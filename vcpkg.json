@@ -1,0 +1,20 @@
+{
+  "name": "turbospharticles",
+  "version": "0.1.0",
+  "builtin-baseline": "7213cf8135c329c37c7e2778e40774489a0583a8",
+  "dependencies": [
+    "benchmark",
+    "spdlog",
+    "highfive",
+    "cli11",
+    "glm",
+    "glfw3",
+    "glad",
+    {
+      "name": "imgui",
+      "features": [ "glfw-binding", "opengl3-binding", "docking-experimental" ]
+    },
+    "implot",
+    "opengl"
+  ]
+}
