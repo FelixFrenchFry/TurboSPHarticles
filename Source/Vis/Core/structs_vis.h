@@ -45,6 +45,14 @@ namespace Vis
 		glm::mat4 viewMat;
 		glm::mat4 projMat;
 		glm::vec3 camPos;
+		float yawDeg;			// left/right angle in degrees
+		float pitchDeg;			// up/down angle in degrees
+		float moveSpeed;
+		float turnSpeedDeg;
+		float speedMult;		// speed multiplier for fast movement toggle
+		float yFovDeg;			// vertical field of view in degrees
+		float zNear;			// near clipping plane
+		float zFar;				// far clipping plane
 	};
 
 	struct GLVersion

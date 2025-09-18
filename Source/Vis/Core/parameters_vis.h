@@ -30,10 +30,9 @@ namespace Vis
 
 	// ===== snapshot of mutable visualization parameters =====
 
+	// TODO: pass by reference instead of value
 	struct VisParams
 	{
-		// TODO: add more parameters as needed
-
 		WindowConfig window
 		{
 			.size =			{1920, 1080},
@@ -50,14 +49,22 @@ namespace Vis
 
 		CameraState camera
 		{
-			.viewMat =	glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // eye
-									glm::vec3(0.0f, 0.0f, 0.0f), // center
-									glm::vec3(0.0f, 1.0f, 0.0f)  // up
-									),
+			.viewMat =		glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // eye
+										glm::vec3(0.0f, 0.0f, 0.0f), // center
+										glm::vec3(0.0f, 1.0f, 0.0f)  // up
+										),
 			// TODO: adjust aspect ratio
-			.projMat =	glm::perspective(glm::radians(45.0f), 
-										 16.0f / 9.0f, 0.01f, 100.0f),
-			.camPos =	{0.0f, 0.0f, 6.0f}
+			.projMat =		glm::perspective(glm::radians(45.0f), 
+											 16.0f / 9.0f, 0.01f, 100.0f),
+			.camPos =		{0.0f, 0.0f, 5.0f},
+			.yawDeg =		-90.0f,
+			.pitchDeg =		0.0f,
+			.moveSpeed =	2.0f,
+			.turnSpeedDeg = 90.0f,
+			.speedMult =	4.0f,
+			.yFovDeg =		60.0f,
+			.zNear =		0.01f,
+			.zFar =			500.0f
 		};
 
 		RenderConfig render
@@ -93,6 +100,13 @@ namespace Vis
 		std::optional<glm::mat4> viewMat;
 		std::optional<glm::mat4> projMat;
 		std::optional<glm::vec3> camPos;
+		std::optional<float> yawDeg;
+		std::optional<float> pitchDeg;
+		std::optional<float> moveSpeed;
+		std::optional<float> turnSpeedDeg;
+		std::optional<float> yFovDeg;
+		std::optional<float> zNear;
+		std::optional<float> zFar;
 	};
 
 	struct RenderPatch
