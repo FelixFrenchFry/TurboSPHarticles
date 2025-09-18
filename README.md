@@ -1,2 +1,4 @@
 # TurboSPHarticles
-SPH fluid simulation using CUDA and OpenMP
+SPH fluid simulation using CUDA
+
+TODO: proper description
