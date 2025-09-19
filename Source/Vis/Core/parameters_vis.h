@@ -16,8 +16,7 @@
 
 namespace Vis
 {
-	// ===== static constants =====
-
+	// static non-mutable constants
 	struct VisConstants
 	{
 		static constexpr GLVersion glVersion
@@ -28,9 +27,7 @@ namespace Vis
 		};
 	};
 
-	// ===== snapshot of mutable visualization parameters =====
-
-	// TODO: pass by reference instead of value
+	// snapshot of visualization parameters
 	struct VisParams
 	{
 		WindowConfig window
@@ -80,7 +77,7 @@ namespace Vis
 		};
 	};
 
-	// ===== patches for setters =====
+	// patches for setters
 	struct WindowPatch
 	{
 		std::optional<glm::ivec2> size;
@@ -124,9 +121,9 @@ namespace Vis
 	{
 	public: // ==============================
 
-		VisParamsMgr();
+		VisParamsMgr() = default;
 
-		// returns snapshot and version of current simulation parameters
+		// returns snapshot and version of current visualization parameters
 		std::pair<VisParams, uint64_t> SnapshotParams() const;
 
 		// returns current stable version number

@@ -17,7 +17,7 @@
 
 namespace Vis
 {
-	struct VisSimStateView
+	struct VisualSnapView
 	{
 		std::span<const glm::vec3> position;
 		std::span<const float> scalarData; // data according to color coding mode

@@ -1,0 +1,105 @@
+// visualization.h
+//
+// TODO: comment
+
+#pragma once
+
+// external
+#include <vector>
+#include <cstdint>
+#include <glm/glm.hpp>
+#include <GLFW/glfw3.h>
+
+// internal
+#include "../../Base/enum_hub.h"
+#include "../../Sim/Core/parameters_sim.h"
+#include "../Input/user_input.h"
+#include "../Inter/user_interface.h"
+#include "../Render/rendering.h"
+#include "parameters_vis.h"
+#include "structs_vis.h"
+
+
+
+namespace Vis
+{
+	class VisualizationMgr
+	{
+	public: // ==============================
+
+		VisualizationMgr(Sim::SimParamsMgr& simParamsMgr,
+						 Vis::VisParamsMgr& visParamsMgr);
+
+		// create window & GL context, and initialize sub-systems
+		bool Init(const WindowConfig& windowConfig = {});
+
+		// destroy contexts, sub-systems and free up resources
+		void Shutdown();
+
+		// main visualization loop (handle input, interface, render)
+		void Run();
+
+		// TODO: remove demo
+		// demo data toggle/state
+		bool demoActive_ = true;			// set false when real sim is wired
+		bool demoPrimed_ = false;			// generate only once
+		std::size_t demoCount_ = 100'000;	// number of particles to spawn
+
+	private: // ==============================
+
+		// parameter managers and snapshots to be managed and passed to sub-systems
+		Sim::SimParamsMgr& simParamsMgr_;
+		Vis::VisParamsMgr& visParamsMgr_;
+		Sim::SimParams simParams_;
+		Vis::VisParams visParams_;
+		uint64_t simParamsVersion_ = 0;
+		uint64_t visParamsVersion_ = 0;
+
+		// controlled sub-system managers
+		Input::UserInputMgr userInputMgr_;
+		Inter::UserInterfaceMgr userInterfaceMgr_;
+		Render::RenderingMgr renderingMgr_;
+
+		// double-buffered vis-specific state
+		std::vector<glm::vec3> position_[2];
+		std::vector<float> scalarData_[2]; // data according to color coding mode
+		int front_ = 0; int back_ = 1; // current / next buffer index
+
+		// current view and scalar (coloring) mode for visualization
+		VisualSnapView view_{};
+		Base::ColorCodingMode scalarMode_{ Base::None };
+
+		// window and GL context
+		GLFWwindow* window_ = nullptr;
+
+		// static callbacks for GLFW
+		static void GLFW_FramebufferSizeCB(GLFWwindow* window, int width, int height);
+		static void GLFW_WindowSizeCB(GLFWwindow* window, int width, int height);
+		static void GLFW_WindowContentScaleCB(GLFWwindow* window, float xScale, float yScale);
+		static void GLFW_KeyCB(GLFWwindow* window, int key, int scancode, int action, int mods);
+		static void GLFW_MouseButtonCB(GLFWwindow* window, int button, int action, int mods);
+		static void GLFW_CursorPosCB(GLFWwindow* window, double xPos, double yPos);
+		static void GLFW_ScrollCB(GLFWwindow* window, double xOff, double yOff);
+		// TODO: char callback?
+
+		// instance methods called by static callbacks
+		void OnFramebufferSize(int width, int height);
+		void OnWindowSize(int width, int height);
+		void OnWindowContentScale(float xScale, float yScale);
+		void OnKey(int key, int scancode, int action, int mods);
+		void OnMouseButton(int button, int action, int mods);
+		void OnCursorPos(double xPos, double yPos);
+		void OnScroll(double xOff, double yOff);
+
+		// pulls latest parameter snapshots and versions if they have changed
+		void SyncParameters(bool force = false);
+
+		// pulls latest simulation state and packs it into vis-specific data structures
+		// (positions + scalar property depending on color coding mode)
+		void SyncVisSimState();
+
+		// utils
+		void SwapVisBuffers();
+	};
+
+} // namespace Vis

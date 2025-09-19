@@ -11,11 +11,6 @@
 
 using namespace Vis;
 
-VisParamsMgr::VisParamsMgr()
-{
-	// TODO
-}
-
 std::pair<VisParams, uint64_t> VisParamsMgr::SnapshotParams() const
 {
 	while (true)
