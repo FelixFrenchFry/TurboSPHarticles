@@ -9,7 +9,6 @@
 
 // internal
 #include "../Source/Sim/Core/parameters_sim.h"
-#include "../Source/Sim/Core/simulation.h"
 #include "../Source/Vis/Core/parameters_vis.h"
 #include "../Source/Vis/Core/visualization.h"
 
@@ -33,6 +32,23 @@ int main(int argc, char** argv)
 		// TODO: add --version, --threads, --backend, etc... ?
 
 		CLI11_PARSE(application, argc, argv);
+
+		// ===== initialization of manager systems =====
+
+		Sim::SimParamsMgr simParamsMgr{};
+		Vis::VisParamsMgr visParamsMgr{};
+		Vis::VisualizationMgr visualizationMgr{ simParamsMgr, visParamsMgr };
+
+		if (!visualizationMgr.Init())
+		{
+			SPDLOG_ERROR("Failed to initialize VisualizationMgr");
+			return EXIT_FAILURE;
+		}
+
+		// ===== main loop =====
+
+		visualizationMgr.Run();
+		visualizationMgr.Shutdown();
 	}
 	catch (const std::exception& ex)
 	{
