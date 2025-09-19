@@ -5,10 +5,18 @@
 #pragma once
 
 // external
+#include <atomic>
+#include <cstdint>
+#include <glm/vec3.hpp>
 #include <span>
+#include <stop_token>
+#include <thread>
+#include <vector>
 
 // internal
 #include "parameters_sim.h"
+#include "../Sync/mailboxes.h"
+#include "../Sync/snapshots.h"
 
 
 
@@ -35,11 +43,27 @@ namespace Sim
 		// initialize sub-systems
 		bool Init();
 
-		// destroy contexts, sub-systems and free up resources
+		// destroy sub-systems and free up resources
 		void Shutdown();
 
 		// pulls latest parameter snapshot and version if they have changed
 		void SyncParameters(bool force = false);
+
+		// TODO: void Launch(std::uint32_t N_simThreads);
+		// TODO: void RunSim(std::uint32_t N_simThreads);
+
+		void Launch_Async(std::uint32_t N_simThreads);
+
+		// main simulation loop
+		void RunSim_Async(std::uint32_t N_simThreads, std::stop_token stopToken);
+
+		void RequestStop();
+
+		void JoinThreads();
+
+		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
+
+		void PushToVisualMailbox(std::size_t step);
 
 	private: // ==============================
 
@@ -47,6 +71,16 @@ namespace Sim
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;
 		uint64_t simParamsVersion_ = 0;
+
+		// TODO: comment
+		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned
+
+		// controller thread spawns worker threads within OpenMP parallel regions
+		std::jthread controllerThread_;
+		std::atomic<bool> running_{ false };
+
+		// internal guard
+		std::atomic<bool> initialized_{ false };
 	};
 
 } // namespace Sim

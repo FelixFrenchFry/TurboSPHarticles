@@ -142,10 +142,8 @@ void VisualizationMgr::Shutdown()
 	glfwTerminate();
 }
 
-void VisualizationMgr::Run()
+void VisualizationMgr::RunVis()
 {
-	// TODO: implement properly
-
 	if (!window_) { return; }
 
 	double lastTime = glfwGetTime();
@@ -186,6 +184,11 @@ void VisualizationMgr::Run()
 
 		glfwSwapBuffers(window_);
 	}
+}
+
+void VisualizationMgr::SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
+{
+	visualSnapMailbox_ = visualSnapMailbox;
 }
 
 // ===== callback trampolines =====

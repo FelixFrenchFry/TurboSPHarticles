@@ -11,11 +11,12 @@
 #include <GLFW/glfw3.h>
 
 // internal
-#include "../../Base/enum_hub.h"
-#include "../../Sim/Core/parameters_sim.h"
-#include "../Input/user_input.h"
-#include "../Inter/user_interface.h"
-#include "../Render/rendering.h"
+#include "Source/Base/enum_hub.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Sync/mailboxes.h"
+#include "Source/Vis/Input/user_input.h"
+#include "Source/Vis/Inter/user_interface.h"
+#include "Source/Vis/Render/rendering.h"
 #include "parameters_vis.h"
 #include "structs_vis.h"
 
@@ -37,7 +38,9 @@ namespace Vis
 		void Shutdown();
 
 		// main visualization loop (handle input, interface, render)
-		void Run();
+		void RunVis();
+
+		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
 
 		// TODO: remove demo
 		// demo data toggle/state
@@ -54,6 +57,9 @@ namespace Vis
 		Vis::VisParams visParams_;
 		uint64_t simParamsVersion_ = 0;
 		uint64_t visParamsVersion_ = 0;
+
+		// TODO: comment
+		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned
 
 		// controlled sub-system managers
 		Input::UserInputMgr userInputMgr_;
