@@ -31,7 +31,15 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
-find_package(OpenMP REQUIRED COMPONENTS CXX)
+
+# on MSVC, use OpenMP from LLVM for modern versions
+if(MSVC)
+    add_library(MSVC_LLVM_OpenMP INTERFACE)
+    target_compile_options(MSVC_LLVM_OpenMP INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:/openmp:llvm>) # apply to host C++ only (not CUDA)
+else()
+    find_package(OpenMP REQUIRED COMPONENTS CXX)
+endif()
 
 if(ENABLE_CUDA)
     enable_language(CUDA)
@@ -143,11 +151,12 @@ target_link_libraries(TSP_H PUBLIC
     HighFive
     CLI11::CLI11
     glm::glm
-    OpenMP::OpenMP_CXX
     $<$<BOOL:${ENABLE_CUDA}>:CUDA::cudart>
     Project_Warnings
     Project_Defines
     Project_Options
+    $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
 )
 
 if(ENABLE_CUDA AND SRC_SIM_GPU)
@@ -160,6 +169,8 @@ if(ENABLE_CUDA AND SRC_SIM_GPU)
             $<$<CONFIG:RelWithDebInfo>:-O2 -lineinfo>
         >
     )
+    # TODO: comment this out if compilation works fine without it?
+    set_property(TARGET TSP_H PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
 endif()
 
 # ===================================================
