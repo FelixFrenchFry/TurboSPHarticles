@@ -8,6 +8,12 @@
 
 namespace Base
 {
+	enum class BackendVersion
+	{
+		CPU_01,				// 0
+		GPU_01				// 1
+	};
+
 	enum NeighborSearchMethod
 	{
 		BruteForce,			// 0

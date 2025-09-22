@@ -5,6 +5,7 @@
 #include "spdlog/spdlog.h"
 
 // internal
+#include "Source/Eval/Export/serialization.h"
 #include "simulation.h"
 
 
@@ -21,6 +22,9 @@ bool SimulationMgr::Init()
 {
 	// initial snapshot
 	SyncParameters(true);
+
+	// empty default state
+	universalSimState_ = Sync::UniversalSimState{};
 
 	initialized_.store(true, std::memory_order_release);
 
@@ -54,6 +58,16 @@ void SimulationMgr::SyncParameters(bool force)
 	}
 }
 
+void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
+{
+	simBackend_ = MakeSimBackend(version, simParams_);
+
+	if (!simBackend_)
+	{
+		SPDLOG_ERROR("Failed to create sim backend");
+	}
+}
+
 void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 {
 	if (!initialized_.load(std::memory_order_acquire))
@@ -73,6 +87,29 @@ void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 			RunSim_Async(N_simThreads, stopToken);
 		});
 }
+
+void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken)
+{
+	// configure OpenMP for the simulation pool
+	omp_set_dynamic(0); // disable dynamic adjustment of threads
+	omp_set_num_threads(N_simThreads); // set fixed number of worker threads
+
+	SPDLOG_INFO("Simulation started running with {} worker threads",
+		N_simThreads);
+
+	// main simulation step loop
+	while (!stopToken.stop_requested())
+	{
+		// one simulation step with one parallel region
+		#pragma omp parallel
+		{
+			// TODO: use OpenMP for/single/etc... for SPH computations
+		}
+	}
+
+	SPDLOG_INFO("Simulation stopped running");
+}
+
 
 // requests the controller thread to stop cleanly
 void SimulationMgr::RequestStop()
@@ -104,7 +141,7 @@ void SimulationMgr::SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
 
 // convert simulation state from data structures used for the computations
 // to portable data structures used by the visual snapshot and push to mailbox
-void SimulationMgr::PushToVisualMailbox(std::size_t step)
+void SimulationMgr::PushToVisualMailbox(std::int64_t step)
 {
 	if (!visualSnapMailbox_) { return; }
 
@@ -129,26 +166,4 @@ void SimulationMgr::PushToVisualMailbox(std::size_t step)
 	*/
 
 	visualSnapMailbox_->StoreSnapshot(std::move(snap)); // non-blocking
-}
-
-void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, std::stop_token stopToken)
-{
-	// configure OpenMP for the simulation pool
-	omp_set_dynamic(0); // disable dynamic adjustment of threads
-	omp_set_num_threads(N_simThreads); // set fixed number of worker threads
-
-	SPDLOG_INFO("Simulation started running with {} worker threads",
-		N_simThreads);
-
-	// main simulation step loop
-	while (!stopToken.stop_requested())
-	{
-		// one simulation step with one parallel region
-		#pragma omp parallel
-		{
-			// TODO: use OpenMP for/single/etc... for SPH computations
-		}
-	}
-
-	SPDLOG_INFO("Simulation stopped running");
 }

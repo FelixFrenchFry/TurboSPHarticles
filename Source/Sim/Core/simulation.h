@@ -14,6 +14,7 @@
 #include <vector>
 
 // internal
+#include "backend_sim.h"
 #include "parameters_sim.h"
 #include "../Sync/mailboxes.h"
 #include "../Sync/snapshots.h"
@@ -25,7 +26,7 @@ namespace Sim
 	// TODO: prototype!!!
 	struct SimStateView
 	{
-		std::size_t N_particles{ 0 };
+		std::uint32_t N_particles{ 0 };
 		std::span<const float> posX, posY, posZ;
 		std::span<const float> velX, velY, velZ;
 		std::span<const float> density;
@@ -49,13 +50,17 @@ namespace Sim
 		// pulls latest parameter snapshot and version if they have changed
 		void SyncParameters(bool force = false);
 
+		void SelectSimBackend(Base::BackendVersion version);
+
+		void LoadInitialSimState(const Sync::UniversalSimState& state);
+
 		// TODO: void Launch(std::uint32_t N_simThreads);
 		// TODO: void RunSim(std::uint32_t N_simThreads);
 
 		void Launch_Async(std::uint32_t N_simThreads);
 
 		// main simulation loop
-		void RunSim_Async(std::uint32_t N_simThreads, std::stop_token stopToken);
+		void RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken);
 
 		void RequestStop();
 
@@ -63,14 +68,18 @@ namespace Sim
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
 
-		void PushToVisualMailbox(std::size_t step);
+		void PushToVisualMailbox(std::int64_t step);
 
 	private: // ==============================
 
 		// parameter manager and snapshot to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;
-		uint64_t simParamsVersion_ = 0;
+		int64_t simParamsVersion_ = 0;
+
+		// universal simulation state and backend for compute
+		Sync::UniversalSimState universalSimState_;
+		std::unique_ptr<ISimBackend> simBackend_;
 
 		// TODO: comment
 		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned
