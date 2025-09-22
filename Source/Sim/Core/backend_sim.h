@@ -35,6 +35,10 @@ namespace Sim
 		virtual void PackExportSnapshot(Sync::ExportSnapshot& snap) const = 0;
 		virtual void PackVisualSnapshot(Sync::VisualSnapshot& snap) const = 0;
 
+		// fills in the scalar data based on given different color coding modes
+		// (backend-specific such that possible transformations can be applied efficiently)
+		virtual void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const = 0;
+
 		// advances the simulation by N_steps
 		virtual void SimStep(std::int64_t N_steps = 1) = 0;
 	};

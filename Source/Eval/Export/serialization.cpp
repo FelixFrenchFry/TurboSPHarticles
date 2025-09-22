@@ -89,7 +89,7 @@ namespace {
 	{
 		std::error_code ec;
 
-		// try rename directly
+		// try to rename directly
 		std::filesystem::rename(tmp, dst, ec);
 		if (!ec) return;
 

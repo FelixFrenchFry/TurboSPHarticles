@@ -33,6 +33,10 @@ namespace Sim
 		void PackExportSnapshot(Sync::ExportSnapshot& snap) const override;
 		void PackVisualSnapshot(Sync::VisualSnapshot& snap) const override;
 
+		// fills in the scalar data based on given different color coding modes
+		// (backend-specific such that possible transformations can be applied efficiently)
+		void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const override;
+
 		// advances the simulation by N_steps
 		void SimStep(std::int64_t N_steps) override;
 

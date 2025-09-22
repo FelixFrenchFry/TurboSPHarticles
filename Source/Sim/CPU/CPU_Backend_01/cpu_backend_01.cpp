@@ -153,11 +153,45 @@ void SimBackendCPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	for (std::int64_t i = 0; i < N_F_; i++)
 	{
 		snap.position[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
+	}
 
-		// TODO: choose scalar data according to color coding mode
-		snap.scalarData[i] = glm::sqrt(xVelF_[i] * xVelF_[i] 
-									    + yVelF_[i] * yVelF_[i]
-										+ zVelF_[i] * zVelF_[i]);
+	FillScalarData(snap, snap.scalarMode);
+}
+
+void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const
+{
+	switch (mode)
+	{
+	case Base::None:
+	{
+		snap.scalarData.clear();
+		break;
+	}
+	case Base::VelocityMag:
+	{
+		#pragma omp parallel for schedule(static)
+		for (std::int64_t i = 0; i < N_F_; i++)
+		{
+			// magnitude of velocity vector
+			snap.scalarData[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
+											+ yVelF_[i] * yVelF_[i]
+											+ zVelF_[i] * zVelF_[i]);
+		}
+		break;
+	}
+	case Base::Density:
+	{
+		snap.scalarData = densityF_;
+		break;
+	}
+	case Base::Pressure:
+	{
+		snap.scalarData = pressureF_;
+		break;
+	}
+	default:
+		SPDLOG_ERROR("Unsupported scalar data mode in CPU backend 01");
+		break;
 	}
 }
 
