@@ -1,0 +1,43 @@
+// serialization.h
+//
+// TODO: comment
+
+#pragma once
+
+// external
+#include <cstdint>
+#include <string>
+
+// internal
+#include "Source/Sim/Sync/simulation_state.h"
+
+
+
+namespace Export
+{
+	struct SaveOptions
+	{
+		// compression
+		int compressionLevel	= 3;    // [0,...,9], 0 = none, 9 = max
+		bool compress			= true; // zlib compression (non-contiguous chunks)
+		bool shuffleFilter		= true; // byte shuffle for better compression ratio on FP data
+
+		// chunk target size
+		std::int64_t targetChunkBytes = 1u << 22; // 4 MiB (2^22 bytes)
+
+		// safer saves
+		// (write to temp file and rename on success)
+		std::string tempSuffix = ".tmp";
+		bool atomicWrite	   = true;
+	};
+
+	// lossless, versioned serialization of the full simulation state into a file
+	void SaveUniversalSimState(const std::string& path,
+							   const Sync::UniversalSimState& state,
+							   const SaveOptions& opt = {});
+
+	// lossless, versioned de-serialization of the full simulation state from a file
+	void LoadUniversalSimState(const std::string& path,
+							   Sync::UniversalSimState& state);
+
+} // namespace Export
