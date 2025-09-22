@@ -16,13 +16,11 @@ namespace Sim
 		switch (version)
 		{
 		case Base::BackendVersion::CPU_01:
-			{
-				return std::make_unique<SimBackendCPU_01>(params);
-			}
+		{
+			return std::make_unique<SimBackendCPU_01>(params);
+		}
 		default:
-			{
-				throw std::runtime_error("Unsupported sim backend version request");
-			}
+			throw std::runtime_error("Unsupported sim backend version request");
 		}
 	}
 

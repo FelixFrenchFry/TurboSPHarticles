@@ -283,5 +283,6 @@ void UserInterfaceMgr::BeginDockspace()
 
 	// central dockspace node that other windows can dock into
 	ImGuiID dockId = ImGui::GetID("MainDockSpace");
-	ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f),
+		ImGuiDockNodeFlags_PassthruCentralNode);
 }

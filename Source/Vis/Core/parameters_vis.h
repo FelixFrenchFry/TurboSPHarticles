@@ -130,10 +130,10 @@ namespace Vis
 		uint64_t StableVersion() const;
 
 		// patch-style setters for individual parameters and their dependent values
-		void SetParam(WindowPatch patch);
-		void SetParam(FrameBufferPatch patch);
-		void SetParam(CameraPatch patch);
-		void SetParam(RenderPatch patch);
+		void SetParam(const WindowPatch& patch);
+		void SetParam(const FrameBufferPatch& patch);
+		void SetParam(const CameraPatch& patch);
+		void SetParam(const RenderPatch& patch);
 
 	private: // ==============================
 

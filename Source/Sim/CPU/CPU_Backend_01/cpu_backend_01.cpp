@@ -83,8 +83,9 @@ void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		}
 	}
 
-	SPDLOG_INFO("Pulled universal sim state with {} fluid and {} boundary particles into "
-			    "data structures of CPU backend 01", N_F_, N_B_);
+	SPDLOG_INFO("Pulled universal sim state with {} fluid and "
+				"{} boundary particles into data structures of CPU backend 01",
+				N_F_, N_B_);
 }
 
 void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
@@ -131,8 +132,9 @@ void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	F.N_particles = N_F_;
 	B.N_particles = N_B_;
 
-	SPDLOG_INFO("Pushed from data structures of CPU backend 01 with {} fluid and {} boundary particles "
-				"to universal sim state", N_F_, N_B_);
+	SPDLOG_INFO("Pushed from data structures of CPU backend 01 with "
+				"{} fluid and {} boundary particles to universal sim state",
+				N_F_, N_B_);
 }
 
 void SimBackendCPU_01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
@@ -158,7 +160,8 @@ void SimBackendCPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	FillScalarData(snap, snap.scalarMode);
 }
 
-void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const
+void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
+									  Base::ColorCodingMode mode) const
 {
 	switch (mode)
 	{

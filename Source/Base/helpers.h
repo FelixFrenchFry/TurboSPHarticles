@@ -79,11 +79,26 @@ namespace Base
     }
 
 	// overloads that select the right comparator automatically
-    inline void MarkIfChanged(const std::optional<float>& o, const float& cur, bool& ch) { if (o && !ApproxEqu(*o, cur)) ch = true; }
-    inline void MarkIfChanged(const std::optional<glm::vec2>& o, const glm::vec2& cur, bool& ch) { if (o && !ApproxEqu(*o, cur)) ch = true; }
-    inline void MarkIfChanged(const std::optional<glm::vec3>& o, const glm::vec3& cur, bool& ch) { if (o && !ApproxEqu(*o, cur)) ch = true; }
-    inline void MarkIfChanged(const std::optional<glm::vec4>& o, const glm::vec4& cur, bool& ch) { if (o && !ApproxEqu(*o, cur)) ch = true; }
-    inline void MarkIfChanged(const std::optional<glm::mat4>& o, const glm::mat4& cur, bool& ch) { if (o && !ApproxEqu(*o, cur)) ch = true; }
+    inline void MarkIfChanged(const std::optional<float>& o, const float& cur, bool& ch)
+    {
+	    if (o && !ApproxEqu(*o, cur)) ch = true;
+    }
+    inline void MarkIfChanged(const std::optional<glm::vec2>& o, const glm::vec2& cur, bool& ch)
+    {
+	    if (o && !ApproxEqu(*o, cur)) ch = true;
+    }
+    inline void MarkIfChanged(const std::optional<glm::vec3>& o, const glm::vec3& cur, bool& ch)
+    {
+	    if (o && !ApproxEqu(*o, cur)) ch = true;
+    }
+    inline void MarkIfChanged(const std::optional<glm::vec4>& o, const glm::vec4& cur, bool& ch)
+    {
+	    if (o && !ApproxEqu(*o, cur)) ch = true;
+    }
+    inline void MarkIfChanged(const std::optional<glm::mat4>& o, const glm::mat4& cur, bool& ch)
+    {
+	    if (o && !ApproxEqu(*o, cur)) ch = true;
+    }
 
     // ===== misc =====
 

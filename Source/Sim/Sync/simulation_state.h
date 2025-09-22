@@ -15,7 +15,8 @@
 
 namespace Sync
 {
-	// view into fluid particle data (non-owning, for read-only access)
+	// view into fluid particle data
+	// (non-owning, for read-only access)
 	struct FluidView
 	{
 		// metadata
@@ -35,7 +36,8 @@ namespace Sync
 		std::span<float> size;
 	};
 
-	// view into boundary particle data (non-owning, for read-only access)
+	// view into boundary particle data
+	// (non-owning, for read-only access)
 	struct BoundaryView
 	{
 		// metadata
@@ -51,7 +53,8 @@ namespace Sync
 		std::span<float> size;
 	};
 
-	// backend-agnostic representation of fluid particles (owned, for read/write access)
+	// backend-agnostic representation of fluid particles
+	// (owned, for read/write access)
 	struct FluidParticles
 	{
 		// metadata
@@ -103,13 +106,29 @@ namespace Sync
 			N_particles = N;
 			id.resize(N_particles);
 
-			xPos.resize(N_particles); yPos.resize(N_particles); zPos.resize(N_particles);
-			xVel.resize(N_particles); yVel.resize(N_particles); zVel.resize(N_particles);
-			xAcc.resize(N_particles); yAcc.resize(N_particles); zAcc.resize(N_particles);
+			xPos.resize(N_particles);
+			yPos.resize(N_particles);
+			zPos.resize(N_particles);
 
-			xAccPress.resize(N_particles); yAccPress.resize(N_particles); zAccPress.resize(N_particles);
-			xAccVisc.resize(N_particles); yAccVisc.resize(N_particles); zAccVisc.resize(N_particles);
-			xAccExt.resize(N_particles); yAccExt.resize(N_particles); zAccExt.resize(N_particles);
+			xVel.resize(N_particles);
+			yVel.resize(N_particles);
+			zVel.resize(N_particles);
+
+			xAcc.resize(N_particles);
+			yAcc.resize(N_particles);
+			zAcc.resize(N_particles);
+
+			xAccPress.resize(N_particles);
+			yAccPress.resize(N_particles);
+			zAccPress.resize(N_particles);
+
+			xAccVisc.resize(N_particles);
+			yAccVisc.resize(N_particles);
+			zAccVisc.resize(N_particles);
+
+			xAccExt.resize(N_particles);
+			yAccExt.resize(N_particles);
+			zAccExt.resize(N_particles);
 
 			density.resize(N_particles);
 			pressure.resize(N_particles);
@@ -117,7 +136,7 @@ namespace Sync
 			size.resize(N_particles);
 		}
 
-		// builds and returns a mutable view into the data (spans over the vectors)
+		// builds and returns a mutable view into the data
 		FluidView view()
 		{
 			return FluidView
@@ -125,13 +144,29 @@ namespace Sync
 				.N_particles = N_particles,
 				.id = std::span<std::uint32_t>(id),
 
-				.xPos = std::span<float>(xPos), .yPos = std::span<float>(yPos), .zPos = std::span<float>(zPos),
-				.xVel = std::span<float>(xVel), .yVel = std::span<float>(yVel), .zVel = std::span<float>(zVel),
-				.xAcc = std::span<float>(xAcc), .yAcc = std::span<float>(yAcc), .zAcc = std::span<float>(zAcc),
+				.xPos = std::span<float>(xPos),
+				.yPos = std::span<float>(yPos),
+				.zPos = std::span<float>(zPos),
 
-				.xAccPress = std::span<float>(xAccPress), .yAccPress = std::span<float>(yAccPress), .zAccPress = std::span<float>(zAccPress),
-				.xAccVisc = std::span<float>(xAccVisc), .yAccVisc = std::span<float>(yAccVisc), .zAccVisc = std::span<float>(zAccVisc),
-				.xAccExt = std::span<float>(xAccExt), .yAccExt = std::span<float>(yAccExt), .zAccExt = std::span<float>(zAccExt),
+				.xVel = std::span<float>(xVel),
+				.yVel = std::span<float>(yVel),
+				.zVel = std::span<float>(zVel),
+
+				.xAcc = std::span<float>(xAcc),
+				.yAcc = std::span<float>(yAcc),
+				.zAcc = std::span<float>(zAcc),
+
+				.xAccPress = std::span<float>(xAccPress),
+				.yAccPress = std::span<float>(yAccPress),
+				.zAccPress = std::span<float>(zAccPress),
+
+				.xAccVisc = std::span<float>(xAccVisc),
+				.yAccVisc = std::span<float>(yAccVisc),
+				.zAccVisc = std::span<float>(zAccVisc),
+
+				.xAccExt = std::span<float>(xAccExt),
+				.yAccExt = std::span<float>(yAccExt),
+				.zAccExt = std::span<float>(zAccExt),
 
 				.density = std::span<float>(density),
 				.pressure = std::span<float>(pressure),
@@ -141,14 +176,18 @@ namespace Sync
 		}
 
 		// const view reuses same layout
-		FluidView constView() const { return const_cast<FluidParticles*>(this)->view(); }
+		FluidView constView() const
+		{
+			return const_cast<FluidParticles*>(this)->view();
+		}
 
 		// TODO: SESPH-specific data?
 
 		// TODO: IISPH-specific data?
 	};
 
-	// backend-agnostic representation of boundary particles (owned, for read/write access)
+	// backend-agnostic representation of boundary particles
+	// (owned, for read/write access)
 	struct BoundaryParticles
 	{
 		// metadata
@@ -181,8 +220,13 @@ namespace Sync
 			N_particles = N;
 			id.resize(N_particles);
 
-			xPos.resize(N_particles); yPos.resize(N_particles); zPos.resize(N_particles);
-			xVel.resize(N_particles); yVel.resize(N_particles); zVel.resize(N_particles);
+			xPos.resize(N_particles);
+			yPos.resize(N_particles);
+			zPos.resize(N_particles);
+
+			xVel.resize(N_particles);
+			yVel.resize(N_particles);
+			zVel.resize(N_particles);
 
 			density.resize(N_particles);
 			pressure.resize(N_particles);
@@ -190,7 +234,7 @@ namespace Sync
 			size.resize(N_particles);
 		}
 
-		// builds and returns a mutable view into the data (spans over the vectors)
+		// builds and returns a mutable view into the data
 		BoundaryView view()
 		{
 			return BoundaryView
@@ -198,8 +242,13 @@ namespace Sync
 				.N_particles = N_particles,
 				.id = std::span<std::uint32_t>(id),
 
-				.xPos = std::span<float>(xPos), .yPos = std::span<float>(yPos), .zPos = std::span<float>(zPos),
-				.xVel = std::span<float>(xVel), .yVel = std::span<float>(yVel), .zVel = std::span<float>(zVel),
+				.xPos = std::span<float>(xPos),
+				.yPos = std::span<float>(yPos),
+				.zPos = std::span<float>(zPos),
+
+				.xVel = std::span<float>(xVel),
+				.yVel = std::span<float>(yVel),
+				.zVel = std::span<float>(zVel),
 
 				.density = std::span<float>(density),
 				.pressure = std::span<float>(pressure),
@@ -209,7 +258,10 @@ namespace Sync
 		}
 
 		// const view reuses same layout
-		BoundaryView constView() const { return const_cast<BoundaryParticles*>(this)->view(); }
+		BoundaryView constView() const
+		{
+			return const_cast<BoundaryParticles*>(this)->view();
+		}
 
 		// TODO: SESPH-specific data?
 

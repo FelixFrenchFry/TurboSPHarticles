@@ -7,11 +7,9 @@
 // external
 #include <atomic>
 #include <cstdint>
-#include <glm/vec3.hpp>
 #include <span>
 #include <stop_token>
 #include <thread>
-#include <vector>
 
 // internal
 #include "backend_sim.h"

@@ -42,7 +42,7 @@ namespace Render
 
 		void Shutdown();
 
-		// upload latest render-specific simulation state to the GPU instance buffers
+		// upload latest render-specific sim state to the GPU instance buffers
 		// (positions required, scalar data for coloring optional)
 		void UpdateParticles(const Vis::VisualSnapView& view);
 

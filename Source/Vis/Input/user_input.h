@@ -6,8 +6,6 @@
 
 // external
 #include <bitset>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 // internal
 #include "../../Sim/Core/parameters_sim.h"

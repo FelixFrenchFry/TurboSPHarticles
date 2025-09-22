@@ -42,7 +42,7 @@ uint64_t VisParamsMgr::StableVersion() const
 	}
 }
 
-void VisParamsMgr::SetParam(WindowPatch patch)
+void VisParamsMgr::SetParam(const WindowPatch& patch)
 {
 	// detect if any parameter would actually change
 	bool changed = false;
@@ -63,7 +63,7 @@ void VisParamsMgr::SetParam(WindowPatch patch)
 	EndWrite();
 }
 
-void VisParamsMgr::SetParam(FrameBufferPatch patch)
+void VisParamsMgr::SetParam(const FrameBufferPatch& patch)
 {
 	// detect if any parameter would actually change
 	bool changed = false;
@@ -80,7 +80,7 @@ void VisParamsMgr::SetParam(FrameBufferPatch patch)
 	EndWrite();
 }
 
-void VisParamsMgr::SetParam(CameraPatch patch)
+void VisParamsMgr::SetParam(const CameraPatch& patch)
 {
 	// detect if any parameter would actually change
 	bool changed = false;
@@ -113,7 +113,7 @@ void VisParamsMgr::SetParam(CameraPatch patch)
 	EndWrite();
 }
 
-void VisParamsMgr::SetParam(RenderPatch patch)
+void VisParamsMgr::SetParam(const RenderPatch& patch)
 {
 	// detect if any parameter would actually change
 	bool changed = false;
