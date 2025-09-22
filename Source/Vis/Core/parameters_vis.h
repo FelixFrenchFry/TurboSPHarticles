@@ -21,9 +21,9 @@ namespace Vis
 	{
 		static constexpr GLVersion glVersion
 		{
-			.major = 4,
-			.minor = 5,
-			.name = "#version 450"
+			.major	= 4,
+			.minor	= 5,
+			.name	= "#version 450"
 		};
 	};
 
@@ -32,48 +32,48 @@ namespace Vis
 	{
 		WindowConfig window
 		{
-			.size =			{1920, 1080},
-			.title =		"TSP Visual",
-			.resizable =	true,
-			.vsync =        false
+			.size			= {1920, 1080},
+			.title			= "TSP Visual",
+			.resizable		= true,
+			.vsync			= false
 		};
 
 		FrameBufferConfig frameBuffer
 		{
-			.size =			{1920, 1080},
-			.dpiScale =		1.0f
+			.size			= {1920, 1080},
+			.dpiScale		= 1.0f
 		};
 
 		CameraState camera
 		{
-			.viewMat =		glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // eye
-										glm::vec3(0.0f, 0.0f, 0.0f), // center
-										glm::vec3(0.0f, 1.0f, 0.0f)  // up
-										),
+			.viewMat		= glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // eye
+										  glm::vec3(0.0f, 0.0f, 0.0f), // center
+										  glm::vec3(0.0f, 1.0f, 0.0f)  // up
+										  ),
 			// TODO: adjust aspect ratio
-			.projMat =		glm::perspective(glm::radians(45.0f), 
-											 16.0f / 9.0f, 0.01f, 100.0f),
-			.camPos =		{0.0f, 0.0f, 5.0f},
-			.yawDeg =		-90.0f,
-			.pitchDeg =		0.0f,
-			.moveSpeed =	2.0f,
-			.turnSpeedDeg = 90.0f,
-			.speedMult =	4.0f,
-			.yFovDeg =		60.0f,
-			.zNear =		0.01f,
-			.zFar =			500.0f
+			.projMat		= glm::perspective(glm::radians(45.0f), 
+											   16.0f / 9.0f, 0.01f, 100.0f),
+			.camPos			= {0.0f, 0.0f, 5.0f},
+			.yawDeg			= -90.0f,
+			.pitchDeg		= 0.0f,
+			.moveSpeed		= 2.0f,
+			.turnSpeedDeg	= 90.0f,
+			.speedMult		= 4.0f,
+			.yFovDeg		= 60.0f,
+			.zNear			= 0.01f,
+			.zFar			= 500.0f
 		};
 
 		RenderConfig render
 		{
-			.lightDirVS =	{0.3f, 0.6f, 0.6f},
-			.clearColor =	{0.15f, 0.15f, 0.15f, 1.0f},
-			.baseColor =	{1.0f, 0.8f, 0.0f},
-			.alpha =		1.0f,
-			.radius =		0.03f,
-			.scalarMin =	0.0f,
-			.scalarMax =	1.0f,
-			.useScalar =	false
+			.lightDirVS		= {0.3f, 0.6f, 0.6f},
+			.clearColor		= {0.15f, 0.15f, 0.15f, 1.0f},
+			.baseColor		= {1.0f, 0.8f, 0.0f},
+			.alpha			= 1.0f,
+			.radius			= 0.03f,
+			.scalarMin		= 0.0f,
+			.scalarMax		= 1.0f,
+			.useScalar		= false
 		};
 	};
 

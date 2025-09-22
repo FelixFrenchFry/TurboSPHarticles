@@ -22,7 +22,7 @@ namespace Vis
 		std::span<const glm::vec3> position;
 		std::span<const float> scalarData; // data according to color coding mode
 		Base::ColorCodingMode scalarMode{ Base::None };
-		std::size_t	N_particles{ 0 };
+		std::int64_t N_particles{ 0 };
 		bool changed{ false };
 	};
 

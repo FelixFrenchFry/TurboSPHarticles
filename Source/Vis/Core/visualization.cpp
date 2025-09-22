@@ -115,7 +115,7 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 
 	// pre-reserve double-buffers
 	// TODO: use better estimate of max sizes
-	const std::size_t N_reserve = 100'000;
+	const std::int64_t N_reserve = 100'000;
 	position_[0].reserve(N_reserve);
 	position_[1].reserve(N_reserve);
 	scalarData_[0].reserve(N_reserve);
@@ -374,7 +374,7 @@ void VisualizationMgr::SyncVisSimState()
 		std::mt19937 rng{ 12345678 }; // deterministic seed
 		std::normal_distribution<float> N(0.0f, 0.5f);
 
-		for (std::size_t i = 0; i < demoCount_; i++) 
+		for (std::int64_t i = 0; i < demoCount_; i++)
 		{
 			glm::vec3 p{ N(rng), N(rng), N(rng) };
 			position_[back_][i] = p;

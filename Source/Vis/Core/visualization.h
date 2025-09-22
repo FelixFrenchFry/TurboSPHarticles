@@ -46,7 +46,7 @@ namespace Vis
 		// demo data toggle/state
 		bool demoActive_ = true;			// set false when real sim is wired
 		bool demoPrimed_ = false;			// generate only once
-		std::size_t demoCount_ = 100'000;	// number of particles to spawn
+		std::int64_t demoCount_ = 100'000;	// number of particles to spawn
 
 	private: // ==============================
 

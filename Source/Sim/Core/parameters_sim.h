@@ -19,7 +19,7 @@ namespace Sim
 		// TODO: add more parameters as needed
 
 		// simulation
-		std::uint64_t step		= 0;
+		std::int64_t step		= 0;
 
 		// time
 		float timeStep			= 0.01f;

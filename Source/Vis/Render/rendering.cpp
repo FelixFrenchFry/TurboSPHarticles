@@ -138,13 +138,13 @@ void RenderingMgr::CreateImpostorProgram()
 }
 
 // compiles a shader of given type from source and returns its ID
-GLuint RenderingMgr::Compile(GLenum type, const char* source)
+GLuint RenderingMgr::Compile(GLenum type, const char* src)
 {
 	GLuint res = glCreateShader(type);
 	GLint ok = 0;
 
 	// compile and check shader
-	glShaderSource(res, 1, &source, nullptr);
+	glShaderSource(res, 1, &src, nullptr);
 	glCompileShader(res);
 	glGetShaderiv(res, GL_COMPILE_STATUS, &ok);
 
@@ -241,17 +241,17 @@ void RenderingMgr::UpdateCameraUBO(const Vis::CameraState& cam)
 	glNamedBufferSubData(uboCamera_, 0, sizeof(CameraUBO), &cachedCam);
 }
 
-void RenderingMgr::EnsureInstanceCapacity(std::size_t N_required)
+void RenderingMgr::EnsureInstanceCapacity(std::int64_t N_required)
 {
 	if (N_required <= capacity_) { return; }
 
 	// grow capacity to next power of two
-	std::size_t newCap = capacity_ ? capacity_ : 1024;
+	std::int64_t newCap = capacity_ ? capacity_ : 1024;
 	while (newCap < N_required)
 	{
 		newCap *= 2;
 	}
-	std::size_t newSize = newCap * sizeof(InstanceData);
+	std::uint64_t newSize = newCap * sizeof(InstanceData);
 
 	// (re)allocate immutable storage and map persistently
 	const GLbitfield storageFlags = GL_MAP_WRITE_BIT |

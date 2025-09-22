@@ -69,21 +69,21 @@ namespace Render
 
 		// persistent map pointer
 		unsigned char* mappedBase_ = nullptr;
-		std::size_t mappedSize_ = 0; // total bytes reserved
-		std::size_t capacity_ = 0; // number of instances capacity
+		std::int64_t mappedSize_ = 0; // total bytes reserved
+		std::int64_t capacity_ = 0; // number of instances capacity
 
 		// draw state
-		std::size_t N_instances_ = 0;
+		std::int64_t N_instances_ = 0;
 
 		// helpers
 		void CreateImpostorProgram();
-		GLuint Compile(GLenum type, const char* source);
+		GLuint Compile(GLenum type, const char* src);
 		GLuint Link(GLuint vertS, GLuint fragS);
 
 		void CreateVAOandBuffers();
 		void DestroyVAOandBuffers();
 
-		void EnsureInstanceCapacity(std::size_t N_required);
+		void EnsureInstanceCapacity(std::int64_t N_required);
 		void UpdateParamsUBO(const Vis::RenderConfig& render);
 		void UpdateCameraUBO(const Vis::CameraState& cam);
 
