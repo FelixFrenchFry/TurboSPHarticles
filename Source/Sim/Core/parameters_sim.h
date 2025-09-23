@@ -59,10 +59,10 @@ namespace Sim
 		SimParamsMgr() = default;
 
 		// returns snapshot and version of current simulation parameters
-		std::pair<SimParams, uint64_t> SnapshotParams() const;
+		std::pair<SimParams, int64_t> SnapshotParams() const;
 
 		// returns current stable version number to check for changes
-		uint64_t StableVersion() const;
+		int64_t StableVersion() const;
 
 		// setters for individual parameters and their dependent values
 		void Set_TimeStep(float newTimeStep);

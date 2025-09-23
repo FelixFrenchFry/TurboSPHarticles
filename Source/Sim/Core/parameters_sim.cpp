@@ -11,24 +11,24 @@
 
 using namespace Sim;
 
-std::pair<SimParams, uint64_t> SimParamsMgr::SnapshotParams() const
+std::pair<SimParams, int64_t> SimParamsMgr::SnapshotParams() const
 {
 	while (true)
 	{
 		// check for ongoing write
-		uint64_t before = version_.load();
+		int64_t before = version_.load();
 		if (before % 2 != 0) { continue; }
 
 		// copy parameters
 		SimParams res = params_;
 
 		// make sure no write happened during copy
-		uint64_t after = version_.load();
+		int64_t after = version_.load();
 		if (before == after) { return { res, after }; }
 	}
 }
 
-uint64_t SimParamsMgr::StableVersion() const
+int64_t SimParamsMgr::StableVersion() const
 {
 	while (true)
 	{

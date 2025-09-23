@@ -84,7 +84,7 @@ void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	}
 
 	SPDLOG_INFO("Pulled universal sim state with {} fluid and "
-				"{} boundary particles into data structures of CPU backend 01",
+				"{} boundary particles into data structures of backend CPU_01",
 				N_F_, N_B_);
 }
 
@@ -132,7 +132,7 @@ void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	F.N_particles = N_F_;
 	B.N_particles = N_B_;
 
-	SPDLOG_INFO("Pushed from data structures of CPU backend 01 with "
+	SPDLOG_INFO("Pushed from data structures of backend CPU_01 with "
 				"{} fluid and {} boundary particles to universal sim state",
 				N_F_, N_B_);
 }
@@ -193,7 +193,7 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 		break;
 	}
 	default:
-		SPDLOG_ERROR("Unsupported scalar data mode in CPU backend 01");
+		SPDLOG_ERROR("Unsupported scalar data mode in backend CPU_01");
 		break;
 	}
 }

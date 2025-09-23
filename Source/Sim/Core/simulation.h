@@ -48,6 +48,8 @@ namespace Sim
 		// pulls latest parameter snapshot and version if they have changed
 		void SyncParameters(bool force = false);
 
+		// create or switch backend
+		// (destroys previous backend and all its data)
 		void SelectSimBackend(Base::BackendVersion version);
 
 		void LoadInitialSimState(const Sync::UniversalSimState& state);
@@ -66,8 +68,6 @@ namespace Sim
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
 
-		void PushToVisualMailbox(std::int64_t step);
-
 	private: // ==============================
 
 		// parameter manager and snapshot to be managed and passed to sub-systems
@@ -77,7 +77,7 @@ namespace Sim
 
 		// universal simulation state and backend for compute
 		Sync::UniversalSimState universalSimState_;
-		std::unique_ptr<ISimBackend> simBackend_;
+		std::unique_ptr<ISimBackend> simBackend_{ nullptr };
 
 		// TODO: comment
 		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned
@@ -85,9 +85,10 @@ namespace Sim
 		// controller thread spawns worker threads within OpenMP parallel regions
 		std::jthread controllerThread_;
 		std::atomic<bool> running_{ false };
-
-		// internal guard
 		std::atomic<bool> initialized_{ false };
+
+		// misc
+		std::mutex stateMutex_; // protects universalSimState_
 	};
 
 } // namespace Sim

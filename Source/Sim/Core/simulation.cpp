@@ -23,8 +23,14 @@ bool SimulationMgr::Init()
 	// initial snapshot
 	SyncParameters(true);
 
-	// empty default state
+	// default sim state (empty)
 	universalSimState_ = Sync::UniversalSimState{};
+
+	// TODO: load initial sim state from a file
+	// TODO: load sim scenario
+
+	// default sim backend (CPU_01)
+	SelectSimBackend(Base::BackendVersion::CPU_01);
 
 	initialized_.store(true, std::memory_order_release);
 
@@ -43,7 +49,7 @@ void SimulationMgr::Shutdown()
 
 void SimulationMgr::SyncParameters(bool force)
 {
-	uint64_t latestSimParamsVersion = simParamsMgr_.StableVersion();
+	int64_t latestSimParamsVersion = simParamsMgr_.StableVersion();
 	if (latestSimParamsVersion != simParamsVersion_ ||
 		force)
 	{
@@ -60,12 +66,36 @@ void SimulationMgr::SyncParameters(bool force)
 
 void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 {
-	simBackend_ = MakeSimBackend(version, simParams_);
+	if (simBackend_) // a backend already exists
+	{
+		// transfer its current data into the universal state to save it
+		std::scoped_lock lock(stateMutex_);
+		simBackend_->PushToUniversalSimState(universalSimState_);
+		simBackend_.reset();
+	}
 
+	// create new backend and initialize it with the universal state
+	simBackend_ = MakeSimBackend(version, simParams_);
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("Failed to create sim backend");
+		SPDLOG_ERROR("Failed to create sim backend {}",
+			static_cast<int>(version));
+		return;
 	}
+
+	{
+		// transfer universal state into backend-specific data structures
+		std::scoped_lock lock(stateMutex_);
+		simBackend_->PullFromUniversalSimState(universalSimState_);
+	}
+
+	SPDLOG_INFO("Selected sim backend {}",
+		static_cast<int>(version));
+}
+
+void SimulationMgr::LoadInitialSimState(const Sync::UniversalSimState& state)
+{
+	// TODO: implement
 }
 
 void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
@@ -73,6 +103,11 @@ void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 	if (!initialized_.load(std::memory_order_acquire))
 	{
 		SPDLOG_ERROR("Failed to launch async SimulationMgr (not initialized)");
+		return;
+	}
+	if (!simBackend_)
+	{
+		SPDLOG_ERROR("Failed to launch async SimulationMgr (no backend selected)");
 		return;
 	}
 	if (running_.exchange(true))
@@ -90,7 +125,7 @@ void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 
 void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken)
 {
-	// configure OpenMP for the simulation pool
+	// configure pool size for any OpenMP usage within the selected backend
 	omp_set_dynamic(0); // disable dynamic adjustment of threads
 	omp_set_num_threads(N_simThreads); // set fixed number of worker threads
 
@@ -100,16 +135,29 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 	// main simulation step loop
 	while (!stopToken.stop_requested())
 	{
-		// one simulation step with one parallel region
-		#pragma omp parallel
+		// execute one simulation step
+		simBackend_->SimStep(1);
+
+		// TODO: adjust update frequency
+		if (visualSnapMailbox_)
 		{
-			// TODO: use OpenMP for/single/etc... for SPH computations
+			// create visual snapshot and push to mailbox
+			auto snap = std::make_shared<Sync::VisualSnapshot>();
+			simBackend_->PackVisualSnapshot(*snap);
+			visualSnapMailbox_->StoreSnapshot(std::move(snap)); // non-blocking
 		}
+
+		SyncParameters();
+	}
+
+	{
+		// transfer last sim state into the universal state to save it
+		std::scoped_lock lock(stateMutex_);
+		simBackend_->PushToUniversalSimState(universalSimState_);
 	}
 
 	SPDLOG_INFO("Simulation stopped running");
 }
-
 
 // requests the controller thread to stop cleanly
 void SimulationMgr::RequestStop()
@@ -118,7 +166,6 @@ void SimulationMgr::RequestStop()
 	{
 		SPDLOG_INFO("Requesting stop of SimulationMgr...");
 		controllerThread_.request_stop(); // non-blocking
-		SPDLOG_INFO("Stopping completed");
 	}
 }
 
@@ -130,40 +177,10 @@ void SimulationMgr::JoinThreads()
 		SPDLOG_INFO("Joining SimulationMgr thread...");
 		controllerThread_.join();
 		running_.store(false, std::memory_order_release);
-		SPDLOG_INFO("Joining completed");
 	}
 }
 
 void SimulationMgr::SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
 {
 	visualSnapMailbox_ = visualSnapMailbox;
-}
-
-// convert simulation state from data structures used for the computations
-// to portable data structures used by the visual snapshot and push to mailbox
-void SimulationMgr::PushToVisualMailbox(std::int64_t step)
-{
-	if (!visualSnapMailbox_) { return; }
-
-	auto snap = std::make_shared<Sync::VisualSnapshot>();
-	// TODO: translate simulation state into visual snapshot
-	/*
-	snap->position.resize(TODO);
-	snap->scalarData.resize(TODO);
-	snap->scalarMode = TODO;
-	snap->N_particles = TODO;
-	snap->step = step;
-	*/
-
-	// TODO: fill in data from simulation state
-	/*
-	#pragma omp parallel for schedule(static)
-	for (std::int64_t i; i < TODO; i++)
-	{
-		snap->position[i] = TODO;
-		snap->scalarData[i] = TODO;
-	}
-	*/
-
-	visualSnapMailbox_->StoreSnapshot(std::move(snap)); // non-blocking
 }
