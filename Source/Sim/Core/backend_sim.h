@@ -11,8 +11,8 @@
 // internal
 #include "parameters_sim.h"
 #include "Source/Base/enum_hub.h"
-#include "Source/Sim/Sync/simulation_state.h"
 #include "Source/Sim/Sync/snapshots.h"
+#include "Source/Sim/Sync/state_sim.h"
 
 
 

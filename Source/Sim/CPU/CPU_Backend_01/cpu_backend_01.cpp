@@ -23,8 +23,8 @@ void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 {
 	const auto& F = src.fluidParticles;
 	const auto& B = src.boundaryParticles;
-	N_F_ = F.N_particles;
-	N_B_ = B.N_particles;
+	N_F_ = F.N_;
+	N_B_ = B.N_;
 	step_ = src.step;
 
 	// resize backend fluid data structures
@@ -129,8 +129,8 @@ void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		}
 	}
 
-	F.N_particles = N_F_;
-	B.N_particles = N_B_;
+	F.N_ = N_F_;
+	B.N_ = N_B_;
 
 	SPDLOG_INFO("Pushed from data structures of backend CPU_01 with "
 				"{} fluid and {} boundary particles to universal sim state",

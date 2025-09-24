@@ -100,7 +100,7 @@ namespace {
 
 	void CheckFluidConsistent(const Sync::FluidParticles& F)
 	{
-		const auto N = static_cast<size_t>(F.N_particles);
+		const auto N = static_cast<size_t>(F.N_);
 		assert(F.id.size() == N);
 
 		assert(F.xPos.size() == N && F.yPos.size() == N && F.zPos.size() == N);
@@ -119,7 +119,7 @@ namespace {
 
 	void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
 	{
-		const auto N = static_cast<size_t>(B.N_particles);
+		const auto N = static_cast<size_t>(B.N_);
 		assert(B.id.size() == N);
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
@@ -164,7 +164,7 @@ namespace Export {
 				const auto& F = state.fluidParticles;
 				auto gF = root.createGroup("fluidParticles");
 
-				gF.createAttribute("N_particles", F.N_particles);
+				gF.createAttribute("N_particles", F.N_);
 
 				// write SoA arrays
 				Write1D(gF, "xPos", F.xPos, opt);  Write1D(gF, "yPos", F.yPos, opt);  Write1D(gF, "zPos", F.zPos, opt);
@@ -188,7 +188,7 @@ namespace Export {
 				const auto& B = state.boundaryParticles;
 				auto gB = root.createGroup("boundaryParticles");
 
-				gB.createAttribute("N_particles", B.N_particles);
+				gB.createAttribute("N_particles", B.N_);
 
 				// write SoA arrays
 				Write1D(gB, "xPos", B.xPos, opt);  Write1D(gB, "yPos", B.yPos, opt);  Write1D(gB, "zPos", B.zPos, opt);
@@ -247,7 +247,7 @@ namespace Export {
 			Read1D(gF, "id", F.id);
 
 			// sanity check
-			F.N_particles = NF;
+			F.N_ = NF;
 		}
 
 		// boundary data
@@ -269,7 +269,7 @@ namespace Export {
 			Read1D(gB, "id", B.id);
 
 			// sanity check
-			B.N_particles = NB;
+			B.N_ = NB;
 		}
 	}
 

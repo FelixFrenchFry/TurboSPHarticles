@@ -2,6 +2,7 @@
 
 // external
 #include <spdlog/spdlog.h>
+#include <thread>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -11,34 +12,40 @@
 
 using namespace Vis;
 
-std::pair<VisParams, uint64_t> VisParamsMgr::SnapshotParams() const
+std::pair<VisParams, int64_t> VisParamsMgr::SnapshotParams() const
 {
 	while (true)
 	{
 		// check for ongoing write
-		uint64_t before = version_.load();
-		if (before % 2 != 0) { continue; }
+		int64_t before = version_.load(std::memory_order_acquire);
+		if (before % 2 != 0) { std::this_thread::yield(); continue; }
 
 		// copy parameters
 		VisParams res = params_;
 
 		// make sure no write happened during copy
-		uint64_t after = version_.load();
+		int64_t after = version_.load(std::memory_order_acquire);
 		if (before == after) { return { res, after }; }
+
+		// else try again
+		std::this_thread::yield();
 	}
 }
 
-uint64_t VisParamsMgr::StableVersion() const
+int64_t VisParamsMgr::StableVersion() const
 {
 	while (true)
 	{
 		// make sure no write is ongoing
-		uint64_t a = version_.load();
+		int64_t a = version_.load(std::memory_order_acquire);
 		if (a % 2 == 0)
 		{
-			uint64_t b = version_.load();
+			int64_t b = version_.load(std::memory_order_acquire);
 			if (a == b) { return a; }
 		}
+
+		// else try again
+		std::this_thread::yield();
 	}
 }
 
