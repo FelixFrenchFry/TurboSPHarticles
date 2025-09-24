@@ -66,6 +66,8 @@ endif()
 file(GLOB_RECURSE SRC_BASE CONFIGURE_DEPENDS "Source/Base/*.cpp")
 file(GLOB_RECURSE SRC_EVAL CONFIGURE_DEPENDS "Source/Eval/*.cpp")
 file(GLOB_RECURSE SRC_SIM_CORE CONFIGURE_DEPENDS "Source/Sim/Core/*.cpp")
+file(GLOB_RECURSE SRC_SIM_SCENE CONFIGURE_DEPENDS "Source/Sim/Scene/*.cpp")
+file(GLOB_RECURSE SRC_SIM_SYNC CONFIGURE_DEPENDS "Source/Sim/Sync/*.cpp")
 file(GLOB_RECURSE SRC_SIM_CPU CONFIGURE_DEPENDS "Source/Sim/CPU/*.cpp")
 
 if(ENABLE_CUDA)
@@ -139,6 +141,8 @@ add_library(TSP_H STATIC
     ${SRC_SIM_CORE}
     ${SRC_SIM_CPU}
     $<$<BOOL:${ENABLE_CUDA}>:${SRC_SIM_GPU}>
+    ${SRC_SIM_SCENE}
+    ${SRC_SIM_SYNC}
 )
 
 target_include_directories(TSP_H PUBLIC
