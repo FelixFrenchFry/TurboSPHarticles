@@ -70,7 +70,7 @@ namespace Vis
 			.clearColor		= {0.15f, 0.15f, 0.15f, 1.0f},
 			.baseColor		= {1.0f, 0.8f, 0.0f},
 			.alpha			= 1.0f,
-			.radius			= 0.03f,
+			.radius			= 0.05f,
 			.scalarMin		= 0.0f,
 			.scalarMax		= 1.0f,
 			.useScalar		= false
@@ -124,10 +124,10 @@ namespace Vis
 		VisParamsMgr() = default;
 
 		// returns snapshot and version of current visualization parameters
-		std::pair<VisParams, uint64_t> SnapshotParams() const;
+		std::pair<VisParams, int64_t> SnapshotParams() const;
 
 		// returns current stable version number
-		uint64_t StableVersion() const;
+		int64_t StableVersion() const;
 
 		// patch-style setters for individual parameters and their dependent values
 		void SetParam(const WindowPatch& patch);
@@ -138,7 +138,7 @@ namespace Vis
 	private: // ==============================
 
 		alignas(64) VisParams params_{}; // current active copy of visualization parameters
-		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
+		alignas(64) std::atomic<int64_t> version_{ 0 }; // even = stable, odd = writing
 
 		inline void BeginWrite(); // mark beginning of write operation
 		inline void EndWrite(); // mark end of write operation

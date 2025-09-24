@@ -1,7 +1,9 @@
 // parameters_sim.cpp
 
 // external
+#include <cmath>
 #include <spdlog/spdlog.h>
+#include <thread>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -16,15 +18,18 @@ std::pair<SimParams, int64_t> SimParamsMgr::SnapshotParams() const
 	while (true)
 	{
 		// check for ongoing write
-		int64_t before = version_.load();
-		if (before % 2 != 0) { continue; }
+		int64_t before = version_.load(std::memory_order_acquire);
+		if (before % 2 != 0) { std::this_thread::yield(); continue; }
 
 		// copy parameters
 		SimParams res = params_;
 
 		// make sure no write happened during copy
-		int64_t after = version_.load();
+		int64_t after = version_.load(std::memory_order_acquire);
 		if (before == after) { return { res, after }; }
+
+		// else try again
+		std::this_thread::yield();
 	}
 }
 
@@ -33,136 +38,271 @@ int64_t SimParamsMgr::StableVersion() const
 	while (true)
 	{
 		// make sure no write is ongoing
-		uint64_t a = version_.load();
+		int64_t a = version_.load(std::memory_order_acquire);
 		if (a % 2 == 0)
 		{
-			uint64_t b = version_.load();
+			int64_t b = version_.load(std::memory_order_acquire);
 			if (a == b) { return a; }
 		}
+
+		// else try again
+		std::this_thread::yield();
 	}
 }
 
-/*
-void SimParamsMgr::SetParam(TimeStepPatch patch)
+void SimParamsMgr::Set_TimeStep(float timeStep)
 {
-	// detect if any parameter would actually change
+	if (!(timeStep > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'timeStep' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
 	bool changed = false;
 
-	Base::MarkIfChanged(patch.timeStep, params_.time.timeStep, changed);
-	Base::MarkIfChanged(patch.timeStepInv, params_.time.timeStepInv, changed);
-	Base::MarkIfChanged(patch.timeStepSqu, params_.time.timeStepSqu, changed);
+	Base::MarkIfChanged(timeStep, params_.timeStep, changed);
 
 	if (!changed) { return; } // nothing to change
 
+	SPDLOG_INFO("Changed 'timeStep' from {} to {}",
+		params_.timeStep, timeStep);
+
 	// apply changes
 	BeginWrite();
-	if (patch.timeStep) { params_.time.timeStep = *patch.timeStep; }
-	if (patch.timeStepInv) { params_.time.timeStepInv = *patch.timeStepInv; }
-	if (patch.timeStepSqu) { params_.time.timeStepSqu = *patch.timeStepSqu; }
+	params_.timeStep = timeStep;
 	EndWrite();
 }
-*/
 
-void SimParamsMgr::Set_TimeStep(float newTimeStep)
+void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 {
-	SPDLOG_INFO("Changed 'timeStep' from {} to {}",
-		params_.timeStep, newTimeStep);
+	if (!(particleSize > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'particleSize' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		Base::MarkIfChanged(particleSize, params_.particleSizeF, changed);
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		Base::MarkIfChanged(particleSize, params_.particleSizeB, changed);
+	}
+	else
+	{
+		SPDLOG_INFO("Change of 'particleSize' not implemented for this type");
+	}
+
+	if (!changed) { return; } // nothing to change
 
 	BeginWrite();
-	params_.timeStep = newTimeStep;
-	params_.timeStepInv = (newTimeStep != 0.0f) ? 1.0f / newTimeStep : 0.0f;
-	params_.timeStepSqu = newTimeStep * newTimeStep;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		SPDLOG_INFO("Changed 'particleSizeF' from {} to {} "
+					"(and dependent params accordingly)",
+			params_.particleSizeF, particleSize);
+
+		// apply changes
+		params_.particleSizeF = particleSize;
+		params_.particleRadiusF = 0.5f * particleSize;
+		params_.massF = params_.restDensityF * particleSize
+											 * particleSize
+											 * particleSize;
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		SPDLOG_INFO("Changed 'particleSizeB' from {} to {} "
+					"(and dependent params accordingly)",
+			params_.particleSizeB, particleSize);
+
+		// apply changes
+		params_.particleSizeB = particleSize;
+		params_.particleRadiusB = 0.5f * particleSize;
+		params_.massB = params_.restDensityB * particleSize
+											 * particleSize
+											 * particleSize;
+	}
+
 	EndWrite();
 }
 
-
-void SimParamsMgr::Set_ParticleSize(float newParticleSize)
+void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 {
-	SPDLOG_INFO("Changed 'particleSize' from {} to {}",
-		params_.particleSize, newParticleSize);
+	if (!(kernelRadius > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must be > 0");
+		return;
+	}
 
-	BeginWrite();
-	params_.particleSize = newParticleSize;
-	EndWrite();
-}
+	// detect if parameter would actually change
+	bool changed = false;
 
+	Base::MarkIfChanged(kernelRadius, params_.kernelRadius, changed);
 
-void SimParamsMgr::Set_MassFluid(float newMassFluid)
-{
-	SPDLOG_INFO("Changed 'massFluid' from {} to {}",
-		params_.massFluid, newMassFluid);
+	if (!changed) { return; } // nothing to change
 
-	BeginWrite();
-	params_.massFluid = newMassFluid;
-	EndWrite();
-}
-
-
-void SimParamsMgr::Set_MassBound(float newMassBound)
-{
-	SPDLOG_INFO("Changed 'massBound' from {} to {}",
-		params_.massBound, newMassBound);
-
-	BeginWrite();
-	params_.massBound = newMassBound;
-	EndWrite();
-}
-
-
-void SimParamsMgr::Set_KernelRadius(float newKernelRadius)
-{
 	SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
-		params_.kernelRadius, newKernelRadius);
+		params_.kernelRadius, kernelRadius);
 
+	// apply changes
 	BeginWrite();
-	params_.kernelRadius = newKernelRadius;
-	params_.kernelRadiusSqu = newKernelRadius * newKernelRadius;
+	params_.kernelRadius = kernelRadius;
 	EndWrite();
 }
 
-
-void SimParamsMgr::Set_RestDensity(float newRestDensity)
+void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 {
-	SPDLOG_INFO("Changed 'restDensity' from {} to {}",
-		params_.restDensity, newRestDensity);
+	if (!(restDensity > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'restDensity' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		Base::MarkIfChanged(restDensity, params_.restDensityF, changed);
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		Base::MarkIfChanged(restDensity, params_.restDensityB, changed);
+	}
+	else
+	{
+		SPDLOG_INFO("Change of 'restDensity' not implemented for this type");
+	}
+
+	if (!changed) { return; } // nothing to change
 
 	BeginWrite();
-	params_.restDensity = newRestDensity;
-	params_.restDensityInv = (newRestDensity != 0.0f) ? 1.0f / newRestDensity : 0.0f;
-	params_.restDensitySqu = newRestDensity * newRestDensity;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		SPDLOG_INFO("Changed 'restDensityF' from {} to {} "
+					"(and dependent params accordingly)",
+			params_.restDensityF, restDensity);
+
+		// apply changes
+		params_.restDensityF = restDensity;
+		params_.massF = restDensity * params_.particleSizeF
+									* params_.particleSizeF
+									* params_.particleSizeF;
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		SPDLOG_INFO("Changed 'restDensityB' from {} to {} "
+					"(and dependent params accordingly)",
+			params_.restDensityB, restDensity);
+
+		// apply changes
+		params_.restDensityB = restDensity;
+		params_.massB = restDensity * params_.particleSizeB
+									* params_.particleSizeB
+									* params_.particleSizeB;
+	}
+
 	EndWrite();
 }
 
-
-void SimParamsMgr::Set_ViscosityFluid(float newViscosityFluid)
+void SimParamsMgr::Set_Viscosity(float viscosity, Base::ParticleType type)
 {
-	SPDLOG_INFO("Changed 'viscosityFluid' from {} to {}",
-		params_.viscosityFluid, newViscosityFluid);
+	// detect if parameter would actually change
+	bool changed = false;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		Base::MarkIfChanged(viscosity, params_.viscosityF, changed);
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		Base::MarkIfChanged(viscosity, params_.viscosityB, changed);
+	}
+	else
+	{
+		SPDLOG_INFO("Change of 'viscosity' not implemented for this type");
+	}
+
+	if (!changed) { return; } // nothing to change
 
 	BeginWrite();
-	params_.viscosityFluid = newViscosityFluid;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		SPDLOG_INFO("Changed 'viscosityF' from {} to {}",
+			params_.viscosityF, viscosity);
+
+		// apply changes
+		params_.viscosityF = viscosity;
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		SPDLOG_INFO("Changed 'viscosityB' from {} to {}",
+			params_.viscosityB, viscosity);
+
+		// apply changes
+		params_.viscosityB = viscosity;
+	}
+
 	EndWrite();
 }
 
-
-void SimParamsMgr::Set_ViscosityBound(float newViscosityBound)
+void SimParamsMgr::Set_Gravity(glm::vec3 gravity)
 {
-	SPDLOG_INFO("Changed 'viscosityBound' from {} to {}",
-		params_.viscosityBound, newViscosityBound);
+	// detect if parameter would actually change
+	bool changed = false;
 
+	Base::MarkIfChanged(gravity, params_.gravity, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
+		params_.gravity.x, params_.gravity.y, params_.gravity.z,
+		gravity.x, gravity.y, gravity.z);
+
+	// apply changes
 	BeginWrite();
-	params_.viscosityBound = newViscosityBound;
+	params_.gravity = gravity;
 	EndWrite();
 }
 
+void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
+{
+	if (!(boundaryLayers >= 0))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'boundaryLayers' must be >= 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(boundaryLayers, params_.boundaryLayers, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'boundaryLayers' from {} to {}",
+		params_.boundaryLayers, boundaryLayers);
+
+	// apply changes
+	BeginWrite();
+	params_.boundaryLayers = boundaryLayers;
+	EndWrite();
+}
 
 void SimParamsMgr::BeginWrite()
 {
-	version_.fetch_add(1);
+	version_.fetch_add(1, std::memory_order_acq_rel);
 }
-
 
 void SimParamsMgr::EndWrite()
 {
-	version_.fetch_add(1);
+	version_.fetch_add(1, std::memory_order_release);
 }

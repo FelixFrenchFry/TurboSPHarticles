@@ -8,10 +8,21 @@
 
 namespace Base
 {
-	enum class BackendVersion
+	enum ParticleType
+	{
+		Fluid,				// 0
+		Boundary			// 1
+	};
+
+	enum BackendVersion
 	{
 		CPU_01,				// 0
 		GPU_01				// 1
+	};
+
+	enum SimScenario
+	{
+		BreakingDam,		// 0
 	};
 
 	enum NeighborSearchMethod

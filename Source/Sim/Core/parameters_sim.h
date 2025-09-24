@@ -5,9 +5,12 @@
 #pragma once
 
 // external
+#include <array>
 #include <atomic>
+#include <glm/vec3.hpp>
 
 // internal
+#include "Source/Base/enum_hub.h"
 
 
 
@@ -23,33 +26,34 @@ namespace Sim
 
 		// time
 		float timeStep			= 0.01f;
-		float timeStepInv		= 100.0f;
-		float timeStepSqu		= 0.0001f;
 
-		// particles
-		float particleSize		= 1.0f;
-		float massFluid			= 0.2f;
-		float massBound			= 0.2f;
+		// particle sizes
+		float particleSizeF		= 0.1f;
+		float particleSizeB		= 0.1f;
+		float particleRadiusF	= 0.05f;
+		float particleRadiusB	= 0.05f;
 
 		// kernel
-		float kernelRadius		= 2.0f;
-		float kernelRadiusSqu	= 4.0f;
+		float kernelRadius		= 0.2f;
 
-		// density
-		float restDensity		= 1'000.0f;
-		float restDensityInv	= 0.001f;
-		float restDensitySqu	= 1'000'000.0f;
+		// density and mass
+		float restDensityF		= 1'000.0f;
+		float restDensityB		= 1'000.0f;
+		float massF				= 100.0f;
+		float massB				= 100.0f;
 
 		// viscosity
-		float viscosityFluid	= 0.1f;
-		float viscosityBound	= 0.1f;
+		float viscosityF		= 0.1f;
+		float viscosityB		= 0.1f;
 
 		// gravity
-		float gravity[3]		= { 0.0f, -9.81f, 0.0f };
+		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
-		// flags
-
-		// misc
+		// scene
+		int boundaryLayers		= 3;
+		bool closeTop			= true;
+		float jitterFrac		= 0.0f; // % of kernel radius
+		std::int64_t jitterSeed = 42; // RNG seed for jitter
 	};
 
 	class SimParamsMgr
@@ -65,19 +69,18 @@ namespace Sim
 		int64_t StableVersion() const;
 
 		// setters for individual parameters and their dependent values
-		void Set_TimeStep(float newTimeStep);
-		void Set_ParticleSize(float newParticleSize);
-		void Set_MassFluid(float newMassFluid);
-		void Set_MassBound(float newMassBound);
-		void Set_KernelRadius(float newKernelRadius);
-		void Set_RestDensity(float newRestDensity);
-		void Set_ViscosityFluid(float newViscosityFluid);
-		void Set_ViscosityBound(float newViscosityBound);
+		void Set_TimeStep(float timeStep);
+		void Set_ParticleSize(float particleSize, Base::ParticleType type);
+		void Set_KernelRadius(float kernelRadius);
+		void Set_RestDensity(float restDensity, Base::ParticleType type);
+		void Set_Viscosity(float viscosity, Base::ParticleType type);
+		void Set_Gravity(glm::vec3 gravity);
+		void Set_BoundaryLayers(int boundaryLayers);
 
 	private: // ==============================
 
 		alignas(64) SimParams params_{}; // current active copy of visualization parameters
-		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
+		alignas(64) std::atomic<int64_t> version_{ 0 }; // even = stable, odd = writing
 
 		inline void BeginWrite(); // mark beginning of write operation
 		inline void EndWrite(); // mark end of write operation
