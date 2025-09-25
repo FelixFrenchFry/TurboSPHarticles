@@ -49,11 +49,15 @@ namespace Sim
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
-		// scene
-		int boundaryLayers		= 3;
-		bool closeTop			= true;
-		float jitterFrac		= 0.0f; // % of kernel radius
-		std::int64_t jitterSeed = 42; // RNG seed for jitter
+		// fluid conditions
+		float jitFracF			= 0.0f; // % of particle size
+		std::int64_t jitSeedF	= 42; // RNG seed for jitter
+
+		// boundary conditions
+		float jitFracB			= 0.0f; // % of particle size
+		std::int64_t jitSeedB	= 42; // RNG seed for jitter
+		int boundaryLayers = 3;
+		bool closeTop = true;
 	};
 
 	class SimParamsMgr
