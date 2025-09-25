@@ -1,4 +1,4 @@
-// scenebuilder.h
+// builder.h
 //
 // TODO: comment
 
@@ -6,6 +6,7 @@
 
 // external
 #include <array>
+#include <glm/vec3.hpp>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
@@ -26,6 +27,8 @@ namespace Scene
 		float wLen;		  // depth (along wHat)
 	};
 
+	// TODO: still needed?
+	/*
 	struct OBBCorners
 	{
 		glm::vec3 p000; // near-left-bottom  (xMin, yMin, zMin)
@@ -37,6 +40,7 @@ namespace Scene
 		glm::vec3 p011; // far-left-top      (xMin, yMax, zMax)
 		glm::vec3 p111; // far-right-top     (xMax, yMax, zMax)
 	};
+	*/
 
 	struct OBBFace
 	{
@@ -46,18 +50,6 @@ namespace Scene
 		glm::vec3 nHat;   // face normal (outward)
 		float uLen;		  // width (along uHat)
 		float vLen;		  // height (along vHat)
-	};
-
-	class IScenario
-	{
-	public: // ==============================
-
-		virtual ~IScenario() = default;
-
-		virtual const char* Name() const = 0;
-
-		// builds a universal sim state according to the scenario and options
-		virtual void Build(Sync::UniversalSimState& dst, Sim::SimParams params) const = 0;
 	};
 
 	class ScenarioMgr
@@ -85,10 +77,10 @@ namespace Scene
 										  Sync::UniversalSimState& dst,
 										  const Sim::SimParams& params);
 
-		OBB inline MakeOBB_FromAxes(glm::vec3 origin,
-									glm::vec3 uDir, float uLen,
-									glm::vec3 vDir, float vLen,
-									glm::vec3 wDir, float wLen);
+		OBB MakeOBB_FromAxes(glm::vec3 origin,
+							 glm::vec3 uDir, float uLen,
+							 glm::vec3 vDir, float vLen,
+							 glm::vec3 wDir, float wLen);
 
 		std::array<OBBFace, 6> inline GetFacesFromOBB(const OBB& box);
 

@@ -1,8 +1,9 @@
 // simulation.cpp
 
 // external
+#include <mutex>
 #include <omp.h>
-#include "spdlog/spdlog.h"
+#include <spdlog/spdlog.h>
 
 // internal
 #include "Source/Eval/Export/serialization.h"
@@ -12,8 +13,9 @@
 
 using namespace Sim;
 
-SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr)
-	: simParamsMgr_{ simParamsMgr }
+SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
+							 Scene::ScenarioMgr& scenarioMgr)
+	: simParamsMgr_{ simParamsMgr }, scenarioMgr_{ scenarioMgr }
 {
 	// TODO: implement
 }
@@ -27,10 +29,14 @@ bool SimulationMgr::Init()
 	universalSimState_ = Sync::UniversalSimState{};
 
 	// TODO: load initial sim state from a file
-	// TODO: load sim scenario
+
+	// default sim scenario (BreakingDam)
+	SelectSimScenario(Base::ScenarioType::BreakingDam);
 
 	// default sim backend (CPU_01)
 	SelectSimBackend(Base::BackendVersion::CPU_01);
+
+	ReBuildInitialSimState();
 
 	initialized_.store(true, std::memory_order_release);
 
@@ -64,38 +70,90 @@ void SimulationMgr::SyncParameters(bool force)
 	}
 }
 
+void SimulationMgr::SelectSimScenario(Base::ScenarioType type)
+{
+	if (running_.load(std::memory_order_acquire))
+	{
+		SPDLOG_ERROR("Stop the simulation before switching scenario.");
+		return;
+	}
+
+	// create new scenario
+	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, simParams_);
+	if (!simScenario_)
+	{
+		SPDLOG_ERROR("Failed to create sim scenario ({})",
+			static_cast<int>(type));
+		return;
+	}
+
+	SPDLOG_INFO("Selected sim scenario ({})",
+		static_cast<int>(type));
+}
+
 void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 {
+	if (running_.load(std::memory_order_acquire))
+	{
+		SPDLOG_ERROR("Stop the simulation before switching backend");
+		return;
+	}
+
 	if (simBackend_) // a backend already exists
 	{
-		// transfer its current data into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
+
+		// transfer its current data into the universal state to save it
 		simBackend_->PushToUniversalSimState(universalSimState_);
-		simBackend_.reset();
 	}
 
 	// create new backend and initialize it with the universal state
 	simBackend_ = MakeSimBackend(version, simParams_);
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("Failed to create sim backend {}",
+		SPDLOG_ERROR("Failed to create sim backend ({})",
 			static_cast<int>(version));
 		return;
 	}
 
 	{
-		// transfer universal state into backend-specific data structures
 		std::scoped_lock lock(stateMutex_);
+
+		// transfer universal state into backend-specific data structures
 		simBackend_->PullFromUniversalSimState(universalSimState_);
 	}
 
-	SPDLOG_INFO("Selected sim backend {}",
+	SPDLOG_INFO("Selected sim backend ({})",
 		static_cast<int>(version));
 }
 
-void SimulationMgr::LoadInitialSimState(const Sync::UniversalSimState& state)
+void SimulationMgr::ReBuildInitialSimState()
 {
-	// TODO: implement
+	if (!simScenario_)
+	{
+		SPDLOG_ERROR("Failed to re-build initial sim state (no scenario selected)");
+		return;
+	}
+	if (!simBackend_)
+	{
+		SPDLOG_ERROR("Failed to re-build initial sim state (no backend selected)");
+		return;
+	}
+
+	// lock state during re-build
+	std::scoped_lock lock(stateMutex_);
+
+	// reset scenario and all its data
+	universalSimState_ = {};
+	universalSimState_.schemaVersion = 1;
+	universalSimState_.step = 0;
+	universalSimState_.time = 0.0;
+
+	// re-build initial scenario state by transferring into universal state
+	simScenario_->Build(universalSimState_, simParams_);
+
+	// transfer universal state into backend-specific data structures
+	simBackend_->PullFromUniversalSimState(universalSimState_);
 }
 
 void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
@@ -135,10 +193,13 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 	// main simulation step loop
 	while (!stopToken.stop_requested())
 	{
-		// execute one simulation step
-		simBackend_->SimStep(1);
+		// local copy for thread safety
+		const auto params = simParams_;
 
-		// TODO: adjust update frequency
+		// execute one simulation step
+		simBackend_->SimStep(params, 1);
+
+		// TODO: adjust update frequency with throttle
 		if (visualSnapMailbox_)
 		{
 			// create visual snapshot and push to mailbox
@@ -148,6 +209,8 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		}
 
 		SyncParameters();
+
+		// TODO: check if scenario or backend need to be switched?
 	}
 
 	{

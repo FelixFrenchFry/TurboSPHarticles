@@ -18,7 +18,7 @@ namespace Sim
 		{
 		case Base::BackendVersion::CPU_01:
 		{
-			return std::make_unique<SimBackendCPU_01>(params);
+			return std::make_unique<SimBackendCPU_01>();
 		}
 		case Base::BackendVersion::GPU_01:
 		{

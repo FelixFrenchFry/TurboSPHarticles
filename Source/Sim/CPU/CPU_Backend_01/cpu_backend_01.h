@@ -20,7 +20,9 @@ namespace Sim
 	{
 	public: // ==============================
 
-		explicit SimBackendCPU_01(const SimParams& simParams);
+		SimBackendCPU_01() = default;
+
+		const char* Name() const override { return "CPU_01"; }
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(const Sync::UniversalSimState& src) override;
@@ -38,12 +40,9 @@ namespace Sim
 		void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const override;
 
 		// advances the simulation by N_steps
-		void SimStep(std::int64_t N_steps) override;
+		void SimStep(const SimParams& params, std::int64_t N_steps) override;
 
 	private: // ==============================
-
-		// copy of current simulation parameters
-		SimParams simParams_;
 
 		// misc
 		std::int64_t step_ = 0;

@@ -49,7 +49,8 @@ int main(int argc, char** argv)
 
 		Sim::SimParamsMgr simParamsMgr{};
 		Vis::VisParamsMgr visParamsMgr{};
-		Sim::SimulationMgr simulationMgr{ simParamsMgr };
+		Scene::ScenarioMgr scenarioMgr{};
+		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr };
 		Vis::VisualizationMgr visualizationMgr{ simParamsMgr, visParamsMgr };
 
 		Sync::VisualSnapMailbox visualMailbox{};

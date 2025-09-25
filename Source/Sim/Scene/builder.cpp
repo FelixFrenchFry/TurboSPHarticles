@@ -1,4 +1,4 @@
-// scenebuilder.cpp
+// builder.cpp
 
 // external
 #include <cassert>
@@ -10,7 +10,7 @@
 
 // internal
 #include "Source/Base/helpers.h"
-#include "scenebuilder.h"
+#include "builder.h"
 
 
 
@@ -242,10 +242,10 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 	assert(idx == (N_base + N_add));
 }
 
-OBB inline ScenarioMgr::MakeOBB_FromAxes(glm::vec3 origin,
-										 glm::vec3 uDir, float uLen,
-										 glm::vec3 vDir, float vLen,
-										 glm::vec3 wDir, float wLen)
+OBB ScenarioMgr::MakeOBB_FromAxes(glm::vec3 origin,
+								  glm::vec3 uDir, float uLen,
+								  glm::vec3 vDir, float vLen,
+								  glm::vec3 wDir, float wLen)
 {
 	// any dir that is zero is set to a default axis
 	if (Base::ApproxEqu(uDir, glm::vec3(0))) { uDir = { 1, 0, 0 }; }

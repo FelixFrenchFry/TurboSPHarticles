@@ -20,7 +20,7 @@ namespace Base
 		GPU_01				// 1
 	};
 
-	enum SimScenario
+	enum ScenarioType
 	{
 		BreakingDam,		// 0
 	};

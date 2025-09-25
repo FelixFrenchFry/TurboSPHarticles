@@ -24,6 +24,8 @@ namespace Sim
 
 		virtual ~ISimBackend() = default;
 
+		virtual const char* Name() const = 0;
+
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(const Sync::UniversalSimState& src) = 0;
 
@@ -40,7 +42,7 @@ namespace Sim
 		virtual void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const = 0;
 
 		// advances the simulation by N_steps
-		virtual void SimStep(std::int64_t N_steps = 1) = 0;
+		virtual void SimStep(const SimParams& params, std::int64_t N_steps = 1) = 0;
 	};
 
 	// backend factory

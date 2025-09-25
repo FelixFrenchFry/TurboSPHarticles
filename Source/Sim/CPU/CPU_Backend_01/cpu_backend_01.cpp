@@ -13,12 +13,6 @@
 
 using namespace Sim;
 
-SimBackendCPU_01::SimBackendCPU_01(const SimParams& simParams)
-	: simParams_{ simParams }
-{
-	// nothing to do
-}
-
 void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
 {
 	const auto& F = src.fluidParticles;
@@ -198,7 +192,7 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 	}
 }
 
-void SimBackendCPU_01::SimStep(std::int64_t N_steps)
+void SimBackendCPU_01::SimStep(const SimParams& params, std::int64_t N_steps)
 {
 	for (std::int64_t step = 0; step < N_steps; step++)
 	{

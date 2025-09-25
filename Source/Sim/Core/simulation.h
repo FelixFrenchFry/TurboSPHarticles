@@ -7,37 +7,27 @@
 // external
 #include <atomic>
 #include <cstdint>
-#include <span>
 #include <stop_token>
 #include <thread>
 
 // internal
+#include "Source/Sim/Scene/builder.h"
+#include "Source/Sim/Scene/scenario_sim.h"
+#include "Source/Sim/Sync/mailboxes.h"
+#include "Source/Sim/Sync/snapshots.h"
 #include "backend_sim.h"
 #include "parameters_sim.h"
-#include "../Sync/mailboxes.h"
-#include "../Sync/snapshots.h"
 
 
 
 namespace Sim
 {
-	// TODO: prototype!!!
-	struct SimStateView
-	{
-		std::uint32_t N_particles{ 0 };
-		std::span<const float> posX, posY, posZ;
-		std::span<const float> velX, velY, velZ;
-		std::span<const float> density;
-		std::span<const float> pressure;
-
-		// TODO: finish implementation
-	};
-
 	class SimulationMgr
 	{
 	public: // ==============================
 
-		SimulationMgr(Sim::SimParamsMgr& simParamsMgr);
+		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
+					  Scene::ScenarioMgr& scenarioMgr);
 
 		// initialize sub-systems
 		bool Init();
@@ -48,11 +38,15 @@ namespace Sim
 		// pulls latest parameter snapshot and version if they have changed
 		void SyncParameters(bool force = false);
 
+		// create or switch scenario
+		// (destroys previous scenario and all its data)
+		void SelectSimScenario(Base::ScenarioType type);
+
 		// create or switch backend
 		// (destroys previous backend and all its data)
 		void SelectSimBackend(Base::BackendVersion version);
 
-		void LoadInitialSimState(const Sync::UniversalSimState& state);
+		void ReBuildInitialSimState();
 
 		// TODO: void Launch(std::uint32_t N_simThreads);
 		// TODO: void RunSim(std::uint32_t N_simThreads);
@@ -75,9 +69,13 @@ namespace Sim
 		Sim::SimParams simParams_;
 		int64_t simParamsVersion_ = 0;
 
-		// universal simulation state and backend for compute
+		// universal simulation state, and backend for compute
 		Sync::UniversalSimState universalSimState_;
 		std::unique_ptr<ISimBackend> simBackend_{ nullptr };
+
+		// scenario management
+		Scene::ScenarioMgr scenarioMgr_;
+		std::unique_ptr<Scene::ISimScenario> simScenario_{ nullptr };
 
 		// TODO: comment
 		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned

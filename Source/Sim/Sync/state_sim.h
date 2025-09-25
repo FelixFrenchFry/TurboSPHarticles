@@ -329,12 +329,12 @@ namespace Sync
 	// TODO: how to deal with backend-specific data?
 	struct UniversalSimState
 	{
+		// persistent layout version
+		std::int64_t schemaVersion{ 1 };
+
 		// simulation metadata
 		std::int64_t step{ 0 };		// simulation step at this state
 		double time{ 0 };			// simulation time in seconds
-
-		// persistent layout version
-		std::int64_t schemaVersion{ 1 };
 
 		// particle data
 		FluidParticles fluidParticles;

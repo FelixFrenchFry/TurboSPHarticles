@@ -56,8 +56,7 @@ namespace Sim
 		// boundary conditions
 		float jitFracB			= 0.0f; // % of particle size
 		std::int64_t jitSeedB	= 42; // RNG seed for jitter
-		int boundaryLayers = 3;
-		bool closeTop = true;
+		int boundaryLayers		= 3;
 	};
 
 	class SimParamsMgr
