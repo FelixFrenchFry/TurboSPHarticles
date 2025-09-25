@@ -44,7 +44,8 @@ namespace Render
 
 		// upload latest render-specific sim state to the GPU instance buffers
 		// (positions required, scalar data for coloring optional)
-		void UpdateParticles(const Vis::VisualSnapView& view);
+		void UpdateParticles(const Vis::VisualSnapView& view,
+							 const Vis::VisParams& params);
 
 		// upload a new 256-entry RGBA colormap (assumed to be linear RGB)
 		void UpdateColorMap(const std::vector<glm::vec4>& colorMap256);

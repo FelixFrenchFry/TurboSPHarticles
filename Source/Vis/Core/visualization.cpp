@@ -364,6 +364,59 @@ void VisualizationMgr::SyncParameters(bool force)
 
 void VisualizationMgr::SyncVisSimState()
 {
+	if (!visualSnapMailbox_)
+	{
+		SPDLOG_ERROR("Failed to sync vis sim state (no mailbox set)");
+		return;
+	}
+
+	// try to fetch latest snapshot
+	std::shared_ptr<Sync::VisualSnapshot> snap;
+	if (!visualSnapMailbox_->TryFetchLatestSnapshot(snap))
+	{
+		// no new snapshot available
+		return;
+	}
+
+	// move snapshot data into back buffers
+	position_[back_].swap(snap->position);
+	scalarData_[back_].swap(snap->scalarData);
+	scalarMode_ = snap->scalarMode;
+
+	// ensure scalar data size matches position size
+	if (scalarMode_ != Base::None)
+	{
+		if (scalarData_[back_].size() != position_[back_].size())
+		{
+			SPDLOG_WARN("Failed color coding (scalar count ({}) != position count ({}))",
+				scalarData_[back_].size(), position_[back_].size());
+
+			// fix by resizing and filling with zeros
+			scalarData_[back_].resize(position_[back_].size(), 0.0f);
+		}
+	}
+	else // no color coding -> keep scalar buffer empty
+	{
+		scalarData_[back_].clear();
+	}
+
+	SwapVisBuffers();
+
+	// pack the read-only view
+	view_.position = std::span<const glm::vec3>(position_[front_].data(), position_[front_].size());
+	view_.scalarData = (scalarMode_ == Base::None)
+		? std::span<const float>()
+		: std::span<const float>(scalarData_[front_].data(), scalarData_[front_].size());
+	view_.scalarMode = scalarMode_;
+	view_.N_particles = static_cast<std::int64_t>(position_[front_].size());
+
+	// local copy for thread safety
+	const auto params = visParams_;
+
+	// push to GPU to let renderer use the new data
+	renderingMgr_.UpdateParticles(view_, params);
+
+	/*
 	if (!demoActive_) { return; }
 
 	if (!demoPrimed_) 
@@ -393,6 +446,7 @@ void VisualizationMgr::SyncVisSimState()
 	view_.changed = true;
 
 	renderingMgr_.UpdateParticles(view_);
+	*/
 }
 
 void VisualizationMgr::SwapVisBuffers() { std::swap(front_, back_); }

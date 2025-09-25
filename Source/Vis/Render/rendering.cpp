@@ -51,7 +51,8 @@ void RenderingMgr::Shutdown()
 	DestroyVAOandBuffers();
 }
 
-void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view)
+void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
+								   const Vis::VisParams& params)
 {
 	N_instances_ = view.N_particles;
 	if (N_instances_ == 0) { return; }
@@ -59,14 +60,15 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view)
 	EnsureInstanceCapacity(N_instances_);
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
-	const float rad = 0.03f;
+	// TODO: differentiate between fluid and boundary particles?
+	const float rad = params.render.radius;
 	const bool hasScalar = (view.scalarMode != Base::None) &&
 							!view.scalarData.empty();
 
 	// write all instance data into the persistently mapped buffer
 	// TODO: how many threads should be used here?
 	// #pragma omp parallel for schedule(static)
-	for (int64_t i = 0; i < static_cast<int64_t>(N_instances_); i++)
+	for (int64_t i = 0; i < N_instances_; i++)
 	{
 		const glm::vec3 pos = view.position[i];
 		out[i].posAndRad = glm::vec4(pos, rad);

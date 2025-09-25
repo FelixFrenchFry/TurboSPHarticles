@@ -53,8 +53,8 @@ namespace Vis
 			// TODO: adjust aspect ratio
 			.projMat		= glm::perspective(glm::radians(45.0f), 
 											   16.0f / 9.0f, 0.01f, 100.0f),
-			.camPos			= {0.0f, 0.0f, 5.0f},
-			.yawDeg			= -90.0f,
+			.camPos			= {0.0f, 0.0f, 0.0f},
+			.yawDeg			= 0.0f,
 			.pitchDeg		= 0.0f,
 			.moveSpeed		= 2.0f,
 			.turnSpeedDeg	= 90.0f,

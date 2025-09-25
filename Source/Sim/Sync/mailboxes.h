@@ -25,16 +25,20 @@ namespace Sync
 			latestSnap_.store(std::move(snap), std::memory_order_release);
 		};
 
-		std::shared_ptr<VisualSnapshot> FetchLatestSnapshot() noexcept
+		bool TryFetchLatestSnapshot(std::shared_ptr<VisualSnapshot>& dst) noexcept
 		{
-			return latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			auto snap = latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			if (!snap) { return false; } // failed fetch
+
+			// successful fetch
+			dst = std::move(snap);
+			return true;
 		};
 
 	private: // ==============================
 
 		// latest snapshot of the vis-specific simulation state
 		std::atomic<std::shared_ptr<VisualSnapshot>> latestSnap_{ nullptr };
-
 	};
 
 } // namespace Sim
