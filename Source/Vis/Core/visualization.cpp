@@ -20,8 +20,6 @@ VisualizationMgr::VisualizationMgr(Sim::SimParamsMgr& simParamsMgr,
 								   Vis::VisParamsMgr& visParamsMgr)
 	: simParamsMgr_{ simParamsMgr }
 	, visParamsMgr_{ visParamsMgr }
-	, simParams_{}
-	, visParams_{}
 	, userInputMgr_{ simParamsMgr, visParamsMgr }
 	, userInterfaceMgr_{ simParamsMgr, visParamsMgr }
 	, renderingMgr_{ simParamsMgr, visParamsMgr }
@@ -112,14 +110,6 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 	userInputMgr_.Init(visParams_);
 	userInterfaceMgr_.Init(window_, VisConstants::glVersion.name);
 	renderingMgr_.Init(visParams_.frameBuffer.size, visParams_.frameBuffer.dpiScale);
-
-	// pre-reserve double-buffers
-	// TODO: use better estimate of max sizes
-	const std::int64_t N_reserve = 100'000;
-	position_[0].reserve(N_reserve);
-	position_[1].reserve(N_reserve);
-	scalarData_[0].reserve(N_reserve);
-	scalarData_[1].reserve(N_reserve);
 
 	// initial GL viewport
 	// TODO: outsource to renderingMgr
@@ -379,74 +369,45 @@ void VisualizationMgr::SyncVisSimState()
 	}
 
 	// move snapshot data into back buffers
-	position_[back_].swap(snap->position);
-	scalarData_[back_].swap(snap->scalarData);
-	scalarMode_ = snap->scalarMode;
+	posF_[back_].swap(snap->posF);
+	scalarDataF_[back_].swap(snap->scalarDataF);
+	boxesB_[back_].swap(snap->boxesB);
+	scalarMode_ = snap->scalarModeF;
 
 	// ensure scalar data size matches position size
 	if (scalarMode_ != Base::None)
 	{
-		if (scalarData_[back_].size() != position_[back_].size())
+		if (scalarDataF_[back_].size() != posF_[back_].size())
 		{
 			SPDLOG_WARN("Failed color coding (scalar count ({}) != position count ({}))",
-				scalarData_[back_].size(), position_[back_].size());
+				scalarDataF_[back_].size(), posF_[back_].size());
 
 			// fix by resizing and filling with zeros
-			scalarData_[back_].resize(position_[back_].size(), 0.0f);
+			scalarDataF_[back_].resize(posF_[back_].size(), 0.0f);
 		}
 	}
 	else // no color coding -> keep scalar buffer empty
 	{
-		scalarData_[back_].clear();
+		scalarDataF_[back_].clear();
 	}
 
 	SwapVisBuffers();
 
-	// pack the read-only view
-	view_.position = std::span<const glm::vec3>(position_[front_].data(), position_[front_].size());
-	view_.scalarData = (scalarMode_ == Base::None)
+	// pack the read-only view for the rendering manager to use it
+	view_.N_F = static_cast<std::int64_t>(posF_[front_].size());
+	view_.posF = std::span<const glm::vec3>(posF_[front_].data(), posF_[front_].size());
+	view_.scalarDataF = (scalarMode_ == Base::None)
 		? std::span<const float>()
-		: std::span<const float>(scalarData_[front_].data(), scalarData_[front_].size());
-	view_.scalarMode = scalarMode_;
-	view_.N_particles = static_cast<std::int64_t>(position_[front_].size());
+		: std::span<const float>(scalarDataF_[front_].data(), scalarDataF_[front_].size());
+	view_.scalarModeF = scalarMode_;
+	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
 
 	// local copy for thread safety
 	const auto params = visParams_;
 
 	// push to GPU to let renderer use the new data
 	renderingMgr_.UpdateParticles(view_, params);
-
-	/*
-	if (!demoActive_) { return; }
-
-	if (!demoPrimed_) 
-	{
-		position_[back_].resize(demoCount_);
-		scalarData_[back_].resize(demoCount_);
-
-		std::mt19937 rng{ 12345678 }; // deterministic seed
-		std::normal_distribution<float> N(0.0f, 0.5f);
-
-		for (std::int64_t i = 0; i < demoCount_; i++)
-		{
-			glm::vec3 p{ N(rng), N(rng), N(rng) };
-			position_[back_][i] = p;
-			scalarData_[back_][i] = glm::length(p);
-		}
-
-		SwapVisBuffers();
-
-		demoPrimed_ = true;
-	}
-
-	view_.position = std::span<const glm::vec3>(position_[front_].data(), position_[front_].size());
-	view_.scalarData = std::span<const float>(scalarData_[front_].data(), scalarData_[front_].size());
-	view_.scalarMode = scalarMode_;
-	view_.N_particles = position_[front_].size();
-	view_.changed = true;
-
-	renderingMgr_.UpdateParticles(view_);
-	*/
+	renderingMgr_.UpdateWireframes(view_, params);
 }
 
 void VisualizationMgr::SwapVisBuffers() { std::swap(front_, back_); }

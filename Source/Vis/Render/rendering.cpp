@@ -23,8 +23,14 @@ RenderingMgr::RenderingMgr(Sim::SimParamsMgr& simParamsMgr,
 void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 {
 	EnableDebugOutput();
-	CreateImpostorProgram();
-	CreateVAOandBuffers();
+
+	// create shader programs
+	CreateSphereImpostorProgram();
+	CreateLineProgram();
+
+	// create VAOs and buffers
+	CreateSphereImpostorVAOandBuffers();
+	CreateLineVAOandBuffers();
 
 	// default grayscale colormap
 	std::vector<glm::vec4> lut(256);
@@ -42,40 +48,63 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 
 void RenderingMgr::Shutdown()
 {
-	if (progImpostor_)
+	if (progSphereImpostors_)
 	{
-		glDeleteProgram(progImpostor_);
-		progImpostor_ = 0;
+		glDeleteProgram(progSphereImpostors_);
+		progSphereImpostors_ = 0;
 	}
 
-	DestroyVAOandBuffers();
+	if (progLines_)
+	{
+		glDeleteProgram(progLines_);
+		progLines_ = 0;
+	}
+
+	DestroySphereImpostorVAOandBuffers();
+	DestroyLineVAOandBuffers();
 }
 
 void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 								   const Vis::VisParams& params)
 {
-	N_instances_ = view.N_particles;
-	if (N_instances_ == 0) { return; }
+	N_impostorInstances_ = view.N_F;
+	if (N_impostorInstances_ == 0) { return; }
 
-	EnsureInstanceCapacity(N_instances_);
+	EnsureInstanceCapacity(N_impostorInstances_);
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
 	// TODO: differentiate between fluid and boundary particles?
 	const float rad = params.render.radius;
-	const bool hasScalar = (view.scalarMode != Base::None) &&
-							!view.scalarData.empty();
+	const bool hasScalar = (view.scalarModeF != Base::None) &&
+							!view.scalarDataF.empty();
 
 	// write all instance data into the persistently mapped buffer
 	// TODO: how many threads should be used here?
 	// #pragma omp parallel for schedule(static)
-	for (int64_t i = 0; i < N_instances_; i++)
+	for (int64_t i = 0; i < N_impostorInstances_; i++)
 	{
-		const glm::vec3 pos = view.position[i];
+		const glm::vec3 pos = view.posF[i];
 		out[i].posAndRad = glm::vec4(pos, rad);
-		out[i].scalar = hasScalar ? view.scalarData[i] : 0.0f;
+		out[i].scalar = hasScalar ? view.scalarDataF[i] : 0.0f;
 	}
 
 	// no need to flush since persistently mapped
+}
+
+void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::VisParams& params)
+{
+	// get line vertices for all boxes
+	std::vector<glm::vec3> lineVertices{};
+	for (const auto& box : view.boxesB)
+	{
+		BuildWireframeEdgesFromOBB(box, lineVertices);
+	}
+
+	N_lineVertices_ = static_cast<int64_t>(lineVertices.size());
+	if (N_lineVertices_ == 0) { return; }
+
+	const GLsizeiptr bytes = static_cast<GLsizeiptr>(lineVertices.size() * sizeof(glm::vec3));
+	glNamedBufferData(vboLines_, bytes, lineVertices.data(), GL_DYNAMIC_DRAW);
 }
 
 void RenderingMgr::UpdateColorMap(const std::vector<glm::vec4>& colorMap256)
@@ -93,49 +122,73 @@ void RenderingMgr::UpdateColorMap(const std::vector<glm::vec4>& colorMap256)
 
 void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraState& cam)
 {
-	if (N_instances_ == 0) { return; }
-
 	// make sure params cached on the GPU are up to date
 	UpdateParamsUBO(render);
 	UpdateCameraUBO(cam);
 
-	// bind state and bind color LUT to unit 0
-	glUseProgram(progImpostor_);
-	glBindVertexArray(vao_);
-	glBindTextureUnit(0, texColorMap_);
+	if (N_impostorInstances_ > 0)
+	{
+		// bind state and bind color LUT
+		glUseProgram(progSphereImpostors_);
+		glBindVertexArray(vao_);
+		glBindTextureUnit(0, texColorMap_);
 
-	// TODO: add GPU timer?
-	// glBeginQuery(GL_TIME_ELAPSED, timerQuery_);
+		// draw 4-vertex quads (2 triangles), instanced N times
+		glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+		glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(N_impostorInstances_));
+		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+	}
 
-	// draw 4-vertex quads (2 triangles), instanced N times
-	glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-	glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(N_instances_));
-	glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-
-	// TODO: add GPU timer?
-	/*
-	glEndQuery(GL_TIME_ELAPSED);
-	GLuint64 ns = 0;
-	glGetQueryObjectui64v(timerQuery_, GL_QUERY_RESULT, &ns);
-	lastGpuTimeNs_ = ns;
-	*/
+	if (N_lineVertices_ > 0)
+	{
+		// bind state and bind color uniform
+		glUseProgram(progLines_);
+		glBindVertexArray(vaoLines_);
+		glUniform4fv(uniColorLoc_, 1, &render.lineColor.x);
+		glLineWidth(render.lineWidth);
+		glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(N_lineVertices_));
+		glBindVertexArray(0);
+		glUseProgram(0);
+	}
 }
 
-// creates the shader program for rendering impostor spheres
-void RenderingMgr::CreateImpostorProgram()
+// creates the shader program for rendering sphere impostors
+void RenderingMgr::CreateSphereImpostorProgram()
 {
-	GLuint vertS = Compile(GL_VERTEX_SHADER, VS_impostor);
-	GLuint fragS = Compile(GL_FRAGMENT_SHADER, FS_impostor);
+	GLuint vertS = Compile(GL_VERTEX_SHADER, VS_sphereImpostor);
+	GLuint fragS = Compile(GL_FRAGMENT_SHADER, FS_sphereImpostor);
 
-	if (vertS == 0) { SPDLOG_ERROR("Failed to compile vertex shader"); }
-	if (fragS == 0) { SPDLOG_ERROR("Failed to compile fragment shader"); }
+	if (vertS == 0) { SPDLOG_ERROR("Failed to compile vertex shader (VS_sphereImpostor)"); }
+	if (fragS == 0) { SPDLOG_ERROR("Failed to compile fragment shader (FS_sphereImpostor)"); }
 
-	progImpostor_ = Link(vertS, fragS);
-
-	if (!progImpostor_)
+	progSphereImpostors_ = Link(vertS, fragS);
+	if (!progSphereImpostors_)
 	{
-		SPDLOG_ERROR("Failed to create impostor shader program");
-		throw std::runtime_error("Failed to create impostor shader program");
+		SPDLOG_ERROR("Failed to create sphere impostor shader program");
+		throw std::runtime_error("Failed to create sphere impostor shader program");
+	}
+}
+
+// creates the shader program for rendering lines
+void RenderingMgr::CreateLineProgram()
+{
+	GLuint vertS = Compile(GL_VERTEX_SHADER, VS_line);
+	GLuint fragS = Compile(GL_FRAGMENT_SHADER, FS_line);
+
+	if (vertS == 0) { SPDLOG_ERROR("Failed to compile vertex shader (VS_line)"); }
+	if (fragS == 0) { SPDLOG_ERROR("Failed to compile fragment shader (FS_line)"); }
+
+	progLines_ = Link(vertS, fragS);
+	if (!progLines_)
+	{
+		SPDLOG_ERROR("Failed to create line shader program");
+		throw std::runtime_error("Failed to create line shader program");
+	}
+
+	uniColorLoc_ = glGetUniformLocation(progLines_, "uColor");
+	if (uniColorLoc_ < 0)
+	{
+		SPDLOG_WARN("Failed to find uniform location for 'uColor' in line shader");
 	}
 }
 
@@ -243,51 +296,7 @@ void RenderingMgr::UpdateCameraUBO(const Vis::CameraState& cam)
 	glNamedBufferSubData(uboCamera_, 0, sizeof(CameraUBO), &cachedCam);
 }
 
-void RenderingMgr::EnsureInstanceCapacity(std::int64_t N_required)
-{
-	if (N_required <= capacity_) { return; }
-
-	// grow capacity to next power of two
-	std::int64_t newCap = capacity_ ? capacity_ : 1024;
-	while (newCap < N_required)
-	{
-		newCap *= 2;
-	}
-	std::uint64_t newSize = newCap * sizeof(InstanceData);
-
-	// (re)allocate immutable storage and map persistently
-	const GLbitfield storageFlags = GL_MAP_WRITE_BIT |
-									GL_MAP_PERSISTENT_BIT |
-									GL_MAP_COHERENT_BIT;
-	const GLbitfield mapFlags = GL_MAP_WRITE_BIT |
-								GL_MAP_PERSISTENT_BIT |
-								GL_MAP_COHERENT_BIT;
-
-	// unmap and delete old buffer if existing
-	if (mappedBase_)
-	{
-		glUnmapNamedBuffer(vboInstances_);
-		mappedBase_ = nullptr;
-		mappedSize_ = 0;
-	}
-
-	glNamedBufferStorage(vboInstances_, newSize, nullptr, storageFlags);
-	mappedBase_ = static_cast<unsigned char*>(
-		glMapNamedBufferRange(vboInstances_, 0, newSize, mapFlags));
-	if (!mappedBase_)
-	{
-		SPDLOG_ERROR("Failed to map instance buffer");
-		throw std::runtime_error("Failed to map instance buffer");
-	}
-
-	mappedSize_ = newSize;
-	capacity_ = newCap;
-
-	// re-bind instance VBO to index 1
-	glVertexArrayVertexBuffer(vao_, 1, vboInstances_, 0, sizeof(InstanceData));
-}
-
-void RenderingMgr::CreateVAOandBuffers()
+void RenderingMgr::CreateSphereImpostorVAOandBuffers()
 {
 	// create VAO for tracking vertex attributes
 	glCreateVertexArrays(1, &vao_);
@@ -351,7 +360,22 @@ void RenderingMgr::CreateVAOandBuffers()
 	// glGenQueries(1, &timerQuery_);
 }
 
-void RenderingMgr::DestroyVAOandBuffers()
+void RenderingMgr::CreateLineVAOandBuffers()
+{
+	// create VAO and VBO for rendering lines
+	glCreateVertexArrays(1, &vaoLines_);
+	glCreateBuffers(1, &vboLines_);
+
+	// bind line VBO to index 0
+	glVertexArrayVertexBuffer(vaoLines_, 0, vboLines_, 0, sizeof(glm::vec3));
+
+	// attribute 0 = vec3 aPos 
+	glEnableVertexArrayAttrib(vaoLines_, 0);
+	glVertexArrayAttribFormat(vaoLines_, 0, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vaoLines_, 0, 0);
+}
+
+void RenderingMgr::DestroySphereImpostorVAOandBuffers()
 {
 	if (mappedBase_)
 	{
@@ -368,6 +392,12 @@ void RenderingMgr::DestroyVAOandBuffers()
 	if (vao_) { glDeleteVertexArrays(1, &vao_); vao_ = 0; }
 }
 
+void RenderingMgr::DestroyLineVAOandBuffers()
+{
+	if (vboLines_) { glDeleteBuffers(1, &vboLines_); vboLines_ = 0; }
+	if (vaoLines_) { glDeleteVertexArrays(1, &vaoLines_); vaoLines_ = 0; }
+}
+
 static void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
 								   GLenum severity, GLsizei length,
 								   const GLchar* message, const void* userParam)
@@ -375,6 +405,71 @@ static void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
 	if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) { return; } // too noisy
 
 	SPDLOG_WARN("GL debug type=0x{:x}, severity=0x{:x}, msg={}", type, severity, message);
+}
+
+void RenderingMgr::EnsureInstanceCapacity(std::int64_t N_required)
+{
+	if (N_required <= capacity_) { return; }
+
+	// grow capacity to next power of two
+	std::int64_t newCap = capacity_ ? capacity_ : 1024;
+	while (newCap < N_required)
+	{
+		newCap *= 2;
+	}
+	std::uint64_t newSize = newCap * sizeof(InstanceData);
+
+	// (re)allocate immutable storage and map persistently
+	const GLbitfield storageFlags = GL_MAP_WRITE_BIT |
+		GL_MAP_PERSISTENT_BIT |
+		GL_MAP_COHERENT_BIT;
+	const GLbitfield mapFlags = GL_MAP_WRITE_BIT |
+		GL_MAP_PERSISTENT_BIT |
+		GL_MAP_COHERENT_BIT;
+
+	// unmap and delete old buffer if existing
+	if (mappedBase_)
+	{
+		glUnmapNamedBuffer(vboInstances_);
+		mappedBase_ = nullptr;
+		mappedSize_ = 0;
+	}
+
+	glNamedBufferStorage(vboInstances_, newSize, nullptr, storageFlags);
+	mappedBase_ = static_cast<unsigned char*>(
+		glMapNamedBufferRange(vboInstances_, 0, newSize, mapFlags));
+	if (!mappedBase_)
+	{
+		SPDLOG_ERROR("Failed to map instance buffer");
+		throw std::runtime_error("Failed to map instance buffer");
+	}
+
+	mappedSize_ = newSize;
+	capacity_ = newCap;
+
+	// re-bind instance VBO to index 1
+	glVertexArrayVertexBuffer(vao_, 1, vboInstances_, 0, sizeof(InstanceData));
+}
+
+void RenderingMgr::BuildWireframeEdgesFromOBB(const Scene::OBB& box, std::vector<glm::vec3>& dst)
+{
+	const glm::vec3 p000 = box.origin;
+	const glm::vec3 p100 = box.origin + box.uHat * box.uLen;
+	const glm::vec3 p010 = box.origin + box.vHat * box.vLen;
+	const glm::vec3 p110 = box.origin + box.uHat * box.uLen + box.vHat * box.vLen;
+	const glm::vec3 p001 = box.origin + box.wHat * box.wLen;
+	const glm::vec3 p101 = box.origin + box.uHat * box.uLen + box.wHat * box.wLen;
+	const glm::vec3 p011 = box.origin + box.vHat * box.vLen + box.wHat * box.wLen;
+	const glm::vec3 p111 = box.origin + box.uHat * box.uLen + box.vHat * box.vLen + box.wHat * box.wLen;
+
+	auto edge = [&](const glm::vec3& a, const glm::vec3& b) { dst.push_back(a); dst.push_back(b); };
+
+	// near (zMin)
+	edge(p000, p100); edge(p100, p110); edge(p110, p010); edge(p010, p000);
+	// far (zMax)
+	edge(p001, p101); edge(p101, p111); edge(p111, p011); edge(p011, p001);
+	// connectors
+	edge(p000, p001); edge(p100, p101); edge(p110, p111); edge(p010, p011);
 }
 
 void RenderingMgr::EnableDebugOutput()

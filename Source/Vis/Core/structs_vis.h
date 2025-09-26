@@ -10,7 +10,8 @@
 #include <glm/vec3.hpp>
 
 // internal
-#include "../../Base/enum_hub.h"
+#include "Source/Base/enum_hub.h"
+#include "Source/Sim/Scene/builder.h"
 
 
 
@@ -18,10 +19,19 @@ namespace Vis
 {
 	struct VisualSnapView
 	{
-		std::span<const glm::vec3> position;
-		std::span<const float> scalarData; // data according to color coding mode
-		Base::ColorCodingMode scalarMode{ Base::None };
-		std::int64_t N_particles{ 0 };
+		// metadata
+		std::int64_t step;					// simulation step at this snapshot
+
+		// data for fluid particle vis
+		std::int64_t N_F;					// number of fluid particles
+		std::span<const glm::vec3> posF;	// positions of all fluid particles
+		std::span<const float> scalarDataF;	// data according to color coding mode
+		Base::ColorCodingMode scalarModeF;	// color coding mode
+
+		// data for boundary particles and boundary structures vis
+		std::int64_t N_B;					// number of boundary particles
+		std::span<const glm::vec3> posB;	// positions of all boundary particles
+		std::span<const Scene::OBB> boxesB;	// OBBs of boundary structures
 	};
 
 	struct WindowConfig
@@ -64,12 +74,15 @@ namespace Vis
 	{
 		glm::vec3 lightDirVS;		// light direction in view space
 		glm::vec4 clearColor;		// background color RGBA
-		glm::vec3 baseColor;		// base sphere color RGB
+		glm::vec3 baseColor;		// base sphere impostor color RGB
+		glm::vec3 lineColor;		// wireframe color RGB
 		float alpha;
 		float radius;
 		float scalarMin;
 		float scalarMax;
 		bool useScalar;
+
+		float lineWidth;
 	};
 
 } // namespace Vis

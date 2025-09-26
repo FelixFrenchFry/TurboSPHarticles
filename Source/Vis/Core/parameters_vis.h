@@ -35,7 +35,7 @@ namespace Vis
 			.size			= {1920, 1080},
 			.title			= "TSP Visual",
 			.resizable		= true,
-			.vsync			= false
+			.vsync			= true
 		};
 
 		FrameBufferConfig frameBuffer
@@ -53,10 +53,10 @@ namespace Vis
 			// TODO: adjust aspect ratio
 			.projMat		= glm::perspective(glm::radians(45.0f), 
 											   16.0f / 9.0f, 0.01f, 100.0f),
-			.camPos			= {0.0f, 0.0f, 0.0f},
-			.yawDeg			= 0.0f,
+			.camPos			= {5.5f, 3.0f, 9.0f},
+			.yawDeg			= -90.0f,
 			.pitchDeg		= 0.0f,
-			.moveSpeed		= 2.0f,
+			.moveSpeed		= 3.0f,
 			.turnSpeedDeg	= 90.0f,
 			.speedMult		= 4.0f,
 			.yFovDeg		= 60.0f,
@@ -69,11 +69,13 @@ namespace Vis
 			.lightDirVS		= {0.3f, 0.6f, 0.6f},
 			.clearColor		= {0.15f, 0.15f, 0.15f, 1.0f},
 			.baseColor		= {1.0f, 0.8f, 0.0f},
+			.lineColor		= {1.0f, 1.0f, 1.0f},
 			.alpha			= 1.0f,
 			.radius			= 0.05f,
 			.scalarMin		= 0.0f,
 			.scalarMax		= 1.0f,
-			.useScalar		= false
+			.useScalar		= false,
+			.lineWidth		= 0.02f
 		};
 	};
 

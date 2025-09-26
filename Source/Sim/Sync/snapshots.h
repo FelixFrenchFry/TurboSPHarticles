@@ -9,7 +9,8 @@
 #include <vector>
 
 // internal
-#include "../../Base/enum_hub.h"
+#include "Source/Base/enum_hub.h"
+#include "Source/Sim/Scene/builder.h"
 
 
 
@@ -79,13 +80,19 @@ namespace Sync
 	// interactive visualization)
 	struct VisualSnapshot
 	{
-		// TODO: implement properly
-
-		std::vector<glm::vec3> position;	// positions of all particles
-		std::vector<float> scalarData;		// data according to color coding mode
-		Base::ColorCodingMode scalarMode;	// color coding mode
-		std::int64_t N_particles;			// number of particles
+		// metadata
 		std::int64_t step;					// simulation step at this snapshot
+
+		// data for fluid particle vis
+		std::int64_t N_F;					// number of fluid particles
+		std::vector<glm::vec3> posF;		// positions of all fluid particles
+		std::vector<float> scalarDataF;		// data according to color coding mode
+		Base::ColorCodingMode scalarModeF;	// color coding mode
+
+		// data for boundary particles and boundary structures vis
+		std::int64_t N_B;					// number of boundary particles
+		std::vector<glm::vec3> posB;		// positions of all boundary particles
+		std::vector<Scene::OBB> boxesB;		// OBBs of boundary structures
 	};
 
 } // namespace Sim

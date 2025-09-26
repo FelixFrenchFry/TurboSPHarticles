@@ -205,7 +205,13 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			// create visual snapshot and push to mailbox
 			auto snap = std::make_shared<Sync::VisualSnapshot>();
 			simBackend_->PackVisualSnapshot(*snap);
-			visualSnapMailbox_->StoreSnapshot(std::move(snap)); // non-blocking
+
+			// pack misc data into snapshot that is not handled by the backend
+			snap->step = params.step;
+			snap->boxesB = simScenario_->GetBoundaryBoxes();
+
+			// move snapshot into mailbox (non-blocking)
+			visualSnapMailbox_->StoreSnapshot(std::move(snap));
 		}
 
 		SyncParameters();

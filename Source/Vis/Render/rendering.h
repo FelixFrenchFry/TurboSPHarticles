@@ -10,8 +10,8 @@
 #include <glm/glm.hpp>
 
 // internal
-#include "../../Sim/Core/parameters_sim.h"
-#include "../Core/parameters_vis.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Vis/Core/parameters_vis.h"
 
 // forward declarations
 
@@ -47,6 +47,10 @@ namespace Render
 		void UpdateParticles(const Vis::VisualSnapView& view,
 							 const Vis::VisParams& params);
 
+		// upload latest render-specific sim state to the GPU instance buffers
+		void UpdateWireframes(const Vis::VisualSnapView& view,
+							  const Vis::VisParams& params);
+
 		// upload a new 256-entry RGBA colormap (assumed to be linear RGB)
 		void UpdateColorMap(const std::vector<glm::vec4>& colorMap256);
 
@@ -59,14 +63,22 @@ namespace Render
 		Sim::SimParamsMgr& simParamsMgr_;
 		Vis::VisParamsMgr& visParamsMgr_;
 
-		// addresses of GL objects
-		GLuint vao_ = 0;			// vertex array object
-		GLuint vboQuad_ = 0;		// quad for impostor sphere instances
-		GLuint vboInstances_ = 0;   // instance data
-		GLuint uboParams_ = 0;		// cached render params
-		GLuint uboCamera_ = 0;		// cached camera config
-		GLuint texColorMap_ = 0;	// color lookup-table
-		GLuint progImpostor_ = 0;	// impostor sphere shader program
+		// addresses of GL objects (sphere impostors -> particles)
+		GLuint vao_ = 0;					// vertex array object
+		GLuint vboQuad_ = 0;				// quad for impostor sphere instances
+		GLuint vboInstances_ = 0;			// instance data
+		GLuint progSphereImpostors_ = 0;	// impostor sphere shader program
+		GLuint texColorMap_ = 0;			// color lookup-table
+
+		// addresses of GL objects (lines -> wireframes)
+		GLuint vaoLines_ = 0;
+		GLuint vboLines_ = 0;
+		GLuint progLines_ = 0;
+		GLint uniColorLoc_ = -1;
+
+		// cached params
+		GLuint uboParams_ = 0; // cached render params
+		GLuint uboCamera_ = 0; // cached camera config
 
 		// persistent map pointer
 		unsigned char* mappedBase_ = nullptr;
@@ -74,19 +86,27 @@ namespace Render
 		std::int64_t capacity_ = 0; // number of instances capacity
 
 		// draw state
-		std::int64_t N_instances_ = 0;
+		int64_t N_impostorInstances_ = 0;
+		int64_t N_lineVertices_ = 0;
 
 		// helpers
-		void CreateImpostorProgram();
+		void CreateSphereImpostorProgram();
+		void CreateLineProgram();
 		GLuint Compile(GLenum type, const char* src);
 		GLuint Link(GLuint vertS, GLuint fragS);
 
-		void CreateVAOandBuffers();
-		void DestroyVAOandBuffers();
+		void CreateSphereImpostorVAOandBuffers();
+		void CreateLineVAOandBuffers();
 
-		void EnsureInstanceCapacity(std::int64_t N_required);
+		void DestroySphereImpostorVAOandBuffers();
+		void DestroyLineVAOandBuffers();
+
 		void UpdateParamsUBO(const Vis::RenderConfig& render);
 		void UpdateCameraUBO(const Vis::CameraState& cam);
+
+		void EnsureInstanceCapacity(std::int64_t N_required);
+
+		void BuildWireframeEdgesFromOBB(const Scene::OBB& box, std::vector<glm::vec3>& dst);
 
 		// debug callback
 		void EnableDebugOutput();

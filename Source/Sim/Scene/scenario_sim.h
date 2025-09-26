@@ -27,6 +27,8 @@ namespace Scene
 
 		// builds a universal sim state according to the scenario and options
 		virtual void Build(Sync::UniversalSimState& dst, const Sim::SimParams& params) const = 0;
+
+		virtual std::vector<OBB> GetBoundaryBoxes() const = 0;
 	};
 
 	// scenario factory

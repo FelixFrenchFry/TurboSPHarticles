@@ -8,7 +8,7 @@
 
 namespace Render
 {
-	static const char* VS_impostor = R"(#version 450 core
+	static const char* VS_sphereImpostor = R"GLSL(#version 450 core
 
 	// per-vertex attributes for a quad (2 triangles / 4 vertices) centered at origin
 	layout(location = 0) in vec2 aCorner;		// per-vertex: (-1,-1), (1,-1), (1,1), (-1,1)
@@ -51,9 +51,9 @@ namespace Render
 		vScalar = aScalar;
 		vBillboardVS = billboardVS;
 	}
-	)";
+	)GLSL";
 
-	static const char* FS_impostor = R"(#version 450 core
+	static const char* FS_sphereImpostor = R"GLSL(#version 450 core
 
 	// input from vertex shader
 	noperspective in vec2 vCorner;
@@ -147,6 +147,36 @@ namespace Render
 		// output final color
 		FragColor = vec4(lit, alpha);
 	}
-	)";
+	)GLSL";
+
+	static const char* VS_line = R"GLSL(#version 450 core
+	
+	layout(location = 0) in vec3 aPos;
+
+	layout(std140, binding = 1) uniform Camera
+	{
+		mat4 uViewMat;
+		mat4 uProjMat;
+		mat4 uViewProjMat;
+		vec4 uCamPos;							// xyz = camera position in world space, w unused (0)
+	};
+
+	void main()
+	{
+		gl_Position = uViewProjMat * vec4(aPos, 1.0);
+	}
+	)GLSL";
+
+	static const char* FS_line = R"GLSL(#version 450 core
+
+	layout(location = 0) out vec4 FragColor;
+
+	uniform vec4 uColor;
+
+	void main()
+	{
+		FragColor = uColor;
+	}
+	)GLSL";
 
 } // namespace Render

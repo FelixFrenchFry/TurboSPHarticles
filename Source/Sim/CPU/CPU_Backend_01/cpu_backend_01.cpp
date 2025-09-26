@@ -140,18 +140,18 @@ void SimBackendCPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	// TODO: add boundary particles
 
-	snap.position.resize(N_F_);
-	snap.scalarData.resize(N_F_);
-	snap.N_particles = N_F_;
+	snap.posF.resize(N_F_);
+	snap.scalarDataF.resize(N_F_);
+	snap.N_F = N_F_;
 	snap.step = step_;
 
 	#pragma omp parallel for schedule(static)
 	for (std::int64_t i = 0; i < N_F_; i++)
 	{
-		snap.position[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
+		snap.posF[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
 	}
 
-	FillScalarData(snap, snap.scalarMode);
+	FillScalarData(snap, snap.scalarModeF);
 }
 
 void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
@@ -161,7 +161,7 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 	{
 	case Base::None:
 	{
-		snap.scalarData.clear();
+		snap.scalarDataF.clear();
 		break;
 	}
 	case Base::VelocityMag:
@@ -170,20 +170,20 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 		for (std::int64_t i = 0; i < N_F_; i++)
 		{
 			// magnitude of velocity vector
-			snap.scalarData[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
-											+ yVelF_[i] * yVelF_[i]
-											+ zVelF_[i] * zVelF_[i]);
+			snap.scalarDataF[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
+											 + yVelF_[i] * yVelF_[i]
+											 + zVelF_[i] * zVelF_[i]);
 		}
 		break;
 	}
 	case Base::Density:
 	{
-		snap.scalarData = densityF_;
+		snap.scalarDataF = densityF_;
 		break;
 	}
 	case Base::Pressure:
 	{
-		snap.scalarData = pressureF_;
+		snap.scalarDataF = pressureF_;
 		break;
 	}
 	default:

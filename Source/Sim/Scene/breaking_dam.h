@@ -43,6 +43,15 @@ namespace Scene
 			scenarioMgr_.BuildFluidBlock_OBB(config_.fluid, dst, params);
 		}
 
+		std::vector<OBB> GetBoundaryBoxes() const override
+		{
+			std::vector<OBB> res{};
+
+			res.push_back(config_.container);
+
+			return res;
+		}
+
 	private: // ==============================
 
 		ScenarioMgr& scenarioMgr_;
@@ -56,21 +65,21 @@ namespace Scene
 	BreakingDamConfig inline MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr,
 													       const Sim::SimParams& params)
 	{
-		const glm::vec3 U{ 1,0,0 }, V{ 0,1,0 }, W{ 0,0,1 };
+		const glm::vec3 U{ 1, 0, 0 }, V{ 0, 1, 0 }, W{ 0, 0, 1 };
 
 		OBB container = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0,0,0},
-			/* uDir, uLen */	U, 10.0f,
-			/* vDir, vLen */	V, 5.0f,
-			/* wDir, wLen */	W, 5.0f
+			/* uDir, uLen */	U, 9.0f,
+			/* vDir, vLen */	V, 6.0f,
+			/* wDir, wLen */	W, 3.0f
 		);
 
 		OBB fluid = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0,0,0},
-			/* uDir, uLen */	U, 1.0f,
-			/* vDir, vLen */	V, 2.0f,
+			/* uDir, uLen */	U, 4.0f,
+			/* vDir, vLen */	V, 3.0f,
 			/* wDir, wLen */	W, 2.0f
 		);
 

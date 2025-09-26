@@ -58,22 +58,21 @@ namespace Vis
 		uint64_t simParamsVersion_ = 0;
 		uint64_t visParamsVersion_ = 0;
 
-		// TODO: comment
-		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned
-
 		// controlled sub-system managers
 		Input::UserInputMgr userInputMgr_;
 		Inter::UserInterfaceMgr userInterfaceMgr_;
 		Render::RenderingMgr renderingMgr_;
 
 		// double-buffered vis-specific state
-		std::vector<glm::vec3> position_[2];
-		std::vector<float> scalarData_[2]; // data according to color coding mode
+		std::vector<glm::vec3> posF_[2];	// positions of fluid particles
+		std::vector<float> scalarDataF_[2]; // data according to color coding mode
+		std::vector<Scene::OBB> boxesB_[2]; // OBBs of boundary structures
 		int front_ = 0; int back_ = 1; // current / next buffer index
 
 		// current view and scalar (coloring) mode for visualization
-		VisualSnapView view_{};
+		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };
 		Base::ColorCodingMode scalarMode_{ Base::None };
+		VisualSnapView view_{};
 
 		// window and GL context
 		GLFWwindow* window_ = nullptr;
