@@ -214,56 +214,6 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
-{
-	if (!(kernelSuppRatio >= 1.0f))
-	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be >= 1");
-		return;
-	}
-
-	// detect if parameter would actually change
-	bool changed = false;
-
-	Base::MarkIfChanged(kernelSuppRatio, params_.kernelSuppRatio, changed);
-
-	if (!changed) { return; } // nothing to change
-
-	SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
-		params_.kernelSuppRatio, kernelSuppRatio);
-
-	// apply changes
-	BeginWrite();
-	params_.kernelSuppRatio = kernelSuppRatio;
-	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_KernelRadius(float kernelRadius)
-{
-	if (!(kernelRadius > 0.0f))
-	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must be > 0");
-		return;
-	}
-
-	// detect if parameter would actually change
-	bool changed = false;
-
-	Base::MarkIfChanged(kernelRadius, params_.kernelRadius, changed);
-
-	if (!changed) { return; } // nothing to change
-
-	SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
-		params_.kernelRadius, kernelRadius);
-
-	// apply changes
-	BeginWrite();
-	params_.kernelRadius = kernelRadius;
-	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
-	EndWrite();
-}
-
 void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 {
 	if (!(restDensity > 0.0f))
@@ -317,6 +267,42 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 									* params_.particleSizeB;
 	}
 
+	EndWrite();
+}
+
+void SimParamsMgr::Set_TaitExponent(float taitExponent)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(taitExponent, params_.taitExponent, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'taitExponent' from {} to {}",
+		params_.taitExponent, taitExponent);
+
+	// apply changes
+	BeginWrite();
+	params_.taitExponent = taitExponent;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_Stiffness(float stiffness)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(stiffness, params_.stiffness, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'stiffness' from {} to {}",
+		params_.stiffness, stiffness);
+
+	// apply changes
+	BeginWrite();
+	params_.stiffness = stiffness;
 	EndWrite();
 }
 
@@ -381,6 +367,56 @@ void SimParamsMgr::Set_Gravity(glm::vec3 gravity)
 	EndWrite();
 }
 
+void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
+{
+	if (!(kernelSuppRatio >= 1.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be >= 1");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(kernelSuppRatio, params_.kernelSuppRatio, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
+		params_.kernelSuppRatio, kernelSuppRatio);
+
+	// apply changes
+	BeginWrite();
+	params_.kernelSuppRatio = kernelSuppRatio;
+	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_KernelRadius(float kernelRadius)
+{
+	if (!(kernelRadius > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(kernelRadius, params_.kernelRadius, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
+		params_.kernelRadius, kernelRadius);
+
+	// apply changes
+	BeginWrite();
+	params_.kernelRadius = kernelRadius;
+	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
+	EndWrite();
+}
+
 void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
 {
 	if (!(boundaryLayers >= 0))
@@ -413,8 +449,8 @@ void SimParamsMgr::PresetParams_A()
 	float particleSize		= 0.01f;
 	float kernelSuppRatio	= 2.0f;
 	float restDensity		= 1'000.0f;
-	float viscosity			= 0.000003f;
-	glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
+	float viscosity			= 0.03f;
+	float gravity			= -9.81f;
 
 	Set_SimRunning(false);
 	Set_SimRunNextStep(false);
@@ -426,7 +462,7 @@ void SimParamsMgr::PresetParams_A()
 	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
 	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
 	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
-	Set_Gravity(gravity);
+	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
 }
 
 void SimParamsMgr::BeginWrite()

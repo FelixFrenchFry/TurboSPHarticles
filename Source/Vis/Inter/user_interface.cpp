@@ -9,7 +9,8 @@
 #include <spdlog/spdlog.h>
 
 // internal
-#include "../Assets/iosevka_compressed.h"
+#include "Source/Base/helpers.h"
+#include "Source/Vis/Assets/iosevka_compressed.h"
 #include "user_interface.h"
 
 
@@ -94,6 +95,11 @@ void UserInterfaceMgr::BuildUserInterfaceSections(const Sim::SimulationMgr& simu
 		BuildSection_SimulationControl(simulationMgr, simParams, visParams);
 	}
 
+	if (ImGui::CollapsingHeader("Parameters"))
+	{
+		BuildSection_Parameters(simulationMgr, simParams, visParams);
+	}
+
 	// show FPS
 	ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
 
@@ -117,63 +123,6 @@ void UserInterfaceMgr::BuildUserInterfaceSections(const Sim::SimulationMgr& simu
 		io.WantCaptureMouse ? 1 : 0,
 		io.WantCaptureKeyboard ? 1 : 0);
 	ImGui::End();
-}
-
-void UserInterfaceMgr::BuildSection_SimulationControl(const Sim::SimulationMgr& simulationMgr,
-													  const Sim::SimParams& simParams,
-													  const Vis::VisParams& visParams)
-{
-	ImGui::Spacing(); ImGui::Spacing();
-
-	ImGui::SameLine();
-	if (simParams.simRunning)
-	{
-		//ImGui::SetCursorPosX(GetTextAlignment_Right("", 10));
-		ImGui::PushStyleColor(ImGuiCol_Button, color_buttonNegative_);
-		if (ImGui::Button("PAUSE SIMULATION", { 240, 40 }))
-		{
-			simParamsMgr_.Set_SimRunning(false);
-		}
-	}
-	else
-	{
-		//ImGui::SetCursorPosX(GetTextAlignment_Right("", 10));
-		ImGui::PushStyleColor(ImGuiCol_Button, color_buttonPositive_);
-		if (ImGui::Button("RESUME SIMULATION", { 240, 40 }))
-		{
-			simParamsMgr_.Set_SimRunning(true);
-		}
-	}
-	ImGui::PopStyleColor(1);
-	ImGui::SameLine();
-	if (ImGui::Button("STEP +1", { 134, 40 }))
-	{
-		simParamsMgr_.Set_SimRunNextStep(true);
-	}
-	ImGui::Spacing();
-
-	ImGui::Text("step count:");
-	ImGui::SameLine();
-	snprintf(stringBuffer, sizeof(stringBuffer), "%d", simulationMgr.simStep_);
-	//ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 230));
-	ImGui::Text(stringBuffer);
-
-	/*
-	// update displayed FPS value in specified time intervals
-	ImGui::SameLine();
-	refreshTimeDifference = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - lastFrameRateRefreshTime).count();
-	if (refreshTimeDifference > 1000.0f * frameRateRefreshInterval)
-	{
-		frameRate = ImGui::GetIO().Framerate;
-		lastFrameRateRefreshTime = std::chrono::high_resolution_clock::now();
-	}
-	if (!parameterHandler->simulationPaused) { snprintf(stringBuffer, sizeof(stringBuffer), "(%.1f/sec)", frameRate); }
-	else { snprintf(stringBuffer, sizeof(stringBuffer), "(----/sec)"); }
-	ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 383));
-	ImGui::Text(stringBuffer);
-	if (fluidParticles->particleCount == 0) { ImGui::EndDisabled(); }
-	ImGui::Spacing();
-	*/
 }
 
 void UserInterfaceMgr::EndFrame()
@@ -252,6 +201,228 @@ void UserInterfaceMgr::OnDPIScaleChanged(float dpiScale)
 	RebuildFonts(dpiScale);
 }
 
+// ===== sections =====
+
+void UserInterfaceMgr::BuildSection_SimulationControl(
+	const Sim::SimulationMgr& simulationMgr,
+	const Sim::SimParams& simParams,
+	const Vis::VisParams& visParams)
+{
+	ImGui::Spacing(); ImGui::Spacing();
+
+	ImGui::SameLine();
+	if (simParams.simRunning)
+	{
+		//ImGui::SetCursorPosX(GetTextAlignment_Right("", 10));
+		ImGui::PushStyleColor(ImGuiCol_Button, RGBA_negative_);
+		if (ImGui::Button("PAUSE SIMULATION", { 240, 40 }))
+		{
+			simParamsMgr_.Set_SimRunning(false);
+		}
+	}
+	else
+	{
+		//ImGui::SetCursorPosX(GetTextAlignment_Right("", 10));
+		ImGui::PushStyleColor(ImGuiCol_Button, RGBA_positive_);
+		if (ImGui::Button("RESUME SIMULATION", { 240, 40 }))
+		{
+			simParamsMgr_.Set_SimRunning(true);
+		}
+	}
+	ImGui::PopStyleColor(1);
+	ImGui::SameLine();
+	if (ImGui::Button("STEP +1", { 134, 40 }))
+	{
+		simParamsMgr_.Set_SimRunNextStep(true);
+	}
+	ImGui::Spacing();
+
+	ImGui::Text("step count:");
+	ImGui::SameLine();
+	snprintf(stringBuffer, sizeof(stringBuffer), "%d", simulationMgr.simStep_);
+	//ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 230));
+	ImGui::Text(stringBuffer);
+
+	/*
+	// update displayed FPS value in specified time intervals
+	ImGui::SameLine();
+	refreshTimeDifference = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - lastFrameRateRefreshTime).count();
+	if (refreshTimeDifference > 1000.0f * frameRateRefreshInterval)
+	{
+		frameRate = ImGui::GetIO().Framerate;
+		lastFrameRateRefreshTime = std::chrono::high_resolution_clock::now();
+	}
+	if (!parameterHandler->simulationPaused) { snprintf(stringBuffer, sizeof(stringBuffer), "(%.1f/sec)", frameRate); }
+	else { snprintf(stringBuffer, sizeof(stringBuffer), "(----/sec)"); }
+	ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 383));
+	ImGui::Text(stringBuffer);
+	if (fluidParticles->particleCount == 0) { ImGui::EndDisabled(); }
+	ImGui::Spacing();
+	*/
+}
+
+void UserInterfaceMgr::BuildSection_Parameters(
+	const Sim::SimulationMgr& simulationMgr,
+	const Sim::SimParams& simParams,
+	const Vis::VisParams& visParams)
+{
+	ImGui::Spacing();
+
+	BuildParamElement_TaitExponent(simParams);
+	BuildParamElement_Stiffness(simParams);
+	BuildParamElement_ViscosityF(simParams);
+	BuildParamElement_ViscosityB(simParams);
+	BuildParamElement_Gravity(simParams);
+
+	ImGui::Spacing();
+
+	// save or discard parameter changes buttons
+	const bool cached = unsavedParamChanges_;
+	if (!cached) { ImGui::BeginDisabled(); }
+	ImGui::PushStyleColor(ImGuiCol_Button, RGBA_positive_);
+	if (ImGui::Button(" APPLY CHANGES ", { 185, 40 }))
+	{
+		ApplyParamChanges();
+	}
+	ImGui::SameLine();
+	ImGui::PopStyleColor(1);
+	ImGui::PushStyleColor(ImGuiCol_Button, RGBA_negative_);
+	if (ImGui::Button(" RESET CHANGES ", { 185, 40 }))
+	{
+		ResetParamChanges(simParams);
+	}
+	ImGui::PopStyleColor(1);
+	ImGui::Spacing();
+	if (!cached) { ImGui::EndDisabled(); }
+
+	// live editing checkbox and tooltip
+	if (ImGui::Checkbox("##checkbox_liveParamEditing", &liveParamEditing_)) {}
+	ImGui::SameLine();
+	ImGui::Button(" ? ");
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+		ImGui::TextColored(RGBA_tooltip_,
+		"With this enabled, any changes to the\n"
+			"parameters are applied immediately.\n"
+			"There is no option to APPLY or RESET.");
+		ImGui::EndTooltip();
+	}
+	ImGui::SameLine();
+	ImGui::Text(" enable live editing");
+	ImGui::Spacing();
+}
+
+void UserInterfaceMgr::BuildParamElement_TaitExponent(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.taitExponent;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" tait exponent##input_taitExponent",
+		&temp_.taitExponent, mags_.taitExponent[0], mags_.taitExponent[1], "%.1f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.taitExponent, simParams.taitExponent);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_TaitExponent(temp_.taitExponent);
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.taitExponent = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_Stiffness(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.stiffness;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" stiffness##input_stiffness",
+		&temp_.stiffness, mags_.stiffness[0], mags_.stiffness[1], "%.0f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.stiffness, simParams.stiffness);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_Stiffness(temp_.stiffness);
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.stiffness = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_ViscosityF(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.viscosityF;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" fluid visco##input_viscosityF",
+		&temp_.viscosityF, mags_.viscosityF[0], mags_.viscosityF[1], "%.6f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.viscosityF, simParams.viscosityF);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_Viscosity(temp_.viscosityF, Base::ParticleType::Fluid);
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.viscosityF = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_ViscosityB(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.viscosityB;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" bound visco##input_viscosityB",
+		&temp_.viscosityB, mags_.viscosityB[0], mags_.viscosityB[1], "%.6f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.viscosityB, simParams.viscosityB);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_Viscosity(temp_.viscosityB, Base::ParticleType::Boundary);
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.viscosityB = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_Gravity(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.gravity;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" gravity##input_gravity",
+		&temp_.gravity, mags_.gravity[0], mags_.gravity[1], "%.2f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.gravity, simParams.gravity.y);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_Gravity(glm::vec3{ 0.f, temp_.gravity, 0.f });
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.gravity = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
 // ===== helpers =====
 
 void UserInterfaceMgr::SetDockingEnabled(bool enabled)
@@ -316,6 +487,72 @@ void UserInterfaceMgr::RebuildFonts(float dpiScale)
 
 	ImGui_ImplOpenGL3_DestroyFontsTexture();
 	ImGui_ImplOpenGL3_CreateFontsTexture();
+}
+
+void UserInterfaceMgr::ApplyParamChanges()
+{
+	if (!unsavedParamChanges_) { return; }
+
+	if (changed_.taitExponent)
+	{
+		simParamsMgr_.Set_TaitExponent(temp_.taitExponent);
+		changed_.taitExponent = false;
+	}
+	if (changed_.stiffness)
+	{
+		simParamsMgr_.Set_Stiffness(temp_.stiffness);
+		changed_.stiffness = false;
+	}
+	if (changed_.viscosityF)
+	{
+		simParamsMgr_.Set_Viscosity(temp_.viscosityF, Base::ParticleType::Fluid);
+		changed_.viscosityF = false;
+	}
+	if (changed_.viscosityB)
+	{
+		simParamsMgr_.Set_Viscosity(temp_.viscosityB, Base::ParticleType::Boundary);
+		changed_.viscosityB = false;
+	}
+	if (changed_.gravity)
+	{
+		simParamsMgr_.Set_Gravity(glm::vec3{ 0.0f, temp_.gravity, 0.0f });
+		changed_.gravity = false;
+	}
+
+	unsavedParamChanges_ = false;
+}
+
+void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
+{
+	if (!unsavedParamChanges_) { return; }
+
+	if (changed_.taitExponent)
+	{
+		temp_.taitExponent = simParams.taitExponent;
+		changed_.taitExponent = false;
+	}
+	if (changed_.stiffness)
+	{
+		temp_.stiffness = simParams.stiffness;
+		changed_.stiffness = false;
+	}
+	if (changed_.viscosityF)
+	{
+		temp_.viscosityF = simParams.viscosityF;
+		changed_.viscosityF = false;
+	}
+	if (changed_.viscosityB)
+	{
+		temp_.viscosityB = simParams.viscosityB;
+		changed_.viscosityB = false;
+	}
+	if (changed_.gravity)
+	{
+		temp_.gravity = simParams.gravity.y;
+		changed_.gravity = false;
+	}
+
+	unsavedParamChanges_ = false;
 }
 
 // ===== dockspace =====

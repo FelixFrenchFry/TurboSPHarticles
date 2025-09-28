@@ -39,10 +39,6 @@ namespace Sim
 		float particleRadiusF	= 0.005f;
 		float particleRadiusB	= 0.005f;
 
-		// kernel
-		float kernelSuppRatio	= 2.0f;
-		float kernelRadius		= 0.02f; // radius = size * supp ratio
-
 		// density and mass
 		float restDensityF		= 1'000.0f;
 		float restDensityB		= 1'000.0f;
@@ -59,6 +55,10 @@ namespace Sim
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
+
+		// kernel
+		float kernelSuppRatio = 2.0f;
+		float kernelRadius = 0.02f; // radius = size * supp ratio
 
 		// fluid conditions
 		float jitterFracF		= 0.0f; // % of particle size
@@ -88,11 +88,13 @@ namespace Sim
 		void Set_NumParticles(uint32_t N, Base::ParticleType type);
 		void Set_TimeStep(float timeStep);
 		void Set_ParticleSize(float particleSize, Base::ParticleType type);
-		void Set_KernelSuppRatio(float kernelSuppRatio);
-		void Set_KernelRadius(float kernelRadius);
 		void Set_RestDensity(float restDensity, Base::ParticleType type);
+		void Set_TaitExponent(float taitExponent);
+		void Set_Stiffness(float stiffness);
 		void Set_Viscosity(float viscosity, Base::ParticleType type);
 		void Set_Gravity(glm::vec3 gravity);
+		void Set_KernelSuppRatio(float kernelSuppRatio);
+		void Set_KernelRadius(float kernelRadius);
 		void Set_BoundaryLayers(int boundaryLayers);
 
 		// different parameter presets for quick testing
