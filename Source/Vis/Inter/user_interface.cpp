@@ -81,36 +81,99 @@ void UserInterfaceMgr::BeginFrame()
 	if (dockingEnabled_) BeginDockspace();
 }
 
-void UserInterfaceMgr::DrawPanels(const Vis::VisParams& visParams)
+void UserInterfaceMgr::BuildUserInterfaceSections(const Sim::SimulationMgr& simulationMgr,
+												  const Sim::SimParams& simParams,
+												  const Vis::VisParams& visParams)
 {
 	if (!initialized_) { return; }
 
-	if (ImGui::Begin("Settings"))
+	ImGui::Begin("Settings");
+
+	if (ImGui::CollapsingHeader("Simulation Control", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		// show FPS
-		ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
-
-		// placeholder controls
-		ImGui::SeparatorText("(Placeholder)");
-		ImGui::BeginDisabled(true);
-		{
-			float dummyRadius = 0.01f;
-			int   dummyLod = 0;
-			ImGui::SliderFloat("Sphere radius", &dummyRadius, 0.001f, 0.05f, "%.3f");
-			ImGui::SliderInt("Sphere LOD", &dummyLod, 0, 2);
-			static int scalar = 0; // 0=None, 1=Vel, 2=Density, 3=Pressure
-			ImGui::Combo("Scalar", &scalar, "None\0Velocity\0Density\0Pressure\0");
-		}
-		ImGui::EndDisabled();
-
-		// hints about input capture
-		ImGui::SeparatorText("Capture");
-		ImGuiIO& io = ImGui::GetIO();
-		ImGui::TextDisabled("mouse=%d keyboard=%d",
-							io.WantCaptureMouse ? 1 : 0,
-							io.WantCaptureKeyboard ? 1 : 0);
+		BuildSection_SimulationControl(simulationMgr, simParams, visParams);
 	}
+
+	// show FPS
+	ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
+
+	// placeholder controls
+	ImGui::SeparatorText("(Placeholder)");
+	ImGui::BeginDisabled(true);
+	{
+		float dummyRadius = 0.01f;
+		int   dummyLod = 0;
+		ImGui::SliderFloat("Sphere radius", &dummyRadius, 0.001f, 0.05f, "%.3f");
+		ImGui::SliderInt("Sphere LOD", &dummyLod, 0, 2);
+		static int scalar = 0; // 0=None, 1=Vel, 2=Density, 3=Pressure
+		ImGui::Combo("Scalar", &scalar, "None\0Velocity\0Density\0Pressure\0");
+	}
+	ImGui::EndDisabled();
+
+	// hints about input capture
+	ImGui::SeparatorText("Capture");
+	ImGuiIO& io = ImGui::GetIO();
+	ImGui::TextDisabled("mouse=%d keyboard=%d",
+		io.WantCaptureMouse ? 1 : 0,
+		io.WantCaptureKeyboard ? 1 : 0);
 	ImGui::End();
+}
+
+void UserInterfaceMgr::BuildSection_SimulationControl(const Sim::SimulationMgr& simulationMgr,
+													  const Sim::SimParams& simParams,
+													  const Vis::VisParams& visParams)
+{
+	ImGui::Spacing(); ImGui::Spacing();
+
+	ImGui::SameLine();
+	if (simParams.simRunning)
+	{
+		//ImGui::SetCursorPosX(GetTextAlignment_Right("", 10));
+		ImGui::PushStyleColor(ImGuiCol_Button, color_buttonNegative_);
+		if (ImGui::Button("PAUSE SIMULATION", { 240, 40 }))
+		{
+			simParamsMgr_.Set_SimRunning(false);
+		}
+	}
+	else
+	{
+		//ImGui::SetCursorPosX(GetTextAlignment_Right("", 10));
+		ImGui::PushStyleColor(ImGuiCol_Button, color_buttonPositive_);
+		if (ImGui::Button("RESUME SIMULATION", { 240, 40 }))
+		{
+			simParamsMgr_.Set_SimRunning(true);
+		}
+	}
+	ImGui::PopStyleColor(1);
+	ImGui::SameLine();
+	if (ImGui::Button("STEP +1", { 134, 40 }))
+	{
+		simParamsMgr_.Set_SimRunNextStep(true);
+	}
+	ImGui::Spacing();
+
+	ImGui::Text("step count:");
+	ImGui::SameLine();
+	snprintf(stringBuffer, sizeof(stringBuffer), "%d", simulationMgr.simStep_);
+	//ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 230));
+	ImGui::Text(stringBuffer);
+
+	/*
+	// update displayed FPS value in specified time intervals
+	ImGui::SameLine();
+	refreshTimeDifference = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - lastFrameRateRefreshTime).count();
+	if (refreshTimeDifference > 1000.0f * frameRateRefreshInterval)
+	{
+		frameRate = ImGui::GetIO().Framerate;
+		lastFrameRateRefreshTime = std::chrono::high_resolution_clock::now();
+	}
+	if (!parameterHandler->simulationPaused) { snprintf(stringBuffer, sizeof(stringBuffer), "(%.1f/sec)", frameRate); }
+	else { snprintf(stringBuffer, sizeof(stringBuffer), "(----/sec)"); }
+	ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 383));
+	ImGui::Text(stringBuffer);
+	if (fluidParticles->particleCount == 0) { ImGui::EndDisabled(); }
+	ImGui::Spacing();
+	*/
 }
 
 void UserInterfaceMgr::EndFrame()
@@ -235,7 +298,7 @@ void UserInterfaceMgr::RebuildFonts(float dpiScale)
 {
 	ImGuiIO& io = ImGui::GetIO();
 
-	const float baseSize = 22.0f;
+	const float baseSize = 24.0f;
 	const float pixelSize = baseSize * (dpiScale > 0.0f ? dpiScale : 1.0f);
 
 	io.Fonts->Clear();

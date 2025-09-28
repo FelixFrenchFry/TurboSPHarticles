@@ -45,7 +45,8 @@ namespace Render
 		// upload latest render-specific sim state to the GPU instance buffers
 		// (positions required, scalar data for coloring optional)
 		void UpdateParticles(const Vis::VisualSnapView& view,
-							 const Vis::VisParams& params);
+							 const Sim::SimParams& simParams,
+							 const Vis::VisParams& visParams);
 
 		// upload latest render-specific sim state to the GPU instance buffers
 		void UpdateWireframes(const Vis::VisualSnapView& view,
@@ -82,12 +83,12 @@ namespace Render
 
 		// persistent map pointer
 		unsigned char* mappedBase_ = nullptr;
-		std::int64_t mappedSize_ = 0; // total bytes reserved
-		std::int64_t capacity_ = 0; // number of instances capacity
+		uint64_t mappedSize_ = 0; // total bytes reserved
+		uint64_t capacity_ = 0; // number of instances capacity
 
 		// draw state
-		int64_t N_impostorInstances_ = 0;
-		int64_t N_lineVertices_ = 0;
+		uint64_t N_impostorInstances_ = 0;
+		uint64_t N_lineVertices_ = 0;
 
 		// helpers
 		void CreateSphereImpostorProgram();
@@ -104,7 +105,7 @@ namespace Render
 		void UpdateParamsUBO(const Vis::RenderConfig& render);
 		void UpdateCameraUBO(const Vis::CameraState& cam);
 
-		void EnsureInstanceCapacity(std::int64_t N_required);
+		void EnsureInstanceCapacity(uint32_t N_required);
 
 		void BuildWireframeEdgesFromOBB(const Scene::OBB& box, std::vector<glm::vec3>& dst);
 

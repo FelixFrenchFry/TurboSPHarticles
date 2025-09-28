@@ -13,6 +13,7 @@
 // internal
 #include "Source/Base/enum_hub.h"
 #include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Core/simulation.h"
 #include "Source/Sim/Sync/mailboxes.h"
 #include "Source/Vis/Input/user_input.h"
 #include "Source/Vis/Inter/user_interface.h"
@@ -28,7 +29,8 @@ namespace Vis
 	{
 	public: // ==============================
 
-		VisualizationMgr(Sim::SimParamsMgr& simParamsMgr,
+		VisualizationMgr(Sim::SimulationMgr& simulationMgr,
+						 Sim::SimParamsMgr& simParamsMgr,
 						 Vis::VisParamsMgr& visParamsMgr);
 
 		// create window & GL context, and initialize sub-systems
@@ -42,13 +44,9 @@ namespace Vis
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
 
-		// TODO: remove demo
-		// demo data toggle/state
-		bool demoActive_ = true;			// set false when real sim is wired
-		bool demoPrimed_ = false;			// generate only once
-		std::int64_t demoCount_ = 100'000;	// number of particles to spawn
-
 	private: // ==============================
+
+		Sim::SimulationMgr& simulationMgr_;
 
 		// parameter managers and snapshots to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;

@@ -51,7 +51,7 @@ int main(int argc, char** argv)
 		Vis::VisParamsMgr visParamsMgr{};
 		Scene::ScenarioMgr scenarioMgr{};
 		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr };
-		Vis::VisualizationMgr visualizationMgr{ simParamsMgr, visParamsMgr };
+		Vis::VisualizationMgr visualizationMgr{ simulationMgr, simParamsMgr, visParamsMgr };
 
 		Sync::VisualSnapMailbox visualMailbox{};
 		simulationMgr.SetVisualMailbox(&visualMailbox);
@@ -69,6 +69,8 @@ int main(int argc, char** argv)
 			SPDLOG_ERROR("Failed to initialize VisualizationMgr");
 			return EXIT_FAILURE;
 		}
+
+		simParamsMgr.PresetParams_A();
 
 		// ===== hardware budgets =====
 

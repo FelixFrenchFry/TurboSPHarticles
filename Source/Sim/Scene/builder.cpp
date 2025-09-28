@@ -36,16 +36,16 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 {
 	const float size = params.particleSizeF;
 	// number of particles in each direction
-	const int N_u = TilesCount(box.uLen, size);
-	const int N_v = TilesCount(box.vLen, size);
-	const int N_w = TilesCount(box.wLen, size);
+	const uint32_t N_u = TilesCount(box.uLen, size);
+	const uint32_t N_v = TilesCount(box.vLen, size);
+	const uint32_t N_w = TilesCount(box.wLen, size);
 	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
 
 	auto& F = dst.fluidParticles;
 
 	// resize fluid particle data structures
-	const int64_t N_base = F.N_;
-	const int64_t N_add = static_cast<int64_t>(N_u) * N_v * N_w;
+	const uint32_t N_base = F.N_;
+	const uint32_t N_add = N_u * N_v * N_w;
 	dst.ResizeFluid(N_base + N_add);
 
 	// offsets from box planes
@@ -53,11 +53,11 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	const float vOff = StartOffset(box.vLen, size, N_v);
 	const float wOff = StartOffset(box.wLen, size, N_w);
 
-	const float jitAmp = params.jitFracF * params.particleSizeF;
+	const float jitAmp = params.jitterFracF * params.particleSizeF;
 
 	#pragma omp parallel
 	{
-		std::mt19937_64 rng(params.jitSeedF + static_cast<uint64_t>(omp_get_thread_num()));
+		std::mt19937_64 rng(params.jitterSeedF + static_cast<uint32_t>(omp_get_thread_num()));
 		std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
 
 		#pragma omp for collapse(3) schedule(static)
@@ -68,8 +68,8 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 				for (int iu = 0; iu < N_u; iu++) // loop over width
 				{
 					// get global index of currently handled particle
-					const std::int64_t local = (static_cast<int64_t>(N_v) * kw + jv) * N_u + iu;
-					const std::int64_t idx = N_base + local;
+					const uint32_t local = (static_cast<int64_t>(N_v) * kw + jv) * N_u + iu;
+					const uint32_t idx = N_base + local;
 
 					// position components
 					float u = uOff + iu * size;
@@ -159,22 +159,22 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
 
 	// compute number of particles we keep to make the box hollow
-	const int64_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
+	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
 	if (N_keep <= 0) { return; }
 
 	auto& B = dst.boundaryParticles;
 
 	// resize boundary particle data structures
-	const int64_t N_base = B.N_;
-	const int64_t N_add = N_keep;
+	const uint32_t N_base = B.N_;
+	const uint32_t N_add = N_keep;
 	dst.ResizeBoundary(N_base + N_add);
 
 	// jittering params
-	const float jitAmp = params.jitFracB * params.particleSizeB;
-	std::mt19937_64 rng(params.jitSeedB);
+	const float jitAmp = params.jitterFracB * params.particleSizeB;
+	std::mt19937_64 rng(params.jitterSeedB);
 	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
 
-	int64_t idx = N_base;
+	uint32_t idx = N_base;
 
 	for (int kw = 0; kw < N_w; kw++) // loop over depth
 	{
@@ -284,14 +284,14 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 											const Sim::SimParams& params)
 {
 	const float size = params.particleSizeB;
-	const int N_u = TilesCount(face.uLen, size); // num particles in u direction
-	const int N_v = TilesCount(face.vLen, size); // num particles in v direction
+	const uint32_t N_u = TilesCount(face.uLen, size); // num particles in u direction
+	const uint32_t N_v = TilesCount(face.vLen, size); // num particles in v direction
 	if (N_u <= 0 || N_v <= 0) { return; }
 
 	auto& B = dst.boundaryParticles;
 
 	// pre-reserve memory for new particles
-	B.reserveAll(B.N_ + static_cast<int64_t>(N_u) * N_v * params.boundaryLayers);
+	B.reserveAll(B.N_ + N_u * N_v * params.boundaryLayers);
 
 	for (int layer = 0; layer < params.boundaryLayers; layer++)
 	{
@@ -328,13 +328,13 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				B.size.push_back(params.particleSizeB);
 
 				// simple running ID
-				B.id.push_back(static_cast<std::uint32_t>(B.id.size()));
+				B.id.push_back(static_cast<uint32_t>(B.id.size()));
 			}
 		}
 	}
 
 	// update boundary particle count
-	dst.boundaryParticles.N_ = static_cast<std::int64_t>(dst.boundaryParticles.id.size());
+	dst.boundaryParticles.N_ = static_cast<uint32_t>(dst.boundaryParticles.id.size());
 }
 
 float inline ScenarioMgr::StartOffset(float length, float spacing, int N, bool centerToFit)
@@ -345,22 +345,22 @@ float inline ScenarioMgr::StartOffset(float length, float spacing, int N, bool c
 	return 0.5f * std::max(0.0f, length - covered);
 }
 
-int inline ScenarioMgr::TilesCount(float length, float spacing)
+uint32_t inline ScenarioMgr::TilesCount(float length, float spacing)
 {
 	if (spacing <= 0.0f) { return 0; }
 
 	return std::max(1, static_cast<int>(std::floor(length / spacing)) + 1);
 }
 
-int64_t inline ScenarioMgr::ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers)
+uint32_t inline ScenarioMgr::ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers)
 {
 	// total particle count of "outer" box
-	const int64_t N_total = static_cast<int64_t>(N_u) * N_v * N_w;
+	const uint32_t N_total = N_u * N_v * N_w;
 	// compute particle count in each direction for "inner" box
-	const int N_u_i = std::max(N_u - 2 * layers, 0);
-	const int N_v_i = std::max(N_v - 2 * layers, 0);
-	const int N_w_i = std::max(N_w - 2 * layers, 0);
-	const int64_t N_inner = static_cast<int64_t>(N_u_i) * N_v_i * N_w_i;
+	const uint32_t N_u_i = std::max(N_u - 2 * layers, 0);
+	const uint32_t N_v_i = std::max(N_v - 2 * layers, 0);
+	const uint32_t N_w_i = std::max(N_w - 2 * layers, 0);
+	const uint32_t N_inner = N_u_i * N_v_i * N_w_i;
 
 	return N_total - N_inner;
 }

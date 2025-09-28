@@ -128,7 +128,6 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	Base::MarkIfChanged(patch.lightDirVS, params_.render.lightDirVS, changed);
 	Base::MarkIfChanged(patch.baseColor, params_.render.baseColor, changed);
 	Base::MarkIfChanged(patch.alpha, params_.render.alpha, changed);
-	Base::MarkIfChanged(patch.radius, params_.render.radius, changed);
 	Base::MarkIfChanged(patch.scalarMin, params_.render.scalarMin, changed);
 	Base::MarkIfChanged(patch.scalarMax, params_.render.scalarMax, changed);
 	Base::MarkIfChanged(patch.useScalar, params_.render.useScalar, changed);
@@ -140,7 +139,6 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (patch.lightDirVS) { params_.render.lightDirVS = *patch.lightDirVS; }
 	if (patch.baseColor) { params_.render.baseColor = *patch.baseColor; }
 	if (patch.alpha) { params_.render.alpha = *patch.alpha; }
-	if (patch.radius) { params_.render.radius = *patch.radius; }
 	if (patch.scalarMin) { params_.render.scalarMin = *patch.scalarMin; }
 	if (patch.scalarMax) { params_.render.scalarMax = *patch.scalarMax; }
 	if (patch.useScalar) { params_.render.useScalar = *patch.useScalar; }

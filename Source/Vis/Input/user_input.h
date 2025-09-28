@@ -8,8 +8,8 @@
 #include <bitset>
 
 // internal
-#include "../../Sim/Core/parameters_sim.h"
-#include "../Core/parameters_vis.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Vis/Core/parameters_vis.h"
 
 
 

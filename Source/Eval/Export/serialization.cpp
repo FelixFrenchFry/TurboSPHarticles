@@ -21,8 +21,8 @@ using namespace HighFive;
 
 namespace {
 
-	inline DataSetCreateProps MakeDsProps(std::int64_t N_elements,
-										  std::int64_t N_elemBytes,
+	inline DataSetCreateProps MakeDsProps(int64_t N_elements,
+										  int64_t N_elemBytes,
 										  const Export::SaveOptions& opt)
 	{
 		DataSetCreateProps props;
@@ -34,8 +34,8 @@ namespace {
 		if (!opt.compress) { return props; }
 
 		// chunked + filters
-		const std::int64_t wantChunkElems = std::max<std::int64_t>(1, opt.targetChunkBytes / N_elemBytes);
-		const std::int64_t chunkElems = std::max<std::int64_t>(1, std::min(N_elements, wantChunkElems));
+		const int64_t wantChunkElems = std::max<int64_t>(1, opt.targetChunkBytes / N_elemBytes);
+		const int64_t chunkElems = std::max<int64_t>(1, std::min(N_elements, wantChunkElems));
 
 		props.add(Chunking({ static_cast<hsize_t>(chunkElems) }));
 
@@ -224,7 +224,7 @@ namespace Export {
 		// fluid data
 		{
 			auto gF = root.getGroup("fluidParticles");
-			std::int64_t NF = 0;
+			uint32_t NF = 0;
 			gF.getAttribute("N_particles").read(NF);
 			state.ResizeFluid(NF);
 
@@ -253,7 +253,7 @@ namespace Export {
 		// boundary data
 		{
 			auto gB = root.getGroup("boundaryParticles");
-			std::int64_t NB = 0;
+			uint32_t NB = 0;
 			gB.getAttribute("N_particles").read(NB);
 			state.ResizeBoundary(NB);
 

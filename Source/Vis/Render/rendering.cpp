@@ -65,7 +65,8 @@ void RenderingMgr::Shutdown()
 }
 
 void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
-								   const Vis::VisParams& params)
+								   const Sim::SimParams& simParams,
+								   const Vis::VisParams& visParams)
 {
 	N_impostorInstances_ = view.N_F;
 	if (N_impostorInstances_ == 0) { return; }
@@ -74,14 +75,12 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
 	// TODO: differentiate between fluid and boundary particles?
-	const float rad = params.render.radius;
+	const float rad = simParams.particleRadiusF;
 	const bool hasScalar = (view.scalarModeF != Base::None) &&
 							!view.scalarDataF.empty();
 
 	// write all instance data into the persistently mapped buffer
-	// TODO: how many threads should be used here?
-	// #pragma omp parallel for schedule(static)
-	for (int64_t i = 0; i < N_impostorInstances_; i++)
+	for (uint64_t i = 0; i < N_impostorInstances_; i++)
 	{
 		const glm::vec3 pos = view.posF[i];
 		out[i].posAndRad = glm::vec4(pos, rad);
@@ -100,7 +99,7 @@ void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::
 		BuildWireframeEdgesFromOBB(box, lineVertices);
 	}
 
-	N_lineVertices_ = static_cast<int64_t>(lineVertices.size());
+	N_lineVertices_ = lineVertices.size();
 	if (N_lineVertices_ == 0) { return; }
 
 	const GLsizeiptr bytes = static_cast<GLsizeiptr>(lineVertices.size() * sizeof(glm::vec3));
@@ -407,17 +406,17 @@ static void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
 	SPDLOG_WARN("GL debug type=0x{:x}, severity=0x{:x}, msg={}", type, severity, message);
 }
 
-void RenderingMgr::EnsureInstanceCapacity(std::int64_t N_required)
+void RenderingMgr::EnsureInstanceCapacity(uint32_t N_required)
 {
 	if (N_required <= capacity_) { return; }
 
 	// grow capacity to next power of two
-	std::int64_t newCap = capacity_ ? capacity_ : 1024;
+	uint64_t newCap = capacity_ ? capacity_ : 1024;
 	while (newCap < N_required)
 	{
 		newCap *= 2;
 	}
-	std::uint64_t newSize = newCap * sizeof(InstanceData);
+	uint64_t newSize = newCap * sizeof(InstanceData);
 
 	// (re)allocate immutable storage and map persistently
 	const GLbitfield storageFlags = GL_MAP_WRITE_BIT |

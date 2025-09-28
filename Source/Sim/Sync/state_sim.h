@@ -20,8 +20,8 @@ namespace Sync
 	struct FluidView
 	{
 		// metadata
-		std::int64_t N_{ 0 };
-		std::span<std::uint32_t> id; // unique particle IDs
+		uint32_t N_{ 0 };
+		std::span<uint32_t> id; // unique particle IDs
 
 		// fields
 		std::span<float> xPos, yPos, zPos;
@@ -41,8 +41,8 @@ namespace Sync
 	struct BoundaryView
 	{
 		// metadata
-		std::int64_t N_{ 0 };
-		std::span<std::uint32_t> id; // unique particle IDs
+		uint32_t N_{ 0 };
+		std::span<uint32_t> id; // unique particle IDs
 
 		// fields
 		std::span<float> xPos, yPos, zPos;
@@ -58,8 +58,8 @@ namespace Sync
 	struct FluidParticles
 	{
 		// metadata
-		std::int64_t N_{ 0 };
-		std::vector<std::uint32_t> id; // unique particle IDs
+		uint32_t N_{ 0 };
+		std::vector<uint32_t> id; // unique particle IDs
 
 		// positions
 		std::vector<float> xPos;
@@ -101,7 +101,7 @@ namespace Sync
 		std::vector<float> size;
 
 		// reserves capacity for all vectors consistently
-		void reserveAll(std::int64_t N)
+		void reserveAll(uint32_t N)
 		{
 			id.reserve(N);
 
@@ -136,7 +136,7 @@ namespace Sync
 		}
 
 		// resizes all vectors consistently
-		void resizeAll(std::int64_t N)
+		void resizeAll(uint32_t N)
 		{
 			N_ = N;
 			id.resize(N_);
@@ -226,8 +226,8 @@ namespace Sync
 	struct BoundaryParticles
 	{
 		// metadata
-		std::int64_t N_{ 0 };
-		std::vector<std::uint32_t> id; // unique particle IDs
+		uint32_t N_{ 0 };
+		std::vector<uint32_t> id; // unique particle IDs
 
 		// positions
 		std::vector<float> xPos;
@@ -250,7 +250,7 @@ namespace Sync
 		std::vector<float> size;
 
 		// reserves capacity for all vectors consistently
-		void reserveAll(std::int64_t N)
+		void reserveAll(uint32_t N)
 		{
 			id.reserve(N);
 
@@ -269,7 +269,7 @@ namespace Sync
 		}
 
 		// resizes all vectors consistently
-		void resizeAll(std::int64_t N)
+		void resizeAll(uint32_t N)
 		{
 			N_ = N;
 			id.resize(N_);
@@ -330,10 +330,10 @@ namespace Sync
 	struct UniversalSimState
 	{
 		// persistent layout version
-		std::int64_t schemaVersion{ 1 };
+		int64_t schemaVersion{ 1 };
 
 		// simulation metadata
-		std::int64_t step{ 0 };		// simulation step at this state
+		int64_t step{ 0 };			// simulation step at this state
 		double time{ 0 };			// simulation time in seconds
 
 		// particle data
@@ -341,20 +341,20 @@ namespace Sync
 		BoundaryParticles boundaryParticles;
 
 		// convenience methods for reserve/resizing
-		void ReserveFluid(std::int64_t N) { fluidParticles.reserveAll(N); }
-		void ReserveBoundary(std::int64_t N) { boundaryParticles.reserveAll(N); }
-		void ResizeFluid(std::int64_t N) { fluidParticles.resizeAll(N); }
-		void ResizeBoundary(std::int64_t N) { boundaryParticles.resizeAll(N); }
+		void ReserveFluid(uint32_t N) { fluidParticles.reserveAll(N); }
+		void ReserveBoundary(uint32_t N) { boundaryParticles.reserveAll(N); }
+		void ResizeFluid(uint32_t N) { fluidParticles.resizeAll(N); }
+		void ResizeBoundary(uint32_t N) { boundaryParticles.resizeAll(N); }
 
-		void ReserveFluidAdditional(std::int64_t add)
+		void ReserveFluidAdditional(uint32_t add)
 		{
-			auto current = static_cast<std::int64_t>(boundaryParticles.id.size());
+			auto current = static_cast<uint32_t>(boundaryParticles.id.size());
 			boundaryParticles.reserveAll(current + add);
 		}
 
-		void ReserveBoundaryAdditional(std::int64_t add)
+		void ReserveBoundaryAdditional(uint32_t add)
 		{
-			auto current = static_cast<std::int64_t>(boundaryParticles.id.size());
+			auto current = static_cast<uint32_t>(boundaryParticles.id.size());
 			boundaryParticles.reserveAll(current + add);
 		}
 

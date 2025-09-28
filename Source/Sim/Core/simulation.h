@@ -62,6 +62,10 @@ namespace Sim
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
 
+		// metadata
+		int64_t simStep_ = 0;
+		double simTime_ = 0.0;
+
 	private: // ==============================
 
 		// parameter manager and snapshot to be managed and passed to sub-systems

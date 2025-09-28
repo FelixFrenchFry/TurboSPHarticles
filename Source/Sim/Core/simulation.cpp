@@ -200,12 +200,19 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		if (params.simRunning ||
 			params.simRunNextStep)
 		{
-			simBackend_->SimStep(params, 1);
+			simBackend_->SimStep(params);
 
-			simParamsMgr_.Set_SimRunNextStep(false); // reset single-step flag
+			// update metadata
+			simStep_ += 1;
+			simTime_ += params.timeStep;
+
+			// reset single-step flag
+			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
 		}
 
 		// TODO: adjust update frequency with throttle
+		// TODO: add upper bound via a "new frame" flag from the visualizer
+		// TODO: add lower bound via ...
 		if (visualSnapMailbox_)
 		{
 			// create visual snapshot and push to mailbox
@@ -213,7 +220,7 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			simBackend_->PackVisualSnapshot(*snap);
 
 			// pack misc data into snapshot that is not handled by the backend
-			snap->step = params.step;
+			snap->simStep = simStep_;
 			snap->boxesB = simScenario_->GetBoundaryBoxes();
 
 			// move snapshot into mailbox (non-blocking)

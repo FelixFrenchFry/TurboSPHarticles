@@ -22,46 +22,51 @@ namespace Sim
 		// TODO: add more parameters as needed
 
 		// simulation
-		std::int64_t step		= 0;
 		bool simRunning			= false;
 		bool simRunNextStep		= false;
 
+		// particles
+		uint32_t N_F			= 0;
+		uint32_t N_B			= 0;
+
 		// time
-		float timeStep			= 0.01f;
+		float timeStep			= 0.0001f;
 
 		// particle sizes
-		float particleSizeF		= 0.1f;
-		float particleSizeB		= 0.1f;
-		float particleRadiusF	= 0.05f;
-		float particleRadiusB	= 0.05f;
+		// (size of particles is treated as smoothing length and spacing)
+		float particleSizeF		= 0.01f;
+		float particleSizeB		= 0.01f;
+		float particleRadiusF	= 0.005f;
+		float particleRadiusB	= 0.005f;
 
 		// kernel
-		float kernelRadius		= 0.2f;
+		float kernelSuppRatio	= 2.0f;
+		float kernelRadius		= 0.02f; // radius = size * supp ratio
 
 		// density and mass
 		float restDensityF		= 1'000.0f;
 		float restDensityB		= 1'000.0f;
-		float massF				= 100.0f;
-		float massB				= 100.0f;
+		float massF				= 0.001f;
+		float massB				= 0.001f;
 
 		// pressure
 		float taitExponent		= 5.0f;
-		float stiffness			= 100.0f;
+		float stiffness			= 5700.0f;
 
 		// viscosity
-		float viscosityF		= 0.1f;
-		float viscosityB		= 0.1f;
+		float viscosityF		= 0.000003f;
+		float viscosityB		= 0.000003f;
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
 		// fluid conditions
-		float jitFracF			= 0.0f; // % of particle size
-		std::int64_t jitSeedF	= 42; // RNG seed for jitter
+		float jitterFracF		= 0.0f; // % of particle size
+		int64_t jitterSeedF		= 42; // RNG seed for jitter
 
 		// boundary conditions
-		float jitFracB			= 0.0f; // % of particle size
-		std::int64_t jitSeedB	= 42; // RNG seed for jitter
+		float jitterFracB		= 0.0f; // % of particle size
+		int64_t jitterSeedB		= 42; // RNG seed for jitter
 		int boundaryLayers		= 2;
 	};
 
@@ -80,13 +85,18 @@ namespace Sim
 		// setters for individual parameters and their dependent values
 		void Set_SimRunning(bool simRunning);
 		void Set_SimRunNextStep(bool simRunNextStep);
+		void Set_NumParticles(uint32_t N, Base::ParticleType type);
 		void Set_TimeStep(float timeStep);
 		void Set_ParticleSize(float particleSize, Base::ParticleType type);
+		void Set_KernelSuppRatio(float kernelSuppRatio);
 		void Set_KernelRadius(float kernelRadius);
 		void Set_RestDensity(float restDensity, Base::ParticleType type);
 		void Set_Viscosity(float viscosity, Base::ParticleType type);
 		void Set_Gravity(glm::vec3 gravity);
 		void Set_BoundaryLayers(int boundaryLayers);
+
+		// different parameter presets for quick testing
+		void PresetParams_A();
 
 	private: // ==============================
 

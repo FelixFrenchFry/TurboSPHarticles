@@ -88,6 +88,50 @@ void SimParamsMgr::Set_SimRunNextStep(bool simRunNextStep)
 	EndWrite();
 }
 
+void SimParamsMgr::Set_NumParticles(uint32_t N, Base::ParticleType type)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		Base::MarkIfChanged(N, params_.N_F, changed);
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		Base::MarkIfChanged(N, params_.N_B, changed);
+	}
+	else
+	{
+		SPDLOG_INFO("Change of 'N' not implemented for this type");
+	}
+
+	if (!changed) { return; } // nothing to change
+
+	BeginWrite();
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		SPDLOG_INFO("Changed 'N_F' from {} to {} "
+			"(and dependent params accordingly)",
+			params_.N_F, N);
+
+		// apply changes
+		params_.N_F = N;
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		SPDLOG_INFO("Changed 'N_B' from {} to {} "
+			"(and dependent params accordingly)",
+			params_.N_B, N);
+
+		// apply changes
+		params_.N_B = N;
+	}
+
+	EndWrite();
+}
+
 void SimParamsMgr::Set_TimeStep(float timeStep)
 {
 	if (!(timeStep > 0.0f))
@@ -170,6 +214,31 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 	EndWrite();
 }
 
+void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
+{
+	if (!(kernelSuppRatio >= 1.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be >= 1");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(kernelSuppRatio, params_.kernelSuppRatio, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
+		params_.kernelSuppRatio, kernelSuppRatio);
+
+	// apply changes
+	BeginWrite();
+	params_.kernelSuppRatio = kernelSuppRatio;
+	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
+	EndWrite();
+}
+
 void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 {
 	if (!(kernelRadius > 0.0f))
@@ -191,6 +260,7 @@ void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 	// apply changes
 	BeginWrite();
 	params_.kernelRadius = kernelRadius;
+	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
 	EndWrite();
 }
 
@@ -333,6 +403,30 @@ void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
 	BeginWrite();
 	params_.boundaryLayers = boundaryLayers;
 	EndWrite();
+}
+
+void SimParamsMgr::PresetParams_A()
+{
+	// TODO: differentiate between fluid and boundary particles?
+
+	float timeStep			= 0.0001f;
+	float particleSize		= 0.01f;
+	float kernelSuppRatio	= 2.0f;
+	float restDensity		= 1'000.0f;
+	float viscosity			= 0.000003f;
+	glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
+
+	Set_SimRunning(false);
+	Set_SimRunNextStep(false);
+	Set_TimeStep(timeStep);
+	Set_ParticleSize(particleSize, Base::ParticleType::Fluid);
+	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
+	Set_KernelSuppRatio(kernelSuppRatio);
+	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
+	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
+	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
+	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
+	Set_Gravity(gravity);
 }
 
 void SimParamsMgr::BeginWrite()

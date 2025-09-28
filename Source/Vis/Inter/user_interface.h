@@ -5,10 +5,12 @@
 #pragma once
 
 // external
+#include <imgui.h>
 #include <string>
 
 // internal
-#include "../../Sim/Core/parameters_sim.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Core/simulation.h"
 #include "../Core/parameters_vis.h"
 
 // forward declarations
@@ -36,7 +38,12 @@ namespace Inter
 
 		// per-frame user interface lifecycle
 		void BeginFrame();
-		void DrawPanels(const Vis::VisParams& visParams);
+		void BuildUserInterfaceSections(const Sim::SimulationMgr& simulationMgr,
+										const Sim::SimParams& simParams, 
+										const Vis::VisParams& visParams);
+		void BuildSection_SimulationControl(const Sim::SimulationMgr& simulationMgr,
+											const Sim::SimParams& simParams,
+											const Vis::VisParams& visParams);
 		void EndFrame();
 		void RenderDrawData();
 
@@ -63,6 +70,17 @@ namespace Inter
 		bool initialized_ = false;
 		bool dockingEnabled_ = true;
 		std::string iniFilename_;
+
+		// interface element colors
+		ImVec4 color_buttonPositive_ =	ImVec4(0.2f, 0.6f, 0.2f, 1.0f);
+		ImVec4 color_buttonNeutral_ =	ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+		ImVec4 color_buttonNegative_ =	ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
+		ImVec4 color_tableHighlight_ =	ImVec4(1.0f, 0.2f, 0.2f, 1.0f);
+		ImVec4 color_tooltip_ =			ImVec4(0.6f, 1.0f, 0.6f, 1.0f);
+		ImVec4 color_unsavedChanges_ =	ImVec4(0.4f, 0.9f, 0.2f, 1.0f);
+
+		// temp
+		char stringBuffer[256];
 
 		// helpers
 		void CreateContexts(const char* iniFilename);

@@ -40,12 +40,13 @@ namespace Sim
 		void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const override;
 
 		// advances the simulation by N_steps
-		void SimStep(SimParams params, std::int64_t N_steps) override;
+		void SimStep(SimParams params, int64_t N_steps) override;
 
 	private: // ==============================
 
-		// misc
-		std::int64_t step_ = 0;
+		// metadata
+		int64_t simStep_ = 0;
+		double simTime_ = 0.0;
 
 		// ===== backend-specific data structures for operating the simulation =====
 

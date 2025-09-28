@@ -93,9 +93,9 @@ namespace Scene
 
 		float inline StartOffset(float length, float spacing, int N, bool centerToFit = true);
 
-		int inline TilesCount(float length, float spacing);
+		uint32_t inline TilesCount(float length, float spacing);
 
-		int64_t inline ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers);
+		uint32_t inline ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers);
 	};
 
 } // namespace Scene

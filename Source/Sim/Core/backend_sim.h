@@ -42,7 +42,7 @@ namespace Sim
 		virtual void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const = 0;
 
 		// advances the simulation by N_steps
-		virtual void SimStep(SimParams params, std::int64_t N_steps = 1) = 0;
+		virtual void SimStep(SimParams params, int64_t N_steps = 1) = 0;
 	};
 
 	// backend factory

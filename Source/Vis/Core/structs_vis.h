@@ -20,16 +20,16 @@ namespace Vis
 	struct VisualSnapView
 	{
 		// metadata
-		std::int64_t step;					// simulation step at this snapshot
+		int64_t simStep;					// simulation step at this snapshot
 
 		// data for fluid particle vis
-		std::int64_t N_F;					// number of fluid particles
+		uint32_t N_F;						// number of fluid particles
 		std::span<const glm::vec3> posF;	// positions of all fluid particles
 		std::span<const float> scalarDataF;	// data according to color coding mode
 		Base::ColorCodingMode scalarModeF;	// color coding mode
 
 		// data for boundary particles and boundary structures vis
-		std::int64_t N_B;					// number of boundary particles
+		uint32_t N_B;						// number of boundary particles
 		std::span<const glm::vec3> posB;	// positions of all boundary particles
 		std::span<const Scene::OBB> boxesB;	// OBBs of boundary structures
 	};
@@ -77,7 +77,6 @@ namespace Vis
 		glm::vec3 baseColor;		// base sphere impostor color RGB
 		glm::vec3 lineColor;		// wireframe color RGB
 		float alpha;
-		float radius;
 		float scalarMin;
 		float scalarMax;
 		bool useScalar;

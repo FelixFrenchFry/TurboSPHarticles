@@ -10,7 +10,6 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "cpu_backend_01.h"
-#include "neighbor_search.h"
 
 constexpr float  PI = std::numbers::pi_v<float>;
 
@@ -24,7 +23,7 @@ void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	const auto& B = src.boundaryParticles;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
-	step_ = src.step;
+	simStep_ = src.step;
 
 	// resize backend fluid data structures
 	xPosF_.resize(N_F_); yPosF_.resize(N_F_); zPosF_.resize(N_F_);
@@ -53,7 +52,7 @@ void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	{
 		// fluid particles
 		#pragma omp for schedule(static)
-		for (std::int64_t i = 0; i < N_F_; i++)
+		for (uint32_t i = 0; i < N_F_; i++)
 		{
 			xPosF_[i] = F.xPos[i]; yPosF_[i] = F.yPos[i]; zPosF_[i] = F.zPos[i];
 			xVelF_[i] = F.xVel[i]; yVelF_[i] = F.yVel[i]; zVelF_[i] = F.zVel[i];
@@ -70,7 +69,7 @@ void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 
 		// boundary particles
 		#pragma omp for schedule(static)
-		for (std::int64_t i = 0; i < N_B_; i++)
+		for (uint32_t i = 0; i < N_B_; i++)
 		{
 			xPosB_[i] = B.xPos[i]; yPosB_[i] = B.yPos[i]; zPosB_[i] = B.zPos[i];
 			xVelB_[i] = B.xVel[i]; yVelB_[i] = B.yVel[i]; zVelB_[i] = B.zVel[i];
@@ -99,7 +98,7 @@ void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	{
 		// fluid particles
 		#pragma omp for schedule(static)
-		for (std::int64_t i = 0; i < N_F_; i++)
+		for (uint32_t i = 0; i < N_F_; i++)
 		{
 			F.xPos[i] = xPosF_[i]; F.yPos[i] = yPosF_[i]; F.zPos[i] = zPosF_[i];
 			F.xVel[i] = xVelF_[i]; F.yVel[i] = yVelF_[i]; F.zVel[i] = zVelF_[i];
@@ -116,7 +115,7 @@ void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 		// boundary particles
 		#pragma omp for schedule(static)
-		for (std::int64_t i = 0; i < N_B_; i++)
+		for (uint32_t i = 0; i < N_B_; i++)
 		{
 			B.xPos[i] = xPosB_[i]; B.yPos[i] = yPosB_[i]; B.zPos[i] = zPosB_[i];
 			B.xVel[i] = xVelB_[i]; B.yVel[i] = yVelB_[i]; B.zVel[i] = zVelB_[i];
@@ -148,10 +147,10 @@ void SimBackendCPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	snap.posF.resize(N_F_);
 	snap.scalarDataF.resize(N_F_);
 	snap.N_F = N_F_;
-	snap.step = step_;
+	snap.simStep = simStep_;
 
 	#pragma omp parallel for schedule(static)
-	for (std::int64_t i = 0; i < N_F_; i++)
+	for (uint32_t i = 0; i < N_F_; i++)
 	{
 		snap.posF[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
 	}
@@ -172,7 +171,7 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 	case Base::VelocityMag:
 	{
 		#pragma omp parallel for schedule(static)
-		for (std::int64_t i = 0; i < N_F_; i++)
+		for (uint32_t i = 0; i < N_F_; i++)
 		{
 			// magnitude of velocity vector
 			snap.scalarDataF[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
@@ -197,7 +196,7 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 	}
 }
 
-void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
+void SimBackendCPU_01::SimStep(SimParams params, int64_t N_steps)
 {
 	// initialization and checks -----------------------------------------------
 
@@ -238,7 +237,7 @@ void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
 		}
 	}
 
-	for (std::int64_t step = 0; step < N_steps; step++)
+	for (int64_t step = 0; step < N_steps; step++)
 	{
 		// one simulation step with one parallel region
 		#pragma omp parallel
@@ -248,8 +247,11 @@ void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
 			const float kernelRadiusSqu =
 				params.kernelRadius * params.kernelRadius;
 
-			const float cubicSplineAlpha =
-				1.0f / (4.0f * PI * std::powf(params.particleSizeF, 3.0f));
+			// cubic spline alpha (computed in double precision for accuracy)
+			const double size = static_cast<double>(params.particleSizeF);
+			const double sizeInv = 1.0 / size;
+			const float cubicSplineAlpha = static_cast<float>(
+				(1.0 / (4.0 * static_cast<double>(PI))) * sizeInv * sizeInv * sizeInv);
 
 			const float sizeF = params.particleSizeF;
 
@@ -468,7 +470,7 @@ void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
 					accViscF += (massF_[j] / densityF_[j])
 							 * (glm::dot(velDiff, posDiff) 
 							 / (glm::dot(posDiff, posDiff) 
-							 + 0.0001f * sizeFSqu))
+							 + 0.01f * sizeFSqu))
 							 * kernelGradientsFF_[i][k];
 
 					// pressure acc contribution from fluid neighbor j
@@ -501,7 +503,7 @@ void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
 					accViscB += (massB_[j] / params.restDensityB)
 							 * (glm::dot(velDiff, posDiff)
 							 / (glm::dot(posDiff, posDiff)
-							 + 0.0001f * sizeFSqu))
+							 + 0.01f * sizeFSqu))
 							 * kernelGradientsFB_[i][k];
 
 					// pressure acc contribution from boundary neighbor j
@@ -511,8 +513,9 @@ void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
 							 * kernelGradientsFB_[i][k];
 				}
 
-				accViscF *= 2.0f * params.viscosityF;
-				accViscB *= 2.0f * params.viscosityB;
+				// 3D -> factor 2 * (dim + 2)
+				accViscF *= 2.0f * (3 + 2) * params.viscosityF;
+				accViscB *= 2.0f * (3 + 2) * params.viscosityB;
 				accPress *= -1.0f;
 
 				xAccViscF_[i] = accViscF.x + accViscB.x;
@@ -551,7 +554,8 @@ void SimBackendCPU_01::SimStep(SimParams params, std::int64_t N_steps)
 				zPosF_[i] = zPosF_[i] + params.timeStep * zVelF_[i];
 			}
 		}
-
-		step_++;
 	}
+
+	simStep_ += 1;
+	simTime_ += N_steps * params.timeStep;
 }

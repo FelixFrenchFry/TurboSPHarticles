@@ -23,7 +23,7 @@ namespace Export
 		bool shuffleFilter		= true; // byte shuffle for better compression ratio on FP data
 
 		// chunk target size
-		std::int64_t targetChunkBytes = 1u << 22; // 4 MiB (2^22 bytes)
+		int64_t targetChunkBytes = 1u << 22; // 4 MiB (2^22 bytes)
 
 		// safer saves
 		// (write to temp file and rename on success)

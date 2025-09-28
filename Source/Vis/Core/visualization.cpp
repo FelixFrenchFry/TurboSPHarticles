@@ -16,9 +16,11 @@
 
 using namespace Vis;
 
-VisualizationMgr::VisualizationMgr(Sim::SimParamsMgr& simParamsMgr,
+VisualizationMgr::VisualizationMgr(Sim::SimulationMgr& simulationMgr,
+								   Sim::SimParamsMgr& simParamsMgr,
 								   Vis::VisParamsMgr& visParamsMgr)
-	: simParamsMgr_{ simParamsMgr }
+	: simulationMgr_{ simulationMgr }
+	, simParamsMgr_{ simParamsMgr }
 	, visParamsMgr_{ visParamsMgr }
 	, userInputMgr_{ simParamsMgr, visParamsMgr }
 	, userInterfaceMgr_{ simParamsMgr, visParamsMgr }
@@ -166,7 +168,7 @@ void VisualizationMgr::RunVis()
 		renderingMgr_.Render(visParams_.render, visParams_.camera);
 
 		// 3. build ImGui panels
-		userInterfaceMgr_.DrawPanels(visParams_);
+		userInterfaceMgr_.BuildUserInterfaceSections(simulationMgr_, simParams_, visParams_);
 		userInterfaceMgr_.EndFrame();
 
 		// 4. render ImGui on top of the 3D scene
@@ -394,7 +396,7 @@ void VisualizationMgr::SyncVisSimState()
 	SwapVisBuffers();
 
 	// pack the read-only view for the rendering manager to use it
-	view_.N_F = static_cast<std::int64_t>(posF_[front_].size());
+	view_.N_F = static_cast<uint32_t>(posF_[front_].size());
 	view_.posF = std::span<const glm::vec3>(posF_[front_].data(), posF_[front_].size());
 	view_.scalarDataF = (scalarMode_ == Base::None)
 		? std::span<const float>()
@@ -403,11 +405,12 @@ void VisualizationMgr::SyncVisSimState()
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
 
 	// local copy for thread safety
-	const auto params = visParams_;
+	const auto simParams = simParams_;
+	const auto visParams = visParams_;
 
 	// push to GPU to let renderer use the new data
-	renderingMgr_.UpdateParticles(view_, params);
-	renderingMgr_.UpdateWireframes(view_, params);
+	renderingMgr_.UpdateParticles(view_, simParams, visParams);
+	renderingMgr_.UpdateWireframes(view_, visParams);
 }
 
 void VisualizationMgr::SwapVisBuffers() { std::swap(front_, back_); }
