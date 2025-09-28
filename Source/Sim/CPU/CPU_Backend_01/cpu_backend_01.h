@@ -40,16 +40,17 @@ namespace Sim
 		void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const override;
 
 		// advances the simulation by N_steps
-		void SimStep(const SimParams& params, std::int64_t N_steps) override;
+		void SimStep(SimParams params, std::int64_t N_steps) override;
 
 	private: // ==============================
 
 		// misc
 		std::int64_t step_ = 0;
 
-		// owned simulation state stored in backend-specific data structures
+		// ===== backend-specific data structures for operating the simulation =====
+
 		// fluid particles
-		std::int64_t N_F_ = 0;
+		uint32_t N_F_ = 0;
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
 		std::vector<float> xAccF_, yAccF_, zAccF_;
@@ -60,16 +61,27 @@ namespace Sim
 		std::vector<float> pressureF_;
 		std::vector<float> massF_;
 		std::vector<float> sizeF_;
-		std::vector<std::uint32_t> idF_;
+		std::vector<uint32_t> idF_;
+
 		// boundary particles
-		std::int64_t N_B_ = 0;
+		uint32_t N_B_ = 0;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> xVelB_, yVelB_, zVelB_;
 		std::vector<float> densityB_;
 		std::vector<float> pressureB_;
 		std::vector<float> massB_;
 		std::vector<float> sizeB_;
-		std::vector<std::uint32_t> idB_;
+		std::vector<uint32_t> idB_;
+
+		// neighbor storage
+		std::vector<std::vector<uint32_t>> neighborsFF_;
+		std::vector<std::vector<uint32_t>> neighborsFB_;
+
+		// kernel weight storage
+		std::vector<std::vector<float>> kernelWeightsFF_;
+		std::vector<std::vector<float>> kernelWeightsFB_;
+		std::vector<std::vector<glm::vec3>> kernelGradientsFF_;
+		std::vector<std::vector<glm::vec3>> kernelGradientsFB_;
 	};
 
 } // namespace Sim

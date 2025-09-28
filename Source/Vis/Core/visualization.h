@@ -32,7 +32,7 @@ namespace Vis
 						 Vis::VisParamsMgr& visParamsMgr);
 
 		// create window & GL context, and initialize sub-systems
-		bool Init(const WindowConfig& windowConfig = {});
+		bool Init(const WindowConfig& windowConfig);
 
 		// destroy contexts, sub-systems and free up resources
 		void Shutdown();

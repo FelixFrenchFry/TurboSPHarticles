@@ -197,7 +197,13 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		const auto params = simParams_;
 
 		// execute one simulation step
-		simBackend_->SimStep(params, 1);
+		if (params.simRunning ||
+			params.simRunNextStep)
+		{
+			simBackend_->SimStep(params, 1);
+
+			simParamsMgr_.Set_SimRunNextStep(false); // reset single-step flag
+		}
 
 		// TODO: adjust update frequency with throttle
 		if (visualSnapMailbox_)

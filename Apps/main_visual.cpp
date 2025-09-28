@@ -63,7 +63,8 @@ int main(int argc, char** argv)
 			return EXIT_FAILURE;
 		}
 
-		if (!visualizationMgr.Init())
+		auto tempVisParams = visParamsMgr.SnapshotParams().first;
+		if (!visualizationMgr.Init(tempVisParams.window))
 		{
 			SPDLOG_ERROR("Failed to initialize VisualizationMgr");
 			return EXIT_FAILURE;

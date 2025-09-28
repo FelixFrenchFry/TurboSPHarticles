@@ -50,6 +50,44 @@ int64_t SimParamsMgr::StableVersion() const
 	}
 }
 
+void SimParamsMgr::Set_SimRunning(bool simRunning)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(simRunning, params_.simRunning, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	SPDLOG_INFO("Changed 'simRunning' from {} to {}",
+		params_.simRunning, simRunning);
+
+	// apply changes
+	BeginWrite();
+	params_.simRunning = simRunning;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_SimRunNextStep(bool simRunNextStep)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(simRunNextStep, params_.simRunNextStep, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	if (params_.simRunning) { return; } // sim already fully running
+
+	SPDLOG_INFO("Changed 'simRunNextStep' from {} to {}",
+		params_.simRunNextStep, simRunNextStep);
+
+	// apply changes
+	BeginWrite();
+	params_.simRunNextStep = simRunNextStep;
+	EndWrite();
+}
+
 void SimParamsMgr::Set_TimeStep(float timeStep)
 {
 	if (!(timeStep > 0.0f))

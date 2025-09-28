@@ -80,7 +80,7 @@ void UserInputMgr::UpdateCamera(const Vis::CameraState& camera,
 	if (keys_[GLFW_KEY_S])				{ delta -= forward; }   // backward
 	if (keys_[GLFW_KEY_D])				{ delta += right; }     // right
 	if (keys_[GLFW_KEY_A])				{ delta -= right; }     // left
-	if (keys_[GLFW_KEY_SPACE])			{ delta += worldUp; }   // up
+	if (keys_[GLFW_KEY_LEFT_SHIFT])		{ delta += worldUp; }   // up
 	if (keys_[GLFW_KEY_LEFT_CONTROL])	{ delta -= worldUp; }   // down
 
 	glm::vec3 tempCamPos = camera.camPos;
@@ -113,7 +113,7 @@ void UserInputMgr::UpdateCamera(const Vis::CameraState& camera,
 		});
 }
 
-bool UserInputMgr::OnKey(const Vis::CameraState& camera, int key, int scancode, int action, int mods)
+bool UserInputMgr::OnKey(const Sim::SimParams& simParams, const Vis::CameraState& camera, int key, int scancode, int action, int mods)
 {
 	// ignore unknown keys
 	if (key < 0 || key >= static_cast<int>(keys_.size())) { return false; }
@@ -127,6 +127,19 @@ bool UserInputMgr::OnKey(const Vis::CameraState& camera, int key, int scancode, 
 	{
 		switch (key)
 		{
+		case GLFW_KEY_SPACE: // toggle simulation pause
+		{
+			bool toggle = !simParams.simRunning;
+			simParamsMgr_.Set_SimRunning(toggle);
+
+			return true;
+		}
+		case GLFW_KEY_RIGHT: // unpause sim for one step
+		{
+			simParamsMgr_.Set_SimRunNextStep(true);
+
+			return true;
+		}
 		case GLFW_KEY_R: // reset camera to default
 		{
 			visParamsMgr_.SetParam(Vis::CameraPatch

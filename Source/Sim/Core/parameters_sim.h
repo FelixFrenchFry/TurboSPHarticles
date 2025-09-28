@@ -23,6 +23,8 @@ namespace Sim
 
 		// simulation
 		std::int64_t step		= 0;
+		bool simRunning			= false;
+		bool simRunNextStep		= false;
 
 		// time
 		float timeStep			= 0.01f;
@@ -42,6 +44,10 @@ namespace Sim
 		float massF				= 100.0f;
 		float massB				= 100.0f;
 
+		// pressure
+		float taitExponent		= 5.0f;
+		float stiffness			= 100.0f;
+
 		// viscosity
 		float viscosityF		= 0.1f;
 		float viscosityB		= 0.1f;
@@ -56,7 +62,7 @@ namespace Sim
 		// boundary conditions
 		float jitFracB			= 0.0f; // % of particle size
 		std::int64_t jitSeedB	= 42; // RNG seed for jitter
-		int boundaryLayers		= 3;
+		int boundaryLayers		= 2;
 	};
 
 	class SimParamsMgr
@@ -72,6 +78,8 @@ namespace Sim
 		int64_t StableVersion() const;
 
 		// setters for individual parameters and their dependent values
+		void Set_SimRunning(bool simRunning);
+		void Set_SimRunNextStep(bool simRunNextStep);
 		void Set_TimeStep(float timeStep);
 		void Set_ParticleSize(float particleSize, Base::ParticleType type);
 		void Set_KernelRadius(float kernelRadius);
