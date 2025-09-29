@@ -110,7 +110,7 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 
 	// initialize sub-system managers
 	userInputMgr_.Init(visParams_);
-	userInterfaceMgr_.Init(window_, VisConstants::glVersion.name);
+	userInterfaceMgr_.Init(window_, simParams_, VisConstants::glVersion.name);
 	renderingMgr_.Init(visParams_.frameBuffer.size, visParams_.frameBuffer.dpiScale);
 
 	// initial GL viewport

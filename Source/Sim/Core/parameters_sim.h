@@ -46,8 +46,8 @@ namespace Sim
 		float massB				= 0.001f;
 
 		// pressure
-		float taitExponent		= 5.0f;
-		float stiffness			= 5700.0f;
+		float taitExponent		= 7.0f;
+		float stiffness			= 57000.0f;
 
 		// viscosity
 		float viscosityF		= 0.000003f;
@@ -57,8 +57,8 @@ namespace Sim
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
 		// kernel
-		float kernelSuppRatio = 2.0f;
-		float kernelRadius = 0.02f; // radius = size * supp ratio
+		float kernelSuppRatio	= 2.0f;
+		float kernelRadius		= 0.02f; // radius = size * supp ratio
 
 		// fluid conditions
 		float jitterFracF		= 0.0f; // % of particle size
@@ -89,6 +89,7 @@ namespace Sim
 		void Set_TimeStep(float timeStep);
 		void Set_ParticleSize(float particleSize, Base::ParticleType type);
 		void Set_RestDensity(float restDensity, Base::ParticleType type);
+		void Set_Mass(float mass, Base::ParticleType type);
 		void Set_TaitExponent(float taitExponent);
 		void Set_Stiffness(float stiffness);
 		void Set_Viscosity(float viscosity, Base::ParticleType type);
@@ -99,6 +100,7 @@ namespace Sim
 
 		// different parameter presets for quick testing
 		void PresetParams_A();
+		void PresetParams_B();
 
 	private: // ==============================
 

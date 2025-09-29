@@ -47,7 +47,7 @@ int main(int argc, char** argv)
 
 		// ===== initialization of manager systems =====
 
-		Sim::SimParamsMgr simParamsMgr{};
+		Sim::SimParamsMgr simParamsMgr{}; simParamsMgr.PresetParams_B();
 		Vis::VisParamsMgr visParamsMgr{};
 		Scene::ScenarioMgr scenarioMgr{};
 		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr };
@@ -69,8 +69,6 @@ int main(int argc, char** argv)
 			SPDLOG_ERROR("Failed to initialize VisualizationMgr");
 			return EXIT_FAILURE;
 		}
-
-		simParamsMgr.PresetParams_A();
 
 		// ===== hardware budgets =====
 

@@ -257,6 +257,9 @@ void SimBackendCPU_01::SimStep(SimParams params, int64_t N_steps)
 
 			const float sizeFSqu = params.particleSizeF * params.particleSizeF;
 
+			const float massF = params.massF;
+			const float massB = params.massB;
+
 			// neighbor search -------------------------------------------------
 
 			// naive brute-force neighbor search
@@ -418,7 +421,7 @@ void SimBackendCPU_01::SimStep(SimParams params, int64_t N_steps)
 					// global index of neighbor particle
 					const uint32_t j = neighborsFF_[i][k];
 
-					density += massF_[j] * kernelWeightsFF_[i][k];
+					density += massF * kernelWeightsFF_[i][k];
 				}
 
 				// loop over all boundary neighbors
@@ -427,7 +430,7 @@ void SimBackendCPU_01::SimStep(SimParams params, int64_t N_steps)
 					// global index of neighbor particle
 					const uint32_t j = neighborsFB_[i][k];
 
-					density += massB_[j] * kernelWeightsFB_[i][k];
+					density += massB * kernelWeightsFB_[i][k];
 				}
 
 				densityF_[i] = density;
@@ -467,14 +470,14 @@ void SimBackendCPU_01::SimStep(SimParams params, int64_t N_steps)
 											    zVelF_[i] - zVelF_[j] };
 
 					// viscosity acc contribution from fluid neighbor j
-					accViscF += (massF_[j] / densityF_[j])
+					accViscF += (massF / densityF_[j])
 							 * (glm::dot(velDiff, posDiff) 
 							 / (glm::dot(posDiff, posDiff) 
 							 + 0.01f * sizeFSqu))
 							 * kernelGradientsFF_[i][k];
 
 					// pressure acc contribution from fluid neighbor j
-					accPress += massF_[j]
+					accPress += massF
 							 * (pressureF_[i] / (densityF_[i] * densityF_[i])
 							 + pressureF_[j] / (densityF_[j] * densityF_[j]))
 							 * kernelGradientsFF_[i][k];
@@ -500,14 +503,14 @@ void SimBackendCPU_01::SimStep(SimParams params, int64_t N_steps)
 												zVelF_[i] - zVelB_[j] };
 
 					// viscosity acc contribution from boundary neighbor j
-					accViscB += (massB_[j] / params.restDensityB)
+					accViscB += (massB / params.restDensityB)
 							 * (glm::dot(velDiff, posDiff)
 							 / (glm::dot(posDiff, posDiff)
 							 + 0.01f * sizeFSqu))
 							 * kernelGradientsFB_[i][k];
 
 					// pressure acc contribution from boundary neighbor j
-					accPress += massB_[j]
+					accPress += massB
 							 * (pressureF_[i] / (densityF_[i] * densityF_[i])
 							 + pressureB_[j] / (params.restDensityB * params.restDensityB))
 							 * kernelGradientsFB_[i][k];

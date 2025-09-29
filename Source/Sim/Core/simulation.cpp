@@ -140,14 +140,26 @@ void SimulationMgr::ReBuildInitialSimState()
 		return;
 	}
 
+	// TODO: make sure simulation is stopped first to fix bug
+
+	// stop simulation
+	simParamsMgr_.Set_SimRunning(false);
+	simParamsMgr_.Set_SimRunNextStep(false);
+
 	// lock state during re-build
 	std::scoped_lock lock(stateMutex_);
+
+	// reset metadata
+	simStep_ = 0;
+	simTime_ = 0.0;
 
 	// reset scenario and all its data
 	universalSimState_ = {};
 	universalSimState_.schemaVersion = 1;
 	universalSimState_.step = 0;
 	universalSimState_.time = 0.0;
+
+	SyncParameters();
 
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);

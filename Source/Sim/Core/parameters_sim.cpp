@@ -270,6 +270,58 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 	EndWrite();
 }
 
+void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
+{
+	if (!(mass > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'mass' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		Base::MarkIfChanged(mass, params_.massF, changed);
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		Base::MarkIfChanged(mass, params_.massB, changed);
+	}
+	else
+	{
+		SPDLOG_INFO("Change of 'mass' not implemented for this type");
+	}
+
+	if (!changed) { return; } // nothing to change
+
+	BeginWrite();
+
+	if (type == Base::ParticleType::Fluid)
+	{
+		SPDLOG_INFO("Changed 'massF' from {} to {} "
+			"(and dependent params accordingly)",
+			params_.massF, mass);
+
+		// apply changes
+		params_.massF = mass;
+		// TODO: adjust rest density too?
+	}
+	else if (type == Base::ParticleType::Boundary)
+	{
+		SPDLOG_INFO("Changed 'massB' from {} to {} "
+			"(and dependent params accordingly)",
+			params_.massB, mass);
+
+		// apply changes
+		params_.massB = mass;
+		// TODO: adjust rest density too?
+	}
+
+	EndWrite();
+}
+
 void SimParamsMgr::Set_TaitExponent(float taitExponent)
 {
 	// detect if parameter would actually change
@@ -447,22 +499,54 @@ void SimParamsMgr::PresetParams_A()
 
 	float timeStep			= 0.0001f;
 	float particleSize		= 0.01f;
-	float kernelSuppRatio	= 2.0f;
 	float restDensity		= 1'000.0f;
-	float viscosity			= 0.03f;
+	float taitExponent		= 7.0f;
+	float stiffness			= 57000.0f;
+	float viscosity			= 0.000003f;
 	float gravity			= -9.81f;
+	float kernelSuppRatio	= 2.0f;
 
 	Set_SimRunning(false);
 	Set_SimRunNextStep(false);
 	Set_TimeStep(timeStep);
 	Set_ParticleSize(particleSize, Base::ParticleType::Fluid);
 	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
-	Set_KernelSuppRatio(kernelSuppRatio);
 	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
 	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
+	Set_TaitExponent(taitExponent);
+	Set_Stiffness(stiffness);
 	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
 	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
 	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
+	Set_KernelSuppRatio(kernelSuppRatio);
+}
+
+void SimParamsMgr::PresetParams_B()
+{
+	// TODO: differentiate between fluid and boundary particles?
+
+	float timeStep = 0.001f;
+	float particleSize = 0.1f;
+	float restDensity = 1'000.0f;
+	float taitExponent = 1700.0f;
+	float stiffness = 57000.0f;
+	float viscosity = 0.3f;
+	float gravity = -9.81f;
+	float kernelSuppRatio = 2.0f;
+
+	Set_SimRunning(false);
+	Set_SimRunNextStep(false);
+	Set_TimeStep(timeStep);
+	Set_ParticleSize(particleSize, Base::ParticleType::Fluid);
+	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
+	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
+	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
+	Set_TaitExponent(taitExponent);
+	Set_Stiffness(stiffness);
+	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
+	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
+	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
+	Set_KernelSuppRatio(kernelSuppRatio);
 }
 
 void SimParamsMgr::BeginWrite()

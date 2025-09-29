@@ -30,16 +30,6 @@ namespace Inter
 		bool gravity;
 	};
 
-	// temporary copies for parameter changes
-	struct ParamTemp
-	{
-		float taitExponent;
-		float stiffness;
-		float viscosityF;
-		float viscosityB;
-		float gravity;
-	};
-
 	// magnitudes of parameter changes
 	struct ParamMags
 	{
@@ -48,6 +38,16 @@ namespace Inter
 		std::array<float, 2> viscosityF;
 		std::array<float, 2> viscosityB;
 		std::array<float, 2> gravity;
+	};
+
+	// temporary copies for parameter changes
+	struct ParamTemp
+	{
+		float taitExponent;
+		float stiffness;
+		float viscosityF;
+		float viscosityB;
+		float gravity;
 	};
 
 	// own and manage the ImGui and ImPlot lifecycle
@@ -59,6 +59,7 @@ namespace Inter
 						 Vis::VisParamsMgr& visParamsMgr);
 
 		void Init(GLFWwindow* window,
+				  const Sim::SimParams& simParams,
 				  const char* glslVersion,
 				  const char* iniFilename = "TSP_visual_gui.ini",
 				  float dpiScale = 1.0f);
@@ -68,7 +69,7 @@ namespace Inter
 
 		// per-frame user interface lifecycle
 		void BeginFrame();
-		void BuildUserInterfaceSections(const Sim::SimulationMgr& simulationMgr,
+		void BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
 										const Sim::SimParams& simParams, 
 										const Vis::VisParams& visParams);
 		void EndFrame();
@@ -116,7 +117,6 @@ namespace Inter
 			.viscosityB		= false,
 			.gravity		= false
 		};
-		ParamTemp temp_{};
 		ParamMags mags_
 		{
 			.taitExponent	= { 1.0f,			0.1f },
@@ -125,15 +125,21 @@ namespace Inter
 			.viscosityB		= { 0.00001f,		0.000001f },
 			.gravity		= { 1.0f,			0.1f }
 		};
+		ParamTemp temp_{};
 
 		// parameter section flags
-		bool liveParamEditing_ = true;
+		bool liveParamEditing_ = false;
 		bool unsavedParamChanges_ = false;
 
 		// temp string buffer
 		char stringBuffer[256];
 
 		// sections
+		void BuildSection_SceneManagement(
+			Sim::SimulationMgr& simulationMgr,
+			const Sim::SimParams& simParams,
+			const Vis::VisParams& visParams);
+
 		void BuildSection_SimulationControl(
 			const Sim::SimulationMgr& simulationMgr,
 			const Sim::SimParams& simParams,

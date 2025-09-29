@@ -26,6 +26,7 @@ UserInterfaceMgr::UserInterfaceMgr(Sim::SimParamsMgr& simParamsMgr,
 }
 
 void UserInterfaceMgr::Init(GLFWwindow* window,
+							const Sim::SimParams& simParams,
 							const char* glslVersion,
 							const char* iniFilename,
 							float dpiScale)
@@ -47,6 +48,16 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 	// overwrite ImGui backends
 	ImGui_ImplGlfw_InitForOpenGL(window_, false);
 	ImGui_ImplOpenGL3_Init(glslVersion);
+
+	// initial param values
+	temp_ =
+	{
+		.taitExponent = simParams.taitExponent,
+		.stiffness = simParams.stiffness,
+		.viscosityF = simParams.viscosityF,
+		.viscosityB = simParams.viscosityB,
+		.gravity = simParams.gravity.y
+	};
 
 	// style & flags
 	SetupStyle();
@@ -82,13 +93,18 @@ void UserInterfaceMgr::BeginFrame()
 	if (dockingEnabled_) BeginDockspace();
 }
 
-void UserInterfaceMgr::BuildUserInterfaceSections(const Sim::SimulationMgr& simulationMgr,
+void UserInterfaceMgr::BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
 												  const Sim::SimParams& simParams,
 												  const Vis::VisParams& visParams)
 {
 	if (!initialized_) { return; }
 
 	ImGui::Begin("Settings");
+
+	if (ImGui::CollapsingHeader("Scene Management", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		BuildSection_SceneManagement(simulationMgr, simParams, visParams);
+	}
 
 	if (ImGui::CollapsingHeader("Simulation Control", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -203,6 +219,38 @@ void UserInterfaceMgr::OnDPIScaleChanged(float dpiScale)
 
 // ===== sections =====
 
+void UserInterfaceMgr::BuildSection_SceneManagement(
+	Sim::SimulationMgr& simulationMgr,
+	const Sim::SimParams& simParams,
+	const Vis::VisParams& visParams)
+{
+	ImGui::Spacing();
+
+	// temporary flags
+	bool cached = false;
+
+	// TODO: select scenario preset via dropdown?
+
+	ImGui::PushStyleColor(ImGuiCol_Button, RGBA_negative_);
+	if (simulationMgr.simStep_ == 0) { ImGui::BeginDisabled(); cached = true; }
+	if (ImGui::Button(" RESET ", { 185, 40 }))
+	{
+		simulationMgr.ReBuildInitialSimState();
+		simParamsMgr_.Set_SimRunning(false);
+	}
+	if (cached) { ImGui::EndDisabled(); cached = false; }
+	ImGui::PopStyleColor(1);
+
+	if (ImGui::TreeNode("scene settings"))
+	{
+		ImGui::Spacing();
+		ImGui::SeparatorText("(Placeholder)");
+
+		ImGui::TreePop();
+	}
+	ImGui::Spacing();
+}
+
 void UserInterfaceMgr::BuildSection_SimulationControl(
 	const Sim::SimulationMgr& simulationMgr,
 	const Sim::SimParams& simParams,
@@ -242,6 +290,7 @@ void UserInterfaceMgr::BuildSection_SimulationControl(
 	snprintf(stringBuffer, sizeof(stringBuffer), "%d", simulationMgr.simStep_);
 	//ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 230));
 	ImGui::Text(stringBuffer);
+	ImGui::Spacing();
 
 	/*
 	// update displayed FPS value in specified time intervals
