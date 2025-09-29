@@ -132,19 +132,36 @@ namespace Render
 		vec3 color = useScalar ? texture(uColorMap, u).xyz
 							   : baseColor;
 
-		// simple Blinn-Phong shading in view space
+		// directions
 		vec3 viewDir = normalize(-P);
 		vec3 lightDir = lightVS;
 		vec3 halfVec = normalize(lightDir + viewDir);
 
-		// diffuse and specular lighting (shininess hardcoded to 16.0)
-		float diff = max(dot(N, lightDir), 0.0);
-		float spec = pow(max(dot(N, halfVec), 0.0), 16.0);
+		float NdotLightDir = dot(N, lightDir);
 
-		vec3 ambient = 0.1 * color;
+		// half-lambert lighting to diffuse dark areas
+		// (higher wrap -> flatter shading)
+		const float wrap = 0.5;
+		float diff = clamp((NdotLightDir + wrap) / (1.0 + wrap), 0.0, 1.0);
+
+		// hemispheric ambient to brighten dark areas
+		const vec3 sky = vec3(0.35); // ambient from above
+		const vec3 ground = vec3(0.15); // ambient from below
+		float up01 = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+		vec3 ambient = mix(ground, sky, up01) * color * 0.8;
+
+		// specular lighting
+		float spec = 0.0;
+		if (NdotLightDir > 0.0)
+		{
+			float NdotHalfVec = max(dot(N, halfVec), 0.0);
+			spec = pow(NdotHalfVec, 8.0) * 0.2; // reduced intensity
+		}
+
+		// final lit color
 		vec3 lit = ambient + diff * color + spec * vec3(1.0);
 
-		// output final color
+		// output
 		FragColor = vec4(lit, alpha);
 	}
 	)GLSL";
