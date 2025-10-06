@@ -15,6 +15,12 @@
 
 int main(int argc, char** argv)
 {
+	#if defined(_WIN32)
+	printf("Running on Windows\n");
+	#elif defined(__linux__)
+	printf("Running on Linux\n");
+	#endif
+
 	// [year-month-day 12:34:56.789] [file.cpp:line] [type] message
 	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
 	spdlog::flush_on(spdlog::level::err);

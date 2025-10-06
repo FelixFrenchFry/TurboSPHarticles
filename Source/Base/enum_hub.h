@@ -8,6 +8,9 @@
 
 namespace Base
 {
+	// TODO: use 'enum class ... : uint16_t' instead?
+	// TODO: put them into separate, local files instead?
+
 	enum ParticleType
 	{
 		Fluid,				// 0

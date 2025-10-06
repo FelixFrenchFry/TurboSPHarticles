@@ -39,8 +39,12 @@ namespace Sim
 		// (backend-specific such that possible transformations can be applied efficiently)
 		void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const override;
 
+		// computes & fills in the stat data for the current sim step
+		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
+		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
+
 		// advances the simulation by N_steps
-		void SimStep(SimParams params, int64_t N_steps) override;
+		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
 
 	private: // ==============================
 
@@ -83,6 +87,9 @@ namespace Sim
 		std::vector<std::vector<float>> kernelWeightsFB_;
 		std::vector<std::vector<glm::vec3>> kernelGradientsFF_;
 		std::vector<std::vector<glm::vec3>> kernelGradientsFB_;
+
+		// re-usable work vector for temp storage
+		mutable std::vector<float> workBuffer_;
 	};
 
 } // namespace Sim

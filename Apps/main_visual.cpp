@@ -17,6 +17,12 @@
 
 int main(int argc, char** argv)
 {
+	#if defined(_WIN32)
+	printf("Running on Windows\n");
+	#elif defined(__linux__)
+	printf("Running on Linux\n");
+	#endif
+
 	// [year-month-day 12:34:56.789] [file.cpp:line] [type] message
 	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
 	spdlog::flush_on(spdlog::level::err);
@@ -47,10 +53,14 @@ int main(int argc, char** argv)
 
 		// ===== initialization of manager systems =====
 
+		// sub-systems
 		Sim::SimParamsMgr simParamsMgr{}; simParamsMgr.PresetParams_B();
 		Vis::VisParamsMgr visParamsMgr{};
 		Scene::ScenarioMgr scenarioMgr{};
-		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr };
+		Stats::StatisticsMgr statisticsMgr{ simParamsMgr.SnapshotParams().first };
+
+		// main systems
+		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, statisticsMgr };
 		Vis::VisualizationMgr visualizationMgr{ simulationMgr, simParamsMgr, visParamsMgr };
 
 		Sync::VisualSnapMailbox visualMailbox{};

@@ -11,6 +11,7 @@
 #include <thread>
 
 // internal
+#include "Source/Eval/Stats/statistics.h"
 #include "Source/Sim/Scene/builder.h"
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "Source/Sim/Sync/mailboxes.h"
@@ -27,7 +28,8 @@ namespace Sim
 	public: // ==============================
 
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
-					  Scene::ScenarioMgr& scenarioMgr);
+					  Scene::ScenarioMgr& scenarioMgr,
+					  Stats::StatisticsMgr& statisticsMgr);
 
 		// initialize sub-systems
 		bool Init();
@@ -88,6 +90,9 @@ namespace Sim
 		std::jthread controllerThread_;
 		std::atomic<bool> running_{ false };
 		std::atomic<bool> initialized_{ false };
+
+		// statistics and performance managers
+		Stats::StatisticsMgr statisticsMgr;
 
 		// misc
 		std::mutex stateMutex_; // protects universalSimState_

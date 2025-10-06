@@ -11,6 +11,7 @@
 // internal
 #include "parameters_sim.h"
 #include "Source/Base/enum_hub.h"
+#include "Source/Eval/Stats/statistics.h"
 #include "Source/Sim/Sync/snapshots.h"
 #include "Source/Sim/Sync/state_sim.h"
 
@@ -37,12 +38,16 @@ namespace Sim
 		virtual void PackExportSnapshot(Sync::ExportSnapshot& snap) const = 0;
 		virtual void PackVisualSnapshot(Sync::VisualSnapshot& snap) const = 0;
 
-		// fills in the scalar data based on given different color coding modes
-		// (backend-specific such that possible transformations can be applied efficiently)
+		// computes & fills in the scalar data based on different color coding modes
+		// (backend-specific so that possible transformations can be applied efficiently)
 		virtual void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const = 0;
 
+		// computes & fills in the stat data for the current sim step
+		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
+		virtual void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const = 0;
+
 		// advances the simulation by N_steps
-		virtual void SimStep(SimParams params, int64_t N_steps = 1) = 0;
+		virtual void ExecuteSimStep(SimParams params, int64_t N_steps = 1) = 0;
 	};
 
 	// backend factory

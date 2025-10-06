@@ -14,8 +14,11 @@
 using namespace Sim;
 
 SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
-							 Scene::ScenarioMgr& scenarioMgr)
-	: simParamsMgr_{ simParamsMgr }, scenarioMgr_{ scenarioMgr }
+							 Scene::ScenarioMgr& scenarioMgr,
+							 Stats::StatisticsMgr& statisticsMgr)
+	: simParamsMgr_{ simParamsMgr }
+	, scenarioMgr_{ scenarioMgr }
+	, statisticsMgr{ statisticsMgr }
 {
 	// TODO: implement
 }
@@ -212,11 +215,16 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		if (params.simRunning ||
 			params.simRunNextStep)
 		{
-			simBackend_->SimStep(params);
+			simBackend_->ExecuteSimStep(params);
 
 			// update metadata
 			simStep_ += 1;
 			simTime_ += params.timeStep;
+
+			// collect statistics
+			statisticsMgr.BeginStep();
+			simBackend_->FillStatisticsRecord(statisticsMgr.CurrentRecord(), simParams_);
+			statisticsMgr.EndStep(simStep_, simTime_);
 
 			// reset single-step flag
 			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
