@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <limits>
 
 // internal
 #include "statistics.h"
@@ -14,19 +15,18 @@ StatisticsMgr::StatisticsMgr(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxStatRecCount)
 	, curRecCount_(0)
 {
-	recLatest_.stats.fill(0.0f);
-	statsSum_allTime_.fill(0.0f);
-	statsMin_allTime_.fill(0.0f);
-	statsMax_allTime_.fill(0.0f);
+	ClearCurrent();
+	ClearAllTime();
 }
 
 void StatisticsMgr::BeginStep()
 {
-	recLatest_.stats.fill(0.0f);
+	ClearCurrent();
 }
 
 void StatisticsMgr::EndStep(int64_t simStep, float simTime)
 {
+	// fill latest record
 	recLatest_.simStep = simStep;
 	recLatest_.simTime = simTime;
 
@@ -70,7 +70,7 @@ float StatisticsMgr::GetStat_Latest(StatMetric metric) const
 	return recLatest_.stats[GetIdx(metric)];
 }
 
-float StatisticsMgr::GetStat_Average(StatMetric metric) const
+float StatisticsMgr::GetStat_Avg(StatMetric metric) const
 {
 	if (curRecCount_ == 0) { return 0.0f; }
 
@@ -89,4 +89,17 @@ float StatisticsMgr::GetStat_Max(StatMetric metric) const
 	if (curRecCount_ == 0) { return 0.0f; }
 
 	return statsMax_allTime_[GetIdx(metric)];
+}
+
+void StatisticsMgr::ClearCurrent()
+{
+	recLatest_ = {};
+	recLatest_.stats.fill(0.0f);
+}
+
+void StatisticsMgr::ClearAllTime()
+{
+	statsSum_allTime_.fill(0.0f);
+	statsMin_allTime_.fill(std::numeric_limits<float>::max());
+	statsMax_allTime_.fill(0.0f);
 }

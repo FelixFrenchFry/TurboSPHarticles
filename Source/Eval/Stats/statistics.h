@@ -11,7 +11,7 @@
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
-#include "metrics_stat.h"
+#include "metrics.h"
 
 
 
@@ -23,20 +23,22 @@ namespace Stats
 
 		StatisticsMgr(const Sim::SimParams& simParams);
 
-		// gives back a reference to the writable current record
-		StatRecordStep& CurrentRecord() { return recLatest_; }
-
 		// resets the latest stat data before pulling in a new record
 		void BeginStep();
 
-		// pushes the record to history and aggregates step data
+		// pushes the record to history and aggregates step's stat data
 		void EndStep(int64_t simStep, float simTime);
 
-		// stat queries
+		// per-metric queries
 		float GetStat_Latest(StatMetric metric) const;
-		float GetStat_Average(StatMetric metric) const;
+		float GetStat_Avg(StatMetric metric) const;
 		float GetStat_Min(StatMetric metric) const;
 		float GetStat_Max(StatMetric metric) const;
+
+		// helpers
+		StatRecordStep& GetCurrentRecord() { return recLatest_; }
+		const StatRecordStep& GetCurrentRecord() const { return recLatest_; }
+		const std::deque<StatRecordStep>& GetHistory() const { return recHistory_; }
 
 	private: // ==============================
 
@@ -49,10 +51,14 @@ namespace Stats
 		// rolling buffer for the stats for the last maxCount_ steps
 		std::deque<StatRecordStep> recHistory_;
 
-		// all-time aggregates
-		std::array<float, GetIdx(StatMetric::Count)> statsSum_allTime_;
-		std::array<float, GetIdx(StatMetric::Count)> statsMin_allTime_;
-		std::array<float, GetIdx(StatMetric::Count)> statsMax_allTime_;
+		// all-time per-metric aggregates
+		std::array<float, GetIdx(StatMetric::Count)> statsSum_allTime_{};
+		std::array<float, GetIdx(StatMetric::Count)> statsMin_allTime_{};
+		std::array<float, GetIdx(StatMetric::Count)> statsMax_allTime_{};
+
+		// helpers
+		void ClearCurrent();
+		void ClearAllTime();
 	};
 
 } // namespace Stats

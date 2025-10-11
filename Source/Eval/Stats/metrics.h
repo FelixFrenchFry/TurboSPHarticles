@@ -1,4 +1,4 @@
-// metrics_stat.h
+// metrics.h
 //
 // TODO: comment
 
@@ -35,7 +35,6 @@ namespace Stats
 		VelMag_Avg,			// average velocity magnitude
 		VelMag_Max,			// max velocity magnitude
 
-		// misc
 		Count
 	};
 
@@ -49,18 +48,66 @@ namespace Stats
 	constexpr inline std::array<StatMetricDef, static_cast<uint16_t>(StatMetric::Count)> Definitions =
 	{
 		{
-			{ StatMetric::NumF,				"num fluid particles",				"" },
-			{ StatMetric::NumB,				"num bound particles",				"" },
-			{ StatMetric::NumNeighF_Avg,		"num fluid neighbors (avg)",		"" },
-			{ StatMetric::NumNeighB_Avg,		"num bound neighbors (avg)",		"" },
-			{ StatMetric::NumNeighF_Max,		"num fluid neighbors (max)",		"" },
-			{ StatMetric::NumNeighB_Max,		"num bound neighbors (max)",		"" },
-			{ StatMetric::DensRelError_Avg,	"density rel err (avg)",			"%" },
-			{ StatMetric::DensRelError_P95,	"density rel err (p95)",			"%" },
-			{ StatMetric::DensRelError_P99,	"density rel err (p99)",			"%" },
-			{ StatMetric::DensRelError_Max,   "density rel err (max)",			"%" },
-			{ StatMetric::VelMag_Avg,			"velocity mag (avg)",				"m/s" },
-			{ StatMetric::VelMag_Max,			"velocity mag (max)",				"m/s" },
+			{
+				.metric = StatMetric::NumF,
+				.name = "num fluid particles",
+				.unit = ""
+			},
+			{
+				.metric = StatMetric::NumB,
+				.name = "num bound particles",
+				.unit = ""
+			},
+			{
+				.metric = StatMetric::NumNeighF_Avg,
+				.name = "num fluid neighbors (avg)",
+				.unit = ""
+			},
+			{
+				.metric = StatMetric::NumNeighB_Avg,
+				.name = "num bound neighbors (avg)",
+				.unit = ""
+			},
+			{
+				.metric = StatMetric::NumNeighF_Max,
+				.name = "num fluid neighbors (max)",
+				.unit = ""
+			},
+			{
+				.metric = StatMetric::NumNeighB_Max,
+				.name = "num bound neighbors (max)",
+				.unit = ""
+			},
+			{
+				.metric = StatMetric::DensRelError_Avg,
+				.name = "density rel err (avg)",
+				.unit = "%"
+			},
+			{
+				.metric = StatMetric::DensRelError_P95,
+				.name = "density rel err (p95)",
+				.unit = "%"
+			},
+			{
+				.metric = StatMetric::DensRelError_P99,
+				.name = "density rel err (p99)",
+				.unit = "%"
+			},
+			{
+				.metric = StatMetric::DensRelError_Max,
+				.name = "density rel err (max)",
+				.unit = "%"
+			},
+			{
+				.metric = StatMetric::VelMag_Avg,
+				.name = "velocity mag (avg)",
+				.unit = "m/s"
+			},
+			{
+				.metric = StatMetric::VelMag_Max,
+				.name = "velocity mag (max)",
+				.unit = "m/s"
+			}
 		}
 	};
 	static_assert(Definitions.size() == static_cast<uint16_t>(StatMetric::Count),
