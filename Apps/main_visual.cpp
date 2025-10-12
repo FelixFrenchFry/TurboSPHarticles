@@ -57,10 +57,11 @@ int main(int argc, char** argv)
 		Sim::SimParamsMgr simParamsMgr{}; simParamsMgr.PresetParams_B();
 		Vis::VisParamsMgr visParamsMgr{};
 		Scene::ScenarioMgr scenarioMgr{};
+		Bench::BenchmarksMgr benchmarksMgr{ simParamsMgr.SnapshotParams().first };
 		Stats::StatisticsMgr statisticsMgr{ simParamsMgr.SnapshotParams().first };
 
 		// main systems
-		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, statisticsMgr };
+		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr };
 		Vis::VisualizationMgr visualizationMgr{ simulationMgr, simParamsMgr, visParamsMgr };
 
 		Sync::VisualSnapMailbox visualMailbox{};

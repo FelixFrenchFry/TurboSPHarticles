@@ -120,7 +120,7 @@ namespace Stats
 	{
 		// metadata
 		int64_t simStep = 0;
-		float simTime = 0.0f;
+		double simTime = 0.0;
 
 		// stat data
 		std::array<float, GetIdx(StatMetric::Count)> stats{};

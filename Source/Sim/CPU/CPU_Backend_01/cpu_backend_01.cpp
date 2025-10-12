@@ -19,6 +19,12 @@ constexpr float  PI = std::numbers::pi_v<float>;
 
 using namespace Sim;
 
+SimBackendCPU_01::SimBackendCPU_01(Bench::BenchmarksMgr& benchmarksMgr)
+	: benchmarksMgr_{ benchmarksMgr }
+{
+	// nothing to do here
+}
+
 void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
 {
 	const auto& F = src.fluidParticles;
@@ -198,6 +204,122 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 	}
 }
 
+// TODO: add flags to enable/disable certain stats?
+void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
+	const SimParams& simParams) const
+{
+	using namespace Stats;
+
+	const uint32_t NF = N_F_;
+	const uint32_t NB = N_B_;
+
+	Set(record, StatMetric::NumF, static_cast<float>(NF));
+	Set(record, StatMetric::NumB, static_cast<float>(NB));
+
+	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
+
+	// neighbor stats ----------------------------------------------------------
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles });
+
+	float sumF = 0.0f;
+	float sumB = 0.0f;
+	float maxF = 0.0f;
+	float maxB = 0.0f;
+
+	#pragma omp parallel for reduction(+:sumF,sumB) reduction(max:maxF,maxB) schedule(static)
+	for (uint32_t i = 0; i < NF; i++)
+	{
+		const float nf = static_cast<float>(neighborsFF_[i].size());
+		const float nb = static_cast<float>(neighborsFB_[i].size());
+
+		sumF += nf;
+		sumB += nb;
+
+		if (nf > maxF) [[unlikely]] { maxF = nf; }
+		if (nb > maxB) [[unlikely]] { maxB = nb; }
+	}
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles });
+
+	// density stats -----------------------------------------------------------
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
+
+	workBuffer_.resize(NF);
+
+	float sumRelErr = 0.0f;
+	float maxRelErr = 0.0f;
+
+	#pragma omp parallel for reduction(+:sumRelErr) reduction(max:maxRelErr) schedule(static)
+	for (uint32_t i = 0; i < NF; i++)
+	{
+		const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
+		const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
+
+		workBuffer_[i] = relErr;
+		sumRelErr += relErr;
+
+		if (relErr > maxRelErr) [[unlikely]] { maxRelErr = relErr; }
+	}
+
+	float p95 = 0.0f;
+	float p99 = 0.0f;
+
+	if (NF) // determine percentiles
+	{
+		// indices of the 95th and 99th percentiles
+		const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
+		const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+
+		auto nth95 = workBuffer_.begin() + i95;
+		auto nth99 = workBuffer_.begin() + i99;
+
+		// partially sort so that the desired percentiles can be extracted
+		std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
+		std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
+
+		p95 = *nth95;
+		p99 = *nth99;
+	}
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Density });
+
+	// velocity stats ----------------------------------------------------------
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Velocity });
+
+	float velMagSum = 0.0f;
+	float velMagMax = 0.0f;
+
+	#pragma omp parallel for reduction(+:velMagSum) reduction(max:velMagMax) schedule(static)
+	for (uint32_t i = 0; i < NF; i++)
+	{
+		const float vx = xVelF_[i];
+		const float vy = yVelF_[i];
+		const float vz = zVelF_[i];
+
+		const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
+
+		velMagSum += velMag;
+		if (velMag > velMagMax) [[unlikely]] { velMagMax = velMag; }
+	}
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Velocity });
+
+	// writes to record --------------------------------------------------------
+
+	Set(record, StatMetric::NumNeighF_Avg, sumF * invNF);
+	Set(record, StatMetric::NumNeighB_Avg, sumB * invNF);
+	Set(record, StatMetric::NumNeighF_Max, maxF);
+	Set(record, StatMetric::NumNeighB_Max, maxB);
+
+	Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
+	Set(record, StatMetric::DensRelError_P95, p95);
+	Set(record, StatMetric::DensRelError_P99, p99);
+	Set(record, StatMetric::DensRelError_Max, maxRelErr);
+
+	Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
+	Set(record, StatMetric::VelMag_Max, velMagMax);
+}
+
 void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 {
 	// initialization and checks -----------------------------------------------
@@ -265,6 +387,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			// neighbor search -------------------------------------------------
 
 			// naive brute-force neighbor search
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
 			#pragma omp for schedule(static)
 			for (uint32_t i = 0; i < N_F_; i++)
 			{
@@ -315,9 +438,12 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 					}
 				}
 			}
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 			// kernel weight and gradient computations -------------------------
 
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Kernel_Weights,
+											Bench::BenchOp::Kernel_Gradients });
 			#pragma omp for schedule(static)
 			for (uint32_t i = 0; i < N_F_; i++)
 			{
@@ -409,9 +535,13 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 											 * (-3.0f * t2 * t2 + 12 * t1 * t1);
 				}
 			}
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Kernel_Weights,
+										   Bench::BenchOp::Kernel_Gradients });
 
 			// density and pressure computations -------------------------------
 
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
+											Bench::BenchOp::Pressure_Solving });
 			#pragma omp for schedule(static)
 			for (uint32_t i = 0; i < N_F_; i++)
 			{
@@ -442,9 +572,15 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 				pressureF_[i] = std::max(pressure, 0.0f);
 			}
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving,
+										   Bench::BenchOp::Pressure_Solving });
 
 			// acceleration computations ---------------------------------------
 
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration,
+											Bench::BenchOp::Viscosity_Acceleration,
+											Bench::BenchOp::External_Acceleration,
+											Bench::BenchOp::AccelerationUpdate });
 			#pragma omp for schedule(static)
 			for (uint32_t i = 0; i < N_F_; i++)
 			{
@@ -541,9 +677,15 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				yAccF_[i] = yAccPressF_[i] + yAccViscF_[i] + yAccExtF_[i];
 				zAccF_[i] = zAccPressF_[i] + zAccViscF_[i] + zAccExtF_[i];
 			}
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration,
+										   Bench::BenchOp::Viscosity_Acceleration,
+										   Bench::BenchOp::External_Acceleration,
+										   Bench::BenchOp::AccelerationUpdate });
 
 			// velocity and position updates -----------------------------------
 
+			benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
+											Bench::BenchOp::PositionUpdate });
 			#pragma omp for schedule(static)
 			for (uint32_t i = 0; i < N_F_; i++)
 			{
@@ -558,116 +700,11 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				yPosF_[i] = yPosF_[i] + params.timeStep * yVelF_[i];
 				zPosF_[i] = zPosF_[i] + params.timeStep * zVelF_[i];
 			}
+			benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
+										   Bench::BenchOp::PositionUpdate });
 		}
 	}
 
 	simStep_ += 1;
 	simTime_ += N_steps * params.timeStep;
-}
-
-// TODO: add flags to enable/disable certain stats?
-void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
-											const SimParams& simParams) const
-{
-	using namespace Stats;
-
-	const uint32_t NF = N_F_;
-	const uint32_t NB = N_B_;
-
-	Set(record, StatMetric::NumF, static_cast<float>(NF));
-	Set(record, StatMetric::NumB, static_cast<float>(NB));
-
-	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
-
-	// neighbor stats ----------------------------------------------------------
-
-	float sumF = 0.0f;
-	float sumB = 0.0f;
-	float maxF = 0.0f;
-	float maxB = 0.0f;
-
-	#pragma omp parallel for reduction(+:sumF,sumB) reduction(max:maxF,maxB) schedule(static)
-	for (uint32_t i = 0; i < NF; i++)
-	{
-		const float nf = static_cast<float>(neighborsFF_[i].size());
-		const float nb = static_cast<float>(neighborsFB_[i].size());
-
-		sumF += nf;
-		sumB += nb;
-
-		if (nf > maxF) [[unlikely]] { maxF = nf; }
-		if (nb > maxB) [[unlikely]] { maxB = nb; }
-	}
-
-	// density stats -----------------------------------------------------------
-
-	workBuffer_.resize(NF);
-
-	float sumRelErr = 0.0f;
-	float maxRelErr = 0.0f;
-
-	#pragma omp parallel for reduction(+:sumRelErr) reduction(max:maxRelErr) schedule(static)
-	for (uint32_t i = 0; i < NF; i++)
-	{
-		const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
-		const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
-
-		workBuffer_[i] = relErr;
-		sumRelErr += relErr;
-
-		if (relErr > maxRelErr) [[unlikely]] { maxRelErr = relErr; }
-	}
-
-	float p95 = 0.0f;
-	float p99 = 0.0f;
-
-	if (NF) // determine percentiles
-	{
-		// indices of the 95th and 99th percentiles
-		const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-		const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
-
-		auto nth95 = workBuffer_.begin() + i95;
-		auto nth99 = workBuffer_.begin() + i99;
-
-		// partially sort so that the desired percentiles can be extracted
-		std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-		std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
-
-		p95 = *nth95;
-		p99 = *nth99;
-	}
-
-	// velocity stats ----------------------------------------------------------
-
-	float velMagSum = 0.0f;
-	float velMagMax = 0.0f;
-
-	#pragma omp parallel for reduction(+:velMagSum) reduction(max:velMagMax) schedule(static)
-	for (uint32_t i = 0; i < NF; i++)
-	{
-		const float vx = xVelF_[i];
-		const float vy = yVelF_[i];
-		const float vz = zVelF_[i];
-
-		const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
-
-		velMagSum += velMag;
-		if (velMag > velMagMax) [[unlikely]] { velMagMax = velMag; }
-	}
-
-	// writes to record --------------------------------------------------------
-
-	Set(record, StatMetric::NumNeighF_Avg, sumF * invNF);
-	Set(record, StatMetric::NumNeighB_Avg, sumB * invNF);
-	Set(record, StatMetric::NumNeighF_Max, maxF);
-	Set(record, StatMetric::NumNeighB_Max, maxB);
-
-	Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
-	Set(record, StatMetric::DensRelError_P95, p95);
-	Set(record, StatMetric::DensRelError_P99, p99);
-	Set(record, StatMetric::DensRelError_Max, maxRelErr);
-
-	Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
-	Set(record, StatMetric::VelMag_Max, velMagMax);
 }

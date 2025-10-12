@@ -27,7 +27,7 @@ namespace Stats
 		void BeginStep();
 
 		// pushes the record to history and aggregates step's stat data
-		void EndStep(int64_t simStep, float simTime);
+		void EndStep(int64_t simStep, double simTime);
 
 		// per-metric queries
 		float GetStat_Latest(StatMetric metric) const;

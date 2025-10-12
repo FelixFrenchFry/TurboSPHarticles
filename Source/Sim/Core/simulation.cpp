@@ -15,10 +15,12 @@ using namespace Sim;
 
 SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 							 Scene::ScenarioMgr& scenarioMgr,
+							 Bench::BenchmarksMgr& benchmarksMgr,
 							 Stats::StatisticsMgr& statisticsMgr)
 	: simParamsMgr_{ simParamsMgr }
 	, scenarioMgr_{ scenarioMgr }
-	, statisticsMgr{ statisticsMgr }
+	, benchmarksMgr_{ benchmarksMgr }
+	, statisticsMgr_{ statisticsMgr }
 {
 	// TODO: implement
 }
@@ -111,7 +113,7 @@ void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 	}
 
 	// create new backend and initialize it with the universal state
-	simBackend_ = MakeSimBackend(version, simParams_);
+	simBackend_ = MakeSimBackend(version, benchmarksMgr_, simParams_);
 	if (!simBackend_)
 	{
 		SPDLOG_ERROR("Failed to create sim backend ({})",
@@ -124,6 +126,18 @@ void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 
 		// transfer universal state into backend-specific data structures
 		simBackend_->PullFromUniversalSimState(universalSimState_);
+	}
+
+	// clear benchmarks from previous backend
+	benchmarksMgr_.ClearRecordHistory();
+
+	// get and validate the new backend's benchmark operation groups
+	simBackend_->GetBenchOpGroups(curBenchOpGroups_);
+	if (!Bench::ValidateOpGroups(curBenchOpGroups_))
+	{
+		SPDLOG_ERROR("Invalid benchmark operation groups for sim backend ({})",
+			static_cast<int>(version));
+		return;
 	}
 
 	SPDLOG_INFO("Selected sim backend ({})",
@@ -205,26 +219,43 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 	SPDLOG_INFO("Simulation started running with {} worker threads",
 		N_simThreads);
 
-	// main simulation step loop
+	// initialize before entering the simulation loop --------------------------
+
+	// create visual snapshot and push to mailbox
+	auto snap = std::make_shared<Sync::VisualSnapshot>();
+	simBackend_->PackVisualSnapshot(*snap);
+
+	// pack misc data into snapshot that is not handled by the backend
+	snap->simStep = simStep_;
+	snap->boxesB = simScenario_->GetBoundaryBoxes();
+
+	// move snapshot into mailbox (non-blocking)
+	visualSnapMailbox_->StoreSnapshot(std::move(snap));
+
+	// enter the simulation loop -----------------------------------------------
+
 	while (!stopToken.stop_requested())
 	{
 		// local copy for thread safety
 		const auto params = simParams_;
+		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// execute one simulation step
-		if (params.simRunning ||
-			params.simRunNextStep)
+		if (doSimStep)
 		{
+			// reset data records for the new step
+			benchmarksMgr_.BeginStep();
+			statisticsMgr_.BeginStep();
+
+			// starting point of total sim benchmark
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Total_Sim });
+
+			// perform the actual simulation step
 			simBackend_->ExecuteSimStep(params);
 
 			// update metadata
 			simStep_ += 1;
 			simTime_ += params.timeStep;
-
-			// collect statistics
-			statisticsMgr.BeginStep();
-			simBackend_->FillStatisticsRecord(statisticsMgr.CurrentRecord(), simParams_);
-			statisticsMgr.EndStep(simStep_, simTime_);
 
 			// reset single-step flag
 			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
@@ -233,8 +264,10 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		// TODO: adjust update frequency with throttle
 		// TODO: add upper bound via a "new frame" flag from the visualizer
 		// TODO: add lower bound via ...
-		if (visualSnapMailbox_)
+		if (doSimStep)
 		{
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Visual });
+
 			// create visual snapshot and push to mailbox
 			auto snap = std::make_shared<Sync::VisualSnapshot>();
 			simBackend_->PackVisualSnapshot(*snap);
@@ -245,12 +278,40 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 
 			// move snapshot into mailbox (non-blocking)
 			visualSnapMailbox_->StoreSnapshot(std::move(snap));
+
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Visual });
+		}
+
+		// evaluate the step
+		if (doSimStep)
+		{
+			// record statistics, archive data and update aggregates
+			simBackend_->FillStatisticsRecord(statisticsMgr_.GetCurrentRecord(), simParams_);
+			statisticsMgr_.EndStep(simStep_, simTime_);
+
+			// ending point of total sim benchmark, archive data and update aggregates
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
+			benchmarksMgr_.EndStep(simStep_, simTime_);
+
+			SPDLOG_WARN("Latest: {}",
+				benchmarksMgr_.GetBench_Latest(Bench::BenchOp::Total_Sim) / 1000);
+
+			SPDLOG_WARN("Avg overall: {}",
+				benchmarksMgr_.GetBench_Avg_OverAll(Bench::BenchOp::Total_Sim) / 1000);
+
+			SPDLOG_WARN("Min: {}",
+				benchmarksMgr_.GetBench_Min(Bench::BenchOp::Total_Sim) / 1000);
+
+			SPDLOG_WARN("Max: {}\n",
+				benchmarksMgr_.GetBench_Max(Bench::BenchOp::Total_Sim) / 1000);
 		}
 
 		SyncParameters();
 
 		// TODO: check if scenario or backend need to be switched?
 	}
+
+	// finalize after exiting the simulation loop ------------------------------
 
 	{
 		// transfer last sim state into the universal state to save it

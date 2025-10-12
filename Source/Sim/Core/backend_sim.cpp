@@ -12,13 +12,15 @@
 
 namespace Sim
 {
-	std::unique_ptr<ISimBackend> MakeSimBackend(Base::BackendVersion version, const SimParams& params)
+	std::unique_ptr<ISimBackend> MakeSimBackend(Base::BackendVersion version,
+												Bench::BenchmarksMgr& benchmarksMgr,
+												SimParams const& params)
 	{
 		switch (version)
 		{
 		case Base::BackendVersion::CPU_01:
 		{
-			return std::make_unique<SimBackendCPU_01>();
+			return std::make_unique<SimBackendCPU_01>(benchmarksMgr);
 		}
 		case Base::BackendVersion::GPU_01:
 		{

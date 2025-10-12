@@ -528,7 +528,7 @@ void SimParamsMgr::PresetParams_B()
 	float timeStep = 0.001f;
 	float particleSize = 0.1f;
 	float restDensity = 1'000.0f;
-	float taitExponent = 1700.0f;
+	float taitExponent = 7.0f;
 	float stiffness = 57000.0f;
 	float viscosity = 0.3f;
 	float gravity = -9.81f;

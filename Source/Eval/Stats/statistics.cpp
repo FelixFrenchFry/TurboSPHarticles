@@ -24,7 +24,7 @@ void StatisticsMgr::BeginStep()
 	ClearCurrent();
 }
 
-void StatisticsMgr::EndStep(int64_t simStep, float simTime)
+void StatisticsMgr::EndStep(int64_t simStep, double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;

@@ -9,6 +9,7 @@
 #include <vector>
 
 // internal
+#include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Sim/Core/backend_sim.h"
 #include "Source/Sim/Core/parameters_sim.h"
 
@@ -20,7 +21,7 @@ namespace Sim
 	{
 	public: // ==============================
 
-		SimBackendCPU_01() = default;
+		SimBackendCPU_01(Bench::BenchmarksMgr& benchmarksMgr);
 
 		const char* Name() const override { return "CPU_01"; }
 
@@ -43,10 +44,17 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
 
+		// provides the list defining how computation operations are benchmarked in groups and/or individually
+		// (backend-specific so that important cache-efficiency optimization can be applied)
+		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
+
 		// advances the simulation by N_steps
 		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
 
 	private: // ==============================
+
+		// managers
+		Bench::BenchmarksMgr& benchmarksMgr_;
 
 		// metadata
 		int64_t simStep_ = 0;
@@ -90,6 +98,56 @@ namespace Sim
 
 		// re-usable work vector for temp storage
 		mutable std::vector<float> workBuffer_;
+
+		// operation benchmarking groups
+		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
+		{
+			{
+				.ops = {	Bench::BenchOp::Neighbors_Query }
+			},
+			{
+				.ops = {  Bench::BenchOp::Kernel_Weights,
+							Bench::BenchOp::Kernel_Gradients }
+			},
+			{
+				.ops = {	Bench::BenchOp::Density_Solving,
+							Bench::BenchOp::Pressure_Solving }
+			},
+			{
+				.ops = {	Bench::BenchOp::Pressure_Acceleration,
+							Bench::BenchOp::Viscosity_Acceleration,
+							Bench::BenchOp::External_Acceleration,
+							Bench::BenchOp::AccelerationUpdate }
+			},
+			{
+				.ops = {	Bench::BenchOp::VelocityUpdate,
+							Bench::BenchOp::PositionUpdate }
+			},
+			{
+				.ops = {  Bench::BenchOp::Statistics_Particles }
+			},
+			{
+				.ops = {  Bench::BenchOp::Statistics_Density }
+			},
+			{
+				.ops = {  Bench::BenchOp::Statistics_Velocity }
+			},
+			{
+				.ops = {  Bench::BenchOp::Snapshot_Visual }
+			},
+			{
+				.ops = {  Bench::BenchOp::Total_Sim }
+			},
+			{
+				.ops = {  Bench::BenchOp::Total_Vis }
+			},
+			{
+				.ops = {  Bench::BenchOp::Misc_Sim }
+			},
+			{
+				.ops = {  Bench::BenchOp::Misc_Vis }
+			},
+		};
 	};
 
 } // namespace Sim

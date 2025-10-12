@@ -11,6 +11,7 @@
 #include <thread>
 
 // internal
+#include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Eval/Stats/statistics.h"
 #include "Source/Sim/Scene/builder.h"
 #include "Source/Sim/Scene/scenario_sim.h"
@@ -29,6 +30,7 @@ namespace Sim
 
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 					  Scene::ScenarioMgr& scenarioMgr,
+					  Bench::BenchmarksMgr& benchmarksMgr,
 					  Stats::StatisticsMgr& statisticsMgr);
 
 		// initialize sub-systems
@@ -91,8 +93,12 @@ namespace Sim
 		std::atomic<bool> running_{ false };
 		std::atomic<bool> initialized_{ false };
 
-		// statistics and performance managers
-		Stats::StatisticsMgr statisticsMgr;
+		// benchmark management
+		Bench::BenchmarksMgr benchmarksMgr_;
+		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
+
+		// statistics management
+		Stats::StatisticsMgr statisticsMgr_;
 
 		// misc
 		std::mutex stateMutex_; // protects universalSimState_

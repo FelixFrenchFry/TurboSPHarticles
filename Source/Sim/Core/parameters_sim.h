@@ -71,6 +71,9 @@ namespace Sim
 
 		// statistics
 		int64_t maxStatRecCount = 100'000'000;
+
+		// benchmarks
+		int64_t maxBenchRecCount = 100'000'000;
 	};
 
 	class SimParamsMgr
