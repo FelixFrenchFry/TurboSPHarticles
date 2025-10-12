@@ -17,16 +17,17 @@
 using namespace Vis;
 
 VisualizationMgr::VisualizationMgr(Sim::SimulationMgr& simulationMgr,
+								   Bench::BenchmarksMgr& benchmarksMgr,
 								   Sim::SimParamsMgr& simParamsMgr,
 								   Vis::VisParamsMgr& visParamsMgr)
 	: simulationMgr_{ simulationMgr }
+	, benchmarksMgr_{ benchmarksMgr }
 	, simParamsMgr_{ simParamsMgr }
 	, visParamsMgr_{ visParamsMgr }
 	, userInputMgr_{ simParamsMgr, visParamsMgr }
 	, userInterfaceMgr_{ simParamsMgr, visParamsMgr }
 	, renderingMgr_{ simParamsMgr, visParamsMgr }
 {
-	// handled by Init()
 }
 
 bool VisualizationMgr::Init(const WindowConfig& windowConfig)
@@ -168,7 +169,7 @@ void VisualizationMgr::RunVis()
 		renderingMgr_.Render(visParams_.render, visParams_.camera);
 
 		// 3. build ImGui panels
-		userInterfaceMgr_.BuildUserInterfaceSections(simulationMgr_, simParams_, visParams_);
+		userInterfaceMgr_.BuildUserInterfaceSections(simulationMgr_, benchmarksMgr_, simParams_, visParams_);
 		userInterfaceMgr_.EndFrame();
 
 		// 4. render ImGui on top of the 3D scene

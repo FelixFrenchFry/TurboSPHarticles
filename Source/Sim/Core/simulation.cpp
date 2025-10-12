@@ -22,7 +22,6 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 	, benchmarksMgr_{ benchmarksMgr }
 	, statisticsMgr_{ statisticsMgr }
 {
-	// TODO: implement
 }
 
 bool SimulationMgr::Init()
@@ -292,18 +291,6 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			// ending point of total sim benchmark, archive data and update aggregates
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
 			benchmarksMgr_.EndStep(simStep_, simTime_);
-
-			SPDLOG_WARN("Latest: {}",
-				benchmarksMgr_.GetBench_Latest(Bench::BenchOp::Total_Sim) / 1000);
-
-			SPDLOG_WARN("Avg overall: {}",
-				benchmarksMgr_.GetBench_Avg_OverAll(Bench::BenchOp::Total_Sim) / 1000);
-
-			SPDLOG_WARN("Min: {}",
-				benchmarksMgr_.GetBench_Min(Bench::BenchOp::Total_Sim) / 1000);
-
-			SPDLOG_WARN("Max: {}\n",
-				benchmarksMgr_.GetBench_Max(Bench::BenchOp::Total_Sim) / 1000);
 		}
 
 		SyncParameters();

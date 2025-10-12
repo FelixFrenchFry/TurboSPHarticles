@@ -82,8 +82,9 @@ namespace Bench
 	struct BenchOpDef
 	{
 		BenchOp op;
-		std::string_view name; // display name
-		std::string_view unit; // unit hint
+		std::string_view name;	// display name
+		std::string_view alias; // abbreviated name
+		std::string_view unit;	// unit hint
 	};
 
 	struct BenchOpGroupDef
@@ -97,151 +98,181 @@ namespace Bench
 			{
 				.op = BenchOp::Data_Sorting,
 				.name = "data structure sorting",
+				.alias = "datSort",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Neighbors_Construction,
 				.name = "neighbor construction",
+				.alias = "neighCon",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Neighbors_Query,
 				.name = "neighbor query",
+				.alias = "neighQue",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Neighbors_ListCompression,
 				.name = "neighbor list compress",
+				.alias = "neighLisCom",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Kernel_Weights,
 				.name = "kernel weights",
+				.alias = "kernWei",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Kernel_Gradients,
 				.name = "kernel gradients",
+				.alias = "kernGra",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Density_Solving,
 				.name = "density solving",
+				.alias = "dens",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Pressure_Solving,
 				.name = "pressure solving",
+				.alias = "pres",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Pressure_Acceleration,
 				.name = "pressure acc",
+				.alias = "presAcc",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Pressure_TermCondition,
 				.name = "pressure term cond",
+				.alias = "presCond",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Viscosity_Solving,
 				.name = "viscosity solving",
+				.alias = "visc",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Viscosity_Acceleration,
 				.name = "viscosity acc",
+				.alias = "viscAcc",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::External_Acceleration,
 				.name = "external acc",
+				.alias = "extAcc",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::AccelerationUpdate,
 				.name = "acceleration update",
+				.alias = "accUpd",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::VelocityUpdate,
 				.name = "velocity update",
+				.alias = "velUpd",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::PositionUpdate,
 				.name = "position update",
+				.alias = "posUpd",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Statistics_Particles,
 				.name = "stat particles",
+				.alias = "statPart",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Statistics_Density,
 				.name = "stat density",
+				.alias = "statDens",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Statistics_Velocity,
 				.name = "stat velocity",
+				.alias = "statVel",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Snapshot_Serial,
 				.name = "serial snapshot",
+				.alias = "snapSer",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Snapshot_Export,
 				.name = "export snapshot",
+				.alias = "snapExp",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Snapshot_Visual,
 				.name = "visual snapshot",
+				.alias = "snapVis",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Rendering,
 				.name = "rendering",
+				.alias = "rend",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::UserInterface,
 				.name = "user interface",
+				.alias = "userInt",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::UserInput,
 				.name = "user input",
+				.alias = "userInp",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Total_Sim,
 				.name = "sim operations total",
+				.alias = "totSim",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Total_Vis,
 				.name = "vis operations total",
+				.alias = "totVis",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Misc_Sim,
 				.name = "sim misc",
+				.alias = "miscSim",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Misc_Vis,
 				.name = "vis misc",
+				.alias = "miscVis",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Test,
 				.name = "test",
+				.alias = "test",
 				.unit = "ns"
 			}
 		}

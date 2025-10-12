@@ -20,6 +20,16 @@ struct GLFWwindow;
 
 namespace Inter
 {
+	enum class TimeUnit : uint8_t
+	{
+		ms, us, ns
+	};
+
+	enum class BenchTableView : uint8_t
+	{
+		Latest, Avg_All, Avg_Used, Min, Max
+	};
+
 	// flags for parameter changes
 	struct ParamChanged
 	{
@@ -70,6 +80,7 @@ namespace Inter
 		// per-frame user interface lifecycle
 		void BeginFrame();
 		void BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
+										const Bench::BenchmarksMgr& benchmarksMgr,
 										const Sim::SimParams& simParams, 
 										const Vis::VisParams& visParams);
 		void EndFrame();
@@ -131,6 +142,11 @@ namespace Inter
 		bool liveParamEditing_ = false;
 		bool unsavedParamChanges_ = false;
 
+		// benchmark table state
+		BenchTableView benchTableView_ = BenchTableView::Latest;
+		TimeUnit benchTimeUnit_ = TimeUnit::us;
+		int sparklineContextLength_ = 1024;
+
 		// temp string buffer
 		char stringBuffer[256];
 
@@ -145,8 +161,20 @@ namespace Inter
 			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
 
-		void BuildSection_Parameters(
+		void BuildSection_SimulationParameters(
 			const Sim::SimulationMgr& simulationMgr,
+			const Sim::SimParams& simParams,
+			const Vis::VisParams& visParams);
+
+		void BuildSection_SimulationStatistics(
+			const Sim::SimulationMgr& simulationMgr,
+			const Sim::SimParams& simParams,
+			const Vis::VisParams& visParams);
+
+		void BuildSection_PerformanceBenchmarks(
+			const Sim::SimulationMgr& simulationMgr,
+			const Bench::BenchmarksMgr& benchmarksMgr,
+			const std::vector<Bench::BenchOpGroupDef>& opGroups,
 			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
 
@@ -164,6 +192,13 @@ namespace Inter
 		void RebuildFonts(float dpiScale);
 		void ApplyParamChanges();
 		void ResetParamChanges(const Sim::SimParams& simParams);
+		inline double ConvertFromNs(TimeUnit unit, uint64_t ns);
+		inline const char* UnitLabel(TimeUnit unit);
+		inline uint64_t ReadOpTiming(const Bench::BenchmarksMgr& benchmarksMgr, Bench::BenchOp op);
+		inline uint64_t ReadOpGroup_Min(const Bench::BenchmarksMgr& benchmarksMgr,
+										const Bench::BenchOpGroupDef& opGroup);
+		inline std::string MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup);
+		void TableTextRightAligned(const char* fmt, ...);
 
 		// dockspace
 		void BeginDockspace();

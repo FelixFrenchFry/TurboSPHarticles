@@ -62,7 +62,7 @@ int main(int argc, char** argv)
 
 		// main systems
 		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr };
-		Vis::VisualizationMgr visualizationMgr{ simulationMgr, simParamsMgr, visParamsMgr };
+		Vis::VisualizationMgr visualizationMgr{ simulationMgr, benchmarksMgr, simParamsMgr, visParamsMgr };
 
 		Sync::VisualSnapMailbox visualMailbox{};
 		simulationMgr.SetVisualMailbox(&visualMailbox);

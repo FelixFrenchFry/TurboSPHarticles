@@ -1,6 +1,8 @@
 // user_interface.cpp
 
 // external
+#include <cstdarg>
+#include <cstdio>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <implot.h>
@@ -94,6 +96,7 @@ void UserInterfaceMgr::BeginFrame()
 }
 
 void UserInterfaceMgr::BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
+												  const Bench::BenchmarksMgr& benchmarksMgr,
 												  const Sim::SimParams& simParams,
 												  const Vis::VisParams& visParams)
 {
@@ -111,9 +114,21 @@ void UserInterfaceMgr::BuildUserInterfaceSections(Sim::SimulationMgr& simulation
 		BuildSection_SimulationControl(simulationMgr, simParams, visParams);
 	}
 
-	if (ImGui::CollapsingHeader("Parameters"))
+	if (ImGui::CollapsingHeader("Simulation Parameters"))
 	{
-		BuildSection_Parameters(simulationMgr, simParams, visParams);
+		BuildSection_SimulationParameters(simulationMgr, simParams, visParams);
+	}
+
+	if (ImGui::CollapsingHeader("Simulation Statistics"))
+	{
+		// BuildSection_SimulationStatistics(simulationMgr, simParams, visParams);
+	}
+
+	if (ImGui::CollapsingHeader("Performance Benchmarks"))
+	{
+		std::vector<Bench::BenchOpGroupDef> opGroups;
+		simulationMgr.GetBenchOpGroups(opGroups);
+		BuildSection_PerformanceBenchmarks(simulationMgr, benchmarksMgr, opGroups, simParams, visParams);
 	}
 
 	// show FPS
@@ -310,7 +325,7 @@ void UserInterfaceMgr::BuildSection_SimulationControl(
 	*/
 }
 
-void UserInterfaceMgr::BuildSection_Parameters(
+void UserInterfaceMgr::BuildSection_SimulationParameters(
 	const Sim::SimulationMgr& simulationMgr,
 	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
@@ -360,6 +375,233 @@ void UserInterfaceMgr::BuildSection_Parameters(
 	ImGui::SameLine();
 	ImGui::Text(" enable live editing");
 	ImGui::Spacing();
+}
+
+void UserInterfaceMgr::BuildSection_SimulationStatistics(
+	const Sim::SimulationMgr& simulationMgr, 
+	const Sim::SimParams& simParams, 
+	const Vis::VisParams& visParams)
+{
+	// TODO
+}
+
+// TODO: deal with threading, which data to show, update frequency, syncing, etc...
+void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
+	const Sim::SimulationMgr& simulationMgr,
+	const Bench::BenchmarksMgr& benchmarksMgr,
+	const std::vector<Bench::BenchOpGroupDef>& opGroups,
+	const Sim::SimParams& simParams,
+	const Vis::VisParams& visParams)
+{
+	using BTV = BenchTableView;
+
+	ImGui::Spacing();
+
+	// tab bar for selecting the table view ------------------------------------
+
+	if (ImGui::BeginTabBar("tabBar_bench"))
+	{
+		// helper function for the tabs
+		auto MakeTab = [&](BTV view, const char* label) -> void
+		{
+			if (ImGui::BeginTabItem(label))
+			{
+				benchTableView_ = view;
+				ImGui::EndTabItem();
+			}
+		};
+
+		MakeTab(BTV::Latest, "Current");
+		MakeTab(BTV::Avg_All, "Avg all");
+		MakeTab(BTV::Avg_Used, "Avg used");
+		MakeTab(BTV::Min, "Min");
+		MakeTab(BTV::Max, "Max");
+		ImGui::EndTabBar();
+	}
+
+	// no percentage column for min/max views
+	const bool showPercent = !(benchTableView_ == BTV::Min ||
+							   benchTableView_ == BTV::Max);
+
+	// per-group timing and totals ---------------------------------------------
+
+	// timing per group (row)
+	std::vector<uint64_t> groupTimings(opGroups.size(), 0);
+
+	// sum of all groups except the one for BenchOp::Total_Sim
+	// (used as denominator for percentages)
+	uint64_t colTime = 0;
+	int totalSimRowIdx = -1;
+
+	for (uint32_t i = 0; i < opGroups.size(); i++)
+	{
+		const auto& group = opGroups[i];
+
+		// pick representative timing for each group 
+		const uint64_t t = ReadOpGroup_Min(benchmarksMgr, group);
+		groupTimings[i] = t;
+
+		//SPDLOG_ERROR("time: {}", t);
+
+		// detect BenchOp::Total_Sim row to exclude from percentage calculations
+		if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total_Sim)
+		{
+			totalSimRowIdx = static_cast<int>(i);
+		}
+		else
+		{
+			colTime += t;
+		}
+	}
+
+	// benchmark table ---------------------------------------------------------
+
+	const int numCols = showPercent ? 3 : 2;
+
+	if (ImGui::BeginTable("table_bench", numCols,
+		ImGuiTableFlags_RowBg |
+		ImGuiTableFlags_BordersH |
+		ImGuiTableFlags_Resizable |
+		ImGuiTableFlags_SizingStretchProp))
+	{
+		// column headers
+		ImGui::TableSetupColumn("operation group",
+			ImGuiTableColumnFlags_WidthStretch, 0.65f);
+		ImGui::TableSetupColumn(UnitLabel(benchTimeUnit_),
+			ImGuiTableColumnFlags_WidthStretch, 0.20f);
+		if (showPercent)
+		{
+			ImGui::TableSetupColumn("%",
+				ImGuiTableColumnFlags_WidthStretch, 0.15f);
+		}
+		ImGui::TableHeadersRow();
+
+		// helper function for drawing each row
+		auto DrawOpGroupRow = [&](uint32_t rowIdx, bool isTotalSim) -> void
+		{
+			const auto& group = opGroups[rowIdx];
+			const uint64_t t = groupTimings[rowIdx];
+			const double t_unit = ConvertFromNs(benchTimeUnit_, t);
+
+			ImGui::TableNextRow();
+
+			// highlight BenchOp::Total_Sim row
+			if (isTotalSim)
+			{
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(200, 50, 50, 255));
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(200, 50, 50, 255));
+			}
+
+			// column 0 with aliases
+			// (expandable to show full names vertically)
+			ImGui::TableSetColumnIndex(0);
+			const std::string alias = MakeGroupAlias(group);
+
+			// stable ID for each row
+			ImGui::PushID(rowIdx);
+			if (isTotalSim)
+			{
+				// show as a regular row (no tree)
+				ImGui::TextUnformatted("total simulation time");
+			}
+			else
+			{
+				constexpr ImGuiTreeNodeFlags flags =
+					ImGuiTreeNodeFlags_SpanFullWidth |
+					ImGuiTreeNodeFlags_AllowItemOverlap |
+					ImGuiTreeNodeFlags_FramePadding;
+
+				if (ImGui::TreeNodeEx("##group", flags, "%s", alias.c_str()))
+				{
+					// make the unfolded list start closer to the left
+					ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 50.0f);
+
+					// show full names (one per line)
+					for (uint32_t k = 0; k < group.ops.size(); k++)
+					{
+						const auto op = group.ops[k];
+						const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+						ImGui::BulletText("%s", def.name.data());
+					}
+
+					ImGui::PopStyleVar();
+					ImGui::TreePop();
+				}
+			}
+			ImGui::PopID();
+
+			// column 1 with timing in selected unit
+			ImGui::TableSetColumnIndex(1);
+			TableTextRightAligned("%.1f", t_unit);
+
+			// column 2 with percentages of total sim time
+			if (showPercent)
+			{
+				ImGui::TableSetColumnIndex(2);
+				if (!isTotalSim && colTime > 0)
+				{
+					const float pct = 100.0f * (static_cast<float>(t)
+									/ static_cast<float>(colTime));
+					const float frac = pct / 100.0f;
+
+					char pctLabel[32];
+					std::snprintf(pctLabel, sizeof(pctLabel), "%.1f%%", pct);
+
+					ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(230, 150, 0, 255));
+					ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0.0f), pctLabel);
+					ImGui::PopStyleColor(1);
+				}
+				else
+				{
+					ImGui::Text("---");
+				}
+			}
+		};
+
+		// draw all regular rows first
+		for (uint32_t i = 0; i < opGroups.size(); i++)
+		{
+			if (static_cast<int>(i) == totalSimRowIdx) { continue; }
+
+			DrawOpGroupRow(i, false);
+		}
+
+		// draw BenchOp::Total_Sim row last (if present)
+		if (totalSimRowIdx >= 0)
+		{
+			DrawOpGroupRow(totalSimRowIdx, true);
+		}
+
+		ImGui::EndTable();
+	}
+
+	// TODO: sparkline?
+	// sparkline for BenchOp::Total_Sim ----------------------------------------
+
+	// display settings --------------------------------------------------------
+
+	if (ImGui::TreeNodeEx("measurement settings"))
+	{
+		// simple unit pickers (mutually exclusive)
+		bool ns = (benchTimeUnit_ == TimeUnit::ns);
+		bool us = (benchTimeUnit_ == TimeUnit::us);
+		bool ms = (benchTimeUnit_ == TimeUnit::ms);
+
+		ImGui::Text("time unit: ");
+		ImGui::SameLine();
+		if (ImGui::Checkbox("ms ", &ms)) { benchTimeUnit_ = TimeUnit::ms; ns = us = false; }
+		ImGui::SameLine();
+		if (ImGui::Checkbox("us ", &us)) { benchTimeUnit_ = TimeUnit::us; ns = ms = false; }
+		ImGui::SameLine();
+		if (ImGui::Checkbox("ns", &ns)) { benchTimeUnit_ = TimeUnit::ns; us = ms = false; }
+		ImGui::Spacing();
+
+		// number of steps shown in sparkline
+		ImGui::SetNextItemWidth(120.0f);
+		ImGui::SliderInt("history", &sparklineContextLength_, 32, 1024);
+
+		ImGui::TreePop();
+	}
 }
 
 void UserInterfaceMgr::BuildParamElement_TaitExponent(const Sim::SimParams& simParams)
@@ -602,6 +844,94 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 	}
 
 	unsavedParamChanges_ = false;
+}
+
+inline double UserInterfaceMgr::ConvertFromNs(TimeUnit unit, uint64_t ns)
+{
+	switch (unit)
+	{
+	case TimeUnit::ms: { return static_cast<double>(ns) / 1'000'000.0; }
+	case TimeUnit::us: { return static_cast<double>(ns) / 1'000.0; }
+	case TimeUnit::ns: { return static_cast<double>(ns); }
+	}
+
+	SPDLOG_WARN("Invalid TimeUnit enum value");
+	return static_cast<double>(ns);
+}
+
+inline const char* UserInterfaceMgr::UnitLabel(TimeUnit unit)
+{
+	switch (unit)
+	{
+	case TimeUnit::ns: { return "ns"; }
+	case TimeUnit::us: { return "us"; }
+	case TimeUnit::ms: { return "ms"; }
+	}
+
+	SPDLOG_WARN("Invalid TimeUnit enum value");
+	return "";
+}
+
+inline uint64_t UserInterfaceMgr::ReadOpTiming(const Bench::BenchmarksMgr& benchmarksMgr, Bench::BenchOp op)
+{
+	switch (benchTableView_)
+	{
+	case BenchTableView::Latest: { return benchmarksMgr.GetBench_Latest(op); }
+	case BenchTableView::Avg_All: { return benchmarksMgr.GetBench_Avg_OverAll(op); }
+	case BenchTableView::Avg_Used: { return benchmarksMgr.GetBench_Avg_WhenUsed(op); }
+	case BenchTableView::Min: { return benchmarksMgr.GetBench_Min(op); }
+	case BenchTableView::Max: { return benchmarksMgr.GetBench_Max(op); }
+	}
+
+	SPDLOG_WARN("Invalid BenchTableView enum value");
+	return 0;
+}
+
+inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Bench::BenchmarksMgr& benchmarksMgr,
+												  const Bench::BenchOpGroupDef& opGroup)
+{
+	uint64_t res = std::numeric_limits<uint64_t>::max();
+
+	// pick one of the operation timings as a representative
+	// (they should all be the same value, but the groups are variably-sized)
+	for (const auto& op : opGroup.ops)
+	{
+		res = std::min(res, ReadOpTiming(benchmarksMgr, op));
+	}
+
+	return res;
+}
+
+inline std::string UserInterfaceMgr::MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup)
+{
+	std::string res;
+
+	// build comma-separated list of operation aliases
+	for (uint32_t i = 0; i < opGroup.ops.size(); i++)
+	{
+		if (i > 0) { res += ", "; }
+		res += Bench::Definitions[Bench::GetIdx(opGroup.ops[i])].alias;
+	}
+
+	return res;
+}
+
+void UserInterfaceMgr::TableTextRightAligned(const char* fmt, ...)
+{
+	char buf[256];
+
+	va_list args;
+	va_start(args, fmt);
+	int n = std::vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+
+	// compute right-aligned cursor X within the current table cell
+	const float avail = ImGui::GetContentRegionAvail().x;
+	const float textWidth = ImGui::CalcTextSize(buf).x;
+	const float x = ImGui::GetCursorPosX() + std::max(0.0f, avail - textWidth - 2.0f);
+
+	ImGui::SetCursorPosX(x);
+	ImGui::TextUnformatted(buf);
 }
 
 // ===== dockspace =====

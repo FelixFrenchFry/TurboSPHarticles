@@ -79,7 +79,6 @@ namespace Bench
 		std::array<uint64_t, GetIdx(BenchOp::Count)> numOcc_allTime_{}; // number of occurrences
 
 		// helpers
-		void ClearCurrent();
 		void ClearAllTime();
 	};
 

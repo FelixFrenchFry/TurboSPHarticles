@@ -17,13 +17,15 @@ BenchmarksMgr::BenchmarksMgr(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxBenchRecCount)
 	, curRecCount_(0)
 {
-	ClearCurrent();
+	recLatest_ = {};
+	recLatest_.time.fill(0);
 	ClearAllTime();
 }
 
 void BenchmarksMgr::BeginStep()
 {
-	ClearCurrent();
+	curStepNs_.fill(0);
+	curStepOcc_.fill(0);
 }
 
 void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
@@ -198,16 +200,11 @@ void BenchmarksMgr::ClearRecordHistory()
 {
 	recHistory_.clear();
 	curRecCount_ = 0;
-	ClearAllTime();
-	ClearCurrent();
-}
-
-void BenchmarksMgr::ClearCurrent()
-{
 	recLatest_ = {};
 	recLatest_.time.fill(0);
 	curStepNs_.fill(0);
 	curStepOcc_.fill(0);
+	ClearAllTime();
 }
 
 void BenchmarksMgr::ClearAllTime()

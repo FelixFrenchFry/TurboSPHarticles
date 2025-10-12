@@ -139,14 +139,8 @@ namespace Sim
 				.ops = {  Bench::BenchOp::Total_Sim }
 			},
 			{
-				.ops = {  Bench::BenchOp::Total_Vis }
-			},
-			{
 				.ops = {  Bench::BenchOp::Misc_Sim }
-			},
-			{
-				.ops = {  Bench::BenchOp::Misc_Vis }
-			},
+			}
 		};
 	};
 
