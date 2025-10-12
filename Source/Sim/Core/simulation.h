@@ -66,6 +66,8 @@ namespace Sim
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
 
+		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const { out = curBenchOpGroups_; }
+
 		// metadata
 		int64_t simStep_ = 0;
 		double simTime_ = 0.0;
@@ -82,7 +84,7 @@ namespace Sim
 		std::unique_ptr<ISimBackend> simBackend_{ nullptr };
 
 		// scenario management
-		Scene::ScenarioMgr scenarioMgr_;
+		Scene::ScenarioMgr& scenarioMgr_;
 		std::unique_ptr<Scene::ISimScenario> simScenario_{ nullptr };
 
 		// TODO: comment
@@ -94,11 +96,11 @@ namespace Sim
 		std::atomic<bool> initialized_{ false };
 
 		// benchmark management
-		Bench::BenchmarksMgr benchmarksMgr_;
+		Bench::BenchmarksMgr& benchmarksMgr_;
 		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
 
 		// statistics management
-		Stats::StatisticsMgr statisticsMgr_;
+		Stats::StatisticsMgr& statisticsMgr_;
 
 		// misc
 		std::mutex stateMutex_; // protects universalSimState_
