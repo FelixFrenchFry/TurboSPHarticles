@@ -11,6 +11,7 @@
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Sync/snapshots.h"
 #include "operations.h"
 
 
@@ -37,6 +38,8 @@ namespace Bench
 		void AddTimingSample(BenchOp op, uint64_t ns);
 
 		void AddGroupTimingSample(std::initializer_list<BenchOp> ops, uint64_t ns);
+
+		void PackBenchSnapshot(Sync::BenchSnapshot& snap) const;
 
 		// per-operation queries
 		uint64_t GetBench_Latest(BenchOp op) const;

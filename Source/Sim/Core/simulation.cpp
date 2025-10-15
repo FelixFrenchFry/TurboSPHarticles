@@ -267,7 +267,7 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		{
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Visual });
 
-			// create visual snapshot and push to mailbox
+			// create visual snapshot and push to its mailbox
 			auto snap = std::make_shared<Sync::VisualSnapshot>();
 			simBackend_->PackVisualSnapshot(*snap);
 
@@ -275,7 +275,6 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			snap->simStep = simStep_;
 			snap->boxesB = simScenario_->GetBoundaryBoxes();
 
-			// move snapshot into mailbox (non-blocking)
 			visualSnapMailbox_->StoreSnapshot(std::move(snap));
 
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Visual });
@@ -291,6 +290,16 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			// ending point of total sim benchmark, archive data and update aggregates
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
 			benchmarksMgr_.EndStep(simStep_, simTime_);
+		}
+
+		// pack and send benchmark snapshots
+		// (to be retrieved by the visualization manager)
+		if (doSimStep)
+		{
+			// create bench snapshot and push to its mailbox
+			auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
+			benchmarksMgr_.PackBenchSnapshot(*benchSnap);
+			benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
 		}
 
 		SyncParameters();
@@ -328,9 +337,4 @@ void SimulationMgr::JoinThreads()
 		controllerThread_.join();
 		running_.store(false, std::memory_order_release);
 	}
-}
-
-void SimulationMgr::SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
-{
-	visualSnapMailbox_ = visualSnapMailbox;
 }

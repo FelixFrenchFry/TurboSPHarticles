@@ -43,7 +43,8 @@ namespace Vis
 		// main visualization loop (handle input, interface, render)
 		void RunVis();
 
-		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
+		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
+		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
 
 	private: // ==============================
 
@@ -70,9 +71,13 @@ namespace Vis
 		int front_ = 0; int back_ = 1; // current / next buffer index
 
 		// current view and scalar (coloring) mode for visualization
-		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };
 		Base::ColorCodingMode scalarMode_{ Base::None };
 		VisualSnapView view_{};
+
+		// mailbox pointers
+		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };
+		Sync::BenchSnapMailbox* benchSnapMailbox_{ nullptr };
+		std::shared_ptr<Sync::BenchSnapshot> localBenchSnap_{ nullptr };
 
 		// window and GL context
 		GLFWwindow* window_ = nullptr;
@@ -102,6 +107,8 @@ namespace Vis
 		// pulls latest simulation state and packs it into vis-specific data structures
 		// (positions + scalar property depending on color coding mode)
 		void SyncVisSimState();
+
+		void SyncBenchSnap();
 
 		// utils
 		void SwapVisBuffers();

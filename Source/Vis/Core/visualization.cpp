@@ -153,8 +153,11 @@ void VisualizationMgr::RunVis()
 		lastTime = now;
 		userInputMgr_.UpdateCamera(visParams_.camera, visParams_.frameBuffer, dt);
 
-		// get latest vis-specific simulation state
+		// fetch latest visual snap and replace vis-specific simulation state
 		SyncVisSimState();
+
+		// fetch latest bench snaps to make local copies
+		SyncBenchSnap();
 
 		// 1. begin new ImGui frame
 		userInterfaceMgr_.BeginFrame();
@@ -169,7 +172,8 @@ void VisualizationMgr::RunVis()
 		renderingMgr_.Render(visParams_.render, visParams_.camera);
 
 		// 3. build ImGui panels
-		userInterfaceMgr_.BuildUserInterfaceSections(simulationMgr_, benchmarksMgr_, simParams_, visParams_);
+		userInterfaceMgr_.BuildUserInterfaceSections(simulationMgr_,
+			localBenchSnap_.get(), simParams_, visParams_);
 		userInterfaceMgr_.EndFrame();
 
 		// 4. render ImGui on top of the 3D scene
@@ -177,11 +181,6 @@ void VisualizationMgr::RunVis()
 
 		glfwSwapBuffers(window_);
 	}
-}
-
-void VisualizationMgr::SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
-{
-	visualSnapMailbox_ = visualSnapMailbox;
 }
 
 // ===== callback trampolines =====
@@ -412,6 +411,22 @@ void VisualizationMgr::SyncVisSimState()
 	// push to GPU to let renderer use the new data
 	renderingMgr_.UpdateParticles(view_, simParams, visParams);
 	renderingMgr_.UpdateWireframes(view_, visParams);
+}
+
+void VisualizationMgr::SyncBenchSnap()
+{
+	if (!benchSnapMailbox_)
+	{
+		SPDLOG_ERROR("Failed to sync bench snap (no mailbox set)");
+		return;
+	}
+
+	// try to fetch latest snapshot for a local copy
+	std::shared_ptr<Sync::BenchSnapshot> snap;
+	if (benchSnapMailbox_->TryFetchLatestSnapshot(snap))
+	{
+		localBenchSnap_ = std::move(snap);
+	}
 }
 
 void VisualizationMgr::SwapVisBuffers() { std::swap(front_, back_); }

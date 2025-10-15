@@ -149,6 +149,23 @@ void BenchmarksMgr::AddGroupTimingSample(std::initializer_list<BenchOp> ops, uin
 	}
 }
 
+void BenchmarksMgr::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
+{
+	// metadata
+	snap.simStep = recLatest_.simStep;
+	snap.simTime = recLatest_.simTime;
+
+	// fill in latest, average over all, average when used, min, max benches
+	for (uint16_t i = 0; i < GetIdx(BenchOp::Count); i++)
+	{
+		snap.latest[i] = GetBench_Latest(static_cast<BenchOp>(i));
+		snap.avgAll[i] = GetBench_Avg_OverAll(static_cast<BenchOp>(i));
+		snap.avgUsed[i] = GetBench_Avg_WhenUsed(static_cast<BenchOp>(i));
+		snap.min[i] = GetBench_Min(static_cast<BenchOp>(i));
+		snap.max[i] = GetBench_Max(static_cast<BenchOp>(i));
+	}
+}
+
 uint64_t BenchmarksMgr::GetBench_Latest(BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }

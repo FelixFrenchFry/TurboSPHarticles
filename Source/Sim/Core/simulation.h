@@ -64,7 +64,8 @@ namespace Sim
 
 		void JoinThreads();
 
-		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox);
+		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
+		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
 
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const { out = curBenchOpGroups_; }
 
@@ -87,8 +88,9 @@ namespace Sim
 		Scene::ScenarioMgr& scenarioMgr_;
 		std::unique_ptr<Scene::ISimScenario> simScenario_{ nullptr };
 
-		// TODO: comment
-		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr }; // not owned
+		// mailbox pointers
+		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };
+		Sync::BenchSnapMailbox* benchSnapMailbox_{ nullptr };
 
 		// controller thread spawns worker threads within OpenMP parallel regions
 		std::jthread controllerThread_;

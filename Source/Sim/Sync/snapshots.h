@@ -10,6 +10,8 @@
 
 // internal
 #include "Source/Base/enum_hub.h"
+#include "Source/Eval/Bench/operations.h"
+#include "Source/Eval/Stats/metrics.h"
 #include "Source/Sim/Scene/builder.h"
 
 
@@ -95,4 +97,18 @@ namespace Sync
 		std::vector<Scene::OBB> boxesB;		// OBBs of boundary structures
 	};
 
-} // namespace Sim
+	struct BenchSnapshot
+	{
+		// metadata
+		int64_t simStep;
+		double simTime;
+
+		// per-operation timings
+		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> latest{};
+		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> avgAll{};
+		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> avgUsed{};
+		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> min{};
+		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> max{};
+	};
+
+} // namespace Sync

@@ -95,10 +95,11 @@ void UserInterfaceMgr::BeginFrame()
 	if (dockingEnabled_) BeginDockspace();
 }
 
-void UserInterfaceMgr::BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
-												  const Bench::BenchmarksMgr& benchmarksMgr,
-												  const Sim::SimParams& simParams,
-												  const Vis::VisParams& visParams)
+void UserInterfaceMgr::BuildUserInterfaceSections(
+	Sim::SimulationMgr& simulationMgr,
+	const Sync::BenchSnapshot* benchSnap,
+	const Sim::SimParams& simParams,
+	const Vis::VisParams& visParams)
 {
 	if (!initialized_) { return; }
 
@@ -121,14 +122,14 @@ void UserInterfaceMgr::BuildUserInterfaceSections(Sim::SimulationMgr& simulation
 
 	if (ImGui::CollapsingHeader("Simulation Statistics"))
 	{
-		// BuildSection_SimulationStatistics(simulationMgr, simParams, visParams);
+		BuildSection_SimulationStatistics(simulationMgr, simParams, visParams);
 	}
 
 	if (ImGui::CollapsingHeader("Performance Benchmarks"))
 	{
 		std::vector<Bench::BenchOpGroupDef> opGroups;
 		simulationMgr.GetBenchOpGroups(opGroups);
-		BuildSection_PerformanceBenchmarks(simulationMgr, benchmarksMgr, opGroups, simParams, visParams);
+		BuildSection_PerformanceBenchmarks(simulationMgr, benchSnap, opGroups, simParams, visParams);
 	}
 
 	// show FPS
@@ -378,8 +379,8 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 }
 
 void UserInterfaceMgr::BuildSection_SimulationStatistics(
-	const Sim::SimulationMgr& simulationMgr, 
-	const Sim::SimParams& simParams, 
+	const Sim::SimulationMgr& simulationMgr,
+	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
 {
 	// TODO
@@ -388,7 +389,7 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 // TODO: deal with threading, which data to show, update frequency, syncing, etc...
 void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	const Sim::SimulationMgr& simulationMgr,
-	const Bench::BenchmarksMgr& benchmarksMgr,
+	const Sync::BenchSnapshot* benchSnap,
 	const std::vector<Bench::BenchOpGroupDef>& opGroups,
 	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
@@ -438,7 +439,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		const auto& group = opGroups[i];
 
 		// pick representative timing for each group 
-		const uint64_t t = ReadOpGroup_Min(benchmarksMgr, group);
+		const uint64_t t = ReadOpGroup_Min(benchSnap, group);
 		groupTimings[i] = t;
 
 		//SPDLOG_ERROR("time: {}", t);
@@ -513,18 +514,17 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 
 				if (ImGui::TreeNodeEx("##group", flags, "%s", alias.c_str()))
 				{
-					// make the unfolded list start closer to the left
-					ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 50.0f);
+					ImGui::Unindent(10.0f); // shift to the left by arrow/bullet spacing
 
 					// show full names (one per line)
 					for (uint32_t k = 0; k < group.ops.size(); k++)
 					{
 						const auto op = group.ops[k];
 						const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-						ImGui::BulletText("%s", def.name.data());
+						ImGui::Text("- %s", def.name.data());
 					}
 
-					ImGui::PopStyleVar();
+					ImGui::Indent(10.0f); // restore indent
 					ImGui::TreePop();
 				}
 			}
@@ -872,22 +872,28 @@ inline const char* UserInterfaceMgr::UnitLabel(TimeUnit unit)
 	return "";
 }
 
-inline uint64_t UserInterfaceMgr::ReadOpTiming(const Bench::BenchmarksMgr& benchmarksMgr, Bench::BenchOp op)
+inline uint64_t UserInterfaceMgr::ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op)
 {
+	if (!snap)
+	{
+		SPDLOG_ERROR("Failed to read operation timing (no snap provided)");
+	}
+	const uint16_t i = Bench::GetIdx(op);
+
 	switch (benchTableView_)
 	{
-	case BenchTableView::Latest: { return benchmarksMgr.GetBench_Latest(op); }
-	case BenchTableView::Avg_All: { return benchmarksMgr.GetBench_Avg_OverAll(op); }
-	case BenchTableView::Avg_Used: { return benchmarksMgr.GetBench_Avg_WhenUsed(op); }
-	case BenchTableView::Min: { return benchmarksMgr.GetBench_Min(op); }
-	case BenchTableView::Max: { return benchmarksMgr.GetBench_Max(op); }
+	case BenchTableView::Latest: { return snap->latest[i]; }
+	case BenchTableView::Avg_All: { return snap->avgAll[i]; }
+	case BenchTableView::Avg_Used: { return snap->avgUsed[i]; }
+	case BenchTableView::Min: { return snap->min[i]; }
+	case BenchTableView::Max: { return snap->max[i]; }
 	}
 
 	SPDLOG_WARN("Invalid BenchTableView enum value");
 	return 0;
 }
 
-inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Bench::BenchmarksMgr& benchmarksMgr,
+inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Sync::BenchSnapshot* snap,
 												  const Bench::BenchOpGroupDef& opGroup)
 {
 	uint64_t res = std::numeric_limits<uint64_t>::max();
@@ -896,7 +902,7 @@ inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Bench::BenchmarksMgr& be
 	// (they should all be the same value, but the groups are variably-sized)
 	for (const auto& op : opGroup.ops)
 	{
-		res = std::min(res, ReadOpTiming(benchmarksMgr, op));
+		res = std::min(res, ReadOpTiming(snap, op));
 	}
 
 	return res;

@@ -79,11 +79,13 @@ namespace Inter
 
 		// per-frame user interface lifecycle
 		void BeginFrame();
+
 		void BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
-										const Bench::BenchmarksMgr& benchmarksMgr,
+										const Sync::BenchSnapshot* benchSnap,
 										const Sim::SimParams& simParams, 
 										const Vis::VisParams& visParams);
 		void EndFrame();
+
 		void RenderDrawData();
 
 		// input capture flags whether event is processed by userInterfaceMgr
@@ -173,7 +175,7 @@ namespace Inter
 
 		void BuildSection_PerformanceBenchmarks(
 			const Sim::SimulationMgr& simulationMgr,
-			const Bench::BenchmarksMgr& benchmarksMgr,
+			const Sync::BenchSnapshot* benchSnap,
 			const std::vector<Bench::BenchOpGroupDef>& opGroups,
 			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
@@ -194,8 +196,8 @@ namespace Inter
 		void ResetParamChanges(const Sim::SimParams& simParams);
 		inline double ConvertFromNs(TimeUnit unit, uint64_t ns);
 		inline const char* UnitLabel(TimeUnit unit);
-		inline uint64_t ReadOpTiming(const Bench::BenchmarksMgr& benchmarksMgr, Bench::BenchOp op);
-		inline uint64_t ReadOpGroup_Min(const Bench::BenchmarksMgr& benchmarksMgr,
+		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op);
+		inline uint64_t ReadOpGroup_Min(const Sync::BenchSnapshot* snap,
 										const Bench::BenchOpGroupDef& opGroup);
 		inline std::string MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup);
 		void TableTextRightAligned(const char* fmt, ...);

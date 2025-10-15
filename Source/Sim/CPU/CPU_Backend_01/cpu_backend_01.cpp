@@ -368,8 +368,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		{
 			// temporary pre-computed constants --------------------------------
 
-			const float kernelRadiusSqu =
-				params.kernelRadius * params.kernelRadius;
+			const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
 			// cubic spline alpha (computed in double precision for accuracy)
 			const double size = static_cast<double>(params.particleSizeF);

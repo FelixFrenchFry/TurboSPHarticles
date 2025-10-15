@@ -64,9 +64,15 @@ int main(int argc, char** argv)
 		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr };
 		Vis::VisualizationMgr visualizationMgr{ simulationMgr, benchmarksMgr, simParamsMgr, visParamsMgr };
 
+		// visual mailbox
 		Sync::VisualSnapMailbox visualMailbox{};
 		simulationMgr.SetVisualMailbox(&visualMailbox);
 		visualizationMgr.SetVisualMailbox(&visualMailbox);
+
+		// bench mailbox
+		Sync::BenchSnapMailbox benchMailbox{};
+		simulationMgr.SetBenchMailbox(&benchMailbox);
+		visualizationMgr.SetBenchMailbox(&benchMailbox);
 
 		if (!simulationMgr.Init())
 		{
