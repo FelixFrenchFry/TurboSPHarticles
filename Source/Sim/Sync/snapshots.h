@@ -111,4 +111,17 @@ namespace Sync
 		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> max{};
 	};
 
+	struct StatSnapshot
+	{
+		// metadata
+		int64_t simStep;
+		double simTime;
+
+		// per-metric stat data
+		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> latest{};
+		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> avg{};
+		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> min{};
+		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> max{};
+	};
+
 } // namespace Sync

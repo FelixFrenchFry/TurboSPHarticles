@@ -30,6 +30,11 @@ namespace Inter
 		Latest, Avg_All, Avg_Used, Min, Max
 	};
 
+	enum class StatTableView : uint8_t
+	{
+		Latest, Avg, Min, Max
+	};
+
 	// flags for parameter changes
 	struct ParamChanged
 	{
@@ -82,6 +87,7 @@ namespace Inter
 
 		void BuildUserInterfaceSections(Sim::SimulationMgr& simulationMgr,
 										const Sync::BenchSnapshot* benchSnap,
+										const Sync::StatSnapshot* statSnap,
 										const Sim::SimParams& simParams, 
 										const Vis::VisParams& visParams);
 		void EndFrame();
@@ -149,6 +155,9 @@ namespace Inter
 		TimeUnit benchTimeUnit_ = TimeUnit::us;
 		int sparklineContextLength_ = 1024;
 
+		// statistics table state
+		StatTableView statTableView_ = StatTableView::Latest;
+
 		// temp string buffer
 		char stringBuffer[256];
 
@@ -170,6 +179,7 @@ namespace Inter
 
 		void BuildSection_SimulationStatistics(
 			const Sim::SimulationMgr& simulationMgr,
+			const Sync::StatSnapshot* statSnap,
 			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
 
@@ -196,11 +206,13 @@ namespace Inter
 		void ResetParamChanges(const Sim::SimParams& simParams);
 		inline double ConvertFromNs(TimeUnit unit, uint64_t ns);
 		inline const char* UnitLabel(TimeUnit unit);
+		inline float ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric);
 		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op);
 		inline uint64_t ReadOpGroup_Min(const Sync::BenchSnapshot* snap,
 										const Bench::BenchOpGroupDef& opGroup);
 		inline std::string MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup);
 		void TableTextRightAligned(const char* fmt, ...);
+		inline void FormatStatValue(const Stats::StatMetricDef& def, char* out, float x, uint64_t cap);
 
 		// dockspace
 		void BeginDockspace();

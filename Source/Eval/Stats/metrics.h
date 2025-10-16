@@ -16,23 +16,27 @@ namespace Stats
 {
 	enum class StatMetric : uint16_t
 	{
-		// particle counts
-		NumF,
-		NumB,
-		NumNeighF_Avg,		// average number of fluid neighbors
-		NumNeighB_Avg,		// average number of boundary neighbors
-		NumNeighF_Max,		// max number of fluid neighbors
-		NumNeighB_Max,		// max number of boundary neighbors
+		// particles and neighbors
+		NumF,				// total number of simulated fluid particles
+		NumB,				// total number of simulated boundary particles
+		NumNeighFF_Avg,		// average number of fluid neighbors
+		NumNeighFB_Avg,		// average number of boundary neighbors
+		NumNeighFF_Min,		// min number of fluid neighbors
+		NumNeighFB_Min,		// min number of boundary neighbors
+		NumNeighFF_Max,		// max number of fluid neighbors
+		NumNeighFB_Max,		// max number of boundary neighbors
 
 		// density
 		// (relative error in % aka deviation)
 		DensRelError_Avg,	// average relative density error
 		DensRelError_P95,	// top 5% of relative density errors
 		DensRelError_P99,	// top 1% of relative density errors
+		DensRelError_Min,	// min relative density error
 		DensRelError_Max,	// max relative density error
 
 		// velocity
 		VelMag_Avg,			// average velocity magnitude
+		VelMag_Min,			// min velocity magnitude
 		VelMag_Max,			// max velocity magnitude
 
 		Count
@@ -43,6 +47,8 @@ namespace Stats
 		StatMetric metric;
 		std::string_view name; // display name
 		std::string_view unit; // unit hint
+		std::string_view var;  // variable type
+		std::string_view tip;  // tooltip description
 	};
 
 	constexpr inline std::array<StatMetricDef, static_cast<uint16_t>(StatMetric::Count)> Definitions =
@@ -51,62 +57,130 @@ namespace Stats
 			{
 				.metric = StatMetric::NumF,
 				.name = "num fluid particles",
-				.unit = ""
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Total number of fluid particles currently simulated"
 			},
 			{
 				.metric = StatMetric::NumB,
 				.name = "num bound particles",
-				.unit = ""
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Total number of boundary particles currently simulated"
 			},
 			{
-				.metric = StatMetric::NumNeighF_Avg,
+				.metric = StatMetric::NumNeighFF_Avg,
 				.name = "num fluid neighbors (avg)",
-				.unit = ""
+				.unit = "",
+				.var = "float",
+				.tip = 
+				"Average number of fluid particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::NumNeighB_Avg,
+				.metric = StatMetric::NumNeighFB_Avg,
 				.name = "num bound neighbors (avg)",
-				.unit = ""
+				.unit = "",
+				.var = "float",
+				.tip =
+				"Average number of boundary particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::NumNeighF_Max,
+				.metric = StatMetric::NumNeighFF_Min,
+				.name = "num fluid neighbors (min)",
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Minimum number of fluid particles neighboring a fluid particle"
+			},
+			{
+				.metric = StatMetric::NumNeighFB_Min,
+				.name = "num bound neighbors (min)",
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Minimum number of boundary particles neighboring a fluid particle"
+			},
+			{
+				.metric = StatMetric::NumNeighFF_Max,
 				.name = "num fluid neighbors (max)",
-				.unit = ""
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Maximum number of fluid particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::NumNeighB_Max,
+				.metric = StatMetric::NumNeighFB_Max,
 				.name = "num bound neighbors (max)",
-				.unit = ""
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Maximum number of boundary particles neighboring a fluid particle"
 			},
 			{
 				.metric = StatMetric::DensRelError_Avg,
 				.name = "density rel err (avg)",
-				.unit = "%"
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Average relative density error among fluid particles"
 			},
 			{
 				.metric = StatMetric::DensRelError_P95,
 				.name = "density rel err (p95)",
-				.unit = "%"
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Top 5%% of relative density errors among fluid particles"
 			},
 			{
 				.metric = StatMetric::DensRelError_P99,
 				.name = "density rel err (p99)",
-				.unit = "%"
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Top 1%% of relative density errors among fluid particles"
+			},
+			{
+				.metric = StatMetric::DensRelError_Min,
+				.name = "density rel err (min)",
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Minimum relative density error among fluid particles"
 			},
 			{
 				.metric = StatMetric::DensRelError_Max,
 				.name = "density rel err (max)",
-				.unit = "%"
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Maximum relative density error among fluid particles"
 			},
 			{
 				.metric = StatMetric::VelMag_Avg,
 				.name = "velocity mag (avg)",
-				.unit = "m/s"
+				.unit = "m/s",
+				.var = "float",
+				.tip =
+				"Average velocity magnitude among fluid particles"
+			},
+			{
+				.metric = StatMetric::VelMag_Min,
+				.name = "velocity mag (min)",
+				.unit = "m/s",
+				.var = "float",
+				.tip =
+				"Minimum velocity magnitude among fluid particles"
 			},
 			{
 				.metric = StatMetric::VelMag_Max,
 				.name = "velocity mag (max)",
-				.unit = "m/s"
+				.unit = "m/s",
+				.var = "float",
+				.tip =
+				"Maximum velocity magnitude among fluid particles"
 			}
 		}
 	};

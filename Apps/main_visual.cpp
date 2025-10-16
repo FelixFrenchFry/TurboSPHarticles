@@ -74,6 +74,11 @@ int main(int argc, char** argv)
 		simulationMgr.SetBenchMailbox(&benchMailbox);
 		visualizationMgr.SetBenchMailbox(&benchMailbox);
 
+		// stat mailbox
+		Sync::StatSnapMailbox statMailbox{};
+		simulationMgr.SetStatMailbox(&statMailbox);
+		visualizationMgr.SetStatMailbox(&statMailbox);
+
 		if (!simulationMgr.Init())
 		{
 			SPDLOG_ERROR("Failed to initialize SimulationMgr");

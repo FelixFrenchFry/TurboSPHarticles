@@ -15,13 +15,15 @@ StatisticsMgr::StatisticsMgr(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxStatRecCount)
 	, curRecCount_(0)
 {
-	ClearCurrent();
+	recLatest_ = {};
+	recLatest_.stats.fill(0.0f);
 	ClearAllTime();
 }
 
 void StatisticsMgr::BeginStep()
 {
-	ClearCurrent();
+	recLatest_ = {};
+	recLatest_.stats.fill(0.0f);
 }
 
 void StatisticsMgr::EndStep(int64_t simStep, double simTime)
@@ -63,6 +65,22 @@ void StatisticsMgr::EndStep(int64_t simStep, double simTime)
 	curRecCount_ += 1;
 }
 
+void StatisticsMgr::PackStatSnapshot(Sync::StatSnapshot& snap) const
+{
+	// metadata
+	snap.simStep = recLatest_.simStep;
+	snap.simTime = recLatest_.simTime;
+
+	// fill in the latest, average, min, max stat data
+	for (uint16_t i = 0; i < GetIdx(StatMetric::Count); i++)
+	{
+		snap.latest[i] = GetStat_Latest(static_cast<StatMetric>(i));
+		snap.avg[i] = GetStat_Avg(static_cast<StatMetric>(i));
+		snap.min[i] = GetStat_Min(static_cast<StatMetric>(i));
+		snap.max[i] = GetStat_Max(static_cast<StatMetric>(i));
+	}
+}
+
 float StatisticsMgr::GetStat_Latest(StatMetric metric) const
 {
 	if (curRecCount_ == 0) { return 0.0f; }
@@ -89,12 +107,6 @@ float StatisticsMgr::GetStat_Max(StatMetric metric) const
 	if (curRecCount_ == 0) { return 0.0f; }
 
 	return statsMax_allTime_[GetIdx(metric)];
-}
-
-void StatisticsMgr::ClearCurrent()
-{
-	recLatest_ = {};
-	recLatest_.stats.fill(0.0f);
 }
 
 void StatisticsMgr::ClearAllTime()

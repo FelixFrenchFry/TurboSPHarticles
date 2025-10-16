@@ -1,6 +1,7 @@
-// user_interface.cpp
+﻿// user_interface.cpp
 
 // external
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <GLFW/glfw3.h>
@@ -98,6 +99,7 @@ void UserInterfaceMgr::BeginFrame()
 void UserInterfaceMgr::BuildUserInterfaceSections(
 	Sim::SimulationMgr& simulationMgr,
 	const Sync::BenchSnapshot* benchSnap,
+	const Sync::StatSnapshot* statSnap,
 	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
 {
@@ -122,7 +124,7 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 
 	if (ImGui::CollapsingHeader("Simulation Statistics"))
 	{
-		BuildSection_SimulationStatistics(simulationMgr, simParams, visParams);
+		BuildSection_SimulationStatistics(simulationMgr, statSnap, simParams, visParams);
 	}
 
 	if (ImGui::CollapsingHeader("Performance Benchmarks"))
@@ -135,25 +137,6 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 	// show FPS
 	ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
 
-	// placeholder controls
-	ImGui::SeparatorText("(Placeholder)");
-	ImGui::BeginDisabled(true);
-	{
-		float dummyRadius = 0.01f;
-		int   dummyLod = 0;
-		ImGui::SliderFloat("Sphere radius", &dummyRadius, 0.001f, 0.05f, "%.3f");
-		ImGui::SliderInt("Sphere LOD", &dummyLod, 0, 2);
-		static int scalar = 0; // 0=None, 1=Vel, 2=Density, 3=Pressure
-		ImGui::Combo("Scalar", &scalar, "None\0Velocity\0Density\0Pressure\0");
-	}
-	ImGui::EndDisabled();
-
-	// hints about input capture
-	ImGui::SeparatorText("Capture");
-	ImGuiIO& io = ImGui::GetIO();
-	ImGui::TextDisabled("mouse=%d keyboard=%d",
-		io.WantCaptureMouse ? 1 : 0,
-		io.WantCaptureKeyboard ? 1 : 0);
 	ImGui::End();
 }
 
@@ -247,12 +230,15 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 
 	// TODO: select scenario preset via dropdown?
 
+	// simulation reset button
 	ImGui::PushStyleColor(ImGuiCol_Button, RGBA_negative_);
 	if (simulationMgr.simStep_ == 0) { ImGui::BeginDisabled(); cached = true; }
 	if (ImGui::Button(" RESET ", { 185, 40 }))
 	{
 		simulationMgr.ReBuildInitialSimState();
 		simParamsMgr_.Set_SimRunning(false);
+
+		// TODO: reset statistics and benchmarks
 	}
 	if (cached) { ImGui::EndDisabled(); cached = false; }
 	ImGui::PopStyleColor(1);
@@ -304,26 +290,8 @@ void UserInterfaceMgr::BuildSection_SimulationControl(
 	ImGui::Text("step count:");
 	ImGui::SameLine();
 	snprintf(stringBuffer, sizeof(stringBuffer), "%d", simulationMgr.simStep_);
-	//ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 230));
 	ImGui::Text(stringBuffer);
 	ImGui::Spacing();
-
-	/*
-	// update displayed FPS value in specified time intervals
-	ImGui::SameLine();
-	refreshTimeDifference = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - lastFrameRateRefreshTime).count();
-	if (refreshTimeDifference > 1000.0f * frameRateRefreshInterval)
-	{
-		frameRate = ImGui::GetIO().Framerate;
-		lastFrameRateRefreshTime = std::chrono::high_resolution_clock::now();
-	}
-	if (!parameterHandler->simulationPaused) { snprintf(stringBuffer, sizeof(stringBuffer), "(%.1f/sec)", frameRate); }
-	else { snprintf(stringBuffer, sizeof(stringBuffer), "(----/sec)"); }
-	ImGui::SetCursorPosX(GetTextAlignment_Right(stringBuffer, 383));
-	ImGui::Text(stringBuffer);
-	if (fluidParticles->particleCount == 0) { ImGui::EndDisabled(); }
-	ImGui::Spacing();
-	*/
 }
 
 void UserInterfaceMgr::BuildSection_SimulationParameters(
@@ -380,10 +348,174 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 
 void UserInterfaceMgr::BuildSection_SimulationStatistics(
 	const Sim::SimulationMgr& simulationMgr,
+	const Sync::StatSnapshot* statSnap,
 	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
 {
-	// TODO
+	using STV = StatTableView;
+	using SM = Stats::StatMetric;
+
+	ImGui::Spacing();
+
+	if (!statSnap)
+	{
+		ImGui::TextDisabled("(No statistics data recorded yet)");
+		ImGui::Spacing();
+		return;
+	}
+
+	// --- [ tab bar for selecting the table view ] ----------------------------
+
+	if (ImGui::BeginTabBar("tabBar_stats"))
+	{
+		// helper function for the tabs
+		auto MakeTab = [&](STV view, const char* label) -> void
+		{
+			if (ImGui::BeginTabItem(label))
+			{
+				statTableView_ = view;
+				ImGui::EndTabItem();
+			}
+		};
+
+		MakeTab(STV::Latest, "Latest");
+		MakeTab(STV::Avg, "Avg");
+		MakeTab(STV::Min, "Min");
+		MakeTab(STV::Max, "Max");
+		ImGui::EndTabBar();
+	}
+
+	// helper function for the per-group 2-column tables
+	auto DrawStatGroupTable = [&](const char* tableIdSuffix,
+	std::initializer_list<Stats::StatMetric> metrics)
+	{
+		// 2 columns (metric name | value)
+		char tableId[64];
+		std::snprintf(tableId, sizeof(tableId), "table_stats_%s", tableIdSuffix);
+
+		if (ImGui::BeginTable(tableId, 2,
+			ImGuiTableFlags_RowBg |
+			ImGuiTableFlags_BordersH |
+			ImGuiTableFlags_Resizable |
+			ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("metric", 
+				ImGuiTableColumnFlags_WidthStretch, 0.75f);
+			ImGui::TableSetupColumn("value", 
+				ImGuiTableColumnFlags_WidthStretch, 0.25f);
+
+			for (auto metric : metrics)
+			{
+				const uint16_t i = Stats::GetIdx(metric);
+				const auto& def = Stats::Definitions[i];
+				const float val = ReadStatData(statSnap, metric);
+
+				ImGui::TableNextRow();
+
+				// column 0 (metric name)
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(def.name.data());
+
+				// tooltip from metric definition
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+				{
+					const char* text;
+
+					!def.tip.empty() ? text = def.tip.data()
+									 : text = "(no description provided)";
+
+					ImGui::BeginTooltip();
+					ImGui::TextColored(RGBA_tooltip_, text);
+					ImGui::EndTooltip();
+				}
+
+				// column 1 (formatted, right-aligned value)
+				ImGui::TableSetColumnIndex(1);
+				{
+					char buf[64];
+					FormatStatValue(def, buf, val, sizeof(buf));
+					TableTextRightAligned("%s", buf);
+				}
+			}
+
+			ImGui::EndTable();
+		}
+	};
+
+	// --- [ per-group stat tables ] -------------------------------------------
+
+	// particles and neighbors
+	ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 100));
+	if (ImGui::TreeNodeEx("Particle Stats",
+		ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::PopStyleColor(1);
+
+		DrawStatGroupTable("table_particles",
+		{
+			Stats::StatMetric::NumF,
+			Stats::StatMetric::NumB,
+			Stats::StatMetric::NumNeighFF_Avg,
+			Stats::StatMetric::NumNeighFB_Avg,
+			Stats::StatMetric::NumNeighFF_Min,
+			Stats::StatMetric::NumNeighFB_Min,
+			Stats::StatMetric::NumNeighFF_Max,
+			Stats::StatMetric::NumNeighFB_Max
+		});
+
+		ImGui::TreePop();
+	}
+	else { ImGui::PopStyleColor(1); }
+	ImGui::Spacing();
+
+	// density
+	ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 100));
+	if (ImGui::TreeNodeEx("Density Stats",
+		ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::PopStyleColor(1);
+
+		DrawStatGroupTable("table_density",
+		{
+			Stats::StatMetric::DensRelError_Avg,
+			Stats::StatMetric::DensRelError_Min,
+			Stats::StatMetric::DensRelError_P95,
+			Stats::StatMetric::DensRelError_P99,
+			Stats::StatMetric::DensRelError_Max
+		});
+
+		ImGui::TreePop();
+	}
+	else { ImGui::PopStyleColor(1); }
+	ImGui::Spacing();
+
+	// velocity
+	ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 100));
+	if (ImGui::TreeNodeEx("Velocity Stats",
+		ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::PopStyleColor(1);
+
+		DrawStatGroupTable("table_velocity",
+		{
+			Stats::StatMetric::VelMag_Avg,
+			Stats::StatMetric::VelMag_Min,
+			Stats::StatMetric::VelMag_Max
+		});
+
+		ImGui::TreePop();
+	}
+	else { ImGui::PopStyleColor(1); }
+	ImGui::Spacing();
+
+	// settings
+	if (ImGui::TreeNodeEx("Statistics Settings"))
+	{
+		ImGui::TextDisabled("(no settings yet)");
+
+		ImGui::TreePop();
+	}
+	ImGui::Spacing();
 }
 
 // TODO: deal with threading, which data to show, update frequency, syncing, etc...
@@ -397,6 +529,13 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	using BTV = BenchTableView;
 
 	ImGui::Spacing();
+
+	if (!benchSnap)
+	{
+		ImGui::TextDisabled("(No benchmark data recorded yet)");
+		ImGui::Spacing();
+		return;
+	}
 
 	// tab bar for selecting the table view ------------------------------------
 
@@ -412,7 +551,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 			}
 		};
 
-		MakeTab(BTV::Latest, "Current");
+		MakeTab(BTV::Latest, "Latest");
 		MakeTab(BTV::Avg_All, "Avg all");
 		MakeTab(BTV::Avg_Used, "Avg used");
 		MakeTab(BTV::Min, "Min");
@@ -580,7 +719,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 
 	// display settings --------------------------------------------------------
 
-	if (ImGui::TreeNodeEx("measurement settings"))
+	if (ImGui::TreeNodeEx("Benchmark Settings"))
 	{
 		// simple unit pickers (mutually exclusive)
 		bool ns = (benchTimeUnit_ == TimeUnit::ns);
@@ -872,6 +1011,26 @@ inline const char* UserInterfaceMgr::UnitLabel(TimeUnit unit)
 	return "";
 }
 
+inline float UserInterfaceMgr::ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric)
+{
+	if (!snap)
+	{
+		SPDLOG_ERROR("Failed to read stat data (no snap provided)");
+	}
+	const uint16_t i = Stats::GetIdx(metric);
+
+	switch (statTableView_)
+	{
+	case StatTableView::Latest: { return snap->latest[i]; }
+	case StatTableView::Avg: { return snap->avg[i]; }
+	case StatTableView::Min: { return snap->min[i]; }
+	case StatTableView::Max: { return snap->max[i]; }
+	}
+
+	SPDLOG_WARN("Invalid StatTableView enum value");
+	return 0;
+}
+
 inline uint64_t UserInterfaceMgr::ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op)
 {
 	if (!snap)
@@ -940,7 +1099,47 @@ void UserInterfaceMgr::TableTextRightAligned(const char* fmt, ...)
 	ImGui::TextUnformatted(buf);
 }
 
-// ===== dockspace =====
+// formats a stat value according to its metric definition
+inline void UserInterfaceMgr::FormatStatValue(
+	const Stats::StatMetricDef& def,
+	char* out,
+	float x,
+	uint64_t cap)
+{
+	// ints
+	if (def.var == "int")
+	{
+		int64_t ix = static_cast<int64_t>(std::llround(x));
+
+		if (def.unit.empty())
+		{
+			std::snprintf(out, cap, "%lld", static_cast<long long>(ix));
+		}
+		else
+		{
+			std::snprintf(out, cap, "%lld %.*s",
+				static_cast<long long>(ix),
+				static_cast<int>(def.unit.size()), def.unit.data());
+		}
+		return;
+	}
+
+	// floats
+	if (def.unit == "%")
+	{
+		std::snprintf(out, cap, "%.1f %%", x);
+	}
+	else if (def.unit == "m/s" && false) // TODO: use meters per second?
+	{
+		std::snprintf(out, cap, "%.2f m/s", x);
+	}
+	else
+	{
+		std::snprintf(out, cap, "%.2f", x);
+	}
+}
+
+// --- [ dockspace ] -----------------------------------------------------------
 
 void UserInterfaceMgr::BeginDockspace()
 {

@@ -156,8 +156,9 @@ void VisualizationMgr::RunVis()
 		// fetch latest visual snap and replace vis-specific simulation state
 		SyncVisSimState();
 
-		// fetch latest bench snaps to make local copies
+		// fetch latest bench and stat snaps to make local copies
 		SyncBenchSnap();
+		SyncStatSnap();
 
 		// 1. begin new ImGui frame
 		userInterfaceMgr_.BeginFrame();
@@ -173,7 +174,7 @@ void VisualizationMgr::RunVis()
 
 		// 3. build ImGui panels
 		userInterfaceMgr_.BuildUserInterfaceSections(simulationMgr_,
-			localBenchSnap_.get(), simParams_, visParams_);
+			localBenchSnap_.get(), localStatSnap_.get(), simParams_, visParams_);
 		userInterfaceMgr_.EndFrame();
 
 		// 4. render ImGui on top of the 3D scene
@@ -426,6 +427,22 @@ void VisualizationMgr::SyncBenchSnap()
 	if (benchSnapMailbox_->TryFetchLatestSnapshot(snap))
 	{
 		localBenchSnap_ = std::move(snap);
+	}
+}
+
+void VisualizationMgr::SyncStatSnap()
+{
+	if (!statSnapMailbox_)
+	{
+		SPDLOG_ERROR("Failed to sync stat snap (no mailbox set)");
+		return;
+	}
+
+	// try to fetch latest snapshot for a local copy
+	std::shared_ptr<Sync::StatSnapshot> snap;
+	if (statSnapMailbox_->TryFetchLatestSnapshot(snap))
+	{
+		localStatSnap_ = std::move(snap);
 	}
 }
 

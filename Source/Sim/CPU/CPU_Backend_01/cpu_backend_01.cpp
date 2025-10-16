@@ -5,6 +5,7 @@
 #include <cmath>
 #include <glm/exponential.hpp>
 #include <glm/vec3.hpp>
+#include <limits>
 #include <numbers>
 #include <omp.h>
 #include <spdlog/spdlog.h>
@@ -210,6 +211,8 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 {
 	using namespace Stats;
 
+	// --- [ particle counts ] -------------------------------------------------
+
 	const uint32_t NF = N_F_;
 	const uint32_t NB = N_B_;
 
@@ -218,39 +221,48 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
-	// neighbor stats ----------------------------------------------------------
-
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles });
 
-	float sumF = 0.0f;
-	float sumB = 0.0f;
-	float maxF = 0.0f;
-	float maxB = 0.0f;
+	float sumFF = 0.0f;
+	float sumFB = 0.0f;
+	float minFF = std::numeric_limits<float>::max();
+	float minFB = std::numeric_limits<float>::max();
+	float maxFF = 0.0f;
+	float maxFB = 0.0f;
 
-	#pragma omp parallel for reduction(+:sumF,sumB) reduction(max:maxF,maxB) schedule(static)
+	#pragma omp parallel for reduction(+:sumFF,sumFB) reduction(min:minFF,minFB) reduction(max:maxFF,maxFB) schedule(static)
 	for (uint32_t i = 0; i < NF; i++)
 	{
 		const float nf = static_cast<float>(neighborsFF_[i].size());
 		const float nb = static_cast<float>(neighborsFB_[i].size());
 
-		sumF += nf;
-		sumB += nb;
+		sumFF += nf;
+		sumFB += nb;
 
-		if (nf > maxF) [[unlikely]] { maxF = nf; }
-		if (nb > maxB) [[unlikely]] { maxB = nb; }
+		if (nf < minFF) [[unlikely]] { minFF = nf; }
+		if (nb < minFB) [[unlikely]] { minFB = nb; }
+
+		if (nf > maxFF) [[unlikely]] { maxFF = nf; }
+		if (nb > maxFB) [[unlikely]] { maxFB = nb; }
+	}
+	if (NF == 0) // reasonable defaults for empty sim
+	{
+		minFF = 0.0f;
+		minFB = 0.0f;
 	}
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles });
 
-	// density stats -----------------------------------------------------------
+	// --- [ density stats ] ---------------------------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
 
 	workBuffer_.resize(NF);
 
 	float sumRelErr = 0.0f;
+	float minRelErr = std::numeric_limits<float>::max();
 	float maxRelErr = 0.0f;
 
-	#pragma omp parallel for reduction(+:sumRelErr) reduction(max:maxRelErr) schedule(static)
+	#pragma omp parallel for reduction(+:sumRelErr) reduction(min:minRelErr) reduction(max:maxRelErr) schedule(static)
 	for (uint32_t i = 0; i < NF; i++)
 	{
 		const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
@@ -259,6 +271,7 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		workBuffer_[i] = relErr;
 		sumRelErr += relErr;
 
+		if (relErr < minRelErr) [[unlikely]] { minRelErr = relErr; }
 		if (relErr > maxRelErr) [[unlikely]] { maxRelErr = relErr; }
 	}
 
@@ -281,16 +294,22 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		p95 = *nth95;
 		p99 = *nth99;
 	}
+	else // reasonable defaults for empty sim
+	{
+		minRelErr = 0.0f;
+		maxRelErr = 0.0f;
+	}
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Density });
 
-	// velocity stats ----------------------------------------------------------
+	// --- [ velocity stats ] --------------------------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Velocity });
 
 	float velMagSum = 0.0f;
+	float velMagMin = std::numeric_limits<float>::max();
 	float velMagMax = 0.0f;
 
-	#pragma omp parallel for reduction(+:velMagSum) reduction(max:velMagMax) schedule(static)
+	#pragma omp parallel for reduction(+:velMagSum) reduction(min:velMagMin) reduction(max:velMagMax) schedule(static)
 	for (uint32_t i = 0; i < NF; i++)
 	{
 		const float vx = xVelF_[i];
@@ -300,23 +319,33 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
 
 		velMagSum += velMag;
+		if (velMag < velMagMin) [[unlikely]] { velMagMin = velMag; }
 		if (velMag > velMagMax) [[unlikely]] { velMagMax = velMag; }
+	}
+	if (NF == 0) // reasonable defaults for empty sim
+	{
+		velMagMin = 0.0f;
+		velMagMax = 0.0f;
 	}
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Velocity });
 
-	// writes to record --------------------------------------------------------
+	// --- [ writes to record ] ------------------------------------------------
 
-	Set(record, StatMetric::NumNeighF_Avg, sumF * invNF);
-	Set(record, StatMetric::NumNeighB_Avg, sumB * invNF);
-	Set(record, StatMetric::NumNeighF_Max, maxF);
-	Set(record, StatMetric::NumNeighB_Max, maxB);
+	Set(record, StatMetric::NumNeighFF_Avg, sumFF * invNF);
+	Set(record, StatMetric::NumNeighFB_Avg, sumFB * invNF);
+	Set(record, StatMetric::NumNeighFF_Min, minFF);
+	Set(record, StatMetric::NumNeighFB_Min, minFB);
+	Set(record, StatMetric::NumNeighFF_Max, maxFF);
+	Set(record, StatMetric::NumNeighFB_Max, maxFB);
 
 	Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
 	Set(record, StatMetric::DensRelError_P95, p95);
 	Set(record, StatMetric::DensRelError_P99, p99);
+	Set(record, StatMetric::DensRelError_Min, minRelErr);
 	Set(record, StatMetric::DensRelError_Max, maxRelErr);
 
 	Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
+	Set(record, StatMetric::VelMag_Min, velMagMin);
 	Set(record, StatMetric::VelMag_Max, velMagMax);
 }
 

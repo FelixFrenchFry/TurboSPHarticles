@@ -45,6 +45,7 @@ namespace Vis
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
+		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox) { statSnapMailbox_ = statSnapMailbox; }
 
 	private: // ==============================
 
@@ -77,7 +78,9 @@ namespace Vis
 		// mailbox pointers
 		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };
 		Sync::BenchSnapMailbox* benchSnapMailbox_{ nullptr };
+		Sync::StatSnapMailbox* statSnapMailbox_{ nullptr };
 		std::shared_ptr<Sync::BenchSnapshot> localBenchSnap_{ nullptr };
+		std::shared_ptr<Sync::StatSnapshot> localStatSnap_{ nullptr };
 
 		// window and GL context
 		GLFWwindow* window_ = nullptr;
@@ -109,6 +112,7 @@ namespace Vis
 		void SyncVisSimState();
 
 		void SyncBenchSnap();
+		void SyncStatSnap();
 
 		// utils
 		void SwapVisBuffers();

@@ -292,7 +292,7 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			benchmarksMgr_.EndStep(simStep_, simTime_);
 		}
 
-		// pack and send benchmark snapshots
+		// pack and send benchmark and statistics snapshots
 		// (to be retrieved by the visualization manager)
 		if (doSimStep)
 		{
@@ -300,6 +300,11 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 			auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
 			benchmarksMgr_.PackBenchSnapshot(*benchSnap);
 			benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
+
+			// create stat snapshot and push to its mailbox
+			auto statSnap = std::make_shared<Sync::StatSnapshot>();
+			statisticsMgr_.PackStatSnapshot(*statSnap);
+			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
 		}
 
 		SyncParameters();

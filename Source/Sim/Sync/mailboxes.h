@@ -67,4 +67,30 @@ namespace Sync
 		std::atomic<std::shared_ptr<BenchSnapshot>> latestSnap_{ nullptr };
 	};
 
+	// single-producer, single-consumer, lock-free mailbox for statistics data snapshots
+	class StatSnapMailbox
+	{
+	public: // ==============================
+
+		void StoreSnapshot(std::shared_ptr<StatSnapshot> snap) noexcept
+		{
+			latestSnap_.store(std::move(snap), std::memory_order_release);
+		}
+
+		bool TryFetchLatestSnapshot(std::shared_ptr<StatSnapshot>& dst) noexcept
+		{
+			auto snap = latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			if (!snap) { return false; } // failed fetch
+
+			// successful fetch
+			dst = std::move(snap);
+			return true;
+		}
+
+	private: // ==============================
+
+		// latest snapshot of the statistics data
+		std::atomic<std::shared_ptr<StatSnapshot>> latestSnap_{ nullptr };
+	};
+
 } // namespace Sync

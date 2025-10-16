@@ -11,6 +11,7 @@
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Sync/snapshots.h"
 #include "metrics.h"
 
 
@@ -28,6 +29,8 @@ namespace Stats
 
 		// pushes the record to history and aggregates step's stat data
 		void EndStep(int64_t simStep, double simTime);
+
+		void PackStatSnapshot(Sync::StatSnapshot& snap) const;
 
 		// per-metric queries
 		float GetStat_Latest(StatMetric metric) const;
@@ -57,7 +60,6 @@ namespace Stats
 		std::array<float, GetIdx(StatMetric::Count)> statsMax_allTime_{};
 
 		// helpers
-		void ClearCurrent();
 		void ClearAllTime();
 	};
 
