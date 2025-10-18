@@ -351,7 +351,7 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 {
-	// initialization and checks -----------------------------------------------
+	// --- [ initialization and checks ] ---------------------------------------
 
 	// ensure neighbor storage has enough capacity
 	if (N_F_ != static_cast<uint32_t>(neighborsFF_.size()) ||
@@ -395,7 +395,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		// one simulation step with one parallel region
 		#pragma omp parallel
 		{
-			// temporary pre-computed constants --------------------------------
+			// --- [ temporary pre-computed constants ] ------------------------
 
 			const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -412,7 +412,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			const float massF = params.massF;
 			const float massB = params.massB;
 
-			// neighbor search -------------------------------------------------
+			// [ neighbor search ] ---------------------------------------------
 
 			// naive brute-force neighbor search
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
@@ -468,7 +468,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			}
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
-			// kernel weight and gradient computations -------------------------
+			// [ kernel weight and gradient computations ] ---------------------
 
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Kernel_Weights,
 											Bench::BenchOp::Kernel_Gradients });
@@ -481,15 +481,15 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				kernelGradientsFF_[i].resize(neighborsFF_[i].size());
 				kernelGradientsFB_[i].resize(neighborsFB_[i].size());
 
+				const float xi = xPosF_[i];
+				const float yi = yPosF_[i];
+				const float zi = zPosF_[i];
+
 				// loop over all fluid neighbors
 				for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 				{
 					// global index of neighbor particle
 					const uint32_t j = neighborsFF_[i][k];
-
-					const float xi = xPosF_[i];
-					const float yi = yPosF_[i];
-					const float zi = zPosF_[i];
 
 					const float dx = xi - xPosF_[j];
 					const float dy = yi - yPosF_[j];
@@ -528,10 +528,6 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 					// global index of neighbor particle
 					const uint32_t j = neighborsFB_[i][k];
 
-					const float xi = xPosF_[i];
-					const float yi = yPosF_[i];
-					const float zi = zPosF_[i];
-
 					const float dx = xi - xPosB_[j];
 					const float dy = yi - yPosB_[j];
 					const float dz = zi - zPosB_[j];
@@ -566,7 +562,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Kernel_Weights,
 										   Bench::BenchOp::Kernel_Gradients });
 
-			// density and pressure computations -------------------------------
+			// [ density and pressure computations ] ---------------------------
 
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
 											Bench::BenchOp::Pressure_Solving });
@@ -598,12 +594,13 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				const float pressure = params.stiffness * std::powf(
 					density / params.restDensityF, params.taitExponent) - 1.0f;
 
+				// TODO: do hard clamp, allow negative pressure, or use other fix?
 				pressureF_[i] = std::max(pressure, 0.0f);
 			}
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving,
 										   Bench::BenchOp::Pressure_Solving });
 
-			// acceleration computations ---------------------------------------
+			// [ acceleration computations ] -----------------------------------
 
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration,
 											Bench::BenchOp::Viscosity_Acceleration,
@@ -616,24 +613,31 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				glm::vec3 accViscF = { 0.0f, 0.0f, 0.0f };
 				glm::vec3 accViscB = { 0.0f, 0.0f, 0.0f };
 
+				const float xi = xPosF_[i];
+				const float yi = yPosF_[i];
+				const float zi = zPosF_[i];
+
+				const float vxi = xVelF_[i];
+				const float vyi = yVelF_[i];
+				const float vzi = zVelF_[i];
+
+				const float presi = pressureF_[i];
+				const float densi = densityF_[i];
+
 				// loop over all fluid neighbors
 				for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 				{
 					// global index of neighbor particle
 					const uint32_t j = neighborsFF_[i][k];
 
-					const float xi = xPosF_[i];
-					const float yi = yPosF_[i];
-					const float zi = zPosF_[i];
-
 					const float dx = xi - xPosF_[j];
 					const float dy = yi - yPosF_[j];
 					const float dz = zi - zPosF_[j];
 
 					const glm::vec3 posDiff = { dx, dy, dz };
-					const glm::vec3 velDiff = { xVelF_[i] - xVelF_[j],
-											    yVelF_[i] - yVelF_[j],
-											    zVelF_[i] - zVelF_[j] };
+					const glm::vec3 velDiff = { vxi - xVelF_[j],
+												vyi - yVelF_[j],
+												vzi - zVelF_[j] };
 
 					// viscosity acc contribution from fluid neighbor j
 					accViscF += (massF / densityF_[j])
@@ -644,7 +648,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 					// pressure acc contribution from fluid neighbor j
 					accPress += massF
-							 * (pressureF_[i] / (densityF_[i] * densityF_[i])
+							 * (presi / (densi * densi)
 							 + pressureF_[j] / (densityF_[j] * densityF_[j]))
 							 * kernelGradientsFF_[i][k];
 				}
@@ -655,18 +659,14 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 					// global index of neighbor particle
 					const uint32_t j = neighborsFB_[i][k];
 
-					const float xi = xPosF_[i];
-					const float yi = yPosF_[i];
-					const float zi = zPosF_[i];
-
 					const float dx = xi - xPosB_[j];
 					const float dy = yi - yPosB_[j];
 					const float dz = zi - zPosB_[j];
 
 					const glm::vec3 posDiff = { dx, dy, dz };
-					const glm::vec3 velDiff = { xVelF_[i] - xVelB_[j],
-												yVelF_[i] - yVelB_[j],
-												zVelF_[i] - zVelB_[j] };
+					const glm::vec3 velDiff = { vxi - xVelB_[j],
+												vyi - yVelB_[j],
+												vzi - zVelB_[j] };
 
 					// viscosity acc contribution from boundary neighbor j
 					accViscB += (massB / params.restDensityB)
@@ -677,7 +677,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 					// pressure acc contribution from boundary neighbor j
 					accPress += massB
-							 * (pressureF_[i] / (densityF_[i] * densityF_[i])
+							 * (presi / (densi * densi)
 							 + pressureB_[j] / (params.restDensityB * params.restDensityB))
 							 * kernelGradientsFB_[i][k];
 				}
@@ -710,7 +710,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 										   Bench::BenchOp::External_Acceleration,
 										   Bench::BenchOp::AccelerationUpdate });
 
-			// velocity and position updates -----------------------------------
+			// [ velocity and position updates ] -------------------------------
 
 			benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
 											Bench::BenchOp::PositionUpdate });
