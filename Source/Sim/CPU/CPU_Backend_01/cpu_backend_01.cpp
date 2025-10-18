@@ -591,8 +591,8 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 				densityF_[i] = density;
 
-				const float pressure = params.stiffness * std::powf(
-					density / params.restDensityF, params.taitExponent) - 1.0f;
+				const float pressure = params.stiffness * (std::powf(
+					density / params.restDensityF, params.taitExponent) - 1.0f);
 
 				// TODO: do hard clamp, allow negative pressure, or use other fix?
 				pressureF_[i] = std::max(pressure, 0.0f);

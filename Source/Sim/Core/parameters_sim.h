@@ -104,6 +104,8 @@ namespace Sim
 		void Set_KernelRadius(float kernelRadius);
 		void Set_BoundaryLayers(int boundaryLayers);
 
+		bool AssertParamDerivationCorrectness();
+
 		// different parameter presets for quick testing
 		void PresetParams_A();
 		void PresetParams_B();

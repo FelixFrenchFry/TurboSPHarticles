@@ -493,6 +493,128 @@ void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
 	EndWrite();
 }
 
+bool SimParamsMgr::AssertParamDerivationCorrectness()
+{
+	auto [par, ver] = SnapshotParams();
+
+	auto Check = [&](std::string_view msg, bool fail, auto&& pred) -> bool
+	{
+		const bool pass = static_cast<bool>(pred());
+
+		if (!pass)
+		{
+			if (fail == true)
+			{
+				SPDLOG_ERROR("[SimParams] {}", msg);
+			#ifndef NDEBUG
+				assert(false && "SimParam invariant failed");
+			#endif
+			}
+			else
+			{
+				SPDLOG_WARN("[SimParams] {}", msg);
+			}
+		}
+
+		return pass;
+	};
+
+	// --- [ hard invariants ] -------------------------------------------------
+
+	bool ok = true;
+
+	// non-zero positive values
+	ok &= Check("timeStep <= 0", true, [&]()
+	{
+		return par.timeStep > 0.0f;
+	});
+	ok &= Check("particleSizeF <= 0", true, [&]()
+	{
+		return par.particleSizeF > 0.0f;
+	});
+	ok &= Check("particleSizeB <= 0", true, [&]()
+	{
+		return par.particleSizeB > 0.0f;
+	});
+	ok &= Check("particleRadiusF <= 0", true, [&]()
+	{
+		return par.particleRadiusF > 0.0f;
+	});
+	ok &= Check("particleRadiusB <= 0", true, [&]()
+	{
+		return par.particleRadiusB > 0.0f;
+	});
+	ok &= Check("restDensityF <= 0", true, [&]()
+	{
+		return par.restDensityF > 0.0f;
+	});
+	ok &= Check("restDensityB <= 0", true, [&]()
+	{
+		return par.restDensityB > 0.0f;
+	});
+	ok &= Check("massF <= 0", true, [&]()
+	{
+		return par.massF > 0.0f;
+	});
+	ok &= Check("massB <= 0", true, [&]()
+	{
+		return par.massB > 0.0f;
+	});
+	ok &= Check("taitExponent < 0", true, [&]()
+	{
+		return par.taitExponent >= 0.0f;
+	});
+	ok &= Check("stiffness < 0", true, [&]()
+	{
+		return par.stiffness >= 0.0f;
+	});
+	ok &= Check("viscosityF < 0", true, [&]()
+	{
+		return par.viscosityF >= 0.0f;
+	});
+	ok &= Check("viscosityB < 0", true, [&]()
+	{
+		return par.viscosityB >= 0.0f;
+	});
+
+	// relationships
+	ok &= Check("particleRadiusF != 0.5 * particleSizeF", true, [&]()
+	{
+		float expect = 0.5f * par.particleSizeF;
+		return Base::ApproxEqu(par.particleRadiusF, expect);
+	});
+	ok &= Check("particleRadiusB != 0.5 * particleSizeB", true, [&]()
+	{
+		float expect = 0.5f * par.particleSizeB;
+		return Base::ApproxEqu(par.particleRadiusB, expect);
+	});
+	ok &= Check("massF != restDensityF * particleSizeF^3", true, [&]()
+	{
+		float expect = par.restDensityF * par.particleSizeF
+										* par.particleSizeF
+										* par.particleSizeF;
+		return Base::ApproxEqu(par.massF, expect);
+	});
+	ok &= Check("massB != restDensityB * particleSizeB^3", true, [&]()
+	{
+		float expect = par.restDensityB * par.particleSizeB
+										* par.particleSizeB
+										* par.particleSizeB;
+		return Base::ApproxEqu(par.massB, expect);
+	});
+	ok &= Check("kernelRadius != kernelSuppRatio * particleSizeF", true, [&]()
+	{
+		float expect = par.kernelSuppRatio * par.particleSizeF;
+		return Base::ApproxEqu(par.kernelRadius, expect);
+	});
+	ok &= Check("kernelSuppRatio < 1", true, [&]()
+	{
+		return par.kernelSuppRatio >= 1.0f;
+	});
+
+	return ok;
+}
+
 void SimParamsMgr::PresetParams_A()
 {
 	// TODO: differentiate between fluid and boundary particles?
