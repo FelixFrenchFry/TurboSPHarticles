@@ -7,6 +7,7 @@
     "spdlog",
     "highfive",
     "cli11",
+    "unordered-dense",
     "glm",
     "glfw3",
     "glad",

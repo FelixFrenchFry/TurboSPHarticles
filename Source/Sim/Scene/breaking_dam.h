@@ -78,8 +78,8 @@ namespace Scene
 		OBB fluid = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0.0,0.0,0.0},
-			/* uDir, uLen */	U, 0.6f,
-			/* vDir, vLen */	V, 0.4f,
+			/* uDir, uLen */	U, 0.2f,
+			/* vDir, vLen */	V, 0.2f,
 			/* wDir, wLen */	W, 0.2f
 		);
 

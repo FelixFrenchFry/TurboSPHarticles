@@ -6,7 +6,7 @@
 
 // external
 #include <cstdint>
-#include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <vector>
 
 // internal
@@ -57,7 +57,7 @@ namespace Sim
 		// grid of cells, each made up of a key and a bucket
 		using Key = uint64_t;
 		using Bucket = std::vector<uint32_t>;
-		using CellGrid = std::unordered_map<Key, Bucket>;
+		using CellGrid = ankerl::unordered_dense::map<Key, Bucket>;
 
 		// managers
 		Bench::BenchmarksMgr& benchmarksMgr_;
