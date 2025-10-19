@@ -35,10 +35,18 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 									  const Sim::SimParams& params)
 {
 	const float size = params.particleSizeF;
-	// number of particles in each direction
-	const uint32_t N_u = TilesCount(box.uLen, size);
-	const uint32_t N_v = TilesCount(box.vLen, size);
-	const uint32_t N_w = TilesCount(box.wLen, size);
+	const float radius = params.particleRadiusF;
+
+	// inner lengths for centers (shrink by one radius per side)
+	const float uLen_i = box.uLen - 2.0f * radius;
+	const float vLen_i = box.vLen - 2.0f * radius;
+	const float wLen_i = box.wLen - 2.0f * radius;
+	if (uLen_i <= 0.0f || vLen_i <= 0.0f || wLen_i <= 0.0f) { return; }
+
+	// number of particles in each direction (inside inner OBB)
+	const uint32_t N_u = TilesCount(uLen_i, size);
+	const uint32_t N_v = TilesCount(vLen_i, size);
+	const uint32_t N_w = TilesCount(wLen_i, size);
 	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
 
 	auto& F = dst.fluidParticles;
@@ -49,9 +57,9 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	dst.ResizeFluid(N_base + N_add);
 
 	// offsets from box planes
-	const float uOff = StartOffset(box.uLen, size, N_u);
-	const float vOff = StartOffset(box.vLen, size, N_v);
-	const float wOff = StartOffset(box.wLen, size, N_w);
+	const float uOff = radius + StartOffset(uLen_i, size, N_u);
+	const float vOff = radius + StartOffset(vLen_i, size, N_v);
+	const float wOff = radius + StartOffset(wLen_i, size, N_w);
 
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
 
@@ -84,10 +92,10 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 						w += uniformDist(rng);
 					}
 
-					// clamp to make edge particles remain inside the box
-					u = std::clamp(u, 0.0f, box.uLen);
-					v = std::clamp(v, 0.0f, box.vLen);
-					w = std::clamp(w, 0.0f, box.wLen);
+					// clamp to make edge particles remain fully inside the box
+					u = std::clamp(u, radius, box.uLen - radius);
+					v = std::clamp(v, radius, box.vLen - radius);
+					w = std::clamp(w, radius, box.wLen - radius);
 
 					const glm::vec3 pos = box.origin
 										+ box.uHat * u

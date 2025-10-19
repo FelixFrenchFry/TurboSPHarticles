@@ -67,7 +67,7 @@ namespace Sim
 		// boundary conditions
 		float jitterFracB		= 0.0f; // % of particle size
 		int64_t jitterSeedB		= 42; // RNG seed for jitter
-		int boundaryLayers		= 2;
+		int boundaryLayers		= 3;
 
 		// statistics
 		int64_t maxStatRecCount = 100'000'000;
