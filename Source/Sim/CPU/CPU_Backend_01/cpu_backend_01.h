@@ -56,6 +56,9 @@ namespace Sim
 		// managers
 		Bench::BenchmarksMgr& benchmarksMgr_;
 
+		// neighbor search
+		std::unique_ptr<ISimNeighborSearch> neighborSearch_;
+
 		// metadata
 		int64_t simStep_ = 0;
 		double simTime_ = 0.0;
@@ -102,6 +105,9 @@ namespace Sim
 		// operation benchmarking groups
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
 		{
+			{
+				.ops = {	Bench::BenchOp::Neighbors_Construction }
+			},
 			{
 				.ops = {	Bench::BenchOp::Neighbors_Query }
 			},

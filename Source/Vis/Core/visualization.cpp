@@ -53,6 +53,14 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 							   visParams_.window.size.y,
 							   visParams_.window.title,
 							   nullptr, nullptr);
+
+	// TODO: choose window position properly
+	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+	const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+	glm::ivec2 monitorSize{ mode->width, mode->height };
+	glfwSetWindowPos(window_, monitorSize.x / 2 - visParams_.window.size.x / 2 + 560,
+							  monitorSize.y / 2 - visParams_.window.size.y / 2);
+
 	if (!window_)
 	{
 		SPDLOG_ERROR("Failed to create GLFW window");

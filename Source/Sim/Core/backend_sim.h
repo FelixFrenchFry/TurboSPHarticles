@@ -7,6 +7,8 @@
 // external
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <vector>
 
 // internal
 #include "parameters_sim.h"
@@ -21,9 +23,13 @@
 
 namespace Sim
 {
+	// -------------------------------------------------------------------------
+	// --- [ simulation pipeline interface ] -----------------------------------
+	// -------------------------------------------------------------------------
+
 	class ISimBackend
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		virtual ~ISimBackend() = default;
 
@@ -60,5 +66,54 @@ namespace Sim
 	std::unique_ptr<ISimBackend> MakeSimBackend(Base::BackendVersion version,
 												Bench::BenchmarksMgr& benchmarksMgr,
 												const SimParams& params);
+
+	// -------------------------------------------------------------------------
+	// --- [ neighbor search interface ] ---------------------------------------
+	// -------------------------------------------------------------------------
+
+	struct NeighborSearchContext
+	{
+		// metadata
+		uint32_t N_F = 0;
+		uint32_t N_B = 0;
+
+		// read-only views into fluid particle positions
+		std::span<const float> xPosF;
+		std::span<const float> yPosF;
+		std::span<const float> zPosF;
+
+		// read-only views into boundary particle positions
+		std::span<const float> xPosB;
+		std::span<const float> yPosB;
+		std::span<const float> zPosB;
+
+		// kernel
+		float kernelRadius = 0.0f;
+		float kernelRadiusSqu = 0.0f;
+	};
+
+	struct NeighborSearchResult
+	{
+		// neighbor lists
+		std::span<std::vector<uint32_t>> neighborsFF;
+		std::span<std::vector<uint32_t>> neighborsFB;
+	};
+
+	class ISimNeighborSearch
+	{
+	public: // -----------------------------------------------------------------
+
+		virtual ~ISimNeighborSearch() = default;
+
+		virtual const char* Name() const = 0;
+
+		virtual void Init() = 0;
+
+		virtual void Construct(const NeighborSearchContext& ctx) = 0;
+
+		virtual void Query(const NeighborSearchContext& ctx, const NeighborSearchResult& out) = 0;
+
+		// TODO: add re-order?
+	};
 
 } // namespace Sim

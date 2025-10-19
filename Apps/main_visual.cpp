@@ -53,8 +53,12 @@ int main(int argc, char** argv)
 
 		// ===== initialization of manager systems =====
 
+		// simulation parameters
+		Sim::SimParamsMgr simParamsMgr{};
+		simParamsMgr.PresetParams_B();
+		simParamsMgr.AssertParamDerivationCorrectness();
+
 		// sub-systems
-		Sim::SimParamsMgr simParamsMgr{}; simParamsMgr.PresetParams_B();
 		Vis::VisParamsMgr visParamsMgr{};
 		Scene::ScenarioMgr scenarioMgr{};
 		Bench::BenchmarksMgr benchmarksMgr{ simParamsMgr.SnapshotParams().first };

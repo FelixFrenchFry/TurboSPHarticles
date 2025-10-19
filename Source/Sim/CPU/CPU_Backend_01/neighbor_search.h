@@ -5,27 +5,74 @@
 #pragma once
 
 // external
+#include <cstdint>
+#include <unordered_map>
+#include <vector>
 
 // internal
+#include "Source/Sim/Core/backend_sim.h"
 
 
 
 namespace Sim
 {
-	float KernelFunction_CubicSpline(float distNorm, float alpha)
+	class BruteForce final : public ISimNeighborSearch
 	{
-		const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-		const float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
+	public: // -----------------------------------------------------------------
 
-		return alpha * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
-	}
+		BruteForce(Bench::BenchmarksMgr& benchmarksMgr);
 
-	glm::vec3 KernelGradient_CubicSpline(glm::vec3 diff, float distNorm, float size, float alpha)
+		const char* Name() const override { return "BruteForce_CPU_01"; }
+
+		void Init() override;
+
+		void Construct(const NeighborSearchContext& ctx) override;
+
+		void Query(const NeighborSearchContext& ctx,
+				   const NeighborSearchResult& out) override;
+
+	private: // ----------------------------------------------------------------
+
+		// managers
+		Bench::BenchmarksMgr& benchmarksMgr_;
+	};
+
+	class SpatialHashing_Simple final : public ISimNeighborSearch
 	{
-		const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-		const float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
+	public: // -----------------------------------------------------------------
 
-		return alpha * (diff / (distNorm * size * size)) * (-3.0f * t2 * t2 + 12 * t1 * t1);
-	}
+		SpatialHashing_Simple(Bench::BenchmarksMgr& benchmarksMgr);
+
+		const char* Name() const override { return "SpatialHashing_CPU_01"; }
+
+		void Init() override;
+
+		void Construct(const NeighborSearchContext& ctx) override;
+
+		void Query(const NeighborSearchContext& ctx,
+				   const NeighborSearchResult& out) override;
+
+	private: // ----------------------------------------------------------------
+
+		// grid of cells, each made up of a key and a bucket
+		using Key = uint64_t;
+		using Bucket = std::vector<uint32_t>;
+		using CellGrid = std::unordered_map<Key, Bucket>;
+
+		// managers
+		Bench::BenchmarksMgr& benchmarksMgr_;
+
+		// data structures
+		CellGrid cellGridF_{};
+		CellGrid cellGridB_{};
+
+		float cellSize_ = 0.0f;
+		float cellSizeInv_ = 0.0f;
+
+		// helpers
+		inline int FloorToInt(float v) noexcept;
+		inline uint32_t ZigZag(int v) noexcept;
+		inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
+	};
 
 } // namespace Sim

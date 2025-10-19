@@ -13,6 +13,7 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "cpu_backend_01.h"
+#include "neighbor_search.h"
 
 constexpr float  PI = std::numbers::pi_v<float>;
 
@@ -23,7 +24,7 @@ using namespace Sim;
 SimBackendCPU_01::SimBackendCPU_01(Bench::BenchmarksMgr& benchmarksMgr)
 	: benchmarksMgr_{ benchmarksMgr }
 {
-	// nothing to do here
+	neighborSearch_ = std::make_unique<SpatialHashing_Simple>(benchmarksMgr);
 }
 
 void SimBackendCPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
@@ -390,6 +391,30 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		}
 	}
 
+	// prepare for neighbor search
+	NeighborSearchContext nsCtx
+	{
+		.N_F = N_F_,
+		.N_B = N_B_,
+
+		.xPosF = xPosF_,
+		.yPosF = yPosF_,
+		.zPosF = zPosF_,
+
+		.xPosB = xPosB_,
+		.yPosB = yPosB_,
+		.zPosB = zPosB_,
+
+		.kernelRadius = params.kernelRadius,
+		.kernelRadiusSqu = params.kernelRadius * params.kernelRadius
+	};
+
+	NeighborSearchResult nsRes
+	{
+		.neighborsFF = { neighborsFF_.data(), neighborsFF_.size() },
+		.neighborsFB = { neighborsFB_.data(), neighborsFB_.size() }
+	};
+
 	for (int64_t step = 0; step < N_steps; step++)
 	{
 		// one simulation step with one parallel region
@@ -414,58 +439,16 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 			// [ neighbor search ] ---------------------------------------------
 
-			// naive brute-force neighbor search
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
-			#pragma omp for schedule(static)
-			for (uint32_t i = 0; i < N_F_; i++)
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+			#pragma omp single
 			{
-				// neighbor lists for particle i
-				// (delete contents, but keep capacity)
-				auto& ff = neighborsFF_[i];
-				auto& fb = neighborsFB_[i];
-				ff.clear();
-				fb.clear();
-
-				const float xi = xPosF_[i];
-				const float yi = yPosF_[i];
-				const float zi = zPosF_[i];
-
-				// check all fluid particles j
-				for (uint32_t j = 0; j < N_F_; j++)
-				{
-					const float dx = xi - xPosF_[j];
-					const float dy = yi - yPosF_[j];
-					const float dz = zi - zPosF_[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						ff.push_back(j);
-
-						// TODO: re-use distance to compute kernel weights?
-					}
-				}
-
-				// check all boundary particles j
-				for (uint32_t j = 0; j < N_B_; j++)
-				{
-					const float dx = xi - xPosB_[j];
-					const float dy = yi - yPosB_[j];
-					const float dz = zi - zPosB_[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						fb.push_back(j);
-
-						// TODO: re-use distance to compute kernel weights?
-					}
-				}
+				neighborSearch_->Construct(nsCtx);
 			}
+			#pragma omp barrier 
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+			neighborSearch_->Query(nsCtx, nsRes);
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 			// [ kernel weight and gradient computations ] ---------------------
