@@ -25,19 +25,36 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # ==================================
 # ===== dependencies via vcpkg =====
 
-# TODO: configure with -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
+if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+  message(FATAL_ERROR
+    "vcpkg toolchain not set. Use the provided CMakePresets.json or pass:\n"
+    "  -DCMAKE_TOOLCHAIN_FILE=<path>/vcpkg/scripts/buildsystems/vcpkg.cmake")
+endif()
+
 find_package(benchmark CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
-# on MSVC, use OpenMP from LLVM for modern versions
+# probe for /openmp:llvm on MSVC and fall back
 if(MSVC)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("/openmp:llvm" HAS_OPENMP_LLVM_FLAG)
     add_library(MSVC_LLVM_OpenMP INTERFACE)
-    target_compile_options(MSVC_LLVM_OpenMP INTERFACE
-        $<$<COMPILE_LANGUAGE:CXX>:/openmp:llvm>) # apply to host C++ only (not CUDA)
+
+    if(HAS_OPENMP_LLVM_FLAG)
+        target_compile_options(MSVC_LLVM_OpenMP INTERFACE
+            $<$<COMPILE_LANGUAGE:CXX>:/openmp:llvm>)  # modern LLVM libomp
+        message(STATUS "OpenMP: MSVC using /openmp:llvm (LLVM libomp)")
+    else()
+        # fallback to classic /openmp (older vcomp runtime)
+        target_compile_options(MSVC_LLVM_OpenMP INTERFACE
+            $<$<COMPILE_LANGUAGE:CXX>:/openmp>)
+        message(WARNING "OpenMP: /openmp:llvm not supported by this MSVC; falling back to /openmp.")
+    endif()
 else()
+    # explicitly request CXX component
     find_package(OpenMP REQUIRED COMPONENTS CXX)
 endif()
 
@@ -132,7 +149,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
 # consistent debug info format
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "ProgramDatabase")
 
-# ========================================
+# ============================
 # ===== headless library =====
 
 add_library(TSP_H STATIC
@@ -177,7 +194,7 @@ if(ENABLE_CUDA AND SRC_SIM_GPU)
     set_property(TARGET TSP_H PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
 endif()
 
-# ===================================================
+# ============================================
 # ===== visual library (optional add-on) =====
 
 if(ENABLE_VIS)
@@ -207,10 +224,18 @@ endif()
 # ===== apps =====
 
 add_executable(TSP_Headless "Apps/main_headless.cpp")
-target_link_libraries(TSP_Headless PRIVATE TSP_H Project_Warnings Project_Defines Project_Options)
+target_link_libraries(TSP_Headless PRIVATE 
+    TSP_H Project_Warnings Project_Defines Project_Options
+    $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
+)
 target_compile_definitions(TSP_Headless PRIVATE TURBOSPHARTICLES_HEADLESS=1)
 
 if(ENABLE_VIS)
     add_executable(TSP_Visual "Apps/main_visual.cpp")
-    target_link_libraries(TSP_Visual PRIVATE TSP_V Project_Warnings Project_Defines Project_Options)
+    target_link_libraries(TSP_Visual PRIVATE
+    TSP_V Project_Warnings Project_Defines Project_Options
+    $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
+)
 endif()

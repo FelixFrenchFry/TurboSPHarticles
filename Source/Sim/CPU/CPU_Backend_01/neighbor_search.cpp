@@ -5,7 +5,6 @@
 #include <cassert>
 #include <cstdint>
 #include <omp.h>
-#include <unordered_map>
 #include <vector>
 
 // internal
@@ -155,11 +154,11 @@ namespace Sim
 	}
 
 	void SpatialHashing_Simple::Query(const NeighborSearchContext& ctx,
-							   const NeighborSearchResult& out)
+									  const NeighborSearchResult& out)
 	{
 		const float kernelRadiusSqu = ctx.kernelRadiusSqu;
 
-		#pragma omp for schedule(static)
+		#pragma omp for schedule(guided)
 		for (uint32_t i = 0; i < ctx.N_F; i++)
 		{
 			// neighbor lists for particle i
