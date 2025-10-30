@@ -54,12 +54,12 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		virtual void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const = 0;
 
+		// advances the simulation by N_steps
+		virtual void ExecuteSimStep(SimParams params, int64_t N_steps = 1) = 0;
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		virtual void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const = 0;
-
-		// advances the simulation by N_steps
-		virtual void ExecuteSimStep(SimParams params, int64_t N_steps = 1) = 0;
 	};
 
 	// backend factory

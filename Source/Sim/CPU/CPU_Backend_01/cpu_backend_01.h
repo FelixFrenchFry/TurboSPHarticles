@@ -19,7 +19,7 @@ namespace Sim
 {
 	class SimBackendCPU_01 final : public ISimBackend
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		SimBackendCPU_01(Bench::BenchmarksMgr& benchmarksMgr);
 
@@ -44,14 +44,14 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
 
+		// advances the simulation by N_steps
+		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
 
-		// advances the simulation by N_steps
-		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
-
-	private: // ==============================
+	private: // ----------------------------------------------------------------
 
 		// managers
 		Bench::BenchmarksMgr& benchmarksMgr_;
@@ -62,11 +62,12 @@ namespace Sim
 		// metadata
 		int64_t simStep_ = 0;
 		double simTime_ = 0.0;
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
 
-		// ===== backend-specific data structures for operating the simulation =====
+		// --- [ backend-specific data structures for operating the simulation ]
 
 		// fluid particles
-		uint32_t N_F_ = 0;
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
 		std::vector<float> xAccF_, yAccF_, zAccF_;
@@ -80,7 +81,6 @@ namespace Sim
 		std::vector<uint32_t> idF_;
 
 		// boundary particles
-		uint32_t N_B_ = 0;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> xVelB_, yVelB_, zVelB_;
 		std::vector<float> densityB_;
@@ -99,7 +99,7 @@ namespace Sim
 		std::vector<std::vector<glm::vec3>> kernelGradientsFF_;
 		std::vector<std::vector<glm::vec3>> kernelGradientsFB_;
 
-		// re-usable work vector for temp storage
+		// re-usable work (scratch) buffer for temp storage
 		mutable std::vector<float> workBuffer_;
 
 		// operation benchmarking groups

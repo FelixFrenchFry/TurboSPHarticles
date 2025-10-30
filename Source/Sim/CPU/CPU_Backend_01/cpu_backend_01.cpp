@@ -100,6 +100,8 @@ void SimBackendCPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
+
+	// make sure the destination data structures have enough capacity
 	dst.ResizeFluid(N_F_);
 	dst.ResizeBoundary(N_B_);
 
@@ -154,10 +156,21 @@ void SimBackendCPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	// TODO: add boundary particles
 
-	snap.posF.resize(N_F_);
-	snap.scalarDataF.resize(N_F_);
 	snap.N_F = N_F_;
 	snap.simStep = simStep_;
+
+	if (N_F_ == 0) // empty sim
+	{
+		snap.posF.clear();
+		snap.scalarDataF.clear();
+
+		// TODO: add boundary particles
+
+		return;
+	}
+
+	snap.posF.resize(N_F_);
+	snap.scalarDataF.resize(N_F_);
 
 	#pragma omp parallel for schedule(static)
 	for (uint32_t i = 0; i < N_F_; i++)
@@ -171,12 +184,21 @@ void SimBackendCPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 									  Base::ColorCodingMode mode) const
 {
+	if (N_F_ == 0) // empty sim
+	{
+		snap.scalarDataF.clear();
+
+		// TODO: add boundary particles
+
+		return;
+	}
+
 	switch (mode)
 	{
 	case Base::None:
 	{
 		snap.scalarDataF.clear();
-		break;
+		return;
 	}
 	case Base::VelocityMag:
 	{
@@ -188,27 +210,28 @@ void SimBackendCPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 											 + yVelF_[i] * yVelF_[i]
 											 + zVelF_[i] * zVelF_[i]);
 		}
-		break;
+		return;
 	}
 	case Base::Density:
 	{
 		snap.scalarDataF = densityF_;
-		break;
+		return;
 	}
 	case Base::Pressure:
 	{
 		snap.scalarDataF = pressureF_;
-		break;
+		return;
 	}
 	default:
 		SPDLOG_ERROR("Unsupported scalar data mode in backend CPU_01");
-		break;
+		snap.scalarDataF.clear();
+		return;
 	}
 }
 
 // TODO: add flags to enable/disable certain stats?
 void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
-	const SimParams& simParams) const
+											const SimParams& simParams) const
 {
 	using namespace Stats;
 

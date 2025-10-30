@@ -9,8 +9,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(ENABLE_CUDA  "Build GPU backend with CUDA"   ON)
-option(ENABLE_VIS   "Build visual interface"        ON)
+option(ENABLE_CUDA "Build GPU backend with CUDA" OFF)
+option(ENABLE_VIS "Build visual interface" ON)
 
 # default build type
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
