@@ -523,6 +523,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 										   * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
 
 					// kernel gradient
+					// TODO: multiply distNorm with size once or twice?
 					kernelGradientsFF_[i][k] = cubicSplineAlpha
 											 * (posDiff / (distNorm * sizeF * sizeF))
 											 * (-3.0f * t2 * t2 + 12 * t1 * t1);
@@ -560,8 +561,9 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 										   * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
 
 					// kernel gradient
+					// TODO: multiply distNorm with size once or twice?
 					kernelGradientsFB_[i][k] = cubicSplineAlpha
-											 * (posDiff / (distNorm * sizeFSqu))
+											 * (posDiff / (distNorm * sizeF * sizeF))
 											 * (-3.0f * t2 * t2 + 12 * t1 * t1);
 				}
 			}

@@ -1,7 +1,7 @@
 // backend_sim.cpp
 
 // external
-#include "spdlog/spdlog.h"
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 // internal
