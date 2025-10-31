@@ -61,9 +61,9 @@ endif()
 if(ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    set(CMAKE_CUDA_ARCHITECTURES 61 70 75 80 86 89 90 100 120)
+    set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89 90 100 120)
     #if(NOT CMAKE_CUDA_ARCHITECTURES)
     #    set(CMAKE_CUDA_ARCHITECTURES native)
     #endif()
@@ -103,8 +103,8 @@ endif()
 # warnings
 add_library(Project_Warnings INTERFACE)
 target_compile_options(Project_Warnings INTERFACE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /utf-8>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /utf-8>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:-Wall -Wextra -Wpedantic>
 )
 
 # platform defines
@@ -116,15 +116,21 @@ target_compile_definitions(Project_Defines INTERFACE
 # C++ optimization flags
 add_library(Project_Options INTERFACE)
 target_compile_options(Project_Options INTERFACE
-    $<$<CXX_COMPILER_ID:MSVC>:
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
         $<$<CONFIG:Debug>:/Od /Zi>
         $<$<CONFIG:Release>:/O2>
         $<$<CONFIG:RelWithDebInfo>:/O2 /Zi>
     >
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
         $<$<CONFIG:Debug>:-O0 -g>
         $<$<CONFIG:Release>:-O3>
         $<$<CONFIG:RelWithDebInfo>:-O2 -g>
+    >
+    # CUDA-specific options, separate from MSVC/GCC flags
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        $<$<CONFIG:Debug>:-O0 -g>
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:RelWithDebInfo>:-O2 -lineinfo>
     >
 )
 
@@ -181,16 +187,12 @@ target_link_libraries(TSP_H PUBLIC
 )
 
 if(ENABLE_CUDA AND SRC_SIM_GPU)
-    set_target_properties(TSP_H PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-    # CUDA optimization flags
-    target_compile_options(TSP_H PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:
-            $<$<CONFIG:Debug>:-O0 -g>
-            $<$<CONFIG:Release>:-O3>
-            $<$<CONFIG:RelWithDebInfo>:-O2 -lineinfo>
-        >
+    set_target_properties(TSP_H PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+        CUDA_ARCHITECTURES "75;80;86;89;90;100;120"
     )
-    # TODO: comment this out if compilation works fine without it?
+    # keep IPO off when CUDA is enabled to avoid nvlink/LTO clashes
     set_property(TARGET TSP_H PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
 endif()
 
@@ -238,4 +240,14 @@ if(ENABLE_VIS)
     $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
 )
+endif()
+
+# make sure device link works on final executables and turn IPO off when CUDA is on
+if(ENABLE_CUDA)
+    set_target_properties(TSP_Headless PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+    set_property(TARGET TSP_Headless PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
+    if(ENABLE_VIS)
+        set_target_properties(TSP_Visual  PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+        set_property(TARGET TSP_Visual  PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
+    endif()
 endif()
