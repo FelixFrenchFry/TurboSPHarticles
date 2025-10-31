@@ -7,6 +7,7 @@
 // internal
 #include "backend_sim.h"
 #include "Source/Sim/CPU/CPU_Backend_01/cpu_backend_01.h"
+#include "Source/Sim/GPU/GPU_Backend_01/gpu_backend_01.h"
 
 
 
@@ -24,7 +25,7 @@ namespace Sim
 		}
 		case Base::BackendVersion::GPU_01:
 		{
-			SPDLOG_ERROR("Backend GPU_02 not implemented yet");
+			return std::make_unique<SimBackendGPU_01>(benchmarksMgr);
 		}
 		default:
 			throw std::runtime_error("Unsupported sim backend version request");

@@ -9,6 +9,7 @@
 #include "Source/Base/helpers.h"
 #include "Source/Sim/GPU/gpu_utils.h"
 #include "gpu_backend_01.h"
+#include "gpu_kernels_01.cuh"
 
 
 
@@ -303,4 +304,104 @@ void SimBackendGPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
 	// TODO: implement
+}
+
+void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
+{
+	if (N_F_ == 0) // empty sim
+	{
+		simStep_ += N_steps;
+		simTime_ += N_steps * params.timeStep;
+
+		return;
+	}
+
+	for (int64_t step = 0; step < N_steps; step++)
+	{
+		GPU_01::ReloadConstants(params, stream_);
+
+		// [ neighbor search ] -------------------------------------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+
+		// reset neighbor counters and overflow
+		GPU::MemsetZero(d_neighCountFF_.Data(), N_F_, stream_);
+		GPU::MemsetZero(d_neighCountFB_.Data(), N_F_, stream_);
+		GPU::MemsetZero(d_neighOverflowFlag_.Data(), 1, stream_);
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		GPU_01::Launch_NeighborSearch_BruteForce(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(), 
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_, 
+			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+			d_neighListFF_.Data(), d_neighListFB_.Data(), 
+			d_neighOverflowFlag_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+
+		// [ density and pressure computations ] -------------------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
+										Bench::BenchOp::Pressure_Solving });
+		GPU_01::Launch_DensityPressure(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+			d_neighListFF_.Data(), d_neighListFB_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_, 
+			d_densityF_.Data(), d_pressureF_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving,
+									   Bench::BenchOp::Pressure_Solving });
+
+		// [ acceleration computations ] ---------------------------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration,
+										Bench::BenchOp::Viscosity_Acceleration,
+										Bench::BenchOp::External_Acceleration,
+										Bench::BenchOp::AccelerationUpdate });
+		GPU_01::Launch_Accelerations(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
+			d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data(),
+			d_densityF_.Data(),
+			d_pressureF_.Data(), d_pressureB_.Data(),
+			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+			d_neighListFF_.Data(), d_neighListFB_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_xAccF_.Data(), d_yAccF_.Data(), d_zAccF_.Data(),
+			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
+			d_xAccViscF_.Data(), d_yAccViscF_.Data(), d_zAccViscF_.Data(),
+			d_xAccExtF_.Data(), d_yAccExtF_.Data(), d_zAccExtF_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration,
+									   Bench::BenchOp::Viscosity_Acceleration,
+									   Bench::BenchOp::External_Acceleration,
+									   Bench::BenchOp::AccelerationUpdate });
+
+		// [ integration ] -----------------------------------------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
+										Bench::BenchOp::PositionUpdate });
+		GPU_01::Launch_Integration(
+			d_xAccF_.Data(), d_yAccF_.Data(), d_zAccF_.Data(),
+			N_F_, N_B_, stream_,
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
+									   Bench::BenchOp::PositionUpdate });
+	}
+
+	simStep_ += N_steps;
+	simTime_ += N_steps * params.timeStep;
 }

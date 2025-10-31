@@ -375,6 +375,14 @@ void SimBackendCPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 {
+	if (N_F_ == 0) // empty sim
+	{
+		simStep_ += N_steps;
+		simTime_ += N_steps * params.timeStep;
+
+		return;
+	}
+
 	// --- [ initialization and checks ] ---------------------------------------
 
 	// ensure neighbor storage has enough capacity
@@ -690,7 +698,8 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 							 * kernelGradientsFB_[i][k];
 				}
 
-				// 3D -> factor 2 * (dim + 2)
+				// finalize accelerations
+				// (3D -> factor 2 * (dim + 2))
 				accViscF *= 2.0f * (3 + 2) * params.viscosityF;
 				accViscB *= 2.0f * (3 + 2) * params.viscosityB;
 				accPress *= -1.0f;
@@ -708,7 +717,7 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				yAccExtF_[i] = params.gravity.y;
 				zAccExtF_[i] = params.gravity.z;
 
-				// accumulate final acceleration components
+				// sum final acceleration components
 				xAccF_[i] = xAccPressF_[i] + xAccViscF_[i] + xAccExtF_[i];
 				yAccF_[i] = yAccPressF_[i] + yAccViscF_[i] + yAccExtF_[i];
 				zAccF_[i] = zAccPressF_[i] + zAccViscF_[i] + zAccExtF_[i];
@@ -741,6 +750,6 @@ void SimBackendCPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		}
 	}
 
-	simStep_ += 1;
+	simStep_ += N_steps;
 	simTime_ += N_steps * params.timeStep;
 }

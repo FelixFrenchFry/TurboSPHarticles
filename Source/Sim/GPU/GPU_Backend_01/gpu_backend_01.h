@@ -163,8 +163,8 @@ namespace Sim
 
 		DeviceBuffer<uint32_t> d_neighCountFF_;
 		DeviceBuffer<uint32_t> d_neighCountFB_;
-		DeviceBuffer<uint32_t> d_neighborsFF_; // N_F_ * N_MAX_NEIGH_FF_
-		DeviceBuffer<uint32_t> d_neighborsFB_; // N_F_ * N_MAX_NEIGH_FB_
+		DeviceBuffer<uint32_t> d_neighListFF_; // N_F_ * N_MAX_NEIGH_FF_
+		DeviceBuffer<uint32_t> d_neighListFB_; // N_F_ * N_MAX_NEIGH_FB_
 		DeviceBuffer<uint32_t> d_neighOverflowFlag_; // TODO: use smaller data type?
 
 		// re-usable work (scratch) buffer for temp storage
@@ -178,10 +178,6 @@ namespace Sim
 			},
 			{
 				.ops = {	Bench::BenchOp::Neighbors_Query }
-			},
-			{
-				.ops = {  Bench::BenchOp::Kernel_Weights,
-							Bench::BenchOp::Kernel_Gradients }
 			},
 			{
 				.ops = {	Bench::BenchOp::Density_Solving,
@@ -251,8 +247,8 @@ namespace Sim
 			// neighbors
 			d_neighCountFF_.Resize(N_F_);
 			d_neighCountFB_.Resize(N_F_);
-			d_neighborsFF_.Resize(N_F_ * N_MAX_FF_);
-			d_neighborsFB_.Resize(N_F_ * N_MAX_FB_);
+			d_neighListFF_.Resize(N_F_ * N_MAX_FF_);
+			d_neighListFB_.Resize(N_F_ * N_MAX_FB_);
 			d_neighOverflowFlag_.Resize(1);
 		}
 	};
