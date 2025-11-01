@@ -1,6 +1,7 @@
 // simulation.cpp
 
 // external
+#include <chrono>
 #include <mutex>
 #include <omp.h>
 #include <spdlog/spdlog.h>
@@ -231,6 +232,9 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 	// move snapshot into mailbox (non-blocking)
 	visualSnapMailbox_->StoreSnapshot(std::move(snap));
 
+	// vis throttle starting point
+	lastVisWall_ = std::chrono::steady_clock::now();
+
 	// enter the simulation loop -----------------------------------------------
 
 	while (!stopToken.stop_requested())
@@ -265,19 +269,30 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		// TODO: add lower bound via ...
 		if (doSimStep)
 		{
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Visual });
+			const auto now = std::chrono::steady_clock::now();
 
-			// create visual snapshot and push to its mailbox
-			auto snap = std::make_shared<Sync::VisualSnapshot>();
-			simBackend_->PackVisualSnapshot(*snap);
+			// compute minimum interval from the target rate
+			const auto minInterval = std::chrono::duration_cast<std::chrono::microseconds>(
+				std::chrono::duration<double>(1.0 / std::max(1e-6f, visMaxHz_)));
 
-			// pack misc data into snapshot that is not handled by the backend
-			snap->simStep = simStep_;
-			snap->boxesB = simScenario_->GetBoundaryBoxes();
+			if (now - lastVisWall_ >= minInterval)
+			{
+				benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Visual });
 
-			visualSnapMailbox_->StoreSnapshot(std::move(snap));
+				// create visual snapshot and push to its mailbox
+				auto snap = std::make_shared<Sync::VisualSnapshot>();
+				simBackend_->PackVisualSnapshot(*snap);
 
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Visual });
+				// pack misc data into snapshot that is not handled by the backend
+				snap->simStep = simStep_;
+				snap->boxesB = simScenario_->GetBoundaryBoxes();
+
+				visualSnapMailbox_->StoreSnapshot(std::move(snap));
+
+				benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Visual });
+
+				lastVisWall_ = now;
+			}
 		}
 
 		// evaluate the step

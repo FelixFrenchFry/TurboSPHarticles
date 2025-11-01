@@ -6,6 +6,7 @@
 
 // external
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <stop_token>
 #include <thread>
@@ -105,6 +106,10 @@ namespace Sim
 
 		// statistics management
 		Stats::StatisticsMgr& statisticsMgr_;
+
+		// visualization management
+		std::chrono::steady_clock::time_point lastVisWall_{};
+		float visMaxHz_ = 100.0f;
 
 		// misc
 		std::mutex stateMutex_; // protects universalSimState_
