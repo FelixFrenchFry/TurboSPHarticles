@@ -64,11 +64,23 @@ namespace GPU
 	inline void Copy_HostToDevice(T* dstDevice, const T* srcHost, 
 								  size_t countElems, cudaStream_t stream)
 	{
-		if (!dstDevice || !srcHost || countElems == 0) { return; }
+		if (countElems == 0) { return; }
+
+		if (!dstDevice)
+		{
+			throw std::runtime_error("GPU::Copy_HostToDevice() -> "
+				"null-pointer dstDevice, but nonzero element count");
+		}
+
+		if (!srcHost)
+		{
+			throw std::runtime_error("GPU::Copy_HostToDevice() -> "
+				"null-pointer srcHost, but nonzero element count");
+		}
 
 		Check(cudaMemcpyAsync(dstDevice, srcHost, countElems * sizeof(T),
-			cudaMemcpyHostToDevice, stream), 
-			"cudaMemcpyAsync() H to D");
+			  cudaMemcpyHostToDevice, stream),
+			  "cudaMemcpyAsync() H->D");
 	}
 
 	// helper for copying buffer data from device to host
@@ -76,7 +88,19 @@ namespace GPU
 	inline void Copy_DeviceToHost(T* dstHost, const T* srcDevice,
 								  size_t countElems, cudaStream_t stream)
 	{
-		if (!dstHost || !srcDevice || countElems == 0) { return; }
+		if (countElems == 0) { return; }
+
+		if (!dstHost)
+		{
+			throw std::runtime_error("GPU::Copy_DeviceToHost() -> "
+				"null-pointer dstHost, but nonzero element count");
+		}
+
+		if (!srcDevice)
+		{
+			throw std::runtime_error("GPU::Copy_DeviceToHost() -> "
+				"null-pointer srcDevice, but nonzero element count");
+		}
 
 		Check(cudaMemcpyAsync(dstHost, srcDevice, countElems * sizeof(T),
 			  cudaMemcpyDeviceToHost, stream), 
@@ -88,7 +112,13 @@ namespace GPU
 	inline void MemsetBytes(T* dstDevice, int value,
 							size_t countElems, cudaStream_t stream)
 	{
-		if (!dstDevice || countElems == 0) { return; }
+		if (countElems == 0) { return; }
+
+		if (!dstDevice)
+		{
+			throw std::runtime_error("GPU::MemsetBytes() -> "
+				"null-pointer dstDevice, but nonzero element count");
+		}
 
 		Check(cudaMemsetAsync(dstDevice, value, countElems * sizeof(T), stream), 
 			  "cudaMemsetAsync()");

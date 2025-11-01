@@ -215,9 +215,36 @@ namespace Sim
 
 		// resizes all device buffers when particle counts change
 		// (does not preserve data)
-		void EnsureCapacity(uint32_t N_F_new, uint32_t N_B_new)
+		void EnsureCapacity(uint32_t N_F_new, uint32_t N_B_new, bool force = false)
 		{
-			if (N_F_new == N_F_ && N_B_new == N_B_) { return; }
+			const bool needOverflow = (d_neighOverflowFlag_.Size() != 1);
+
+			const bool needFluid =
+				force ||
+				(N_F_new != N_F_) ||
+				d_xPosF_.Size() != N_F_new || d_yPosF_.Size() != N_F_new || d_zPosF_.Size() != N_F_new ||
+				d_xVelF_.Size() != N_F_new || d_yVelF_.Size() != N_F_new || d_zVelF_.Size() != N_F_new ||
+				d_xAccF_.Size() != N_F_new || d_yAccF_.Size() != N_F_new || d_zAccF_.Size() != N_F_new ||
+				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
+				d_xAccViscF_.Size() != N_F_new || d_yAccViscF_.Size() != N_F_new || d_zAccViscF_.Size() != N_F_new ||
+				d_xAccExtF_.Size() != N_F_new || d_yAccExtF_.Size() != N_F_new || d_zAccExtF_.Size() != N_F_new ||
+				d_densityF_.Size() != N_F_new || d_pressureF_.Size() != N_F_new ||
+				d_massF_.Size() != N_F_new || d_sizeF_.Size() != N_F_new || d_idF_.Size() != N_F_new ||
+				d_neighCountFF_.Size() != N_F_new || d_neighCountFB_.Size() != N_F_new ||
+				d_neighListFF_.Size() != static_cast<size_t>(N_F_new) * N_MAX_FF_ ||
+				d_neighListFB_.Size() != static_cast<size_t>(N_F_new) * N_MAX_FB_;
+
+			const bool needBoundary =
+				force ||
+				(N_B_new != N_B_) ||
+				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
+				d_xVelB_.Size() != N_B_new || d_yVelB_.Size() != N_B_new || d_zVelB_.Size() != N_B_new ||
+				d_densityB_.Size() != N_B_new || d_pressureB_.Size() != N_B_new ||
+				d_massB_.Size() != N_B_new || d_sizeB_.Size() != N_B_new || d_idB_.Size() != N_B_new;
+
+			// detect if (re)allocation of buffers is needed
+			// (might be due to change in particle counts or lack of initialization)
+			if (!(needFluid || needBoundary || needOverflow)) { return; }
 
 			N_F_ = N_F_new;
 			N_B_ = N_B_new;

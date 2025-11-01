@@ -99,11 +99,11 @@ void SimBackendGPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	GPU::MemsetZero(d_neighCountFB_.Data(), N_F_, stream_);
 	GPU::MemsetZero(d_neighOverflowFlag_.Data(), 1, stream_);
 
+	GPU::StreamSync(stream_);
+
 	SPDLOG_INFO("Pulled universal sim state with {} fluid and "
 				"{} boundary particles into data structures of backend GPU_01",
 				N_F_, N_B_);
-
-	// TODO: sync if compute kernels don't all use the same stream
 }
 
 void SimBackendGPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
@@ -170,7 +170,6 @@ void SimBackendGPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(B.id.data(), d_idB_.Data(), N_B_, stream_);
 	}
 
-	// wait for all copies to finish
 	GPU::StreamSync(stream_);
 
 	F.N_ = N_F_;
@@ -303,6 +302,8 @@ void SimBackendGPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 void SimBackendGPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
+	using namespace Stats;
+
 	// TODO: implement
 }
 
@@ -318,7 +319,7 @@ void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 	for (int64_t step = 0; step < N_steps; step++)
 	{
-		GPU_01::ReloadConstants(params, stream_);
+		GPU_01::ReloadConstants(params, N_F_, N_B_, stream_);
 
 		// [ neighbor search ] -------------------------------------------------
 

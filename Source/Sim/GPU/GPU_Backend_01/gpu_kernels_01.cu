@@ -2,6 +2,7 @@
 
 // external
 #include <cuda_runtime.h>
+#include <iostream>
 #include <numbers>
 
 // internal
@@ -33,7 +34,7 @@ namespace GPU_01
 	__constant__ float c_kernelRadiusSqu;
 	__constant__ float c_cubicSplineAlpha;
 
-	void ReloadConstants(const Sim::SimParams& params, cudaStream_t stream)
+	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
 	{
 		const float sizeInv = 1.0 / params.particleSizeF;
 		const float cubicSplineAlpha = static_cast<float>(
@@ -42,24 +43,24 @@ namespace GPU_01
 
 		// store values in constant memory on the GPU
 		// (efficient read-only broadcast access for all threads)
-		cudaMemcpyToSymbol(c_N_F, &params.N_F, sizeof(uint32_t));
-		cudaMemcpyToSymbol(c_N_B, &params.N_B, sizeof(uint32_t));
-		cudaMemcpyToSymbol(c_timeStep, &params.timeStep, sizeof(float));
-		cudaMemcpyToSymbol(c_sizeF, &params.particleSizeF, sizeof(float));
-		cudaMemcpyToSymbol(c_sizeB, &params.particleSizeB, sizeof(float));
-		cudaMemcpyToSymbol(c_restDensityF, &params.restDensityF, sizeof(float));
-		cudaMemcpyToSymbol(c_restDensityB, &params.restDensityB, sizeof(float));
-		cudaMemcpyToSymbol(c_massF, &params.massF, sizeof(float));
-		cudaMemcpyToSymbol(c_massB, &params.massB, sizeof(float));
-		cudaMemcpyToSymbol(c_taitExponent, &params.taitExponent, sizeof(float));
-		cudaMemcpyToSymbol(c_stiffness, &params.stiffness, sizeof(float));
-		cudaMemcpyToSymbol(c_viscosityF, &params.viscosityF, sizeof(float));
-		cudaMemcpyToSymbol(c_viscosityB, &params.viscosityB, sizeof(float));
-		cudaMemcpyToSymbol(c_xGravity, &params.gravity.x, sizeof(float));
-		cudaMemcpyToSymbol(c_yGravity, &params.gravity.y, sizeof(float));
-		cudaMemcpyToSymbol(c_zGravity, &params.gravity.z, sizeof(float));
-		cudaMemcpyToSymbol(c_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float));
-		cudaMemcpyToSymbol(c_cubicSplineAlpha, &cubicSplineAlpha, sizeof(float));
+		GPU::Check(cudaMemcpyToSymbol(c_N_F, &N_F, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_N_B, &N_B, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_timeStep, &params.timeStep, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_sizeF, &params.particleSizeF, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_sizeB, &params.particleSizeB, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_restDensityF, &params.restDensityF, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_restDensityB, &params.restDensityB, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_massF, &params.massF, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_massB, &params.massB, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_taitExponent, &params.taitExponent, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_stiffness, &params.stiffness, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_viscosityF, &params.viscosityF, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_viscosityB, &params.viscosityB, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_xGravity, &params.gravity.x, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_yGravity, &params.gravity.y, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_zGravity, &params.gravity.z, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_cubicSplineAlpha, &cubicSplineAlpha, sizeof(float)));
 
 		GPU::StreamSync(stream);
 	}
