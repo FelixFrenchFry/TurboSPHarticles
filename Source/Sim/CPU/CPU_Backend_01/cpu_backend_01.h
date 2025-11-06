@@ -17,13 +17,15 @@
 
 namespace Sim
 {
-	class SimBackendCPU_01 final : public ISimBackend
+	class SimBackend_CPU01 final : public I_SimBackend
 	{
 	public: // -----------------------------------------------------------------
 
-		SimBackendCPU_01(Bench::BenchmarksMgr& benchmarksMgr);
+		SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr);
 
-		const char* Name() const override { return "CPU_01"; }
+		const char* Name() const override { return "CPU01"; }
+
+		void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) override;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(const Sync::UniversalSimState& src) override;
@@ -47,6 +49,9 @@ namespace Sim
 		// advances the simulation by N_steps
 		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
 
+		// IISPH fluid solver step
+		void Step_IISPH(const SimParams&) override;
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
@@ -57,7 +62,9 @@ namespace Sim
 		Bench::BenchmarksMgr& benchmarksMgr_;
 
 		// neighbor search
-		std::unique_ptr<ISimNeighborSearch> neighborSearch_;
+		std::unique_ptr<I_NeighborSearchStrat> neighborSearchStrat_;
+		friend class NS_BruteForce_CPU01;
+		friend class NS_SpatialHashingBasic_CPU01;
 
 		// metadata
 		int64_t simStep_ = 0;

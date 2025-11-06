@@ -13,7 +13,7 @@ constexpr float  PI = std::numbers::pi_v<float>;
 
 
 
-namespace GPU_01
+namespace GPU01
 {
 	__constant__ uint32_t c_N_F;
 	__constant__ uint32_t c_N_B;
@@ -491,13 +491,13 @@ namespace GPU_01
 		zF[i] = zF[i] + c_timeStep * vzF[i];
 	}
 
-} // namespace GPU_01
+} // namespace GPU01
 
 // -----------------------------------------------------------------------------
 // --- [ kernel launchers ] ----------------------------------------------------
 // -----------------------------------------------------------------------------
 
-namespace GPU_01
+namespace GPU01
 {
 	void Launch_NeighborSearch_BruteForce(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -604,4 +604,4 @@ namespace GPU_01
 		GPU::CheckLastKernel("K_Integration()");
 	}
 
-} // namespace GPU_01
+} // namespace GPU01

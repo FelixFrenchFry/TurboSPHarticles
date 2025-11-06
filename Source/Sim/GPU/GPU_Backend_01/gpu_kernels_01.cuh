@@ -13,7 +13,7 @@
 
 
 
-namespace GPU_01
+namespace GPU01
 {
 	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream);
 
@@ -75,4 +75,4 @@ namespace GPU_01
 		float* xPosF, float* yPosF, float* zPosF,
 		float* xVelF, float* yVelF, float* zVelF);
 
-} // namespace GPU_01
+} // namespace GPU01

@@ -84,7 +84,7 @@ namespace Sim
 
 		// universal simulation state, and backend for compute
 		Sync::UniversalSimState universalSimState_;
-		std::unique_ptr<ISimBackend> simBackend_{ nullptr };
+		std::unique_ptr<I_SimBackend> simBackend_{ nullptr };
 
 		// scenario management
 		Scene::ScenarioMgr& scenarioMgr_;
@@ -109,7 +109,7 @@ namespace Sim
 
 		// visualization management
 		std::chrono::steady_clock::time_point lastVisWall_{};
-		float visMaxHz_ = 100.0f;
+		float visMaxHz_ = 60.0f;
 
 		// misc
 		std::mutex stateMutex_; // protects universalSimState_

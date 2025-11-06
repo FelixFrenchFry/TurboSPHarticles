@@ -38,8 +38,8 @@ bool SimulationMgr::Init()
 	// default sim scenario (BreakingDam)
 	SelectSimScenario(Base::ScenarioType::BreakingDam);
 
-	// default sim backend (CPU_01)
-	SelectSimBackend(Base::BackendVersion::GPU_01);
+	// default sim backend (CPU01)
+	SelectSimBackend(Base::BackendVersion::CPU01);
 
 	ReBuildInitialSimState();
 

@@ -15,13 +15,13 @@
 
 using namespace Sim;
 
-SimBackendGPU_01::SimBackendGPU_01(Bench::BenchmarksMgr& benchmarksMgr)
+SimBackend_GPU01::SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr)
 	: benchmarksMgr_{ benchmarksMgr }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
 }
 
-SimBackendGPU_01::~SimBackendGPU_01()
+SimBackend_GPU01::~SimBackend_GPU01()
 {
 	if (stream_)
 	{
@@ -29,7 +29,12 @@ SimBackendGPU_01::~SimBackendGPU_01()
 	}
 }
 
-void SimBackendGPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
+void SimBackend_GPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
+{
+	neighborSearchStrat_ = std::move(strat);
+}
+
+void SimBackend_GPU01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
 {
 	const auto& F = src.fluidParticles;
 	const auto& B = src.boundaryParticles;
@@ -102,11 +107,11 @@ void SimBackendGPU_01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	GPU::StreamSync(stream_);
 
 	SPDLOG_INFO("Pulled universal sim state with {} fluid and "
-				"{} boundary particles into data structures of backend GPU_01",
+				"{} boundary particles into data structures of backend GPU01",
 				N_F_, N_B_);
 }
 
-void SimBackendGPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
+void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
@@ -175,17 +180,17 @@ void SimBackendGPU_01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	F.N_ = N_F_;
 	B.N_ = N_B_;
 
-	SPDLOG_INFO("Pushed from data structures of backend GPU_01 with "
+	SPDLOG_INFO("Pushed from data structures of backend GPU01 with "
 				"{} fluid and {} boundary particles to universal sim state",
 				N_F_, N_B_);
 }
 
-void SimBackendGPU_01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
+void SimBackend_GPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 {
 	// TODO: implement
 }
 
-void SimBackendGPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
+void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	// TODO: add boundary particles
 
@@ -227,7 +232,7 @@ void SimBackendGPU_01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	FillScalarData(snap, snap.scalarModeF);
 }
 
-void SimBackendGPU_01::FillScalarData(Sync::VisualSnapshot& snap,
+void SimBackend_GPU01::FillScalarData(Sync::VisualSnapshot& snap,
 									  Base::ColorCodingMode mode) const
 {
 	if (N_F_ == 0) // empty sim
@@ -292,14 +297,14 @@ void SimBackendGPU_01::FillScalarData(Sync::VisualSnapshot& snap,
 		return;
 	}
 	default:
-		SPDLOG_ERROR("Unsupported scalar data mode in backend GPU_01");
+		SPDLOG_ERROR("Unsupported scalar data mode in backend GPU01");
 		snap.scalarDataF.clear();
 		return;
 	}
 }
 
 // TODO: add flags to enable/disable certain stats?
-void SimBackendGPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
+void SimBackend_GPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
 	using namespace Stats;
@@ -307,7 +312,7 @@ void SimBackendGPU_01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	// TODO: implement
 }
 
-void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
+void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 {
 	if (N_F_ == 0) // empty sim
 	{
@@ -319,7 +324,7 @@ void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 	for (int64_t step = 0; step < N_steps; step++)
 	{
-		GPU_01::ReloadConstants(params, N_F_, N_B_, stream_);
+		GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
 
 		// [ neighbor search ] -------------------------------------------------
 
@@ -334,7 +339,7 @@ void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		GPU_01::Launch_NeighborSearch_BruteForce(
+		GPU01::Launch_NeighborSearch_BruteForce(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(), 
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_, 
@@ -349,7 +354,7 @@ void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
 										Bench::BenchOp::Pressure_Solving });
-		GPU_01::Launch_DensityPressure(
+		GPU01::Launch_DensityPressure(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
@@ -367,7 +372,7 @@ void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 										Bench::BenchOp::Viscosity_Acceleration,
 										Bench::BenchOp::External_Acceleration,
 										Bench::BenchOp::AccelerationUpdate });
-		GPU_01::Launch_Accelerations(
+		GPU01::Launch_Accelerations(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
@@ -392,7 +397,7 @@ void SimBackendGPU_01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
 										Bench::BenchOp::PositionUpdate });
-		GPU_01::Launch_Integration(
+		GPU01::Launch_Integration(
 			d_xAccF_.Data(), d_yAccF_.Data(), d_zAccF_.Data(),
 			N_F_, N_B_, stream_,
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),

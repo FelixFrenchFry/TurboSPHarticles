@@ -652,7 +652,7 @@ void SimParamsMgr::PresetParams_B()
 	float restDensity = 1'000.0f;
 	float taitExponent = 7.0f;
 	float stiffness = 57000.0f;
-	float viscosity = 0.000003f;
+	float viscosity = 0.00009f;
 	float gravity = -9.81f;
 	float kernelSuppRatio = 2.0f;
 

@@ -23,17 +23,22 @@
 
 namespace Sim
 {
+	// forward declarations
+	class I_NeighborSearchStrat;
+
 	// -------------------------------------------------------------------------
-	// --- [ simulation pipeline interface ] -----------------------------------
+	// --- [ simulation backend interface ] ------------------------------------
 	// -------------------------------------------------------------------------
 
-	class ISimBackend
+	class I_SimBackend
 	{
 	public: // -----------------------------------------------------------------
 
-		virtual ~ISimBackend() = default;
+		virtual ~I_SimBackend() = default;
 
 		virtual const char* Name() const = 0;
+
+		virtual void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) = 0;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(const Sync::UniversalSimState& src) = 0;
@@ -57,63 +62,38 @@ namespace Sim
 		// advances the simulation by N_steps
 		virtual void ExecuteSimStep(SimParams params, int64_t N_steps = 1) = 0;
 
+		// IISPH fluid solver step
+		virtual void Step_IISPH(const SimParams& params) = 0;
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		virtual void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const = 0;
 	};
 
 	// backend factory
-	std::unique_ptr<ISimBackend> MakeSimBackend(Base::BackendVersion version,
-												Bench::BenchmarksMgr& benchmarksMgr,
-												const SimParams& params);
+	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendVersion version,
+												 Bench::BenchmarksMgr& benchmarksMgr,
+												 const SimParams& params);
 
 	// -------------------------------------------------------------------------
 	// --- [ neighbor search interface ] ---------------------------------------
 	// -------------------------------------------------------------------------
 
-	struct NeighborSearchContext
-	{
-		// metadata
-		uint32_t N_F = 0;
-		uint32_t N_B = 0;
-
-		// read-only views into fluid particle positions
-		std::span<const float> xPosF;
-		std::span<const float> yPosF;
-		std::span<const float> zPosF;
-
-		// read-only views into boundary particle positions
-		std::span<const float> xPosB;
-		std::span<const float> yPosB;
-		std::span<const float> zPosB;
-
-		// kernel
-		float kernelRadius = 0.0f;
-		float kernelRadiusSqu = 0.0f;
-	};
-
-	struct NeighborSearchResult
-	{
-		// neighbor lists
-		std::span<std::vector<uint32_t>> neighborsFF;
-		std::span<std::vector<uint32_t>> neighborsFB;
-	};
-
-	class ISimNeighborSearch
+	class I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------
 
-		virtual ~ISimNeighborSearch() = default;
+		virtual ~I_NeighborSearchStrat() = default;
 
 		virtual const char* Name() const = 0;
 
-		virtual void Init() = 0;
+		virtual void Init(const SimParams& params) = 0;
 
-		virtual void Construct(const NeighborSearchContext& ctx) = 0;
+		virtual void Construct(const SimParams& params) = 0;
 
-		virtual void Query(const NeighborSearchContext& ctx, const NeighborSearchResult& out) = 0;
+		virtual void Query(const SimParams& params) = 0;
 
-		// TODO: add re-order?
+		// TODO: add re-order and sorting stuff?
 	};
 
 } // namespace Sim

@@ -19,8 +19,8 @@ namespace Base
 
 	enum BackendVersion
 	{
-		CPU_01,				// 0
-		GPU_01				// 1
+		CPU01,				// 0
+		GPU01				// 1
 	};
 
 	enum ScenarioType
@@ -33,7 +33,8 @@ namespace Base
 		BruteForce,			// 0
 		ExplicitGrid1D,		// 1
 		ExplicitGrid3D,		// 2
-		IndexSortBasic		// 3
+		IndexSortBasic,		// 3
+		SpatialHashingBasic // 4
 	};
 
 	enum ColorCodingMode

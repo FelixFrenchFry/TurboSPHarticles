@@ -84,14 +84,16 @@ namespace Sim
 		size_t size_ = 0;
 	};
 
-	class SimBackendGPU_01 final : public ISimBackend
+	class SimBackend_GPU01 final : public I_SimBackend
 	{
 	public: // -----------------------------------------------------------------
 
-		SimBackendGPU_01(Bench::BenchmarksMgr& benchmarksMgr);
-		~SimBackendGPU_01() override;
+		SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr);
+		~SimBackend_GPU01() override;
 
-		const char* Name() const override { return "GPU_01"; }
+		const char* Name() const override { return "GPU01"; }
+
+		void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) override;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(const Sync::UniversalSimState& src) override;
@@ -115,6 +117,9 @@ namespace Sim
 		// advances the simulation by N_steps
 		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
 
+		// IISPH fluid solver step
+		void Step_IISPH(const SimParams&) override;
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
@@ -123,6 +128,11 @@ namespace Sim
 
 		// managers
 		Bench::BenchmarksMgr& benchmarksMgr_;
+
+		// neighbor search
+		std::unique_ptr<I_NeighborSearchStrat> neighborSearchStrat_;
+		friend class NS_BruteForce_GPU01;
+		friend class NS_SpatialHashingBasic_GPU01;
 
 		// CUDA stream
 		cudaStream_t stream_ = nullptr;

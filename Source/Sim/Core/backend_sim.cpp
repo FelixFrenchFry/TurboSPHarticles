@@ -13,19 +13,19 @@
 
 namespace Sim
 {
-	std::unique_ptr<ISimBackend> MakeSimBackend(Base::BackendVersion version,
-												Bench::BenchmarksMgr& benchmarksMgr,
-												SimParams const& params)
+	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendVersion version,
+												 Bench::BenchmarksMgr& benchmarksMgr,
+												 SimParams const& params)
 	{
 		switch (version)
 		{
-		case Base::BackendVersion::CPU_01:
+		case Base::BackendVersion::CPU01:
 		{
-			return std::make_unique<SimBackendCPU_01>(benchmarksMgr);
+			return std::make_unique<SimBackend_CPU01>(benchmarksMgr);
 		}
-		case Base::BackendVersion::GPU_01:
+		case Base::BackendVersion::GPU01:
 		{
-			return std::make_unique<SimBackendGPU_01>(benchmarksMgr);
+			return std::make_unique<SimBackend_GPU01>(benchmarksMgr);
 		}
 		default:
 			throw std::runtime_error("Unsupported sim backend version request");

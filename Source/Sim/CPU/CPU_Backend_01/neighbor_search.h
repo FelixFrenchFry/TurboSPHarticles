@@ -16,51 +16,54 @@
 
 namespace Sim
 {
-	class BruteForce final : public ISimNeighborSearch
+	// forward declarations
+	class SimBackend_CPU01;
+
+	// TODO: add this as a friend class and let it access private members
+	// TODO: instead of neighbor search ctx structs that have to be adapted per backend?
+	class NS_BruteForce_CPU01 : public I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------
 
-		BruteForce(Bench::BenchmarksMgr& benchmarksMgr);
+		explicit NS_BruteForce_CPU01(SimBackend_CPU01& backend);
 
-		const char* Name() const override { return "BruteForce_CPU_01"; }
+		const char* Name() const override { return "BruteForce_CPU01"; }
 
-		void Init() override;
+		void Init(const SimParams& params) override;
 
-		void Construct(const NeighborSearchContext& ctx) override;
+		void Construct(const SimParams& params) override;
 
-		void Query(const NeighborSearchContext& ctx,
-				   const NeighborSearchResult& out) override;
+		void Query(const SimParams& params) override;
 
 	private: // ----------------------------------------------------------------
-
-		// managers
-		Bench::BenchmarksMgr& benchmarksMgr_;
+		
+		SimBackend_CPU01& be_;
 	};
 
-	class SpatialHashing_Simple final : public ISimNeighborSearch
+	// TODO: add this as a friend class and let it access private members
+	// TODO: instead of neighbor search ctx structs that have to be adapted per backend?
+	class NS_SpatialHashingBasic_CPU01 : public I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------
 
-		SpatialHashing_Simple(Bench::BenchmarksMgr& benchmarksMgr);
+		explicit NS_SpatialHashingBasic_CPU01(SimBackend_CPU01& backend);
 
-		const char* Name() const override { return "SpatialHashing_CPU_01"; }
+		const char* Name() const override { return "SpatialHashing_CPU01"; }
 
-		void Init() override;
+		void Init(const SimParams& params) override;
 
-		void Construct(const NeighborSearchContext& ctx) override;
+		void Construct(const SimParams& params) override;
 
-		void Query(const NeighborSearchContext& ctx,
-				   const NeighborSearchResult& out) override;
+		void Query(const SimParams& params) override;
 
 	private: // ----------------------------------------------------------------
+
+		SimBackend_CPU01& be_;
 
 		// grid of cells, each made up of a key and a bucket
 		using Key = uint64_t;
 		using Bucket = std::vector<uint32_t>;
 		using CellGrid = ankerl::unordered_dense::map<Key, Bucket>;
-
-		// managers
-		Bench::BenchmarksMgr& benchmarksMgr_;
 
 		// data structures
 		CellGrid cellGridF_{};
