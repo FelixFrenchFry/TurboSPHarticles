@@ -111,6 +111,9 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 					F.xVel[idx] = 0.0f;
 					F.yVel[idx] = 0.0f;
 					F.zVel[idx] = 0.0f;
+					F.xVelPred[idx] = 0.0f;
+					F.yVelPred[idx] = 0.0f;
+					F.zVelPred[idx] = 0.0f;
 
 					// no acceleration by default
 					F.xAcc[idx] = 0.0f;
@@ -126,11 +129,12 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 					F.yAccExt[idx] = 0.0f;
 					F.zAccExt[idx] = 0.0f;
 
-					// default density, pressure, etc...
-					F.density[idx] = params.restDensityF;
+					// default pressure, density, etc...
+					F.sourceTerm[idx] = 0.0f;
+					F.diagElem[idx] = 0.0f;
+					F.sysVecElem[idx] = 0.0f;
 					F.pressure[idx] = 0.0f;
-					F.mass[idx] = params.massF;
-					F.size[idx] = params.particleSizeF;
+					F.density[idx] = params.restDensityF;
 
 					// use global idx as ID
 					F.id[idx] = static_cast<std::uint32_t>(idx);
@@ -236,8 +240,6 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 				// default density, pressure, etc...
 				B.density[idx] = params.restDensityB;
 				B.pressure[idx] = 0.0f;
-				B.mass[idx] = params.massB;
-				B.size[idx] = params.particleSizeB;
 
 				// use global idx as ID
 				B.id[idx] = static_cast<std::uint32_t>(idx);
@@ -332,8 +334,6 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				// default density, pressure, etc...
 				B.density.push_back(params.restDensityB);
 				B.pressure.push_back(0.0f);
-				B.mass.push_back(params.massB);
-				B.size.push_back(params.particleSizeB);
 
 				// simple running ID
 				B.id.push_back(static_cast<uint32_t>(B.id.size()));

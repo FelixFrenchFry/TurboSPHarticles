@@ -42,23 +42,21 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	// resize backend fluid data structures
 	xPosF_.resize(N_F_); yPosF_.resize(N_F_); zPosF_.resize(N_F_);
 	xVelF_.resize(N_F_); yVelF_.resize(N_F_); zVelF_.resize(N_F_);
+	xVelPredF_.resize(N_F_); yVelPredF_.resize(N_F_); zVelPredF_.resize(N_F_);
 	xAccF_.resize(N_F_); yAccF_.resize(N_F_); zAccF_.resize(N_F_);
 	xAccPressF_.resize(N_F_); yAccPressF_.resize(N_F_); zAccPressF_.resize(N_F_);
 	xAccViscF_.resize(N_F_); yAccViscF_.resize(N_F_); zAccViscF_.resize(N_F_);
 	xAccExtF_.resize(N_F_); yAccExtF_.resize(N_F_); zAccExtF_.resize(N_F_);
-	densityF_.resize(N_F_);
+	sourceTermF_.resize(N_F_);
+	diagElemF_.resize(N_F_);
+	sysVecElemF_.resize(N_F_);
 	pressureF_.resize(N_F_);
-	massF_.resize(N_F_);
-	sizeF_.resize(N_F_);
+	densityF_.resize(N_F_);
 	idF_.resize(N_F_);
 
 	// resize backend boundary data structures
 	xPosB_.resize(N_B_); yPosB_.resize(N_B_); zPosB_.resize(N_B_);
 	xVelB_.resize(N_B_); yVelB_.resize(N_B_); zVelB_.resize(N_B_);
-	densityB_.resize(N_B_);
-	pressureB_.resize(N_B_);
-	massB_.resize(N_B_);
-	sizeB_.resize(N_B_);
 	idB_.resize(N_B_);
 
 	// parallel region for the copy
@@ -70,14 +68,16 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		{
 			xPosF_[i] = F.xPos[i]; yPosF_[i] = F.yPos[i]; zPosF_[i] = F.zPos[i];
 			xVelF_[i] = F.xVel[i]; yVelF_[i] = F.yVel[i]; zVelF_[i] = F.zVel[i];
+			xVelPredF_[i] = F.xVelPred[i]; yVelPredF_[i] = F.yVelPred[i]; zVelPredF_[i] = F.zVelPred[i];
 			xAccF_[i] = F.xAcc[i]; yAccF_[i] = F.yAcc[i]; zAccF_[i] = F.zAcc[i];
 			xAccPressF_[i] = F.xAccPress[i]; yAccPressF_[i] = F.yAccPress[i]; zAccPressF_[i] = F.zAccPress[i];
 			xAccViscF_[i] = F.xAccVisc[i]; yAccViscF_[i] = F.yAccVisc[i]; zAccViscF_[i] = F.zAccVisc[i];
 			xAccExtF_[i] = F.xAccExt[i]; yAccExtF_[i] = F.yAccExt[i]; zAccExtF_[i] = F.zAccExt[i];
-			densityF_[i] = F.density[i];
+			sourceTermF_[i] = F.sourceTerm[i];
+			diagElemF_[i] = F.diagElem[i];
+			sysVecElemF_[i] = F.sysVecElem[i];
 			pressureF_[i] = F.pressure[i];
-			massF_[i] = F.mass[i];
-			sizeF_[i] = F.size[i];
+			densityF_[i] = F.density[i];
 			idF_[i] = F.id[i];
 		}
 
@@ -87,10 +87,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		{
 			xPosB_[i] = B.xPos[i]; yPosB_[i] = B.yPos[i]; zPosB_[i] = B.zPos[i];
 			xVelB_[i] = B.xVel[i]; yVelB_[i] = B.yVel[i]; zVelB_[i] = B.zVel[i];
-			densityB_[i] = B.density[i];
-			pressureB_[i] = B.pressure[i];
-			massB_[i] = B.mass[i];
-			sizeB_[i] = B.size[i];
+
 			idB_[i] = B.id[i];
 		}
 	}
@@ -118,14 +115,16 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		{
 			F.xPos[i] = xPosF_[i]; F.yPos[i] = yPosF_[i]; F.zPos[i] = zPosF_[i];
 			F.xVel[i] = xVelF_[i]; F.yVel[i] = yVelF_[i]; F.zVel[i] = zVelF_[i];
+			F.xVelPred[i] = xVelPredF_[i]; F.yVelPred[i] = yVelPredF_[i]; F.zVelPred[i] = zVelPredF_[i];
 			F.xAcc[i] = xAccF_[i]; F.yAcc[i] = yAccF_[i]; F.zAcc[i] = zAccF_[i];
 			F.xAccPress[i] = xAccPressF_[i]; F.yAccPress[i] = yAccPressF_[i]; F.zAccPress[i] = zAccPressF_[i];
 			F.xAccVisc[i] = xAccViscF_[i]; F.yAccVisc[i] = yAccViscF_[i]; F.zAccVisc[i] = zAccViscF_[i];
 			F.xAccExt[i] = xAccExtF_[i]; F.yAccExt[i] = yAccExtF_[i]; F.zAccExt[i] = zAccExtF_[i];
-			F.density[i] = densityF_[i];
+			F.sourceTerm[i] = sourceTermF_[i];
+			F.diagElem[i] = diagElemF_[i];
+			F.sysVecElem[i] = sysVecElemF_[i];
 			F.pressure[i] = pressureF_[i];
-			F.mass[i] = massF_[i];
-			F.size[i] = sizeF_[i];
+			F.density[i] = densityF_[i];
 			F.id[i] = idF_[i];
 		}
 
@@ -135,10 +134,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		{
 			B.xPos[i] = xPosB_[i]; B.yPos[i] = yPosB_[i]; B.zPos[i] = zPosB_[i];
 			B.xVel[i] = xVelB_[i]; B.yVel[i] = yVelB_[i]; B.zVel[i] = zVelB_[i];
-			B.density[i] = densityB_[i];
-			B.pressure[i] = pressureB_[i];
-			B.mass[i] = massB_[i];
-			B.size[i] = sizeB_[i];
 			B.id[i] = idB_[i];
 		}
 	}

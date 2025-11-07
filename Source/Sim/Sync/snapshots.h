@@ -61,10 +61,6 @@ namespace Sync
 		// densities and pressures
 		std::vector<float> density;
 		std::vector<float> pressure;
-
-		// masses and sizes
-		std::vector<float> mass;
-		std::vector<float> size;
 	};
 
 	// data structure for exporting parts of the simulation state

@@ -55,8 +55,8 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 	// initial param values
 	temp_ =
 	{
-		.taitExponent = simParams.taitExponent,
-		.stiffness = simParams.stiffness,
+		.gammaPress = simParams.gammaPress,
+		.jacobiOmega = simParams.jacobiOmega,
 		.viscosityF = simParams.viscosityF,
 		.viscosityB = simParams.viscosityB,
 		.gravity = simParams.gravity.y
@@ -301,8 +301,8 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 {
 	ImGui::Spacing();
 
-	BuildParamElement_TaitExponent(simParams);
-	BuildParamElement_Stiffness(simParams);
+	BuildParamElement_GammaPress(simParams);
+	BuildParamElement_JacobiOmega(simParams);
 	BuildParamElement_ViscosityF(simParams);
 	BuildParamElement_ViscosityB(simParams);
 	BuildParamElement_Gravity(simParams);
@@ -743,45 +743,45 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	}
 }
 
-void UserInterfaceMgr::BuildParamElement_TaitExponent(const Sim::SimParams& simParams)
+void UserInterfaceMgr::BuildParamElement_GammaPress(const Sim::SimParams& simParams)
 {
-	const bool cached = changed_.taitExponent;
+	const bool cached = changed_.gammaPress;
 	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
 	ImGui::SetNextItemWidth(170);
-	if (ImGui::InputFloat(" tait exponent##input_taitExponent",
-		&temp_.taitExponent, mags_.taitExponent[0], mags_.taitExponent[1], "%.1f"))
+	if (ImGui::InputFloat(" gamma press##input_gammaPress",
+		&temp_.gammaPress, mags_.gammaPress[0], mags_.gammaPress[1], "%.1f"))
 	{
-		const bool changed = !Base::ApproxEqu(temp_.taitExponent, simParams.taitExponent);
+		const bool changed = !Base::ApproxEqu(temp_.gammaPress, simParams.gammaPress);
 
 		if (changed && liveParamEditing_) // apply param changes immediately
 		{
-			simParamsMgr_.Set_TaitExponent(temp_.taitExponent);
+			simParamsMgr_.Set_GammaPress(temp_.gammaPress);
 		}
 
 		// mark unsaved changes when not live editing
-		changed_.taitExponent = changed && !liveParamEditing_;
+		changed_.gammaPress = changed && !liveParamEditing_;
 		unsavedParamChanges_ = changed && !liveParamEditing_;
 	}
 	if (cached) { ImGui::PopStyleColor(); }
 }
 
-void UserInterfaceMgr::BuildParamElement_Stiffness(const Sim::SimParams& simParams)
+void UserInterfaceMgr::BuildParamElement_JacobiOmega(const Sim::SimParams& simParams)
 {
-	const bool cached = changed_.stiffness;
+	const bool cached = changed_.jacobiOmega;
 	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
 	ImGui::SetNextItemWidth(170);
-	if (ImGui::InputFloat(" stiffness##input_stiffness",
-		&temp_.stiffness, mags_.stiffness[0], mags_.stiffness[1], "%.0f"))
+	if (ImGui::InputFloat(" jacobi omega##input_jacobiOmega",
+		&temp_.jacobiOmega, mags_.jacobiOmega[0], mags_.jacobiOmega[1], "%.0f"))
 	{
-		const bool changed = !Base::ApproxEqu(temp_.stiffness, simParams.stiffness);
+		const bool changed = !Base::ApproxEqu(temp_.jacobiOmega, simParams.jacobiOmega);
 
 		if (changed && liveParamEditing_) // apply param changes immediately
 		{
-			simParamsMgr_.Set_Stiffness(temp_.stiffness);
+			simParamsMgr_.Set_JacobiOmega(temp_.jacobiOmega);
 		}
 
 		// mark unsaved changes when not live editing
-		changed_.stiffness = changed && !liveParamEditing_;
+		changed_.jacobiOmega = changed && !liveParamEditing_;
 		unsavedParamChanges_ = changed && !liveParamEditing_;
 	}
 	if (cached) { ImGui::PopStyleColor(); }
@@ -923,15 +923,15 @@ void UserInterfaceMgr::ApplyParamChanges()
 {
 	if (!unsavedParamChanges_) { return; }
 
-	if (changed_.taitExponent)
+	if (changed_.gammaPress)
 	{
-		simParamsMgr_.Set_TaitExponent(temp_.taitExponent);
-		changed_.taitExponent = false;
+		simParamsMgr_.Set_GammaPress(temp_.gammaPress);
+		changed_.gammaPress = false;
 	}
-	if (changed_.stiffness)
+	if (changed_.jacobiOmega)
 	{
-		simParamsMgr_.Set_Stiffness(temp_.stiffness);
-		changed_.stiffness = false;
+		simParamsMgr_.Set_JacobiOmega(temp_.jacobiOmega);
+		changed_.jacobiOmega = false;
 	}
 	if (changed_.viscosityF)
 	{
@@ -956,15 +956,15 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 {
 	if (!unsavedParamChanges_) { return; }
 
-	if (changed_.taitExponent)
+	if (changed_.gammaPress)
 	{
-		temp_.taitExponent = simParams.taitExponent;
-		changed_.taitExponent = false;
+		temp_.gammaPress = simParams.gammaPress;
+		changed_.gammaPress = false;
 	}
-	if (changed_.stiffness)
+	if (changed_.jacobiOmega)
 	{
-		temp_.stiffness = simParams.stiffness;
-		changed_.stiffness = false;
+		temp_.jacobiOmega = simParams.jacobiOmega;
+		changed_.jacobiOmega = false;
 	}
 	if (changed_.viscosityF)
 	{

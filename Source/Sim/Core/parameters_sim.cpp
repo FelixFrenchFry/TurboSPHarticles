@@ -322,39 +322,39 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_TaitExponent(float taitExponent)
+void SimParamsMgr::Set_GammaPress(float gammaPress)
 {
 	// detect if parameter would actually change
 	bool changed = false;
 
-	Base::MarkIfChanged(taitExponent, params_.taitExponent, changed);
+	Base::MarkIfChanged(gammaPress, params_.gammaPress, changed);
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'taitExponent' from {} to {}",
-		params_.taitExponent, taitExponent);
+	SPDLOG_INFO("Changed 'gammaPress' from {} to {}",
+		params_.gammaPress, gammaPress);
 
 	// apply changes
 	BeginWrite();
-	params_.taitExponent = taitExponent;
+	params_.gammaPress = gammaPress;
 	EndWrite();
 }
 
-void SimParamsMgr::Set_Stiffness(float stiffness)
+void SimParamsMgr::Set_JacobiOmega(float jacobiOmega)
 {
 	// detect if parameter would actually change
 	bool changed = false;
 
-	Base::MarkIfChanged(stiffness, params_.stiffness, changed);
+	Base::MarkIfChanged(jacobiOmega, params_.jacobiOmega, changed);
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'stiffness' from {} to {}",
-		params_.stiffness, stiffness);
+	SPDLOG_INFO("Changed 'jacobiOmega' from {} to {}",
+		params_.jacobiOmega, jacobiOmega);
 
 	// apply changes
 	BeginWrite();
-	params_.stiffness = stiffness;
+	params_.jacobiOmega = jacobiOmega;
 	EndWrite();
 }
 
@@ -560,13 +560,13 @@ bool SimParamsMgr::AssertParamDerivationCorrectness()
 	{
 		return par.massB > 0.0f;
 	});
-	ok &= Check("taitExponent < 0", true, [&]()
+	ok &= Check("gammaPress < 0", true, [&]()
 	{
-		return par.taitExponent >= 0.0f;
+		return par.gammaPress >= 0.0f;
 	});
-	ok &= Check("stiffness < 0", true, [&]()
+	ok &= Check("jacobiOmega < 0", true, [&]()
 	{
-		return par.stiffness >= 0.0f;
+		return par.jacobiOmega >= 0.0f;
 	});
 	ok &= Check("viscosityF < 0", true, [&]()
 	{
@@ -622,8 +622,8 @@ void SimParamsMgr::PresetParams_A()
 	float timeStep			= 0.0001f;
 	float particleSize		= 0.01f;
 	float restDensity		= 1'000.0f;
-	float taitExponent		= 7.0f;
-	float stiffness			= 57000.0f;
+	float gammaPress		= 0.5f;
+	float jacobiOmega		= 0.6f;
 	float viscosity			= 0.000003f;
 	float gravity			= -9.81f;
 	float kernelSuppRatio	= 2.0f;
@@ -635,8 +635,8 @@ void SimParamsMgr::PresetParams_A()
 	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
 	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
 	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
-	Set_TaitExponent(taitExponent);
-	Set_Stiffness(stiffness);
+	Set_GammaPress(gammaPress);
+	Set_JacobiOmega(jacobiOmega);
 	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
 	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
 	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
@@ -647,14 +647,14 @@ void SimParamsMgr::PresetParams_B()
 {
 	// TODO: differentiate between fluid and boundary particles?
 
-	float timeStep = 0.0001f;
-	float particleSize = 0.01f;
-	float restDensity = 1'000.0f;
-	float taitExponent = 7.0f;
-	float stiffness = 57000.0f;
-	float viscosity = 0.00009f;
-	float gravity = -9.81f;
-	float kernelSuppRatio = 2.0f;
+	float timeStep			= 0.0001f;
+	float particleSize		= 0.01f;
+	float restDensity		= 1'000.0f;
+	float gammaPress		= 0.5f;
+	float jacobiOmega		= 0.6f;
+	float viscosity			= 0.00009f;
+	float gravity			= -9.81f;
+	float kernelSuppRatio	= 2.0f;
 
 	Set_SimRunning(false);
 	Set_SimRunNextStep(false);
@@ -663,8 +663,8 @@ void SimParamsMgr::PresetParams_B()
 	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
 	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
 	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
-	Set_TaitExponent(taitExponent);
-	Set_Stiffness(stiffness);
+	Set_GammaPress(gammaPress);
+	Set_JacobiOmega(jacobiOmega);
 	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
 	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
 	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });

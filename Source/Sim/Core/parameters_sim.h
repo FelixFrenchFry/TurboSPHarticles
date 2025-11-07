@@ -46,12 +46,15 @@ namespace Sim
 		float massB				= 0.001f;
 
 		// pressure
-		float taitExponent		= 7.0f;
-		float stiffness			= 57000.0f;
+		float gammaPress		= 0.5f;
+		float jacobiOmega		= 0.6f;
 
 		// viscosity
 		float viscosityF		= 0.000003f;
 		float viscosityB		= 0.000003f;
+
+		float taitExponent		= -1.0f; // TODO: to be removed
+		float stiffness			= -1.0f; // TODO: to be removed
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
@@ -96,8 +99,8 @@ namespace Sim
 		void Set_ParticleSize(float particleSize, Base::ParticleType type);
 		void Set_RestDensity(float restDensity, Base::ParticleType type);
 		void Set_Mass(float mass, Base::ParticleType type);
-		void Set_TaitExponent(float taitExponent);
-		void Set_Stiffness(float stiffness);
+		void Set_GammaPress(float gammaPress);
+		void Set_JacobiOmega(float jacobiOmega);
 		void Set_Viscosity(float viscosity, Base::ParticleType type);
 		void Set_Gravity(glm::vec3 gravity);
 		void Set_KernelSuppRatio(float kernelSuppRatio);

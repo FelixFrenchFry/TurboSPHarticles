@@ -167,18 +167,39 @@ namespace Export {
 				gF.createAttribute("N_particles", F.N_);
 
 				// write SoA arrays
-				Write1D(gF, "xPos", F.xPos, opt);  Write1D(gF, "yPos", F.yPos, opt);  Write1D(gF, "zPos", F.zPos, opt);
-				Write1D(gF, "xVel", F.xVel, opt);  Write1D(gF, "yVel", F.yVel, opt);  Write1D(gF, "zVel", F.zVel, opt);
-				Write1D(gF, "xAcc", F.xAcc, opt);  Write1D(gF, "yAcc", F.yAcc, opt);  Write1D(gF, "zAcc", F.zAcc, opt);
+				Write1D(gF, "xPos", F.xPos, opt);
+				Write1D(gF, "yPos", F.yPos, opt);
+				Write1D(gF, "zPos", F.zPos, opt);
 
-				Write1D(gF, "xAccPress", F.xAccPress, opt);  Write1D(gF, "yAccPress", F.yAccPress, opt);  Write1D(gF, "zAccPress", F.zAccPress, opt);
-				Write1D(gF, "xAccVisc", F.xAccVisc, opt);  Write1D(gF, "yAccVisc", F.yAccVisc, opt);  Write1D(gF, "zAccVisc", F.zAccVisc, opt);
-				Write1D(gF, "xAccExt", F.xAccExt, opt);  Write1D(gF, "yAccExt", F.yAccExt, opt);  Write1D(gF, "zAccExt", F.zAccExt, opt);
+				Write1D(gF, "xVel", F.xVel, opt);
+				Write1D(gF, "yVel", F.yVel, opt);
+				Write1D(gF, "zVel", F.zVel, opt);
 
-				Write1D(gF, "density", F.density, opt);
+				Write1D(gF, "xVelPred", F.xVelPred, opt);
+				Write1D(gF, "yVelPred", F.yVelPred, opt);
+				Write1D(gF, "zVelPred", F.zVelPred, opt);
+
+				Write1D(gF, "xAcc", F.xAcc, opt);
+				Write1D(gF, "yAcc", F.yAcc, opt);
+				Write1D(gF, "zAcc", F.zAcc, opt);
+
+				Write1D(gF, "xAccPress", F.xAccPress, opt);
+				Write1D(gF, "yAccPress", F.yAccPress, opt);
+				Write1D(gF, "zAccPress", F.zAccPress, opt);
+
+				Write1D(gF, "xAccVisc", F.xAccVisc, opt);
+				Write1D(gF, "yAccVisc", F.yAccVisc, opt);
+				Write1D(gF, "zAccVisc", F.zAccVisc, opt);
+
+				Write1D(gF, "xAccExt", F.xAccExt, opt);
+				Write1D(gF, "yAccExt", F.yAccExt, opt);
+				Write1D(gF, "zAccExt", F.zAccExt, opt);
+
+				Write1D(gF, "sourceTerm", F.sourceTerm, opt);
+				Write1D(gF, "diagElem", F.diagElem, opt);
+				Write1D(gF, "sysVecElem", F.sysVecElem, opt);
 				Write1D(gF, "pressure", F.pressure, opt);
-				Write1D(gF, "mass", F.mass, opt);
-				Write1D(gF, "size", F.size, opt);
+				Write1D(gF, "density", F.density, opt);
 
 				Write1D(gF, "id", F.id, opt);
 			}
@@ -191,11 +212,13 @@ namespace Export {
 				gB.createAttribute("N_particles", B.N_);
 
 				// write SoA arrays
-				Write1D(gB, "xPos", B.xPos, opt);  Write1D(gB, "yPos", B.yPos, opt);  Write1D(gB, "zPos", B.zPos, opt);
-				Write1D(gB, "xVel", B.xVel, opt);  Write1D(gB, "yVel", B.yVel, opt);  Write1D(gB, "zVel", B.zVel, opt);
+				Write1D(gB, "xPos", B.xPos, opt);
+				Write1D(gB, "yPos", B.yPos, opt);
+				Write1D(gB, "zPos", B.zPos, opt);
 
-				Write1D(gB, "mass", B.mass, opt);
-				Write1D(gB, "size", B.size, opt);
+				Write1D(gB, "xVel", B.xVel, opt);
+				Write1D(gB, "yVel", B.yVel, opt);
+				Write1D(gB, "zVel", B.zVel, opt);
 
 				Write1D(gB, "id", B.id, opt);
 			}
@@ -231,18 +254,39 @@ namespace Export {
 			auto& F = state.fluidParticles;
 
 			// read SoA arrays
-			Read1D(gF, "xPos", F.xPos);  Read1D(gF, "yPos", F.yPos);  Read1D(gF, "zPos", F.zPos);
-			Read1D(gF, "xVel", F.xVel);  Read1D(gF, "yVel", F.yVel);  Read1D(gF, "zVel", F.zVel);
-			Read1D(gF, "xAcc", F.xAcc);  Read1D(gF, "yAcc", F.yAcc);  Read1D(gF, "zAcc", F.zAcc);
+			Read1D(gF, "xPos", F.xPos);
+			Read1D(gF, "yPos", F.yPos);
+			Read1D(gF, "zPos", F.zPos);
 
-			Read1D(gF, "xAccPress", F.xAccPress);  Read1D(gF, "yAccPress", F.yAccPress);  Read1D(gF, "zAccPress", F.zAccPress);
-			Read1D(gF, "xAccVisc", F.xAccVisc);   Read1D(gF, "yAccVisc", F.yAccVisc);   Read1D(gF, "zAccVisc", F.zAccVisc);
-			Read1D(gF, "xAccExt", F.xAccExt);    Read1D(gF, "yAccExt", F.yAccExt);    Read1D(gF, "zAccExt", F.zAccExt);
+			Read1D(gF, "xVel", F.xVel);
+			Read1D(gF, "yVel", F.yVel);
+			Read1D(gF, "zVel", F.zVel);
 
-			Read1D(gF, "density", F.density);
+			Read1D(gF, "xVelPred", F.xVelPred);
+			Read1D(gF, "yVelPred", F.yVelPred);
+			Read1D(gF, "zVelPred", F.zVelPred);
+
+			Read1D(gF, "xAcc", F.xAcc);
+			Read1D(gF, "yAcc", F.yAcc);
+			Read1D(gF, "zAcc", F.zAcc);
+
+			Read1D(gF, "xAccPress", F.xAccPress);
+			Read1D(gF, "yAccPress", F.yAccPress);
+			Read1D(gF, "zAccPress", F.zAccPress);
+
+			Read1D(gF, "xAccVisc", F.xAccVisc);
+			Read1D(gF, "yAccVisc", F.yAccVisc);
+			Read1D(gF, "zAccVisc", F.zAccVisc);
+
+			Read1D(gF, "xAccExt", F.xAccExt);
+			Read1D(gF, "yAccExt", F.yAccExt);
+			Read1D(gF, "zAccExt", F.zAccExt);
+
+			Read1D(gF, "sourceTerm", F.sourceTerm);
+			Read1D(gF, "diagElem", F.diagElem);
+			Read1D(gF, "sysVecElem", F.sysVecElem);
 			Read1D(gF, "pressure", F.pressure);
-			Read1D(gF, "mass", F.mass);
-			Read1D(gF, "size", F.size);
+			Read1D(gF, "density", F.density);
 
 			Read1D(gF, "id", F.id);
 
@@ -260,11 +304,13 @@ namespace Export {
 			auto& B = state.boundaryParticles;
 
 			// read SoA arrays
-			Read1D(gB, "xPos", B.xPos);  Read1D(gB, "yPos", B.yPos);  Read1D(gB, "zPos", B.zPos);
-			Read1D(gB, "xVel", B.xVel);  Read1D(gB, "yVel", B.yVel);  Read1D(gB, "zVel", B.zVel);
+			Read1D(gB, "xPos", B.xPos);
+			Read1D(gB, "yPos", B.yPos);
+			Read1D(gB, "zPos", B.zPos);
 
-			Read1D(gB, "mass", B.mass);
-			Read1D(gB, "size", B.size);
+			Read1D(gB, "xVel", B.xVel);
+			Read1D(gB, "yVel", B.yVel);
+			Read1D(gB, "zVel", B.zVel);
 
 			Read1D(gB, "id", B.id);
 

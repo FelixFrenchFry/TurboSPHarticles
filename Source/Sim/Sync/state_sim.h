@@ -26,14 +26,16 @@ namespace Sync
 		// fields
 		std::span<float> xPos, yPos, zPos;
 		std::span<float> xVel, yVel, zVel;
+		std::span<float> xVelPred, yVelPred, zVelPred;
 		std::span<float> xAcc, yAcc, zAcc;
 		std::span<float> xAccPress, yAccPress, zAccPress;
 		std::span<float> xAccVisc, yAccVisc, zAccVisc;
 		std::span<float> xAccExt, yAccExt, zAccExt;
-		std::span<float> density;
+		std::span<float> sourceTerm;
+		std::span<float> diagElem;
+		std::span<float> sysVecElem;
 		std::span<float> pressure;
-		std::span<float> mass;
-		std::span<float> size;
+		std::span<float> density;
 	};
 
 	// view into boundary particle data
@@ -47,10 +49,8 @@ namespace Sync
 		// fields
 		std::span<float> xPos, yPos, zPos;
 		std::span<float> xVel, yVel, zVel;
-		std::span<float> density;
 		std::span<float> pressure;
-		std::span<float> mass;
-		std::span<float> size;
+		std::span<float> density;
 	};
 
 	// backend-agnostic representation of fluid particles
@@ -71,7 +71,12 @@ namespace Sync
 		std::vector<float> yVel;
 		std::vector<float> zVel;
 
-		// accelerations (total)
+		// predicted velocities
+		std::vector<float> xVelPred;
+		std::vector<float> yVelPred;
+		std::vector<float> zVelPred;
+
+		// accelerations
 		std::vector<float> xAcc;
 		std::vector<float> yAcc;
 		std::vector<float> zAcc;
@@ -92,13 +97,12 @@ namespace Sync
 		std::vector<float> yAccExt;
 		std::vector<float> zAccExt;
 
-		// densities and pressures
-		std::vector<float> density;
+		// pressures, densities, and related solver data
+		std::vector<float> sourceTerm;
+		std::vector<float> diagElem;
+		std::vector<float> sysVecElem;
 		std::vector<float> pressure;
-
-		// masses and sizes
-		std::vector<float> mass;
-		std::vector<float> size;
+		std::vector<float> density;
 
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
@@ -112,6 +116,10 @@ namespace Sync
 			xVel.reserve(N);
 			yVel.reserve(N);
 			zVel.reserve(N);
+
+			xVelPred.reserve(N);
+			yVelPred.reserve(N);
+			zVelPred.reserve(N);
 
 			xAcc.reserve(N);
 			yAcc.reserve(N);
@@ -129,10 +137,11 @@ namespace Sync
 			yAccExt.reserve(N);
 			zAccExt.reserve(N);
 
-			density.reserve(N);
+			sourceTerm.reserve(N);
+			diagElem.reserve(N);
+			sysVecElem.reserve(N);
 			pressure.reserve(N);
-			mass.reserve(N);
-			size.reserve(N);
+			density.reserve(N);
 		}
 
 		// resizes all vectors consistently
@@ -148,6 +157,10 @@ namespace Sync
 			xVel.resize(N_);
 			yVel.resize(N_);
 			zVel.resize(N_);
+
+			xVelPred.resize(N_);
+			yVelPred.resize(N_);
+			zVelPred.resize(N_);
 
 			xAcc.resize(N_);
 			yAcc.resize(N_);
@@ -165,10 +178,11 @@ namespace Sync
 			yAccExt.resize(N_);
 			zAccExt.resize(N_);
 
-			density.resize(N_);
+			sourceTerm.resize(N_);
+			diagElem.resize(N_);
+			sysVecElem.resize(N_);
 			pressure.resize(N_);
-			mass.resize(N_);
-			size.resize(N_);
+			density.resize(N_);
 		}
 
 		// builds and returns a mutable view into the data
@@ -187,6 +201,10 @@ namespace Sync
 				.yVel = std::span<float>(yVel),
 				.zVel = std::span<float>(zVel),
 
+				.xVelPred = std::span<float>(xVelPred),
+				.yVelPred = std::span<float>(yVelPred),
+				.zVelPred = std::span<float>(zVelPred),
+
 				.xAcc = std::span<float>(xAcc),
 				.yAcc = std::span<float>(yAcc),
 				.zAcc = std::span<float>(zAcc),
@@ -203,10 +221,11 @@ namespace Sync
 				.yAccExt = std::span<float>(yAccExt),
 				.zAccExt = std::span<float>(zAccExt),
 
-				.density = std::span<float>(density),
+				.sourceTerm = std::span<float>(sourceTerm),
+				.diagElem = std::span<float>(diagElem),
+				.sysVecElem = std::span<float>(sysVecElem),
 				.pressure = std::span<float>(pressure),
-				.mass = std::span<float>(mass),
-				.size = std::span<float>(size)
+				.density = std::span<float>(density)
 			};
 		}
 
@@ -215,8 +234,6 @@ namespace Sync
 		{
 			return const_cast<FluidParticles*>(this)->view();
 		}
-
-		// TODO: SESPH-specific data?
 
 		// TODO: IISPH-specific data?
 	};
@@ -241,13 +258,9 @@ namespace Sync
 
 		// TODO: accelerations for rigid moving boundaries?
 
-		// densities and pressures
-		std::vector<float> density;
+		// pressures and densities
 		std::vector<float> pressure;
-
-		// masses and sizes
-		std::vector<float> mass;
-		std::vector<float> size;
+		std::vector<float> density;
 
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
@@ -262,10 +275,8 @@ namespace Sync
 			yVel.reserve(N);
 			zVel.reserve(N);
 
-			density.reserve(N);
 			pressure.reserve(N);
-			mass.reserve(N);
-			size.reserve(N);
+			density.reserve(N);
 		}
 
 		// resizes all vectors consistently
@@ -282,10 +293,8 @@ namespace Sync
 			yVel.resize(N_);
 			zVel.resize(N_);
 
-			density.resize(N_);
 			pressure.resize(N_);
-			mass.resize(N_);
-			size.resize(N_);
+			density.resize(N_);
 		}
 
 		// builds and returns a mutable view into the data
@@ -304,10 +313,8 @@ namespace Sync
 				.yVel = std::span<float>(yVel),
 				.zVel = std::span<float>(zVel),
 
-				.density = std::span<float>(density),
 				.pressure = std::span<float>(pressure),
-				.mass = std::span<float>(mass),
-				.size = std::span<float>(size)
+				.density = std::span<float>(density)
 			};
 		}
 
@@ -317,8 +324,6 @@ namespace Sync
 			return const_cast<BoundaryParticles*>(this)->view();
 		}
 
-		// TODO: SESPH-specific data?
-
 		// TODO: IISPH-specific data?
 	};
 
@@ -326,7 +331,6 @@ namespace Sync
 	// including all data making up the state, enabling lossless save & load
 	// (mostly SoA-layout for efficient serialization or conversion into other layouts)
 	// TODO: how to deal with simulation method-specific data?
-	// TODO: how to deal with backend-specific data?
 	struct UniversalSimState
 	{
 		// persistent layout version

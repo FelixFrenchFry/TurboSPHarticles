@@ -77,27 +77,21 @@ namespace Sim
 		// fluid particles
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
+		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_;
 		std::vector<float> xAccF_, yAccF_, zAccF_;
 		std::vector<float> xAccPressF_, yAccPressF_, zAccPressF_;
 		std::vector<float> xAccViscF_, yAccViscF_, zAccViscF_;
 		std::vector<float> xAccExtF_, yAccExtF_, zAccExtF_;
-		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_;
 		std::vector<float> sourceTermF_;
 		std::vector<float> diagElemF_;
 		std::vector<float> sysVecElemF_;
 		std::vector<float> pressureF_;
 		std::vector<float> densityF_;
-		std::vector<float> massF_;
-		std::vector<float> sizeF_;
 		std::vector<uint32_t> idF_;
 
 		// boundary particles
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> xVelB_, yVelB_, zVelB_;
-		std::vector<float> densityB_;
-		std::vector<float> pressureB_;
-		std::vector<float> massB_;
-		std::vector<float> sizeB_;
 		std::vector<uint32_t> idB_;
 
 		// neighbor storage

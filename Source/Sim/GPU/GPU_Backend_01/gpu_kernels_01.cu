@@ -287,7 +287,6 @@ namespace GPU01
 		const float* __restrict__ zVelB,
 		const float* __restrict__ densityF,
 		const float* __restrict__ pressureF,
-		const float* __restrict__ pressureB,
 		const uint32_t* __restrict__ neighCountFF,
 		const uint32_t* __restrict__ neighCountFB,
 		const uint32_t* __restrict__ neighListFF,
@@ -430,8 +429,9 @@ namespace GPU01
 			sum_zAccViscB += viscCoeff * gz;
 
 			// pressure acc contribution from boundary neighbor j
+			// TODO: pressure mirroring applied correctly?
 			const float pressCoeff = (c_massB * (pressureF[i] / (densityF[i] * densityF[i])
-								   + pressureB[j] / (c_restDensityB * c_restDensityB)));
+								   + pressureF[i] / (c_restDensityB * c_restDensityB)));
 
 			sum_xAccPress += pressCoeff * gx;
 			sum_yAccPress += pressCoeff * gy;
@@ -557,7 +557,6 @@ namespace GPU01
 		const float* xVelB, const float* yVelB, const float* zVelB,
 		const float* densityF,
 		const float* pressureF,
-		const float* pressureB,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -578,7 +577,7 @@ namespace GPU01
 
 		K_Accelerations<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, xVelB, yVelB, zVelB,
-			densityF, pressureF, pressureB, neighCountFF, neighCountFB, neighListFF, neighListFB,
+			densityF, pressureF, neighCountFF, neighCountFB, neighListFF, neighListFB,
 			N_MAX_FF, N_MAX_FB, xAccF, yAccF, zAccF, xAccPressF, yAccPressF, zAccPressF,
 			xAccViscF, yAccViscF, zAccViscF, xAccExtF, yAccExtF, zAccExtF);
 

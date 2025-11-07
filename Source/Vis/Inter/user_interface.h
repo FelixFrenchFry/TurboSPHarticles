@@ -38,8 +38,8 @@ namespace Inter
 	// flags for parameter changes
 	struct ParamChanged
 	{
-		bool taitExponent;
-		bool stiffness;
+		bool gammaPress;
+		bool jacobiOmega;
 		bool viscosityF;
 		bool viscosityB;
 		bool gravity;
@@ -48,8 +48,8 @@ namespace Inter
 	// magnitudes of parameter changes
 	struct ParamMags
 	{
-		std::array<float, 2> taitExponent;
-		std::array<float, 2> stiffness;
+		std::array<float, 2> gammaPress;
+		std::array<float, 2> jacobiOmega;
 		std::array<float, 2> viscosityF;
 		std::array<float, 2> viscosityB;
 		std::array<float, 2> gravity;
@@ -58,8 +58,8 @@ namespace Inter
 	// temporary copies for parameter changes
 	struct ParamTemp
 	{
-		float taitExponent;
-		float stiffness;
+		float gammaPress;
+		float jacobiOmega;
 		float viscosityF;
 		float viscosityB;
 		float gravity;
@@ -130,16 +130,16 @@ namespace Inter
 		// TODO: initialize their values
 		ParamChanged changed_
 		{
-			.taitExponent	= false,
-			.stiffness		= false,
+			.gammaPress		= false,
+			.jacobiOmega	= false,
 			.viscosityF		= false,
 			.viscosityB		= false,
 			.gravity		= false
 		};
 		ParamMags mags_
 		{
-			.taitExponent	= { 1.0f,			0.1f },
-			.stiffness		= { 1000.0f,		100.0f },
+			.gammaPress		= { 0.1f,			0.01f },
+			.jacobiOmega	= { 0.1f,			0.01f },
 			.viscosityF		= { 0.00001f,		0.000001f },
 			.viscosityB		= { 0.00001f,		0.000001f },
 			.gravity		= { 1.0f,			0.1f }
@@ -191,8 +191,8 @@ namespace Inter
 			const Vis::VisParams& visParams);
 
 		// parameter section elements for parameter changes
-		void BuildParamElement_TaitExponent(const Sim::SimParams& simParams);
-		void BuildParamElement_Stiffness(const Sim::SimParams& simParams);
+		void BuildParamElement_GammaPress(const Sim::SimParams& simParams);
+		void BuildParamElement_JacobiOmega(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityF(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityB(const Sim::SimParams& simParams);
 		void BuildParamElement_Gravity(const Sim::SimParams& simParams);

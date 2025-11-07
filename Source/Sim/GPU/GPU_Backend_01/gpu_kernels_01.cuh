@@ -53,7 +53,6 @@ namespace GPU01
 		const float* xVelB, const float* yVelB, const float* zVelB,
 		const float* densityF,
 		const float* pressureF,
-		const float* pressureB,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,

@@ -74,10 +74,9 @@ void SimBackend_GPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		GPU::Copy_HostToDevice(d_yAccExtF_.Data(), F.yAccExt.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zAccExtF_.Data(), F.zAccExt.data(), N_F_, stream_);
 
-		GPU::Copy_HostToDevice(d_densityF_.Data(), F.density.data(), N_F_, stream_);
+		GPU::Copy_HostToDevice(d_sourceTermF_.Data(), F.sourceTerm.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_pressureF_.Data(), F.pressure.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_massF_.Data(), F.mass.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_sizeF_.Data(), F.size.data(), N_F_, stream_);
+		GPU::Copy_HostToDevice(d_densityF_.Data(), F.density.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_idF_.Data(), F.id.data(), N_F_, stream_);
 	}
 
@@ -92,10 +91,6 @@ void SimBackend_GPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		GPU::Copy_HostToDevice(d_yVelB_.Data(), B.yVel.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_zVelB_.Data(), B.zVel.data(), N_B_, stream_);
 
-		GPU::Copy_HostToDevice(d_densityB_.Data(), B.density.data(), N_B_, stream_);
-		GPU::Copy_HostToDevice(d_pressureB_.Data(), B.pressure.data(), N_B_, stream_);
-		GPU::Copy_HostToDevice(d_massB_.Data(), B.mass.data(), N_B_, stream_);
-		GPU::Copy_HostToDevice(d_sizeB_.Data(), B.size.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_idB_.Data(), B.id.data(), N_B_, stream_);
 	}
 
@@ -150,10 +145,11 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(F.yAccExt.data(), d_yAccExtF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zAccExt.data(), d_zAccExtF_.Data(), N_F_, stream_);
 
-		GPU::Copy_DeviceToHost(F.density.data(), d_densityF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.sourceTerm.data(), d_sourceTermF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.diagElem.data(), d_diagElemF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.sysVecElem.data(), d_sysVecElemF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.pressure.data(), d_pressureF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.mass.data(), d_massF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.size.data(), d_sizeF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.density.data(), d_densityF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.id.data(), d_idF_.Data(), N_F_, stream_);
 	}
 
@@ -168,10 +164,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(B.yVel.data(), d_yVelB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.zVel.data(), d_zVelB_.Data(), N_B_, stream_);
 
-		GPU::Copy_DeviceToHost(B.density.data(), d_densityB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(B.pressure.data(), d_pressureB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(B.mass.data(), d_massB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(B.size.data(), d_sizeB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.id.data(), d_idB_.Data(), N_B_, stream_);
 	}
 
@@ -377,8 +369,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 			d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data(),
-			d_densityF_.Data(),
-			d_pressureF_.Data(), d_pressureB_.Data(),
+			d_densityF_.Data(), d_pressureF_.Data(),
 			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
 			d_neighListFF_.Data(), d_neighListFB_.Data(),
 			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
