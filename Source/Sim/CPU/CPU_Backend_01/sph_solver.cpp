@@ -346,7 +346,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		const float massF = params.massF;
 		const float massB = params.massB;
 
-		// [ neighbor search ] ---------------------------------------------
+		// --- [ neighbor search ] -----------------------------------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 		#pragma omp single
@@ -360,7 +360,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		neighborSearchStrat_->Query(params);
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
-		// [ kernel weight and gradient computations ] ---------------------
+		// --- [ kernel weight and gradient computations ] -----------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Kernel_Weights,
 										Bench::BenchOp::Kernel_Gradients });
@@ -377,7 +377,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			const float yi = yPosF_[i];
 			const float zi = zPosF_[i];
 
-			// loop over all fluid neighbors
+			// contributions from fluid neighbors
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 			{
 				// global index of neighbor particle
@@ -415,7 +415,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 										 * (-3.0f * t2 * t2 + 12 * t1 * t1);
 			}
 
-			// loop over all boundary neighbors
+			// contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
 				// global index of neighbor particle
@@ -456,16 +456,15 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Kernel_Weights,
 									   Bench::BenchOp::Kernel_Gradients });
 
-		// [ density and pressure computations ] ---------------------------
+		// --- [ density computations ] ------------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
-										Bench::BenchOp::Pressure_Solving });
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
 			float density = 0.0f;
 
-			// loop over all fluid neighbors
+			// contributions from fluid neighbors
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 			{
 				// global index of neighbor particle
@@ -474,7 +473,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				density += massF * kernelWeightsFF_[i][k];
 			}
 
-			// loop over all boundary neighbors
+			// contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
 				// global index of neighbor particle
@@ -485,25 +484,14 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 			densityF_[i] = density;
 
-			const float pressure = params.stiffness * (std::powf(
-				density / params.restDensityF, params.taitExponent) - 1.0f);
-
-			// TODO: do hard clamp, allow negative pressure, or use other fix?
-			pressureF_[i] = std::max(pressure, 0.0f);
 		}
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving,
-									   Bench::BenchOp::Pressure_Solving });
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving });
 
-		// [ acceleration computations ] -----------------------------------
+		// --- [ non-pressure accelerations ] ------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration,
-										Bench::BenchOp::Viscosity_Acceleration,
-										Bench::BenchOp::External_Acceleration,
-										Bench::BenchOp::AccelerationUpdate });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
-			glm::vec3 accPress = { 0.0f, 0.0f, 0.0f };
 			glm::vec3 accViscF = { 0.0f, 0.0f, 0.0f };
 			glm::vec3 accViscB = { 0.0f, 0.0f, 0.0f };
 
@@ -515,10 +503,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			const float vyi = yVelF_[i];
 			const float vzi = zVelF_[i];
 
-			const float presi = pressureF_[i];
-			const float densi = densityF_[i];
-
-			// loop over all fluid neighbors
+			// contributions from fluid neighbors
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 			{
 				// global index of neighbor particle
@@ -539,15 +524,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 						  / (glm::dot(posDiff, posDiff)
 						  + 0.01f * sizeFSqu))
 						  * kernelGradientsFF_[i][k];
-
-				// pressure acc contribution from fluid neighbor j
-				accPress += massF
-						  * (presi / (densi * densi)
-						  + pressureF_[j] / (densityF_[j] * densityF_[j]))
-						  * kernelGradientsFF_[i][k];
 			}
 
-			// loop over all boundary neighbors
+			// contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
 				// global index of neighbor particle
@@ -568,42 +547,248 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 						  / (glm::dot(posDiff, posDiff)
 						  + 0.01f * sizeFSqu))
 						  * kernelGradientsFB_[i][k];
-
-				// pressure acc contribution from boundary neighbor j
-				accPress += massB
-						  * (presi / (densi * densi)
-						  + pressureB_[j] / (params.restDensityB * params.restDensityB))
-						  * kernelGradientsFB_[i][k];
 			}
 
 			// finalize accelerations
 			// (3D -> factor 2 * (dim + 2))
 			accViscF *= 2.0f * (3 + 2) * params.viscosityF;
 			accViscB *= 2.0f * (3 + 2) * params.viscosityB;
-			accPress *= -1.0f;
 
 			xAccViscF_[i] = accViscF.x + accViscB.x;
 			yAccViscF_[i] = accViscF.y + accViscB.y;
 			zAccViscF_[i] = accViscF.z + accViscB.z;
-
-			xAccPressF_[i] = accPress.x;
-			yAccPressF_[i] = accPress.y;
-			zAccPressF_[i] = accPress.z;
 
 			// TODO: add surface tension acc contribution
 			xAccExtF_[i] = params.gravity.x;
 			yAccExtF_[i] = params.gravity.y;
 			zAccExtF_[i] = params.gravity.z;
 
-			// sum final acceleration components
-			xAccF_[i] = xAccPressF_[i] + xAccViscF_[i] + xAccExtF_[i];
-			yAccF_[i] = yAccPressF_[i] + yAccViscF_[i] + yAccExtF_[i];
-			zAccF_[i] = zAccPressF_[i] + zAccViscF_[i] + zAccExtF_[i];
+			// compute predicted velocity from non-pressure accelerations
+			xVelPredF_[i] = xVelF_[i] + params.timeStep * (xAccViscF_[i] + xAccExtF_[i]);
+			yVelPredF_[i] = yVelF_[i] + params.timeStep * (yAccViscF_[i] + yAccExtF_[i]);
+			zVelPredF_[i] = zVelF_[i] + params.timeStep * (zAccViscF_[i] + zAccExtF_[i]);
 		}
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration,
-									   Bench::BenchOp::Viscosity_Acceleration,
-									   Bench::BenchOp::External_Acceleration,
-									   Bench::BenchOp::AccelerationUpdate });
+
+		// --- [ source-term for density invariance ] ----------------------
+
+		#pragma omp for schedule(static)
+		for (uint32_t i = 0; i < N_F_; i++)
+		{
+			float tmpSourceTerm = 0.0f;
+
+			const float vxi = xVelF_[i];
+			const float vyi = yVelF_[i];
+			const float vzi = zVelF_[i];
+
+			// contributions from fluid neighbors
+			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFF_[i][k];
+
+				tmpSourceTerm += glm::dot(glm::vec3{ vxi - xVelPredF_[j],
+													   vyi - yVelPredF_[j],
+													   vzi - zVelPredF_[j] }, kernelGradientsFF_[i][k])
+							   * (massF / params.restDensityF); // TODO: BA uses real density instead?
+			}
+
+			// contributions from boundary neighbors
+			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFB_[i][k];
+
+				tmpSourceTerm += glm::dot(glm::vec3{ vxi - xVelB_[j],
+													   vyi - yVelB_[j],
+													   vzi - zVelB_[j] }, kernelGradientsFB_[i][k])
+							   * (massB / params.restDensityB);
+			}
+
+			sourceTermF_[i] = 1.0f - ((massF / params.restDensityF) 
+							/ (massF / densityF_[i])) - params.timeStep * tmpSourceTerm;
+		}
+
+		// --- [ diagonal matrix elements ] --------------------------------
+
+		#pragma omp for schedule(static)
+		for (uint32_t i = 0; i < N_F_; i++)
+		{
+			float tmpDiagElem = 0.0f;
+			glm::vec3 cF = { 0.0f, 0.0f, 0.0f };
+			glm::vec3 cB = { 0.0f, 0.0f, 0.0f };
+			const float densitySquInv = 1.0f / (densityF_[i] * densityF_[i]);
+
+			// add c-term contributions from fluid neighbors
+			for (uint32_t k = 0; k< neighborsFF_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFF_[i][k];
+
+				cF += massF * kernelGradientsFF_[i][k];
+			}
+
+			// add c-term contributions from boundary neighbors
+			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFB_[i][k];
+
+				cB += massB * kernelGradientsFB_[i][k];
+			}
+
+			// finalize c-term
+			glm::vec3 c = -1.0f * (cF * densitySquInv)
+						- 2.0f * params.gammaPress * (cB * densitySquInv);
+
+			// part 1 (top) of the summation
+			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFF_[i][k];
+
+				tmpDiagElem += massF * glm::dot(c, kernelGradientsFF_[i][k]);
+			}
+
+			// part 2 (middle) of the summation
+			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFF_[i][k];
+
+				const glm::vec3 tmpVec = (massF * densitySquInv) * (-1.0f * kernelGradientsFF_[i][k]);
+				tmpDiagElem += massF * glm::dot(tmpVec, kernelGradientsFF_[i][k]);
+			}
+
+			// part 3 (bottom) of the summation
+			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFB_[i][k];
+
+				tmpDiagElem += massB * glm::dot(c, kernelGradientsFB_[i][k]);
+			}
+
+			// finalize diagonal element
+			diagElemF_[i] = params.timeStep * params.timeStep * tmpDiagElem;
+		}
+
+		// --- [ initialize pressure for jacobi solver ] -------------------
+
+		#pragma omp for schedule(static)
+		for (uint32_t i = 0; i < N_F_; i++)
+		{
+			float tmpPressure = 0.0f;
+
+			// only update pressure if particle has neighbors
+			if (!Base::ApproxEqu(diagElemF_[i], 0.0f))
+			{
+				tmpPressure = params.jacobiOmega * (sourceTermF_[i] / diagElemF_[i]);
+			}
+
+			// clamp pressure to non-negative values
+			pressureF_[i] = glm::max(tmpPressure, 0.0f);
+		}
+
+		// --- [ relaxed jacobi solver for pressure ] ----------------------
+
+		int cnt = 0;
+		while (cnt < 3)
+		{
+			// [ loop 1: pressure acceleration ] ---------------------------
+			#pragma omp for schedule(static)
+			for (uint32_t i = 0; i < N_F_; i++)
+			{
+				glm::vec3 accPress = { 0.0f, 0.0f, 0.0f };
+
+				const float presi = pressureF_[i];
+				const float densi = densityF_[i];
+
+				// contributions from fluid neighbors
+				for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
+				{
+					// global index of neighbor particle
+					const uint32_t j = neighborsFF_[i][k];
+
+					// pressure acc contribution from fluid neighbor j
+					accPress += massF
+							  * (presi / (densi * densi)
+							  + pressureF_[j] / (densityF_[j] * densityF_[j]))
+							  * kernelGradientsFF_[i][k];
+				}
+
+				// contributions from boundary neighbors
+				for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
+				{
+					// global index of neighbor particle
+					const uint32_t j = neighborsFB_[i][k];
+
+					// pressure acc contribution from boundary neighbor j
+					accPress += massB
+							  * (presi / (densi * densi)
+							  + pressureF_[j] / (params.restDensityB * params.restDensityB))
+							  * kernelGradientsFB_[i][k];
+				}
+
+				// finalize pressure acceleration
+				accPress *= -1.0f;
+
+				xAccPressF_[i] = accPress.x;
+				yAccPressF_[i] = accPress.y;
+				zAccPressF_[i] = accPress.z;
+			}
+
+			// [ loop 2: relaxed jacobi solver ] ---------------------------
+			#pragma omp for schedule(static)
+			for (uint32_t i = 0; i < N_F_; i++)
+			{
+				float tmpSysVecElem = 0.0f;
+
+				const float axi = xAccPressF_[i];
+				const float ayi = yAccPressF_[i];
+				const float azi = zAccPressF_[i];
+
+				// contributions from fluid neighbors
+				for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
+				{
+					// global index of neighbor particle
+					const uint32_t j = neighborsFF_[i][k];
+
+					tmpSysVecElem += glm::dot(glm::vec3{ axi - xAccPressF_[j],
+														   ayi - yAccPressF_[j],
+														   azi - zAccPressF_[j] }, kernelGradientsFF_[i][k])
+								   * (massF / densityF_[j]);
+				}
+
+				// contributions from boundary neighbors
+				for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
+				{
+					// global index of neighbor particle
+					const uint32_t j = neighborsFB_[i][k];
+
+					tmpSysVecElem += glm::dot(glm::vec3{ axi,
+														   ayi,
+														   azi }, kernelGradientsFB_[i][k])
+								   * (massB / params.restDensityB);
+				}
+
+				// finalize system vector element
+				sysVecElemF_[i] = params.timeStep * params.timeStep * tmpSysVecElem;
+
+				float tmpPressure = 0.0f;
+
+				// only update pressure if particle has neighbors
+				if (!Base::ApproxEqu(diagElemF_[i], 0.0f))
+				{
+					tmpPressure = pressureF_[i] + params.jacobiOmega
+								* ((sourceTermF_[i] - sysVecElemF_[i]) / diagElemF_[i]);
+				}
+
+				// clamp pressure to non-negative values
+				pressureF_[i] = glm::max(tmpPressure, 0.0f);
+			}
+
+			cnt++;
+		}
 
 		// [ velocity and position updates ] -------------------------------
 

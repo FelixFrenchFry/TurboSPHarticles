@@ -81,8 +81,12 @@ namespace Sim
 		std::vector<float> xAccPressF_, yAccPressF_, zAccPressF_;
 		std::vector<float> xAccViscF_, yAccViscF_, zAccViscF_;
 		std::vector<float> xAccExtF_, yAccExtF_, zAccExtF_;
-		std::vector<float> densityF_;
+		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_;
+		std::vector<float> sourceTermF_;
+		std::vector<float> diagElemF_;
+		std::vector<float> sysVecElemF_;
 		std::vector<float> pressureF_;
+		std::vector<float> densityF_;
 		std::vector<float> massF_;
 		std::vector<float> sizeF_;
 		std::vector<uint32_t> idF_;
