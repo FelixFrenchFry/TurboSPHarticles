@@ -237,9 +237,9 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 				B.yVel[idx] = 0.0f;
 				B.zVel[idx] = 0.0f;
 
-				// default density, pressure, etc...
-				B.density[idx] = params.restDensityB;
+				// default pressure, density, etc...
 				B.pressure[idx] = 0.0f;
+				B.density[idx] = params.restDensityB;
 
 				// use global idx as ID
 				B.id[idx] = static_cast<std::uint32_t>(idx);
@@ -331,9 +331,9 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				B.yVel.push_back(0.0f);
 				B.zVel.push_back(0.0f);
 
-				// default density, pressure, etc...
-				B.density.push_back(params.restDensityB);
+				// default pressure, density, etc...
 				B.pressure.push_back(0.0f);
+				B.density.push_back(params.restDensityB);
 
 				// simple running ID
 				B.id.push_back(static_cast<uint32_t>(B.id.size()));

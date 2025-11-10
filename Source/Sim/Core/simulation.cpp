@@ -23,6 +23,7 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 	, benchmarksMgr_{ benchmarksMgr }
 	, statisticsMgr_{ statisticsMgr }
 {
+	// nothing
 }
 
 bool SimulationMgr::Init()

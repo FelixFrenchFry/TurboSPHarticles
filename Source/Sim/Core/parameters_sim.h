@@ -53,8 +53,8 @@ namespace Sim
 		float viscosityF		= 0.000003f;
 		float viscosityB		= 0.000003f;
 
-		float taitExponent		= -1.0f; // TODO: to be removed
-		float stiffness			= -1.0f; // TODO: to be removed
+		float taitExponent		= 7.0f; // TODO: to be removed
+		float stiffness			= 57000.0f; // TODO: to be removed
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };

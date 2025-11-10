@@ -32,7 +32,7 @@ namespace Vis
 	{
 		WindowConfig window
 		{
-			.size			= {1920, 1080},
+			.size			= {2120, 1316},
 			.title			= "TSP Visual",
 			.resizable		= true,
 			.vsync			= true
@@ -40,7 +40,7 @@ namespace Vis
 
 		FrameBufferConfig frameBuffer
 		{
-			.size			= {1920, 1080},
+			.size			= {2120, 1316},
 			.dpiScale		= 1.0f
 		};
 

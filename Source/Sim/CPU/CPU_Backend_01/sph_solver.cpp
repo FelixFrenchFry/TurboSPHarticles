@@ -9,6 +9,8 @@
 #include <glm/vec3.hpp>
 
 // internal
+#include <iostream>
+
 #include "Source/Base/helpers.h"
 #include "neighbor_search.h"
 #include "cpu_backend_01.h"
@@ -576,9 +578,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		{
 			float tmpSourceTerm = 0.0f;
 
-			const float vxi = xVelF_[i];
-			const float vyi = yVelF_[i];
-			const float vzi = zVelF_[i];
+			const float vxi = xVelPredF_[i];
+			const float vyi = yVelPredF_[i];
+			const float vzi = zVelPredF_[i];
 
 			// contributions from fluid neighbors
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
@@ -595,12 +597,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			// contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFB_[i][k];
-
-				tmpSourceTerm += glm::dot(glm::vec3{ vxi - xVelB_[j],
-													   vyi - yVelB_[j],
-													   vzi - zVelB_[j] }, kernelGradientsFB_[i][k])
+				// TODO: subtract actual boundary velocity when moving them?
+				tmpSourceTerm += glm::dot(glm::vec3{ vxi - 0.0f,
+													   vyi - 0.0f,
+													   vzi - 0.0f }, kernelGradientsFB_[i][k])
 							   * (massB / params.restDensityB);
 			}
 
@@ -616,55 +616,41 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			float tmpDiagElem = 0.0f;
 			glm::vec3 cF = { 0.0f, 0.0f, 0.0f };
 			glm::vec3 cB = { 0.0f, 0.0f, 0.0f };
-			const float densitySquInv = 1.0f / (densityF_[i] * densityF_[i]);
+			const float restDensitySquInv = 1.0f / (params.restDensityF 
+												 * params.restDensityF);
 
 			// add c-term contributions from fluid neighbors
 			for (uint32_t k = 0; k< neighborsFF_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFF_[i][k];
-
 				cF += massF * kernelGradientsFF_[i][k];
 			}
 
 			// add c-term contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFB_[i][k];
-
 				cB += massB * kernelGradientsFB_[i][k];
 			}
 
 			// finalize c-term
-			glm::vec3 c = -1.0f * (cF * densitySquInv)
-						- 2.0f * params.gammaPress * (cB * densitySquInv);
+			glm::vec3 c = -1.0f * (cF * restDensitySquInv)
+						- 2.0f * params.gammaPress * (cB * restDensitySquInv);
 
 			// part 1 (top) of the summation
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFF_[i][k];
-
 				tmpDiagElem += massF * glm::dot(c, kernelGradientsFF_[i][k]);
 			}
 
 			// part 2 (middle) of the summation
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFF_[i][k];
-
-				const glm::vec3 tmpVec = (massF * densitySquInv) * (-1.0f * kernelGradientsFF_[i][k]);
+				const glm::vec3 tmpVec = (massF * restDensitySquInv) * (-1.0f * kernelGradientsFF_[i][k]);
 				tmpDiagElem += massF * glm::dot(tmpVec, kernelGradientsFF_[i][k]);
 			}
 
 			// part 3 (bottom) of the summation
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFB_[i][k];
-
 				tmpDiagElem += massB * glm::dot(c, kernelGradientsFB_[i][k]);
 			}
 
@@ -719,13 +705,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				// contributions from boundary neighbors
 				for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 				{
-					// global index of neighbor particle
-					const uint32_t j = neighborsFB_[i][k];
-
 					// pressure acc contribution from boundary neighbor j
-					accPress += massB
-							  * (presi / (densi * densi)
-							  + pressureF_[j] / (params.restDensityB * params.restDensityB))
+					accPress += params.gammaPress * massB
+							  * 2.0f * (presi / (densi * densi))
 							  * kernelGradientsFB_[i][k];
 				}
 
@@ -762,12 +744,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				// contributions from boundary neighbors
 				for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 				{
-					// global index of neighbor particle
-					const uint32_t j = neighborsFB_[i][k];
-
-					tmpSysVecElem += glm::dot(glm::vec3{ axi,
-														   ayi,
-														   azi }, kernelGradientsFB_[i][k])
+					tmpSysVecElem += glm::dot(glm::vec3{ axi - 0.0f,
+														   ayi - 0.0f,
+														   azi - 0.0f }, kernelGradientsFB_[i][k])
 								   * (massB / params.restDensityB);
 				}
 
@@ -784,10 +763,55 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				}
 
 				// clamp pressure to non-negative values
-				pressureF_[i] = glm::max(tmpPressure, 0.0f);
+				pressureF_[i] = glm::max(tmpPressure, 0.0f); 
 			}
 
 			cnt++;
+		}
+
+		// [ finalize pressure acceleration for integration ] --------------
+
+		#pragma omp for schedule(static)
+		for (uint32_t i = 0; i < N_F_; i++)
+		{
+			glm::vec3 accPress = { 0.0f, 0.0f, 0.0f };
+
+			const float presi = pressureF_[i];
+			const float densi = densityF_[i];
+
+			// contributions from fluid neighbors
+			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
+			{
+				// global index of neighbor particle
+				const uint32_t j = neighborsFF_[i][k];
+
+				// pressure acc contribution from fluid neighbor j
+				accPress += massF
+						  * (presi / (densi * densi)
+						  + pressureF_[j] / (densityF_[j] * densityF_[j]))
+						  * kernelGradientsFF_[i][k];
+			}
+
+			// contributions from boundary neighbors
+			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
+			{
+				// pressure acc contribution from boundary neighbor j
+				accPress += params.gammaPress * massB
+						  * 2.0f * (presi / (densi * densi))
+						  * kernelGradientsFB_[i][k];
+			}
+
+			// finalize pressure acceleration
+			accPress *= -1.0f;
+
+			xAccPressF_[i] = accPress.x;
+			yAccPressF_[i] = accPress.y;
+			zAccPressF_[i] = accPress.z; 
+
+			// finalize total acceleration
+			xAccF_[i] = xAccViscF_[i] + xAccExtF_[i] + xAccPressF_[i];
+			yAccF_[i] = yAccViscF_[i] + yAccExtF_[i] + yAccPressF_[i];
+			zAccF_[i] = zAccViscF_[i] + zAccExtF_[i] + zAccPressF_[i];
 		}
 
 		// [ velocity and position updates ] -------------------------------
@@ -798,9 +822,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
 			// explicit Euler integration
-			xVelF_[i] = xVelF_[i] + params.timeStep * xAccF_[i];
-			yVelF_[i] = yVelF_[i] + params.timeStep * yAccF_[i];
-			zVelF_[i] = zVelF_[i] + params.timeStep * zAccF_[i];
+			// TODO: only refine using pressure acceleration instead of full update?
+			xVelF_[i] = xVelPredF_[i] + params.timeStep * xAccPressF_[i];
+			yVelF_[i] = yVelPredF_[i] + params.timeStep * yAccPressF_[i];
+			zVelF_[i] = zVelPredF_[i] + params.timeStep * zAccPressF_[i];
 
 			// semi-implicit Euler integration
 			// (using updated velocity for position update)
