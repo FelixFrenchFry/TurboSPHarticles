@@ -342,9 +342,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			(1.0 / (4.0 * static_cast<double>(PI))) * sizeInv * sizeInv * sizeInv);
 
 		const float sizeF = params.particleSizeF;
-
-		const float sizeFSqu = params.particleSizeF * params.particleSizeF;
-
 		const float massF = params.massF;
 		const float massB = params.massB;
 
@@ -469,18 +466,12 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			// contributions from fluid neighbors
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFF_[i][k];
-
 				density += massF * kernelWeightsFF_[i][k];
 			}
 
 			// contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
-				// global index of neighbor particle
-				const uint32_t j = neighborsFB_[i][k];
-
 				density += massB * kernelWeightsFB_[i][k];
 			}
 
@@ -511,11 +502,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				// global index of neighbor particle
 				const uint32_t j = neighborsFF_[i][k];
 
-				const float dx = xi - xPosF_[j];
-				const float dy = yi - yPosF_[j];
-				const float dz = zi - zPosF_[j];
-
-				const glm::vec3 posDiff = { dx, dy, dz };
+				const glm::vec3 posDiff = { xi - xPosF_[j],
+											yi - yPosF_[j],
+											zi - zPosF_[j] };
 				const glm::vec3 velDiff = { vxi - xVelF_[j],
 											vyi - yVelF_[j],
 											vzi - zVelF_[j] };
@@ -524,7 +513,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				accViscF += (massF / densityF_[j])
 						  * (glm::dot(velDiff, posDiff)
 						  / (glm::dot(posDiff, posDiff)
-						  + 0.01f * sizeFSqu))
+						  + 0.01f * sizeF * sizeF))
 						  * kernelGradientsFF_[i][k];
 			}
 
@@ -534,11 +523,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				// global index of neighbor particle
 				const uint32_t j = neighborsFB_[i][k];
 
-				const float dx = xi - xPosB_[j];
-				const float dy = yi - yPosB_[j];
-				const float dz = zi - zPosB_[j];
-
-				const glm::vec3 posDiff = { dx, dy, dz };
+				const glm::vec3 posDiff = { xi - xPosB_[j],
+											yi - yPosB_[j],
+										    zi - zPosB_[j] };
 				const glm::vec3 velDiff = { vxi - xVelB_[j],
 											vyi - yVelB_[j],
 											vzi - zVelB_[j] };
@@ -547,7 +534,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				accViscB += (massB / params.restDensityB)
 						  * (glm::dot(velDiff, posDiff)
 						  / (glm::dot(posDiff, posDiff)
-						  + 0.01f * sizeFSqu))
+						  + 0.01f * sizeF * sizeF))
 						  * kernelGradientsFB_[i][k];
 			}
 
@@ -578,9 +565,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		{
 			float tmpSourceTerm = 0.0f;
 
-			const float vxi = xVelPredF_[i];
-			const float vyi = yVelPredF_[i];
-			const float vzi = zVelPredF_[i];
+			const float vpxi = xVelPredF_[i];
+			const float vpyi = yVelPredF_[i];
+			const float vpzi = zVelPredF_[i];
 
 			// contributions from fluid neighbors
 			for (uint32_t k = 0; k < neighborsFF_[i].size(); k++)
@@ -588,24 +575,25 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				// global index of neighbor particle
 				const uint32_t j = neighborsFF_[i][k];
 
-				tmpSourceTerm += glm::dot(glm::vec3{ vxi - xVelPredF_[j],
-													   vyi - yVelPredF_[j],
-													   vzi - zVelPredF_[j] }, kernelGradientsFF_[i][k])
-							   * (massF / params.restDensityF); // TODO: BA uses real density instead?
+				tmpSourceTerm += glm::dot(glm::vec3{ vpxi - xVelPredF_[j],
+													   vpyi - yVelPredF_[j],
+													   vpzi - zVelPredF_[j] }, 
+										  kernelGradientsFF_[i][k]) * massF;
 			}
 
 			// contributions from boundary neighbors
 			for (uint32_t k = 0; k < neighborsFB_[i].size(); k++)
 			{
-				// TODO: subtract actual boundary velocity when moving them?
-				tmpSourceTerm += glm::dot(glm::vec3{ vxi - 0.0f,
-													   vyi - 0.0f,
-													   vzi - 0.0f }, kernelGradientsFB_[i][k])
-							   * (massB / params.restDensityB);
+				// TODO: subtract actual boundary velocity when adding non-static boundaries
+				tmpSourceTerm += glm::dot(glm::vec3{ vpxi - 0.0f,
+													   vpyi - 0.0f,
+													   vpzi - 0.0f }, 
+										  kernelGradientsFB_[i][k]) * massB;
 			}
 
-			sourceTermF_[i] = 1.0f - ((massF / params.restDensityF) 
-							/ (massF / densityF_[i])) - params.timeStep * tmpSourceTerm;
+			// finalize source term
+			sourceTermF_[i] = params.restDensityF - densityF_[i]
+							- params.timeStep * tmpSourceTerm;
 		}
 
 		// --- [ diagonal matrix elements ] --------------------------------
