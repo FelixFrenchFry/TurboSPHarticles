@@ -345,7 +345,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		// [ density and pressure computations ] -------------------------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
-										Bench::BenchOp::Pressure_Solving });
+										Bench::BenchOp::Pressure_JacobiSolver });
 		GPU01::Launch_DensityPressure(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -356,7 +356,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 		GPU::StreamSync(stream_);
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving,
-									   Bench::BenchOp::Pressure_Solving });
+									   Bench::BenchOp::Pressure_JacobiSolver });
 
 		// [ acceleration computations ] ---------------------------------------
 

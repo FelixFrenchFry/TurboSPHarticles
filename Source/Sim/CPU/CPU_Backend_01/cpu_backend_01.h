@@ -111,46 +111,55 @@ namespace Sim
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
 		{
 			{
-				.ops = {	Bench::BenchOp::Neighbors_Construction }
+				.ops = { Bench::BenchOp::Neighbors_Construction }
 			},
 			{
-				.ops = {	Bench::BenchOp::Neighbors_Query }
+				.ops = { Bench::BenchOp::Neighbors_Query }
 			},
 			{
-				.ops = {  Bench::BenchOp::Kernel_Weights,
-							Bench::BenchOp::Kernel_Gradients }
+				.ops = { Bench::BenchOp::Kernel_Weights,
+						   Bench::BenchOp::Kernel_Gradients }
 			},
 			{
-				.ops = {	Bench::BenchOp::Density_Solving,
-							Bench::BenchOp::Pressure_Solving }
+				.ops = { Bench::BenchOp::Density_Solving }
 			},
 			{
-				.ops = {	Bench::BenchOp::Pressure_Acceleration,
-							Bench::BenchOp::Viscosity_Acceleration,
-							Bench::BenchOp::External_Acceleration,
-							Bench::BenchOp::AccelerationUpdate }
+				.ops = { Bench::BenchOp::Viscosity_Acceleration,
+						   Bench::BenchOp::External_Acceleration }
 			},
 			{
-				.ops = {	Bench::BenchOp::VelocityUpdate,
-							Bench::BenchOp::PositionUpdate }
+				.ops = { Bench::BenchOp::Pressure_SourceTerm }
 			},
 			{
-				.ops = {  Bench::BenchOp::Statistics_Particles }
+				.ops = { Bench::BenchOp::Pressure_DiagonalElem }
 			},
 			{
-				.ops = {  Bench::BenchOp::Statistics_Density }
+				.ops = { Bench::BenchOp::Pressure_JacobiSolver }
 			},
 			{
-				.ops = {  Bench::BenchOp::Statistics_Velocity }
+				.ops = { Bench::BenchOp::Pressure_Acceleration }
 			},
 			{
-				.ops = {  Bench::BenchOp::Snapshot_Visual }
+				.ops = { Bench::BenchOp::VelocityUpdate,
+						   Bench::BenchOp::PositionUpdate }
 			},
 			{
-				.ops = {  Bench::BenchOp::Total_Sim }
+				.ops = { Bench::BenchOp::Statistics_Particles }
 			},
 			{
-				.ops = {  Bench::BenchOp::Misc_Sim }
+				.ops = { Bench::BenchOp::Statistics_Density }
+			},
+			{
+				.ops = { Bench::BenchOp::Statistics_Velocity }
+			},
+			{
+				.ops = { Bench::BenchOp::Snapshot_Visual }
+			},
+			{
+				.ops = { Bench::BenchOp::Total_Sim }
+			},
+			{
+				.ops = { Bench::BenchOp::Misc_Sim }
 			}
 		};
 	};

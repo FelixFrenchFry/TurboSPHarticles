@@ -80,8 +80,8 @@ void UserInputMgr::UpdateCamera(const Vis::CameraState& camera,
 	if (keys_[GLFW_KEY_S])				{ delta -= forward; }   // backward
 	if (keys_[GLFW_KEY_D])				{ delta += right; }     // right
 	if (keys_[GLFW_KEY_A])				{ delta -= right; }     // left
-	if (keys_[GLFW_KEY_LEFT_SHIFT])		{ delta += worldUp; }   // up
-	if (keys_[GLFW_KEY_LEFT_CONTROL])	{ delta -= worldUp; }   // down
+	if (keys_[GLFW_KEY_UP])				{ delta += worldUp; }   // up
+	if (keys_[GLFW_KEY_DOWN])			{ delta -= worldUp; }   // down
 
 	glm::vec3 tempCamPos = camera.camPos;
 	if (glm::dot(delta, delta) > 0.000001f)

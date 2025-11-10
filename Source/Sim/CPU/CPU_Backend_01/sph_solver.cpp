@@ -176,6 +176,8 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 		// --- [ non-pressure accelerations ] ------------------------------
 
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Viscosity_Acceleration,
+										Bench::BenchOp::External_Acceleration });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
@@ -251,9 +253,12 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			yVelPredF_[i] = yVelF_[i] + params.timeStep * (yAccViscF_[i] + yAccExtF_[i]);
 			zVelPredF_[i] = zVelF_[i] + params.timeStep * (zAccViscF_[i] + zAccExtF_[i]);
 		}
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Viscosity_Acceleration,
+									   Bench::BenchOp::External_Acceleration });
 
 		// --- [ source-term for density invariance ] ----------------------
 
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
@@ -289,9 +294,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			sourceTermF_[i] = params.restDensityF - densityF_[i]
 							- params.timeStep * tmpSourceTerm;
 		}
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm });
 
 		// --- [ diagonal matrix elements ] --------------------------------
 
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_DiagonalElem });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
@@ -341,9 +348,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			// finalize diagonal element
 			diagElemF_[i] = params.timeStep * params.timeStep * tmpDiagElem;
 		}
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_DiagonalElem });
 
 		// --- [ initialize pressure for jacobi solver ] -------------------
 
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
@@ -453,9 +462,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 			cnt++;
 		}
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
 		// [ finalize pressure acceleration for integration ] --------------
 
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 		#pragma omp for schedule(static)
 		for (uint32_t i = 0; i < N_F_; i++)
 		{
@@ -498,6 +509,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			yAccF_[i] = yAccPressF_[i] + yAccViscF_[i] + yAccExtF_[i];
 			zAccF_[i] = zAccPressF_[i] + zAccViscF_[i] + zAccExtF_[i];
 		}
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
 		// [ velocity and position updates ] -------------------------------
 

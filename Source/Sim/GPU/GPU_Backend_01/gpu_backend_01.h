@@ -189,7 +189,7 @@ namespace Sim
 			},
 			{
 				.ops = {	Bench::BenchOp::Density_Solving,
-							Bench::BenchOp::Pressure_Solving }
+							Bench::BenchOp::Pressure_JacobiSolver }
 			},
 			{
 				.ops = {	Bench::BenchOp::Pressure_Acceleration,

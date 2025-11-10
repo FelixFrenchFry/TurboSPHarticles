@@ -33,7 +33,9 @@ namespace Bench
 		Density_Solving,
 
 		// pressure
-		Pressure_Solving,					// computation of pressure values
+		Pressure_JacobiSolver,				// computation of pressure values via the Jacobi solver
+		Pressure_SourceTerm,				// computation of the pressure solver system source term
+		Pressure_DiagonalElem,				// computation of the pressure solver system diagonal elements
 		Pressure_Acceleration,				// computation of the pressure accelerations
 		Pressure_TermCondition,				// evaluation of the pressure solver termination condition
 
@@ -137,9 +139,21 @@ namespace Bench
 				.unit = "ns"
 			},
 			{
-				.op = BenchOp::Pressure_Solving,
-				.name = "pressure solving",
-				.alias = "pres",
+				.op = BenchOp::Pressure_JacobiSolver,
+				.name = "jacobi solver",
+				.alias = "jacSolv",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Pressure_SourceTerm,
+				.name = "source term",
+				.alias = "srcTerm",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Pressure_DiagonalElem,
+				.name = "diagonal element",
+				.alias = "diagElem",
 				.unit = "ns"
 			},
 			{
