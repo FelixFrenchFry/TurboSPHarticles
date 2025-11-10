@@ -647,12 +647,12 @@ void SimParamsMgr::PresetParams_B()
 {
 	// TODO: differentiate between fluid and boundary particles?
 
-	float timeStep			= 0.0001f;
+	float timeStep			= 0.001f;
 	float particleSize		= 0.01f;
 	float restDensity		= 1'000.0f;
 	float gammaPress		= 0.5f;
 	float jacobiOmega		= 0.6f;
-	float viscosity			= 0.00009f;
+	float viscosity			= 0.00003f;
 	float gravity			= -9.81f;
 	float kernelSuppRatio	= 2.0f;
 
