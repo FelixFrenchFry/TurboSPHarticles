@@ -32,7 +32,7 @@ namespace GPU01
 		uint32_t* neighListFB,
 		uint32_t* overflowFlag);
 
-	void Launch_DensityPressure(
+	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t* neighCountFF,
@@ -43,7 +43,71 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		float* densityF,
+		float* densityF);
+
+	void Launch_NonPressureAcc(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* xVelF, const float* yVelF, const float* zVelF,
+		const float* densityF,
+		const uint32_t* neighCountFF,
+		const uint32_t* neighCountFB,
+		const uint32_t* neighListFF,
+		const uint32_t* neighListFB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* xVelPredF, float* yVelPredF, float* zVelPredF,
+		float* xAccViscF, float* yAccViscF, float* zAccViscF,
+		float* xAccExtF, float* yAccExtF, float* zAccExtF);
+
+	void Launch_SourceTerm(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
+		const float* densityF,
+		const uint32_t* neighCountFF,
+		const uint32_t* neighCountFB,
+		const uint32_t* neighListFF,
+		const uint32_t* neighListFB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* sourceTermF);
+
+	void Launch_DiagonalElement(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const uint32_t* neighCountFF,
+		const uint32_t* neighCountFB,
+		const uint32_t* neighListFF,
+		const uint32_t* neighListFB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* diagElemF);
+
+	void Launch_PressureJacobiSolver(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* densityF,
+		const float* sourceTermF,
+		const float* diagElemF,
+		const uint32_t* neighCountFF,
+		const uint32_t* neighCountFB,
+		const uint32_t* neighListFF,
+		const uint32_t* neighListFB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* xAccPressF,
+		float* yAccPressF,
+		float* zAccPressF,
+		float* sysVecElemF,
 		float* pressureF);
 
 	void Launch_Accelerations(

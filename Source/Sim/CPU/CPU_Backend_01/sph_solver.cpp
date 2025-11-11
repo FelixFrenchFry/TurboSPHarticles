@@ -222,9 +222,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				const glm::vec3 posDiff = { xi - xPosB_[j],
 											yi - yPosB_[j],
 										    zi - zPosB_[j] };
-				const glm::vec3 velDiff = { vxi - xVelB_[j],
-											vyi - yVelB_[j],
-											vzi - zVelB_[j] };
+				const glm::vec3 velDiff = { vxi, vyi, vzi };
 
 				// viscosity acc contribution from boundary neighbor j
 				accViscB += (massB / params.restDensityB)
