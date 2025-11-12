@@ -90,12 +90,19 @@ namespace GPU01
 		// destinations
 		float* diagElemF);
 
-	void Launch_PressureJacobiSolver(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* densityF,
+	void Launch_PressureJacobiInit(
 		const float* sourceTermF,
 		const float* diagElemF,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* pressureF);
+
+	void Launch_PressureAcceleration(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* pressureF,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -106,17 +113,15 @@ namespace GPU01
 		// destinations
 		float* xAccPressF,
 		float* yAccPressF,
-		float* zAccPressF,
-		float* sysVecElemF,
-		float* pressureF);
+		float* zAccPressF);
 
-	void Launch_Accelerations(
+	void Launch_PressureRelaxedJacobiSolver(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* xVelF, const float* yVelF, const float* zVelF,
-		const float* xVelB, const float* yVelB, const float* zVelB,
+		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
+		const float* sourceTermF,
+		const float* diagElemF,
 		const float* densityF,
-		const float* pressureF,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -125,14 +130,14 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		float* xAccF, float* yAccF, float* zAccF,
-		float* xAccPressF, float* yAccPressF, float* zAccPressF,
-		float* xAccViscF, float* yAccViscF, float* zAccViscF,
-		float* xAccExtF, float* yAccExtF, float* zAccExtF);
+		float* sysVecElemF,
+		float* pressureF);
 
 	void Launch_Integration(
-		const float* xAccF, const float* yAccF, const float* zAccF,
+		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
+		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* xPosF, float* yPosF, float* zPosF,

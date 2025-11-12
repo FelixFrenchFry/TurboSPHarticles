@@ -318,7 +318,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 	{
 		GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
 
-		// [ neighbor search ] -------------------------------------------------
+		// --- [ neighbor search ] ---------------------------------------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 
@@ -342,55 +342,135 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		GPU::StreamSync(stream_);
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
-		// [ density and pressure computations ] -------------------------------
+		// --- [ density computations ] ----------------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving,
-										Bench::BenchOp::Pressure_JacobiSolver });
-		GPU01::Launch_DensityPressure(
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving });
+		GPU01::Launch_Density(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
 			d_neighListFF_.Data(), d_neighListFB_.Data(),
 			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_, 
-			d_densityF_.Data(), d_pressureF_.Data());
+			d_densityF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving,
-									   Bench::BenchOp::Pressure_JacobiSolver });
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving });
 
-		// [ acceleration computations ] ---------------------------------------
+		// --- [ non-pressure accelerations ] ----------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration,
-										Bench::BenchOp::Viscosity_Acceleration,
-										Bench::BenchOp::External_Acceleration,
-										Bench::BenchOp::AccelerationUpdate });
-		GPU01::Launch_Accelerations(
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Viscosity_Acceleration,
+										Bench::BenchOp::External_Acceleration });
+		GPU01::Launch_NonPressureAcc(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
-			d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data(),
-			d_densityF_.Data(), d_pressureF_.Data(),
+			d_densityF_.Data(),
 			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
 			d_neighListFF_.Data(), d_neighListFB_.Data(),
 			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
-			d_xAccF_.Data(), d_yAccF_.Data(), d_zAccF_.Data(),
-			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
+			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_xAccViscF_.Data(), d_yAccViscF_.Data(), d_zAccViscF_.Data(),
 			d_xAccExtF_.Data(), d_yAccExtF_.Data(), d_zAccExtF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration,
-									   Bench::BenchOp::Viscosity_Acceleration,
-									   Bench::BenchOp::External_Acceleration,
-									   Bench::BenchOp::AccelerationUpdate });
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Viscosity_Acceleration,
+									   Bench::BenchOp::External_Acceleration });
 
-		// [ integration ] -----------------------------------------------------
+		// --- [ source-term for density invariance ] --------------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm });
+		GPU01::Launch_SourceTerm(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
+			d_densityF_.Data(),
+			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+			d_neighListFF_.Data(), d_neighListFB_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_sourceTermF_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm });
+
+		// --- [ diagonal elements of system matrix ] --------------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_DiagonalElem });
+		GPU01::Launch_DiagonalElement(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+			d_neighListFF_.Data(), d_neighListFB_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_diagElemF_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_DiagonalElem });
+
+		// --- [ initialize pressure for jacobi solver ] -----------------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
+		GPU01::Launch_PressureJacobiInit(
+			d_sourceTermF_.Data(), d_diagElemF_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_pressureF_.Data());
+
+		// --- [ relaxed jacobi solver for pressure ] --------------------------
+
+		int cnt = 0;
+		while (cnt < 2)
+		{
+			// [ loop 1: pressure acceleration ] -------------------------------
+			GPU01::Launch_PressureAcceleration(
+				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+				d_pressureF_.Data(),
+				d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+				d_neighListFF_.Data(), d_neighListFB_.Data(),
+				N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
+
+			GPU::StreamSync(stream_);
+
+			// [ loop 2: relaxed jacobi solver ] -------------------------------
+			GPU01::Launch_PressureRelaxedJacobiSolver(
+				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
+				d_sourceTermF_.Data(), d_diagElemF_.Data(), d_densityF_.Data(),
+				d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+				d_neighListFF_.Data(), d_neighListFB_.Data(),
+				N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+				d_sysVecElemF_.Data(), d_pressureF_.Data());
+
+			GPU::StreamSync(stream_);
+
+			cnt++;
+		}
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
+
+		// --- [ finalize pressure acceleration for integration ] --------------
+
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
+		GPU01::Launch_PressureAcceleration(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_pressureF_.Data(),
+			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
+			d_neighListFF_.Data(), d_neighListFB_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
+
+		GPU::StreamSync(stream_);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
+
+		// --- [ velocity and position updates ] -------------------------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
 										Bench::BenchOp::PositionUpdate });
 		GPU01::Launch_Integration(
-			d_xAccF_.Data(), d_yAccF_.Data(), d_zAccF_.Data(),
-			N_F_, N_B_, stream_,
+			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
+			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
+			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data());
 

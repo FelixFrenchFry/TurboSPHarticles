@@ -377,7 +377,7 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, gx, gy, gz);
 
 			// viscosity acc contribution from fluid neighbor j
-			const float accViscCoeff = (c_massF / densityF[j])
+			const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-12f))
 									 * (dvx * dx + dvy * dy + dvz * dz)
 									 / (dx * dx + dy * dy + dz * dz
 									 + 0.01f * c_sizeF * c_sizeF);
@@ -682,19 +682,40 @@ namespace GPU01
 		}
 
 		// finalize diagonal element
-		diagElemF[i] = -1.0f * c_timeStep * c_timeStep * tmp_DiagElemF;
+		diagElemF[i] = c_timeStep * c_timeStep * tmp_DiagElemF;
 	}
 
-	void K_PressureJacobiSolver(
+	__global__
+	void K_PressureJacobiInit(
+		const float* sourceTermF,
+		const float* diagElemF,
+		// destinations
+		float* pressureF)
+	{
+		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+		if (i >= c_N_F) { return; }
+
+		float tmp_pressureF = 0.0f;
+
+		// only update pressure if particle has neighbors
+		if (!(fabsf(diagElemF[i]) <= 1e-6f))
+		{
+			tmp_pressureF = c_jacobiOmega * (sourceTermF[i] / diagElemF[i]);
+		}
+
+		// finalize pressure value by clamping to non-negative
+		pressureF[i] = fmaxf(tmp_pressureF, 0.0f);
+	}
+
+	__global__
+	void K_PressureAcceleration(
 		const float* __restrict__ xPosF,
 		const float* __restrict__ yPosF,
 		const float* __restrict__ zPosF,
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const float* __restrict__ densityF,
-		const float* __restrict__ sourceTermF,
-		const float* __restrict__ diagElemF,
+		const float* __restrict__ pressureF,
 		const uint32_t* __restrict__ neighCountFF,
 		const uint32_t* __restrict__ neighCountFB,
 		const uint32_t* __restrict__ neighListFF,
@@ -703,9 +724,7 @@ namespace GPU01
 		// destinations
 		float* __restrict__ xAccPressF,
 		float* __restrict__ yAccPressF,
-		float* __restrict__ zAccPressF,
-		float* __restrict__ sysVecElemF,
-		float* __restrict__ pressureF)
+		float* __restrict__ zAccPressF)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_N_F) { return; }
@@ -716,7 +735,6 @@ namespace GPU01
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
 		const float pressi = pressureF[i];
-		const float densi = densityF[i];
 
 		// temp accumulation variables
 		float tmp_xAccPressF = 0.0f;
@@ -744,12 +762,13 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, gx, gy, gz);
 
 			// pressure acc contribution from fluid neighbor j
-			const float accPressCoeff = (c_massF * (pressi / (densi * densi)
-									  + pressureF[j] / (densi * densi)));
+			const float accPressCoeff = (c_massF * (pressi / (c_restDensityF * c_restDensityF)
+									  + pressureF[j] / (c_restDensityF * c_restDensityF)));
 
-			tmp_xAccPressF += accPressCoeff * gx;
-			tmp_yAccPressF += accPressCoeff * gy;
-			tmp_zAccPressF += accPressCoeff * gz;
+			// TODO: use fmaf for all other accumulation operations too?
+			tmp_xAccPressF = fmaf(accPressCoeff, gx, tmp_xAccPressF);
+			tmp_yAccPressF = fmaf(accPressCoeff, gy, tmp_yAccPressF);
+			tmp_zAccPressF = fmaf(accPressCoeff, gz, tmp_zAccPressF);
 		}
 
 		const uint32_t baseFB = i * N_MAX_FB;
@@ -774,11 +793,11 @@ namespace GPU01
 
 			// pressure acc contribution from boundary neighbor j
 			const float accPressCoeff = c_gammaPress * (c_massB * 2.0f 
-									  * (pressi / (densi * densi)));
-
-			tmp_xAccPressF += accPressCoeff * gx;
-			tmp_yAccPressF += accPressCoeff * gy;
-			tmp_zAccPressF += accPressCoeff * gz;
+									  * (pressi / (c_restDensityF * c_restDensityF)));
+			// TODO: use fmaf for all other accumulation operations too?
+			tmp_xAccPressF = fmaf(accPressCoeff, gx, tmp_xAccPressF);
+			tmp_yAccPressF = fmaf(accPressCoeff, gy, tmp_yAccPressF);
+			tmp_zAccPressF = fmaf(accPressCoeff, gz, tmp_zAccPressF);
 		}
 
 		// finalize pressure acceleration
@@ -792,39 +811,27 @@ namespace GPU01
 	}
 
 	__global__
-	void K_Accelerations(
+	void K_PressureRelaxedJacobiSolver(
 		const float* __restrict__ xPosF,
 		const float* __restrict__ yPosF,
 		const float* __restrict__ zPosF,
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const float* __restrict__ xVelF,
-		const float* __restrict__ yVelF,
-		const float* __restrict__ zVelF,
-		const float* __restrict__ xVelB,
-		const float* __restrict__ yVelB,
-		const float* __restrict__ zVelB,
+		const float* __restrict__ xAccPressF,
+		const float* __restrict__ yAccPressF,
+		const float* __restrict__ zAccPressF,
+		const float* __restrict__ sourceTermF,
+		const float* __restrict__ diagElemF,
 		const float* __restrict__ densityF,
-		const float* __restrict__ pressureF,
 		const uint32_t* __restrict__ neighCountFF,
 		const uint32_t* __restrict__ neighCountFB,
 		const uint32_t* __restrict__ neighListFF,
 		const uint32_t* __restrict__ neighListFB,
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		// destinations
-		float* __restrict__ xAccF,
-		float* __restrict__ yAccF,
-		float* __restrict__ zAccF,
-		float* __restrict__ xAccPressF,
-		float* __restrict__ yAccPressF,
-		float* __restrict__ zAccPressF,
-		float* __restrict__ xAccViscF,
-		float* __restrict__ yAccViscF,
-		float* __restrict__ zAccViscF,
-		float* __restrict__ xAccExtF,
-		float* __restrict__ yAccExtF,
-		float* __restrict__ zAccExtF)
+		float* __restrict__ sysVecElemF,
+		float* __restrict__ pressureF)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_N_F) { return; }
@@ -834,20 +841,17 @@ namespace GPU01
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
-		const float vxi = xVelF[i];
-		const float vyi = yVelF[i];
-		const float vzi = zVelF[i];
+		const float axi = xAccPressF[i];
+		const float ayi = yAccPressF[i];
+		const float azi = zAccPressF[i];
+
+		// temp accumulation variables
+		float tmp_xSysVecElem = 0.0f;
+		float tmp_ySysVecElem = 0.0f;
+		float tmp_zSysVecElem = 0.0f;
 
 		const uint32_t baseFF = i * N_MAX_FF;
 		const uint32_t cntFF = neighCountFF[i];
-
-		// accumulators
-		float sum_xAccPress = 0.0f;
-		float sum_yAccPress = 0.0f;
-		float sum_zAccPress = 0.0f;
-		float sum_xAccViscF = 0.0f;
-		float sum_yAccViscF = 0.0f;
-		float sum_zAccViscF = 0.0f;
 
 		// FF
 		for (uint32_t k = 0; k < cntFF; k++)
@@ -855,57 +859,25 @@ namespace GPU01
 			// global index of neighbor particle
 			const uint32_t j = neighListFF[baseFF + k];
 
+			// position difference
 			const float dx = xi - xPosF[j];
 			const float dy = yi - yPosF[j];
 			const float dz = zi - zPosF[j];
 
 			// kernel weight and gradient
-			float w = 0.0f;
 			float gx = 0.0f;
 			float gy = 0.0f;
 			float gz = 0.0f;
+			KernelGradient_CubicSpline(dx, dy, dz, gx, gy, gz);
 
-			KernelWeightAndGradient_CubicSpline(
-				dx, dy, dz, w, gx, gy, gz);
-
-			// velocity difference
-			const float dvx = vxi - xVelF[j];
-			const float dvy = vyi - yVelF[j];
-			const float dvz = vzi - zVelF[j];
-
-			const float velDiff_dot_posDiff = dvx * dx
-										    + dvy * dy
-										    + dvz * dz;
-
-			const float posDiff_dot_posDiff = dx * dx
-										    + dy * dy
-										    + dz * dz;
-
-			// viscosity acc contribution from fluid neighbor j
-			const float viscCoeff = (c_massF / densityF[j])
-								  * velDiff_dot_posDiff / (posDiff_dot_posDiff
-								  + 0.01f * c_sizeF * c_sizeF);
-
-			sum_xAccViscF += viscCoeff * gx;
-			sum_yAccViscF += viscCoeff * gy;
-			sum_zAccViscF += viscCoeff * gz;
-
-			// pressure acc contribution from fluid neighbor j
-			const float pressCoeff = (c_massF * (pressureF[i] / (densityF[i] * densityF[i])
-									+ pressureF[j] / (densityF[j] * densityF[j])));
-
-			sum_xAccPress += pressCoeff * gx;
-			sum_yAccPress += pressCoeff * gy;
-			sum_zAccPress += pressCoeff * gz;
+			// system vector element contribution from fluid neighbor j
+			tmp_xSysVecElem += c_massF * (axi - xAccPressF[j]) * gx;
+			tmp_ySysVecElem += c_massF * (ayi - yAccPressF[j]) * gy;
+			tmp_zSysVecElem += c_massF * (azi - zAccPressF[j]) * gz;
 		}
 
 		const uint32_t baseFB = i * N_MAX_FB;
 		const uint32_t cntFB = neighCountFB[i];
-
-		// accumulators
-		float sum_xAccViscB = 0.0f;
-		float sum_yAccViscB = 0.0f;
-		float sum_zAccViscB = 0.0f;
 
 		// FB
 		for (uint32_t k = 0; k < cntFB; k++)
@@ -913,102 +885,73 @@ namespace GPU01
 			// global index of neighbor particle
 			const uint32_t j = neighListFB[baseFB + k];
 
+			// position difference
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
 
 			// kernel weight and gradient
-			float w = 0.0f;
 			float gx = 0.0f;
 			float gy = 0.0f;
 			float gz = 0.0f;
+			KernelGradient_CubicSpline(dx, dy, dz, gx, gy, gz);
 
-			KernelWeightAndGradient_CubicSpline(
-				dx, dy, dz, w, gx, gy, gz);
-
-			// velocity difference
-			const float dvx = vxi - xVelB[j];
-			const float dvy = vyi - yVelB[j];
-			const float dvz = vzi - zVelB[j];
-
-			const float velDiff_dot_posDiff = dvx * dx
-											+ dvy * dy
-											+ dvz * dz;
-
-			const float posDiff_dot_posDiff = dx * dx
-											+ dy * dy
-											+ dz * dz;
-
-			// viscosity acc contribution from boundary neighbor j
-			const float viscCoeff = (c_massB / c_restDensityB)
-								  * velDiff_dot_posDiff / (posDiff_dot_posDiff
-								  + 0.01f * c_sizeF * c_sizeF);
-
-			sum_xAccViscB += viscCoeff * gx;
-			sum_yAccViscB += viscCoeff * gy;
-			sum_zAccViscB += viscCoeff * gz;
-
-			// pressure acc contribution from boundary neighbor j
-			// TODO: pressure mirroring applied correctly?
-			const float pressCoeff = (c_massB * (pressureF[i] / (densityF[i] * densityF[i])
-								   + pressureF[i] / (c_restDensityB * c_restDensityB)));
-
-			sum_xAccPress += pressCoeff * gx;
-			sum_yAccPress += pressCoeff * gy;
-			sum_zAccPress += pressCoeff * gz;
+			// system vector element contribution from boundary neighbor j
+			tmp_xSysVecElem += c_massB * axi * gx;
+			tmp_ySysVecElem += c_massB * ayi * gy;
+			tmp_zSysVecElem += c_massB * azi * gz;
 		}
 
-		// finalize accelerations
-		// (3D -> factor 2 * (dim + 2))
-		const float viscScaleF = 2.0f * (3 + 2) * c_viscosityF;
-		const float viscScaleB = 2.0f * (3 + 2) * c_viscosityB;
-		sum_xAccPress *= -1.0f;
-		sum_yAccPress *= -1.0f;
-		sum_zAccPress *= -1.0f;
+		// finalize system vector element
+		sysVecElemF[i] = c_timeStep * c_timeStep
+					   * (tmp_xSysVecElem + tmp_ySysVecElem + tmp_zSysVecElem);
 
-		xAccViscF[i] = sum_xAccViscF * viscScaleF + sum_xAccViscB * viscScaleB;
-		yAccViscF[i] = sum_yAccViscF * viscScaleF + sum_yAccViscB * viscScaleB;
-		zAccViscF[i] = sum_zAccViscF * viscScaleF + sum_zAccViscB * viscScaleB;
+		float tmp_pressureF = 0.0f;
 
-		xAccPressF[i] = sum_xAccPress;
-		yAccPressF[i] = sum_yAccPress;
-		zAccPressF[i] = sum_zAccPress;
+		// only update pressure if particle has neighbors
+		if (!(fabsf(diagElemF[i]) <= 1e-6f))
+		{
+			tmp_pressureF = pressureF[i] + c_jacobiOmega
+						  * ((sourceTermF[i] - sysVecElemF[i]) / diagElemF[i]);
+		}
 
-		xAccExtF[i] = c_xGravity;
-		yAccExtF[i] = c_yGravity;
-		zAccExtF[i] = c_zGravity;
-
-		// sum final acceleration components
-		xAccF[i] = xAccPressF[i] + xAccViscF[i] + xAccExtF[i];
-		yAccF[i] = yAccPressF[i] + yAccViscF[i] + yAccExtF[i];
-		zAccF[i] = zAccPressF[i] + zAccViscF[i] + zAccExtF[i];
+		// finalize pressure value by clamping to non-negative
+		pressureF[i] = fmaxf(tmp_pressureF, 0.0f);
 	}
 
 	__global__
 	void K_Integration(
-		const float* __restrict__ axF,
-		const float* __restrict__ ayF,
-		const float* __restrict__ azF,
+		const float* __restrict__ xVelPredF,
+		const float* __restrict__ yVelPredF,
+		const float* __restrict__ zVelPredF,
+		const float* __restrict__ xAccPressF,
+		const float* __restrict__ yAccPressF,
+		const float* __restrict__ zAccPressF,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		// destinations
-		float* __restrict__ xF,
-		float* __restrict__ yF,
-		float* __restrict__ zF,
-		float* __restrict__ vxF,
-		float* __restrict__ vyF,
-		float* __restrict__ vzF)
+		float* __restrict__ xPosF,
+		float* __restrict__ yPosF,
+		float* __restrict__ zPosF,
+		float* __restrict__ xVelF,
+		float* __restrict__ yVelF,
+		float* __restrict__ zVelF)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_N_F) { return; }
 
 		// explicit Euler integration for velocity
-		vxF[i] = vxF[i] + c_timeStep * axF[i];
-		vyF[i] = vyF[i] + c_timeStep * ayF[i];
-		vzF[i] = vzF[i] + c_timeStep * azF[i];
+		// (now only refining predicted velocity with pressure acc)
+		// TODO: use fmaf here?
+		xVelF[i] = xVelPredF[i] + c_timeStep * xAccPressF[i];
+		yVelF[i] = yVelPredF[i] + c_timeStep * yAccPressF[i];
+		zVelF[i] = zVelPredF[i] + c_timeStep * zAccPressF[i];
 
-		// semi-implicit Euler integration for position
-		xF[i] = xF[i] + c_timeStep * vxF[i];
-		yF[i] = yF[i] + c_timeStep * vyF[i];
-		zF[i] = zF[i] + c_timeStep * vzF[i];
+		// semi-implicit Euler integration
+		// (using updated velocity for position update)
+		// TODO: use fmaf here?
+		xPosF[i] = xPosF[i] + c_timeStep * xVelF[i];
+		yPosF[i] = yPosF[i] + c_timeStep * yVelF[i];
+		zPosF[i] = zPosF[i] + c_timeStep * zVelF[i];
 	}
 
 } // namespace GPU01
@@ -1149,12 +1092,30 @@ namespace GPU01
 		GPU::CheckLastKernel("K_DiagonalElement()");
 	}
 
-	void Launch_PressureJacobiSolver(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* densityF,
+	void Launch_PressureJacobiInit(
 		const float* sourceTermF,
 		const float* diagElemF,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* pressureF)
+	{
+		// TODO: initialize constants if needed
+
+		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+
+		K_PressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			sourceTermF, diagElemF, pressureF);
+
+		GPU::CheckLastKernel("K_PressureJacobiInit()");
+	}
+
+	void Launch_PressureAcceleration(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* pressureF,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -1165,30 +1126,28 @@ namespace GPU01
 		// destinations
 		float* xAccPressF,
 		float* yAccPressF,
-		float* zAccPressF,
-		float* sysVecElemF,
-		float* pressureF)
+		float* zAccPressF)
 	{
 		// TODO: initialize constants if needed
 
 		const uint32_t N_BLOCKSIZE = 256;
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
-		K_PressureJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, densityF, sourceTermF, diagElemF,
+		K_PressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, pressureF,
 			neighCountFF, neighCountFB, neighListFF, neighListFB, N_MAX_FF, N_MAX_FB,
-			xAccPressF, yAccPressF, zAccPressF, sysVecElemF, pressureF);
+			xAccPressF, yAccPressF, zAccPressF);
 
-		GPU::CheckLastKernel("K_PressureJacobiSolver()");
+		GPU::CheckLastKernel("K_PressureAcceleration()");
 	}
 
-	void Launch_Accelerations(
+	void Launch_PressureRelaxedJacobiSolver(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* xVelF, const float* yVelF, const float* zVelF,
-		const float* xVelB, const float* yVelB, const float* zVelB,
+		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
+		const float* sourceTermF,
+		const float* diagElemF,
 		const float* densityF,
-		const float* pressureF,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -1197,28 +1156,27 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		float* xAccF, float* yAccF, float* zAccF,
-		float* xAccPressF, float* yAccPressF, float* zAccPressF,
-		float* xAccViscF, float* yAccViscF, float* zAccViscF,
-		float* xAccExtF, float* yAccExtF, float* zAccExtF)
+		float* sysVecElemF,
+		float* pressureF)
 	{
 		// TODO: initialize constants if needed
 
 		const uint32_t N_BLOCKSIZE = 256;
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
-		K_Accelerations<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, xVelB, yVelB, zVelB,
-			densityF, pressureF, neighCountFF, neighCountFB, neighListFF, neighListFB,
-			N_MAX_FF, N_MAX_FB, xAccF, yAccF, zAccF, xAccPressF, yAccPressF, zAccPressF,
-			xAccViscF, yAccViscF, zAccViscF, xAccExtF, yAccExtF, zAccExtF);
+		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xAccPressF, yAccPressF, zAccPressF,
+			sourceTermF, diagElemF, densityF, neighCountFF, neighCountFB, neighListFF, neighListFB,
+			N_MAX_FF, N_MAX_FB, sysVecElemF, pressureF);
 
-		GPU::CheckLastKernel("K_Accelerations()");
+		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
 	}
 
 	void Launch_Integration(
-		const float* xAccF, const float* yAccF, const float* zAccF,
+		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
+		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* xPosF, float* yPosF, float* zPosF,
@@ -1230,7 +1188,8 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_Integration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xAccF, yAccF, zAccF, xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
+			xVelPredF, yVelPredF, zVelPredF, xAccPressF, yAccPressF, zAccPressF,
+			N_MAX_FF, N_MAX_FB, xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
 
 		GPU::CheckLastKernel("K_Integration()");
 	}
