@@ -30,11 +30,11 @@ namespace Base
 
 	enum NeighborSearchMethod
 	{
-		BruteForce,			// 0
-		ExplicitGrid1D,		// 1
-		ExplicitGrid3D,		// 2
-		IndexSortBasic,		// 3
-		SpatialHashingBasic // 4
+		BruteForce,				// 0
+		ExplicitGrid1D,			// 1
+		ExplicitGrid3D,			// 2
+		SpatialHashing_Basic,	// 4
+		CellLinkedList_Basic	// 3
 	};
 
 	enum ColorCodingMode

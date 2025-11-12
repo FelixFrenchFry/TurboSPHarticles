@@ -32,6 +32,10 @@ namespace GPU01
 		uint32_t* neighListFB,
 		uint32_t* overflowFlag);
 
+	void Launch_NeighborSearch_CellLinkedListBasic_Construct();
+
+	void Launch_NeighborSearch_CellLinkedListBasic_Query();
+
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,

@@ -42,13 +42,13 @@ namespace Sim
 
 	// TODO: add this as a friend class and let it access private members
 	// TODO: instead of neighbor search ctx structs that have to be adapted per backend?
-	class NS_SpatialHashingBasic_CPU01 : public I_NeighborSearchStrat
+	class NS_SpatialHashing_Basic_CPU01 : public I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------
 
-		explicit NS_SpatialHashingBasic_CPU01(SimBackend_CPU01& backend);
+		explicit NS_SpatialHashing_Basic_CPU01(SimBackend_CPU01& backend);
 
-		const char* Name() const override { return "SpatialHashing_CPU01"; }
+		const char* Name() const override { return "SpatialHashing_Basic_CPU01"; }
 
 		void Init(const SimParams& params) override;
 

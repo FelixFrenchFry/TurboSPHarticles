@@ -23,7 +23,7 @@ using namespace Sim;
 SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
 	: benchmarksMgr_{ benchmarksMgr }
 {
-	neighborSearchStrat_ = std::make_unique<NS_SpatialHashingBasic_CPU01>(*this);
+	neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
 }
 
 void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)

@@ -93,13 +93,13 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 // --- [ spatial hashing implementation ] --------------------------------------
 // -----------------------------------------------------------------------------
 
-NS_SpatialHashingBasic_CPU01::NS_SpatialHashingBasic_CPU01(SimBackend_CPU01& backend)
+NS_SpatialHashing_Basic_CPU01::NS_SpatialHashing_Basic_CPU01(SimBackend_CPU01& backend)
 	: be_{ backend }
 {
 	// nothing
 }
 
-void NS_SpatialHashingBasic_CPU01::Init(const SimParams& params)
+void NS_SpatialHashing_Basic_CPU01::Init(const SimParams& params)
 {
 	cellGridF_.clear();
 	cellGridB_.clear();
@@ -107,7 +107,7 @@ void NS_SpatialHashingBasic_CPU01::Init(const SimParams& params)
 	cellSizeInv_ = 0.0f;
 }
 
-void NS_SpatialHashingBasic_CPU01::Construct(const SimParams& params)
+void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 {
 	cellSize_ = params.kernelRadius;
 	cellSizeInv_ = 1.0f / params.kernelRadius;
@@ -155,7 +155,7 @@ void NS_SpatialHashingBasic_CPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_SpatialHashingBasic_CPU01::Query(const SimParams& params)
+void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -242,7 +242,7 @@ void NS_SpatialHashingBasic_CPU01::Query(const SimParams& params)
 	}
 }
 
-inline int NS_SpatialHashingBasic_CPU01::FloorToInt(float v) noexcept
+inline int NS_SpatialHashing_Basic_CPU01::FloorToInt(float v) noexcept
 {
 	int i = static_cast<int>(v);
 
@@ -251,7 +251,7 @@ inline int NS_SpatialHashingBasic_CPU01::FloorToInt(float v) noexcept
 
 // bijective mapping of signed to unsigned integers
 // (-1 -> 1, 1 -> 2, -2 -> 3, 2 -> 4, ...)
-inline uint32_t NS_SpatialHashingBasic_CPU01::ZigZag(int v) noexcept
+inline uint32_t NS_SpatialHashing_Basic_CPU01::ZigZag(int v) noexcept
 {
 	// shift left by 1 and XOR with sign bit
 	std::uint32_t uv = static_cast<std::uint32_t>(v);
@@ -261,7 +261,7 @@ inline uint32_t NS_SpatialHashingBasic_CPU01::ZigZag(int v) noexcept
 	return even ^ sign;
 }
 
-inline uint64_t NS_SpatialHashingBasic_CPU01::PackKey(int cx, int cy, int cz) noexcept
+inline uint64_t NS_SpatialHashing_Basic_CPU01::PackKey(int cx, int cy, int cz) noexcept
 {
 	// apply zig-zag encoding
 	const uint64_t x = ZigZag(cx);
