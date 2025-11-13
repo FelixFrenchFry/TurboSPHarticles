@@ -152,7 +152,7 @@ namespace Inter
 
 		// benchmark table state
 		BenchTableView benchTableView_ = BenchTableView::Latest;
-		TimeUnit benchTimeUnit_ = TimeUnit::us;
+		TimeUnit benchTimeUnit_ = TimeUnit::ms;
 		int sparklineContextLength_ = 1024;
 
 		// statistics table state

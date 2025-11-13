@@ -30,11 +30,17 @@ namespace Base
 
 	enum NeighborSearchMethod
 	{
-		BruteForce,				// 0
-		ExplicitGrid1D,			// 1
-		ExplicitGrid3D,			// 2
-		SpatialHashing_Basic,	// 4
-		CellLinkedList_Basic	// 3
+		BruteForce,
+
+		ExplicitGrid1D,
+
+		ExplicitGrid3D,
+
+		SpatialHashing_Basic,
+
+		// derived from paper:
+		// "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013)
+		CellLinkedList_Basic
 	};
 
 	enum ColorCodingMode
