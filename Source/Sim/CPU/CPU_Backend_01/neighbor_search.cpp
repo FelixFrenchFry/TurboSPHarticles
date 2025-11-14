@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <execution>
 #include <numeric>
 #include <omp.h>
 #include <ranges>
@@ -14,12 +15,10 @@
 #include <vector>
 
 // internal
-#include "neighbor_search.h"
-
-#include <execution>
-
 #include "cpu_backend_01.h"
 #include "glm/common.hpp"
+#include "neighbor_search.h"
+
 
 
 using namespace Sim;
@@ -377,7 +376,20 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 		static_cast<uint32_t>(std::ceil(yLen * cellSizeInv_)));
 	N_DimZ_ = std::max<uint32_t>(1, 
 		static_cast<uint32_t>(std::ceil(zLen * cellSizeInv_)));
-	N_Cells_ = N_DimX_ * N_DimY_ * N_DimZ_;
+	
+	// overflow protection
+	const uint64_t N_DimX = static_cast<uint64_t>(N_DimX_);
+	const uint64_t N_DimY = static_cast<uint64_t>(N_DimY_);
+	const uint64_t N_DimZ = static_cast<uint64_t>(N_DimZ_);
+	const uint64_t N_Cells = N_DimX * N_DimY * N_DimZ;
+	if (N_Cells > std::numeric_limits<uint32_t>::max())
+	{
+		SPDLOG_ERROR("Too many grid cells for uint32_t ({})", N_Cells);
+	}
+	else
+	{
+		N_Cells_ = static_cast<uint32_t>(N_Cells);
+	}
 
 	// --- [ preparation data structures ] -------------------------------------
 

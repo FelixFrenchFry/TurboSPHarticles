@@ -1,4 +1,4 @@
-// gpu_kernels_01.cuh
+// sph_kernels.cuh
 //
 // TODO: comment
 

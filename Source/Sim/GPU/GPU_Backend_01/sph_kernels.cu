@@ -1,4 +1,4 @@
-// gpu_kernels_01.cu
+// sph_kernels.cu
 
 // external
 #include <cuda_runtime.h>
@@ -7,7 +7,7 @@
 
 // internal
 #include "Source/Sim/GPU/gpu_utils.h"
-#include "gpu_kernels_01.cuh"
+#include "sph_kernels.cuh"
 
 constexpr float  PI = std::numbers::pi_v<float>;
 
@@ -36,7 +36,7 @@ namespace GPU01
 	__constant__ float c_kernelRadiusSqu;
 	__constant__ float c_cubicSplineAlpha;
 
-	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
+	inline void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
 	{
 		const float sizeInv = 1.0 / params.particleSizeF;
 		const float cubicSplineAlpha = static_cast<float>(
@@ -46,7 +46,6 @@ namespace GPU01
 		const float restDensitySquInvB = 1.0f / (params.restDensityB * params.restDensityB);
 
 		// store values in constant memory on the GPU
-		// (efficient read-only broadcast access for all threads)
 		GPU::Check(cudaMemcpyToSymbol(c_N_F, &N_F, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_N_B, &N_B, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_timeStep, &params.timeStep, sizeof(float)));

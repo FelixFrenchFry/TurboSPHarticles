@@ -9,7 +9,7 @@
 #include "Source/Base/helpers.h"
 #include "Source/Sim/GPU/gpu_utils.h"
 #include "gpu_backend_01.h"
-#include "gpu_kernels_01.cuh"
+#include "sph_kernels.cuh"
 
 
 
