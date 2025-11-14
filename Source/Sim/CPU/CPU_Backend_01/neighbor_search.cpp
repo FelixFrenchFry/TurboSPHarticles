@@ -8,10 +8,16 @@
 #include <omp.h>
 #include <ranges>
 #include <spdlog/spdlog.h>
+#include <tbb/parallel_sort.h>
+#include <tbb/blocked_range.h>
+#include <tbb/partitioner.h>
 #include <vector>
 
 // internal
 #include "neighbor_search.h"
+
+#include <execution>
+
 #include "cpu_backend_01.h"
 #include "glm/common.hpp"
 
@@ -427,13 +433,34 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 
 	// --- [ sort particle indices by cell IDs ] -------------------------------
 
-	auto ByCellIdF = [&](uint32_t a, uint32_t b)
+	auto ByCellIdPredF = [&](uint32_t a, uint32_t b)
 		{ return cellIdF_[a] < cellIdF_[b]; };
-	std::ranges::sort(sortedParticleIdxF_, ByCellIdF);
 
-	auto ByCellIdB = [&](uint32_t a, uint32_t b)
+	auto ByCellIdPredB = [&](uint32_t a, uint32_t b)
 		{ return cellIdB_[a] < cellIdB_[b]; };
-	std::ranges::sort(sortedParticleIdxB_, ByCellIdB);
+
+	// single-threaded basic sorting version
+	/*
+	std::ranges::sort(sortedParticleIdxF_, ByCellIdPredF);
+
+	std::ranges::sort(sortedParticleIdxB_, ByCellIdPredB);
+	*/
+
+	// multi-threaded parallel sorting version using C++ standard library
+	/*
+	std::sort(std::execution::par, sortedParticleIdxF_.begin(), 
+		sortedParticleIdxF_.end(), ByCellIdPredF);
+
+	std::sort(std::execution::par, sortedParticleIdxB_.begin(),
+		sortedParticleIdxB_.end(), ByCellIdPredB);
+	*/
+
+	// multi-threaded parallel sorting version using TBB
+	tbb::parallel_sort(sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
+		[&](uint32_t a, uint32_t b) { return cellIdF_[a] < cellIdF_[b]; });
+
+	tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
+		[&](uint32_t a, uint32_t b) { return cellIdB_[a] < cellIdB_[b]; });
 
 	// --- [ fill in cell start/end indices ] ----------------------------------
 

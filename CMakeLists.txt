@@ -31,6 +31,7 @@ if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     "  -DCMAKE_TOOLCHAIN_FILE=<path>/vcpkg/scripts/buildsystems/vcpkg.cmake")
 endif()
 
+find_package(TBB CONFIG REQUIRED)
 find_package(benchmark CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
@@ -178,6 +179,7 @@ target_link_libraries(TSP_H PUBLIC
     HighFive
     CLI11::CLI11
     glm::glm
+    TBB::tbb
     $<$<BOOL:${ENABLE_CUDA}>:CUDA::cudart>
     Project_Warnings
     Project_Defines

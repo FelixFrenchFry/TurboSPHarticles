@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "builtin-baseline": "7213cf8135c329c37c7e2778e40774489a0583a8",
   "dependencies": [
+    "tbb",
     "benchmark",
     "spdlog",
     "highfive",

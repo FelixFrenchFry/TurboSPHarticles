@@ -1,3 +1,4 @@
+
 // sph_solver.cpp
 
 // external
@@ -22,6 +23,14 @@ using namespace Sim;
 
 void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 {
+	// --- [ neighbor search construct ] ---------------------------------------
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	{
+		neighborSearchStrat_->Construct(params);
+	}
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+
 	// one simulation step with one parallel region
 	#pragma omp parallel
 	{
@@ -39,15 +48,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		const float massF = params.massF;
 		const float massB = params.massB;
 
-		// --- [ neighbor search ] ---------------------------------------------
-
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-		#pragma omp single
-		{
-			neighborSearchStrat_->Construct(params);
-		}
-		#pragma omp barrier
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+		// --- [ neighbor search query ] ---------------------------------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearchStrat_->Query(params);
