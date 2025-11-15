@@ -9,6 +9,7 @@
 #include "Source/Base/helpers.h"
 #include "Source/Sim/GPU/gpu_utils.h"
 #include "gpu_backend_01.h"
+#include "neighbor_search.cuh"
 #include "sph_kernels.cuh"
 
 
@@ -19,6 +20,9 @@ SimBackend_GPU01::SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr)
 	: benchmarksMgr_{ benchmarksMgr }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
+
+	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_GPU01>(*this);
+	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_GPU01>(*this);
 }
 
 SimBackend_GPU01::~SimBackend_GPU01()
@@ -321,25 +325,11 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		// --- [ neighbor search ] ---------------------------------------------
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-
-		// reset neighbor counters and overflow
-		GPU::MemsetZero(d_neighCountFF_.Data(), N_F_, stream_);
-		GPU::MemsetZero(d_neighCountFB_.Data(), N_F_, stream_);
-		GPU::MemsetZero(d_neighOverflowFlag_.Data(), 1, stream_);
-
-		GPU::StreamSync(stream_);
+		neighborSearchStrat_->Construct(params);
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		GPU01::Launch_NeighborSearch_BruteForce(
-			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(), 
-			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_, 
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(), 
-			d_neighOverflowFlag_.Data());
-
-		GPU::StreamSync(stream_);
+		neighborSearchStrat_->Query(params);
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 		// --- [ density computations ] ----------------------------------------

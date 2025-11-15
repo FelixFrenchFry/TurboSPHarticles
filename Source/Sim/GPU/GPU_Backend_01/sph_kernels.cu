@@ -36,7 +36,7 @@ namespace GPU01
 	__constant__ float c_kernelRadiusSqu;
 	__constant__ float c_cubicSplineAlpha;
 
-	inline void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
+	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
 	{
 		const float sizeInv = 1.0 / params.particleSizeF;
 		const float cubicSplineAlpha = static_cast<float>(

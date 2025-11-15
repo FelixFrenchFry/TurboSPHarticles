@@ -2,7 +2,6 @@
 
 // external
 #include <cmath>
-#include <spdlog/spdlog.h>
 #include <thrust/device_ptr.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/zip_iterator.h>
@@ -15,12 +14,49 @@
 #include "common.cuh"
 #include "neighbor_search.cuh"
 #include "neighbor_search_kernels.cuh"
+#include "sph_kernels.cuh"
 #include "Source/Base/helpers.h"
 #include "Source/Sim/GPU/gpu_utils.h"
 
 
 
 using namespace Sim;
+
+// -----------------------------------------------------------------------------
+// --- [ brute force implementation ] ------------------------------------------
+// -----------------------------------------------------------------------------
+
+void NS_BruteForce_GPU01::Init(const SimParams& params)
+{
+	// nothing
+}
+
+void NS_BruteForce_GPU01::Construct(const SimParams& params)
+{
+	// reset neighbor counters and overflow
+	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
+
+	GPU::StreamSync(be_.stream_);
+}
+
+void NS_BruteForce_GPU01::Query(const SimParams& params)
+{
+	GPU01::Launch_NeighborSearch_BruteForce(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		be_.N_F_, be_.N_B_, be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
+		be_.d_neighCountFF_.Data(), be_.d_neighCountFB_.Data(),
+		be_.d_neighListFF_.Data(), be_.d_neighListFB_.Data(),
+		be_.d_neighOverflowFlag_.Data());
+
+	GPU::StreamSync(be_.stream_);
+}
+
+// -----------------------------------------------------------------------------
+// --- [ cell linked list basic implementation ] -------------------------------
+// -----------------------------------------------------------------------------
 
 void NS_CellLinkedList_Basic_GPU01::Init(const SimParams& params)
 {
@@ -51,7 +87,8 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 {
 	if (be_.N_F_ == 0 && be_.N_B_ == 0)
 	{
-		SPDLOG_WARN("No construction possible (empty simulation)");
+		// SPDLOG_WARN("No construction possible (empty simulation)");
+		std::cerr << "Warning: No construction possible (empty simulation)\n";
 
 		N_DimX_ = 0;
 		N_DimY_ = 0;
@@ -165,7 +202,8 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	const uint64_t N_Cells = N_DimX * N_DimY * N_DimZ;
 	if (N_Cells > std::numeric_limits<uint32_t>::max())
 	{
-		SPDLOG_ERROR("Too many grid cells for uint32_t ({})", N_Cells);
+		// SPDLOG_ERROR("Too many grid cells for uint32_t ({})", N_Cells);
+		std::cerr << "Error: Too many grid cells for uint32_t (" << N_Cells << ")\n";
 	}
 	else
 	{
@@ -176,9 +214,9 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 
 	EnsureCapacity(be_.N_F_, be_.N_B_, N_Cells_);
 
-	ReloadConstants(
-		params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_, 
-		N_DimX_, N_DimY_, N_DimZ_, N_Cells_, be_.stream_);
+	GPU01::NS_ReloadConstants(
+		params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_,
+		N_DimX_, N_DimY_, N_DimZ_, N_Cells_, EMPTY, be_.stream_);
 
 	// --- [ compute cell IDs and init sorted indices ] ------------------------
 

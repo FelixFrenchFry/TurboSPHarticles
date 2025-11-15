@@ -26,9 +26,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	// --- [ neighbor search construct ] ---------------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-	{
-		neighborSearchStrat_->Construct(params);
-	}
+	neighborSearchStrat_->Construct(params);
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	// one simulation step with one parallel region

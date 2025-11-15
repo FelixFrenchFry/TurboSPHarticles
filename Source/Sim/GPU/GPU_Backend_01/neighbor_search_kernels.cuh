@@ -12,6 +12,13 @@
 
 namespace GPU01
 {
+	void NS_ReloadConstants(
+		float kernelRadius, float cellSize,
+		float xBoxOrig, float yBoxOrig, float zBoxOrig,
+		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
+		uint32_t N_Cells, uint32_t EMPTY,
+		cudaStream_t stream);
+
 	void Launch_FillCellIdAndIdxF(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const uint32_t N_F,

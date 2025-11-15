@@ -20,8 +20,6 @@ namespace Sim
 	// forward declarations
 	class SimBackend_CPU01;
 
-	// TODO: add this as a friend class and let it access private members
-	// TODO: instead of neighbor search ctx structs that have to be adapted per backend?
 	class NS_BruteForce_CPU01 : public I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------
@@ -42,8 +40,6 @@ namespace Sim
 		SimBackend_CPU01& be_;
 	};
 
-	// TODO: add this as a friend class and let it access private members
-	// TODO: instead of neighbor search ctx structs that have to be adapted per backend?
 	class NS_SpatialHashing_Basic_CPU01 : public I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------

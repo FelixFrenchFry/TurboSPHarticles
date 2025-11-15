@@ -11,40 +11,42 @@
 
 namespace GPU01
 {
-	__constant__ float c_kernelRadius;
-	__constant__ float c_kernelRadiusSqu;
-	__constant__ float c_cellSize;
-	__constant__ float c_cellSizeInv;
-	__constant__ float c_xBoxOrig;
-	__constant__ float c_yBoxOrig;
-	__constant__ float c_zBoxOrig;
-	__constant__ uint32_t c_N_DimX;
-	__constant__ uint32_t c_N_DimY;
-	__constant__ uint32_t c_N_DimZ;
-	__constant__ uint32_t c_N_Cells;
-	__constant__ uint32_t c_EMPTY;
+	__constant__ float c_ns_kernelRadius;
+	__constant__ float c_ns_kernelRadiusSqu;
+	__constant__ float c_ns_cellSize;
+	__constant__ float c_ns_cellSizeInv;
+	__constant__ float c_ns_xBoxOrig;
+	__constant__ float c_ns_yBoxOrig;
+	__constant__ float c_ns_zBoxOrig;
+	__constant__ uint32_t c_ns_N_DimX;
+	__constant__ uint32_t c_ns_N_DimY;
+	__constant__ uint32_t c_ns_N_DimZ;
+	__constant__ uint32_t c_ns_N_Cells;
+	__constant__ uint32_t c_ns_EMPTY;
 
-	inline void Sim::NS_CellLinkedList_Basic_GPU01::ReloadConstants(
-		float kernelRadius, float cellSize, float xBoxOrig, float yBoxOrig, float zBoxOrig,
-		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ, uint32_t N_Cells,
-		uint32_t EMPTY, cudaStream_t stream)
+	void NS_ReloadConstants(
+		float kernelRadius, float cellSize,
+		float xBoxOrig, float yBoxOrig, float zBoxOrig,
+		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
+		uint32_t N_Cells, uint32_t EMPTY,
+		cudaStream_t stream)
 	{
 		float kernelRadiusSqu = kernelRadius * kernelRadius;
 		float cellSizeInv = (cellSize == 0.0f) ? 0.0f : (1.0f / cellSize);
 
 		// store values in constant memory on the GPU
-		GPU::Check(cudaMemcpyToSymbol(c_kernelRadius, &kernelRadius, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_cellSize, &cellSize, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_cellSizeInv, &cellSizeInv, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_xBoxOrig, &xBoxOrig, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_yBoxOrig, &yBoxOrig, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_zBoxOrig, &zBoxOrig, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_N_DimX, &N_DimX, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_N_DimY, &N_DimY, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_N_DimZ, &N_DimZ, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_N_Cells, &N_Cells, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_EMPTY, &EMPTY, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_kernelRadius, &kernelRadius, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSize, &cellSize, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSizeInv, &cellSizeInv, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_xBoxOrig, &xBoxOrig, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_yBoxOrig, &yBoxOrig, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_zBoxOrig, &zBoxOrig, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_DimX, &N_DimX, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_DimY, &N_DimY, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_DimZ, &N_DimZ, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_Cells, &N_Cells, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_EMPTY, &EMPTY, sizeof(uint32_t)));
 
 		GPU::StreamSync(stream);
 	}
@@ -56,7 +58,7 @@ namespace GPU01
 	__device__ __forceinline__
 	uint32_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz)
 	{
-		return cx + c_N_DimX * (cy + c_N_DimY * cz);
+		return cx + c_ns_N_DimX * (cy + c_ns_N_DimY * cz);
 	}
 
 	__device__ __forceinline__
@@ -95,13 +97,13 @@ namespace GPU01
 		const float zi = zPosF[i];
 
 		// cell coordinates of particle i
-		const int cxi = FloorToInt((xi - c_xBoxOrig) * c_cellSizeInv);
-		const int cyi = FloorToInt((yi - c_yBoxOrig) * c_cellSizeInv);
-		const int czi = FloorToInt((zi - c_zBoxOrig) * c_cellSizeInv);
+		const int cxi = FloorToInt((xi - c_ns_xBoxOrig) * c_ns_cellSizeInv);
+		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
+		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
 
-		const uint32_t cx = ClampInt(cxi, 0, c_N_DimX - 1);
-		const uint32_t cy = ClampInt(cyi, 0, c_N_DimY - 1);
-		const uint32_t cz = ClampInt(czi, 0, c_N_DimZ - 1);
+		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_DimX - 1);
+		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_DimY - 1);
+		const uint32_t cz = ClampInt(czi, 0, c_ns_N_DimZ - 1);
 
 		cellIdF[i] = MapToCellId_Basic(static_cast<uint32_t>(cx),
 									   static_cast<uint32_t>(cy),
@@ -127,13 +129,13 @@ namespace GPU01
 		const float zi = zPosB[i];
 
 		// compute cell coordinates
-		const int cxi = FloorToInt((xi - c_xBoxOrig) * c_cellSizeInv);
-		const int cyi = FloorToInt((yi - c_yBoxOrig) * c_cellSizeInv);
-		const int czi = FloorToInt((zi - c_zBoxOrig) * c_cellSizeInv);
+		const int cxi = FloorToInt((xi - c_ns_xBoxOrig) * c_ns_cellSizeInv);
+		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
+		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
 
-		const uint32_t cx = ClampInt(cxi, 0, c_N_DimX - 1);
-		const uint32_t cy = ClampInt(cyi, 0, c_N_DimY - 1);
-		const uint32_t cz = ClampInt(czi, 0, c_N_DimZ - 1);
+		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_DimX - 1);
+		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_DimY - 1);
+		const uint32_t cz = ClampInt(czi, 0, c_ns_N_DimZ - 1);
 
 		cellIdB[i] = MapToCellId_Basic(static_cast<uint32_t>(cx),
 									   static_cast<uint32_t>(cy),
@@ -182,8 +184,8 @@ namespace GPU01
 		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= N_Cells) { return; }
 
-		cellStartIdx[i] = c_EMPTY;
-		cellEndIdx[i] = c_EMPTY;
+		cellStartIdx[i] = c_ns_EMPTY;
+		cellEndIdx[i] = c_ns_EMPTY;
 	}
 
 	__global__
@@ -219,16 +221,10 @@ namespace GPU01
 		const float zi = zPosF[i];
 
 		// cell coordinates of particle i
-		const int cxi = static_cast<int>(floorf((xi - c_xBoxOrig) * c_cellSizeInv));
-		const int cyi = static_cast<int>(floorf((yi - c_yBoxOrig) * c_cellSizeInv));
-		const int czi = static_cast<int>(floorf((zi - c_zBoxOrig) * c_cellSizeInv));
+		const int cxi = FloorToInt((xi - c_ns_xBoxOrig) * c_ns_cellSizeInv);
+		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
+		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
 
-		// TODO: use helper instead?
-		/*
-		const int cxi = FloorToInt((xi - c_xBoxOrig) * c_cellSizeInv);
-		const int cyi = FloorToInt((yi - c_yBoxOrig) * c_cellSizeInv);
-		const int czi = FloorToInt((zi - c_zBoxOrig) * c_cellSizeInv);
-		*/
 
 		// neighbor write bases
 		const uint32_t baseFF = i * N_MAX_FF;
@@ -240,17 +236,17 @@ namespace GPU01
 		for (int rz = -1; rz <= 1; rz++)
 		{
 			int cz = czi + rz; // target cell coordinate in z-direction
-			if (cz < 0 || cz >= static_cast<int>(c_N_DimZ)) { continue; }
+			if (cz < 0 || cz >= static_cast<int>(c_ns_N_DimZ)) { continue; }
 
 			for (int ry = -1; ry <= 1; ry++)
 			{
 				int cy = cyi + ry; // target cell coordinate in y-direction
-				if (cy < 0 || cy >= static_cast<int>(c_N_DimY)) { continue; }
+				if (cy < 0 || cy >= static_cast<int>(c_ns_N_DimY)) { continue; }
 
 				for (int rx = -1; rx <= 1; rx++)
 				{
 					int cx = cxi + rx; // target cell coordinate in x-direction
-					if (cx < 0 || cx >= static_cast<int>(c_N_DimX)) { continue; }
+					if (cx < 0 || cx >= static_cast<int>(c_ns_N_DimX)) { continue; }
 
 					// cell ID
 					const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
@@ -260,7 +256,7 @@ namespace GPU01
 					// check fluid candidates
 					const uint32_t sF = cellStartIdxF[cid];
 					const uint32_t eF = cellEndIdxF[cid];
-					if (sF != c_EMPTY && eF != c_EMPTY)
+					if (sF != c_ns_EMPTY && eF != c_ns_EMPTY)
 					{
 						// check all neighbor candidates in the cell
 						for (uint32_t k = sF; k < eF; k++)
@@ -278,7 +274,7 @@ namespace GPU01
 												+ dy * dy
 												+ dz * dz;
 
-							if (distSqu <= c_kernelRadiusSqu) // neighbor found
+							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
 								if (cntFF < N_MAX_FF)
 								{
@@ -298,7 +294,7 @@ namespace GPU01
 					// check boundary candidates
 					const uint32_t sB = cellStartIdxB[cid];
 					const uint32_t eB = cellEndIdxB[cid];
-					if (sB != c_EMPTY && eB != c_EMPTY)
+					if (sB != c_ns_EMPTY && eB != c_ns_EMPTY)
 					{
 						// check all neighbor candidates in the cell
 						for (uint32_t k = sB; k < eB; k++)
@@ -316,7 +312,7 @@ namespace GPU01
 												+ dy * dy
 												+ dz * dz;
 
-							if (distSqu <= c_kernelRadiusSqu) // neighbor found
+							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
 								if (cntFB < N_MAX_FB)
 								{
