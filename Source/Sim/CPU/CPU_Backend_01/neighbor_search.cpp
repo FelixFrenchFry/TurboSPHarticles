@@ -18,6 +18,7 @@
 #include "cpu_backend_01.h"
 #include "glm/common.hpp"
 #include "neighbor_search.h"
+#include "Source/Base/helpers.h"
 
 
 
@@ -316,7 +317,8 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	}
 
 	cellSize_ = params.kernelRadius;
-	cellSizeInv_ = 1.0f / params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+				 ? 0.0f : (1.0f / params.kernelRadius);
 
 	// --- [ combined AABB over fluid and boundary particles ] -----------------
 
@@ -561,7 +563,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 		const float yi = be_.yPosF_[i];
 		const float zi = be_.zPosF_[i];
 
-		// cell ID of particle i
+		// cell coordinates of particle i
 		const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
 		const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
 		const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
@@ -569,17 +571,17 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 		// check all particles j in 27 neighboring grid cells
 		for (int rz = -1; rz <= 1; rz++)
 		{
-			int cz = czi + rz; // cell coordinate in z-direction
+			int cz = czi + rz; // target cell coordinate in z-direction
 			if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
 
 			for (int ry = -1; ry <= 1; ry++)
 			{
-				int cy = cyi + ry; // cell coordinate in y-direction
+				int cy = cyi + ry; // target cell coordinate in y-direction
 				if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
 
 				for (int rx = -1; rx <= 1; rx++)
 				{
-					int cx = cxi + rx; // cell coordinate in x-direction
+					int cx = cxi + rx; // target cell coordinate in x-direction
 					if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
 
 					// cell ID
@@ -587,7 +589,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 														   static_cast<uint32_t>(cy),
 														   static_cast<uint32_t>(cz));
 
-					// fluid particles
+					// check fluid candidates
 					const uint32_t sF = cellStartIdxF_[cid];
 					const uint32_t eF = cellEndIdxF_[cid];
 					if (sF != EMPTY && eF != EMPTY)
@@ -598,6 +600,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 							// index of neighbor candidate
 							const uint32_t j = sortedParticleIdxF_[k];
 
+							// position difference
 							const float dx = xi - be_.xPosF_[j];
 							const float dy = yi - be_.yPosF_[j];
 							const float dz = zi - be_.zPosF_[j];
@@ -615,7 +618,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 						}
 					}
 
-					// boundary particles
+					// check boundary candidates
 					const uint32_t sB = cellStartIdxB_[cid];
 					const uint32_t eB = cellEndIdxB_[cid];
 					if (sB != EMPTY && eB != EMPTY)
@@ -626,6 +629,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 							// index of neighbor candidate
 							const uint32_t j = sortedParticleIdxB_[k];
 
+							// position difference
 							const float dx = xi - be_.xPosB_[j];
 							const float dy = yi - be_.yPosB_[j];
 							const float dz = zi - be_.zPosB_[j];
@@ -665,5 +669,6 @@ inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(
 inline uint32_t NS_CellLinkedList_Basic_CPU01::ClampInt(
 	int v, int low, int high) const noexcept
 {
-	return static_cast<uint32_t>(v < low ? low : (v > high ? high : v));
+	const int t = (v < low) ? low : v;
+	return static_cast<uint32_t>((t > high) ? high : t);
 }

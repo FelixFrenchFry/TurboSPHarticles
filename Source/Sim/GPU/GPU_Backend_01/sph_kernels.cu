@@ -154,19 +154,22 @@ namespace GPU01
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_N_F) { return; }
 
+		// particle i data
+		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
 
+		// neighbor write bases
 		const uint32_t baseFF = i * N_MAX_FF;
 		const uint32_t baseFB = i * N_MAX_FB;
-
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
 
-		// FF
+		// check fluid candidates (all particles)
 		for (uint32_t j = 0; j < c_N_F; j++)
 		{
+			// position difference
 			const float dx = xi - xPosF[j];
 			const float dy = yi - yPosF[j];
 			const float dz = zi - zPosF[j];
@@ -190,9 +193,10 @@ namespace GPU01
 			}
 		}
 
-		// FB
+		// check boundary candidates (all particles)
 		for (uint32_t j = 0; j < c_N_B; j++)
 		{
+			// position difference
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];

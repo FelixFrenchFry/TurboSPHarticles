@@ -1,19 +1,22 @@
-// neighbor_search.cpp
+// neighbor_search.cu
 
 // external
 #include <cmath>
 #include <spdlog/spdlog.h>
 #include <thrust/device_ptr.h>
-#include <thrust/sort.h>
-#include <thrust/sequence.h>
-#include <thrust/iterator/zip_iterator.h>
 #include <thrust/functional.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/sequence.h>
+#include <thrust/sort.h>
 #include <thrust/transform_reduce.h>
+#include <thrust/tuple.h>
 
 // internal
-#include "Source/Sim/GPU/gpu_utils.h"
-#include "neighbor_search.h"
+#include "common.cuh"
+#include "neighbor_search.cuh"
 #include "neighbor_search_kernels.cuh"
+#include "Source/Base/helpers.h"
+#include "Source/Sim/GPU/gpu_utils.h"
 
 
 
@@ -59,7 +62,8 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	}
 
 	cellSize_ = params.kernelRadius;
-	cellSizeInv_ = 1.0f / params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+				 ? 0.0f : (1.0f / params.kernelRadius);
 
 	// --- [ combined AABB over fluid and boundary particles ] -----------------
 
@@ -91,9 +95,9 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		h_aabbF_ = thrust::transform_reduce(
 			thrust::cuda::par.on(be_.stream_),
 			first, last,
-			ToMinMax3{},
+			GPU01::ToMinMax3{},
 			h_aabbF_,
-			ReduceMinMax3{});
+			GPU01::ReduceMinMax3{});
 	}
 
 	if (hasB)
@@ -107,9 +111,9 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		h_aabbB_ = thrust::transform_reduce(
 			thrust::cuda::par.on(be_.stream_),
 			first, last,
-			ToMinMax3{},
+			GPU01::ToMinMax3{},
 			h_aabbB_,
-			ReduceMinMax3{});
+			GPU01::ReduceMinMax3{});
 	}
 
 	MinMax3 box;
@@ -121,6 +125,16 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		box.xMax = fmaxf(h_aabbF_.xMax, h_aabbB_.xMax);
 		box.yMax = fmaxf(h_aabbF_.yMax, h_aabbB_.yMax);
 		box.zMax = fmaxf(h_aabbF_.zMax, h_aabbB_.zMax);
+	}
+	else if (hasF)
+	{
+		box = { h_aabbF_.xMin, h_aabbF_.yMin, h_aabbF_.zMin,
+				  h_aabbF_.xMax, h_aabbF_.yMax, h_aabbF_.zMax };
+	}
+	else
+	{
+		box = { h_aabbB_.xMin, h_aabbB_.yMin, h_aabbB_.zMin,
+				  h_aabbB_.xMax, h_aabbB_.yMax, h_aabbB_.zMax };
 	}
 
 	// padding to avoid edge clamp issues
@@ -163,7 +177,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	EnsureCapacity(be_.N_F_, be_.N_B_, N_Cells_);
 
 	ReloadConstants(
-		cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_, 
+		params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_, 
 		N_DimX_, N_DimY_, N_DimZ_, N_Cells_, be_.stream_);
 
 	// --- [ compute cell IDs and init sorted indices ] ------------------------
@@ -224,7 +238,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		{
 			// clear to EMPTY
 			GPU01::Launch_ClearRanges(
-				EMPTY, N_Cells_, be_.stream_,
+				N_Cells_, be_.stream_,
 				d_cellStartIdxF_.Data(), d_cellEndIdxF_.Data());
 		}
 
@@ -232,7 +246,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		{
 			// clear to EMPTY
 			GPU01::Launch_ClearRanges(
-				EMPTY, N_Cells_, be_.stream_,
+				N_Cells_, be_.stream_,
 				d_cellStartIdxB_.Data(), d_cellEndIdxB_.Data());
 		}
 	}
@@ -250,4 +264,27 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 			d_cellIdB_.Data(), be_.N_B_, be_.stream_,
 			d_cellStartIdxB_.Data(), d_cellEndIdxB_.Data());
 	}
+}
+
+void NS_CellLinkedList_Basic_GPU01::Query(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// reset per-particle counts/overflow before filling
+	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
+
+	GPU01::Launch_QueryNeighbors(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		d_cellStartIdxF_.Data(), d_cellEndIdxF_.Data(),
+		d_cellStartIdxB_.Data(), d_cellEndIdxB_.Data(),
+		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
+		be_.N_F_, be_.N_B_, be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
+		be_.d_neighCountFF_.Data(), be_.d_neighCountFB_.Data(),
+		be_.d_neighListFF_.Data(), be_.d_neighListFB_.Data(),
+		be_.d_neighOverflowFlag_.Data());
+
+	GPU::StreamSync(be_.stream_);
 }

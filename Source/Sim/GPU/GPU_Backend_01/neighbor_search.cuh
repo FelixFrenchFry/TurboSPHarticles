@@ -1,4 +1,4 @@
-// neighbor_search.h
+// neighbor_search.cuh
 //
 // TODO: comment
 
@@ -71,7 +71,7 @@ namespace Sim
 		MinMax3 h_aabbF_{};
 		MinMax3 h_aabbB_{};
 
-		inline void ReloadConstants(float cellSize, float xBoxOrig, float yBoxOrig, float zBoxOrig,
+		inline void ReloadConstants(float kernelRadius, float cellSize, float xBoxOrig, float yBoxOrig, float zBoxOrig,
 								    uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ, uint32_t N_Cells,
 									cudaStream_t stream);
 
