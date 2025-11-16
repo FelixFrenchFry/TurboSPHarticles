@@ -71,8 +71,8 @@ void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
 			}
 
 			// update all-time max
-			benchMax_allTime_[i] = std::max(recLatest_.time[i], 
-											benchMax_allTime_[i]);
+			benchMax_allTime_[i] = fmaxf(recLatest_.time[i],
+										 benchMax_allTime_[i]);
 
 			// update occurrence count
 			numOcc_allTime_[i] += curStepOcc_[i] ? 1 : 0;

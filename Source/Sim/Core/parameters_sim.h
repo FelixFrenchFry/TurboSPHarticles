@@ -5,7 +5,6 @@
 #pragma once
 
 // external
-#include <array>
 #include <atomic>
 #include <glm/vec3.hpp>
 

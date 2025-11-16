@@ -53,12 +53,12 @@ void StatisticsMgr::EndStep(int64_t simStep, double simTime)
 			statsSum_allTime_[i] += recLatest_.stats[i];
 
 			// update all-time min
-			statsMin_allTime_[i] = std::min(recLatest_.stats[i],
-											statsMin_allTime_[i]);
+			statsMin_allTime_[i] = fminf(recLatest_.stats[i],
+										 statsMin_allTime_[i]);
 
 			// update all-time max
-			statsMax_allTime_[i] = std::max(recLatest_.stats[i], 
-											statsMax_allTime_[i]);
+			statsMax_allTime_[i] = fminf(recLatest_.stats[i],
+										 statsMax_allTime_[i]);
 		}
 	}
 

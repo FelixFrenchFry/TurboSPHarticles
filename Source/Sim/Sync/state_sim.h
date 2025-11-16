@@ -9,8 +9,6 @@
 #include <span>
 #include <vector>
 
-// internal
-
 
 
 namespace Sync

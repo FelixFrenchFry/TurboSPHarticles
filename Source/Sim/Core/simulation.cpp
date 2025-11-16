@@ -7,7 +7,6 @@
 #include <spdlog/spdlog.h>
 
 // internal
-#include "Source/Eval/Export/serialization.h"
 #include "simulation.h"
 
 
@@ -274,7 +273,7 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 
 			// compute minimum interval from the target rate
 			const auto minInterval = std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::duration<double>(1.0 / std::max(1e-6f, visMaxHz_)));
+				std::chrono::duration<double>(1.0 / fmaxf(1e-6f, visMaxHz_)));
 
 			if (now - lastVisWall_ >= minInterval)
 			{

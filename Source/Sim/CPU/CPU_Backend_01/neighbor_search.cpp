@@ -5,12 +5,9 @@
 #include <cassert>
 #include <cstdint>
 #include <execution>
-#include <numeric>
-#include <omp.h>
 #include <ranges>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_sort.h>
-#include <tbb/blocked_range.h>
 #include <tbb/partitioner.h>
 #include <vector>
 
@@ -366,9 +363,9 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	yBoxOrig_ = yMin;
 	zBoxOrig_ = zMin;
 
-	const float xLen = std::max(0.0f, xMax - xMin);
-	const float yLen = std::max(0.0f, yMax - yMin);
-	const float zLen = std::max(0.0f, zMax - zMin);
+	const float xLen = fmaxf(0.0f, xMax - xMin);
+	const float yLen = fmaxf(0.0f, yMax - yMin);
+	const float zLen = fmaxf(0.0f, zMax - zMin);
 
 	// compute grid dimensions
 	N_DimX_ = std::max<uint32_t>(1, 

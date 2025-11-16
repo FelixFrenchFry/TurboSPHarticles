@@ -14,6 +14,7 @@
 #include "structs_vis.h"
 
 
+
 namespace Vis
 {
 	// static non-mutable constants

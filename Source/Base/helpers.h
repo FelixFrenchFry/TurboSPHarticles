@@ -55,7 +55,7 @@ namespace Base
         {
             for (int r = 0; r < 4; r++)
             {
-                maxDiff = std::max(maxDiff, std::fabs(a[c][r] - b[c][r]));
+                maxDiff = fmaxf(maxDiff, std::fabs(a[c][r] - b[c][r]));
             }
         }
 
@@ -108,7 +108,7 @@ namespace Base
     {
         float diff = std::fabs(a - b);
         if (diff <= abs_epsilon) return true;
-        return diff <= rel_epsilon * std::max(std::fabs(a), std::fabs(b));
+        return diff <= rel_epsilon * fmaxf(std::fabs(a), std::fabs(b));
     }
 
 } // namespace Base

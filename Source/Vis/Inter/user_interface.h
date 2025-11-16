@@ -11,7 +11,7 @@
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Core/simulation.h"
-#include "../Core/parameters_vis.h"
+#include "Source/Vis/Core/parameters_vis.h"
 
 // forward declarations
 struct GLFWwindow;

@@ -1061,7 +1061,7 @@ inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Sync::BenchSnapshot* sna
 	// (they should all be the same value, but the groups are variably-sized)
 	for (const auto& op : opGroup.ops)
 	{
-		res = std::min(res, ReadOpTiming(snap, op));
+		res = fminf(res, ReadOpTiming(snap, op));
 	}
 
 	return res;
@@ -1093,7 +1093,7 @@ void UserInterfaceMgr::TableTextRightAligned(const char* fmt, ...)
 	// compute right-aligned cursor X within the current table cell
 	const float avail = ImGui::GetContentRegionAvail().x;
 	const float textWidth = ImGui::CalcTextSize(buf).x;
-	const float x = ImGui::GetCursorPosX() + std::max(0.0f, avail - textWidth - 2.0f);
+	const float x = ImGui::GetCursorPosX() + fmaxf(0.0f, avail - textWidth - 2.0f);
 
 	ImGui::SetCursorPosX(x);
 	ImGui::TextUnformatted(buf);

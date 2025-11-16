@@ -226,7 +226,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				const float dvz = vzi - zVelF_[j];
 
 				// viscosity acc contribution from fluid neighbor j
-				const float accCoeff = (massF / std::max(densityF_[j], 1e-12f))
+				const float accCoeff = (massF / fmaxf(densityF_[j], 1e-12f))
 									 * (dvx * dx + dvy * dy + dvz * dz)
 									 / (dx * dx + dy * dy + dz * dz
 									 + 0.01f * sizeF * sizeF);
@@ -432,7 +432,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			}
 
 			// clamp pressure to non-negative values
-			pressureF_[i] = std::max(tmpPressure, 0.0f);
+			pressureF_[i] = fmaxf(tmpPressure, 0.0f);
 		}
 
 		// --- [ relaxed jacobi solver for pressure ] --------------------------
@@ -544,7 +544,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				}
 
 				// clamp pressure to non-negative values
-				pressureF_[i] = std::max(tmpPressure, 0.0f);
+				pressureF_[i] = fmaxf(tmpPressure, 0.0f);
 			}
 
 			cnt++;

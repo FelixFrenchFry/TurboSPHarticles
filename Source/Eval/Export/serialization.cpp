@@ -3,11 +3,11 @@
 // external
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 #include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
 #include <highfive/H5File.hpp>
-#include <stdexcept>
 #include <vector>
 
 // internal
@@ -35,7 +35,7 @@ namespace {
 
 		// chunked + filters
 		const int64_t wantChunkElems = std::max<int64_t>(1, opt.targetChunkBytes / N_elemBytes);
-		const int64_t chunkElems = std::max<int64_t>(1, std::min(N_elements, wantChunkElems));
+		const int64_t chunkElems = std::max<int64_t>(1, fminf(N_elements, wantChunkElems));
 
 		props.add(Chunking({ static_cast<hsize_t>(chunkElems) }));
 

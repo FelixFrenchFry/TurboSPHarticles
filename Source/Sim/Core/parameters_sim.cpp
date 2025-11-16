@@ -1,7 +1,6 @@
 // parameters_sim.cpp
 
 // external
-#include <cmath>
 #include <spdlog/spdlog.h>
 #include <thread>
 

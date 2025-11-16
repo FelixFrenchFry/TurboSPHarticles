@@ -7,7 +7,6 @@
 #include <glm/vec3.hpp>
 #include <limits>
 #include <numbers>
-#include <omp.h>
 #include <spdlog/spdlog.h>
 
 // internal

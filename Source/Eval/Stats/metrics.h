@@ -204,6 +204,6 @@ namespace Stats
 	inline void Set(StatRecordStep& record, StatMetric metric, float x) { record.stats[GetIdx(metric)] = x; }
 	inline void Add(StatRecordStep& record, StatMetric metric, float x) { record.stats[GetIdx(metric)] += x; }
 	inline void MaxWith(StatRecordStep& record, StatMetric metric, float x)
-		{ record.stats[GetIdx(metric)] = std::max(x, record.stats[GetIdx(metric)]); }
+		{ record.stats[GetIdx(metric)] = fmaxf(x, record.stats[GetIdx(metric)]); }
 
 } // namespace Stats

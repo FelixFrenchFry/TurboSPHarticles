@@ -17,7 +17,6 @@
 #include "Source/Sim/Scene/builder.h"
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "Source/Sim/Sync/mailboxes.h"
-#include "Source/Sim/Sync/snapshots.h"
 #include "backend_sim.h"
 #include "parameters_sim.h"
 
