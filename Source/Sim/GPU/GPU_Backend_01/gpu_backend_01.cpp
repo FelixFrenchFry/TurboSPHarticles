@@ -426,7 +426,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
-				d_sourceTermF_.Data(), d_diagElemF_.Data(), d_densityF_.Data(),
+				d_sourceTermF_.Data(), d_diagElemF_.Data(),
 				d_neighCountFF_.Data(), d_neighCountFB_.Data(),
 				d_neighListFF_.Data(), d_neighListFB_.Data(),
 				N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
@@ -460,7 +460,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		GPU01::Launch_Integration(
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			N_F_, N_B_, stream_,
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data());
 

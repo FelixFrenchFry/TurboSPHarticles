@@ -38,12 +38,16 @@ void NS_BruteForce_GPU01::Construct(const SimParams& params)
 	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
 
+	GPU01::NS_ReloadConstants(
+		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
+
 	GPU::StreamSync(be_.stream_);
 }
 
 void NS_BruteForce_GPU01::Query(const SimParams& params)
 {
-	GPU01::Launch_NeighborSearch_BruteForce(
+	GPU01::Launch_BruteForce_Query(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		be_.N_F_, be_.N_B_, be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
@@ -215,7 +219,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	EnsureCapacity(be_.N_F_, be_.N_B_, N_Cells_);
 
 	GPU01::NS_ReloadConstants(
-		params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_,
+		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_,
 		N_DimX_, N_DimY_, N_DimZ_, N_Cells_, EMPTY, be_.stream_);
 
 	// --- [ compute cell IDs and init sorted indices ] ------------------------
@@ -313,7 +317,7 @@ void NS_CellLinkedList_Basic_GPU01::Query(const SimParams& params)
 	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
 
-	GPU01::Launch_QueryNeighbors(
+	GPU01::Launch_CellLinkedListBasic_Query(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		d_cellStartIdxF_.Data(), d_cellEndIdxF_.Data(),

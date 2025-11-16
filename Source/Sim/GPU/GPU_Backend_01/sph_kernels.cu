@@ -67,8 +67,12 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_cubicSplineAlpha, &cubicSplineAlpha, sizeof(float)));
 
-		GPU::StreamSync(stream);
+		//GPU::StreamSync(stream);
 	}
+
+	// -------------------------------------------------------------------------
+	// --- [ helpers ] ---------------------------------------------------------
+	// -------------------------------------------------------------------------
 
 	__device__ __forceinline__
 	void KernelGradient_CubicSpline(
@@ -135,96 +139,9 @@ namespace GPU01
 		}
 	}
 
-	__global__
-	void K_NeighborSearch_BruteForce(
-		const float* __restrict__ xPosF,
-		const float* __restrict__ yPosF,
-		const float* __restrict__ zPosF,
-		const float* __restrict__ xPosB,
-		const float* __restrict__ yPosB,
-		const float* __restrict__ zPosB,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
-		// destinations
-		uint32_t* __restrict__ neighCountFF,
-		uint32_t* __restrict__ neighCountFB,
-		uint32_t* __restrict__ neighListFF,
-		uint32_t* __restrict__ neighListFB,
-		uint32_t* __restrict__ overflowFlag)
-	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= c_N_F) { return; }
-
-		// particle i data
-		// (global memory reads)
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
-
-		// neighbor write bases
-		const uint32_t baseFF = i * N_MAX_FF;
-		const uint32_t baseFB = i * N_MAX_FB;
-		uint32_t cntFF = 0;
-		uint32_t cntFB = 0;
-
-		// check fluid candidates (all particles)
-		for (uint32_t j = 0; j < c_N_F; j++)
-		{
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
-
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= c_kernelRadiusSqu) // neighbor found
-			{
-				if (cntFF < N_MAX_FF)
-				{
-					// add fluid neighbor to the list
-					// (global memory write)
-					neighListFF[baseFF + cntFF] = j;
-					cntFF++;
-				}
-				else // overflow
-				{
-					atomicExch(overflowFlag, 1u);
-				}
-			}
-		}
-
-		// check boundary candidates (all particles)
-		for (uint32_t j = 0; j < c_N_B; j++)
-		{
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= c_kernelRadiusSqu) // neighbor found
-			{
-				if (cntFB < N_MAX_FB)
-				{
-					// add boundary neighbor to the list
-					// (global memory write)
-					neighListFB[baseFB + cntFB] = j;
-					cntFB++;
-				}
-				else // overflow
-				{
-					atomicExch(overflowFlag, 1u);
-				}
-			}
-		}
-
-		// update neighbor counts
-		// (global memory write)
-		neighCountFF[i] = cntFF;
-		neighCountFB[i] = cntFB;
-	}
+	// -------------------------------------------------------------------------
+	// --- [ kernels launched by host ] ----------------------------------------
+	// -------------------------------------------------------------------------
 
 	__global__
 	void K_Density(
@@ -826,7 +743,6 @@ namespace GPU01
 		const float* __restrict__ zAccPressF,
 		const float* __restrict__ sourceTermF,
 		const float* __restrict__ diagElemF,
-		const float* __restrict__ densityF,
 		const uint32_t* __restrict__ neighCountFF,
 		const uint32_t* __restrict__ neighCountFB,
 		const uint32_t* __restrict__ neighListFF,
@@ -930,7 +846,6 @@ namespace GPU01
 		const float* __restrict__ xAccPressF,
 		const float* __restrict__ yAccPressF,
 		const float* __restrict__ zAccPressF,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		// destinations
 		float* __restrict__ xPosF,
 		float* __restrict__ yPosF,
@@ -965,31 +880,6 @@ namespace GPU01
 
 namespace GPU01
 {
-	void Launch_NeighborSearch_BruteForce(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* neighCountFF,
-		uint32_t* neighCountFB,
-		uint32_t* neighListFF,
-		uint32_t* neighListFB,
-		uint32_t* overflowFlag)
-	{
-		// TODO: initialize constants if needed
-
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_NeighborSearch_BruteForce<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, N_MAX_FF, N_MAX_FB, neighCountFF, neighCountFB,
-			neighListFF, neighListFB, overflowFlag);
-
-		GPU::CheckLastKernel("K_NeighborSearch_BruteForce()");
-	}
-
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
@@ -1150,7 +1040,6 @@ namespace GPU01
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,
-		const float* densityF,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -1169,7 +1058,7 @@ namespace GPU01
 
 		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xAccPressF, yAccPressF, zAccPressF,
-			sourceTermF, diagElemF, densityF, neighCountFF, neighCountFB, neighListFF, neighListFB,
+			sourceTermF, diagElemF, neighCountFF, neighCountFB, neighListFF, neighListFB,
 			N_MAX_FF, N_MAX_FB, sysVecElemF, pressureF);
 
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
@@ -1179,7 +1068,6 @@ namespace GPU01
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* xPosF, float* yPosF, float* zPosF,
@@ -1192,7 +1080,7 @@ namespace GPU01
 
 		K_Integration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xVelPredF, yVelPredF, zVelPredF, xAccPressF, yAccPressF, zAccPressF,
-			N_MAX_FF, N_MAX_FB, xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
+			xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
 
 		GPU::CheckLastKernel("K_Integration()");
 	}

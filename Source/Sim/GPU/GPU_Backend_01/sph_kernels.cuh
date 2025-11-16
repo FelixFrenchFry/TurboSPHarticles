@@ -17,25 +17,6 @@ namespace GPU01
 {
 	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream);
 
-	// TODO: split into construction and query
-	// TODO: make adhere to neighbor search interface
-	void Launch_NeighborSearch_BruteForce(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* neighCountFF,
-		uint32_t* neighCountFB,
-		uint32_t* neighListFF,
-		uint32_t* neighListFB,
-		uint32_t* overflowFlag);
-
-	void Launch_NeighborSearch_CellLinkedListBasic_Construct();
-
-	void Launch_NeighborSearch_CellLinkedListBasic_Query();
-
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
@@ -125,7 +106,6 @@ namespace GPU01
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,
-		const float* densityF,
 		const uint32_t* neighCountFF,
 		const uint32_t* neighCountFB,
 		const uint32_t* neighListFF,
@@ -141,7 +121,6 @@ namespace GPU01
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* xPosF, float* yPosF, float* zPosF,

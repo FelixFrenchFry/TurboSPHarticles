@@ -13,11 +13,25 @@
 namespace GPU01
 {
 	void NS_ReloadConstants(
+		uint32_t N_F, uint32_t N_B,
 		float kernelRadius, float cellSize,
 		float xBoxOrig, float yBoxOrig, float zBoxOrig,
 		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
 		uint32_t N_Cells, uint32_t EMPTY,
 		cudaStream_t stream);
+
+	void Launch_BruteForce_Query(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		uint32_t* neighCountFF,
+		uint32_t* neighCountFB,
+		uint32_t* neighListFF,
+		uint32_t* neighListFB,
+		uint32_t* overflowFlag);
 
 	void Launch_FillCellIdAndIdxF(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -46,7 +60,7 @@ namespace GPU01
 		// destinations
 		uint32_t* cellStartIdx, uint32_t* cellEndIdx);
 
-	void Launch_QueryNeighbors(
+	void Launch_CellLinkedListBasic_Query(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t* cellStartIdxF, const uint32_t* cellEndIdxF,

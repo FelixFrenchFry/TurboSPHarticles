@@ -11,6 +11,8 @@
 
 namespace GPU01
 {
+	__constant__ uint32_t c_ns_N_F;
+	__constant__ uint32_t c_ns_N_B;
 	__constant__ float c_ns_kernelRadius;
 	__constant__ float c_ns_kernelRadiusSqu;
 	__constant__ float c_ns_cellSize;
@@ -25,6 +27,7 @@ namespace GPU01
 	__constant__ uint32_t c_ns_EMPTY;
 
 	void NS_ReloadConstants(
+		uint32_t N_F, uint32_t N_B,
 		float kernelRadius, float cellSize,
 		float xBoxOrig, float yBoxOrig, float zBoxOrig,
 		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
@@ -35,6 +38,8 @@ namespace GPU01
 		float cellSizeInv = (cellSize == 0.0f) ? 0.0f : (1.0f / cellSize);
 
 		// store values in constant memory on the GPU
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_F, &N_F, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_B, &N_B, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_kernelRadius, &kernelRadius, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSize, &cellSize, sizeof(float)));
@@ -48,7 +53,7 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_ns_N_Cells, &N_Cells, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_EMPTY, &EMPTY, sizeof(uint32_t)));
 
-		GPU::StreamSync(stream);
+		//GPU::StreamSync(stream);
 	}
 
 	// -------------------------------------------------------------------------
@@ -75,8 +80,99 @@ namespace GPU01
 	}
 
 	// -------------------------------------------------------------------------
-	// --- [ kernels ] ---------------------------------------------------------
+	// --- [ kernels launched by host ] ----------------------------------------
 	// -------------------------------------------------------------------------
+
+	__global__
+	void K_BruteForce_Query(
+		const float* __restrict__ xPosF,
+		const float* __restrict__ yPosF,
+		const float* __restrict__ zPosF,
+		const float* __restrict__ xPosB,
+		const float* __restrict__ yPosB,
+		const float* __restrict__ zPosB,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		// destinations
+		uint32_t* __restrict__ neighCountFF,
+		uint32_t* __restrict__ neighCountFB,
+		uint32_t* __restrict__ neighListFF,
+		uint32_t* __restrict__ neighListFB,
+		uint32_t* __restrict__ overflowFlag)
+	{
+		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+		if (i >= c_ns_N_F) { return; }
+
+		// particle i data
+		// (global memory reads)
+		const float xi = xPosF[i];
+		const float yi = yPosF[i];
+		const float zi = zPosF[i];
+
+		// neighbor write bases
+		const uint32_t baseFF = i * N_MAX_FF;
+		const uint32_t baseFB = i * N_MAX_FB;
+		uint32_t cntFF = 0;
+		uint32_t cntFB = 0;
+
+		// check fluid candidates (all particles)
+		for (uint32_t j = 0; j < c_ns_N_F; j++)
+		{
+			// position difference
+			const float dx = xi - xPosF[j];
+			const float dy = yi - yPosF[j];
+			const float dz = zi - zPosF[j];
+
+			// squared distance between particles i and j
+			const float distSqu = dx * dx + dy * dy + dz * dz;
+
+			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
+			{
+				if (cntFF < N_MAX_FF)
+				{
+					// add fluid neighbor to the list
+					// (global memory write)
+					neighListFF[baseFF + cntFF] = j;
+					cntFF++;
+				}
+				else // overflow
+				{
+					atomicExch(overflowFlag, 1u);
+				}
+			}
+		}
+
+		// check boundary candidates (all particles)
+		for (uint32_t j = 0; j < c_ns_N_B; j++)
+		{
+			// position difference
+			const float dx = xi - xPosB[j];
+			const float dy = yi - yPosB[j];
+			const float dz = zi - zPosB[j];
+
+			// squared distance between particles i and j
+			const float distSqu = dx * dx + dy * dy + dz * dz;
+
+			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
+			{
+				if (cntFB < N_MAX_FB)
+				{
+					// add boundary neighbor to the list
+					// (global memory write)
+					neighListFB[baseFB + cntFB] = j;
+					cntFB++;
+				}
+				else // overflow
+				{
+					atomicExch(overflowFlag, 1u);
+				}
+			}
+		}
+
+		// update neighbor counts
+		// (global memory write)
+		neighCountFF[i] = cntFF;
+		neighCountFB[i] = cntFB;
+	}
 
 	__global__
 	void K_FillCellIdAndIdxF(
@@ -189,7 +285,7 @@ namespace GPU01
 	}
 
 	__global__
-	void K_QueryNeighbors(
+	void K_CellLinkedListBasic_Query(
 		const float* __restrict__ xPosF,
 		const float* __restrict__ yPosF,
 		const float* __restrict__ zPosF,
@@ -346,6 +442,31 @@ namespace GPU01
 
 namespace GPU01
 {
+	void Launch_BruteForce_Query(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		uint32_t* neighCountFF,
+		uint32_t* neighCountFB,
+		uint32_t* neighListFF,
+		uint32_t* neighListFB,
+		uint32_t* overflowFlag)
+	{
+		// TODO: initialize constants if needed
+
+		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+
+		K_BruteForce_Query<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, N_MAX_FF, N_MAX_FB,
+			neighCountFF, neighCountFB, neighListFF, neighListFB, overflowFlag);
+
+		GPU::CheckLastKernel("K_BruteForce_Query()");
+	}
+
 	void Launch_FillCellIdAndIdxF(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const uint32_t N_F,
@@ -417,7 +538,7 @@ namespace GPU01
 		GPU::CheckLastKernel("K_ClearRanges()");
 	}
 
-	void Launch_QueryNeighbors(
+	void Launch_CellLinkedListBasic_Query(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t* cellStartIdxF, const uint32_t* cellEndIdxF,
@@ -436,7 +557,7 @@ namespace GPU01
 		const uint32_t N_BLOCKSIZE = 256;
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
-		K_QueryNeighbors<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_CellLinkedListBasic_Query<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, cellStartIdxF, cellEndIdxF,
 			cellStartIdxB, cellEndIdxB, sortedParticleIdxF, sortedParticleIdxB,
 			N_F, N_MAX_FF, N_MAX_FB,
