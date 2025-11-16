@@ -245,7 +245,9 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles });
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles,
+									Bench::BenchOp::Statistics_Density,
+									Bench::BenchOp::Statistics_Velocity });
 
 	float sumFF = 0.0f;
 	float sumFB = 0.0f;
@@ -274,11 +276,8 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		minFF = 0.0f;
 		minFB = 0.0f;
 	}
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles });
 
 	// --- [ density stats ] ---------------------------------------------------
-
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
 
 	workBuffer_.resize(NF);
 
@@ -323,11 +322,8 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		minRelErr = 0.0f;
 		maxRelErr = 0.0f;
 	}
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Density });
 
 	// --- [ velocity stats ] --------------------------------------------------
-
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Velocity });
 
 	float velMagSum = 0.0f;
 	float velMagMin = std::numeric_limits<float>::max();
@@ -351,7 +347,9 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		velMagMin = 0.0f;
 		velMagMax = 0.0f;
 	}
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Velocity });
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles,
+								   Bench::BenchOp::Statistics_Density,
+								   Bench::BenchOp::Statistics_Velocity });
 
 	// --- [ writes to record ] ------------------------------------------------
 

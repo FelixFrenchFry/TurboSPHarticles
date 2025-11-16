@@ -228,6 +228,8 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 	// pack misc data into snapshot that is not handled by the backend
 	snap->simStep = simStep_;
 	snap->boxesB = simScenario_->GetBoundaryBoxes();
+	// TODO: add this to vis params instead?
+	//snap->scalarModeF = Base::ColorCodingMode::VelocityMag;
 
 	// move snapshot into mailbox (non-blocking)
 	visualSnapMailbox_->StoreSnapshot(std::move(snap));
@@ -286,6 +288,8 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 				// pack misc data into snapshot that is not handled by the backend
 				snap->simStep = simStep_;
 				snap->boxesB = simScenario_->GetBoundaryBoxes();
+				// TODO: add this to vis params instead?
+				//snap->scalarModeF = Base::ColorCodingMode::VelocityMag;
 
 				visualSnapMailbox_->StoreSnapshot(std::move(snap));
 

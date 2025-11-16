@@ -151,13 +151,9 @@ namespace Sim
 						   Bench::BenchOp::PositionUpdate }
 			},
 			{
-				.ops = { Bench::BenchOp::Statistics_Particles }
-			},
-			{
-				.ops = { Bench::BenchOp::Statistics_Density }
-			},
-			{
-				.ops = { Bench::BenchOp::Statistics_Velocity }
+				.ops = { Bench::BenchOp::Statistics_Particles,
+						   Bench::BenchOp::Statistics_Density,
+						   Bench::BenchOp::Statistics_Velocity }
 			},
 			{
 				.ops = { Bench::BenchOp::Snapshot_Visual }
