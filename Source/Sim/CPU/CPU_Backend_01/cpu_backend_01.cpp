@@ -391,15 +391,23 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		N_F_ != static_cast<uint32_t>(neighborsFB_.size()) ||
 		N_F_ != static_cast<uint32_t>(kernelWeightsFF_.size()) ||
 		N_F_ != static_cast<uint32_t>(kernelWeightsFB_.size()) ||
-		N_F_ != static_cast<uint32_t>(kernelGradientsFF_.size()) ||
-		N_F_ != static_cast<uint32_t>(kernelGradientsFB_.size()))
+		N_F_ != static_cast<uint32_t>(xKernelGradFF_.size()) ||
+		N_F_ != static_cast<uint32_t>(yKernelGradFF_.size()) ||
+		N_F_ != static_cast<uint32_t>(zKernelGradFF_.size()) ||
+		N_F_ != static_cast<uint32_t>(xKernelGradFB_.size()) ||
+		N_F_ != static_cast<uint32_t>(yKernelGradFB_.size()) ||
+		N_F_ != static_cast<uint32_t>(zKernelGradFB_.size()))
 	{
 		neighborsFF_.resize(N_F_);
 		neighborsFB_.resize(N_F_);
 		kernelWeightsFF_.resize(N_F_);
 		kernelWeightsFB_.resize(N_F_);
-		kernelGradientsFF_.resize(N_F_);
-		kernelGradientsFB_.resize(N_F_);
+		xKernelGradFF_.resize(N_F_);
+		yKernelGradFF_.resize(N_F_);
+		zKernelGradFF_.resize(N_F_);
+		xKernelGradFB_.resize(N_F_);
+		yKernelGradFB_.resize(N_F_);
+		zKernelGradFB_.resize(N_F_);
 
 		// expected number of fluid and boundary neighbors
 		const uint32_t N_expectedNumFF =
@@ -418,8 +426,12 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			neighborsFB_[i].reserve(N_expectedNumFB);
 			kernelWeightsFF_[i].reserve(N_expectedNumFF);
 			kernelWeightsFB_[i].reserve(N_expectedNumFB);
-			kernelGradientsFF_[i].reserve(N_expectedNumFF);
-			kernelGradientsFB_[i].reserve(N_expectedNumFB);
+			xKernelGradFF_[i].reserve(N_expectedNumFF);
+			yKernelGradFF_[i].reserve(N_expectedNumFF);
+			zKernelGradFF_[i].reserve(N_expectedNumFF);
+			xKernelGradFB_[i].reserve(N_expectedNumFB);
+			yKernelGradFB_[i].reserve(N_expectedNumFB);
+			zKernelGradFB_[i].reserve(N_expectedNumFB);
 		}
 	}
 

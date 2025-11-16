@@ -16,7 +16,6 @@
 
 // internal
 #include "cpu_backend_01.h"
-#include "glm/common.hpp"
 #include "neighbor_search.h"
 #include "Source/Base/helpers.h"
 

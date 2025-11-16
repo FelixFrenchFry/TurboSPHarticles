@@ -102,8 +102,14 @@ namespace Sim
 		// kernel weight storage
 		std::vector<std::vector<float>> kernelWeightsFF_;
 		std::vector<std::vector<float>> kernelWeightsFB_;
-		std::vector<std::vector<glm::vec3>> kernelGradientsFF_;
-		std::vector<std::vector<glm::vec3>> kernelGradientsFB_;
+
+		// kernel gradient storage
+		std::vector<std::vector<float>> xKernelGradFF_;
+		std::vector<std::vector<float>> yKernelGradFF_;
+		std::vector<std::vector<float>> zKernelGradFF_;
+		std::vector<std::vector<float>> xKernelGradFB_;
+		std::vector<std::vector<float>> yKernelGradFB_;
+		std::vector<std::vector<float>> zKernelGradFB_;
 
 		// re-usable work (scratch) buffer for temp storage
 		mutable std::vector<float> workBuffer_;

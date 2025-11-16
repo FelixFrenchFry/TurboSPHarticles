@@ -113,8 +113,6 @@ namespace {
 
 		assert(F.density.size() == N);
 		assert(F.pressure.size() == N);
-		assert(F.mass.size() == N);
-		assert(F.size.size() == N);
 	}
 
 	void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
@@ -124,9 +122,6 @@ namespace {
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
 		assert(B.xVel.size() == N && B.yVel.size() == N && B.zVel.size() == N);
-
-		assert(B.mass.size() == N);
-		assert(B.size.size() == N);
 	}
 
 } // anonymous namespace

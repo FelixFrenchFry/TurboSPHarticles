@@ -42,12 +42,17 @@ find_package(glm CONFIG REQUIRED)
 if(MSVC)
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("/openmp:llvm" HAS_OPENMP_LLVM_FLAG)
+    check_cxx_compiler_flag("/openmp:experimental" HAS_OPENMP_EXP_FLAG)
     add_library(MSVC_LLVM_OpenMP INTERFACE)
 
     if(HAS_OPENMP_LLVM_FLAG)
         target_compile_options(MSVC_LLVM_OpenMP INTERFACE
             $<$<COMPILE_LANGUAGE:CXX>:/openmp:llvm>)  # modern LLVM libomp
-        message(STATUS "OpenMP: MSVC using /openmp:llvm (LLVM libomp)")
+        if(HAS_OPENMP_EXP_FLAG)
+            target_compile_options(MSVC_LLVM_OpenMP INTERFACE
+                $<$<COMPILE_LANGUAGE:CXX>:/openmp:experimental>)
+        endif()
+        message(STATUS "OpenMP: MSVC using /openmp:llvm (+experimental for simd)")
     else()
         # fallback to classic /openmp (older vcomp runtime)
         target_compile_options(MSVC_LLVM_OpenMP INTERFACE
@@ -136,15 +141,16 @@ target_compile_options(Project_Options INTERFACE
 )
 
 # optional native archtitecture-specific optimizations
-# (activated with "-DENABLE_NATIVE_OPT=ON")
-option(ENABLE_NATIVE_OPT "Enable -march=native (or /arch:AVX2) for Release-like builds" OFF)
+option(ENABLE_NATIVE_OPT "Enable -march=native (or /arch:AVX2) for release-builds" OFF)
 if(ENABLE_NATIVE_OPT)
     target_compile_options(Project_Options INTERFACE
-        $<$<CXX_COMPILER_ID:MSVC>:
+        # MSVC C++ only
+        $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
             $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:/arch:AVX2>
         >
-        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:
-            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-march=native>
+        # GCC/Clang C++ only
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
+            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-march:native>
         >
     )
 endif()
