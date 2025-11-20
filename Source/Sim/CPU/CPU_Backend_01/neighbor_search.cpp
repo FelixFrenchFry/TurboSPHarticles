@@ -863,152 +863,158 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 
 	// loop over all non-empty grid cells
 	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
-	#pragma omp for schedule (guided)
-	for (uint64_t c = 0; c < N_Cells; c++)
-	{
-		// range of all fluid particles in this cell
-		const uint32_t sF = cellStartIdxF_[c]; // start
-		const uint32_t eF = cellStartIdxF_[c + 1]; // end
-		if (sF >= eF) { continue; }
-
-		// clear neighbor lists of all particles in this cell
-		for (uint32_t k = sF; k < eF; k++)
+	tbb::parallel_for(
+		tbb::blocked_range<uint64_t>(0, N_Cells),
+		[&](const tbb::blocked_range<uint64_t>& range)
 		{
-			const uint32_t i = sortedParticleIdxF_[k];
-
-			be_.neighborsFF_[i].clear();
-			be_.neighborsFB_[i].clear();
-		}
-
-		// determine a representative particle i0
-		const uint32_t i0 = sortedParticleIdxF_[sF];
-
-		const float xi0 = be_.xPosF_[i0];
-		const float yi0 = be_.yPosF_[i0];
-		const float zi0 = be_.zPosF_[i0];
-
-		// cell coordinates of all particles in this cell
-		const int cx = FloorToInt(xi0 * cellSizeInv_);
-		const int cy = FloorToInt(yi0 * cellSizeInv_);
-		const int cz = FloorToInt(zi0 * cellSizeInv_);
-
-		// check all particles j in 27 (3x3x3) neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
-		{
-			int nz = cz + rz; // target cell coordinate in z-direction
-
-			for (int ry = -1; ry <= 1; ry++)
+			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{
-				int ny = cy + ry; // target cell coordinate in y-direction
+				// range of all fluid particles in this cell
+				const uint32_t sF = cellStartIdxF_[c]; // start
+				const uint32_t eF = cellStartIdxF_[c + 1]; // end
+				if (sF >= eF) { continue; }
 
-				for (int rx = -1; rx <= 1; rx++)
+				// clear neighbor lists of all particles in this cell
+				for (uint32_t k = sF; k < eF; k++)
 				{
-					int nx = cx + rx; // target cell coordinate in x-direction
+					const uint32_t i = sortedParticleIdxF_[k];
 
-					// cell ID of the neighbor cell
-					const uint64_t cid_nbr = MapToCellId_Morton(nx, ny, nz);
+					be_.neighborsFF_[i].clear();
+					be_.neighborsFB_[i].clear();
+				}
 
-					// find neighbor fluid cell in compact list (binary search)
-					// TODO: use ternary search and BigMin-LitMax instead?
-					auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+				// determine a representative particle i0
+				const uint32_t i0 = sortedParticleIdxF_[sF];
 
-					// check fluid candidates in this neighbor cell
-					if (itF != uniqueCellIdF_.end() && *itF == cid_nbr)
+				const float xi0 = be_.xPosF_[i0];
+				const float yi0 = be_.yPosF_[i0];
+				const float zi0 = be_.zPosF_[i0];
+
+				// cell coordinates of all particles in this cell
+				const int cx = FloorToInt(xi0 * cellSizeInv_);
+				const int cy = FloorToInt(yi0 * cellSizeInv_);
+				const int cz = FloorToInt(zi0 * cellSizeInv_);
+
+				// check all particles j in 27 (3x3x3) neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					int nz = cz + rz; // target cell coordinate in z-direction
+
+					for (int ry = -1; ry <= 1; ry++)
 					{
-						const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
+						int ny = cy + ry; // target cell coordinate in y-direction
 
-						// range of all fluid particles in the neighbor cell
-						const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
-						const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
-						if (sF_nbr >= eF_nbr) { continue; }
-
-						// outer loop over particles in this cell (c)
-						// inner loop over all particles in the neighbor cell (cF_nbr)
-						for (uint32_t k = sF; k < eF; k++)
+						for (int rx = -1; rx <= 1; rx++)
 						{
-							const uint32_t i = sortedParticleIdxF_[k];
+							int nx = cx + rx; // target cell coordinate in x-direction
 
-							const float xi = be_.xPosF_[i];
-							const float yi = be_.yPosF_[i];
-							const float zi = be_.zPosF_[i];
+							// cell ID of the neighbor cell
+							const uint64_t cid_nbr = MapToCellId_Morton(nx, ny, nz);
 
-							#pragma omp simd
-							for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+							// find neighbor fluid cell in compact list (binary search)
+							// TODO: use ternary search and BigMin-LitMax instead?
+							auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+
+							// check fluid candidates in this neighbor cell
+							if (itF != uniqueCellIdF_.end() && *itF == cid_nbr)
 							{
-								// index of fluid neighbor candidate
-								const uint32_t j = sortedParticleIdxF_[l];
+								const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
 
-								// position difference
-								const float dx = xi - be_.xPosF_[j];
-								const float dy = yi - be_.yPosF_[j];
-								const float dz = zi - be_.zPosF_[j];
+								// range of all fluid particles in the neighbor cell
+								const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
+								const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
+								if (sF_nbr >= eF_nbr) { continue; }
 
-								// squared distance between particles i and j
-								const float distSqu = dx * dx
-													+ dy * dy
-													+ dz * dz;
-
-								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								// outer loop over particles in this cell (c)
+								// inner loop over all particles in the neighbor cell (cF_nbr)
+								for (uint32_t k = sF; k < eF; k++)
 								{
-									// add actual neighbor to list
-									be_.neighborsFF_[i].push_back(j);
+									const uint32_t i = sortedParticleIdxF_[k];
+
+									const float xi = be_.xPosF_[i];
+									const float yi = be_.yPosF_[i];
+									const float zi = be_.zPosF_[i];
+
+									#pragma omp simd
+									for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+									{
+										// index of fluid neighbor candidate
+										const uint32_t j = sortedParticleIdxF_[l];
+
+										// position difference
+										const float dx = xi - be_.xPosF_[j];
+										const float dy = yi - be_.yPosF_[j];
+										const float dz = zi - be_.zPosF_[j];
+
+										// squared distance between particles i and j
+										const float distSqu = dx * dx
+															+ dy * dy
+															+ dz * dz;
+
+										if (distSqu <= kernelRadiusSqu) [[unlikely]]
+										{
+											// add actual neighbor to list
+											be_.neighborsFF_[i].push_back(j);
+										}
+									}
 								}
 							}
-						}
-					}
 
-					// find neighbor boundary cell in compact list (binary search)
-					// TODO: use ternary search and BigMin-LitMax instead?
-					auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
+							// find neighbor boundary cell in compact list (binary search)
+							// TODO: use ternary search and BigMin-LitMax instead?
+							auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
 
-					// check fluid candidates in this neighbor cell
-					if (itB != uniqueCellIdB_.end() && *itB == cid_nbr)
-					{
-						const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
-
-						// range of all boundary particles in the neighbor cell
-						const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
-						const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
-						if (sB_nbr >= eB_nbr) { continue; }
-
-						// outer loop over particles in this cell (c)
-						// inner loop over all particles in the neighbor cell (cB_nbr)
-						for (uint32_t k = sF; k < eF; k++)
-						{
-							const uint32_t i = sortedParticleIdxF_[k];
-
-							const float xi = be_.xPosF_[i];
-							const float yi = be_.yPosF_[i];
-							const float zi = be_.zPosF_[i];
-
-							#pragma omp simd
-							for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+							// check fluid candidates in this neighbor cell
+							if (itB != uniqueCellIdB_.end() && *itB == cid_nbr)
 							{
-								// index of boundary neighbor candidate
-								const uint32_t j = sortedParticleIdxB_[l];
+								const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
 
-								// position difference
-								const float dx = xi - be_.xPosB_[j];
-								const float dy = yi - be_.yPosB_[j];
-								const float dz = zi - be_.zPosB_[j];
+								// range of all boundary particles in the neighbor cell
+								const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
+								const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
+								if (sB_nbr >= eB_nbr) { continue; }
 
-								// squared distance between particles i and j
-								const float distSqu = dx * dx
-													+ dy * dy
-													+ dz * dz;
-
-								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								// outer loop over particles in this cell (c)
+								// inner loop over all particles in the neighbor cell (cB_nbr)
+								for (uint32_t k = sF; k < eF; k++)
 								{
-									// add actual neighbor to list
-									be_.neighborsFB_[i].push_back(j);
+									const uint32_t i = sortedParticleIdxF_[k];
+
+									const float xi = be_.xPosF_[i];
+									const float yi = be_.yPosF_[i];
+									const float zi = be_.zPosF_[i];
+
+									#pragma omp simd
+									for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+									{
+										// index of boundary neighbor candidate
+										const uint32_t j = sortedParticleIdxB_[l];
+
+										// position difference
+										const float dx = xi - be_.xPosB_[j];
+										const float dy = yi - be_.yPosB_[j];
+										const float dz = zi - be_.zPosB_[j];
+
+										// squared distance between particles i and j
+										const float distSqu = dx * dx
+															+ dy * dy
+															+ dz * dz;
+
+										if (distSqu <= kernelRadiusSqu) [[unlikely]]
+										{
+											// add actual neighbor to list
+											be_.neighborsFB_[i].push_back(j);
+										}
+									}
 								}
 							}
 						}
 					}
 				}
 			}
-		}
-	}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(

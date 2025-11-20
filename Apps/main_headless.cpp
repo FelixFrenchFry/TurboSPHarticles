@@ -38,16 +38,7 @@ int main(int argc, char** argv)
 
 		CLI11_PARSE(application, argc, argv);
 
-		// set OpenMP environment variables
-		#ifdef _WIN32
-		_putenv_s("OMP_PLACES", "cores"); // use cores as places
-		_putenv_s("OMP_PROC_BIND", "close"); // bind threads close to master thread
-		_putenv_s("OMP_WAIT_POLICY", "ACTIVE"); // explicit busy-waiting for max sim performance
-		#else
-		setenv("OMP_PLACES", "cores", 1); // use cores as places
-		setenv("OMP_PROC_BIND", "close", 1); // bind threads close to master thread
-		setenv("OMP_WAIT_POLICY", "ACTIVE", 1); // explicit busy-waiting for max sim performance
-		#endif
+		// --- [ initialization of manager systems ] ---------------------------
 	}
 	catch (const std::exception& ex)
 	{

@@ -7,6 +7,9 @@
 #include <glm/vec3.hpp>
 #include <omp.h>
 #include <random>
+#include <tbb/blocked_range3d.h>
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -15,8 +18,6 @@
 
 
 using namespace Scene;
-
-// public ==============================
 
 void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 											 Sync::UniversalSimState& dst,
@@ -63,84 +64,90 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
 
-	#pragma omp parallel
+	if (N_w > 0 && N_v > 0 && N_u > 0)
 	{
-		std::mt19937_64 rng(params.jitterSeedF + static_cast<uint32_t>(omp_get_thread_num()));
-		std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
-
-		#pragma omp for collapse(3) schedule(static)
-		for (int kw = 0; kw < N_w; kw++) // loop over depth
-		{
-			for (int jv = 0; jv < N_v; jv++) // loop over height
+		tbb::parallel_for(
+			tbb::blocked_range3d<int>(0, N_w, 0, N_v, 0, N_u),
+			[&](const tbb::blocked_range3d<int>& r)
 			{
-				for (int iu = 0; iu < N_u; iu++) // loop over width
+				for (int kw = r.pages().begin(); kw != r.pages().end(); ++kw)      // depth
 				{
-					// get global index of currently handled particle
-					const uint32_t local = (static_cast<int64_t>(N_v) * kw + jv) * N_u + iu;
-					const uint32_t idx = N_base + local;
-
-					// position components
-					float u = uOff + iu * size;
-					float v = vOff + jv * size;
-					float w = wOff + kw * size;
-
-					// optionally apply jittering
-					if (jitAmp > 0.0f)
+					for (int jv = r.rows().begin(); jv != r.rows().end(); ++jv)    // height
 					{
-						u += uniformDist(rng);
-						v += uniformDist(rng);
-						w += uniformDist(rng);
+						for (int iu = r.cols().begin(); iu != r.cols().end(); ++iu) // width
+						{
+							// get global index of currently handled particle
+							const uint32_t local = (static_cast<int64_t>(N_v) * kw + jv) * N_u + iu;
+							const uint32_t idx = N_base + local;
+
+							// position components
+							float u = uOff + iu * size;
+							float v = vOff + jv * size;
+							float w = wOff + kw * size;
+
+							// optionally apply jittering
+							if (jitAmp > 0.0f)
+							{
+								// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
+								const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
+
+								u += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 0ull, jitAmp);
+								v += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 1ull, jitAmp);
+								w += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 2ull, jitAmp);
+							}
+
+							// clamp to make edge particles remain fully inside the box
+							u = std::clamp(u, radius, box.uLen - radius);
+							v = std::clamp(v, radius, box.vLen - radius);
+							w = std::clamp(w, radius, box.wLen - radius);
+
+							const glm::vec3 pos = box.origin
+												+ box.uHat * u
+												+ box.vHat * v
+												+ box.wHat * w;
+
+							// use pos for new particle
+							F.xPos[idx] = pos.x;
+							F.yPos[idx] = pos.y;
+							F.zPos[idx] = pos.z;
+
+							// no velocity by default
+							F.xVel[idx] = 0.0f;
+							F.yVel[idx] = 0.0f;
+							F.zVel[idx] = 0.0f;
+							F.xVelPred[idx] = 0.0f;
+							F.yVelPred[idx] = 0.0f;
+							F.zVelPred[idx] = 0.0f;
+
+							// no acceleration by default
+							F.xAcc[idx] = 0.0f;
+							F.yAcc[idx] = 0.0f;
+							F.zAcc[idx] = 0.0f;
+							F.xAccPress[idx] = 0.0f;
+							F.yAccPress[idx] = 0.0f;
+							F.zAccPress[idx] = 0.0f;
+							F.xAccVisc[idx] = 0.0f;
+							F.yAccVisc[idx] = 0.0f;
+							F.zAccVisc[idx] = 0.0f;
+							F.xAccExt[idx] = 0.0f;
+							F.yAccExt[idx] = 0.0f;
+							F.zAccExt[idx] = 0.0f;
+
+							// default pressure, density, etc...
+							F.sourceTerm[idx] = 0.0f;
+							F.diagElem[idx] = 0.0f;
+							F.sysVecElem[idx] = 0.0f;
+							F.pressure[idx] = 0.0f;
+							F.density[idx] = params.restDensityF;
+
+							// use global idx as ID
+							F.id[idx] = idx;
+						}
 					}
-
-					// clamp to make edge particles remain fully inside the box
-					u = std::clamp(u, radius, box.uLen - radius);
-					v = std::clamp(v, radius, box.vLen - radius);
-					w = std::clamp(w, radius, box.wLen - radius);
-
-					const glm::vec3 pos = box.origin
-										+ box.uHat * u
-										+ box.vHat * v
-										+ box.wHat * w;
-
-					// use pos for new particle
-					F.xPos[idx] = pos.x;
-					F.yPos[idx] = pos.y;
-					F.zPos[idx] = pos.z;
-
-					// no velocity by default
-					F.xVel[idx] = 0.0f;
-					F.yVel[idx] = 0.0f;
-					F.zVel[idx] = 0.0f;
-					F.xVelPred[idx] = 0.0f;
-					F.yVelPred[idx] = 0.0f;
-					F.zVelPred[idx] = 0.0f;
-
-					// no acceleration by default
-					F.xAcc[idx] = 0.0f;
-					F.yAcc[idx] = 0.0f;
-					F.zAcc[idx] = 0.0f;
-					F.xAccPress[idx] = 0.0f;
-					F.yAccPress[idx] = 0.0f;
-					F.zAccPress[idx] = 0.0f;
-					F.xAccVisc[idx] = 0.0f;
-					F.yAccVisc[idx] = 0.0f;
-					F.zAccVisc[idx] = 0.0f;
-					F.xAccExt[idx] = 0.0f;
-					F.yAccExt[idx] = 0.0f;
-					F.zAccExt[idx] = 0.0f;
-
-					// default pressure, density, etc...
-					F.sourceTerm[idx] = 0.0f;
-					F.diagElem[idx] = 0.0f;
-					F.sysVecElem[idx] = 0.0f;
-					F.pressure[idx] = 0.0f;
-					F.density[idx] = params.restDensityF;
-
-					// use global idx as ID
-					F.id[idx] = static_cast<std::uint32_t>(idx);
 				}
-			}
-		}
+			},
+			tbb::auto_partitioner{}
+		);
 	}
 }
 
@@ -287,8 +294,6 @@ std::array<OBBFace, 6> inline ScenarioMgr::GetFacesFromOBB(const OBB& box)
 	return faces;
 }
 
-// private ==============================
-
 void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 											Sync::UniversalSimState& dst,
 											const Sim::SimParams& params)
@@ -345,7 +350,25 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	dst.boundaryParticles.N_ = static_cast<uint32_t>(dst.boundaryParticles.id.size());
 }
 
-float inline ScenarioMgr::StartOffset(float length, float spacing, int N, bool centerToFit)
+// deterministic hash-based jitter, safe for parallel use
+inline float ScenarioMgr::Jitter3D(uint64_t baseSeed, uint64_t key, float amp)
+{
+	// using SplitMix64-style hash
+	uint64_t x = baseSeed + key * 0x9E3779B97F4A7C15ull;
+	x ^= x >> 30;
+	x *= 0xBF58476D1CE4E5B9ull;
+	x ^= x >> 27;
+	x *= 0x94D049BB133111EBull;
+	x ^= x >> 31;
+
+	// map to [0,1)
+	const double u01 = (x >> 11) * (1.0 / 9007199254740992.0); // 2^53
+
+	// map to [-amp, +amp]
+	return static_cast<float>((u01 * 2.0 - 1.0) * amp);
+}
+
+inline float ScenarioMgr::StartOffset(float length, float spacing, int N, bool centerToFit)
 {
 	if (!centerToFit || N <= 1) { return 0.0f; }
 
@@ -353,14 +376,14 @@ float inline ScenarioMgr::StartOffset(float length, float spacing, int N, bool c
 	return 0.5f * fmaxf(0.0f, length - covered);
 }
 
-uint32_t inline ScenarioMgr::TilesCount(float length, float spacing)
+inline uint32_t ScenarioMgr::TilesCount(float length, float spacing)
 {
 	if (spacing <= 0.0f) { return 0; }
 
 	return std::max(1, static_cast<int>(std::floor(length / spacing)) + 1);
 }
 
-uint32_t inline ScenarioMgr::ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers)
+inline uint32_t ScenarioMgr::ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers)
 {
 	// total particle count of "outer" box
 	const uint32_t N_total = N_u * N_v * N_w;

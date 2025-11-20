@@ -91,11 +91,13 @@ namespace Scene
 									   Sync::UniversalSimState& dst,
 									   const Sim::SimParams& params);
 
-		float inline StartOffset(float length, float spacing, int N, bool centerToFit = true);
+		static inline float Jitter3D(uint64_t baseSeed, uint64_t key, float amp);
 
-		uint32_t inline TilesCount(float length, float spacing);
+		static inline float StartOffset(float length, float spacing, int N, bool centerToFit = true);
 
-		uint32_t inline ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers);
+		static inline uint32_t TilesCount(float length, float spacing);
+
+		static inline uint32_t ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers);
 	};
 
 } // namespace Scene

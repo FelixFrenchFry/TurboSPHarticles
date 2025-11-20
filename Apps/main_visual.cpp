@@ -6,6 +6,7 @@
 #include <exception>
 #include <iostream>
 #include <spdlog/spdlog.h>
+#include <tbb/global_control.h>
 
 // internal
 #include "../Source/Sim/Core/parameters_sim.h"
@@ -40,18 +41,7 @@ int main(int argc, char** argv)
 
 		CLI11_PARSE(application, argc, argv);
 
-		// set OpenMP environment variables
-		#ifdef _WIN32
-		_putenv_s("OMP_PLACES", "cores"); // use cores as places
-		_putenv_s("OMP_PROC_BIND", "close"); // bind threads close to master thread
-		_putenv_s("OMP_WAIT_POLICY", "PASSIVE"); // avoid busy-waiting for smoother vis performance
-		#else
-		setenv("OMP_PLACES", "cores", 1); // use cores as places
-		setenv("OMP_PROC_BIND", "close", 1); // bind threads close to master thread
-		setenv("OMP_WAIT_POLICY", "PASSIVE", 1); // avoid busy-waiting for smoother vis performance
-		#endif
-
-		// ===== initialization of manager systems =====
+		// --- [ initialization of manager systems ] ---------------------------
 
 		// simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
@@ -96,7 +86,7 @@ int main(int argc, char** argv)
 			return EXIT_FAILURE;
 		}
 
-		// ===== hardware budgets =====
+		// --- [ hardware budgets ] --------------------------------------------
 
 		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
 		const std::uint32_t N_visThreads = 1; // TODO: make configurable?
@@ -106,18 +96,19 @@ int main(int argc, char** argv)
 		SPDLOG_INFO("Number of threads [total/sim/vis]: [ {} / {} / {} ]",
 			N_totalThreads, N_simThreads, N_visThreads);
 
-		// ===== main loop =====
+		// limit TBB to N_simThreads worker threads
+		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_simThreads);
 
-		// TODO: run simulation with separate thread(s)
+		// --- [ main loop ] ---------------------------------------------------
 
 		// simulation runs on background controller thread
-		// (using OpenMP parallel regions to spawn N-1 worker threads within)
+		// (spawn N-1 worker threads within)
 		simulationMgr.Launch_Async(N_simThreads);
 
 		// visualization runs on main thread
 		visualizationMgr.RunVis();
 
-		// ===== shutdown =====
+		// --- [ shutdown ] ----------------------------------------------------
 
 		simulationMgr.RequestStop();
 		simulationMgr.JoinThreads();

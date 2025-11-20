@@ -212,10 +212,6 @@ void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 
 void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken)
 {
-	// configure pool size for any OpenMP usage within the selected backend
-	omp_set_dynamic(0); // disable dynamic adjustment of threads
-	omp_set_num_threads(N_simThreads); // set fixed number of worker threads
-
 	SPDLOG_INFO("Simulation started running with {} worker threads",
 		N_simThreads);
 
