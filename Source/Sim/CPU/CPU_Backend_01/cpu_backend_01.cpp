@@ -9,6 +9,7 @@
 #include <numbers>
 #include <spdlog/spdlog.h>
 #include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 
 // internal
@@ -44,13 +45,34 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	simStep_ = src.step;
 
 	// resize backend fluid data structures
-	xPosF_.resize(N_F_); yPosF_.resize(N_F_); zPosF_.resize(N_F_);
-	xVelF_.resize(N_F_); yVelF_.resize(N_F_); zVelF_.resize(N_F_);
-	xVelPredF_.resize(N_F_); yVelPredF_.resize(N_F_); zVelPredF_.resize(N_F_);
-	xAccF_.resize(N_F_); yAccF_.resize(N_F_); zAccF_.resize(N_F_);
-	xAccPressF_.resize(N_F_); yAccPressF_.resize(N_F_); zAccPressF_.resize(N_F_);
-	xAccViscF_.resize(N_F_); yAccViscF_.resize(N_F_); zAccViscF_.resize(N_F_);
-	xAccExtF_.resize(N_F_); yAccExtF_.resize(N_F_); zAccExtF_.resize(N_F_);
+	xPosF_.resize(N_F_);
+	yPosF_.resize(N_F_);
+	zPosF_.resize(N_F_);
+
+	xVelF_.resize(N_F_);
+	yVelF_.resize(N_F_);
+	zVelF_.resize(N_F_);
+
+	xVelPredF_.resize(N_F_);
+	yVelPredF_.resize(N_F_);
+	zVelPredF_.resize(N_F_);
+
+	xAccF_.resize(N_F_);
+	yAccF_.resize(N_F_);
+	zAccF_.resize(N_F_);
+
+	xAccPressF_.resize(N_F_);
+	yAccPressF_.resize(N_F_);
+	zAccPressF_.resize(N_F_);
+
+	xAccViscF_.resize(N_F_);
+	yAccViscF_.resize(N_F_);
+	zAccViscF_.resize(N_F_);
+
+	xAccExtF_.resize(N_F_);
+	yAccExtF_.resize(N_F_);
+	zAccExtF_.resize(N_F_);
+
 	sourceTermF_.resize(N_F_);
 	diagElemF_.resize(N_F_);
 	sysVecElemF_.resize(N_F_);
@@ -63,38 +85,72 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	xVelB_.resize(N_B_); yVelB_.resize(N_B_); zVelB_.resize(N_B_);
 	idB_.resize(N_B_);
 
-	// parallel region for the copy
-	#pragma omp parallel
-	{
-		// fluid particles
-		#pragma omp for schedule(static)
-		for (uint32_t i = 0; i < N_F_; i++)
+	// fluid particles
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			xPosF_[i] = F.xPos[i]; yPosF_[i] = F.yPos[i]; zPosF_[i] = F.zPos[i];
-			xVelF_[i] = F.xVel[i]; yVelF_[i] = F.yVel[i]; zVelF_[i] = F.zVel[i];
-			xVelPredF_[i] = F.xVelPred[i]; yVelPredF_[i] = F.yVelPred[i]; zVelPredF_[i] = F.zVelPred[i];
-			xAccF_[i] = F.xAcc[i]; yAccF_[i] = F.yAcc[i]; zAccF_[i] = F.zAcc[i];
-			xAccPressF_[i] = F.xAccPress[i]; yAccPressF_[i] = F.yAccPress[i]; zAccPressF_[i] = F.zAccPress[i];
-			xAccViscF_[i] = F.xAccVisc[i]; yAccViscF_[i] = F.yAccVisc[i]; zAccViscF_[i] = F.zAccVisc[i];
-			xAccExtF_[i] = F.xAccExt[i]; yAccExtF_[i] = F.yAccExt[i]; zAccExtF_[i] = F.zAccExt[i];
-			sourceTermF_[i] = F.sourceTerm[i];
-			diagElemF_[i] = F.diagElem[i];
-			sysVecElemF_[i] = F.sysVecElem[i];
-			pressureF_[i] = F.pressure[i];
-			densityF_[i] = F.density[i];
-			idF_[i] = F.id[i];
-		}
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				xPosF_[i] = F.xPos[i];
+				yPosF_[i] = F.yPos[i];
+				zPosF_[i] = F.zPos[i];
 
-		// boundary particles
-		#pragma omp for schedule(static)
-		for (uint32_t i = 0; i < N_B_; i++)
+				xVelF_[i] = F.xVel[i];
+				yVelF_[i] = F.yVel[i];
+				zVelF_[i] = F.zVel[i];
+
+				xVelPredF_[i] = F.xVelPred[i];
+				yVelPredF_[i] = F.yVelPred[i];
+				zVelPredF_[i] = F.zVelPred[i];
+
+				xAccF_[i] = F.xAcc[i];
+				yAccF_[i] = F.yAcc[i];
+				zAccF_[i] = F.zAcc[i];
+
+				xAccPressF_[i] = F.xAccPress[i];
+				yAccPressF_[i] = F.yAccPress[i];
+				zAccPressF_[i] = F.zAccPress[i];
+
+				xAccViscF_[i] = F.xAccVisc[i];
+				yAccViscF_[i] = F.yAccVisc[i];
+				zAccViscF_[i] = F.zAccVisc[i];
+
+				xAccExtF_[i] = F.xAccExt[i];
+				yAccExtF_[i] = F.yAccExt[i];
+				zAccExtF_[i] = F.zAccExt[i];
+
+				sourceTermF_[i] = F.sourceTerm[i];
+				diagElemF_[i] = F.diagElem[i];
+				sysVecElemF_[i] = F.sysVecElem[i];
+				pressureF_[i] = F.pressure[i];
+				densityF_[i] = F.density[i];
+				idF_[i] = F.id[i];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// boundary particles
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_B_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			xPosB_[i] = B.xPos[i]; yPosB_[i] = B.yPos[i]; zPosB_[i] = B.zPos[i];
-			xVelB_[i] = B.xVel[i]; yVelB_[i] = B.yVel[i]; zVelB_[i] = B.zVel[i];
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				xPosB_[i] = B.xPos[i];
+				yPosB_[i] = B.yPos[i];
+				zPosB_[i] = B.zPos[i];
 
-			idB_[i] = B.id[i];
-		}
-	}
+				xVelB_[i] = B.xVel[i];
+				yVelB_[i] = B.yVel[i];
+				zVelB_[i] = B.zVel[i];
+
+				idB_[i] = B.id[i];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
 	SPDLOG_INFO("Pulled universal sim state with {} fluid and "
 				"{} boundary particles into data structures of backend CPU01",
@@ -110,37 +166,72 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	dst.ResizeFluid(N_F_);
 	dst.ResizeBoundary(N_B_);
 
-	// parallel region for the copy
-	#pragma omp parallel
-	{
-		// fluid particles
-		#pragma omp for schedule(static)
-		for (uint32_t i = 0; i < N_F_; i++)
+	// fluid particles
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			F.xPos[i] = xPosF_[i]; F.yPos[i] = yPosF_[i]; F.zPos[i] = zPosF_[i];
-			F.xVel[i] = xVelF_[i]; F.yVel[i] = yVelF_[i]; F.zVel[i] = zVelF_[i];
-			F.xVelPred[i] = xVelPredF_[i]; F.yVelPred[i] = yVelPredF_[i]; F.zVelPred[i] = zVelPredF_[i];
-			F.xAcc[i] = xAccF_[i]; F.yAcc[i] = yAccF_[i]; F.zAcc[i] = zAccF_[i];
-			F.xAccPress[i] = xAccPressF_[i]; F.yAccPress[i] = yAccPressF_[i]; F.zAccPress[i] = zAccPressF_[i];
-			F.xAccVisc[i] = xAccViscF_[i]; F.yAccVisc[i] = yAccViscF_[i]; F.zAccVisc[i] = zAccViscF_[i];
-			F.xAccExt[i] = xAccExtF_[i]; F.yAccExt[i] = yAccExtF_[i]; F.zAccExt[i] = zAccExtF_[i];
-			F.sourceTerm[i] = sourceTermF_[i];
-			F.diagElem[i] = diagElemF_[i];
-			F.sysVecElem[i] = sysVecElemF_[i];
-			F.pressure[i] = pressureF_[i];
-			F.density[i] = densityF_[i];
-			F.id[i] = idF_[i];
-		}
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				F.xPos[i] = xPosF_[i];
+				F.yPos[i] = yPosF_[i];
+				F.zPos[i] = zPosF_[i];
 
-		// boundary particles
-		#pragma omp for schedule(static)
-		for (uint32_t i = 0; i < N_B_; i++)
+				F.xVel[i] = xVelF_[i];
+				F.yVel[i] = yVelF_[i];
+				F.zVel[i] = zVelF_[i];
+
+				F.xVelPred[i] = xVelPredF_[i];
+				F.yVelPred[i] = yVelPredF_[i];
+				F.zVelPred[i] = zVelPredF_[i];
+
+				F.xAcc[i] = xAccF_[i];
+				F.yAcc[i] = yAccF_[i];
+				F.zAcc[i] = zAccF_[i];
+
+				F.xAccPress[i] = xAccPressF_[i];
+				F.yAccPress[i] = yAccPressF_[i];
+				F.zAccPress[i] = zAccPressF_[i];
+
+				F.xAccVisc[i] = xAccViscF_[i];
+				F.yAccVisc[i] = yAccViscF_[i];
+				F.zAccVisc[i] = zAccViscF_[i];
+
+				F.xAccExt[i] = xAccExtF_[i];
+				F.yAccExt[i] = xAccExtF_[i];
+				F.zAccExt[i] = zAccExtF_[i];
+
+				F.sourceTerm[i] = sourceTermF_[i];
+				F.diagElem[i] = diagElemF_[i];
+				F.sysVecElem[i] = sysVecElemF_[i];
+				F.pressure[i] = pressureF_[i];
+				F.density[i] = densityF_[i];
+				F.id[i] = idF_[i];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// boundary particles
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_B_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			B.xPos[i] = xPosB_[i]; B.yPos[i] = yPosB_[i]; B.zPos[i] = zPosB_[i];
-			B.xVel[i] = xVelB_[i]; B.yVel[i] = yVelB_[i]; B.zVel[i] = zVelB_[i];
-			B.id[i] = idB_[i];
-		}
-	}
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				B.xPos[i] = xPosB_[i];
+				B.yPos[i] = yPosB_[i];
+				B.zPos[i] = zPosB_[i];
+
+				B.xVel[i] = xVelB_[i];
+				B.yVel[i] = yVelB_[i];
+				B.zVel[i] = zVelB_[i];
+
+				B.id[i] = idB_[i];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
@@ -175,11 +266,18 @@ void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	snap.posF.resize(N_F_);
 	snap.scalarDataF.resize(N_F_);
 
-	#pragma omp parallel for schedule(static)
-	for (uint32_t i = 0; i < N_F_; i++)
-	{
-		snap.posF[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
-	}
+	// pack into the visual snapshot's data structures
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				snap.posF[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
 	FillScalarData(snap, snap.scalarModeF);
 }
@@ -205,14 +303,20 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 	}
 	case Base::VelocityMag:
 	{
-		#pragma omp parallel for schedule(static)
-		for (uint32_t i = 0; i < N_F_; i++)
-		{
-			// magnitude of velocity vector
-			snap.scalarDataF[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
-											 + yVelF_[i] * yVelF_[i]
-											 + zVelF_[i] * zVelF_[i]);
-		}
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// magnitude of velocity vector
+					snap.scalarDataF[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
+													 + yVelF_[i] * yVelF_[i]
+													 + zVelF_[i] * zVelF_[i]);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
 		return;
 	}
 	case Base::Density:
@@ -329,29 +433,6 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		minFB = 0.0f;
 	}
 
-	/*
-	#pragma omp parallel for reduction(+:sumFF,sumFB) reduction(min:minFF,minFB) reduction(max:maxFF,maxFB) schedule(static)
-	for (uint32_t i = 0; i < NF; i++)
-	{
-		const float nf = static_cast<float>(neighborsFF_[i].size());
-		const float nb = static_cast<float>(neighborsFB_[i].size());
-
-		sumFF += nf;
-		sumFB += nb;
-
-		if (nf < minFF) [[unlikely]] { minFF = nf; }
-		if (nb < minFB) [[unlikely]] { minFB = nb; }
-
-		if (nf > maxFF) [[unlikely]] { maxFF = nf; }
-		if (nb > maxFB) [[unlikely]] { maxFB = nb; }
-	}
-	if (NF == 0) // reasonable defaults for empty sim
-	{
-		minFF = 0.0f;
-		minFB = 0.0f;
-	}
-	*/
-
 	// --- [ density stats ] ---------------------------------------------------
 
 	workBuffer_.resize(NF);
@@ -410,21 +491,6 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		minRelErr = globalDens.minRelErr;
 		maxRelErr = globalDens.maxRelErr;
 	}
-
-	/*
-	#pragma omp parallel for reduction(+:sumRelErr) reduction(min:minRelErr) reduction(max:maxRelErr) schedule(static)
-	for (uint32_t i = 0; i < NF; i++)
-	{
-		const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
-		const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
-
-		workBuffer_[i] = relErr;
-		sumRelErr += relErr;
-
-		if (relErr < minRelErr) [[unlikely]] { minRelErr = relErr; }
-		if (relErr > maxRelErr) [[unlikely]] { maxRelErr = relErr; }
-	}
-	*/
 
 	float p95 = 0.0f;
 	float p99 = 0.0f;
@@ -514,27 +580,6 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		velMagMax = 0.0f;
 	}
 
-	/*
-	#pragma omp parallel for reduction(+:velMagSum) reduction(min:velMagMin) reduction(max:velMagMax) schedule(static)
-	for (uint32_t i = 0; i < NF; i++)
-	{
-		const float vx = xVelF_[i];
-		const float vy = yVelF_[i];
-		const float vz = zVelF_[i];
-
-		const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
-
-		velMagSum += velMag;
-		if (velMag < velMagMin) [[unlikely]] { velMagMin = velMag; }
-		if (velMag > velMagMax) [[unlikely]] { velMagMax = velMag; }
-	}
-	if (NF == 0) // reasonable defaults for empty sim
-	{
-		velMagMin = 0.0f;
-		velMagMax = 0.0f;
-	}
-	*/
-
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles,
 								   Bench::BenchOp::Statistics_Density,
 								   Bench::BenchOp::Statistics_Velocity });
@@ -604,20 +649,26 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			std::powf(params.kernelRadius, 3.0f));
 
 		// heuristic reserves (kept and re-used across steps)
-		#pragma omp parallel for schedule(static)
-		for (uint32_t i = 0; i < N_F_; i++)
-		{
-			neighborsFF_[i].reserve(N_expectedNumFF);
-			neighborsFB_[i].reserve(N_expectedNumFB);
-			kernelWeightsFF_[i].reserve(N_expectedNumFF);
-			kernelWeightsFB_[i].reserve(N_expectedNumFB);
-			xKernelGradFF_[i].reserve(N_expectedNumFF);
-			yKernelGradFF_[i].reserve(N_expectedNumFF);
-			zKernelGradFF_[i].reserve(N_expectedNumFF);
-			xKernelGradFB_[i].reserve(N_expectedNumFB);
-			yKernelGradFB_[i].reserve(N_expectedNumFB);
-			zKernelGradFB_[i].reserve(N_expectedNumFB);
-		}
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					neighborsFF_[i].reserve(N_expectedNumFF);
+					neighborsFB_[i].reserve(N_expectedNumFB);
+					kernelWeightsFF_[i].reserve(N_expectedNumFF);
+					kernelWeightsFB_[i].reserve(N_expectedNumFB);
+					xKernelGradFF_[i].reserve(N_expectedNumFF);
+					yKernelGradFF_[i].reserve(N_expectedNumFF);
+					zKernelGradFF_[i].reserve(N_expectedNumFF);
+					xKernelGradFB_[i].reserve(N_expectedNumFB);
+					yKernelGradFB_[i].reserve(N_expectedNumFB);
+					zKernelGradFB_[i].reserve(N_expectedNumFB);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
 	}
 
 	Step_IISPH(params);

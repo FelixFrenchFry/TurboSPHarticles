@@ -4,6 +4,8 @@
 #include <glm/vec3.hpp>
 #include <cmath>
 #include <spdlog/spdlog.h>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -219,11 +221,17 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	GPU::StreamSync(stream_);
 
 	// pack into the visual snapshot's data structures
-	#pragma omp parallel for schedule(static)
-	for (uint32_t i = 0; i < N_F_; i++)
-	{
-		snap.posF[i] = glm::vec3{ h_xPosF[i], h_yPosF[i], h_zPosF[i] };
-	}
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				snap.posF[i] = glm::vec3{ h_xPosF[i], h_yPosF[i], h_zPosF[i] };
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
 	FillScalarData(snap, snap.scalarModeF);
 }
@@ -264,18 +272,24 @@ void SimBackend_GPU01::FillScalarData(Sync::VisualSnapshot& snap,
 		// wait for all copies to finish
 		GPU::StreamSync(stream_);
 
-		#pragma omp parallel for schedule(static)
-		for (uint32_t i = 0; i < N_F_; ++i)
-		{
-			const float vxi = h_xVelF[i];
-			const float vyi = h_yVelF[i];
-			const float vzi = h_zVelF[i];
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float vxi = h_xVelF[i];
+					const float vyi = h_yVelF[i];
+					const float vzi = h_zVelF[i];
 
-			// magnitude of velocity vector
-			snap.scalarDataF[i] = std::sqrt(vxi * vxi 
-											 + vyi * vyi 
-											 + vzi * vzi);
-		}
+					// magnitude of velocity vector
+					snap.scalarDataF[i] = std::sqrt(vxi * vxi
+													 + vyi * vyi
+													 + vzi * vzi);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
 		return;
 	}
 	case Base::Density:

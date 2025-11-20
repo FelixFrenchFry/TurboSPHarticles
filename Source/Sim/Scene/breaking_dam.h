@@ -80,9 +80,9 @@ namespace Scene
 		OBB fluid = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0.0,0.0,0.0},
-			/* uDir, uLen */	U, 0.5f,
+			/* uDir, uLen */	U, 0.8f,
 			/* vDir, vLen */	V, 0.5f,
-			/* wDir, wLen */	W, 0.5f
+			/* wDir, wLen */	W, 0.8f
 		);
 
 		return BreakingDamConfig{ container, fluid };

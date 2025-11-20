@@ -726,32 +726,48 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	cellIdF_.resize(N_F);
 	sortedParticleIdxF_.resize(N_F);
 
-	#pragma omp parallel for schedule(static)
-	for (uint32_t i = 0; i < N_F; i++)
+	if (N_F > 0)
 	{
-		// compute cell coordinates
-		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell coordinates
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
-		cellIdF_[i] = MapToCellId_Morton(cx, cy, cz);
-		sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
+					cellIdF_[i] = MapToCellId_Morton(cx, cy, cz);
+					sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
+				}
+			},
+			tbb::auto_partitioner{}
+		);
 	}
 
 	// boundary
 	cellIdB_.resize(N_B);
 	sortedParticleIdxB_.resize(N_B);
 
-	#pragma omp parallel for schedule(static)
-	for (uint32_t i = 0; i < N_B; i++)
+	if (N_B > 0)
 	{
-		// compute cell coordinates
-		const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell coordinates
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
-		cellIdB_[i] = MapToCellId_Morton(cx, cy, cz);
-		sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
+					cellIdB_[i] = MapToCellId_Morton(cx, cy, cz);
+					sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
+				}
+			},
+			tbb::auto_partitioner{}
+		);
 	}
 
 	// --- [ sort particle indices by cell IDs ] -------------------------------
