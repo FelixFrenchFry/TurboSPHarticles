@@ -24,7 +24,8 @@ SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
 {
 	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_CPU01>(*this);
 	//neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
-	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
+	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
+	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
 }
 
 void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
@@ -233,6 +234,8 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
+	// TODO: add an omp parallel region?
+
 	using namespace Stats;
 
 	// --- [ particle counts ] -------------------------------------------------

@@ -40,7 +40,11 @@ namespace Base
 
 		// derived from paper:
 		// "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013)
-		CellLinkedList_Basic
+		CellLinkedList_Basic,
+
+		// derived from paper:
+		// "Compressed Neighbor Lists for SPH" (2019)
+		CellLinkedList_Compact
 	};
 
 	enum ColorCodingMode

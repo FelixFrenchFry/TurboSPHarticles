@@ -65,7 +65,9 @@ namespace Scene
 	BreakingDamConfig inline MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr,
 													       const Sim::SimParams& params)
 	{
-		const glm::vec3 U{ 1, 0, 0 }, V{ 0, 1, 0 }, W{ 0, 0, 1 };
+		const glm::vec3 U{ 1, 0, 0 }; // forward
+		const glm::vec3 V{ 0, 1, 0 }; // up
+		const glm::vec3 W{ 0, 0, 1 }; // right
 
 		OBB container = scenarioMgr.MakeOBB_FromAxes
 		(

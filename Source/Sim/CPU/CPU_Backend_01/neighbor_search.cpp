@@ -5,8 +5,12 @@
 #include <cassert>
 #include <cstdint>
 #include <execution>
+#include <numeric>
 #include <ranges>
 #include <spdlog/spdlog.h>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
 #include <vector>
@@ -398,8 +402,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	cellIdF_.resize(be_.N_F_);
 	sortedParticleIdxF_.resize(be_.N_F_);
 
-	// TODO: parallelize this?
-	// #pragma omp parallel for schedule(static)
+	#pragma omp parallel for schedule(static)
 	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
 		// compute cell coordinates
@@ -413,7 +416,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 		uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
 
 		cellIdF_[i] = MapToCellId_Basic(ux, uy, uz);
-		sortedParticleIdxF_[i] = i;
+		sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
 	}
 
 	// boundary
@@ -423,8 +426,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	cellIdB_.resize(be_.N_B_);
 	sortedParticleIdxB_.resize(be_.N_B_);
 
-	// TODO: parallelize this?
-	// #pragma omp parallel for schedule(static)
+	#pragma omp parallel for schedule(static)
 	for (uint32_t i = 0; i < be_.N_B_; i++)
 	{
 		// compute cell coordinates
@@ -438,7 +440,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 		uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
 
 		cellIdB_[i] = MapToCellId_Basic(ux, uy, uz);
-		sortedParticleIdxB_[i] = i;
+		sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
 	}
 
 	// --- [ sort particle indices by cell IDs ] -------------------------------
@@ -476,18 +478,18 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 
 	// fluid
 	{
-		uint32_t prevCell = EMPTY;
+		uint32_t cid_prev = EMPTY;
 		for (uint32_t i = 0; i < be_.N_F_; i++)
 		{
 			const uint32_t pidx = sortedParticleIdxF_[i];
 			const uint32_t cid = cellIdF_[pidx];
 
-			if (cid != prevCell) // new cell encountered
+			if (cid != cid_prev) // new cell encountered
 			{
-				if (prevCell != EMPTY)
+				if (cid_prev != EMPTY)
 				{
 					// set end index of previous cell
-					cellEndIdxF_[prevCell] = i;
+					cellEndIdxF_[cid_prev] = i;
 				}
 
 				if (cellStartIdxF_[cid] == EMPTY)
@@ -496,31 +498,31 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 					cellStartIdxF_[cid] = i;
 				}
 
-				prevCell = cid;
+				cid_prev = cid;
 			}
 		}
 
-		if (prevCell != EMPTY)
+		if (cid_prev != EMPTY)
 		{
 			// set end index of last cell to close it
-			cellEndIdxF_[prevCell] = be_.N_F_;
+			cellEndIdxF_[cid_prev] = be_.N_F_;
 		}
 	}
 
 	// boundary
 	{
-		uint32_t prevCell = EMPTY;
+		uint32_t cid_prev = EMPTY;
 		for (uint32_t i = 0; i < be_.N_B_; i++)
 		{
 			const uint32_t pidx = sortedParticleIdxB_[i];
 			const uint32_t cid = cellIdB_[pidx];
 
-			if (cid != prevCell) // new cell encountered
+			if (cid != cid_prev) // new cell encountered
 			{
-				if (prevCell != EMPTY)
+				if (cid_prev != EMPTY)
 				{
 					// set end index of previous cell
-					cellEndIdxB_[prevCell] = i;
+					cellEndIdxB_[cid_prev] = i;
 				}
 
 				if (cellStartIdxB_[cid] == EMPTY)
@@ -529,20 +531,24 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 					cellStartIdxB_[cid] = i;
 				}
 
-				prevCell = cid;
+				cid_prev = cid;
 			}
 		}
 
-		if (prevCell != EMPTY)
+		if (cid_prev != EMPTY)
 		{
 			// set end index of last cell to close it
-			cellEndIdxB_[prevCell] = be_.N_B_;
+			cellEndIdxB_[cid_prev] = be_.N_B_;
 		}
 	}
 }
 
 void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 {
+	// TODO: instead of iterating over particles in the outermost loop,
+	// TODO: iterate over cells and their particles, because for all particles
+	// TODO: in a cell, the neighboring cells and neighbor candidates are the same?
+
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
 	#pragma omp for schedule (guided)
@@ -654,8 +660,7 @@ inline uint32_t NS_CellLinkedList_Basic_CPU01::MapToCellId_Basic(
 	return cx + N_DimX_ * (cy + N_DimY_ * cz);
 }
 
-inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(
-	float v) const noexcept
+inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(float v) const noexcept
 {
 	int i = static_cast<int>(v);
 
@@ -667,4 +672,379 @@ inline uint32_t NS_CellLinkedList_Basic_CPU01::ClampInt(
 {
 	const int t = (v < low) ? low : v;
 	return static_cast<uint32_t>((t > high) ? high : t);
+}
+
+// -----------------------------------------------------------------------------
+// --- [ cell linked list compact implementation ] -----------------------------
+// -----------------------------------------------------------------------------
+
+void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
+{
+	cellSize_ = 0.0f;
+	cellSizeInv_ = 0.0f;
+
+	uniqueCellIdF_.clear();
+	cellStartIdxF_.clear();
+	cellIdF_.clear();
+	sortedParticleIdxF_.clear();
+
+	uniqueCellIdB_.clear();
+	cellStartIdxB_.clear();
+	cellIdB_.clear();
+	sortedParticleIdxB_.clear();
+}
+
+void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
+{
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+
+	if (N_F == 0 && N_B == 0)
+	{
+		SPDLOG_WARN("No construction possible (empty simulation)");
+
+		uniqueCellIdF_.clear();
+		cellStartIdxF_.clear();
+		cellIdF_.clear();
+		sortedParticleIdxF_.clear();
+
+		uniqueCellIdB_.clear();
+		cellStartIdxB_.clear();
+		cellIdB_.clear();
+		sortedParticleIdxB_.clear();
+
+		return;
+	}
+
+	cellSize_ = params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+				 ? 0.0f : (1.0f / params.kernelRadius);
+
+	// --- [ cell coordinates and indices for fluid and boundary particles ] ---
+
+	// fluid
+	cellIdF_.resize(N_F);
+	sortedParticleIdxF_.resize(N_F);
+
+	#pragma omp parallel for schedule(static)
+	for (uint32_t i = 0; i < N_F; i++)
+	{
+		// compute cell coordinates
+		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+		cellIdF_[i] = MapToCellId_Morton(ZigZag(cx), ZigZag(cy), ZigZag(cz));
+		sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
+	}
+
+	// boundary
+	cellIdB_.resize(N_B);
+	sortedParticleIdxB_.resize(N_B);
+
+	#pragma omp parallel for schedule(static)
+	for (uint32_t i = 0; i < N_B; i++)
+	{
+		// compute cell coordinates
+		const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+		const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+		const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+		cellIdB_[i] = MapToCellId_Morton(ZigZag(cx), ZigZag(cy), ZigZag(cz));
+		sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
+	}
+
+	// --- [ sort particle indices by cell IDs ] -------------------------------
+
+	if (N_F > 0)
+	{
+		tbb::parallel_sort(sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				return cellIdF_[a] < cellIdF_[b];
+			});
+	}
+
+	if (N_B > 0)
+	{
+		tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				return cellIdB_[a] < cellIdB_[b];
+			});
+	}
+
+	// --- [ build compact cell list and fill in cell start indices ] ----------
+
+	uniqueCellIdF_.clear();
+	cellStartIdxF_.clear();
+
+	// fluid
+	// TODO: replace this with a parallel marker and scan version?
+	if (N_F > 0)
+	{
+		// worst case, all particles are in unique cells (highly unlikely)
+		// best case (realistically), each cell has 8 particles
+		// TODO: find a better heuristic
+		uniqueCellIdF_.reserve(N_F / 2);
+		cellStartIdxF_.reserve(N_F + 1); // +1 for sentinel
+
+		uint64_t cid_prev = EMPTY_64;
+		for (uint32_t i = 0; i < N_F; i++)
+		{
+			const uint32_t pidx = sortedParticleIdxF_[i];
+			const uint64_t cid = cellIdF_[pidx];
+
+			if (cid != cid_prev) // new cell encountered
+			{
+				uniqueCellIdF_.push_back(cid);
+				cellStartIdxF_.push_back(i);
+
+				cid_prev = cid;
+			}
+		}
+
+		// end of the last cell's range as sentinel
+		cellStartIdxF_.push_back(N_F);
+	}
+
+	uniqueCellIdB_.clear();
+	cellStartIdxB_.clear();
+
+	// boundary
+	// TODO: replace this with a parallel marker and scan version?
+	if (N_B > 0)
+	{
+		// worst case, all particles are in unique cells (highly unlikely)
+		// best case (realistically), each cell has 8 particles
+		// TODO: find a better heuristic
+		uniqueCellIdB_.reserve(N_B / 2);
+		cellStartIdxB_.reserve(N_B + 1); // +1 for sentinel
+
+		uint64_t cid_prev = EMPTY_64;
+		for (uint32_t i = 0; i < N_B; i++)
+		{
+			const uint32_t pidx = sortedParticleIdxB_[i];
+			const uint64_t cid = cellIdB_[pidx];
+
+			if (cid != cid_prev) // new cell encountered
+			{
+				uniqueCellIdB_.push_back(cid);
+				cellStartIdxB_.push_back(i);
+
+				cid_prev = cid;
+			}
+		}
+
+		// end of the last cell's range as sentinel
+		cellStartIdxB_.push_back(N_B);
+	}
+}
+
+void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// loop over all non-empty grid cells
+	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
+	#pragma omp for schedule (guided)
+	for (uint64_t c = 0; c < N_Cells; c++)
+	{
+		// range of all fluid particles in this cell
+		const uint32_t sF = cellStartIdxF_[c]; // start
+		const uint32_t eF = cellStartIdxF_[c + 1]; // end
+		if (sF >= eF) { continue; }
+
+		// clear neighbor lists of all particles in this cell
+		for (uint32_t k = sF; k < eF; k++)
+		{
+			const uint32_t i = sortedParticleIdxF_[k];
+
+			be_.neighborsFF_[i].clear();
+			be_.neighborsFB_[i].clear();
+		}
+
+		// determine a representative particle i0
+		const uint32_t i0 = sortedParticleIdxF_[sF];
+
+		const float xi0 = be_.xPosF_[i0];
+		const float yi0 = be_.yPosF_[i0];
+		const float zi0 = be_.zPosF_[i0];
+
+		// cell coordinates of all particles in this cell
+		const int cx = FloorToInt(xi0 * cellSizeInv_);
+		const int cy = FloorToInt(yi0 * cellSizeInv_);
+		const int cz = FloorToInt(zi0 * cellSizeInv_);
+
+		// check all particles j in 27 (3x3x3) neighboring grid cells
+		for (int rz = -1; rz <= 1; rz++)
+		{
+			int nz = cz + rz; // target cell coordinate in z-direction
+
+			for (int ry = -1; ry <= 1; ry++)
+			{
+				int ny = cy + ry; // target cell coordinate in y-direction
+
+				for (int rx = -1; rx <= 1; rx++)
+				{
+					int nx = cx + rx; // target cell coordinate in x-direction
+
+					// cell ID of the neighbor cell
+					const uint64_t cid_nbr = MapToCellId_Morton(ZigZag(nx),
+						ZigZag(ny),
+						ZigZag(nz));
+
+					// find neighbor fluid cell in compact list (binary search)
+					// TODO: use ternary search and BigMin-LitMax instead?
+					auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+
+					// check fluid candidates in this neighbor cell
+					if (itF != uniqueCellIdF_.end() && *itF == cid_nbr)
+					{
+						const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
+
+						// range of all fluid particles in the neighbor cell
+						const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
+						const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
+						if (sF_nbr >= eF_nbr) { continue; }
+
+						// outer loop over particles in this cell (c)
+						// inner loop over all particles in the neighbor cell (cF_nbr)
+						for (uint32_t k = sF; k < eF; k++)
+						{
+							const uint32_t i = sortedParticleIdxF_[k];
+
+							const float xi = be_.xPosF_[i];
+							const float yi = be_.yPosF_[i];
+							const float zi = be_.zPosF_[i];
+
+							for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+							{
+								// index of fluid neighbor candidate
+								const uint32_t j = sortedParticleIdxF_[l];
+
+								// position difference
+								const float dx = xi - be_.xPosF_[j];
+								const float dy = yi - be_.yPosF_[j];
+								const float dz = zi - be_.zPosF_[j];
+
+								// squared distance between particles i and j
+								const float distSqu = dx * dx
+									+ dy * dy
+									+ dz * dz;
+
+								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								{
+									// add actual neighbor to list
+									be_.neighborsFF_[i].push_back(j);
+								}
+							}
+						}
+					}
+
+					// find neighbor boundary cell in compact list (binary search)
+					// TODO: use ternary search and BigMin-LitMax instead?
+					auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
+
+					// check fluid candidates in this neighbor cell
+					if (itB != uniqueCellIdB_.end() && *itB == cid_nbr)
+					{
+						const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
+
+						// range of all boundary particles in the neighbor cell
+						const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
+						const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
+						if (sB_nbr >= eB_nbr) { continue; }
+
+						// outer loop over particles in this cell (c)
+						// inner loop over all particles in the neighbor cell (cB_nbr)
+						for (uint32_t k = sF; k < eF; k++)
+						{
+							const uint32_t i = sortedParticleIdxF_[k];
+
+							const float xi = be_.xPosF_[i];
+							const float yi = be_.yPosF_[i];
+							const float zi = be_.zPosF_[i];
+
+							for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+							{
+								// index of boundary neighbor candidate
+								const uint32_t j = sortedParticleIdxB_[l];
+
+								// position difference
+								const float dx = xi - be_.xPosB_[j];
+								const float dy = yi - be_.yPosB_[j];
+								const float dz = zi - be_.zPosB_[j];
+
+								// squared distance between particles i and j
+								const float distSqu = dx * dx
+									+ dy * dy
+									+ dz * dz;
+
+								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								{
+									// add actual neighbor to list
+									be_.neighborsFB_[i].push_back(j);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Basic(
+	uint32_t cx, uint32_t cy, uint32_t cz) noexcept
+{
+	// TODO: implement
+	return -1;
+}
+
+inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
+	uint32_t cx, uint32_t cy, uint32_t cz) noexcept
+{
+	// TODO: first do zig-zag encoding to handle negative indices?
+	// how spatially efficient would that be?
+
+	const uint64_t xx = SpreadBitsWithGaps_21to63(cx); // bits at pos 0,3,6,...
+	const uint64_t yy = SpreadBitsWithGaps_21to63(cy) << 1; // bits at pos 1,4,7,...
+	const uint64_t zz = SpreadBitsWithGaps_21to63(cz) << 2; // bits at pos 2,5,8,...
+
+	return xx | yy | zz; // interleaved 3D Morton/Z-order code
+}
+
+// spread out lower 21 bits of v into lower 63 bits and fill with gaps zeros like 000x00x00x00x00x...
+inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint32_t v) noexcept
+{
+	uint64_t x = static_cast<uint64_t>(v & 0x1fffffU); // lower 21 bits
+
+	x = (x | (x << 32)) & 0x1f00000000ffffULL;
+	x = (x | (x << 16)) & 0x1f0000ff0000ffULL;
+	x = (x | (x << 8)) & 0x100f00f00f00f00fULL;
+	x = (x | (x << 4)) & 0x10c30c30c30c30c3ULL;
+	x = (x | (x << 2)) & 0x1249249249249249ULL;
+
+	return x;
+}
+
+// bijective mapping of signed to unsigned integers
+// before: [0  -1   1  -2   2  -3   3 ...]
+// after:  [0   1   2   3   4   5   6 ...]
+uint32_t NS_CellLinkedList_Compact_CPU01::ZigZag(int v) noexcept
+{
+	// shift left by 1 and XOR with sign bit
+	std::uint32_t uv = static_cast<std::uint32_t>(v);
+	std::uint32_t even = uv << 1;
+	std::uint32_t sign = static_cast<std::uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
+
+	return even ^ sign;
+}
+
+inline int NS_CellLinkedList_Compact_CPU01::FloorToInt(float v) noexcept
+{
+	int i = static_cast<int>(v);
+
+	return (v < static_cast<float>(i)) ? (i - 1) : i;
 }
