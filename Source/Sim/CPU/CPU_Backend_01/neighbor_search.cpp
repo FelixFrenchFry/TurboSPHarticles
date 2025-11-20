@@ -660,7 +660,7 @@ inline uint32_t NS_CellLinkedList_Basic_CPU01::MapToCellId_Basic(
 	return cx + N_DimX_ * (cy + N_DimY_ * cz);
 }
 
-inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(float v) const noexcept
+inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(float v) noexcept
 {
 	int i = static_cast<int>(v);
 
@@ -668,7 +668,7 @@ inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(float v) const noexcept
 }
 
 inline uint32_t NS_CellLinkedList_Basic_CPU01::ClampInt(
-	int v, int low, int high) const noexcept
+	int v, int low, int high) noexcept
 {
 	const int t = (v < low) ? low : v;
 	return static_cast<uint32_t>((t > high) ? high : t);
@@ -734,7 +734,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
 		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
-		cellIdF_[i] = MapToCellId_Morton(ZigZag(cx), ZigZag(cy), ZigZag(cz));
+		cellIdF_[i] = MapToCellId_Morton(cx, cy, cz);
 		sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
 	}
 
@@ -750,7 +750,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
 		const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
-		cellIdB_[i] = MapToCellId_Morton(ZigZag(cx), ZigZag(cy), ZigZag(cz));
+		cellIdB_[i] = MapToCellId_Morton(cx, cy, cz);
 		sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
 	}
 
@@ -890,9 +890,7 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 					int nx = cx + rx; // target cell coordinate in x-direction
 
 					// cell ID of the neighbor cell
-					const uint64_t cid_nbr = MapToCellId_Morton(ZigZag(nx),
-						ZigZag(ny),
-						ZigZag(nz));
+					const uint64_t cid_nbr = MapToCellId_Morton(nx, ny, nz);
 
 					// find neighbor fluid cell in compact list (binary search)
 					// TODO: use ternary search and BigMin-LitMax instead?
@@ -995,22 +993,34 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 	}
 }
 
-inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Basic(
-	uint32_t cx, uint32_t cy, uint32_t cz) noexcept
+inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(
+	int cx, int cy, int cz) noexcept
 {
-	// TODO: implement
-	return -1;
+	// zig-zag encoding of coordinates to handle negative values
+	const uint64_t ux = static_cast<uint64_t>(ZigZag(cx));
+	const uint64_t uy = static_cast<uint64_t>(ZigZag(cy));
+	const uint64_t uz = static_cast<uint64_t>(ZigZag(cz));
+
+	// each axis must fit into 21 bits
+	assert(ux < (1u << 21));
+	assert(uy < (1u << 21));
+	assert(uz < (1u << 21));
+
+	// packed XYZ encoding
+	return (ux) | (uy << 21) | (uz << 42);
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
-	uint32_t cx, uint32_t cy, uint32_t cz) noexcept
+	int cx, int cy, int cz) noexcept
 {
-	// TODO: first do zig-zag encoding to handle negative indices?
-	// how spatially efficient would that be?
+	// zig-zag encoding of coordinates to handle negative values
+	const uint32_t ux = ZigZag(cx);
+	const uint32_t uy = ZigZag(cy);
+	const uint32_t uz = ZigZag(cz);
 
-	const uint64_t xx = SpreadBitsWithGaps_21to63(cx); // bits at pos 0,3,6,...
-	const uint64_t yy = SpreadBitsWithGaps_21to63(cy) << 1; // bits at pos 1,4,7,...
-	const uint64_t zz = SpreadBitsWithGaps_21to63(cz) << 2; // bits at pos 2,5,8,...
+	const uint64_t xx = SpreadBitsWithGaps_21to63(ux); // bits at pos 0,3,6,...
+	const uint64_t yy = SpreadBitsWithGaps_21to63(uy) << 1; // bits at pos 1,4,7,...
+	const uint64_t zz = SpreadBitsWithGaps_21to63(uz) << 2; // bits at pos 2,5,8,...
 
 	return xx | yy | zz; // interleaved 3D Morton/Z-order code
 }

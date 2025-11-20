@@ -127,8 +127,8 @@ namespace Sim
 		// helpers
 		// TODO: make them const or static?
 		inline uint32_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz) const noexcept;
-		inline int FloorToInt(float v) const noexcept;
-		inline uint32_t ClampInt(int v, int low, int high) const noexcept;
+		static inline int FloorToInt(float v) noexcept;
+		static inline uint32_t ClampInt(int v, int low, int high) noexcept;
 	};
 
 	class NS_CellLinkedList_Compact_CPU01 : public I_NeighborSearchStrat
@@ -169,8 +169,8 @@ namespace Sim
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 
 		// helpers
-		static inline uint64_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz) noexcept;
-		static inline uint64_t MapToCellId_Morton(uint32_t cx, uint32_t cy, uint32_t cz) noexcept;
+		static inline uint64_t MapToCellId_XYZ(int cx, int cy, int cz) noexcept;
+		static inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
 		static inline uint32_t ZigZag(int v) noexcept;
 		static inline int FloorToInt(float v) noexcept;
