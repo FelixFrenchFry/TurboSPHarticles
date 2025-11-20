@@ -916,6 +916,7 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 							const float yi = be_.yPosF_[i];
 							const float zi = be_.zPosF_[i];
 
+							#pragma omp simd
 							for (uint32_t l = sF_nbr; l < eF_nbr; l++)
 							{
 								// index of fluid neighbor candidate
@@ -928,8 +929,8 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 
 								// squared distance between particles i and j
 								const float distSqu = dx * dx
-									+ dy * dy
-									+ dz * dz;
+													+ dy * dy
+													+ dz * dz;
 
 								if (distSqu <= kernelRadiusSqu) [[unlikely]]
 								{
@@ -964,6 +965,7 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 							const float yi = be_.yPosF_[i];
 							const float zi = be_.zPosF_[i];
 
+							#pragma omp simd
 							for (uint32_t l = sB_nbr; l < eB_nbr; l++)
 							{
 								// index of boundary neighbor candidate
@@ -976,8 +978,8 @@ void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 
 								// squared distance between particles i and j
 								const float distSqu = dx * dx
-									+ dy * dy
-									+ dz * dz;
+													+ dy * dy
+													+ dz * dz;
 
 								if (distSqu <= kernelRadiusSqu) [[unlikely]]
 								{

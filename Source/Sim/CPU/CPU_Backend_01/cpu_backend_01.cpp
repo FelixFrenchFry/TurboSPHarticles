@@ -8,6 +8,8 @@
 #include <limits>
 #include <numbers>
 #include <spdlog/spdlog.h>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_reduce.h>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -234,8 +236,6 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
-	// TODO: add an omp parallel region?
-
 	using namespace Stats;
 
 	// --- [ particle counts ] -------------------------------------------------
@@ -259,6 +259,77 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	float maxFF = 0.0f;
 	float maxFB = 0.0f;
 
+	if (NF > 0)
+	{
+		struct NeighStatsLocal
+		{
+			float sumFF;
+			float sumFB;
+			float minFF;
+			float minFB;
+			float maxFF;
+			float maxFB;
+		};
+
+		NeighStatsLocal globalNeigh = tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(0, NF),
+			NeighStatsLocal
+			{
+				.sumFF = 0.0f,
+				.sumFB = 0.0f,
+				.minFF = std::numeric_limits<float>::max(),
+				.minFB = std::numeric_limits<float>::max(),
+				.maxFF = 0.0f,
+				.maxFB = 0.0f
+			},
+			[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
+			{
+				for (uint32_t i = r.begin(); i != r.end(); ++i)
+				{
+					const float nf = static_cast<float>(neighborsFF_[i].size());
+					const float nb = static_cast<float>(neighborsFB_[i].size());
+
+					local.sumFF += nf;
+					local.sumFB += nb;
+
+					if (nf < local.minFF) [[unlikely]] { local.minFF = nf; }
+					if (nb < local.minFB) [[unlikely]] { local.minFB = nb; }
+
+					if (nf > local.maxFF) [[unlikely]] { local.maxFF = nf; }
+					if (nb > local.maxFB) [[unlikely]] { local.maxFB = nb; }
+				}
+				return local;
+			},
+			[](const NeighStatsLocal& a, const NeighStatsLocal& b) -> NeighStatsLocal
+			{
+				NeighStatsLocal r;
+
+				r.sumFF = a.sumFF + b.sumFF;
+				r.sumFB = a.sumFB + b.sumFB;
+				r.minFF = std::min(a.minFF, b.minFF);
+				r.minFB = std::min(a.minFB, b.minFB);
+				r.maxFF = std::max(a.maxFF, b.maxFF);
+				r.maxFB = std::max(a.maxFB, b.maxFB);
+
+				return r;
+			},
+			tbb::auto_partitioner{}
+		);
+
+		sumFF = globalNeigh.sumFF;
+		sumFB = globalNeigh.sumFB;
+		minFF = globalNeigh.minFF;
+		minFB = globalNeigh.minFB;
+		maxFF = globalNeigh.maxFF;
+		maxFB = globalNeigh.maxFB;
+	}
+	if (NF == 0) // reasonable defaults for empty sim
+	{
+		minFF = 0.0f;
+		minFB = 0.0f;
+	}
+
+	/*
 	#pragma omp parallel for reduction(+:sumFF,sumFB) reduction(min:minFF,minFB) reduction(max:maxFF,maxFB) schedule(static)
 	for (uint32_t i = 0; i < NF; i++)
 	{
@@ -279,6 +350,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		minFF = 0.0f;
 		minFB = 0.0f;
 	}
+	*/
 
 	// --- [ density stats ] ---------------------------------------------------
 
@@ -288,6 +360,58 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	float minRelErr = std::numeric_limits<float>::max();
 	float maxRelErr = 0.0f;
 
+	if (NF > 0)
+	{
+		struct DensStatsLocal
+		{
+			float sumRelErr;
+			float minRelErr;
+			float maxRelErr;
+		};
+
+		DensStatsLocal globalDens = tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(0, NF),
+			DensStatsLocal
+			{
+				.sumRelErr = 0.0f,
+				.minRelErr = std::numeric_limits<float>::max(),
+				.maxRelErr = 0.0f
+			},
+			[&](const tbb::blocked_range<uint32_t>& r, DensStatsLocal local) -> DensStatsLocal
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
+					const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
+
+					workBuffer_[i] = relErr;
+					local.sumRelErr += relErr;
+
+					if (relErr < local.minRelErr) [[unlikely]] { local.minRelErr = relErr; }
+					if (relErr > local.maxRelErr) [[unlikely]] { local.maxRelErr = relErr; }
+				}
+
+				return local;
+			},
+			[](const DensStatsLocal& a, const DensStatsLocal& b) -> DensStatsLocal
+			{
+				DensStatsLocal r;
+
+				r.sumRelErr = a.sumRelErr + b.sumRelErr;
+				r.minRelErr = std::min(a.minRelErr, b.minRelErr);
+				r.maxRelErr = std::max(a.maxRelErr, b.maxRelErr);
+
+				return r;
+			},
+			tbb::auto_partitioner{}
+		);
+
+		sumRelErr = globalDens.sumRelErr;
+		minRelErr = globalDens.minRelErr;
+		maxRelErr = globalDens.maxRelErr;
+	}
+
+	/*
 	#pragma omp parallel for reduction(+:sumRelErr) reduction(min:minRelErr) reduction(max:maxRelErr) schedule(static)
 	for (uint32_t i = 0; i < NF; i++)
 	{
@@ -300,6 +424,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		if (relErr < minRelErr) [[unlikely]] { minRelErr = relErr; }
 		if (relErr > maxRelErr) [[unlikely]] { maxRelErr = relErr; }
 	}
+	*/
 
 	float p95 = 0.0f;
 	float p99 = 0.0f;
@@ -332,6 +457,64 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	float velMagMin = std::numeric_limits<float>::max();
 	float velMagMax = 0.0f;
 
+	if (NF > 0)
+	{
+		struct VelStatsLocal
+		{
+			float velMagSum;
+			float velMagMin;
+			float velMagMax;
+		};
+
+		VelStatsLocal globalVel = tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(0, NF),
+			VelStatsLocal
+			{
+				.velMagSum = 0.0f,
+				.velMagMin = std::numeric_limits<float>::max(),
+				.velMagMax = 0.0f
+			},
+			[&](const tbb::blocked_range<uint32_t>& r, VelStatsLocal local) -> VelStatsLocal
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float vx = xVelF_[i];
+					const float vy = yVelF_[i];
+					const float vz = zVelF_[i];
+
+					const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
+
+					local.velMagSum += velMag;
+					if (velMag < local.velMagMin) [[unlikely]] { local.velMagMin = velMag; }
+					if (velMag > local.velMagMax) [[unlikely]] { local.velMagMax = velMag; }
+				}
+
+				return local;
+			},
+			[](const VelStatsLocal& a, const VelStatsLocal& b) -> VelStatsLocal
+			{
+				VelStatsLocal r;
+
+				r.velMagSum = a.velMagSum + b.velMagSum;
+				r.velMagMin = std::min(a.velMagMin, b.velMagMin);
+				r.velMagMax = std::max(a.velMagMax, b.velMagMax);
+
+				return r;
+			},
+			tbb::auto_partitioner{}
+		);
+
+		velMagSum = globalVel.velMagSum;
+		velMagMin = globalVel.velMagMin;
+		velMagMax = globalVel.velMagMax;
+	}
+	if (NF == 0) // reasonable defaults for empty sim
+	{
+		velMagMin = 0.0f;
+		velMagMax = 0.0f;
+	}
+
+	/*
 	#pragma omp parallel for reduction(+:velMagSum) reduction(min:velMagMin) reduction(max:velMagMax) schedule(static)
 	for (uint32_t i = 0; i < NF; i++)
 	{
@@ -350,6 +533,8 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		velMagMin = 0.0f;
 		velMagMax = 0.0f;
 	}
+	*/
+
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles,
 								   Bench::BenchOp::Statistics_Density,
 								   Bench::BenchOp::Statistics_Velocity });
