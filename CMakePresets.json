@@ -18,7 +18,6 @@
       }
     },
 
-    // windows
     {
       "name": "Win-x64-Debug",
       "inherits": "base",
@@ -55,7 +54,6 @@
       }
     },
 
-    // linux
     {
       "name": "Linux-x64-Debug",
       "inherits": "base",

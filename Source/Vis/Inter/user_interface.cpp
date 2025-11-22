@@ -1061,7 +1061,7 @@ inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Sync::BenchSnapshot* sna
 	// (they should all be the same value, but the groups are variably-sized)
 	for (const auto& op : opGroup.ops)
 	{
-		res = fminf(res, ReadOpTiming(snap, op));
+		res = std::min(res, ReadOpTiming(snap, op));
 	}
 
 	return res;

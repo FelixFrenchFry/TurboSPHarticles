@@ -35,7 +35,7 @@ namespace {
 
 		// chunked + filters
 		const int64_t wantChunkElems = std::max<int64_t>(1, opt.targetChunkBytes / N_elemBytes);
-		const int64_t chunkElems = std::max<int64_t>(1, fminf(N_elements, wantChunkElems));
+		const int64_t chunkElems = std::max<int64_t>(1, std::min(N_elements, wantChunkElems));
 
 		props.add(Chunking({ static_cast<hsize_t>(chunkElems) }));
 
@@ -137,7 +137,7 @@ namespace Export {
 		// file path handling
 		const std::filesystem::path dstPath{ path };
 		const std::filesystem::path tmpPath = opt.atomicWrite ?
-			(dstPath.string() + opt.tempSuffix) : dstPath;
+			std::filesystem::path(dstPath.string() + opt.tempSuffix) : dstPath;
 
 		// open file (optionally with alignment)
 		File file = OpenFileForWrite(tmpPath.string());

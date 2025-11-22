@@ -198,6 +198,10 @@ target_link_libraries(TSP_H PUBLIC
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
 )
 
+if(ENABLE_CUDA)
+    target_compile_definitions(TSP_H PUBLIC TURBOSPHARTICLES_WITH_CUDA=1)
+endif()
+
 if(ENABLE_CUDA AND SRC_SIM_GPU)
     set_target_properties(TSP_H PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON

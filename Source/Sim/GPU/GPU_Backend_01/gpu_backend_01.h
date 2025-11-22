@@ -3,6 +3,7 @@
 // TODO: comment
 
 #pragma once
+#ifdef TURBOSPHARTICLES_WITH_CUDA
 
 // external
 #include <cuda_runtime.h>
@@ -293,3 +294,5 @@ namespace Sim
 	};
 
 } // namespace Sim
+
+#endif

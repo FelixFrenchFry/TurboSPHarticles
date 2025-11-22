@@ -160,12 +160,12 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	MinMax3 box;
 	if (hasF && hasB)
 	{
-		box.xMin = fminf(h_aabbF_.xMin, h_aabbB_.xMin);
-		box.yMin = fminf(h_aabbF_.yMin, h_aabbB_.yMin);
-		box.zMin = fminf(h_aabbF_.zMin, h_aabbB_.zMin);
-		box.xMax = fmaxf(h_aabbF_.xMax, h_aabbB_.xMax);
-		box.yMax = fmaxf(h_aabbF_.yMax, h_aabbB_.yMax);
-		box.zMax = fmaxf(h_aabbF_.zMax, h_aabbB_.zMax);
+		box.xMin = std::min(h_aabbF_.xMin, h_aabbB_.xMin);
+		box.yMin = std::min(h_aabbF_.yMin, h_aabbB_.yMin);
+		box.zMin = std::min(h_aabbF_.zMin, h_aabbB_.zMin);
+		box.xMax = std::max(h_aabbF_.xMax, h_aabbB_.xMax);
+		box.yMax = std::max(h_aabbF_.yMax, h_aabbB_.yMax);
+		box.zMax = std::max(h_aabbF_.zMax, h_aabbB_.zMax);
 	}
 	else if (hasF)
 	{

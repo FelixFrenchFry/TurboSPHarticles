@@ -199,19 +199,19 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 	{
 		// interior particle beyond layers in w, and clamp to prevent drift
 		const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
-		float w = fminf(wLen_i, kw * size);
+		float w = std::min(wLen_i, kw * size);
 
 		for (int jv = 0; jv < N_v; jv++) // loop over height
 		{
 			// interior particle beyond layers in v, and clamp to prevent drift
 			const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
-			float v = fminf(vLen_i, jv * size);
+			float v = std::min(vLen_i, jv * size);
 
 			for (int iu = 0; iu < N_u; iu++) // loop over width
 			{
 				// interior particle beyond layers in u, and clamp to prevent drift
 				const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
-				float u = fminf(uLen_i, iu * size);
+				float u = std::min(uLen_i, iu * size);
 
 				// inside all three axes -> interior hollow, skip
 				if (uInside && vInside && wInside) { continue; }
@@ -314,12 +314,12 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 
 		for (int i = 0; i < N_u; i++)
 		{
-			const float su = fminf(i * size, face.uLen);
+			const float su = std::min(i * size, face.uLen);
 			const glm::vec3 bu = face.uHat * su;
 
 			for (int j = 0; j < N_v; j++)
 			{
-				const float sv = fminf(j * size, face.vLen);
+				const float sv = std::min(j * size, face.vLen);
 				const glm::vec3 bv = face.vHat * sv;
 
 				const glm::vec3 pos = face.origin + bu + bv + face.nHat * outOffset;
