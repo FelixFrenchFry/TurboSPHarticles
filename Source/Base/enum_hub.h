@@ -20,7 +20,9 @@ namespace Base
 	enum BackendVersion
 	{
 		CPU01,				// 0
-		GPU01				// 1
+		CPU02,				// 1
+
+		GPU01				// 2
 	};
 
 	enum ScenarioType

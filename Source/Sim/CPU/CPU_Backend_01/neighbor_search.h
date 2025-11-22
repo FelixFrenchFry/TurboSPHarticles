@@ -72,9 +72,9 @@ namespace Sim
 		ankerl::unordered_dense::map<Key, Bucket> cellGridB_{};
 
 		// helpers
-		inline uint32_t ZigZag(int v) noexcept;
-		inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
-		inline int FloorToInt(float v) const noexcept;
+		static inline uint32_t ZigZag(int v) noexcept;
+		static inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
+		static inline int FloorToInt(float v) noexcept;
 	};
 
 	class NS_CellLinkedList_Basic_CPU01 : public I_NeighborSearchStrat
@@ -125,7 +125,6 @@ namespace Sim
 		static constexpr uint32_t EMPTY = std::numeric_limits<uint32_t>::max();
 
 		// helpers
-		// TODO: make them const or static?
 		inline uint32_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz) const noexcept;
 		static inline int FloorToInt(float v) noexcept;
 		static inline uint32_t ClampInt(int v, int low, int high) noexcept;

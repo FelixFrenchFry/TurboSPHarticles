@@ -641,12 +641,10 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 		// expected number of fluid and boundary neighbors
 		const uint32_t N_expectedNumFF =
-			std::ceilf(2.0f * PI *
-			std::powf(params.kernelRadius, 3.0f));
+			std::ceilf(2.0f * PI * std::powf(params.kernelRadius, 3.0f));
 
 		const uint32_t N_expectedNumFB =
-			std::ceilf(0.5f * PI *
-			std::powf(params.kernelRadius, 3.0f));
+			std::ceilf(0.5f * PI * std::powf(params.kernelRadius, 3.0f));
 
 		// heuristic reserves (kept and re-used across steps)
 		tbb::parallel_for(

@@ -101,10 +101,12 @@ namespace Sim
 		std::vector<std::vector<uint32_t>> neighborsFB_;
 
 		// kernel weight storage
+		// TODO: use small vector from boost library for inner vec?
 		std::vector<std::vector<float>> kernelWeightsFF_;
 		std::vector<std::vector<float>> kernelWeightsFB_;
 
 		// kernel gradient storage
+		// TODO: use small vector from boost library for inner vec?
 		std::vector<std::vector<float>> xKernelGradFF_;
 		std::vector<std::vector<float>> yKernelGradFF_;
 		std::vector<std::vector<float>> zKernelGradFF_;

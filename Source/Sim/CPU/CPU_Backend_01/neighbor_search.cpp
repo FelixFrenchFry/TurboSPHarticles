@@ -137,8 +137,8 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 		cellGridB_.reserve(std::max<uint32_t>(1024, be_.N_B_ / 4));
 	}
 
-	// TODO: multi-thread this?
 	// fill in fluid cell grid
+	// TODO: multi-thread this?
 	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
 		// compute cell index
@@ -151,8 +151,8 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 		cellGridF_[key].push_back(i);
 	}
 
-	// TODO: multi-thread this?
 	// fill in boundary cell grid
+	// TODO: multi-thread this?
 	for (uint32_t i = 0; i < be_.N_B_; i++)
 	{
 		// compute cell index
@@ -170,6 +170,7 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// TODO: convert this to tbb parallel_for?
 	#pragma omp for schedule(guided)
 	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
@@ -280,7 +281,7 @@ inline uint64_t NS_SpatialHashing_Basic_CPU01::PackKey(int cx, int cy, int cz) n
 	return (x) | (y << 21) | (z << 42);
 }
 
-inline int NS_SpatialHashing_Basic_CPU01::FloorToInt(float v) const noexcept
+inline int NS_SpatialHashing_Basic_CPU01::FloorToInt(float v) noexcept
 {
 	int i = static_cast<int>(v);
 
@@ -373,7 +374,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	}
 
 	// padding to avoid edge clamp issues
-	const float pad = 1e-6f;
+	constexpr float pad = 1e-6f;
 	xMin -= pad; yMin -= pad; zMin -= pad;
 	xMax += pad; yMax += pad; zMax += pad;
 
@@ -416,6 +417,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	cellIdF_.resize(be_.N_F_);
 	sortedParticleIdxF_.resize(be_.N_F_);
 
+	// TODO: convert to tbb parallel_for?
 	#pragma omp parallel for schedule(static)
 	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
@@ -440,6 +442,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	cellIdB_.resize(be_.N_B_);
 	sortedParticleIdxB_.resize(be_.N_B_);
 
+	// TODO: convert to tbb parallel_for?
 	#pragma omp parallel for schedule(static)
 	for (uint32_t i = 0; i < be_.N_B_; i++)
 	{
@@ -565,6 +568,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// TODO: convert this to tbb parallel_for?
 	#pragma omp for schedule (guided)
 	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
@@ -1177,6 +1181,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 						{
 							const uint32_t j = sortedParticleIdxF_[l];
 
+							// position difference
 							const float dx = xi - xPosF[j];
 							const float dy = yi - yPosF[j];
 							const float dz = zi - zPosF[j];
@@ -1205,6 +1210,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 						{
 							const uint32_t j = sortedParticleIdxB_[l];
 
+							// position difference
 							const float dx = xi - xPosB[j];
 							const float dy = yi - yPosB[j];
 							const float dz = zi - zPosB[j];

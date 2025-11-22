@@ -9,6 +9,7 @@
     "highfive",
     "cli11",
     "unordered-dense",
+    "eigen3",
     "glm",
     "glfw3",
     "glad",

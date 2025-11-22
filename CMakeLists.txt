@@ -36,6 +36,7 @@ find_package(benchmark CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
+find_package(Eigen3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
 # probe for /openmp:llvm on MSVC and fall back
@@ -113,10 +114,12 @@ target_compile_options(Project_Warnings INTERFACE
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:-Wall -Wextra -Wpedantic>
 )
 
-# platform defines
+# platform defines, eigen debug stuff disabled in non-debug builds
 add_library(Project_Defines INTERFACE)
 target_compile_definitions(Project_Defines INTERFACE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE>
+    $<$<CONFIG:Release>:EIGEN_NO_DEBUG>
+    $<$<CONFIG:RelWithDebInfo>:EIGEN_NO_DEBUG>
 )
 
 # C++ optimization flags
@@ -184,6 +187,7 @@ target_link_libraries(TSP_H PUBLIC
     spdlog::spdlog
     HighFive
     CLI11::CLI11
+    Eigen3::Eigen
     glm::glm
     TBB::tbb
     $<$<BOOL:${ENABLE_CUDA}>:CUDA::cudart>

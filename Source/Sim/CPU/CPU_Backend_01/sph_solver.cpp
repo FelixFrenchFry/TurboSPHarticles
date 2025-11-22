@@ -24,7 +24,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 {
 	// --- [ temporary pre-computed constants ] --------------------------------
 
-		// cubic spline alpha (computed in double precision for accuracy)
+	// cubic spline alpha (computed in double precision for accuracy)
 	const double size = static_cast<double>(params.particleSizeF);
 	const double sizeInv = 1.0 / size;
 	const float cubicSplineAlpha = static_cast<float>(
