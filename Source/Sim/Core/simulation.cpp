@@ -8,6 +8,7 @@
 
 // internal
 #include "simulation.h"
+#include "Source/Sim/Core/diagnostics.h"
 
 
 
@@ -39,11 +40,13 @@ bool SimulationMgr::Init()
 	SelectSimScenario(Base::ScenarioType::BreakingDam);
 
 	// default sim backend (CPU01)
-	SelectSimBackend(Base::BackendVersion::CPU01);
+	SelectSimBackend(Base::BackendVersion::GPU01);
 
 	ReBuildInitialSimState();
 
 	initialized_.store(true, std::memory_order_release);
+
+	PrintSimParams(simParams_);
 
 	return true;
 }
@@ -92,8 +95,8 @@ void SimulationMgr::SelectSimScenario(Base::ScenarioType type)
 		return;
 	}
 
-	SPDLOG_INFO("Selected sim scenario ({})",
-		static_cast<int>(type));
+	//SPDLOG_INFO("Selected sim scenario ({})",
+	//	static_cast<int>(type));
 }
 
 void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
@@ -140,8 +143,8 @@ void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 		return;
 	}
 
-	SPDLOG_INFO("Selected sim backend ({})",
-		static_cast<int>(version));
+	//SPDLOG_INFO("Selected sim backend ({})",
+	//	static_cast<int>(version));
 }
 
 void SimulationMgr::ReBuildInitialSimState()
@@ -212,8 +215,8 @@ void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 
 void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken)
 {
-	SPDLOG_INFO("Simulation started running with {} worker threads",
-		N_simThreads);
+	//SPDLOG_INFO("Simulation started running with {} worker threads",
+	//	N_simThreads);
 
 	// initialize before entering the simulation loop --------------------------
 
@@ -323,6 +326,8 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		}
 
 		SyncParameters();
+
+		PrintProgressMilestone(simStep_);
 
 		// TODO: check if scenario or backend need to be switched?
 	}

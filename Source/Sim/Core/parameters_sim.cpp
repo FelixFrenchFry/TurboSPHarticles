@@ -58,8 +58,8 @@ void SimParamsMgr::Set_SimRunning(bool simRunning)
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'simRunning' from {} to {}",
-		params_.simRunning, simRunning);
+	//SPDLOG_INFO("Changed 'simRunning' from {} to {}",
+	//	params_.simRunning, simRunning);
 
 	// apply changes
 	BeginWrite();
@@ -78,8 +78,8 @@ void SimParamsMgr::Set_SimRunNextStep(bool simRunNextStep)
 
 	if (params_.simRunning) { return; } // sim already fully running
 
-	SPDLOG_INFO("Changed 'simRunNextStep' from {} to {}",
-		params_.simRunNextStep, simRunNextStep);
+	//SPDLOG_INFO("Changed 'simRunNextStep' from {} to {}",
+	//	params_.simRunNextStep, simRunNextStep);
 
 	// apply changes
 	BeginWrite();
@@ -102,7 +102,7 @@ void SimParamsMgr::Set_NumParticles(uint32_t N, Base::ParticleType type)
 	}
 	else
 	{
-		SPDLOG_INFO("Change of 'N' not implemented for this type");
+		SPDLOG_WARN("Change of 'N' not implemented for this type");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -111,18 +111,18 @@ void SimParamsMgr::Set_NumParticles(uint32_t N, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		SPDLOG_INFO("Changed 'N_F' from {} to {} "
-			"(and dependent params accordingly)",
-			params_.N_F, N);
+		//SPDLOG_INFO("Changed 'N_F' from {} to {} "
+		//	"(and dependent params accordingly)",
+		//	params_.N_F, N);
 
 		// apply changes
 		params_.N_F = N;
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		SPDLOG_INFO("Changed 'N_B' from {} to {} "
-			"(and dependent params accordingly)",
-			params_.N_B, N);
+		//SPDLOG_INFO("Changed 'N_B' from {} to {} "
+		//	"(and dependent params accordingly)",
+		//	params_.N_B, N);
 
 		// apply changes
 		params_.N_B = N;
@@ -146,8 +146,8 @@ void SimParamsMgr::Set_TimeStep(float timeStep)
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'timeStep' from {} to {}",
-		params_.timeStep, timeStep);
+	//SPDLOG_INFO("Changed 'timeStep' from {} to {}",
+	//	params_.timeStep, timeStep);
 
 	// apply changes
 	BeginWrite();
@@ -176,7 +176,7 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 	}
 	else
 	{
-		SPDLOG_INFO("Change of 'particleSize' not implemented for this type");
+		SPDLOG_WARN("Change of 'particleSize' not implemented for this type");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -185,9 +185,9 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		SPDLOG_INFO("Changed 'particleSizeF' from {} to {} "
-					"(and dependent params accordingly)",
-			params_.particleSizeF, particleSize);
+		//SPDLOG_INFO("Changed 'particleSizeF' from {} to {} "
+		//			"(and dependent params accordingly)",
+		//	params_.particleSizeF, particleSize);
 
 		// apply changes
 		params_.particleSizeF = particleSize;
@@ -198,9 +198,9 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		SPDLOG_INFO("Changed 'particleSizeB' from {} to {} "
-					"(and dependent params accordingly)",
-			params_.particleSizeB, particleSize);
+		//SPDLOG_INFO("Changed 'particleSizeB' from {} to {} "
+		//			"(and dependent params accordingly)",
+		//	params_.particleSizeB, particleSize);
 
 		// apply changes
 		params_.particleSizeB = particleSize;
@@ -234,7 +234,7 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 	}
 	else
 	{
-		SPDLOG_INFO("Change of 'restDensity' not implemented for this type");
+		SPDLOG_WARN("Change of 'restDensity' not implemented for this type");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -243,9 +243,9 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		SPDLOG_INFO("Changed 'restDensityF' from {} to {} "
-					"(and dependent params accordingly)",
-			params_.restDensityF, restDensity);
+		//SPDLOG_INFO("Changed 'restDensityF' from {} to {} "
+		//			"(and dependent params accordingly)",
+		//	params_.restDensityF, restDensity);
 
 		// apply changes
 		params_.restDensityF = restDensity;
@@ -255,9 +255,9 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		SPDLOG_INFO("Changed 'restDensityB' from {} to {} "
-					"(and dependent params accordingly)",
-			params_.restDensityB, restDensity);
+		//SPDLOG_INFO("Changed 'restDensityB' from {} to {} "
+		//			"(and dependent params accordingly)",
+		//	params_.restDensityB, restDensity);
 
 		// apply changes
 		params_.restDensityB = restDensity;
@@ -290,7 +290,7 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 	}
 	else
 	{
-		SPDLOG_INFO("Change of 'mass' not implemented for this type");
+		SPDLOG_WARN("Change of 'mass' not implemented for this type");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -299,9 +299,9 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		SPDLOG_INFO("Changed 'massF' from {} to {} "
-			"(and dependent params accordingly)",
-			params_.massF, mass);
+		//SPDLOG_INFO("Changed 'massF' from {} to {} "
+		//	"(and dependent params accordingly)",
+		//	params_.massF, mass);
 
 		// apply changes
 		params_.massF = mass;
@@ -309,51 +309,15 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		SPDLOG_INFO("Changed 'massB' from {} to {} "
-			"(and dependent params accordingly)",
-			params_.massB, mass);
+		//SPDLOG_INFO("Changed 'massB' from {} to {} "
+		//	"(and dependent params accordingly)",
+		//	params_.massB, mass);
 
 		// apply changes
 		params_.massB = mass;
 		// TODO: adjust rest density too?
 	}
 
-	EndWrite();
-}
-
-void SimParamsMgr::Set_GammaPress(float gammaPress)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-
-	Base::MarkIfChanged(gammaPress, params_.gammaPress, changed);
-
-	if (!changed) { return; } // nothing to change
-
-	SPDLOG_INFO("Changed 'gammaPress' from {} to {}",
-		params_.gammaPress, gammaPress);
-
-	// apply changes
-	BeginWrite();
-	params_.gammaPress = gammaPress;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_JacobiOmega(float jacobiOmega)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-
-	Base::MarkIfChanged(jacobiOmega, params_.jacobiOmega, changed);
-
-	if (!changed) { return; } // nothing to change
-
-	SPDLOG_INFO("Changed 'jacobiOmega' from {} to {}",
-		params_.jacobiOmega, jacobiOmega);
-
-	// apply changes
-	BeginWrite();
-	params_.jacobiOmega = jacobiOmega;
 	EndWrite();
 }
 
@@ -372,7 +336,7 @@ void SimParamsMgr::Set_Viscosity(float viscosity, Base::ParticleType type)
 	}
 	else
 	{
-		SPDLOG_INFO("Change of 'viscosity' not implemented for this type");
+		SPDLOG_WARN("Change of 'viscosity' not implemented for this type");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -381,21 +345,57 @@ void SimParamsMgr::Set_Viscosity(float viscosity, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		SPDLOG_INFO("Changed 'viscosityF' from {} to {}",
-			params_.viscosityF, viscosity);
+		//SPDLOG_INFO("Changed 'viscosityF' from {} to {}",
+		//	params_.viscosityF, viscosity);
 
 		// apply changes
 		params_.viscosityF = viscosity;
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		SPDLOG_INFO("Changed 'viscosityB' from {} to {}",
-			params_.viscosityB, viscosity);
+		//SPDLOG_INFO("Changed 'viscosityB' from {} to {}",
+		//	params_.viscosityB, viscosity);
 
 		// apply changes
 		params_.viscosityB = viscosity;
 	}
 
+	EndWrite();
+}
+
+void SimParamsMgr::Set_GammaPress(float gammaPress)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(gammaPress, params_.gammaPress, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	//SPDLOG_INFO("Changed 'gammaPress' from {} to {}",
+	//	params_.gammaPress, gammaPress);
+
+	// apply changes
+	BeginWrite();
+	params_.gammaPress = gammaPress;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_JacobiOmega(float jacobiOmega)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+
+	Base::MarkIfChanged(jacobiOmega, params_.jacobiOmega, changed);
+
+	if (!changed) { return; } // nothing to change
+
+	//SPDLOG_INFO("Changed 'jacobiOmega' from {} to {}",
+	//	params_.jacobiOmega, jacobiOmega);
+
+	// apply changes
+	BeginWrite();
+	params_.jacobiOmega = jacobiOmega;
 	EndWrite();
 }
 
@@ -408,9 +408,9 @@ void SimParamsMgr::Set_Gravity(glm::vec3 gravity)
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
-		params_.gravity.x, params_.gravity.y, params_.gravity.z,
-		gravity.x, gravity.y, gravity.z);
+	//SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
+	//	params_.gravity.x, params_.gravity.y, params_.gravity.z,
+	//	gravity.x, gravity.y, gravity.z);
 
 	// apply changes
 	BeginWrite();
@@ -433,8 +433,8 @@ void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
-		params_.kernelSuppRatio, kernelSuppRatio);
+	//SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
+	//	params_.kernelSuppRatio, kernelSuppRatio);
 
 	// apply changes
 	BeginWrite();
@@ -458,8 +458,8 @@ void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
-		params_.kernelRadius, kernelRadius);
+	//SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
+	//	params_.kernelRadius, kernelRadius);
 
 	// apply changes
 	BeginWrite();
@@ -483,8 +483,8 @@ void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
 
 	if (!changed) { return; } // nothing to change
 
-	SPDLOG_INFO("Changed 'boundaryLayers' from {} to {}",
-		params_.boundaryLayers, boundaryLayers);
+	//SPDLOG_INFO("Changed 'boundaryLayers' from {} to {}",
+	//	params_.boundaryLayers, boundaryLayers);
 
 	// apply changes
 	BeginWrite();
@@ -634,10 +634,10 @@ void SimParamsMgr::PresetParams_A()
 	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
 	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
 	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
-	Set_GammaPress(gammaPress);
-	Set_JacobiOmega(jacobiOmega);
 	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
 	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
+	Set_GammaPress(gammaPress);
+	Set_JacobiOmega(jacobiOmega);
 	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
 	Set_KernelSuppRatio(kernelSuppRatio);
 }
@@ -662,10 +662,10 @@ void SimParamsMgr::PresetParams_B()
 	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
 	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
 	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
-	Set_GammaPress(gammaPress);
-	Set_JacobiOmega(jacobiOmega);
 	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
 	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
+	Set_GammaPress(gammaPress);
+	Set_JacobiOmega(jacobiOmega);
 	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
 	Set_KernelSuppRatio(kernelSuppRatio);
 }

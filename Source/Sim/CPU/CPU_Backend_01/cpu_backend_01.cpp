@@ -152,9 +152,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		tbb::auto_partitioner{}
 	);
 
-	SPDLOG_INFO("Pulled universal sim state with {} fluid and "
-				"{} boundary particles into data structures of backend CPU01",
-				N_F_, N_B_);
+	//SPDLOG_INFO("Pulled universal sim state with {} fluid and "
+	//			"{} boundary particles into data structures of backend CPU01",
+	//			N_F_, N_B_);
 }
 
 void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
@@ -236,9 +236,9 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	F.N_ = N_F_;
 	B.N_ = N_B_;
 
-	SPDLOG_INFO("Pushed from data structures of backend CPU01 with "
-				"{} fluid and {} boundary particles to universal sim state",
-				N_F_, N_B_);
+	//SPDLOG_INFO("Pushed from data structures of backend CPU01 with "
+	//			"{} fluid and {} boundary particles to universal sim state",
+	//			N_F_, N_B_);
 }
 
 void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const

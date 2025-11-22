@@ -6,10 +6,12 @@
 #include <exception>
 #include <iostream>
 #include <spdlog/spdlog.h>
+#include <tbb/global_control.h>
 
 // internal
-#include "../Source/Sim/Core/parameters_sim.h"
-#include "../Source/Sim/Core/simulation.h"
+#include "Source/Sim/Core/diagnostics.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Core/simulation.h"
 
 
 
@@ -37,6 +39,15 @@ int main(int argc, char** argv)
 		// TODO: add --version, --threads, --backend, etc... ?
 
 		CLI11_PARSE(application, argc, argv);
+
+		// --- [ hardware budgets ] --------------------------------------------
+
+		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
+
+		Sim::PrintHardwareSpecs(N_totalThreads, N_totalThreads, 0);
+
+		// limit TBB to N_simThreads worker threads
+		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_totalThreads);
 
 		// --- [ initialization of manager systems ] ---------------------------
 	}

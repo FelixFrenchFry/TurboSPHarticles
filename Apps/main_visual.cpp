@@ -9,10 +9,11 @@
 #include <tbb/global_control.h>
 
 // internal
-#include "../Source/Sim/Core/parameters_sim.h"
-#include "../Source/Sim/Core/simulation.h"
-#include "../Source/Vis/Core/parameters_vis.h"
-#include "../Source/Vis/Core/visualization.h"
+#include "Source/Sim/Core/diagnostics.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Core/simulation.h"
+#include "Source/Vis/Core/parameters_vis.h"
+#include "Source/Vis/Core/visualization.h"
 
 
 
@@ -40,6 +41,18 @@ int main(int argc, char** argv)
 		// TODO: add --version, --threads, --backend, etc... ?
 
 		CLI11_PARSE(application, argc, argv);
+
+		// --- [ hardware budgets ] --------------------------------------------
+
+		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
+		const std::uint32_t N_visThreads = 1; // TODO: make configurable?
+		const std::uint32_t N_simThreads = N_totalThreads > N_visThreads ?
+			N_totalThreads - N_visThreads : 1;
+
+		Sim::PrintHardwareSpecs(N_totalThreads, N_simThreads, N_visThreads);
+
+		// limit TBB to N_simThreads worker threads
+		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_simThreads);
 
 		// --- [ initialization of manager systems ] ---------------------------
 
@@ -85,19 +98,6 @@ int main(int argc, char** argv)
 			SPDLOG_ERROR("Failed to initialize VisualizationMgr");
 			return EXIT_FAILURE;
 		}
-
-		// --- [ hardware budgets ] --------------------------------------------
-
-		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
-		const std::uint32_t N_visThreads = 1; // TODO: make configurable?
-		const std::uint32_t N_simThreads = N_totalThreads > N_visThreads ?
-										   N_totalThreads - N_visThreads : 1;
-
-		SPDLOG_INFO("Number of threads [total/sim/vis]: [ {} / {} / {} ]",
-			N_totalThreads, N_simThreads, N_visThreads);
-
-		// limit TBB to N_simThreads worker threads
-		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_simThreads);
 
 		// --- [ main loop ] ---------------------------------------------------
 
