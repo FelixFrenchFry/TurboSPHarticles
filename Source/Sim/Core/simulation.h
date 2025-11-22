@@ -77,6 +77,8 @@ namespace Sim
 
 	private: // ==============================
 
+		friend class DiagnosticsMgr;
+
 		// parameter manager and snapshot to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;

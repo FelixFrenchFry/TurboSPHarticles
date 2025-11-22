@@ -18,22 +18,29 @@
 
 namespace Sim
 {
-	void PrintHardwareSpecs(uint32_t N_totalThreads,
-						    uint32_t N_simThreads, 
-						    uint32_t N_visThreads);
+	class DiagnosticsMgr
+	{
+	public: // -----------------------------------------------------------------
 
-	void PrintSimParams(const SimParams& params);
+		DiagnosticsMgr() = delete;
 
-	void PrintSetupSummary(const SimulationMgr& simMgr);
+		static void PrintHardwareSpecs(uint32_t N_totalThreads,
+		                               uint32_t N_simThreads,
+		                               uint32_t N_visThreads);
 
-	void PrintProgressMilestone(int64_t step, int64_t totalSteps = -1);
+		static void PrintSimParams(const SimParams& params);
 
-	void PrintPerformanceSummary(int64_t totalSteps,
-								 double totalSimTime,
-								 double wallSeconds);
+		static void PrintSimSetup(const SimulationMgr& simMgr);
 
-	// TODO: print big performance and statistics tables in-place after every step?
+		static void PrintProgressMilestone(int64_t step, int64_t totalSteps = -1);
 
-	// TODO: print current step and steps/sec periodically?
+		static void PrintPerformanceSummary(int64_t totalSteps,
+		                                    double totalSimTime,
+		                                    double wallSeconds);
+
+		// TODO: print big performance and statistics tables in-place after every step?
+
+		// TODO: print current step and steps/sec periodically?
+	};
 
 } // namespace Sim

@@ -10,7 +10,6 @@
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <sstream>
-#include <thread>
 #ifdef _WIN32
 	#include <windows.h>
 #else
@@ -26,9 +25,9 @@
 
 namespace Sim
 {
-    void PrintHardwareSpecs(uint32_t N_totalThreads,
-						    uint32_t N_simThreads,
-						    uint32_t N_visThreads)
+    void DiagnosticsMgr::PrintHardwareSpecs(uint32_t N_totalThreads,
+											uint32_t N_simThreads,
+											uint32_t N_visThreads)
     {
         printf("\n");
         printf("--- [ hardware specifications ] ------------------------------------------------\n");
@@ -45,7 +44,7 @@ namespace Sim
 			gethostname(hostname, sizeof(hostname));
 		#endif
 
-        printf("%-24s = %s\n", "host name", hostname);
+        printf("%-24s = %s\n", "host", hostname);
         printf("%-24s = %u\n", "threads total avail", N_totalThreads);
         printf("%-24s = %u\n", "threads used for sim", N_simThreads);
         printf("%-24s = %u\n", "threads used for vis", N_visThreads);
@@ -53,7 +52,7 @@ namespace Sim
         printf("\n");
     }
 
-    void PrintSimParams(const SimParams& params)
+    void DiagnosticsMgr::PrintSimParams(const SimParams& params)
     {
         printf("--- [ simulation parameters ] --------------------------------------------------\n");
         printf("--------------------------------------------------------------------------------\n");
@@ -81,7 +80,40 @@ namespace Sim
         printf("\n");
     }
 
-    void PrintProgressMilestone(int64_t step, int64_t totalSteps)
+    void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr)
+    {
+        printf("--- [ simulation setup ] -------------------------------------------------------\n");
+        printf("--------------------------------------------------------------------------------\n");
+
+        const auto& backend = simMgr.simBackend_;
+        const auto& scenario = simMgr.simScenario_;
+
+        // backend
+		std::string backendName = "<unknown>";
+		if (backend)
+		{
+			backendName = simMgr.simBackend_->Name();
+		}
+        printf("%-24s = %s\n", "sim backend", backendName.c_str());
+
+        // scenario
+        std::string scenarioName = "<unknown>";
+        if (scenario)
+        {
+            scenarioName = simMgr.simScenario_->Name();
+        }
+        printf("%-24s = %s\n", "sim scenario", scenarioName.c_str());
+
+        // particle counts
+        printf("%-24s = %u\n", "fluid particles", 
+            simMgr.universalSimState_.fluidParticles.N_);
+        printf("%-24s = %u\n", "boundary particles", 
+            simMgr.universalSimState_.boundaryParticles.N_);
+
+        printf("\n");
+    }
+
+    void DiagnosticsMgr::PrintProgressMilestone(int64_t step, int64_t totalSteps)
     {
         using steady_clock = std::chrono::steady_clock;
 
@@ -248,10 +280,16 @@ namespace Sim
 
         std::cout << oss.str() << std::flush;
 
-        if (isLastStep)
-        {
-            std::cout << std::endl;
-        }
+        if (isLastStep) { std::cout << std::endl; }
+    }
+
+    void DiagnosticsMgr::PrintPerformanceSummary(int64_t totalSteps,
+												 double totalSimTime,
+												 double wallSeconds)
+    {
+        // TODO: implement
+
+        return;
     }
 	
 } // namespace Sim

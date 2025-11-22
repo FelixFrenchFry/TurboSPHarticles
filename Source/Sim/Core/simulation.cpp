@@ -40,13 +40,17 @@ bool SimulationMgr::Init()
 	SelectSimScenario(Base::ScenarioType::BreakingDam);
 
 	// default sim backend (CPU01)
-	SelectSimBackend(Base::BackendVersion::GPU01);
+	SelectSimBackend(Base::BackendVersion::CPU01);
 
 	ReBuildInitialSimState();
 
 	initialized_.store(true, std::memory_order_release);
 
-	PrintSimParams(simParams_);
+	// updated snapshot
+	SyncParameters(true);
+
+	DiagnosticsMgr::PrintSimParams(simParams_);
+	DiagnosticsMgr::PrintSimSetup(*this);
 
 	return true;
 }
@@ -327,7 +331,7 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 
 		SyncParameters();
 
-		PrintProgressMilestone(simStep_);
+		DiagnosticsMgr::PrintProgressMilestone(simStep_);
 
 		// TODO: check if scenario or backend need to be switched?
 	}

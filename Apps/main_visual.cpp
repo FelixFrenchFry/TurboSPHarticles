@@ -49,7 +49,7 @@ int main(int argc, char** argv)
 		const std::uint32_t N_simThreads = N_totalThreads > N_visThreads ?
 			N_totalThreads - N_visThreads : 1;
 
-		Sim::PrintHardwareSpecs(N_totalThreads, N_simThreads, N_visThreads);
+		Sim::DiagnosticsMgr::PrintHardwareSpecs(N_totalThreads, N_simThreads, N_visThreads);
 
 		// limit TBB to N_simThreads worker threads
 		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_simThreads);
