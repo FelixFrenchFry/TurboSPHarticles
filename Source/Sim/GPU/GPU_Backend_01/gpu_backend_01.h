@@ -170,8 +170,8 @@ namespace Sim
 		static constexpr uint32_t N_MAX_FF_ = 96;
 		static constexpr uint32_t N_MAX_FB_ = 64;
 
-		DeviceBuffer<uint32_t> d_neighCountFF_;
-		DeviceBuffer<uint32_t> d_neighCountFB_;
+		DeviceBuffer<uint8_t> d_neighCountFF_;
+		DeviceBuffer<uint8_t> d_neighCountFB_;
 		DeviceBuffer<uint32_t> d_neighListFF_; // N_F_ * N_MAX_NEIGH_FF_
 		DeviceBuffer<uint32_t> d_neighListFB_; // N_F_ * N_MAX_NEIGH_FB_
 		DeviceBuffer<uint32_t> d_neighOverflowFlag_; // TODO: use smaller data type?

@@ -93,8 +93,8 @@ namespace GPU01
 		const float* __restrict__ zPosB,
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		// destinations
-		uint32_t* __restrict__ neighCountFF,
-		uint32_t* __restrict__ neighCountFB,
+		uint8_t* __restrict__ neighCountFF,
+		uint8_t* __restrict__ neighCountFB,
 		uint32_t* __restrict__ neighListFF,
 		uint32_t* __restrict__ neighListFB,
 		uint32_t* __restrict__ overflowFlag)
@@ -301,8 +301,8 @@ namespace GPU01
 		const uint32_t N_F,
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		// destinations
-		uint32_t* __restrict__ neighCountFF,
-		uint32_t* __restrict__ neighCountFB,
+		uint8_t* __restrict__ neighCountFF,
+		uint8_t* __restrict__ neighCountFB,
 		uint32_t* __restrict__ neighListFF,
 		uint32_t* __restrict__ neighListFB,
 		uint32_t* __restrict__ overflowFlag)
@@ -449,8 +449,8 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* neighCountFF,
-		uint32_t* neighCountFB,
+		uint8_t* neighCountFF,
+		uint8_t* neighCountFB,
 		uint32_t* neighListFF,
 		uint32_t* neighListFB,
 		uint32_t* overflowFlag)
@@ -548,7 +548,7 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* neighCountFF, uint32_t* neighCountFB,
+		uint8_t* neighCountFF, uint8_t* neighCountFB,
 		uint32_t* neighListFF, uint32_t* neighListFB,
 		uint32_t* overflowFlag)
 	{

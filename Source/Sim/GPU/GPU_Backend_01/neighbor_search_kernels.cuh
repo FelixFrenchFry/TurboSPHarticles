@@ -27,8 +27,8 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* neighCountFF,
-		uint32_t* neighCountFB,
+		uint8_t* neighCountFF,
+		uint8_t* neighCountFB,
 		uint32_t* neighListFF,
 		uint32_t* neighListFB,
 		uint32_t* overflowFlag);
@@ -70,7 +70,7 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* neighCountFF, uint32_t* neighCountFB,
+		uint8_t* neighCountFF, uint8_t* neighCountFB,
 		uint32_t* neighListFF, uint32_t* neighListFB,
 		uint32_t* overflowFlag);
 
