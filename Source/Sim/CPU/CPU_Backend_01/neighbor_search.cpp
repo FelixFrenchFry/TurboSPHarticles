@@ -50,54 +50,60 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
-	#pragma omp for schedule(static)
-	for (uint32_t i = 0; i < be_.N_F_; i++)
-	{
-		// neighbor lists for particle i
-		// (delete contents, but keep capacity)
-		std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-		std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-		ff.clear();
-		fb.clear();
-
-		const float xi = be_.xPosF_[i];
-		const float yi = be_.yPosF_[i];
-		const float zi = be_.zPosF_[i];
-
-		// check all fluid particles j
-		for (uint32_t j = 0; j < be_.N_F_; j++)
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			const float dx = xi - be_.xPosF_[j];
-			const float dy = yi - be_.yPosF_[j];
-			const float dz = zi - be_.zPosF_[j];
-
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= kernelRadiusSqu) [[unlikely]]
+			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// add actual neighbor to list
-				ff.push_back(j);
+				// neighbor lists for particle i
+				// (delete contents, but keep capacity)
+				std::vector<uint32_t>& ff = be_.neighborsFF_[i];
+				std::vector<uint32_t>& fb = be_.neighborsFB_[i];
+				ff.clear();
+				fb.clear();
+
+				const float xi = be_.xPosF_[i];
+				const float yi = be_.yPosF_[i];
+				const float zi = be_.zPosF_[i];
+
+				// check all fluid particles j
+				for (uint32_t j = 0; j < be_.N_F_; j++)
+				{
+					const float dx = xi - be_.xPosF_[j];
+					const float dy = yi - be_.yPosF_[j];
+					const float dz = zi - be_.zPosF_[j];
+
+					// squared distance between particles i and j
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						// add actual neighbor to list
+						ff.push_back(j);
+					}
+				}
+
+				// check all boundary particles j
+				for (uint32_t j = 0; j < be_.N_B_; j++)
+				{
+					const float dx = xi - be_.xPosB_[j];
+					const float dy = yi - be_.yPosB_[j];
+					const float dz = zi - be_.zPosB_[j];
+
+					// squared distance between particles i and j
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						// add actual neighbor to list
+						fb.push_back(j);
+					}
+				}
 			}
-		}
-
-		// check all boundary particles j
-		for (uint32_t j = 0; j < be_.N_B_; j++)
-		{
-			const float dx = xi - be_.xPosB_[j];
-			const float dy = yi - be_.yPosB_[j];
-			const float dz = zi - be_.zPosB_[j];
-
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= kernelRadiusSqu) [[unlikely]]
-			{
-				// add actual neighbor to list
-				fb.push_back(j);
-			}
-		}
-	}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 // -----------------------------------------------------------------------------

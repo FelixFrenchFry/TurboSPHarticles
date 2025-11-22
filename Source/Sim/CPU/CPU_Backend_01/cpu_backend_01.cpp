@@ -198,7 +198,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				F.zAccVisc[i] = zAccViscF_[i];
 
 				F.xAccExt[i] = xAccExtF_[i];
-				F.yAccExt[i] = xAccExtF_[i];
+				F.yAccExt[i] = yAccExtF_[i];
 				F.zAccExt[i] = zAccExtF_[i];
 
 				F.sourceTerm[i] = sourceTermF_[i];

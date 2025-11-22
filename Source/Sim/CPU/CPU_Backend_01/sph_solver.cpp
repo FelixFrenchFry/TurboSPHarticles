@@ -409,7 +409,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 				const float zCTerm = -1.0f * (zCTermF * restDensitySquInvF)
 								   - 2.0f * params.gammaPress * (zCTermB * restDensitySquInvF);
 
-				// part 1 (top) of the summation
+				// part 1
 				#pragma omp simd reduction(+:tmp_DiagElem)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -418,7 +418,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 										  + zCTerm * zKernelGradFF_[i][k]);
 				}
 
-				// part 2 (middle) of the summation
+				// part 2
 				#pragma omp simd reduction(+:tmp_DiagElem)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -431,7 +431,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 										  + tmp_z * zKernelGradFF_[i][k]);
 				}
 
-				// part 3 (bottom) of the summation
+				// part 3
 				#pragma omp simd reduction(+:tmp_DiagElem)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
