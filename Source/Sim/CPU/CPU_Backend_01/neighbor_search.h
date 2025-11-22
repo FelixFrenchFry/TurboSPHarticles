@@ -148,6 +148,10 @@ namespace Sim
 
 		void Query_Basic(const SimParams& params);
 
+		void Query_Smart(const SimParams& params);
+
+		// TODO: implement query with BigMin-LitMax and ternary search and caching of results?
+
 	private: // ----------------------------------------------------------------
 
 		SimBackend_CPU01& be_;
@@ -155,6 +159,8 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
+		static constexpr uint32_t N_NbrDim_ = 3;
+		static  constexpr uint32_t N_NbrCells_ = N_NbrDim_ * N_NbrDim_ * N_NbrDim_;
 
 		// data structures
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
@@ -175,6 +181,7 @@ namespace Sim
 		static inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
 		static inline uint32_t ZigZag(int v) noexcept;
+		static inline int NeighborOffset(int rx, int ry, int rz) noexcept;
 		static inline int FloorToInt(float v) noexcept;
 	};
 

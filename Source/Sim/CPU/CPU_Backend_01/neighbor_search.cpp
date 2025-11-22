@@ -20,6 +20,14 @@
 #include "neighbor_search.h"
 #include "Source/Base/helpers.h"
 
+#if defined(_MSC_VER)
+	#define RESTRICT __restrict
+#elif defined(__GNUC__) || defined(__clang__)
+	#define RESTRICT __restrict__
+#else
+	#define RESTRICT
+#endif
+
 
 
 using namespace Sim;
@@ -859,7 +867,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 {
-	Query_Basic(params);
+	Query_Smart(params);
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
@@ -1022,6 +1030,196 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 	);
 }
 
+void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	float* RESTRICT xPosF = be_.xPosF_.data();
+	float* RESTRICT yPosF = be_.yPosF_.data();
+	float* RESTRICT zPosF = be_.zPosF_.data();
+
+	float* RESTRICT xPosB = be_.xPosB_.data();
+	float* RESTRICT yPosB = be_.yPosB_.data();
+	float* RESTRICT zPosB = be_.zPosB_.data();
+
+	// loop over all non-empty grid cells
+	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
+	tbb::parallel_for(
+		tbb::blocked_range<uint64_t>(0, N_Cells),
+		[&](const tbb::blocked_range<uint64_t>& range)
+		{
+			for (uint64_t c = range.begin(); c != range.end(); c++)
+			{
+				// range of all fluid particles in this cell
+				const uint32_t sF = cellStartIdxF_[c]; // start
+				const uint32_t eF = cellStartIdxF_[c + 1]; // end
+				if (sF >= eF) { continue; }
+
+				// clear neighbor lists of all particles in this cell
+				for (uint32_t k = sF; k < eF; k++)
+				{
+					const uint32_t i = sortedParticleIdxF_[k];
+
+					be_.neighborsFF_[i].clear();
+					be_.neighborsFB_[i].clear();
+				}
+
+				// determine a representative particle i0
+				const uint32_t i0 = sortedParticleIdxF_[sF];
+
+				const float xi0 = xPosF[i0];
+				const float yi0 = yPosF[i0];
+				const float zi0 = zPosF[i0];
+
+				// cell coordinates of all particles in this cell
+				const int cx = FloorToInt(xi0 * cellSizeInv_);
+				const int cy = FloorToInt(yi0 * cellSizeInv_);
+				const int cz = FloorToInt(zi0 * cellSizeInv_);
+
+				// pre-compute neighbor cell IDs
+				std::array<uint8_t, N_NbrCells_> hasFluidCell{};
+				std::array<uint32_t, N_NbrCells_> sNbrF{};
+				std::array<uint32_t, N_NbrCells_> eNbrF{};
+
+				std::array<uint8_t, N_NbrCells_> hasBoundaryCell{};
+				std::array<uint32_t, N_NbrCells_> sNbrB{};
+				std::array<uint32_t, N_NbrCells_> eNbrB{};
+
+				// check existence and location of all 27 (3x3x3) neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					const int oz = cz + rz; // target cell coordinate in z-direction
+
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						const int oy = cy + ry; // target cell coordinate in y-direction
+
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							const int ox = cx + rx; // target cell coordinate in x-direction
+
+							// index of this neighbor cell in the 3x3x3 neighborhood
+							const int idx_nbr = NeighborOffset(rx, ry, rz);
+
+							// cell ID of this neighbor cell
+							const uint64_t cid_nbr = MapToCellId_Morton(ox, oy, oz);
+
+							// fluid scope
+							{
+								// find out if neighbor cell exists in compact cell list
+								auto iterF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+								if (iterF != uniqueCellIdF_.end() && *iterF == cid_nbr)
+								{
+									// get range of all fluid particles in the neighbor cell
+									const uint32_t cF_nbr = static_cast<uint32_t>(iterF - uniqueCellIdF_.begin());
+									const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
+									const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
+
+									hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
+									sNbrF[idx_nbr] = sF_nbr;
+									eNbrF[idx_nbr] = eF_nbr;
+								}
+								else
+								{
+									hasFluidCell[idx_nbr] = false;
+								}
+							}
+
+							// boundary scope
+							{
+								// find out if neighbor cell exists in compact cell list
+								auto iterB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
+								if (iterB != uniqueCellIdB_.end() && *iterB == cid_nbr)
+								{
+									// get range of all boundary particles in the neighbor cell
+									const uint32_t cB_nbr = static_cast<uint32_t>(iterB - uniqueCellIdB_.begin());
+									const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
+									const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
+
+									hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
+									sNbrB[idx_nbr] = sB_nbr;
+									eNbrB[idx_nbr] = eB_nbr;
+								}
+								else
+								{
+									hasBoundaryCell[idx_nbr] = false;
+								}
+							}
+						}
+					}
+				}
+
+				// check all particles j in 27 (3x3x3) neighboring grid cells
+				for (uint32_t k = sF; k < eF; k++)
+				{
+					const uint32_t i = sortedParticleIdxF_[k];
+
+					const float xi = xPosF[i];
+					const float yi = yPosF[i];
+					const float zi = zPosF[i];
+
+					// fluid neighbors
+					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells_; idx_nbr++)
+					{
+						if (!hasFluidCell[idx_nbr]) { continue; }
+
+						const uint32_t sF_nbr = sNbrF[idx_nbr];
+						const uint32_t eF_nbr = eNbrF[idx_nbr];
+
+						#pragma omp simd
+						for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+						{
+							const uint32_t j = sortedParticleIdxF_[l];
+
+							const float dx = xi - xPosF[j];
+							const float dy = yi - yPosF[j];
+							const float dz = zi - zPosF[j];
+
+							const float distSqu = dx * dx
+												+ dy * dy
+												+ dz * dz;
+
+							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							{
+								be_.neighborsFF_[i].push_back(j);
+							}
+						}
+					}
+
+					// boundary neighbors
+					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells_; idx_nbr++)
+					{
+						if (!hasBoundaryCell[idx_nbr]) { continue; }
+
+						const uint32_t sB_nbr = sNbrB[idx_nbr];
+						const uint32_t eB_nbr = eNbrB[idx_nbr];
+
+						#pragma omp simd
+						for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+						{
+							const uint32_t j = sortedParticleIdxB_[l];
+
+							const float dx = xi - xPosB[j];
+							const float dy = yi - yPosB[j];
+							const float dz = zi - zPosB[j];
+
+							const float distSqu = dx * dx
+												+ dy * dy
+												+ dz * dz;
+
+							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							{
+								be_.neighborsFB_[i].push_back(j);
+							}
+						}
+					}
+				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(
 	int cx, int cy, int cz) noexcept
 {
@@ -1071,7 +1269,7 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 // bijective mapping of signed to unsigned integers
 // before: [0  -1   1  -2   2  -3   3 ...]
 // after:  [0   1   2   3   4   5   6 ...]
-uint32_t NS_CellLinkedList_Compact_CPU01::ZigZag(int v) noexcept
+inline uint32_t NS_CellLinkedList_Compact_CPU01::ZigZag(int v) noexcept
 {
 	// shift left by 1 and XOR with sign bit
 	std::uint32_t uv = static_cast<std::uint32_t>(v);
@@ -1079,6 +1277,11 @@ uint32_t NS_CellLinkedList_Compact_CPU01::ZigZag(int v) noexcept
 	std::uint32_t sign = static_cast<std::uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
 
 	return even ^ sign;
+}
+
+inline int NS_CellLinkedList_Compact_CPU01::NeighborOffset(int rx, int ry, int rz) noexcept
+{
+	return (rz + 1) * 9 + (ry + 1) * 3 + (rx + 1);
 }
 
 inline int NS_CellLinkedList_Compact_CPU01::FloorToInt(float v) noexcept

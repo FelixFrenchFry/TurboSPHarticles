@@ -376,7 +376,14 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 		SyncParameters();
 
-		DiagnosticsMgr::PrintProgressMilestone(simStep_);
+		if (maxSteps == std::numeric_limits<int64_t>::max())
+		{
+			DiagnosticsMgr::PrintProgressMilestone(simStep_);
+		}
+		else
+		{
+			DiagnosticsMgr::PrintProgressMilestone(simStep_, maxSteps);
+		}
 
 		// TODO: check if scenario or backend need to be switched?
 	}

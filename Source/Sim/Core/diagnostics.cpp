@@ -261,11 +261,8 @@ namespace Sim
             // steps so far and percentage
             oss << " | "
                 << step << '/' << totalSteps << " steps ("
-                << "\033[32m"  // green
                 << std::fixed << std::setprecision(1)
-                << percent << " %"
-                << "\033[0m"   // reset
-                << ")";
+                << percent << " %)";
         }
         else // total steps unknown
         {
