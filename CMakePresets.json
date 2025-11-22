@@ -13,8 +13,8 @@
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_FEATURE_FLAGS": "manifests",
-        "ENABLE_CUDA": "ON",
-        "ENABLE_VIS": "ON"
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_VIS": "OFF"
       }
     },
 
