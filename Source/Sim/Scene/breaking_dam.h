@@ -29,10 +29,10 @@ namespace Scene
 
 	class BreakingDamScene final : public ISimScenario
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		BreakingDamScene(ScenarioMgr& scenarioMgr, BreakingDamConfig config)
-			: scenarioMgr_(scenarioMgr), config_(std::move(config)) {}
+			: scenarioMgr_(scenarioMgr), config_(config) {}
 
 		const char* Name() const override { return "Breaking Dam"; }
 
@@ -52,15 +52,11 @@ namespace Scene
 			return res;
 		}
 
-	private: // ==============================
+	private: // ----------------------------------------------------------------
 
 		ScenarioMgr& scenarioMgr_;
 		BreakingDamConfig config_;
 	};
-
-	// ============
-	// helpers
-	// ============
 
 	BreakingDamConfig inline MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr,
 													       const Sim::SimParams& params)
@@ -72,17 +68,17 @@ namespace Scene
 		OBB container = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0,0,0},
-			/* uDir, uLen */	U, 0.8f,
-			/* vDir, vLen */	V, 0.8f,
-			/* wDir, wLen */	W, 0.8f
+			/* uDir, uLen */	U, 0.9f,
+			/* vDir, vLen */	V, 0.9f,
+			/* wDir, wLen */	W, 0.9f
 		);
 
 		OBB fluid = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0.0,0.0,0.0},
-			/* uDir, uLen */	U, 0.5f,
+			/* uDir, uLen */	U, 0.9f,
 			/* vDir, vLen */	V, 0.5f,
-			/* wDir, wLen */	W, 0.5f
+			/* wDir, wLen */	W, 0.9f
 		);
 
 		return BreakingDamConfig{ container, fluid };

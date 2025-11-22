@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 
 		// simulation runs on background controller thread
 		// (spawn N-1 worker threads within)
-		simulationMgr.Launch_Async(N_simThreads);
+		simulationMgr.Launch_Async();
 
 		// visualization runs on main thread
 		visualizationMgr.RunVis();

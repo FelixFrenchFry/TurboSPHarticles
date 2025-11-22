@@ -44,12 +44,49 @@ int main(int argc, char** argv)
 
 		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
 
-		Sim::PrintHardwareSpecs(N_totalThreads, N_totalThreads, 0);
+		Sim::DiagnosticsMgr::PrintHardwareSpecs(N_totalThreads, N_totalThreads, 0);
 
 		// limit TBB to N_simThreads worker threads
 		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_totalThreads);
 
 		// --- [ initialization of manager systems ] ---------------------------
+
+		// simulation parameters
+		Sim::SimParamsMgr simParamsMgr{};
+		simParamsMgr.PresetParams_B();
+		simParamsMgr.AssertParamDerivationCorrectness();
+
+		// sub-systems
+		Scene::ScenarioMgr scenarioMgr{};
+		Bench::BenchmarksMgr benchmarksMgr{ simParamsMgr.SnapshotParams().first };
+		Stats::StatisticsMgr statisticsMgr{ simParamsMgr.SnapshotParams().first };
+
+		// main systems
+		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr };
+
+		// bench mailbox
+		Sync::BenchSnapMailbox benchMailbox{};
+		simulationMgr.SetBenchMailbox(&benchMailbox);
+
+		// stat mailbox
+		Sync::StatSnapMailbox statMailbox{};
+		simulationMgr.SetStatMailbox(&statMailbox);
+
+		if (!simulationMgr.Init())
+		{
+			SPDLOG_ERROR("Failed to initialize SimulationMgr");
+			return EXIT_FAILURE;
+		}
+		simParamsMgr.Set_SimRunning(true);
+
+		// --- [ main loop ] ---------------------------------------------------
+
+		// simulation runs on all available threads
+		simulationMgr.Launch_Blocking(1000);
+
+		// --- [ shutdown ] ----------------------------------------------------
+
+		simulationMgr.Shutdown();
 	}
 	catch (const std::exception& ex)
 	{

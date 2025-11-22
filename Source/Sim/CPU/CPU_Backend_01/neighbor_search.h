@@ -146,6 +146,8 @@ namespace Sim
 
 		void Query(const SimParams& params) override;
 
+		void Query_Basic(const SimParams& params);
+
 	private: // ----------------------------------------------------------------
 
 		SimBackend_CPU01& be_;

@@ -859,6 +859,11 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
 {
+	Query_Basic(params);
+}
+
+void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
+{
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
 	// loop over all non-empty grid cells

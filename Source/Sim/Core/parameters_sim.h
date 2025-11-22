@@ -45,8 +45,8 @@ namespace Sim
 		float massB				= 0.001f;
 
 		// viscosity
-		float viscosityF = 0.000003f;
-		float viscosityB = 0.000003f;
+		float viscosityF		= 0.000003f;
+		float viscosityB		= 0.000003f;
 
 		// pressure
 		float gammaPress		= 0.5f;

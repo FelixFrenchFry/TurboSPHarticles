@@ -56,10 +56,12 @@ namespace Sim
 		// TODO: void Launch(std::uint32_t N_simThreads);
 		// TODO: void RunSim(std::uint32_t N_simThreads);
 
-		void Launch_Async(std::uint32_t N_simThreads);
+		void Launch_Async(int64_t maxSteps = -1);
+		void Launch_Blocking(int64_t maxSteps = -1);
 
 		// main simulation loop
-		void RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken);
+		void RunSim_Async(const std::stop_token& stopToken, int64_t maxSteps);
+		void RunSim_Blocking(int64_t maxSteps);
 
 		void RequestStop();
 

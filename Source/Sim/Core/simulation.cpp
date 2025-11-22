@@ -8,6 +8,9 @@
 
 // internal
 #include "simulation.h"
+
+#include <iostream>
+
 #include "Source/Sim/Core/diagnostics.h"
 
 
@@ -192,7 +195,7 @@ void SimulationMgr::ReBuildInitialSimState()
 	simBackend_->PullFromUniversalSimState(universalSimState_);
 }
 
-void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
+void SimulationMgr::Launch_Async(int64_t maxSteps)
 {
 	if (!initialized_.load(std::memory_order_acquire))
 	{
@@ -210,17 +213,42 @@ void SimulationMgr::Launch_Async(std::uint32_t N_simThreads)
 		return;
 	}
 
+	if (maxSteps < 0) { maxSteps = std::numeric_limits<int64_t>::max(); }
+
 	// launch the controller thread
-	controllerThread_ = std::jthread([this, N_simThreads](const std::stop_token& stopToken)
+	controllerThread_ = std::jthread([this, maxSteps](const std::stop_token& stopToken)
 		{
-			RunSim_Async(N_simThreads, stopToken);
+			RunSim_Async(stopToken, maxSteps);
 		});
 }
 
-void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_token& stopToken)
+void SimulationMgr::Launch_Blocking(int64_t maxSteps)
 {
-	//SPDLOG_INFO("Simulation started running with {} worker threads",
-	//	N_simThreads);
+	if (!initialized_.load(std::memory_order_acquire))
+	{
+		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (not initialized)");
+		return;
+	}
+	if (!simBackend_)
+	{
+		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (no backend selected)");
+		return;
+	}
+	if (running_.exchange(true))
+	{
+		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (already running)");
+		return;
+	}
+
+	if (maxSteps < 0) { maxSteps = std::numeric_limits<int64_t>::max(); }
+
+	// launch threads
+	RunSim_Blocking(maxSteps);
+}
+
+void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSteps)
+{
+	SPDLOG_INFO("Simulation started running\n");
 
 	// initialize before entering the simulation loop --------------------------
 
@@ -240,13 +268,30 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 	// vis throttle starting point
 	lastVisWall_ = std::chrono::steady_clock::now();
 
+	const bool hasMaxSteps = (maxSteps > 0);
+
 	// enter the simulation loop -----------------------------------------------
 
 	while (!stopToken.stop_requested())
 	{
+		SyncParameters(true);
+
 		// local copy for thread safety
 		const auto params = simParams_;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
+
+		// explicit maximum number of steps reached
+		if (hasMaxSteps && simStep_ >= maxSteps) { break; }
+
+		// stop when simRunning is false and at least one step was done
+		if (!hasMaxSteps && !doSimStep && simStep_ > 0) { break; }
+
+		// small sleep to avoid busy spin when nothing to do yet
+		if (!doSimStep)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
 
 		// execute one simulation step
 		if (doSimStep)
@@ -344,7 +389,111 @@ void SimulationMgr::RunSim_Async(std::uint32_t N_simThreads, const std::stop_tok
 		simBackend_->PushToUniversalSimState(universalSimState_);
 	}
 
-	SPDLOG_INFO("Simulation stopped running");
+	SPDLOG_INFO("Simulation stopped running\n");
+}
+
+void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
+{
+	SPDLOG_INFO("Simulation started running\n");
+
+	// enter the simulation loop -----------------------------------------------
+
+	const bool hasMaxSteps = (maxSteps > 0);
+
+	while (true)
+	{
+		SyncParameters(true);
+
+		// local copy for thread safety
+		const auto params = simParams_;
+		const bool doSimStep = (params.simRunning || params.simRunNextStep);
+
+		// explicit maximum number of steps reached
+        if (hasMaxSteps && simStep_ >= maxSteps) { break; }
+
+        // stop when simRunning is false and at least one step was done
+        if (!hasMaxSteps && !doSimStep && simStep_ > 0) { break; }
+
+		// small sleep to avoid busy spin when nothing to do yet
+        if (!doSimStep)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+
+		// execute one simulation step
+		if (doSimStep)
+		{
+			// reset data records for the new step
+			benchmarksMgr_.BeginStep();
+			statisticsMgr_.BeginStep();
+
+			// starting point of total sim benchmark
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Total_Sim });
+
+			// perform the actual simulation step
+			simBackend_->ExecuteSimStep(params);
+
+			// update metadata
+			simStep_ += 1;
+			simTime_ += params.timeStep;
+
+			// reset single-step flag
+			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
+		}
+
+		// evaluate the step
+		if (doSimStep)
+		{
+			// record statistics, archive data and update aggregates
+			simBackend_->FillStatisticsRecord(statisticsMgr_.GetCurrentRecord(), simParams_);
+			statisticsMgr_.EndStep(simStep_, simTime_);
+
+			// ending point of total sim benchmark, archive data and update aggregates
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
+			benchmarksMgr_.EndStep(simStep_, simTime_);
+		}
+
+		// pack and send benchmark and statistics snapshots
+		// (to be retrieved by the visualization manager)
+		if (doSimStep)
+		{
+			// create bench snapshot and push to its mailbox
+			auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
+			benchmarksMgr_.PackBenchSnapshot(*benchSnap);
+			benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
+
+			// create stat snapshot and push to its mailbox
+			auto statSnap = std::make_shared<Sync::StatSnapshot>();
+			statisticsMgr_.PackStatSnapshot(*statSnap);
+			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
+		}
+
+		SyncParameters();
+
+		if (maxSteps == std::numeric_limits<int64_t>::max())
+		{
+			DiagnosticsMgr::PrintProgressMilestone(simStep_);
+		}
+		else
+		{
+			DiagnosticsMgr::PrintProgressMilestone(simStep_, maxSteps);
+		}
+
+		// TODO: check if scenario or backend need to be switched?
+	}
+
+	// finalize after exiting the simulation loop ------------------------------
+
+	{
+		// transfer last sim state into the universal state to save it
+		std::scoped_lock lock(stateMutex_);
+		simBackend_->PushToUniversalSimState(universalSimState_);
+	}
+
+	running_.store(false, std::memory_order_release);
+
+	SPDLOG_INFO("Simulation stopped running\n");
 }
 
 // requests the controller thread to stop cleanly
