@@ -227,7 +227,7 @@ namespace GPU01
 	}
 
 	__global__
-	void K_NonPressureAcc(
+	void K_NonPressureAcceleration(
 		const float* __restrict__ xPosF,
 		const float* __restrict__ yPosF,
 		const float* __restrict__ zPosF,
@@ -903,7 +903,7 @@ namespace GPU01
 		GPU::CheckLastKernel("K_Density()");
 	}
 
-	void Launch_NonPressureAcc(
+	void Launch_NonPressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
@@ -925,12 +925,12 @@ namespace GPU01
 		const uint32_t N_BLOCKSIZE = 256;
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
-		K_NonPressureAcc<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, densityF,
 			neighCountFF, neighCountFB, neighListFF, neighListFB, N_MAX_FF, N_MAX_FB,
 			xVelPredF, yVelPredF, zVelPredF, xAccViscF, yAccViscF, zAccViscF, xAccExtF, yAccExtF, zAccExtF);
 
-		GPU::CheckLastKernel("K_NonPressureAcc()");
+		GPU::CheckLastKernel("K_NonPressureAcceleration()");
 	}
 
 	void Launch_SourceTerm(

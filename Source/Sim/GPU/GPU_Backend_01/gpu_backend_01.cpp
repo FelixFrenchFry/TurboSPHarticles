@@ -364,7 +364,7 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Viscosity_Acceleration,
 										Bench::BenchOp::External_Acceleration });
-		GPU01::Launch_NonPressureAcc(
+		GPU01::Launch_NonPressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),

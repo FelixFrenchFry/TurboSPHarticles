@@ -138,10 +138,8 @@ namespace Sim
 						   Bench::BenchOp::External_Acceleration }
 			},
 			{
-				.ops = { Bench::BenchOp::Pressure_SourceTerm }
-			},
-			{
-				.ops = { Bench::BenchOp::Pressure_DiagonalElem }
+				.ops = { Bench::BenchOp::Pressure_SourceTerm,
+						   Bench::BenchOp::Pressure_DiagonalElem }
 			},
 			{
 				.ops = { Bench::BenchOp::Pressure_JacobiSolver }

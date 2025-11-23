@@ -30,7 +30,7 @@ namespace GPU01
 		// destinations
 		float* densityF);
 
-	void Launch_NonPressureAcc(
+	void Launch_NonPressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelF, const float* yVelF, const float* zVelF,

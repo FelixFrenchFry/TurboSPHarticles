@@ -82,7 +82,7 @@ int main(int argc, char** argv)
 		// --- [ main loop ] ---------------------------------------------------
 
 		// simulation runs on all available threads
-		simulationMgr.Launch_Blocking(1000);
+		simulationMgr.Launch_Blocking(100);
 
 		// --- [ shutdown ] ----------------------------------------------------
 
