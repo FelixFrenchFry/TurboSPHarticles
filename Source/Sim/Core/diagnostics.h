@@ -32,6 +32,8 @@ namespace Sim
 
 		static void PrintSimSetup(const SimulationMgr& simMgr);
 
+		static void PrintMemoryUsage();
+
 		static void PrintProgressMilestone(int64_t step, int64_t totalSteps = -1);
 
 		static void PrintPerformanceSummary(int64_t totalSteps,

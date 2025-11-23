@@ -113,6 +113,14 @@ namespace Sim
         printf("\n");
     }
 
+    void DiagnosticsMgr::PrintMemoryUsage()
+    {
+        printf("--- [ memory usage ] -----------------------------------------------------------\n");
+        printf("--------------------------------------------------------------------------------\n");
+
+        // TODO: implement
+    }
+
     void DiagnosticsMgr::PrintProgressMilestone(int64_t step, int64_t totalSteps)
     {
         using steady_clock = std::chrono::steady_clock;
