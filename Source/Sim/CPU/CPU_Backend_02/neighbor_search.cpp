@@ -132,35 +132,69 @@ void NS_SpatialHashing_Basic_CPU02::Construct(const SimParams& params)
 	}
 
 	// fill in fluid cell grid
-	// TODO: multi-thread this?
-	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
-		const Eigen::Vector3f posi = be_.posF_[i];
+		// compute keys in parallel
+		std::vector<Key> cellKeysF(be_.N_F_);
 
-		// compute cell index
-		const int cx = FloorToInt(posi.x() * cellSizeInv_);
-		const int cy = FloorToInt(posi.y() * cellSizeInv_);
-		const int cz = FloorToInt(posi.z() * cellSizeInv_);
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, be_.N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const Eigen::Vector3f posi = be_.posF_[i];
 
-		// convert cell index into key and insert particle index
-		const Key key = PackKey(cx, cy, cz);
-		cellGridF_[key].push_back(i);
+					// compute cell index
+					const int cx = FloorToInt(posi.x() * cellSizeInv_);
+					const int cy = FloorToInt(posi.y() * cellSizeInv_);
+					const int cz = FloorToInt(posi.z() * cellSizeInv_);
+
+					// convert cell index into key
+					cellKeysF[i] = PackKey(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the hash table single-threaded
+		for (uint32_t i = 0; i < be_.N_F_; i++)
+		{
+			const Key key = cellKeysF[i];
+			cellGridF_[key].push_back(i);
+		}
 	}
 
 	// fill in boundary cell grid
-	// TODO: multi-thread this?
-	for (uint32_t i = 0; i < be_.N_B_; i++)
 	{
-		const Eigen::Vector3f posi = be_.posB_[i];
+		// compute keys in parallel
+		std::vector<Key> cellKeysB(be_.N_B_);
 
-		// compute cell index
-		const int cx = FloorToInt(posi.x() * cellSizeInv_);
-		const int cy = FloorToInt(posi.y() * cellSizeInv_);
-		const int cz = FloorToInt(posi.z() * cellSizeInv_);
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, be_.N_B_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const Eigen::Vector3f posi = be_.posB_[i];
 
-		// convert cell index into key and insert particle index
-		const Key key = PackKey(cx, cy, cz);
-		cellGridB_[key].push_back(i);
+					// compute cell index
+					const int cx = FloorToInt(posi.x() * cellSizeInv_);
+					const int cy = FloorToInt(posi.y() * cellSizeInv_);
+					const int cz = FloorToInt(posi.z() * cellSizeInv_);
+
+					// convert cell index into key
+					cellKeysB[i] = PackKey(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the hash table single-threaded
+		for (uint32_t i = 0; i < be_.N_B_; i++)
+		{
+			const Key key = cellKeysB[i];
+			cellGridB_[key].push_back(i);
+		}
 	}
 }
 
@@ -168,79 +202,84 @@ void NS_SpatialHashing_Basic_CPU02::Query(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
-	// TODO: convert this to tbb parallel_for?
-	#pragma omp for schedule(guided)
-	for (uint32_t i = 0; i < be_.N_F_; i++)
-	{
-		// neighbor lists for particle i
-		// (delete contents, but keep capacity)
-		std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-		std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-		ff.clear();
-		fb.clear();
-
-		const Eigen::Vector3f posi = be_.posF_[i];
-
-		// cell ID of particle i
-		const int cxi = FloorToInt(posi.x() * cellSizeInv_);
-		const int cyi = FloorToInt(posi.y() * cellSizeInv_);
-		const int czi = FloorToInt(posi.z() * cellSizeInv_);
-
-		// check all particles j in 27 neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (int ry = -1; ry <= 1; ry++)
+			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				for (int rx = -1; rx <= 1; rx++)
+				// neighbor lists for particle i
+				// (delete contents, but keep capacity)
+				std::vector<uint32_t>& ff = be_.neighborsFF_[i];
+				std::vector<uint32_t>& fb = be_.neighborsFB_[i];
+				ff.clear();
+				fb.clear();
+
+				const Eigen::Vector3f posi = be_.posF_[i];
+
+				// cell ID of particle i
+				const int cxi = FloorToInt(posi.x() * cellSizeInv_);
+				const int cyi = FloorToInt(posi.y() * cellSizeInv_);
+				const int czi = FloorToInt(posi.z() * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
 				{
-					// current cell key
-					const uint64_t key = PackKey(cxi + rx,
-												 cyi + ry,
-												 czi + rz);
-
-					// fluid particles
-					if (auto bucket = cellGridF_.find(key);
-						bucket != cellGridF_.end())
+					for (int ry = -1; ry <= 1; ry++)
 					{
-						// check all neighbor candidates in the cell bucket
-						for (const uint32_t j : bucket->second)
+						for (int rx = -1; rx <= 1; rx++)
 						{
-							const Eigen::Vector3f dposij = posi - be_.posF_[j];
+							// current cell key
+							const uint64_t key = PackKey(cxi + rx,
+														 cyi + ry,
+														 czi + rz);
 
-							// squared distance between particles i and j
-							const float distSqu = dposij.squaredNorm();
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							// fluid particles
+							if (auto bucket = cellGridF_.find(key);
+								bucket != cellGridF_.end())
 							{
-								// add actual neighbor to list
-								ff.push_back(j);
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const Eigen::Vector3f dposij = posi - be_.posF_[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dposij.squaredNorm();
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										// add actual neighbor to list
+										ff.push_back(j);
+									}
+								}
 							}
-						}
-					}
 
-					// boundary particles
-					if (auto bucket = cellGridB_.find(key);
-						bucket != cellGridB_.end())
-					{
-						// check all neighbor candidates in the cell bucket
-						for (const uint32_t j : bucket->second)
-						{
-							const Eigen::Vector3f dposij = posi - be_.posB_[j];
-
-							// squared distance between particles i and j
-							const float distSqu = dposij.squaredNorm();
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							// boundary particles
+							if (auto bucket = cellGridB_.find(key);
+								bucket != cellGridB_.end())
 							{
-								// add actual neighbor to list
-								fb.push_back(j);
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const Eigen::Vector3f dposij = posi - be_.posB_[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dposij.squaredNorm();
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										// add actual neighbor to list
+										fb.push_back(j);
+									}
+								}
 							}
 						}
 					}
 				}
 			}
-		}
-	}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 // bijective mapping of signed to unsigned integers
@@ -409,25 +448,30 @@ void NS_CellLinkedList_Basic_CPU02::Construct(const SimParams& params)
 	cellIdF_.resize(be_.N_F_);
 	sortedParticleIdxF_.resize(be_.N_F_);
 
-	// TODO: convert to tbb parallel_for?
-	#pragma omp parallel for schedule(static)
-	for (uint32_t i = 0; i < be_.N_F_; i++)
-	{
-		const Eigen::Vector3f posi = be_.posF_[i];
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				const Eigen::Vector3f posi = be_.posF_[i];
 
-		// compute cell coordinates
-		int cx = FloorToInt((posi.x() - xBoxOrig_) * cellSizeInv_);
-		int cy = FloorToInt((posi.y() - yBoxOrig_) * cellSizeInv_);
-		int cz = FloorToInt((posi.z() - zBoxOrig_) * cellSizeInv_);
+				// compute cell coordinates
+				int cx = FloorToInt((posi.x() - xBoxOrig_) * cellSizeInv_);
+				int cy = FloorToInt((posi.y() - yBoxOrig_) * cellSizeInv_);
+				int cz = FloorToInt((posi.z() - zBoxOrig_) * cellSizeInv_);
 
-		// clamp to grid dimensions
-		uint32_t ux = ClampInt(cx, 0, static_cast<int>(N_DimX_ - 1));
-		uint32_t uy = ClampInt(cy, 0, static_cast<int>(N_DimY_ - 1));
-		uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
+				// clamp to grid dimensions
+				uint32_t ux = ClampInt(cx, 0, static_cast<int>(N_DimX_ - 1));
+				uint32_t uy = ClampInt(cy, 0, static_cast<int>(N_DimY_ - 1));
+				uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
 
-		cellIdF_[i] = MapToCellId_Basic(ux, uy, uz);
-		sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
-	}
+				cellIdF_[i] = MapToCellId_Basic(ux, uy, uz);
+				sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
 	// boundary
 	cellStartIdxB_.assign(N_Cells_, EMPTY);
@@ -436,25 +480,30 @@ void NS_CellLinkedList_Basic_CPU02::Construct(const SimParams& params)
 	cellIdB_.resize(be_.N_B_);
 	sortedParticleIdxB_.resize(be_.N_B_);
 
-	// TODO: convert to tbb parallel_for?
-	#pragma omp parallel for schedule(static)
-	for (uint32_t i = 0; i < be_.N_B_; i++)
-	{
-		const Eigen::Vector3f posi = be_.posB_[i];
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, be_.N_B_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				const Eigen::Vector3f posi = be_.posB_[i];
 
-		// compute cell coordinates
-		int cx = FloorToInt((posi.x() - xBoxOrig_) * cellSizeInv_);
-		int cy = FloorToInt((posi.y() - yBoxOrig_) * cellSizeInv_);
-		int cz = FloorToInt((posi.z() - zBoxOrig_) * cellSizeInv_);
+				// compute cell coordinates
+				int cx = FloorToInt((posi.x() - xBoxOrig_) * cellSizeInv_);
+				int cy = FloorToInt((posi.y() - yBoxOrig_) * cellSizeInv_);
+				int cz = FloorToInt((posi.z() - zBoxOrig_) * cellSizeInv_);
 
-		// clamp to grid dimensions
-		uint32_t ux = ClampInt(cx, 0, static_cast<int>(N_DimX_ - 1));
-		uint32_t uy = ClampInt(cy, 0, static_cast<int>(N_DimY_ - 1));
-		uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
+				// clamp to grid dimensions
+				uint32_t ux = ClampInt(cx, 0, static_cast<int>(N_DimX_ - 1));
+				uint32_t uy = ClampInt(cy, 0, static_cast<int>(N_DimY_ - 1));
+				uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
 
-		cellIdB_[i] = MapToCellId_Basic(ux, uy, uz);
-		sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
-	}
+				cellIdB_[i] = MapToCellId_Basic(ux, uy, uz);
+				sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
 	// --- [ sort particle indices by cell IDs ] -------------------------------
 
@@ -564,101 +613,106 @@ void NS_CellLinkedList_Basic_CPU02::Query(const SimParams& params)
 
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
-	// TODO: convert this to tbb parallel_for?
-	#pragma omp for schedule (guided)
-	for (uint32_t i = 0; i < be_.N_F_; i++)
-	{
-		// neighbor lists for particle i
-		// (delete contents, but keep capacity)
-		std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-		std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-		ff.clear();
-		fb.clear();
-
-		const Eigen::Vector3f posi = be_.posF_[i];
-		const float xi = posi.x();
-		const float yi = posi.y();
-		const float zi = posi.z();
-
-		// cell coordinates of particle i
-		const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
-		const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
-		const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
-
-		// check all particles j in 27 neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			int cz = czi + rz; // target cell coordinate in z-direction
-			if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
-
-			for (int ry = -1; ry <= 1; ry++)
+			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				int cy = cyi + ry; // target cell coordinate in y-direction
-				if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+				// neighbor lists for particle i
+				// (delete contents, but keep capacity)
+				std::vector<uint32_t>& ff = be_.neighborsFF_[i];
+				std::vector<uint32_t>& fb = be_.neighborsFB_[i];
+				ff.clear();
+				fb.clear();
 
-				for (int rx = -1; rx <= 1; rx++)
+				const Eigen::Vector3f posi = be_.posF_[i];
+				const float xi = posi.x();
+				const float yi = posi.y();
+				const float zi = posi.z();
+
+				// cell coordinates of particle i
+				const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+				const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+				const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
 				{
-					int cx = cxi + rx; // target cell coordinate in x-direction
-					if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+					int cz = czi + rz; // target cell coordinate in z-direction
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
 
-					// cell ID
-					const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
-														   static_cast<uint32_t>(cy),
-														   static_cast<uint32_t>(cz));
-
-					// check fluid candidates
-					const uint32_t sF = cellStartIdxF_[cid];
-					const uint32_t eF = cellEndIdxF_[cid];
-					if (sF != EMPTY && eF != EMPTY)
+					for (int ry = -1; ry <= 1; ry++)
 					{
-						// check all neighbor candidates in the cell
-						for (uint32_t k = sF; k < eF; k++)
+						int cy = cyi + ry; // target cell coordinate in y-direction
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+						for (int rx = -1; rx <= 1; rx++)
 						{
-							// index of neighbor candidate
-							const uint32_t j = sortedParticleIdxF_[k];
+							int cx = cxi + rx; // target cell coordinate in x-direction
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
 
-							// position difference
-							const Eigen::Vector3f dposij = posi - be_.posF_[j];
+							// cell ID
+							const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
+																   static_cast<uint32_t>(cy),
+																   static_cast<uint32_t>(cz));
 
-							// squared distance between particles i and j
-							const float distSqu = dposij.squaredNorm();
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							// check fluid candidates
+							const uint32_t sF = cellStartIdxF_[cid];
+							const uint32_t eF = cellEndIdxF_[cid];
+							if (sF != EMPTY && eF != EMPTY)
 							{
-								// add actual neighbor to list
-								ff.push_back(j);
+								// check all neighbor candidates in the cell
+								for (uint32_t k = sF; k < eF; k++)
+								{
+									// index of neighbor candidate
+									const uint32_t j = sortedParticleIdxF_[k];
+
+									// position difference
+									const Eigen::Vector3f dposij = posi - be_.posF_[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dposij.squaredNorm();
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										// add actual neighbor to list
+										ff.push_back(j);
+									}
+								}
 							}
-						}
-					}
 
-					// check boundary candidates
-					const uint32_t sB = cellStartIdxB_[cid];
-					const uint32_t eB = cellEndIdxB_[cid];
-					if (sB != EMPTY && eB != EMPTY)
-					{
-						// check all neighbor candidates in the cell
-						for (uint32_t k = sB; k < eB; k++)
-						{
-							// index of neighbor candidate
-							const uint32_t j = sortedParticleIdxB_[k];
-
-							// position difference
-							const Eigen::Vector3f dposij = posi - be_.posB_[j];
-
-							// squared distance between particles i and j
-							const float distSqu = dposij.squaredNorm();
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							// check boundary candidates
+							const uint32_t sB = cellStartIdxB_[cid];
+							const uint32_t eB = cellEndIdxB_[cid];
+							if (sB != EMPTY && eB != EMPTY)
 							{
-								// add actual neighbor to list
-								fb.push_back(j);
+								// check all neighbor candidates in the cell
+								for (uint32_t k = sB; k < eB; k++)
+								{
+									// index of neighbor candidate
+									const uint32_t j = sortedParticleIdxB_[k];
+
+									// position difference
+									const Eigen::Vector3f dposij = posi - be_.posB_[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dposij.squaredNorm();
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										// add actual neighbor to list
+										fb.push_back(j);
+									}
+								}
 							}
 						}
 					}
 				}
 			}
-		}
-	}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 inline uint32_t NS_CellLinkedList_Basic_CPU02::MapToCellId_Basic(

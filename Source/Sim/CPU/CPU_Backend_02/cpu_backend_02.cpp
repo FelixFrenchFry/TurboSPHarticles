@@ -28,8 +28,8 @@ SimBackend_CPU02::SimBackend_CPU02(Bench::BenchmarksMgr& benchmarksMgr)
 {
 	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_CPU02>(*this);
 	//neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU02>(*this);
-	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU02>(*this);
-	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU02>(*this);
+	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU02>(*this);
+	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU02>(*this);
 }
 
 void SimBackend_CPU02::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)

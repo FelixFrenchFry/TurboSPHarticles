@@ -138,31 +138,65 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 	}
 
 	// fill in fluid cell grid
-	// TODO: multi-thread this?
-	for (uint32_t i = 0; i < be_.N_F_; i++)
 	{
-		// compute cell index
-		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+		// compute keys in parallel
+		std::vector<Key> cellKeysF(be_.N_F_);
 
-		// convert cell index into key and insert particle index
-		const Key key = PackKey(cx, cy, cz);
-		cellGridF_[key].push_back(i);
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, be_.N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell index
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+					// convert cell index into key
+					cellKeysF[i] = PackKey(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the hash table single-threaded
+		for (uint32_t i = 0; i < be_.N_F_; i++)
+		{
+			const Key key = cellKeysF[i];
+			cellGridF_[key].push_back(i);
+		}
 	}
 
 	// fill in boundary cell grid
-	// TODO: multi-thread this?
-	for (uint32_t i = 0; i < be_.N_B_; i++)
 	{
-		// compute cell index
-		const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+		// compute keys in parallel
+		std::vector<Key> cellKeysB(be_.N_B_);
 
-		// convert cell index into key and insert particle index
-		const Key key = PackKey(cx, cy, cz);
-		cellGridB_[key].push_back(i);
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, be_.N_B_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell index
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+					// convert cell index into key
+					cellKeysB[i] = PackKey(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the hash table single-threaded
+		for (uint32_t i = 0; i < be_.N_B_; i++)
+		{
+			const Key key = cellKeysB[i];
+			cellGridB_[key].push_back(i);
+		}
 	}
 }
 
