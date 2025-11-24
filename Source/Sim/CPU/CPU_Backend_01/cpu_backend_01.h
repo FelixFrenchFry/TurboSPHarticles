@@ -128,10 +128,8 @@ namespace Sim
 			},
 			{
 				.ops = { Bench::BenchOp::Kernel_Weights,
-						   Bench::BenchOp::Kernel_Gradients }
-			},
-			{
-				.ops = { Bench::BenchOp::Density_Solving }
+						   Bench::BenchOp::Kernel_Gradients,
+						   Bench::BenchOp::Density_Solving }
 			},
 			{
 				.ops = { Bench::BenchOp::Viscosity_Acceleration,
@@ -145,10 +143,8 @@ namespace Sim
 				.ops = { Bench::BenchOp::Pressure_JacobiSolver }
 			},
 			{
-				.ops = { Bench::BenchOp::Pressure_Acceleration }
-			},
-			{
-				.ops = { Bench::BenchOp::VelocityUpdate,
+				.ops = { Bench::BenchOp::Pressure_Acceleration,
+						   Bench::BenchOp::VelocityUpdate,
 						   Bench::BenchOp::PositionUpdate }
 			},
 			{

@@ -124,8 +124,8 @@ namespace GPU01
 		if (dist > 1e-12f && distNorm > 0.0f)
 		{
 			float commonFac = c_cubicSplineAlpha
-						 * (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-						 / (distNorm * c_sizeF * c_sizeF);
+						    * (-3.0f * t2 * t2 + 12.0f * t1 * t1)
+						    / (distNorm * c_sizeF * c_sizeF);
 
 			gx = commonFac * dx;
 			gy = commonFac * dy;
@@ -186,6 +186,7 @@ namespace GPU01
 			const float dz = zi - zPosF[j];
 
 			// kernel weight and gradient
+			// TODO: add kernel weight only function, because gradient is not needed here
 			float w = 0.0f;
 			float gx = 0.0f;
 			float gy = 0.0f;
@@ -212,6 +213,7 @@ namespace GPU01
 			const float dz = zi - zPosB[j];
 
 			// kernel weight and gradient
+			// TODO: add kernel weight only function, because gradient is not needed here
 			float w = 0.0f;
 			float gx = 0.0f;
 			float gy = 0.0f;
