@@ -23,78 +23,48 @@
 
 namespace CPU01
 {
-	void KernelWeightsAndGradients(
+	inline void KernelWeight_CubicSpline(
+		float dx, float dy, float dz,
+		float cubicSplineAlpha, float particleSize,
+		// destinations
+		float& kw) noexcept;
+
+	inline void KernelGradient_CubicSpline(
+		float dx, float dy, float dz,
+		float cubicSplineAlpha, float particleSize,
+		// destinations
+		float& xkg, float& ykg, float& zkg) noexcept;
+
+	void Density(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
 		const float* RESTRICT xPosB,
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
-		const std::vector<std::vector<uint32_t>>& neighborsFF,
-		const std::vector<std::vector<uint32_t>>& neighborsFB,
-		float particleSizeF, float cubicSplineAlpha,
-		uint32_t N_F,
-		// destinations
-		std::vector<std::vector<float>>& kernelWeightsFF,
-		std::vector<std::vector<float>>& kernelWeightsFB,
-		std::vector<std::vector<float>>& xKernelGradFF,
-		std::vector<std::vector<float>>& yKernelGradFF,
-		std::vector<std::vector<float>>& zKernelGradFF,
-		std::vector<std::vector<float>>& xKernelGradFB,
-		std::vector<std::vector<float>>& yKernelGradFB,
-		std::vector<std::vector<float>>& zKernelGradFB);
-
-	void Density(
-		const std::vector<std::vector<float>>& kernelWeightsFF,
-		const std::vector<std::vector<float>>& kernelWeightsFB,
+		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
+		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
+		float cubicSplineAlpha, float particleSizeF,
 		float massF, float massB,
 		uint32_t N_F,
 		// destinations
-		float* RESTRICT densityF);
-
-	void KernelWeightsAndGradientsAndDensity(
-		const float* RESTRICT xPosF,
-		const float* RESTRICT yPosF,
-		const float* RESTRICT zPosF,
-		const float* RESTRICT xPosB,
-		const float* RESTRICT yPosB,
-		const float* RESTRICT zPosB,
-		const std::vector<std::vector<uint32_t>>& neighborsFF,
-		const std::vector<std::vector<uint32_t>>& neighborsFB,
-		float particleSizeF, float massF, float massB,
-		float cubicSplineAlpha,
-		uint32_t N_F,
-		// destinations
-		std::vector<std::vector<float>>& kernelWeightsFF,
-		std::vector<std::vector<float>>& kernelWeightsFB,
-		std::vector<std::vector<float>>& xKernelGradFF,
-		std::vector<std::vector<float>>& yKernelGradFF,
-		std::vector<std::vector<float>>& zKernelGradFF,
-		std::vector<std::vector<float>>& xKernelGradFB,
-		std::vector<std::vector<float>>& yKernelGradFB,
-		std::vector<std::vector<float>>& zKernelGradFB,
 		float* RESTRICT densityF);
 
 	void NonPressureAcceleration(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
-		const float* RESTRICT xVelF,
-		const float* RESTRICT yVelF,
-		const float* RESTRICT zVelF,
 		const float* RESTRICT xPosB,
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
+		const float* RESTRICT xVelF,
+		const float* RESTRICT yVelF,
+		const float* RESTRICT zVelF,
 		const float* RESTRICT densityF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
-		float timeStep, float particleSizeF, float restDensityB,
+		float timeStep, float cubicSplineAlpha,
+		float particleSizeF, float restDensityB,
 		float massF, float massB, float viscosityF, float viscosityB,
 		float xGravity, float yGravity, float zGravity,
 		uint32_t N_F,
@@ -109,54 +79,21 @@ namespace CPU01
 		float* RESTRICT yVelPredF,
 		float* RESTRICT zVelPredF);
 
-	void SourceTerm(
-		const float* RESTRICT xVelPredF,
-		const float* RESTRICT yVelPredF,
-		const float* RESTRICT zVelPredF,
-		const float* RESTRICT densityF,
-		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
-		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
-		float timeStep, float restDensityF,
-		float massF, float massB,
-		uint32_t N_F,
-		// destinations
-		float* RESTRICT sourceTermF);
-
-	void DiagonalElement(
-		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
-		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
-		float timeStep, float restDensitySquInvF,
-		float massF, float massB, float gammaPress,
-		uint32_t N_F,
-		// destinations
-		float* RESTRICT diagElemF);
-
 	void SourceTermAndDiagonalElement(
+		const float* RESTRICT xPosF,
+		const float* RESTRICT yPosF,
+		const float* RESTRICT zPosF,
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
 		const float* RESTRICT xVelPredF,
 		const float* RESTRICT yVelPredF,
 		const float* RESTRICT zVelPredF,
 		const float* RESTRICT densityF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
-		float timeStep, float restDensityF, float restDensitySquInvF,
+		float timeStep, float cubicSplineAlpha, float particleSizeF,
+		float restDensityF, float restDensitySquInvF,
 		float massF, float massB, float gammaPress,
 		uint32_t N_F,
 		// destinations
@@ -172,15 +109,16 @@ namespace CPU01
 		float* RESTRICT pressureF);
 
 	void PressureAcceleration(
+		const float* RESTRICT xPosF,
+		const float* RESTRICT yPosF,
+		const float* RESTRICT zPosF,
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
 		const float* RESTRICT pressureF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
+		float cubicSplineAlpha, float particleSizeF,
 		float restDensityF, float massF, float massB,
 		float gammaPress,
 		uint32_t N_F,
@@ -190,6 +128,12 @@ namespace CPU01
 		float* RESTRICT zAccPressF);
 
 	void PressureRelaxedJacobiSolver(
+		const float* RESTRICT xPosF,
+		const float* RESTRICT yPosF,
+		const float* RESTRICT zPosF,
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
 		const float* RESTRICT xAccPressF,
 		const float* RESTRICT yAccPressF,
 		const float* RESTRICT zAccPressF,
@@ -198,45 +142,17 @@ namespace CPU01
 		float* RESTRICT sysVecElemF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
-		float timeStep, float massF, float massB,
+		float timeStep, float cubicSplineAlpha,
+		float particleSizeF, float massF, float massB,
 		float jacobiOmega,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT pressureF);
 
-	void Integration(
-		const float* RESTRICT xVelPredF,
-		const float* RESTRICT yVelPredF,
-		const float* RESTRICT zVelPredF,
-		const float* RESTRICT xAccPressF,
-		const float* RESTRICT yAccPressF,
-		const float* RESTRICT zAccPressF,
-		const float* RESTRICT xAccViscF,
-		const float* RESTRICT yAccViscF,
-		const float* RESTRICT zAccViscF,
-		const float* RESTRICT xAccExtF,
-		const float* RESTRICT yAccExtF,
-		const float* RESTRICT zAccExtF,
-		float timeStep,
-		uint32_t N_F,
-		// destinations
-		float* RESTRICT xPosF,
-		float* RESTRICT yPosF,
-		float* RESTRICT zPosF,
-		float* RESTRICT xVelF,
-		float* RESTRICT yVelF,
-		float* RESTRICT zVelF,
-		float* RESTRICT xAccF,
-		float* RESTRICT yAccF,
-		float* RESTRICT zAccF);
-
 	void PressureAccelerationAndIntegration(
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
 		const float* RESTRICT xVelPredF,
 		const float* RESTRICT yVelPredF,
 		const float* RESTRICT zVelPredF,
@@ -249,13 +165,8 @@ namespace CPU01
 		const float* RESTRICT pressureF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		const std::vector<std::vector<float>>& xKernelGradFF,
-		const std::vector<std::vector<float>>& yKernelGradFF,
-		const std::vector<std::vector<float>>& zKernelGradFF,
-		const std::vector<std::vector<float>>& xKernelGradFB,
-		const std::vector<std::vector<float>>& yKernelGradFB,
-		const std::vector<std::vector<float>>& zKernelGradFB,
-		float timeStep, float restDensityF,
+		float timeStep, float cubicSplineAlpha,
+		float particleSizeF, float restDensityF,
 		float massF, float massB, float gammaPress,
 		uint32_t N_F,
 		// destinations

@@ -127,9 +127,7 @@ namespace Sim
 				.ops = { Bench::BenchOp::Neighbors_Query }
 			},
 			{
-				.ops = { Bench::BenchOp::Kernel_Weights,
-						   Bench::BenchOp::Kernel_Gradients,
-						   Bench::BenchOp::Density_Solving }
+				.ops = { Bench::BenchOp::Density_Solving }
 			},
 			{
 				.ops = { Bench::BenchOp::Viscosity_Acceleration,

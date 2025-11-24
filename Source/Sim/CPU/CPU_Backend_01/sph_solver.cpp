@@ -76,17 +76,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
 
-	// convenience references for neighbor / kernel containers
+	// references for neighbors
 	auto& neighborsFF = neighborsFF_;
 	auto& neighborsFB = neighborsFB_;
-	auto& kwFF = kernelWeightsFF_;
-	auto& kwFB = kernelWeightsFB_;
-	auto& xGradFF = xKernelGradFF_;
-	auto& yGradFF = yKernelGradFF_;
-	auto& zGradFF = zKernelGradFF_;
-	auto& xGradFB = xKernelGradFB_;
-	auto& yGradFB = yKernelGradFB_;
-	auto& zGradFB = zKernelGradFB_;
 
 	// --- [ neighbor search ] -------------------------------------------------
 
@@ -100,55 +92,19 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	neighborSearchStrat_->Query(params);
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
-	// --- [ kernel weight and gradient computations ] -------------------------
-
-	/*
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Kernel_Weights,
-								    Bench::BenchOp::Kernel_Gradients });
-
-	CPU01::KernelWeightsAndGradients(
-		xPosF, yPosF, zPosF,
-		xPosB, yPosB, zPosB,
-		neighborsFF, neighborsFB,
-		sizeF, cubicSplineAlpha, N_F_,
-		kwFF, kwFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB);
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Kernel_Weights,
-								   Bench::BenchOp::Kernel_Gradients });
-
 	// --- [ density computations ] --------------------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving });
 
 	CPU01::Density(
-		kwFF, kwFB,
+		xPosF, yPosF, zPosF,
+		xPosB, yPosB, zPosB,
+		neighborsFF, neighborsFB,
+		cubicSplineAlpha, sizeF,
 		massF, massB, N_F_,
 		densityF);
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving });
-	*/
-
-	// --- [ kernel weight, gradient, and density computations ] ---------------
-
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Kernel_Weights,
-									Bench::BenchOp::Kernel_Gradients,
-									Bench::BenchOp::Density_Solving });
-
-	CPU01::KernelWeightsAndGradientsAndDensity(
-		xPosF, yPosF, zPosF,
-		xPosB, yPosB, zPosB,
-		neighborsFF, neighborsFB,
-		sizeF, massF, massB, cubicSplineAlpha, N_F_,
-		kwFF, kwFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB,
-		densityF);
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Kernel_Weights,
-								   Bench::BenchOp::Kernel_Gradients,
-								   Bench::BenchOp::Density_Solving });
 
 	// --- [ non-pressure accelerations ] --------------------------------------
 
@@ -157,16 +113,13 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	CPU01::NonPressureAcceleration(
 		xPosF, yPosF, zPosF,
-		xVelF, yVelF, zVelF,
 		xPosB, yPosB, zPosB,
+		xVelF, yVelF, zVelF,
 		densityF,
 		neighborsFF, neighborsFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB,
-		params.timeStep, sizeF, params.restDensityB,
+		params.timeStep, cubicSplineAlpha, sizeF, params.restDensityB,
 		massF, massB, params.viscosityF, params.viscosityB,
-		params.gravity.x, params.gravity.y, params.gravity.z,
-		N_F_,
+		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
 		xAccViscF, yAccViscF, zAccViscF,
 		xAccExtF, yAccExtF, zAccExtF,
 		xVelPredF, yVelPredF, zVelPredF);
@@ -174,46 +127,19 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Viscosity_Acceleration,
 								   Bench::BenchOp::External_Acceleration });
 
-	// --- [ source-term for density invariance ] ------------------------------
-
-	/*
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm });
-
-	CPU01::SourceTerm(
-		xVelPredF, yVelPredF, zVelPredF,
-		densityF,
-		neighborsFF, neighborsFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB,
-		params.timeStep, params.restDensityF, massF, massB, N_F_,
-		sourceTermF);
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm });
-
-	// --- [ diagonal elements of system matrix ] ------------------------------
-
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_DiagonalElem });
-
-	CPU01::DiagonalElement(
-		neighborsFF, neighborsFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB,
-		params.timeStep, restDensitySquInvF, massF, massB, params.gammaPress, N_F_,
-		diagElemF);
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_DiagonalElem });
-	*/
+	// --- [ source-term (density invariance) and diagonal elements ] ----------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm,
 									Bench::BenchOp::Pressure_DiagonalElem });
 
 	CPU01::SourceTermAndDiagonalElement(
+		xPosF, yPosF, zPosF,
+		xPosB, yPosB, zPosB,
 		xVelPredF, yVelPredF, zVelPredF,
 		densityF,
 		neighborsFF_, neighborsFB_,
-		xKernelGradFF_, yKernelGradFF_, zKernelGradFF_,
-		xKernelGradFB_, yKernelGradFB_, zKernelGradFB_,
-		params.timeStep, params.restDensityF, restDensitySquInvF,
+		params.timeStep, cubicSplineAlpha, sizeF,
+		params.restDensityF, restDensitySquInvF,
 		massF, massB, params.gammaPress, N_F_,
 		sourceTermF,
 		diagElemF);
@@ -237,65 +163,29 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	{
 		// compute pressure acceleration from current pressure field
 		CPU01::PressureAcceleration(
+			xPosF, yPosF, zPosF,
+			xPosB, yPosB, zPosB,
 			pressureF,
 			neighborsFF, neighborsFB,
-			xGradFF, yGradFF, zGradFF,
-			xGradFB, yGradFB, zGradFB,
-			params.restDensityF,
-			massF, massB,
-			params.gammaPress,
-			N_F_,
+			cubicSplineAlpha, sizeF, params.restDensityF,
+			massF, massB, params.gammaPress, N_F_,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		// update system vector and pressure
 		CPU01::PressureRelaxedJacobiSolver(
+			xPosF, yPosF, zPosF,
+			xPosB, yPosB, zPosB,
 			xAccPressF, yAccPressF, zAccPressF,
 			sourceTermF, diagElemF, sysVecElemF,
 			neighborsFF, neighborsFB,
-			xGradFF, yGradFF, zGradFF,
-			xGradFB, yGradFB, zGradFB,
-			params.timeStep, massF, massB, params.jacobiOmega, N_F_,
+			params.timeStep, cubicSplineAlpha, sizeF, massF, massB,
+			params.jacobiOmega, N_F_,
 			pressureF);
 
 		cnt++;
 	}
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
-
-	// --- [ finalize pressure acceleration for integration ] ------------------
-
-	/*
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
-
-	CPU01::PressureAcceleration(
-		pressureF,
-		neighborsFF, neighborsFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB,
-		params.restDensityF, massF, massB, params.gammaPress, N_F_,
-		xAccPressF, yAccPressF, zAccPressF); 
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
-
-	// --- [ velocity and position updates ] -----------------------------------
-
-	benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
-									Bench::BenchOp::PositionUpdate });
-
-	CPU01::Integration(
-		xVelPredF, yVelPredF, zVelPredF,
-		xAccPressF, yAccPressF, zAccPressF,
-		xAccViscF, yAccViscF, zAccViscF,
-		xAccExtF, yAccExtF, zAccExtF,
-		params.timeStep, N_F_,
-		xPosF, yPosF, zPosF,
-		xVelF, yVelF, zVelF,
-		xAccF, yAccF, zAccF);
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
-								   Bench::BenchOp::PositionUpdate });
-
-	*/
 
 	// --- [ finalize pressure acc and integrate velocity and position ] -------
 
@@ -304,15 +194,14 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 								    Bench::BenchOp::PositionUpdate });
 
 	CPU01::PressureAccelerationAndIntegration(
+		xPosB, yPosB, zPosB,
 		xVelPredF, yVelPredF, zVelPredF,
 		xAccViscF, yAccViscF, zAccViscF,
 		xAccExtF, yAccExtF, zAccExtF,
 		pressureF,
 		neighborsFF, neighborsFB,
-		xGradFF, yGradFF, zGradFF,
-		xGradFB, yGradFB, zGradFB,
-		params.timeStep, params.restDensityF, massF, massB,
-		params.gammaPress, N_F_,
+		params.timeStep, cubicSplineAlpha, sizeF, params.restDensityF,
+		massF, massB, params.gammaPress, N_F_,
 		xPosF, yPosF, zPosF,
 		xVelF, yVelF, zVelF,
 		xAccF, yAccF, zAccF,
@@ -323,210 +212,71 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 								   Bench::BenchOp::PositionUpdate });
 }
 
-void CPU01::KernelWeightsAndGradients(
-	const float* RESTRICT xPosF,
-	const float* RESTRICT yPosF,
-	const float* RESTRICT zPosF,
-	const float* RESTRICT xPosB,
-	const float* RESTRICT yPosB,
-	const float* RESTRICT zPosB,
-	const std::vector<std::vector<uint32_t>>& neighborsFF,
-	const std::vector<std::vector<uint32_t>>& neighborsFB,
-	const float particleSizeF, const float cubicSplineAlpha,
-	const uint32_t N_F,
+inline void CPU01::KernelWeight_CubicSpline(
+	const float dx, const float dy, const float dz,
+	const float cubicSplineAlpha, const float particleSize,
 	// destinations
-	std::vector<std::vector<float>>& kernelWeightsFF,
-	std::vector<std::vector<float>>& kernelWeightsFB,
-	std::vector<std::vector<float>>& xKernelGradFF,
-	std::vector<std::vector<float>>& yKernelGradFF,
-	std::vector<std::vector<float>>& zKernelGradFF,
-	std::vector<std::vector<float>>& xKernelGradFB,
-	std::vector<std::vector<float>>& yKernelGradFB,
-	std::vector<std::vector<float>>& zKernelGradFB)
+	float& kw) noexcept
 {
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				// resize kernel weight/gradient storage to current number of neighbors
-				kernelWeightsFF[i].resize(neighborsFF[i].size());
-				kernelWeightsFB[i].resize(neighborsFB[i].size());
-				xKernelGradFF[i].resize(neighborsFF[i].size());
-				yKernelGradFF[i].resize(neighborsFF[i].size());
-				zKernelGradFF[i].resize(neighborsFF[i].size());
-				xKernelGradFB[i].resize(neighborsFB[i].size());
-				yKernelGradFB[i].resize(neighborsFB[i].size());
-				zKernelGradFB[i].resize(neighborsFB[i].size());
+	const float distSqu = dx * dx + dy * dy + dz * dz;
+	const float dist = std::sqrt(distSqu);
+	const float distNorm = dist / particleSize;
 
-				const float xi = xPosF[i];
-				const float yi = yPosF[i];
-				const float zi = zPosF[i];
+	float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
+	float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
 
-				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFF[k];
+	// kernel weight
+	kw = cubicSplineAlpha * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
+}
 
-					// position difference
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
+inline void CPU01::KernelGradient_CubicSpline(
+	const float dx, const float dy, const float dz,
+	const float cubicSplineAlpha, const float particleSize,
+	// destinations
+	float& xkg, float& ykg, float& zkg) noexcept
+{
+	const float distSqu = dx * dx + dy * dy + dz * dz;
+	const float dist = std::sqrt(distSqu);
 
-					const float distNorm = std::sqrt(dx * dx + dy * dy + dz * dz)
-										 / particleSizeF;
+	// avoid division by zero in gradient computation
+	if (Base::ApproxEqu(dist, 0.0f)) [[unlikely]]
+	{
+		xkg = 0.0f;
+		ykg = 0.0f;
+		zkg = 0.0f;
 
-					// avoid division by zero in gradient computation
-					if (Base::ApproxEqu(distNorm, 0.0f)) [[unlikely]]
-					{
-						kernelWeightsFF[i][k] = cubicSplineAlpha * 4.0f;
-						xKernelGradFF[i][k] = 0.0f;
-						yKernelGradFF[i][k] = 0.0f;
-						zKernelGradFF[i][k] = 0.0f;
+		return;
+	}
 
-						continue;
-					}
+	const float distNorm = dist / particleSize;
 
-					const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-					const float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
+	float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
+	float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
 
-					// kernel weight
-					kernelWeightsFF[i][k] = cubicSplineAlpha
-										  * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
+	float commonFac = cubicSplineAlpha
+					* (-3.0f * t2 * t2 + 12.0f * t1 * t1)
+					/ (distNorm * particleSize * particleSize);
 
-					// kernel gradient
-					// TODO: multiply distNorm with size once or twice?
-					const float gradCoeff = cubicSplineAlpha
-										  * (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-										  / (distNorm * particleSizeF * particleSizeF);
-
-					xKernelGradFF[i][k] = gradCoeff * dx;
-					yKernelGradFF[i][k] = gradCoeff * dy;
-					zKernelGradFF[i][k] = gradCoeff * dz;
-				}
-
-				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
-				for (uint32_t k = 0; k < N_FB; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFB[k];
-
-					// position difference
-					const float dx = xi - xPosB[j];
-					const float dy = yi - yPosB[j];
-					const float dz = zi - zPosB[j];
-
-					const float distNorm = std::sqrt(dx * dx + dy * dy + dz * dz)
-										 / particleSizeF;
-
-					// avoid division by zero in gradient computation
-					if (Base::ApproxEqu(distNorm, 0.0f)) [[unlikely]]
-					{
-						kernelWeightsFB[i][k] = cubicSplineAlpha * 4.0f;
-						xKernelGradFB[i][k] = 0.0f;
-						yKernelGradFB[i][k] = 0.0f;
-						zKernelGradFB[i][k] = 0.0f;
-
-						continue;
-					}
-
-					const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-					const float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
-
-					// kernel weight
-					kernelWeightsFB[i][k] = cubicSplineAlpha
-										  * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
-
-					// kernel gradient
-					// TODO: multiply distNorm with size once or twice?
-					const float gradCoeff = cubicSplineAlpha
-										  * (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-										  / (distNorm * particleSizeF * particleSizeF);
-
-					xKernelGradFB[i][k] = gradCoeff * dx;
-					yKernelGradFB[i][k] = gradCoeff * dy;
-					zKernelGradFB[i][k] = gradCoeff * dz;
-				}
-			}
-		},
-		tbb::auto_partitioner{}
-	);
+	// kernel gradient
+	xkg = commonFac * dx;
+	ykg = commonFac * dy;
+	zkg = commonFac * dz;
 }
 
 // TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::Density(
-	const std::vector<std::vector<float>>& kernelWeightsFF,
-	const std::vector<std::vector<float>>& kernelWeightsFB,
-	const float massF, const float massB,
-	const uint32_t N_F,
-	// destinations
-	float* RESTRICT densityF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				float tmp_densityF = 0.0f;
-				float tmp_densityB = 0.0f;
-
-				// contributions from fluid neighbors
-				const float* RESTRICT kwFF = kernelWeightsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(kernelWeightsFF[i].size());
-				#pragma omp simd reduction(+:tmp_densityF)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					tmp_densityF += kwFF[k];
-				}
-				tmp_densityF *= massF;
-
-				// contributions from boundary neighbors
-				const float* RESTRICT kwFB = kernelWeightsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(kernelWeightsFB[i].size());
-				#pragma omp simd reduction(+:tmp_densityB)
-				for (uint32_t k = 0; k < N_FB; k++)
-				{
-					tmp_densityB += kwFB[k];
-				}
-				tmp_densityB *= massB;
-
-				// finalize density
-				densityF[i] = tmp_densityF + tmp_densityB;
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-// TODO: use more explicit SIMD hints, maybe xsimd library?
-void CPU01::KernelWeightsAndGradientsAndDensity(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const std::vector<std::vector<uint32_t>>& neighborsFF,
-	const std::vector<std::vector<uint32_t>>& neighborsFB,
-	const float particleSizeF, const float massF, const float massB,
-	const float cubicSplineAlpha,
-	const uint32_t N_F,
+	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
+	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
+	float cubicSplineAlpha, float particleSizeF,
+	float massF, float massB,
+	uint32_t N_F,
 	// destinations
-	std::vector<std::vector<float>>& kernelWeightsFF,
-	std::vector<std::vector<float>>& kernelWeightsFB,
-	std::vector<std::vector<float>>& xKernelGradFF,
-	std::vector<std::vector<float>>& yKernelGradFF,
-	std::vector<std::vector<float>>& zKernelGradFF,
-	std::vector<std::vector<float>>& xKernelGradFB,
-	std::vector<std::vector<float>>& yKernelGradFB,
-	std::vector<std::vector<float>>& zKernelGradFB,
 	float* RESTRICT densityF)
 {
 	tbb::parallel_for(
@@ -535,16 +285,6 @@ void CPU01::KernelWeightsAndGradientsAndDensity(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// resize kernel weight/gradient storage to current number of neighbors
-				kernelWeightsFF[i].resize(neighborsFF[i].size());
-				kernelWeightsFB[i].resize(neighborsFB[i].size());
-				xKernelGradFF[i].resize(neighborsFF[i].size());
-				yKernelGradFF[i].resize(neighborsFF[i].size());
-				zKernelGradFF[i].resize(neighborsFF[i].size());
-				xKernelGradFB[i].resize(neighborsFB[i].size());
-				yKernelGradFB[i].resize(neighborsFB[i].size());
-				zKernelGradFB[i].resize(neighborsFB[i].size());
-
 				const float xi = xPosF[i];
 				const float yi = yPosF[i];
 				const float zi = zPosF[i];
@@ -566,40 +306,12 @@ void CPU01::KernelWeightsAndGradientsAndDensity(
 					const float dy = yi - yPosF[j];
 					const float dz = zi - zPosF[j];
 
-					const float distNorm = std::sqrt(dx * dx + dy * dy + dz * dz)
-										 / particleSizeF;
+					// kernel weight
+					float kw = 0.0f;
+					KernelWeight_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, kw);
 
-					// avoid division by zero in gradient computation
-					if (Base::ApproxEqu(distNorm, 0.0f)) [[unlikely]]
-					{
-						const float kw0 = cubicSplineAlpha * 4.0f;
-						kernelWeightsFF[i][k] = kw0;
-						tmp_densityF += kw0;
-						xKernelGradFF[i][k] = 0.0f;
-						yKernelGradFF[i][k] = 0.0f;
-						zKernelGradFF[i][k] = 0.0f;
-
-						continue;
-					}
-
-					const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-					const float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
-
-					// kernel weight and density contribution
-					const float kwFF = cubicSplineAlpha
-									 * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
-					kernelWeightsFF[i][k] = kwFF;
-					tmp_densityF += kwFF;
-
-					// kernel gradient
-					// TODO: multiply distNorm with size once or twice?
-					const float gradCoeff = cubicSplineAlpha
-										  * (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-										  / (distNorm * particleSizeF * particleSizeF);
-
-					xKernelGradFF[i][k] = gradCoeff * dx;
-					yKernelGradFF[i][k] = gradCoeff * dy;
-					zKernelGradFF[i][k] = gradCoeff * dz;
+					tmp_densityF += kw;
 				}
 				tmp_densityF *= massF;
 
@@ -617,40 +329,12 @@ void CPU01::KernelWeightsAndGradientsAndDensity(
 					const float dy = yi - yPosB[j];
 					const float dz = zi - zPosB[j];
 
-					const float distNorm = std::sqrt(dx * dx + dy * dy + dz * dz)
-										 / particleSizeF;
+					// kernel weight
+					float kw = 0.0f;
+					KernelWeight_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, kw);
 
-					// avoid division by zero in gradient computation
-					if (Base::ApproxEqu(distNorm, 0.0f)) [[unlikely]]
-					{
-						const float kw0 = cubicSplineAlpha * 4.0f;
-						kernelWeightsFB[i][k] = kw0;
-						tmp_densityB += kw0;
-						xKernelGradFB[i][k] = 0.0f;
-						yKernelGradFB[i][k] = 0.0f;
-						zKernelGradFB[i][k] = 0.0f;
-
-						continue;
-					}
-
-					const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-					const float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
-
-					// kernel weight and density contribution
-					const float kwFB = cubicSplineAlpha
-									 * (t2 * t2 * t2 - 4.0f * t1 * t1 * t1);
-					kernelWeightsFB[i][k] = kwFB;
-					tmp_densityB += kwFB;
-
-					// kernel gradient
-					// TODO: multiply distNorm with size once or twice?
-					const float gradCoeff = cubicSplineAlpha
-										  * (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-										  / (distNorm * particleSizeF * particleSizeF);
-
-					xKernelGradFB[i][k] = gradCoeff * dx;
-					yKernelGradFB[i][k] = gradCoeff * dy;
-					zKernelGradFB[i][k] = gradCoeff * dz;
+					tmp_densityB += kw;
 				}
 				tmp_densityB *= massB;
 
@@ -667,22 +351,17 @@ void CPU01::NonPressureAcceleration(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
-	const float* RESTRICT xVelF,
-	const float* RESTRICT yVelF,
-	const float* RESTRICT zVelF,
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
+	const float* RESTRICT xVelF,
+	const float* RESTRICT yVelF,
+	const float* RESTRICT zVelF,
 	const float* RESTRICT densityF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
-	const float timeStep, const float particleSizeF, const float restDensityB,
+	const float timeStep, const float cubicSplineAlpha,
+	const float particleSizeF, const float restDensityB,
 	const float massF, const float massB, const float viscosityF, const float viscosityB,
 	const float xGravity, const float yGravity, const float zGravity,
 	const uint32_t N_F,
@@ -716,9 +395,6 @@ void CPU01::NonPressureAcceleration(
 				float tmp_zAccViscF = 0.0f;
 
 				// contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
 				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
 				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
 				#pragma omp simd reduction(+:tmp_xAccViscF,tmp_yAccViscF,tmp_zAccViscF)
@@ -737,15 +413,22 @@ void CPU01::NonPressureAcceleration(
 					const float dvy = vyi - yVelF[j];
 					const float dvz = vzi - zVelF[j];
 
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// viscosity acc contribution from fluid neighbor j
 					const float accCoeff = (massF / fmaxf(densityF[j], 1e-12f))
 										 * (dvx * dx + dvy * dy + dvz * dz)
 										 / (dx * dx + dy * dy + dz * dz
 										 + 0.01f * particleSizeF * particleSizeF);
 
-					tmp_xAccViscF += accCoeff * xkgFF[k];
-					tmp_yAccViscF += accCoeff * ykgFF[k];
-					tmp_zAccViscF += accCoeff * zkgFF[k];
+					tmp_xAccViscF += accCoeff * xkg;
+					tmp_yAccViscF += accCoeff * ykg;
+					tmp_zAccViscF += accCoeff * zkg;
 				}
 
 				float tmp_xAccViscB = 0.0f;
@@ -753,9 +436,6 @@ void CPU01::NonPressureAcceleration(
 				float tmp_zAccViscB = 0.0f;
 
 				// contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
 				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
 				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
 				#pragma omp simd reduction(+:tmp_xAccViscB,tmp_yAccViscB,tmp_zAccViscB)
@@ -769,15 +449,22 @@ void CPU01::NonPressureAcceleration(
 					const float dy = yi - yPosB[j];
 					const float dz = zi - zPosB[j];
 
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// viscosity acc contribution from boundary neighbor j
 					const float accCoeff = (massB / restDensityB)
 										 * (vxi * dx + vyi * dy + vzi * dz)
 										 / (dx * dx + dy * dy + dz * dz
 										 + 0.01f * particleSizeF * particleSizeF);
 
-					tmp_xAccViscB += accCoeff * xkgFB[k];
-					tmp_yAccViscB += accCoeff * ykgFB[k];
-					tmp_zAccViscB += accCoeff * zkgFB[k];
+					tmp_xAccViscB += accCoeff * xkg;
+					tmp_yAccViscB += accCoeff * ykg;
+					tmp_zAccViscB += accCoeff * zkg;
 				}
 
 				// finalize accelerations
@@ -809,211 +496,21 @@ void CPU01::NonPressureAcceleration(
 }
 
 // TODO: use more explicit SIMD hints, maybe xsimd library?
-void CPU01::SourceTerm(
-	const float* RESTRICT xVelPredF,
-	const float* RESTRICT yVelPredF,
-	const float* RESTRICT zVelPredF,
-	const float* RESTRICT densityF,
-	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
-	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
-	const float timeStep, const float restDensityF,
-	const float massF, const float massB,
-	const uint32_t N_F,
-	// destinations
-	float* RESTRICT sourceTermF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				const float vpxi = xVelPredF[i];
-				const float vpyi = yVelPredF[i];
-				const float vpzi = zVelPredF[i];
-
-				float tmp_SourceTermF = 0.0f;
-				float tmp_SourceTermB = 0.0f;
-
-				// contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
-				#pragma omp simd reduction(+:tmp_SourceTermF)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFF[k];
-
-					// predicted velocity difference
-					const float dvpx = vpxi - xVelPredF[j];
-					const float dvpy = vpyi - yVelPredF[j];
-					const float dvpz = vpzi - zVelPredF[j];
-
-					tmp_SourceTermF += dvpx * xkgFF[k]
-									 + dvpy * ykgFF[k]
-									 + dvpz * zkgFF[k];
-				}
-				tmp_SourceTermF *= massF;
-
-				// contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
-				#pragma omp simd reduction(+:tmp_SourceTermB)
-				for (uint32_t k = 0; k < N_FB; k++)
-				{
-					// TODO: subtract actual boundary velocity when adding non-static boundaries?
-					tmp_SourceTermB += vpxi * xkgFB[k]
-									 + vpyi * ykgFB[k]
-									 + vpzi * zkgFB[k];
-				}
-				tmp_SourceTermB *= massB;
-
-				// finalize source term
-				sourceTermF[i] = restDensityF - densityF[i] - timeStep
-							   * (tmp_SourceTermF + tmp_SourceTermB);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-// TODO: use more explicit SIMD hints, maybe xsimd library?
-void CPU01::DiagonalElement(
-	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
-	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
-	const float timeStep, const float restDensitySquInvF,
-	const float massF, const float massB, const float gammaPress,
-	const uint32_t N_F,
-	// destinations
-	float* RESTRICT diagElemF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				float xCTermF = 0.0f;
-				float yCTermF = 0.0f;
-				float zCTermF = 0.0f;
-
-				// add c-term contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
-				#pragma omp simd reduction(+:xCTermF,yCTermF,zCTermF)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					xCTermF += xkgFF[k];
-					yCTermF += ykgFF[k];
-					zCTermF += zkgFF[k];
-				}
-
-				float xCTermB = 0.0f;
-				float yCTermB = 0.0f;
-				float zCTermB = 0.0f;
-
-				// add c-term contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
-				#pragma omp simd reduction(+:xCTermB,yCTermB,zCTermB)
-				for (uint32_t k = 0; k < N_FB; k++)
-				{
-					xCTermB += xkgFB[k];
-					yCTermB += ykgFB[k];
-					zCTermB += zkgFB[k];
-				}
-
-				// finalize c-term
-				const float xCTerm = -1.0f * (xCTermF * restDensitySquInvF * massF)
-					- 2.0f * gammaPress * (xCTermB * restDensitySquInvF * massB);
-				const float yCTerm = -1.0f * (yCTermF * restDensitySquInvF * massF)
-					- 2.0f * gammaPress * (yCTermB * restDensitySquInvF * massB);
-				const float zCTerm = -1.0f * (zCTermF * restDensitySquInvF * massF)
-					- 2.0f * gammaPress * (zCTermB * restDensitySquInvF * massB);
-
-				float tmp_DiagElemA = 0.0f;
-				float tmp_DiagElemB = 0.0f;
-				float tmp_DiagElemC = 0.0f;
-
-				// part A
-				#pragma omp simd reduction(+:tmp_DiagElemA)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					tmp_DiagElemA += xCTerm * xkgFF[k]
-								   + yCTerm * ykgFF[k]
-								   + zCTerm * zkgFF[k];
-				}
-				tmp_DiagElemA *= massF;
-
-				// part B
-				#pragma omp simd reduction(+:tmp_DiagElemB)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					const float tmp_x = (massF * restDensitySquInvF) * (-xkgFF[k]);
-					const float tmp_y = (massF * restDensitySquInvF) * (-ykgFF[k]);
-					const float tmp_z = (massF * restDensitySquInvF) * (-zkgFF[k]);
-
-					tmp_DiagElemB += tmp_x * xkgFF[k]
-								   + tmp_y * ykgFF[k]
-								   + tmp_z * zkgFF[k];
-				}
-				tmp_DiagElemB *= massF;
-
-				// part C
-				#pragma omp simd reduction(+:tmp_DiagElemC)
-				for (uint32_t k = 0; k < N_FB; k++)
-				{
-					tmp_DiagElemC += xCTerm * xkgFB[k]
-								   + yCTerm * ykgFB[k]
-								   + zCTerm * zkgFB[k];
-				}
-				tmp_DiagElemC *= massB;
-
-				// finalize diagonal element
-				diagElemF[i] = timeStep * timeStep
-							 * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-// TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::SourceTermAndDiagonalElement(
+	const float* RESTRICT xPosF,
+	const float* RESTRICT yPosF,
+	const float* RESTRICT zPosF,
+	const float* RESTRICT xPosB,
+	const float* RESTRICT yPosB,
+	const float* RESTRICT zPosB,
 	const float* RESTRICT xVelPredF,
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
 	const float* RESTRICT densityF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
-	const float timeStep, const float restDensityF, const float restDensitySquInvF,
+	const float timeStep, const float cubicSplineAlpha, const float particleSizeF,
+	const float restDensityF, const float restDensitySquInvF,
 	const float massF, const float massB, const float gammaPress,
 	const uint32_t N_F,
 	// destinations
@@ -1026,6 +523,10 @@ void CPU01::SourceTermAndDiagonalElement(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
 				const float vpxi = xVelPredF[i];
 				const float vpyi = yVelPredF[i];
 				const float vpzi = zVelPredF[i];
@@ -1040,9 +541,6 @@ void CPU01::SourceTermAndDiagonalElement(
 				float zCTermF = 0.0f;
 
 				// contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
 				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
 				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
 				#pragma omp simd reduction(+:tmp_SourceTermF,xCTermF,yCTermF,zCTermF)
@@ -1051,19 +549,31 @@ void CPU01::SourceTermAndDiagonalElement(
 					// global index of neighbor particle
 					const uint32_t j = nbrFF[k];
 
+					// position difference
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
 					// predicted velocity difference
 					const float dvpx = vpxi - xVelPredF[j];
 					const float dvpy = vpyi - yVelPredF[j];
 					const float dvpz = vpzi - zVelPredF[j];
 
-					// source term contribution from fluid neighbor
-					tmp_SourceTermF += dvpx * xkgFF[k]
-									 + dvpy * ykgFF[k]
-									 + dvpz * zkgFF[k];
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
 
-					xCTermF += xkgFF[k];
-					yCTermF += ykgFF[k];
-					zCTermF += zkgFF[k];
+					// source term contribution from fluid neighbor
+					tmp_SourceTermF += dvpx * xkg
+									 + dvpy * ykg
+									 + dvpz * zkg;
+
+					xCTermF += xkg;
+					yCTermF += ykg;
+					zCTermF += zkg;
 				}
 				tmp_SourceTermF *= massF;
 
@@ -1072,22 +582,35 @@ void CPU01::SourceTermAndDiagonalElement(
 				float zCTermB = 0.0f;
 
 				// contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
+				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
 				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
 				#pragma omp simd reduction(+:tmp_SourceTermB,xCTermB,yCTermB,zCTermB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
+					// global index of neighbor particle
+					const uint32_t j = nbrFB[k];
+
+					// position difference
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// source term contribution from boundary neighbor
 					// TODO: subtract actual boundary velocity when adding non-static boundaries?
-					tmp_SourceTermB += vpxi * xkgFB[k]
-									 + vpyi * ykgFB[k]
-									 + vpzi * zkgFB[k];
+					tmp_SourceTermB += vpxi * xkg
+									 + vpyi * ykg
+									 + vpzi * zkg;
 
-					xCTermB += xkgFB[k];
-					yCTermB += ykgFB[k];
-					zCTermB += zkgFB[k];
+					xCTermB += xkg;
+					yCTermB += ykg;
+					zCTermB += zkg;
 				}
 				tmp_SourceTermB *= massB;
 
@@ -1108,36 +631,84 @@ void CPU01::SourceTermAndDiagonalElement(
 				float tmp_DiagElemC = 0.0f;
 
 				// part A
+				// TODO: fuze A, B, and C loops into one loop?
 				#pragma omp simd reduction(+:tmp_DiagElemA)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
-					tmp_DiagElemA += xCTerm * xkgFF[k]
-								   + yCTerm * ykgFF[k]
-								   + zCTerm * zkgFF[k];
+					// global index of neighbor particle
+					const uint32_t j = nbrFF[k];
+
+					// position difference
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
+					tmp_DiagElemA += xCTerm * xkg
+								   + yCTerm * ykg
+								   + zCTerm * zkg;
 				}
 				tmp_DiagElemA *= massF;
 
 				// part B
+				// TODO: fuze A, B, and C loops into one loop?
 				#pragma omp simd reduction(+:tmp_DiagElemB)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
-					const float tmp_x = (massF * restDensitySquInvF) * (-xkgFF[k]);
-					const float tmp_y = (massF * restDensitySquInvF) * (-ykgFF[k]);
-					const float tmp_z = (massF * restDensitySquInvF) * (-zkgFF[k]);
+					// global index of neighbor particle
+					const uint32_t j = nbrFF[k];
 
-					tmp_DiagElemB += tmp_x * xkgFF[k]
-								   + tmp_y * ykgFF[k]
-								   + tmp_z * zkgFF[k];
+					// position difference
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
+					const float tmp_x = (massF * restDensitySquInvF) * (-xkg);
+					const float tmp_y = (massF * restDensitySquInvF) * (-ykg);
+					const float tmp_z = (massF * restDensitySquInvF) * (-zkg);
+
+					tmp_DiagElemB += tmp_x * xkg
+								   + tmp_y * ykg
+								   + tmp_z * zkg;
 				}
 				tmp_DiagElemB *= massF;
 
 				// part C
+				// TODO: fuze A, B, and C loops into one loop?
 				#pragma omp simd reduction(+:tmp_DiagElemC)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
-					tmp_DiagElemC += xCTerm * xkgFB[k]
-								   + yCTerm * ykgFB[k]
-								   + zCTerm * zkgFB[k];
+					// global index of neighbor particle
+					const uint32_t j = nbrFB[k];
+
+					// position difference
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
+					tmp_DiagElemC += xCTerm * xkg
+								   + yCTerm * ykg
+								   + zCTerm * zkg;
 				}
 				tmp_DiagElemC *= massB;
 
@@ -1182,15 +753,16 @@ void CPU01::PressureJacobiInit(
 
 // TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::PressureAcceleration(
+	const float* RESTRICT xPosF,
+	const float* RESTRICT yPosF,
+	const float* RESTRICT zPosF,
+	const float* RESTRICT xPosB,
+	const float* RESTRICT yPosB,
+	const float* RESTRICT zPosB,
 	const float* RESTRICT pressureF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
+	const float cubicSplineAlpha, const float particleSizeF,
 	const float restDensityF, const float massF, const float massB,
 	const float gammaPress,
 	const uint32_t N_F,
@@ -1205,6 +777,10 @@ void CPU01::PressureAcceleration(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
 				const float presi = pressureF[i];
 				const float densi = restDensityF;
 
@@ -1213,9 +789,6 @@ void CPU01::PressureAcceleration(
 				float tmp_zAccPressF = 0.0f;
 
 				// contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
 				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
 				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
@@ -1224,32 +797,57 @@ void CPU01::PressureAcceleration(
 					// global index of neighbor particle
 					const uint32_t j = nbrFF[k];
 
+					// position difference
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// pressure acc contribution from fluid neighbor j
 					// TODO: put most of this coefficient computation outside the loop?
 					const float accCoeff = massF * (presi / (densi * densi)
 										 + pressureF[j] / (densi * densi));
 
-					tmp_xAccPressF += accCoeff * xkgFF[k];
-					tmp_yAccPressF += accCoeff * ykgFF[k];
-					tmp_zAccPressF += accCoeff * zkgFF[k];
+					tmp_xAccPressF += accCoeff * xkg;
+					tmp_yAccPressF += accCoeff * ykg;
+					tmp_zAccPressF += accCoeff * zkg;
 				}
 
 				// contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
+				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
 				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
+					// global index of neighbor particle
+					const uint32_t j = nbrFB[k];
+
+					// position difference
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// pressure acc contribution from boundary neighbor j
 					// TODO: put full coefficient computation outside the loop?
 					const float accCoeff = gammaPress * massB
 										 * 2.0f * (presi / (densi * densi));
 
-					tmp_xAccPressF += accCoeff * xkgFB[k];
-					tmp_yAccPressF += accCoeff * ykgFB[k];
-					tmp_zAccPressF += accCoeff * zkgFB[k];
+					tmp_xAccPressF += accCoeff * xkg;
+					tmp_yAccPressF += accCoeff * ykg;
+					tmp_zAccPressF += accCoeff * zkg;
 				}
 
 				// finalize pressure acceleration
@@ -1268,6 +866,12 @@ void CPU01::PressureAcceleration(
 
 // TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::PressureRelaxedJacobiSolver(
+	const float* RESTRICT xPosF,
+	const float* RESTRICT yPosF,
+	const float* RESTRICT zPosF,
+	const float* RESTRICT xPosB,
+	const float* RESTRICT yPosB,
+	const float* RESTRICT zPosB,
 	const float* RESTRICT xAccPressF,
 	const float* RESTRICT yAccPressF,
 	const float* RESTRICT zAccPressF,
@@ -1276,13 +880,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 	float* RESTRICT sysVecElemF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
-	const float timeStep, const float massF, const float massB,
+	const float timeStep, const float cubicSplineAlpha,
+	const float particleSizeF, const float massF, const float massB,
 	const float jacobiOmega,
 	const uint32_t N_F,
 	// destinations
@@ -1294,6 +893,10 @@ void CPU01::PressureRelaxedJacobiSolver(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
 				const float axi = xAccPressF[i];
 				const float ayi = yAccPressF[i];
 				const float azi = zAccPressF[i];
@@ -1302,9 +905,6 @@ void CPU01::PressureRelaxedJacobiSolver(
 				float tmp_SysVecElemB = 0.0f;
 
 				// contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
 				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
 				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
 				#pragma omp simd reduction(+:tmp_SysVecElemF)
@@ -1313,29 +913,54 @@ void CPU01::PressureRelaxedJacobiSolver(
 					// global index of neighbor particle
 					const uint32_t j = nbrFF[k];
 
+					// position difference
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// pressure acc difference
 					const float dapx = axi - xAccPressF[j];
 					const float dapy = ayi - yAccPressF[j];
 					const float dapz = azi - zAccPressF[j];
 
-					tmp_SysVecElemF += dapx * xkgFF[k]
-									 + dapy * ykgFF[k]
-									 + dapz * zkgFF[k];
+					tmp_SysVecElemF += dapx * xkg
+									 + dapy * ykg
+									 + dapz * zkg;
 				}
 				tmp_SysVecElemF *= massF;
 
 				// contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
+				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
 				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
 				#pragma omp simd reduction(+:tmp_SysVecElemB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
+					// global index of neighbor particle
+					const uint32_t j = nbrFB[k];
+
+					// position difference
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
-					tmp_SysVecElemB += axi * xkgFB[k]
-									 + ayi * ykgFB[k]
-									 + azi * zkgFB[k];
+					tmp_SysVecElemB += axi * xkg
+									 + ayi * ykg
+									 + azi * zkg;
 				}
 				tmp_SysVecElemB *= massB;
 
@@ -1360,64 +985,11 @@ void CPU01::PressureRelaxedJacobiSolver(
 	);
 }
 
-void CPU01::Integration(
-	const float* RESTRICT xVelPredF,
-	const float* RESTRICT yVelPredF,
-	const float* RESTRICT zVelPredF,
-	const float* RESTRICT xAccPressF,
-	const float* RESTRICT yAccPressF,
-	const float* RESTRICT zAccPressF,
-	const float* RESTRICT xAccViscF,
-	const float* RESTRICT yAccViscF,
-	const float* RESTRICT zAccViscF,
-	const float* RESTRICT xAccExtF,
-	const float* RESTRICT yAccExtF,
-	const float* RESTRICT zAccExtF,
-	const float timeStep,
-	const uint32_t N_F,
-	// destinations
-	float* RESTRICT xPosF,
-	float* RESTRICT yPosF,
-	float* RESTRICT zPosF,
-	float* RESTRICT xVelF,
-	float* RESTRICT yVelF,
-	float* RESTRICT zVelF,
-	float* RESTRICT xAccF,
-	float* RESTRICT yAccF,
-	float* RESTRICT zAccF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				// total acceleration update
-				xAccF[i] = xAccPressF[i] + xAccViscF[i] + xAccExtF[i];
-				yAccF[i] = yAccPressF[i] + yAccViscF[i] + yAccExtF[i];
-				zAccF[i] = zAccPressF[i] + zAccViscF[i] + zAccExtF[i];
-
-				// explicit Euler integration
-				// (now only refining predicted velocity with pressure acc)
-				xVelF[i] = xVelPredF[i] + timeStep * xAccPressF[i];
-				yVelF[i] = yVelPredF[i] + timeStep * yAccPressF[i];
-				zVelF[i] = zVelPredF[i] + timeStep * zAccPressF[i];
-
-				// semi-implicit Euler integration
-				// (using updated velocity for position update)
-				xPosF[i] = xPosF[i] + timeStep * xVelF[i];
-				yPosF[i] = yPosF[i] + timeStep * yVelF[i];
-				zPosF[i] = zPosF[i] + timeStep * zVelF[i];
-
-				// TODO: just leave total acceleration un-updated all the time?
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
 // TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::PressureAccelerationAndIntegration(
+	const float* RESTRICT xPosB,
+	const float* RESTRICT yPosB,
+	const float* RESTRICT zPosB,
 	const float* RESTRICT xVelPredF,
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
@@ -1430,14 +1002,9 @@ void CPU01::PressureAccelerationAndIntegration(
 	const float* RESTRICT pressureF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const std::vector<std::vector<float>>& xKernelGradFF,
-	const std::vector<std::vector<float>>& yKernelGradFF,
-	const std::vector<std::vector<float>>& zKernelGradFF,
-	const std::vector<std::vector<float>>& xKernelGradFB,
-	const std::vector<std::vector<float>>& yKernelGradFB,
-	const std::vector<std::vector<float>>& zKernelGradFB,
-	float timeStep, float restDensityF,
-	float massF, float massB, float gammaPress,
+	const float timeStep, const float cubicSplineAlpha,
+	const float particleSizeF, const float restDensityF,
+	const float massF, const float massB, const float gammaPress,
 	uint32_t N_F,
 	// destinations
 	float* RESTRICT xPosF,
@@ -1459,6 +1026,10 @@ void CPU01::PressureAccelerationAndIntegration(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
 				const float presi = pressureF[i];
 				const float densi = restDensityF;
 
@@ -1467,9 +1038,6 @@ void CPU01::PressureAccelerationAndIntegration(
 				float tmp_zAccPressF = 0.0f;
 
 				// contributions from fluid neighbors
-				const float* RESTRICT xkgFF = xKernelGradFF[i].data();
-				const float* RESTRICT ykgFF = yKernelGradFF[i].data();
-				const float* RESTRICT zkgFF = zKernelGradFF[i].data();
 				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
 				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
@@ -1478,32 +1046,57 @@ void CPU01::PressureAccelerationAndIntegration(
 					// global index of neighbor particle
 					const uint32_t j = nbrFF[k];
 
+					// position difference
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// pressure acc contribution from fluid neighbor j
 					// TODO: put most of this coefficient computation outside the loop?
 					const float accCoeff = massF * (presi / (densi * densi)
 										 + pressureF[j] / (densi * densi));
 
-					tmp_xAccPressF += accCoeff * xkgFF[k];
-					tmp_yAccPressF += accCoeff * ykgFF[k];
-					tmp_zAccPressF += accCoeff * zkgFF[k];
+					tmp_xAccPressF += accCoeff * xkg;
+					tmp_yAccPressF += accCoeff * ykg;
+					tmp_zAccPressF += accCoeff * zkg;
 				}
 
 				// contributions from boundary neighbors
-				const float* RESTRICT xkgFB = xKernelGradFB[i].data();
-				const float* RESTRICT ykgFB = yKernelGradFB[i].data();
-				const float* RESTRICT zkgFB = zKernelGradFB[i].data();
+				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
 				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
+					// global index of neighbor particle
+					const uint32_t j = nbrFB[k];
+
+					// position difference
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+
+					// kernel gradient
+					float xkg = 0.0f;
+					float ykg = 0.0f;
+					float zkg = 0.0f;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
+
 					// pressure acc contribution from boundary neighbor j
 					// TODO: put full coefficient computation outside the loop?
 					const float accCoeff = gammaPress * massB
 										 * 2.0f * (presi / (densi * densi));
 
-					tmp_xAccPressF += accCoeff * xkgFB[k];
-					tmp_yAccPressF += accCoeff * ykgFB[k];
-					tmp_zAccPressF += accCoeff * zkgFB[k];
+					tmp_xAccPressF += accCoeff * xkg;
+					tmp_yAccPressF += accCoeff * ykg;
+					tmp_zAccPressF += accCoeff * zkg;
 				}
 
 				// finalize pressure acceleration
