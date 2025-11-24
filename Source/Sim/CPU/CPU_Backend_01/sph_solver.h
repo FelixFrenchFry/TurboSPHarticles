@@ -149,25 +149,20 @@ namespace CPU01
 		// destinations
 		float* RESTRICT pressureF);
 
-	void PressureAccelerationAndIntegration(
-		const float* RESTRICT xPosB,
-		const float* RESTRICT yPosB,
-		const float* RESTRICT zPosB,
+	void Integration(
 		const float* RESTRICT xVelPredF,
 		const float* RESTRICT yVelPredF,
 		const float* RESTRICT zVelPredF,
+		const float* RESTRICT xAccPressF,
+		const float* RESTRICT yAccPressF,
+		const float* RESTRICT zAccPressF,
 		const float* RESTRICT xAccViscF,
 		const float* RESTRICT yAccViscF,
 		const float* RESTRICT zAccViscF,
 		const float* RESTRICT xAccExtF,
 		const float* RESTRICT yAccExtF,
 		const float* RESTRICT zAccExtF,
-		const float* RESTRICT pressureF,
-		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
-		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		float timeStep, float cubicSplineAlpha,
-		float particleSizeF, float restDensityF,
-		float massF, float massB, float gammaPress,
+		float timeStep,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT xPosF,
@@ -178,9 +173,6 @@ namespace CPU01
 		float* RESTRICT zVelF,
 		float* RESTRICT xAccF,
 		float* RESTRICT yAccF,
-		float* RESTRICT zAccF,
-		float* RESTRICT xAccPressF,
-		float* RESTRICT yAccPressF,
-		float* RESTRICT zAccPressF);
+		float* RESTRICT zAccF);
 
 } // namespace CPU01

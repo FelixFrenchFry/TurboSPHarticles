@@ -141,8 +141,10 @@ namespace Sim
 				.ops = { Bench::BenchOp::Pressure_JacobiSolver }
 			},
 			{
-				.ops = { Bench::BenchOp::Pressure_Acceleration,
-						   Bench::BenchOp::VelocityUpdate,
+				.ops = { Bench::BenchOp::Pressure_Acceleration }
+			},
+			{
+				.ops = { Bench::BenchOp::VelocityUpdate,
 						   Bench::BenchOp::PositionUpdate }
 			},
 			{

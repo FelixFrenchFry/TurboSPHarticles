@@ -80,6 +80,15 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	auto& neighborsFF = neighborsFF_;
 	auto& neighborsFB = neighborsFB_;
 
+	auto& kwFF = kernelWeightsFF_;
+	auto& kwFB = kernelWeightsFB_;
+	auto& xGradFF = xKernelGradFF_;
+	auto& yGradFF = yKernelGradFF_;
+	auto& zGradFF = zKernelGradFF_;
+	auto& xGradFB = xKernelGradFB_;
+	auto& yGradFB = yKernelGradFB_;
+	auto& zGradFB = zKernelGradFB_;
+
 	// --- [ neighbor search ] -------------------------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
@@ -187,28 +196,37 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
-	// --- [ finalize pressure acc and integrate velocity and position ] -------
+	// --- [ finalize pressure acceleration ] ----------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration,
-								    Bench::BenchOp::VelocityUpdate,
-								    Bench::BenchOp::PositionUpdate });
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 
-	CPU01::PressureAccelerationAndIntegration(
+	CPU01::PressureAcceleration(
+		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
-		xVelPredF, yVelPredF, zVelPredF,
-		xAccViscF, yAccViscF, zAccViscF,
-		xAccExtF, yAccExtF, zAccExtF,
 		pressureF,
 		neighborsFF, neighborsFB,
-		params.timeStep, cubicSplineAlpha, sizeF, params.restDensityF,
+		cubicSplineAlpha, sizeF, params.restDensityF,
 		massF, massB, params.gammaPress, N_F_,
-		xPosF, yPosF, zPosF,
-		xVelF, yVelF, zVelF,
-		xAccF, yAccF, zAccF,
 		xAccPressF, yAccPressF, zAccPressF);
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration,
-								   Bench::BenchOp::VelocityUpdate,
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
+
+	// --- [ integrate velocity and position ] ---------------------------------
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
+									Bench::BenchOp::PositionUpdate });
+
+	CPU01::Integration(
+		xVelPredF, yVelPredF, zVelPredF,
+		xAccPressF, yAccPressF, zAccPressF,
+		xAccViscF, yAccViscF, zAccViscF,
+		xAccExtF, yAccExtF, zAccExtF,
+		params.timeStep, N_F_,
+		xPosF, yPosF, zPosF,
+		xVelF, yVelF, zVelF,
+		xAccF, yAccF, zAccF);
+
+	benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
 								   Bench::BenchOp::PositionUpdate });
 }
 
@@ -985,27 +1003,21 @@ void CPU01::PressureRelaxedJacobiSolver(
 	);
 }
 
-// TODO: use more explicit SIMD hints, maybe xsimd library?
-void CPU01::PressureAccelerationAndIntegration(
-	const float* RESTRICT xPosB,
-	const float* RESTRICT yPosB,
-	const float* RESTRICT zPosB,
+void CPU01::Integration(
 	const float* RESTRICT xVelPredF,
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
+	const float* RESTRICT xAccPressF,
+	const float* RESTRICT yAccPressF,
+	const float* RESTRICT zAccPressF,
 	const float* RESTRICT xAccViscF,
 	const float* RESTRICT yAccViscF,
 	const float* RESTRICT zAccViscF,
 	const float* RESTRICT xAccExtF,
 	const float* RESTRICT yAccExtF,
 	const float* RESTRICT zAccExtF,
-	const float* RESTRICT pressureF,
-	const std::vector<std::vector<std::uint32_t>>& neighborsFF,
-	const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-	const float timeStep, const float cubicSplineAlpha,
-	const float particleSizeF, const float restDensityF,
-	const float massF, const float massB, const float gammaPress,
-	uint32_t N_F,
+	const float timeStep,
+	const uint32_t N_F,
 	// destinations
 	float* RESTRICT xPosF,
 	float* RESTRICT yPosF,
@@ -1015,10 +1027,7 @@ void CPU01::PressureAccelerationAndIntegration(
 	float* RESTRICT zVelF,
 	float* RESTRICT xAccF,
 	float* RESTRICT yAccF,
-	float* RESTRICT zAccF,
-	float* RESTRICT xAccPressF,
-	float* RESTRICT yAccPressF,
-	float* RESTRICT zAccPressF)
+	float* RESTRICT zAccF)
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
@@ -1026,95 +1035,13 @@ void CPU01::PressureAccelerationAndIntegration(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				const float xi = xPosF[i];
-				const float yi = yPosF[i];
-				const float zi = zPosF[i];
-
-				const float presi = pressureF[i];
-				const float densi = restDensityF;
-
-				float tmp_xAccPressF = 0.0f;
-				float tmp_yAccPressF = 0.0f;
-				float tmp_zAccPressF = 0.0f;
-
-				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
-				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFF[k];
-
-					// position difference
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
-
-					// kernel gradient
-					float xkg = 0.0f;
-					float ykg = 0.0f;
-					float zkg = 0.0f;
-					KernelGradient_CubicSpline(
-						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
-
-					// pressure acc contribution from fluid neighbor j
-					// TODO: put most of this coefficient computation outside the loop?
-					const float accCoeff = massF * (presi / (densi * densi)
-										 + pressureF[j] / (densi * densi));
-
-					tmp_xAccPressF += accCoeff * xkg;
-					tmp_yAccPressF += accCoeff * ykg;
-					tmp_zAccPressF += accCoeff * zkg;
-				}
-
-				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
-				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
-				for (uint32_t k = 0; k < N_FB; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFB[k];
-
-					// position difference
-					const float dx = xi - xPosB[j];
-					const float dy = yi - yPosB[j];
-					const float dz = zi - zPosB[j];
-
-					// kernel gradient
-					float xkg = 0.0f;
-					float ykg = 0.0f;
-					float zkg = 0.0f;
-					KernelGradient_CubicSpline(
-						dx, dy, dz, cubicSplineAlpha, particleSizeF, xkg, ykg, zkg);
-
-					// pressure acc contribution from boundary neighbor j
-					// TODO: put full coefficient computation outside the loop?
-					const float accCoeff = gammaPress * massB
-										 * 2.0f * (presi / (densi * densi));
-
-					tmp_xAccPressF += accCoeff * xkg;
-					tmp_yAccPressF += accCoeff * ykg;
-					tmp_zAccPressF += accCoeff * zkg;
-				}
-
-				// finalize pressure acceleration
-				tmp_xAccPressF *= -1.0f;
-				tmp_yAccPressF *= -1.0f;
-				tmp_zAccPressF *= -1.0f;
-
-				xAccPressF[i] = tmp_xAccPressF;
-				yAccPressF[i] = tmp_yAccPressF;
-				zAccPressF[i] = tmp_zAccPressF;
-
 				// total acceleration update
 				xAccF[i] = xAccPressF[i] + xAccViscF[i] + xAccExtF[i];
 				yAccF[i] = yAccPressF[i] + yAccViscF[i] + yAccExtF[i];
 				zAccF[i] = zAccPressF[i] + zAccViscF[i] + zAccExtF[i];
 
 				// explicit Euler integration
-				// (now only refining predicted velocity with pressure acc)
+				// (refining predicted velocity with pressure acc)
 				xVelF[i] = xVelPredF[i] + timeStep * xAccPressF[i];
 				yVelF[i] = yVelPredF[i] + timeStep * yAccPressF[i];
 				zVelF[i] = zVelPredF[i] + timeStep * zAccPressF[i];

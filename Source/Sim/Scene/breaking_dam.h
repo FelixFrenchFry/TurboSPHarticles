@@ -58,8 +58,7 @@ namespace Scene
 		BreakingDamConfig config_;
 	};
 
-	BreakingDamConfig inline MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr,
-													       const Sim::SimParams& params)
+	BreakingDamConfig inline MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr)
 	{
 		const glm::vec3 U{ 1, 0, 0 }; // forward
 		const glm::vec3 V{ 0, 1, 0 }; // up
@@ -68,17 +67,17 @@ namespace Scene
 		OBB container = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0,0,0},
-			/* uDir, uLen */	U, 1.5f,
+			/* uDir, uLen */	U, 5.5f,
 			/* vDir, vLen */	V, 1.0f,
-			/* wDir, wLen */	W, 1.0f
+			/* wDir, wLen */	W, 5.0f
 		);
 
 		OBB fluid = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0.0,0.0,0.0},
-			/* uDir, uLen */	U, 1.0f,
+			/* uDir, uLen */	U, 5.0f,
 			/* vDir, vLen */	V, 0.5f,
-			/* wDir, wLen */	W, 1.0f
+			/* wDir, wLen */	W, 5.0f
 		);
 
 		return BreakingDamConfig{ container, fluid };
