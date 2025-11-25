@@ -248,7 +248,8 @@ inline void CPU01::KernelWeight_CubicSpline(
 
 	// clamp t1 to [0, 1]
 	// no clamp for t2 needed, distNorm < 2 here
-	const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
+	float t1 = 1.0f - distNorm;
+	t1 = std::max(t1, 0.0f);
 	const float t2 = 2.0f - distNorm;
 
 	// common sub-expressions
@@ -270,7 +271,8 @@ inline void CPU01::KernelGradient_CubicSpline(
 {
 	const float distSqu = dx * dx + dy * dy + dz * dz;
 
-	// outside support radius OR no distance -> no gradient
+	// outside support radius -> no gradient
+	// no distance -> also no gradient
 	if (distSqu >= kernelRadiusSqu ||
 		distSqu < ZERO_EQU_LIM) [[unlikely]]
 	{
@@ -285,7 +287,8 @@ inline void CPU01::KernelGradient_CubicSpline(
 
 	// clamp t1 to [0, 1]
 	// no clamp for t2 needed, distNorm < 2 here
-	const float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
+	float t1 = 1.0f - distNorm;
+	t1 = std::max(t1, 0.0f);
 	const float t2 = 2.0f - distNorm;
 
 	// common sub-expressions
