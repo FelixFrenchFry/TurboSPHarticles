@@ -20,11 +20,6 @@ struct GLFWwindow;
 
 namespace Inter
 {
-	enum class TimeUnit : uint8_t
-	{
-		ms, us, ns
-	};
-
 	enum class BenchTableView : uint8_t
 	{
 		Latest, Avg_All, Avg_Used, Min, Max
@@ -152,7 +147,7 @@ namespace Inter
 
 		// benchmark table state
 		BenchTableView benchTableView_ = BenchTableView::Latest;
-		TimeUnit benchTimeUnit_ = TimeUnit::ms;
+		Bench::TimeUnit benchTimeUnit_ = Bench::TimeUnit::ms;
 		int sparklineContextLength_ = 1024;
 
 		// statistics table state
@@ -204,8 +199,6 @@ namespace Inter
 		void RebuildFonts(float dpiScale);
 		void ApplyParamChanges();
 		void ResetParamChanges(const Sim::SimParams& simParams);
-		inline double ConvertFromNs(TimeUnit unit, uint64_t ns);
-		inline const char* UnitLabel(TimeUnit unit);
 		inline float ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric);
 		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op);
 		inline uint64_t ReadOpGroup_Min(const Sync::BenchSnapshot* snap,

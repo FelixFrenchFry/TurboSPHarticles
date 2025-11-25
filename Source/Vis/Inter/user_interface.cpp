@@ -607,7 +607,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		// column headers
 		ImGui::TableSetupColumn("operation group",
 			ImGuiTableColumnFlags_WidthStretch, 0.65f);
-		ImGui::TableSetupColumn(UnitLabel(benchTimeUnit_),
+		ImGui::TableSetupColumn(Bench::BenchmarksMgr::UnitLabel(benchTimeUnit_),
 			ImGuiTableColumnFlags_WidthStretch, 0.20f);
 		if (showPercent)
 		{
@@ -621,7 +621,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		{
 			const auto& group = opGroups[rowIdx];
 			const uint64_t t = groupTimings[rowIdx];
-			const double t_unit = ConvertFromNs(benchTimeUnit_, t);
+			const double t_unit = Bench::BenchmarksMgr::ConvertFromNs(benchTimeUnit_, t);
 
 			ImGui::TableNextRow();
 
@@ -722,17 +722,17 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	if (ImGui::TreeNodeEx("Benchmark Settings"))
 	{
 		// simple unit pickers (mutually exclusive)
-		bool ns = (benchTimeUnit_ == TimeUnit::ns);
-		bool us = (benchTimeUnit_ == TimeUnit::us);
-		bool ms = (benchTimeUnit_ == TimeUnit::ms);
+		bool ns = (benchTimeUnit_ == Bench::TimeUnit::ns);
+		bool us = (benchTimeUnit_ == Bench::TimeUnit::us);
+		bool ms = (benchTimeUnit_ == Bench::TimeUnit::ms);
 
 		ImGui::Text("time unit: ");
 		ImGui::SameLine();
-		if (ImGui::Checkbox("ms ", &ms)) { benchTimeUnit_ = TimeUnit::ms; ns = us = false; }
+		if (ImGui::Checkbox("ms ", &ms)) { benchTimeUnit_ = Bench::TimeUnit::ms; ns = us = false; }
 		ImGui::SameLine();
-		if (ImGui::Checkbox("us ", &us)) { benchTimeUnit_ = TimeUnit::us; ns = ms = false; }
+		if (ImGui::Checkbox("us ", &us)) { benchTimeUnit_ = Bench::TimeUnit::us; ns = ms = false; }
 		ImGui::SameLine();
-		if (ImGui::Checkbox("ns", &ns)) { benchTimeUnit_ = TimeUnit::ns; us = ms = false; }
+		if (ImGui::Checkbox("ns", &ns)) { benchTimeUnit_ = Bench::TimeUnit::ns; us = ms = false; }
 		ImGui::Spacing();
 
 		// number of steps shown in sparkline
@@ -983,32 +983,6 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 	}
 
 	unsavedParamChanges_ = false;
-}
-
-inline double UserInterfaceMgr::ConvertFromNs(TimeUnit unit, uint64_t ns)
-{
-	switch (unit)
-	{
-	case TimeUnit::ms: { return static_cast<double>(ns) / 1'000'000.0; }
-	case TimeUnit::us: { return static_cast<double>(ns) / 1'000.0; }
-	case TimeUnit::ns: { return static_cast<double>(ns); }
-	}
-
-	SPDLOG_WARN("Invalid TimeUnit enum value");
-	return static_cast<double>(ns);
-}
-
-inline const char* UserInterfaceMgr::UnitLabel(TimeUnit unit)
-{
-	switch (unit)
-	{
-	case TimeUnit::ns: { return "ns"; }
-	case TimeUnit::us: { return "us"; }
-	case TimeUnit::ms: { return "ms"; }
-	}
-
-	SPDLOG_WARN("Invalid TimeUnit enum value");
-	return "";
 }
 
 inline float UserInterfaceMgr::ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric)

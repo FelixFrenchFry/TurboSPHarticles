@@ -36,9 +36,9 @@ namespace Sim
 
 		static void PrintProgressMilestone(int64_t step, int64_t totalSteps = -1);
 
-		static void PrintPerformanceSummary(int64_t totalSteps,
-		                                    double totalSimTime,
-		                                    double wallSeconds);
+		static void PrintPerformanceSummary(const Bench::BenchmarksMgr& benchMgr,
+											const std::vector<Bench::BenchOpGroupDef>& opGroups,
+											Bench::TimeUnit unit);
 
 		// TODO: print big performance and statistics tables in-place after every step?
 

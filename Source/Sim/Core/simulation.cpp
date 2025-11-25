@@ -400,6 +400,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 	}
 
 	SPDLOG_INFO("Simulation stopped running\n");
+
+	DiagnosticsMgr::PrintPerformanceSummary(benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms);
 }
 
 void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
@@ -504,6 +506,8 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 	running_.store(false, std::memory_order_release);
 
 	SPDLOG_INFO("Simulation stopped running\n");
+
+	DiagnosticsMgr::PrintPerformanceSummary(benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms);
 }
 
 // requests the controller thread to stop cleanly
@@ -511,7 +515,7 @@ void SimulationMgr::RequestStop()
 {
 	if (controllerThread_.joinable())
 	{
-		SPDLOG_INFO("Requesting stop of SimulationMgr...");
+		// SPDLOG_INFO("Requesting stop of SimulationMgr...");
 		controllerThread_.request_stop(); // non-blocking
 	}
 }
@@ -521,7 +525,7 @@ void SimulationMgr::JoinThreads()
 {
 	if (controllerThread_.joinable())
 	{
-		SPDLOG_INFO("Joining SimulationMgr thread...");
+		// SPDLOG_INFO("Joining SimulationMgr thread...");
 		controllerThread_.join();
 		running_.store(false, std::memory_order_release);
 	}

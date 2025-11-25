@@ -136,7 +136,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		xPosB, yPosB, zPosB,
 		xVelPredF, yVelPredF, zVelPredF,
 		densityF,
-		neighborsFF_, neighborsFB_,
+		neighborsFF, neighborsFB,
 		timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 		params.restDensityF, restDensitySquInvF,
 		massF, massB, params.gammaPress, N_F_,
@@ -211,7 +211,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		xAccPressF, yAccPressF, zAccPressF,
 		xAccViscF, yAccViscF, zAccViscF,
 		xAccExtF, yAccExtF, zAccExtF,
-		params.timeStep, N_F_,
+		timeStep, N_F_,
 		xPosF, yPosF, zPosF,
 		xVelF, yVelF, zVelF,
 		xAccF, yAccF, zAccF);
