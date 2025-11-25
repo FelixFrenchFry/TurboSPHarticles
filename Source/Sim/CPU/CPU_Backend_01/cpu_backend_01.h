@@ -97,22 +97,9 @@ namespace Sim
 		std::vector<uint32_t> idB_;
 
 		// neighbor storage
+		// TODO: use small vector from boost library for inner vec?
 		std::vector<std::vector<uint32_t>> neighborsFF_;
 		std::vector<std::vector<uint32_t>> neighborsFB_;
-
-		// kernel weight storage
-		// TODO: use small vector from boost library for inner vec?
-		std::vector<std::vector<float>> kernelWeightsFF_;
-		std::vector<std::vector<float>> kernelWeightsFB_;
-
-		// kernel gradient storage
-		// TODO: use small vector from boost library for inner vec?
-		std::vector<std::vector<float>> xKernelGradFF_;
-		std::vector<std::vector<float>> yKernelGradFF_;
-		std::vector<std::vector<float>> zKernelGradFF_;
-		std::vector<std::vector<float>> xKernelGradFB_;
-		std::vector<std::vector<float>> yKernelGradFB_;
-		std::vector<std::vector<float>> zKernelGradFB_;
 
 		// re-usable work (scratch) buffer for temp storage
 		mutable std::vector<float> workBuffer_;
