@@ -35,8 +35,15 @@ namespace Sim
 		// (size of particles is treated as smoothing length and spacing)
 		float particleSizeF		= 0.01f;
 		float particleSizeB		= 0.01f;
+		float particleSizeInvF	= 100.0f;
+		float particleSizeInvB  = 100.0f;
 		float particleRadiusF	= 0.005f;
 		float particleRadiusB	= 0.005f;
+
+		// kernel
+		float kernelSuppRatio	= 2.0f;
+		float kernelRadius		= 0.02f; // radius = size * supp ratio
+		float kernelRadiusSqu	= 0.0004f;
 
 		// density and mass
 		float restDensityF		= 1'000.0f;
@@ -54,10 +61,6 @@ namespace Sim
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
-
-		// kernel
-		float kernelSuppRatio	= 2.0f;
-		float kernelRadius		= 0.02f; // radius = size * supp ratio
 
 		// fluid conditions
 		float jitterFracF		= 0.0f; // % of particle size

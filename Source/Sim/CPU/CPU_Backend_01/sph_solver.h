@@ -23,15 +23,19 @@
 
 namespace CPU01
 {
+	constexpr float ZERO_EQU_LIM = 1e-9f;
+
 	inline void KernelWeight_CubicSpline(
 		float dx, float dy, float dz,
-		float cubicSplineAlpha, float particleSize,
+		float particleSizeInv, float kernelRadiusSqu,
+		float cubicSplineAlpha,
 		// destinations
 		float& kw) noexcept;
 
 	inline void KernelGradient_CubicSpline(
 		float dx, float dy, float dz,
-		float cubicSplineAlpha, float particleSize,
+		float particleSizeInv, float kernelRadiusSqu,
+		float cubicSplineAlpha,
 		// destinations
 		float& xkg, float& ykg, float& zkg) noexcept;
 
@@ -44,8 +48,8 @@ namespace CPU01
 		const float* RESTRICT zPosB,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		float cubicSplineAlpha, float particleSizeF,
-		float massF, float massB,
+		float particleSizeInvF, float kernelRadiusSqu,
+		float cubicSplineAlpha, float massF, float massB,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT densityF);
@@ -63,8 +67,9 @@ namespace CPU01
 		const float* RESTRICT densityF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		float timeStep, float cubicSplineAlpha,
-		float particleSizeF, float restDensityB,
+		float timeStep, float particleSizeInvF,
+		float particleSizeSquF, float kernelRadiusSqu,
+		float cubicSplineAlpha, float restDensityB,
 		float massF, float massB, float viscosityF, float viscosityB,
 		float xGravity, float yGravity, float zGravity,
 		uint32_t N_F,
@@ -92,7 +97,8 @@ namespace CPU01
 		const float* RESTRICT densityF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		float timeStep, float cubicSplineAlpha, float particleSizeF,
+		float timeStep, float particleSizeInvF,
+		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensityF, float restDensitySquInvF,
 		float massF, float massB, float gammaPress,
 		uint32_t N_F,
@@ -118,9 +124,9 @@ namespace CPU01
 		const float* RESTRICT pressureF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		float cubicSplineAlpha, float particleSizeF,
-		float restDensityF, float massF, float massB,
-		float gammaPress,
+		float particleSizeInvF, float kernelRadiusSqu,
+		float cubicSplineAlpha, float restDensityF,
+		float massF, float massB, float gammaPress,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT xAccPressF,
@@ -139,14 +145,14 @@ namespace CPU01
 		const float* RESTRICT zAccPressF,
 		const float* RESTRICT sourceTermF,
 		const float* RESTRICT diagElemF,
-		float* RESTRICT sysVecElemF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFF,
 		const std::vector<std::vector<std::uint32_t>>& neighborsFB,
-		float timeStep, float cubicSplineAlpha,
-		float particleSizeF, float massF, float massB,
-		float jacobiOmega,
+		float timeStep, float particleSizeInvF,
+		float kernelRadiusSqu, float cubicSplineAlpha,
+		float massF, float massB, float jacobiOmega,
 		uint32_t N_F,
 		// destinations
+		float* RESTRICT sysVecElemF,
 		float* RESTRICT pressureF);
 
 	void Integration(

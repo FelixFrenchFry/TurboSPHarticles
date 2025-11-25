@@ -191,6 +191,7 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 
 		// apply changes
 		params_.particleSizeF = particleSize;
+		params_.particleSizeInvF = 1.0f / particleSize;
 		params_.particleRadiusF = 0.5f * particleSize;
 		params_.massF = params_.restDensityF * particleSize
 											 * particleSize
@@ -204,6 +205,7 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 
 		// apply changes
 		params_.particleSizeB = particleSize;
+		params_.particleSizeInvB = 1.0f / particleSize;
 		params_.particleRadiusB = 0.5f * particleSize;
 		params_.massB = params_.restDensityB * particleSize
 											 * particleSize
@@ -440,6 +442,7 @@ void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
 	BeginWrite();
 	params_.kernelSuppRatio = kernelSuppRatio;
 	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
+	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 	EndWrite();
 }
 
@@ -464,6 +467,7 @@ void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 	// apply changes
 	BeginWrite();
 	params_.kernelRadius = kernelRadius;
+	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
 	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
 	EndWrite();
 }
@@ -535,6 +539,14 @@ bool SimParamsMgr::AssertParamDerivationCorrectness()
 	{
 		return par.particleSizeB > 0.0f;
 	});
+	ok &= Check("particleSizeInvF <= 0", true, [&]()
+	{
+		return par.particleSizeInvF > 0.0f;
+	});
+	ok &= Check("particleSizeInvB <= 0", true, [&]()
+	{
+		return par.particleSizeInvB > 0.0f;
+	});
 	ok &= Check("particleRadiusF <= 0", true, [&]()
 	{
 		return par.particleRadiusF > 0.0f;
@@ -577,6 +589,16 @@ bool SimParamsMgr::AssertParamDerivationCorrectness()
 	});
 
 	// relationships
+	ok &= Check("particleSizeInvF != 1 / particleSizeF", true, [&]()
+	{
+		float expect = 1.0f / par.particleSizeF;
+		return Base::ApproxEqu(par.particleSizeInvF, expect);
+	});
+	ok &= Check("particleSizeInvB != 1 / particleSizeB", true, [&]()
+	{
+		float expect = 1.0f / par.particleSizeB;
+		return Base::ApproxEqu(par.particleSizeInvB, expect);
+	});
 	ok &= Check("particleRadiusF != 0.5 * particleSizeF", true, [&]()
 	{
 		float expect = 0.5f * par.particleSizeF;
