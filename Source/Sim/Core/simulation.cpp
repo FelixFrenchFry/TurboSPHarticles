@@ -381,11 +381,13 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 		if (maxSteps == std::numeric_limits<int64_t>::max())
 		{
-			DiagnosticsMgr::PrintProgressMilestone(simStep_);
+			DiagnosticsMgr::PrintPerformanceSummaryAndProgress(
+				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
 		}
 		else
 		{
-			DiagnosticsMgr::PrintProgressMilestone(simStep_, maxSteps);
+			DiagnosticsMgr::PrintPerformanceSummaryAndProgress(
+				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
 		}
 
 		// TODO: check if scenario or backend need to be switched?
@@ -399,9 +401,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 		simBackend_->PushToUniversalSimState(universalSimState_);
 	}
 
+	printf("\n");
 	SPDLOG_INFO("Simulation stopped running\n");
-
-	DiagnosticsMgr::PrintPerformanceSummary(benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms);
 }
 
 void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
@@ -485,11 +486,13 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 
 		if (maxSteps == std::numeric_limits<int64_t>::max())
 		{
-			DiagnosticsMgr::PrintProgressMilestone(simStep_);
+			DiagnosticsMgr::PrintPerformanceSummaryAndProgress(
+				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
 		}
 		else
 		{
-			DiagnosticsMgr::PrintProgressMilestone(simStep_, maxSteps);
+			DiagnosticsMgr::PrintPerformanceSummaryAndProgress(
+				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
 		}
 
 		// TODO: check if scenario or backend need to be switched?
@@ -505,9 +508,8 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 
 	running_.store(false, std::memory_order_release);
 
+	printf("\n");
 	SPDLOG_INFO("Simulation stopped running\n");
-
-	DiagnosticsMgr::PrintPerformanceSummary(benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms);
 }
 
 // requests the controller thread to stop cleanly

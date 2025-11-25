@@ -24,7 +24,13 @@ int main(int argc, char** argv)
 	#endif
 
 	// [year-month-day 12:34:56.789] [file.cpp:line] [type] message
+	/*
 	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
+	spdlog::flush_on(spdlog::level::err);
+	*/
+
+	// [year-month-day 12:34:56.789] [type] message
+	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 	spdlog::flush_on(spdlog::level::err);
 
 	try // application setup

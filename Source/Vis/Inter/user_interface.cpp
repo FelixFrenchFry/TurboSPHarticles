@@ -671,7 +671,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 
 			// column 1 with timing in selected unit
 			ImGui::TableSetColumnIndex(1);
-			TableTextRightAligned("%.1f", t_unit);
+			TableTextRightAligned("%.2f", t_unit);
 
 			// column 2 with percentages of total sim time
 			if (showPercent)
@@ -722,17 +722,17 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	if (ImGui::TreeNodeEx("Benchmark Settings"))
 	{
 		// simple unit pickers (mutually exclusive)
-		bool ns = (benchTimeUnit_ == Bench::TimeUnit::ns);
-		bool us = (benchTimeUnit_ == Bench::TimeUnit::us);
+		bool s = (benchTimeUnit_ == Bench::TimeUnit::s);
 		bool ms = (benchTimeUnit_ == Bench::TimeUnit::ms);
+		bool us = (benchTimeUnit_ == Bench::TimeUnit::us);
 
 		ImGui::Text("time unit: ");
 		ImGui::SameLine();
-		if (ImGui::Checkbox("ms ", &ms)) { benchTimeUnit_ = Bench::TimeUnit::ms; ns = us = false; }
+		if (ImGui::Checkbox("s ", &s)) { benchTimeUnit_ = Bench::TimeUnit::s; ms = us = false; }
 		ImGui::SameLine();
-		if (ImGui::Checkbox("us ", &us)) { benchTimeUnit_ = Bench::TimeUnit::us; ns = ms = false; }
+		if (ImGui::Checkbox("ms ", &ms)) { benchTimeUnit_ = Bench::TimeUnit::ms; s = us = false; }
 		ImGui::SameLine();
-		if (ImGui::Checkbox("ns", &ns)) { benchTimeUnit_ = Bench::TimeUnit::ns; us = ms = false; }
+		if (ImGui::Checkbox("us ", &us)) { benchTimeUnit_ = Bench::TimeUnit::us; s = ms = false; }
 		ImGui::Spacing();
 
 		// number of steps shown in sparkline

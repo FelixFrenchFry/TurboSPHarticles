@@ -122,126 +122,95 @@ namespace Sim
         // TODO: implement
     }
 
-    void DiagnosticsMgr::PrintProgressMilestone(int64_t step, int64_t totalSteps)
+    void DiagnosticsMgr::PrintPerformanceSummaryAndProgress(
+        const Bench::BenchmarksMgr& benchMgr,
+        const std::vector<Bench::BenchOpGroupDef>& opGroups,
+        Bench::TimeUnit unit,
+        int64_t step,
+        int64_t totalSteps)
     {
         using steady_clock = std::chrono::steady_clock;
 
-        // static state to persist across calls
+        // static state for progress, benchmarks, and in-place redraw
         static bool initialized = false;
         static int64_t lastStep = 0;
         static steady_clock::time_point startSteady;
 
-        // history for moving-average steps/s over the last ~100 steps
+        // history for moving-average steps/s over last few samples
         using Sample = std::pair<int64_t, steady_clock::time_point>;
         static std::deque<Sample> history;
-
-        // last time when elapsed/remaining/stepsPerSec was re-computed
-        static steady_clock::time_point lastUpdateSteady;
-
-        // cached derived values (updated at most once per second)
-        static double cachedElapsedS = 0.0;
-        static double cachedRemainingS = 0.0;
-        static double cachedStepsPerSec = 0.0;
+        static int lastNumLines = 0;
 
         const bool hasTotal = (totalSteps > 0);
+        const auto now = steady_clock::now();
 
-        // re-initialize on first call or when step == 0
+        // re-initialize at start or when step == 0
         if (!initialized || step == 0)
         {
             initialized = true;
             lastStep = 0;
-            startSteady = steady_clock::now();
-            lastUpdateSteady = startSteady;
+            startSteady = now;
             history.clear();
-            cachedElapsedS = 0.0;
-            cachedRemainingS = 0.0;
-            cachedStepsPerSec = 0.0;
+            lastNumLines = 0;
         }
 
         if (step <= lastStep) { return; }
         lastStep = step;
 
-        auto nowSteady = steady_clock::now();
-
-        // update history for moving average (last up to 100 steps)
-        history.emplace_back(step, nowSteady);
+        // update history for moving-average steps/s
+        history.emplace_back(step, now);
         constexpr std::size_t MAX_HISTORY = 10;
         if (history.size() > MAX_HISTORY) { history.pop_front(); }
 
         // total elapsed time since start
-        double elapsedS = std::chrono::duration<double>(nowSteady - startSteady).count();
-        elapsedS = std::max(elapsedS, 1e-9); // avoid div-by-zero
+        double elapsedS = std::chrono::duration<double>(now - startSteady).count();
+        elapsedS = std::max(elapsedS, 1e-9);
 
-        const bool isLastStep = (hasTotal && step >= totalSteps);
-        const auto UPDATE_INTERVAL = std::chrono::seconds(1);
-
-        bool doUpdate = false;
-        if (isLastStep)
+        // compute outputs on every call (no throttling)
+        double stepsPerSec = 0.0;
+        if (history.size() >= 2)
         {
-            // force update for final line
-            doUpdate = true;
+            const auto& oldest = history.front();
+            const auto& newest = history.back();
+            double dt = std::chrono::duration<double>(newest.second - oldest.second).count();
+            int64_t ds = newest.first - oldest.first;
+
+            if (dt > 1e-6 && ds > 0)
+            {
+                stepsPerSec = static_cast<double>(ds) / dt;
+            }
         }
-        else if ((nowSteady - lastUpdateSteady) >= UPDATE_INTERVAL)
+
+        // global average if window is too small / degenerate
+        if (stepsPerSec <= 0.0)
         {
-            // refresh once per second
-            doUpdate = true;
+            stepsPerSec = static_cast<double>(step) / elapsedS;
         }
 
-        if (doUpdate)
+        // remaining time based on moving-average speed (only if total steps known)
+        double remainingS = 0.0;
+        if (hasTotal && stepsPerSec > 1e-9 && step < totalSteps)
         {
-            lastUpdateSteady = nowSteady;
-
-            // compute moving-average steps/s over history window
-            double stepsPerSec = 0.0;
-            if (history.size() >= 2)
-            {
-                const auto& oldest = history.front();
-                const auto& newest = history.back();
-                double   dt = std::chrono::duration<double>(newest.second - oldest.second).count();
-                int64_t  ds = newest.first - oldest.first;
-
-                if (dt > 1e-6 && ds > 0)
-                {
-                    stepsPerSec = static_cast<double>(ds) / dt;
-                }
-            }
-
-            // global average if window is too small / degenerate
-            if (stepsPerSec <= 0.0)
-            {
-                stepsPerSec = static_cast<double>(step) / elapsedS;
-            }
-
-            // remaining time based on moving-average speed (only if total steps known)
-            double remainingS = 0.0;
-            if (hasTotal && stepsPerSec > 1e-9 && step < totalSteps)
-            {
-                remainingS = static_cast<double>(totalSteps - step) / stepsPerSec;
-            }
-
-            cachedElapsedS = elapsedS;
-            cachedRemainingS = remainingS;
-            cachedStepsPerSec = stepsPerSec;
+            remainingS = static_cast<double>(totalSteps - step) / stepsPerSec;
         }
 
         auto fmt_hms = [](double seconds, int& h, int& m, int& s)
-    	{
-	        seconds = std::max(seconds, 0.0);
-	        int total = static_cast<int>(seconds + 0.5);
-            h = total / 3600;
-            m = (total % 3600) / 60;
-            s = total % 60;
-        };
+            {
+                seconds = std::max(seconds, 0.0);
+                int total = static_cast<int>(seconds + 0.5);
+                h = total / 3600;
+                m = (total % 3600) / 60;
+                s = total % 60;
+            };
 
         int elH, elM, elS;
         int etaH = 0, etaM = 0, etaS = 0;
-        fmt_hms(cachedElapsedS, elH, elM, elS);
+        fmt_hms(elapsedS, elH, elM, elS);
         if (hasTotal)
         {
-            fmt_hms(cachedRemainingS, etaH, etaM, etaS);
+            fmt_hms(remainingS, etaH, etaM, etaS);
         }
 
-        // progress percentage (only if total steps known)
         double percent = 0.0;
         if (hasTotal)
         {
@@ -250,51 +219,18 @@ namespace Sim
             percent = progress * 100.0;
         }
 
-		// overwrite of previous line
-        std::ostringstream oss;
-        oss << '\r';
-
-        // elapsed time
-        oss << std::setfill('0') << std::setw(2) << elH << ':'
-            << std::setw(2) << elM << ':'
-            << std::setw(2) << elS << " elapsed";
-
-        if (hasTotal)
+        // move cursor up to overwrite previous block
+        if (lastNumLines > 0)
         {
-            // remaining time
-            oss << " | "
-        		<< std::setw(2) << etaH << ':'
-                << std::setw(2) << etaM << ':'
-                << std::setw(2) << etaS << " remaining";
-
-            // steps so far and percentage
-            oss << " | "
-                << step << '/' << totalSteps << " steps ("
-                << std::fixed << std::setprecision(1)
-                << percent << " %)";
-        }
-        else // total steps unknown
-        {
-            // steps so far
-            oss << " | " << step << " steps";
+            std::printf("\x1b[%dA\r", lastNumLines);
         }
 
-        // steps per second (moving average)
-        oss << " | "
-            << std::fixed << std::setprecision(2)
-            << cachedStepsPerSec << " steps/s";
+        int lineCount = 0;
 
-        std::cout << oss.str() << std::flush;
-
-        if (isLastStep) { std::cout << "\n" << std::endl; }
-    }
-
-    void DiagnosticsMgr::PrintPerformanceSummary(const Bench::BenchmarksMgr& benchMgr,
-												 const std::vector<Bench::BenchOpGroupDef>& opGroups,
-												 Bench::TimeUnit unit)
-    {
-        printf("--- [ benchmark summary ] ------------------------------------------------------\n");
-        printf("--------------------------------------------------------------------------------\n");
+        std::printf("--- [ benchmark summary ] ------------------------------------------------------\n");
+        lineCount++;
+        std::printf("--------------------------------------------------------------------------------\n");
+        lineCount++;
 
         // per-group timing
         std::vector<uint64_t> groupTimings(opGroups.size(), 0);
@@ -327,67 +263,117 @@ namespace Sim
         const char* unitStr = Bench::BenchmarksMgr::UnitLabel(unit);
 
         // header (same widths as rows: 30 / 10 / 5)
-        printf("%-30.30s  %10s  %5s\n", "operation group", unitStr, "%");
-        printf("--------------------------------------------------------------------------------\n");
+        std::printf("%-30.30s  %10s  %5s\n", "operation group", unitStr, "%");
+        lineCount++;
+        std::printf("--------------------------------------------------------------------------------\n");
+        lineCount++;
 
         auto PrintRow = [&](uint32_t i, bool isTotalSim)
-        {
-        	const auto& group = opGroups[i];
-        	const uint64_t ns = groupTimings[i];
-        	const double t_unit = Bench::BenchmarksMgr::ConvertFromNs(unit, ns);
+            {
+                const auto& group = opGroups[i];
+                const uint64_t ns = groupTimings[i];
+                const double t_unit = Bench::BenchmarksMgr::ConvertFromNs(unit, ns);
 
-        	std::string alias;
-        	if (isTotalSim)
-        	{
-        		alias = "total simulation time";
-        	}
-        	else if (!group.ops.empty())
-        	{
-        		for (std::size_t k = 0; k < group.ops.size(); ++k)
-        		{
-        			const auto op = group.ops[k];
-        			const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-                    if (k > 0) { alias += " + "; }
-        			alias += def.alias.data();
-        		}
-        	}
-        	else
-        	{
-        		alias = "<empty>";
-        	}
+                std::string alias;
+                if (isTotalSim)
+                {
+                    alias = "total simulation time";
+                }
+                else if (!group.ops.empty())
+                {
+                    for (std::size_t k = 0; k < group.ops.size(); ++k)
+                    {
+                        const auto op = group.ops[k];
+                        const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+                        if (k > 0) { alias += " + "; }
+                        alias += def.alias.data();
+                    }
+                }
+                else
+                {
+                    alias = "<empty>";
+                }
 
-        	double pct = 0.0;
-        	if (!isTotalSim && totalNs > 0)
-        	{
-        		pct = 100.0 * static_cast<double>(ns) / static_cast<double>(totalNs);
-        	}
+                double pct = 0.0;
+                if (!isTotalSim && totalNs > 0)
+                {
+                    pct = 100.0 * static_cast<double>(ns) / static_cast<double>(totalNs);
+                }
 
-        	if (isTotalSim)
-        	{
-        		printf("%-30.30s  %10.3f  %5s\n", alias.c_str(), t_unit, "--");
-        	}
-        	else
-        	{
-        		printf("%-30.30s  %10.3f  %5.1f\n", alias.c_str(), t_unit, pct);
-        	}
-        };
+                if (isTotalSim)
+                {
+                    std::printf("%-30.30s  %10.2f  %5s\n",
+                        alias.c_str(), t_unit, "--");
+                }
+                else
+                {
+                    std::printf("%-30.30s  %10.2f  %5.1f\n",
+                        alias.c_str(), t_unit, pct);
+                }
+
+                lineCount++;
+            };
 
         // regular rows
         for (uint32_t i = 0; i < opGroups.size(); i++)
         {
             if (static_cast<int>(i) == totalSimIdx) { continue; }
-
             PrintRow(i, false);
         }
 
         // total simulation row last
         if (totalSimIdx >= 0)
         {
-            printf("--------------------------------------------------------------------------------\n");
+            std::printf("--------------------------------------------------------------------------------\n");
+            lineCount++;
             PrintRow(static_cast<std::size_t>(totalSimIdx), true);
         }
 
-        printf("\n");
+        // blank line separating table and progress line
+        std::printf("\n");
+        lineCount++;
+
+        // progress line, using printf and padding to overwrite old text cleanly
+        static std::size_t lastProgressLen = 0;
+        char buf[512];
+
+        if (hasTotal)
+        {
+            std::snprintf(
+                buf, sizeof(buf),
+                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.2f steps/s",
+                elH, elM, elS,
+                static_cast<long long>(step),
+                static_cast<long long>(totalSteps),
+                percent,
+                stepsPerSec
+            );
+        }
+        else
+        {
+            std::snprintf(
+                buf, sizeof(buf),
+                "%02d:%02d:%02d elapsed | %lld steps | %.2f steps/s",
+                elH, elM, elS,
+                static_cast<long long>(step),
+                stepsPerSec
+            );
+        }
+
+        std::string line(buf);
+        if (line.size() < lastProgressLen)
+        {
+            line.append(lastProgressLen - line.size(), ' ');
+        }
+        lastProgressLen = line.size();
+
+        std::printf("%s\n", line.c_str());
+        lineCount++;
+
+        std::fflush(stdout);
+
+        // remember how many lines were printed
+        lastNumLines = lineCount;
     }
 	
 } // namespace Sim

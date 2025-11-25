@@ -20,7 +20,7 @@ namespace Bench
 {
 	enum class TimeUnit : uint8_t
 	{
-		ms, us, ns
+		s, ms, us
 	};
 
 	class BenchmarksMgr
@@ -64,9 +64,9 @@ namespace Bench
 		{
 			switch (unit)
 			{
+			case TimeUnit::s:  { return static_cast<double>(ns) / 1'000'000'000.0; }
 			case TimeUnit::ms: { return static_cast<double>(ns) / 1'000'000.0; }
 			case TimeUnit::us: { return static_cast<double>(ns) / 1'000.0; }
-			case TimeUnit::ns: { return static_cast<double>(ns); }
 			}
 
 			return static_cast<double>(ns);
@@ -76,9 +76,9 @@ namespace Bench
 		{
 			switch (unit)
 			{
-			case TimeUnit::ns: { return "ns"; }
-			case TimeUnit::us: { return "us"; }
+			case TimeUnit::s:  { return "s"; }
 			case TimeUnit::ms: { return "ms"; }
+			case TimeUnit::us: { return "us"; }
 			}
 
 			return "";
