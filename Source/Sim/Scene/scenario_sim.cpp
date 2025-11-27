@@ -13,15 +13,16 @@
 namespace Scene
 {
 	std::unique_ptr<ISimScenario> MakeSimScenario(ScenarioMgr& scenarioMgr, 
-												  Base::ScenarioType type,
-												  const Sim::SimParams& params)
+												  Base::ScenarioType type)
 	{
 		switch (type)
 		{
 		case Base::ScenarioType::BreakingDam:
 		{
-			return std::make_unique<BreakingDamScene>
-				(scenarioMgr, MakeBreakingDamConfig_Default(scenarioMgr));
+			BreakingDamConfig cfg;
+			cfg = LoadBreakingDamConfigFromJsonFile(scenarioMgr);
+
+			return std::make_unique<BreakingDamScene>(scenarioMgr, cfg);
 		}
 		default:
 			throw std::runtime_error("Unsupported sim scenario type request");

@@ -294,6 +294,56 @@ std::array<OBBFace, 6> inline ScenarioMgr::GetFacesFromOBB(const OBB& box)
 	return faces;
 }
 
+static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr)
+{
+	auto readVec3 = [](const json& v, glm::vec3 defaultVal) -> glm::vec3
+		{
+			if (!v.is_array() || v.size() != 3) return defaultVal;
+			return glm::vec3(
+				v[0].get<float>(),
+				v[1].get<float>(),
+				v[2].get<float>());
+		};
+
+	glm::vec3 origin = readVec3(j.value("origin", json::array({ 0.0f, 0.0f, 0.0f })), { 0,0,0 });
+	glm::vec3 uDir = readVec3(j.value("uDir", json::array({ 1.0f, 0.0f, 0.0f })), { 1,0,0 });
+	glm::vec3 vDir = readVec3(j.value("vDir", json::array({ 0.0f, 1.0f, 0.0f })), { 0,1,0 });
+	glm::vec3 wDir = readVec3(j.value("wDir", json::array({ 0.0f, 0.0f, 1.0f })), { 0,0,1 });
+
+	float uLen = j.value("uLen", 1.0f);
+	float vLen = j.value("vLen", 1.0f);
+	float wLen = j.value("wLen", 1.0f);
+
+	return scenarioMgr.MakeOBB_FromAxes(origin, uDir, uLen, vDir, vLen, wDir, wLen);
+}
+
+OBB ScenarioMgr::ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr)
+{
+	auto readVec3 = [](const json& v, glm::vec3 defaultVal) -> glm::vec3
+		{
+			if (!v.is_array() || v.size() != 3) return defaultVal;
+
+			return { v[0].get<float>(),
+					   v[1].get<float>(),
+					   v[2].get<float>() };
+		};
+
+	glm::vec3 origin = readVec3(j.value("origin", 
+		json::array({ 0.0f, 0.0f, 0.0f })), { 0,0,0 });
+	glm::vec3 uDir = readVec3(j.value("uDir", 
+		json::array({ 1.0f, 0.0f, 0.0f })), { 1,0,0 });
+	glm::vec3 vDir = readVec3(j.value("vDir", 
+		json::array({ 0.0f, 1.0f, 0.0f })), { 0,1,0 });
+	glm::vec3 wDir = readVec3(j.value("wDir", 
+		json::array({ 0.0f, 0.0f, 1.0f })), { 0,0,1 });
+
+	float uLen = j.value("uLen", 1.0f);
+	float vLen = j.value("vLen", 1.0f);
+	float wLen = j.value("wLen", 1.0f);
+
+	return scenarioMgr.MakeOBB_FromAxes(origin, uDir, uLen, vDir, vLen, wDir, wLen);
+}
+
 void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 											Sync::UniversalSimState& dst,
 											const Sim::SimParams& params)

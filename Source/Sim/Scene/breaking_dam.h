@@ -5,7 +5,6 @@
 #pragma once
 
 // external
-#include <algorithm>
 #include <fstream>
 #include <glm/vec3.hpp>
 #include <spdlog/spdlog.h>

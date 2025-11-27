@@ -33,7 +33,6 @@ namespace Scene
 
 	// scenario factory
 	std::unique_ptr<ISimScenario> MakeSimScenario(ScenarioMgr& scenarioMgr,
-												  Base::ScenarioType type,
-												  const Sim::SimParams& params);
+												  Base::ScenarioType type);
 
 } // namespace Scene

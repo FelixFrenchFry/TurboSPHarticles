@@ -95,7 +95,7 @@ void SimulationMgr::SelectSimScenario(Base::ScenarioType type)
 	}
 
 	// create new scenario
-	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, simParams_);
+	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type);
 	if (!simScenario_)
 	{
 		SPDLOG_ERROR("Failed to create sim scenario ({})",

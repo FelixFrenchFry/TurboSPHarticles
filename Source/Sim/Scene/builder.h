@@ -7,12 +7,15 @@
 // external
 #include <array>
 #include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Sync/state_sim.h"
 
 
+
+using json = nlohmann::json;
 
 namespace Scene
 {
@@ -27,21 +30,6 @@ namespace Scene
 		float wLen;		  // depth (along wHat)
 	};
 
-	// TODO: still needed?
-	/*
-	struct OBBCorners
-	{
-		glm::vec3 p000; // near-left-bottom  (xMin, yMin, zMin)
-		glm::vec3 p100; // near-right-bottom (xMax, yMin, zMin)
-		glm::vec3 p010; // near-left-top     (xMin, yMax, zMin)
-		glm::vec3 p110; // near-right-top    (xMax, yMax, zMin)
-		glm::vec3 p001; // far-left-bottom   (xMin, yMin, zMax)
-		glm::vec3 p101; // far-right-bottom  (xMax, yMin, zMax)
-		glm::vec3 p011; // far-left-top      (xMin, yMax, zMax)
-		glm::vec3 p111; // far-right-top     (xMax, yMax, zMax)
-	};
-	*/
-
 	struct OBBFace
 	{
 		glm::vec3 origin; // near-left-bottom (xMin, yMin, zMin)
@@ -54,7 +42,7 @@ namespace Scene
 
 	class ScenarioMgr
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------s
 
 		ScenarioMgr() = default;
 
@@ -84,7 +72,9 @@ namespace Scene
 
 		std::array<OBBFace, 6> inline GetFacesFromOBB(const OBB& box);
 
-	private: // ==============================
+		static OBB ParseOBBFromJson(const json& jfile, ScenarioMgr& scenarioMgr);
+
+	private: // ----------------------------------------------------------------
 
 		// builds a slab of boundary particles on a given OBB face
 		void BuildBoundaryLayersOnFace(const OBBFace& face,
