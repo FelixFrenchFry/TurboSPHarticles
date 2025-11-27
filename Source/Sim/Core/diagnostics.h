@@ -34,12 +34,18 @@ namespace Sim
 
 		static void PrintMemoryUsage();
 
-		static void PrintPerformanceSummaryAndProgress(
+		static void PrintLatestPerformanceSummaryAndProgress(
 			const Bench::BenchmarksMgr& benchMgr,
 			const std::vector<Bench::BenchOpGroupDef>& opGroups,
 			Bench::TimeUnit unit,
 			int64_t step,
 			int64_t totalSteps = -1);
+
+		static void PrintAveragePerformanceSummary(
+			const Bench::BenchmarksMgr& benchMgr,
+			const std::vector<Bench::BenchOpGroupDef>& opGroups,
+			Bench::TimeUnit unit,
+			int64_t step);
 
 		// TODO: print big performance and statistics tables in-place after every step?
 

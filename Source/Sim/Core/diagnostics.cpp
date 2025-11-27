@@ -122,7 +122,7 @@ namespace Sim
         // TODO: implement
     }
 
-    void DiagnosticsMgr::PrintPerformanceSummaryAndProgress(
+    void DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
         const Bench::BenchmarksMgr& benchMgr,
         const std::vector<Bench::BenchOpGroupDef>& opGroups,
         Bench::TimeUnit unit,
@@ -227,7 +227,7 @@ namespace Sim
 
         int lineCount = 0;
 
-        std::printf("--- [ benchmark summary ] ------------------------------------------------------\n");
+        std::printf("--- [ benchmark summary (SINGLE measurement of the last executed step) ] -------\n");
         lineCount++;
         std::printf("--------------------------------------------------------------------------------\n");
         lineCount++;
@@ -246,7 +246,7 @@ namespace Sim
             uint64_t groupNs = 0;
             for (auto op : group.ops)
             {
-                groupNs += benchMgr.GetBench_Avg_WhenUsed(op);
+                groupNs += benchMgr.GetBench_Latest(op);
             }
             groupTimings[i] = groupNs;
 
@@ -374,6 +374,111 @@ namespace Sim
 
         // remember how many lines were printed
         lastNumLines = lineCount;
+    }
+
+    void DiagnosticsMgr::PrintAveragePerformanceSummary(
+        const Bench::BenchmarksMgr& benchMgr,
+        const std::vector<Bench::BenchOpGroupDef>& opGroups,
+        Bench::TimeUnit unit,
+        int64_t step)
+    {
+        // per-group timing
+        std::vector<uint64_t> groupTimings(opGroups.size(), 0);
+
+        // sum of all groups except Total_Sim (for percentages)
+        uint64_t totalNs = 0;
+        int totalSimIdx = -1;
+
+        for (uint32_t i = 0; i < opGroups.size(); i++)
+        {
+            const auto& group = opGroups[i];
+
+            uint64_t groupNs = 0;
+            for (auto op : group.ops)
+            {
+                groupNs += benchMgr.GetBench_Avg_OverAll(op);
+            }
+            groupTimings[i] = groupNs;
+
+            if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total_Sim)
+            {
+                totalSimIdx = static_cast<int>(i);
+            }
+            else
+            {
+                totalNs += groupNs;
+            }
+        }
+
+        const char* unitStr = Bench::BenchmarksMgr::UnitLabel(unit);
+
+        std::printf("--- [ benchmark summary (AVERAGE over all executed steps) ] --------------------\n");
+        std::printf("--------------------------------------------------------------------------------\n");
+
+        // header (same widths as rows: 30 / 10 / 5)
+        std::printf("%-30.30s  %10s  %5s\n", "operation group", unitStr, "%");
+        std::printf("--------------------------------------------------------------------------------\n");
+
+        auto PrintRow = [&](uint32_t i, bool isTotalSim)
+            {
+                const auto& group = opGroups[i];
+                const uint64_t ns = groupTimings[i];
+                const double t_unit = Bench::BenchmarksMgr::ConvertFromNs(unit, ns);
+
+                std::string alias;
+                if (isTotalSim)
+                {
+                    alias = "total simulation time";
+                }
+                else if (!group.ops.empty())
+                {
+                    for (std::size_t k = 0; k < group.ops.size(); ++k)
+                    {
+                        const auto op = group.ops[k];
+                        const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+                        if (k > 0) { alias += " + "; }
+                        alias += def.alias.data();
+                    }
+                }
+                else
+                {
+                    alias = "<empty>";
+                }
+
+                double pct = 0.0;
+                if (!isTotalSim && totalNs > 0)
+                {
+                    pct = 100.0 * static_cast<double>(ns) / static_cast<double>(totalNs);
+                }
+
+                if (isTotalSim)
+                {
+                    std::printf("%-30.30s  %10.2f  %5s  (avg over %lld steps)\n",
+                        alias.c_str(), t_unit, "--",
+                        static_cast<long long>(step));
+                }
+                else
+                {
+                    std::printf("%-30.30s  %10.2f  %5.1f\n",
+                        alias.c_str(), t_unit, pct);
+                }
+            };
+
+        // regular rows
+        for (uint32_t i = 0; i < opGroups.size(); ++i)
+        {
+            if (static_cast<int>(i) == totalSimIdx) { continue; }
+            PrintRow(i, false);
+        }
+
+        // total simulation row last
+        if (totalSimIdx >= 0)
+        {
+            std::printf("--------------------------------------------------------------------------------\n");
+            PrintRow(static_cast<std::size_t>(totalSimIdx), true);
+        }
+
+        std::printf("--------------------------------------------------------------------------------\n");
     }
 	
 } // namespace Sim
