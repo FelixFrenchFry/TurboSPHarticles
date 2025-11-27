@@ -58,10 +58,12 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 			{
 				// neighbor lists for particle i
 				// (delete contents, but keep capacity)
-				std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-				std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-				ff.clear();
-				fb.clear();
+				//std::vector<uint32_t>& ff = be_.neighborsFF_[i];
+				//std::vector<uint32_t>& fb = be_.neighborsFB_[i];
+				//ff.clear();
+				//fb.clear();
+				be_.neighborsFF_[i].clear();
+				be_.neighborsFB_[i].clear();
 
 				const float xi = be_.xPosF_[i];
 				const float yi = be_.yPosF_[i];
@@ -80,7 +82,7 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
 						// add actual neighbor to list
-						ff.push_back(j);
+						be_.neighborsFF_[i].push_back(j);
 					}
 				}
 
@@ -97,7 +99,7 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
 						// add actual neighbor to list
-						fb.push_back(j);
+						be_.neighborsFB_[i].push_back(j);
 					}
 				}
 			}
@@ -212,10 +214,12 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 			{
 				// neighbor lists for particle i
 				// (delete contents, but keep capacity)
-				std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-				std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-				ff.clear();
-				fb.clear();
+				//std::vector<uint32_t>& ff = be_.neighborsFF_[i];
+				//std::vector<uint32_t>& fb = be_.neighborsFB_[i];
+				//ff.clear();
+				//fb.clear();
+				be_.neighborsFF_[i].clear();
+				be_.neighborsFB_[i].clear();
 
 				const float xi = be_.xPosF_[i];
 				const float yi = be_.yPosF_[i];
@@ -257,7 +261,7 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										ff.push_back(j);
+										be_.neighborsFF_[i].push_back(j);
 									}
 								}
 							}
@@ -281,7 +285,7 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										fb.push_back(j);
+										be_.neighborsFB_[i].push_back(j);
 									}
 								}
 							}
@@ -625,10 +629,12 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 			{
 				// neighbor lists for particle i
 				// (delete contents, but keep capacity)
-				std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-				std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-				ff.clear();
-				fb.clear();
+				//std::vector<uint32_t>& ff = be_.neighborsFF_[i];
+				//std::vector<uint32_t>& fb = be_.neighborsFB_[i];
+				//ff.clear();
+				//fb.clear();
+				be_.neighborsFF_[i].clear();
+				be_.neighborsFB_[i].clear();
 
 				const float xi = be_.xPosF_[i];
 				const float yi = be_.yPosF_[i];
@@ -684,7 +690,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										ff.push_back(j);
+										be_.neighborsFF_[i].push_back(j);
 									}
 								}
 							}
@@ -713,7 +719,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										fb.push_back(j);
+										be_.neighborsFB_[i].push_back(j);
 									}
 								}
 							}

@@ -388,7 +388,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 			},
 			[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
 			{
-				for (uint32_t i = r.begin(); i != r.end(); ++i)
+				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
 					const float nf = static_cast<float>(neighborsFF_[i].size());
 					const float nb = static_cast<float>(neighborsFB_[i].size());
@@ -623,12 +623,14 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		neighborsFF_.resize(N_F_);
 		neighborsFB_.resize(N_F_);
 
+		// TODO: only use when inner neighbor list is std::vector, not boost::small_vector
+		/*
 		// expected number of fluid and boundary neighbors
-		const uint32_t N_expectedNumFF =
-			std::ceilf(2.0f * PI * std::powf(params.kernelRadius, 3.0f));
+		uint32_t N_expectedNumFF =
+			std::ceilf(2.0f * PI * std::powf(params.kernelSuppRatio, 3.0f));
 
-		const uint32_t N_expectedNumFB =
-			std::ceilf(0.5f * PI * std::powf(params.kernelRadius, 3.0f));
+		uint32_t N_expectedNumFB =
+			std::ceilf(0.5f * PI * std::powf(params.kernelSuppRatio, 3.0f));
 
 		// heuristic reserves (kept and re-used across steps)
 		tbb::parallel_for(
@@ -643,6 +645,7 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 			},
 			tbb::auto_partitioner{}
 		);
+		*/
 	}
 
 	Step_IISPH(params);

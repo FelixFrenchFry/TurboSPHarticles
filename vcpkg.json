@@ -9,6 +9,7 @@
     "nlohmann-json",
     "highfive",
     "cli11",
+    "boost-container",
     "unordered-dense",
     "eigen3",
     "glm",

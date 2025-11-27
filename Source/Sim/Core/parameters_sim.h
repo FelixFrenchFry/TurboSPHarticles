@@ -11,6 +11,8 @@
 
 // internal
 #include "Source/Base/enum_hub.h"
+static constexpr uint32_t N_expctNbrCountF = 42;
+static constexpr uint32_t N_expctNbrCountB = 20;
 
 
 

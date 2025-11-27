@@ -40,6 +40,7 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED)
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
@@ -196,6 +197,7 @@ target_link_libraries(TSP_H PUBLIC
     nlohmann_json::nlohmann_json
     HighFive
     CLI11::CLI11
+    Boost::boost
     Eigen3::Eigen
     glm::glm
     TBB::tbb

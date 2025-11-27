@@ -341,7 +341,7 @@ namespace Sim
         {
             std::snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.2f steps/s",
+                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.3f steps/s",
                 elH, elM, elS,
                 static_cast<long long>(step),
                 static_cast<long long>(totalSteps),
@@ -353,7 +353,7 @@ namespace Sim
         {
             std::snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld steps | %.2f steps/s",
+                "%02d:%02d:%02d elapsed | %lld steps | %.3f steps/s",
                 elH, elM, elS,
                 static_cast<long long>(step),
                 stepsPerSec
@@ -412,7 +412,7 @@ namespace Sim
 
         const char* unitStr = Bench::BenchmarksMgr::UnitLabel(unit);
 
-        std::printf("--- [ benchmark summary (AVERAGE over all executed steps) ] --------------------\n");
+        std::printf("--- [ benchmark summary (AVERAGE measurement over all executed steps) ----------\n");
         std::printf("--------------------------------------------------------------------------------\n");
 
         // header (same widths as rows: 30 / 10 / 5)

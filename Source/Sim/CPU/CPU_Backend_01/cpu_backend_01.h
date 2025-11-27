@@ -6,6 +6,7 @@
 
 // external
 #include <cstdint>
+#include <boost/container/small_vector.hpp>
 #include <vector>
 
 // internal
@@ -98,8 +99,10 @@ namespace Sim
 
 		// neighbor storage
 		// TODO: use small vector from boost library for inner vec?
-		std::vector<std::vector<uint32_t>> neighborsFF_;
-		std::vector<std::vector<uint32_t>> neighborsFB_;
+		//std::vector<std::vector<uint32_t>> neighborsFF_;
+		//std::vector<std::vector<uint32_t>> neighborsFB_;
+		std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>> neighborsFF_;
+		std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>> neighborsFB_;
 
 		// re-usable work (scratch) buffer for temp storage
 		mutable std::vector<float> workBuffer_;
