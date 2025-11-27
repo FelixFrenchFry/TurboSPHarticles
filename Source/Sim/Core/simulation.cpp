@@ -401,9 +401,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running\n");
-
-	DiagnosticsMgr::PrintAveragePerformanceSummary(
-		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
 }
 
 void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
@@ -511,9 +508,6 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running\n");
-
-	DiagnosticsMgr::PrintAveragePerformanceSummary(
-		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
 }
 
 // requests the controller thread to stop cleanly

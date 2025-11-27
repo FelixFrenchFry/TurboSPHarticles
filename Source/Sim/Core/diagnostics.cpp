@@ -227,28 +227,35 @@ namespace Sim
 
         int lineCount = 0;
 
-        std::printf("--- [ benchmark summary (SINGLE measurement of the last executed step) ] -------\n");
+        std::printf("--- [ benchmark summary ] ------------------------------------------------------\n");
         lineCount++;
         std::printf("--------------------------------------------------------------------------------\n");
         lineCount++;
 
         // per-group timing
-        std::vector<uint64_t> groupTimings(opGroups.size(), 0);
+        std::vector<uint64_t> groupLatest(opGroups.size(), 0);
+        std::vector<uint64_t> groupAvg(opGroups.size(), 0);
 
-        // sum of all groups except Total_Sim (for percentages)
-        uint64_t totalNs = 0;
+        // sums for percentage calculation (excluding Total_Sim)
+        uint64_t totalNsLatest = 0;
+        uint64_t totalNsAvg = 0;
         int totalSimIdx = -1;
 
         for (std::size_t i = 0; i < opGroups.size(); i++)
         {
             const auto& group = opGroups[i];
 
-            uint64_t groupNs = 0;
+            uint64_t groupNsLatest = 0;
+            uint64_t groupNsAvg = 0;
+
             for (auto op : group.ops)
             {
-                groupNs += benchMgr.GetBench_Latest(op);
+                groupNsLatest += benchMgr.GetBench_Latest(op);
+                groupNsAvg += benchMgr.GetBench_Avg_OverAll(op);
             }
-            groupTimings[i] = groupNs;
+
+            groupLatest[i] = groupNsLatest;
+            groupAvg[i] = groupNsAvg;
 
             if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total_Sim)
             {
@@ -256,14 +263,21 @@ namespace Sim
             }
             else
             {
-                totalNs += groupNs;
+                totalNsLatest += groupNsLatest;
+                totalNsAvg += groupNsAvg;
             }
         }
 
         const char* unitStr = Bench::BenchmarksMgr::UnitLabel(unit);
 
-        // header (same widths as rows: 30 / 10 / 5)
-        std::printf("%-30.30s  %10s  %5s\n", "operation group", unitStr, "%");
+        char latestLabel[32];
+        char avgLabel[32];
+        std::snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
+        std::snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
+
+        // header: 30 (name) + latest pair + gap + avg pair
+        std::printf("%-30.30s | %12s  %6s    | %12s  %6s\n",
+            "operation group", latestLabel, "%", avgLabel, "%");
         lineCount++;
         std::printf("--------------------------------------------------------------------------------\n");
         lineCount++;
@@ -271,8 +285,12 @@ namespace Sim
         auto PrintRow = [&](uint32_t i, bool isTotalSim)
             {
                 const auto& group = opGroups[i];
-                const uint64_t ns = groupTimings[i];
-                const double t_unit = Bench::BenchmarksMgr::ConvertFromNs(unit, ns);
+
+                const uint64_t nsLatest = groupLatest[i];
+                const uint64_t nsAvg = groupAvg[i];
+
+                const double t_latest = Bench::BenchmarksMgr::ConvertFromNs(unit, nsLatest);
+                const double t_avg = Bench::BenchmarksMgr::ConvertFromNs(unit, nsAvg);
 
                 std::string alias;
                 if (isTotalSim)
@@ -294,21 +312,32 @@ namespace Sim
                     alias = "<empty>";
                 }
 
-                double pct = 0.0;
-                if (!isTotalSim && totalNs > 0)
+                double pctLatest = 0.0;
+                double pctAvg = 0.0;
+
+                if (!isTotalSim)
                 {
-                    pct = 100.0 * static_cast<double>(ns) / static_cast<double>(totalNs);
+                    if (totalNsLatest > 0)
+                    {
+                        pctLatest = 100.0 * static_cast<double>(nsLatest)
+                            / static_cast<double>(totalNsLatest);
+                    }
+                    if (totalNsAvg > 0)
+                    {
+                        pctAvg = 100.0 * static_cast<double>(nsAvg)
+                            / static_cast<double>(totalNsAvg);
+                    }
                 }
 
                 if (isTotalSim)
                 {
-                    std::printf("%-30.30s  %10.2f  %5s\n",
-                        alias.c_str(), t_unit, "--");
+                    std::printf("%-30.30s | %12.2f  %6s    | %12.2f  %6s\n",
+                        alias.c_str(), t_latest, "---", t_avg, "---");
                 }
                 else
                 {
-                    std::printf("%-30.30s  %10.2f  %5.1f\n",
-                        alias.c_str(), t_unit, pct);
+                    std::printf("%-30.30s | %12.2f  %6.1f    | %12.2f  %6.1f\n",
+                        alias.c_str(), t_latest, pctLatest, t_avg, pctAvg);
                 }
 
                 lineCount++;
