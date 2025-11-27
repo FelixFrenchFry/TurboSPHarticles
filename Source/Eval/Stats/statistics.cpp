@@ -12,7 +12,7 @@
 using namespace Stats;
 
 StatisticsMgr::StatisticsMgr(const Sim::SimParams& simParams)
-	: maxRecCount_(simParams.maxStatRecCount)
+	: maxRecCount_(simParams.maxStatRecs)
 	, curRecCount_(0)
 {
 	recLatest_ = {};

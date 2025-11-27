@@ -59,8 +59,8 @@ int main(int argc, char** argv)
 
 		// simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
-		simParamsMgr.PresetParams_B();
-		simParamsMgr.AssertParamDerivationCorrectness();
+		// TODO: make adjustable via command line argument?
+		simParamsMgr.LoadSimParamsFromJsonFile("SimParams_B.json");
 
 		// sub-systems
 		Scene::ScenarioMgr scenarioMgr{};
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
 		// --- [ main loop ] ---------------------------------------------------
 
 		// simulation runs on all available threads
-		simulationMgr.Launch_Blocking(100);
+		simulationMgr.Launch_Blocking(simParamsMgr.SnapshotParams().first.maxSteps);
 
 		// --- [ shutdown ] ----------------------------------------------------
 

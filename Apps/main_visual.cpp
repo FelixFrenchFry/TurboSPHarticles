@@ -64,8 +64,8 @@ int main(int argc, char** argv)
 
 		// simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
-		simParamsMgr.PresetParams_B();
-		simParamsMgr.AssertParamDerivationCorrectness();
+		// TODO: make adjustable via command line argument?
+		simParamsMgr.LoadSimParamsFromJsonFile("SimParams_B.json");
 
 		// sub-systems
 		Vis::VisParamsMgr visParamsMgr{};
@@ -109,7 +109,7 @@ int main(int argc, char** argv)
 
 		// simulation runs on background controller thread
 		// (spawn N-1 worker threads within)
-		simulationMgr.Launch_Async();
+		simulationMgr.Launch_Async(simParamsMgr.SnapshotParams().first.maxSteps);
 
 		// visualization runs on main thread
 		visualizationMgr.RunVis();

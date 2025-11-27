@@ -6,6 +6,7 @@
     "tbb",
     "benchmark",
     "spdlog",
+    "nlohmann-json",
     "highfive",
     "cli11",
     "unordered-dense",

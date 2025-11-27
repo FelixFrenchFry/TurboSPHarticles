@@ -42,11 +42,9 @@ bool SimulationMgr::Init()
 
 	// TODO: load initial sim state from a file
 
-	// default sim scenario (BreakingDam)
-	SelectSimScenario(Base::ScenarioType::BreakingDam);
+	SelectSimScenario(simParams_.scenarioType);
 
-	// default sim backend (CPU01)
-	SelectSimBackend(Base::BackendVersion::CPU01);
+	SelectSimBackend(simParams_.backendVersion);
 
 	ReBuildInitialSimState();
 

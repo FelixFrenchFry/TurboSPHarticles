@@ -22,6 +22,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# path to the /Configs folder
+set(TSP_CONFIG_DIR "${CMAKE_SOURCE_DIR}/Configs")
+
 # ==================================
 # ===== dependencies via vcpkg =====
 
@@ -34,6 +37,7 @@ endif()
 find_package(TBB CONFIG REQUIRED)
 find_package(benchmark CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(Eigen3 CONFIG REQUIRED)
@@ -182,9 +186,14 @@ target_include_directories(TSP_H PUBLIC
     ${CMAKE_SOURCE_DIR}
 )
 
+target_compile_definitions(TSP_H PUBLIC
+    TSP_CONFIG_DIR=\"${TSP_CONFIG_DIR}\"
+)
+
 target_link_libraries(TSP_H PUBLIC
     benchmark::benchmark
     spdlog::spdlog
+    nlohmann_json::nlohmann_json
     HighFive
     CLI11::CLI11
     Eigen3::Eigen
@@ -235,6 +244,7 @@ if(ENABLE_VIS)
         TURBOSPHARTICLES_WITH_VIZ=1
         GLFW_INCLUDE_NONE
         IMGUI_IMPL_OPENGL_LOADER_GLAD
+        TSP_CONFIG_DIR=\"${TSP_CONFIG_DIR}\"
     )
 endif()
 

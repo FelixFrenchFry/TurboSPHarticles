@@ -3,6 +3,9 @@
 // external
 #include <spdlog/spdlog.h>
 #include <thread>
+#include <filesystem>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -11,6 +14,7 @@
 
 
 using namespace Sim;
+using nlohmann::json;
 
 std::pair<SimParams, int64_t> SimParamsMgr::SnapshotParams() const
 {
@@ -49,7 +53,265 @@ int64_t SimParamsMgr::StableVersion() const
 	}
 }
 
-void SimParamsMgr::Set_SimRunning(bool simRunning)
+bool SimParamsMgr::LoadSimParamsFromJsonFile(
+	const std::string& fileName, bool verbose)
+{
+	namespace fs = std::filesystem;
+
+	// use TSP_CONFIG_DIR from the build system as base path
+	fs::path base(TSP_CONFIG_DIR);
+	fs::path full = base / fileName;
+	std::string path = full.string();
+
+	std::ifstream in(path);
+
+	if (!in)
+	{
+		SPDLOG_ERROR("Failed to open SimParams JSON file: {}",
+			path.c_str());
+		return false;
+	}
+
+	json jfile;
+	try
+	{
+		in >> jfile;
+	}
+	catch (const std::exception& e)
+	{
+		SPDLOG_ERROR("Failed to parse JSON {}: {}",
+			path.c_str(), e.what());
+		return false;
+	}
+
+	// --- [ modes ] -----------------------------------------------------------
+
+	// helpers for reading enums
+	auto ParseBackendVersion = [](const json& v, Base::BackendVersion& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "CPU01") { out = Base::BackendVersion::CPU01; return true; }
+				if (s == "CPU02") { out = Base::BackendVersion::CPU02; return true; }
+				if (s == "GPU01") { out = Base::BackendVersion::GPU01; return true; }
+
+				// TODO: add more
+
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				out = static_cast<Base::BackendVersion>(v.get<int>());
+
+				return true;
+			}
+
+			return false;
+		};
+
+	auto ParseScenarioType = [](const json& v, Base::ScenarioType& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "BreakingDam") { out = Base::ScenarioType::BreakingDam; return true; }
+
+				// TODO: add more
+
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				out = static_cast<Base::ScenarioType>(v.get<int>());
+
+				return true;
+			}
+
+			return false;
+		};
+
+	// TODO: implement actual setters for backend version and scenario type?
+	{
+		BeginWrite();
+
+		if (auto it = jfile.find("backendVersion"); it != jfile.end())
+		{
+			Base::BackendVersion bv;
+			if (ParseBackendVersion(*it, bv))
+			{
+				params_.backendVersion = bv;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'backendVersion' in JSON");
+			}
+		}
+
+		if (auto it = jfile.find("scenarioType"); it != jfile.end())
+		{
+			Base::ScenarioType st;
+			if (ParseScenarioType(*it, st))
+			{
+				params_.scenarioType = st;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'scenarioType' in JSON");
+			}
+		}
+
+		if (auto it = jfile.find("maxSteps"); it != jfile.end())
+		{
+			params_.maxSteps = it->get<int64_t>();
+		}
+
+		EndWrite();
+	}
+
+	// --- [ simulation state flags ] ------------------------------------------
+
+	Set_SimRunning(false, verbose);
+	Set_SimRunNextStep(false, verbose);
+
+	// --- [ time step ] -------------------------------------------------------
+
+	if (auto it = jfile.find("timeStep"); it != jfile.end())
+	{
+		Set_TimeStep(it->get<float>(), verbose);
+	}
+
+	// --- [ particle size ] ---------------------------------------------------
+
+	if (auto it = jfile.find("particleSize"); it != jfile.end())
+	{
+		Set_ParticleSize(it->get<float>(),
+			Base::ParticleType::Fluid, verbose);
+		Set_ParticleSize(it->get<float>(),
+			Base::ParticleType::Boundary, verbose);
+	}
+
+	// --- [ kernel support ratio ] --------------------------------------------
+
+	if (auto it = jfile.find("kernelSuppRatio"); it != jfile.end())
+	{
+		Set_KernelSuppRatio(it->get<float>(), verbose);
+	}
+
+	// --- [ rest density ] ----------------------------------------------------
+
+	if (auto it = jfile.find("restDensityF"); it != jfile.end())
+	{
+		Set_RestDensity(it->get<float>(),
+			Base::ParticleType::Fluid, verbose);
+	}
+
+	if (auto it = jfile.find("restDensityB"); it != jfile.end())
+	{
+		Set_RestDensity(it->get<float>(),
+			Base::ParticleType::Boundary, verbose);
+	}
+
+	// --- [ viscosity ] -------------------------------------------------------
+
+	if (auto it = jfile.find("viscosityF"); it != jfile.end())
+	{
+		Set_Viscosity(it->get<float>(),
+			Base::ParticleType::Fluid, verbose);
+	}
+
+	if (auto it = jfile.find("viscosityB"); it != jfile.end())
+	{
+		Set_Viscosity(it->get<float>(),
+			Base::ParticleType::Boundary, verbose);
+	}
+
+	// --- [ pressure ] --------------------------------------------------------
+
+	if (auto it = jfile.find("gammaPress"); it != jfile.end())
+	{
+		Set_GammaPress(it->get<float>(), verbose);
+	}
+
+	if (auto it = jfile.find("jacobiOmega"); it != jfile.end())
+	{
+		Set_JacobiOmega(it->get<float>(), verbose);
+	}
+
+	// --- [ gravity ] ---------------------------------------------------------
+
+	if (auto it = jfile.find("gravity"); it != jfile.end() &&
+		it->is_array() && it->size() == 3)
+	{
+		glm::vec3 g;
+		g.x = (*it)[0].get<float>();
+		g.y = (*it)[1].get<float>();
+		g.z = (*it)[2].get<float>();
+		Set_Gravity(g, verbose);
+	}
+
+	// --- [ jitter ] ----------------------------------------------------------
+
+	// TODO: implement setters for jitterFrac/jitterSeed stuff?
+	{
+		BeginWrite();
+
+		if (auto it = jfile.find("jitterFracF"); it != jfile.end())
+		{
+			params_.jitterFracF = it->get<float>();
+		}
+
+		if (auto it = jfile.find("jitterSeedF"); it != jfile.end())
+		{
+			params_.jitterSeedF = it->get<int64_t>();
+		}
+
+		if (auto it = jfile.find("jitterFracB"); it != jfile.end())
+		{
+			params_.jitterFracB = it->get<float>();
+		}
+
+		if (auto it = jfile.find("jitterSeedB"); it != jfile.end())
+		{
+			params_.jitterSeedB = it->get<int64_t>();
+		}
+
+		EndWrite();
+	}
+
+	// --- [ boundary layers ] -------------------------------------------------
+
+	if (auto it = jfile.find("boundaryLayers"); it != jfile.end())
+	{
+		Set_BoundaryLayers(it->get<int>(), verbose);
+	}
+
+	// --- [ statistics and benchmarks tracking ] ------------------------------
+
+	// TODO: implement setters for maxStatRecs/maxBenchRecs?
+	{
+		BeginWrite();
+
+		if (auto it = jfile.find("maxStatRecs"); it != jfile.end())
+		{
+			params_.maxStatRecs = it->get<int64_t>();
+		}
+
+		if (auto it = jfile.find("maxBenchRecs"); it != jfile.end())
+		{
+			params_.maxBenchRecs = it->get<int64_t>();
+		}
+
+		EndWrite();
+	}
+
+	AssertParamDerivationCorrectness();
+
+	return true;
+}
+
+void SimParamsMgr::Set_SimRunning(
+	bool simRunning, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -58,8 +320,11 @@ void SimParamsMgr::Set_SimRunning(bool simRunning)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'simRunning' from {} to {}",
-	//	params_.simRunning, simRunning);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'simRunning' from {} to {}",
+			params_.simRunning, simRunning);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -67,7 +332,8 @@ void SimParamsMgr::Set_SimRunning(bool simRunning)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_SimRunNextStep(bool simRunNextStep)
+void SimParamsMgr::Set_SimRunNextStep(
+	bool simRunNextStep, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -78,8 +344,11 @@ void SimParamsMgr::Set_SimRunNextStep(bool simRunNextStep)
 
 	if (params_.simRunning) { return; } // sim already fully running
 
-	//SPDLOG_INFO("Changed 'simRunNextStep' from {} to {}",
-	//	params_.simRunNextStep, simRunNextStep);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'simRunNextStep' from {} to {}",
+			params_.simRunNextStep, simRunNextStep);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -87,7 +356,8 @@ void SimParamsMgr::Set_SimRunNextStep(bool simRunNextStep)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_NumParticles(uint32_t N, Base::ParticleType type)
+void SimParamsMgr::Set_NumParticles(
+	uint32_t N, Base::ParticleType type, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -111,18 +381,22 @@ void SimParamsMgr::Set_NumParticles(uint32_t N, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		//SPDLOG_INFO("Changed 'N_F' from {} to {} "
-		//	"(and dependent params accordingly)",
-		//	params_.N_F, N);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'N_F' from {} to {}",
+				params_.N_F, N);
+		}
 
 		// apply changes
 		params_.N_F = N;
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		//SPDLOG_INFO("Changed 'N_B' from {} to {} "
-		//	"(and dependent params accordingly)",
-		//	params_.N_B, N);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'N_B' from {} to {}",
+				params_.N_B, N);
+		}
 
 		// apply changes
 		params_.N_B = N;
@@ -131,7 +405,8 @@ void SimParamsMgr::Set_NumParticles(uint32_t N, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_TimeStep(float timeStep)
+void SimParamsMgr::Set_TimeStep(
+	float timeStep, bool verbose)
 {
 	if (!(timeStep > 0.0f))
 	{
@@ -146,8 +421,11 @@ void SimParamsMgr::Set_TimeStep(float timeStep)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'timeStep' from {} to {}",
-	//	params_.timeStep, timeStep);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'timeStep' from {} to {}",
+			params_.timeStep, timeStep);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -155,7 +433,8 @@ void SimParamsMgr::Set_TimeStep(float timeStep)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
+void SimParamsMgr::Set_ParticleSize(
+	float particleSize, Base::ParticleType type, bool verbose)
 {
 	if (!(particleSize > 0.0f))
 	{
@@ -185,9 +464,12 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		//SPDLOG_INFO("Changed 'particleSizeF' from {} to {} "
-		//			"(and dependent params accordingly)",
-		//	params_.particleSizeF, particleSize);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'particleSizeF' from {} to {} "
+						"(and dependent params accordingly)",
+				params_.particleSizeF, particleSize);
+		}
 
 		// apply changes
 		params_.particleSizeF = particleSize;
@@ -199,9 +481,12 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		//SPDLOG_INFO("Changed 'particleSizeB' from {} to {} "
-		//			"(and dependent params accordingly)",
-		//	params_.particleSizeB, particleSize);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'particleSizeB' from {} to {} "
+						"(and dependent params accordingly)",
+				params_.particleSizeB, particleSize);
+		}
 
 		// apply changes
 		params_.particleSizeB = particleSize;
@@ -215,7 +500,8 @@ void SimParamsMgr::Set_ParticleSize(float particleSize, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
+void SimParamsMgr::Set_RestDensity(
+	float restDensity, Base::ParticleType type, bool verbose)
 {
 	if (!(restDensity > 0.0f))
 	{
@@ -245,9 +531,12 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		//SPDLOG_INFO("Changed 'restDensityF' from {} to {} "
-		//			"(and dependent params accordingly)",
-		//	params_.restDensityF, restDensity);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'restDensityF' from {} to {} "
+						"(and dependent params accordingly)",
+				params_.restDensityF, restDensity);
+		}
 
 		// apply changes
 		params_.restDensityF = restDensity;
@@ -257,9 +546,12 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		//SPDLOG_INFO("Changed 'restDensityB' from {} to {} "
-		//			"(and dependent params accordingly)",
-		//	params_.restDensityB, restDensity);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'restDensityB' from {} to {} "
+						"(and dependent params accordingly)",
+				params_.restDensityB, restDensity);
+		}
 
 		// apply changes
 		params_.restDensityB = restDensity;
@@ -271,7 +563,8 @@ void SimParamsMgr::Set_RestDensity(float restDensity, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
+void SimParamsMgr::Set_Mass(
+	float mass, Base::ParticleType type, bool verbose)
 {
 	if (!(mass > 0.0f))
 	{
@@ -301,9 +594,12 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		//SPDLOG_INFO("Changed 'massF' from {} to {} "
-		//	"(and dependent params accordingly)",
-		//	params_.massF, mass);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'massF' from {} to {} "
+						"(and dependent params accordingly)",
+				params_.massF, mass);
+		}
 
 		// apply changes
 		params_.massF = mass;
@@ -311,9 +607,12 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		//SPDLOG_INFO("Changed 'massB' from {} to {} "
-		//	"(and dependent params accordingly)",
-		//	params_.massB, mass);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'massB' from {} to {} "
+						"(and dependent params accordingly)",
+				params_.massB, mass);
+		}
 
 		// apply changes
 		params_.massB = mass;
@@ -323,7 +622,8 @@ void SimParamsMgr::Set_Mass(float mass, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_Viscosity(float viscosity, Base::ParticleType type)
+void SimParamsMgr::Set_Viscosity(
+	float viscosity, Base::ParticleType type, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -347,16 +647,22 @@ void SimParamsMgr::Set_Viscosity(float viscosity, Base::ParticleType type)
 
 	if (type == Base::ParticleType::Fluid)
 	{
-		//SPDLOG_INFO("Changed 'viscosityF' from {} to {}",
-		//	params_.viscosityF, viscosity);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'viscosityF' from {} to {}",
+				params_.viscosityF, viscosity);
+		}
 
 		// apply changes
 		params_.viscosityF = viscosity;
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
-		//SPDLOG_INFO("Changed 'viscosityB' from {} to {}",
-		//	params_.viscosityB, viscosity);
+		if (verbose)
+		{
+			SPDLOG_INFO("Changed 'viscosityB' from {} to {}",
+				params_.viscosityB, viscosity);
+		}
 
 		// apply changes
 		params_.viscosityB = viscosity;
@@ -365,7 +671,8 @@ void SimParamsMgr::Set_Viscosity(float viscosity, Base::ParticleType type)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_GammaPress(float gammaPress)
+void SimParamsMgr::Set_GammaPress(
+	float gammaPress, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -374,8 +681,11 @@ void SimParamsMgr::Set_GammaPress(float gammaPress)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'gammaPress' from {} to {}",
-	//	params_.gammaPress, gammaPress);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'gammaPress' from {} to {}",
+			params_.gammaPress, gammaPress);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -383,7 +693,8 @@ void SimParamsMgr::Set_GammaPress(float gammaPress)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_JacobiOmega(float jacobiOmega)
+void SimParamsMgr::Set_JacobiOmega(
+	float jacobiOmega, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -392,8 +703,11 @@ void SimParamsMgr::Set_JacobiOmega(float jacobiOmega)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'jacobiOmega' from {} to {}",
-	//	params_.jacobiOmega, jacobiOmega);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'jacobiOmega' from {} to {}",
+			params_.jacobiOmega, jacobiOmega);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -401,7 +715,8 @@ void SimParamsMgr::Set_JacobiOmega(float jacobiOmega)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_Gravity(glm::vec3 gravity)
+void SimParamsMgr::Set_Gravity(
+	glm::vec3 gravity, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
@@ -410,9 +725,12 @@ void SimParamsMgr::Set_Gravity(glm::vec3 gravity)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
-	//	params_.gravity.x, params_.gravity.y, params_.gravity.z,
-	//	gravity.x, gravity.y, gravity.z);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
+			params_.gravity.x, params_.gravity.y, params_.gravity.z,
+			gravity.x, gravity.y, gravity.z);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -420,7 +738,8 @@ void SimParamsMgr::Set_Gravity(glm::vec3 gravity)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
+void SimParamsMgr::Set_KernelSuppRatio(
+	float kernelSuppRatio, bool verbose)
 {
 	if (!(kernelSuppRatio >= 1.0f))
 	{
@@ -435,8 +754,11 @@ void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
-	//	params_.kernelSuppRatio, kernelSuppRatio);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
+			params_.kernelSuppRatio, kernelSuppRatio);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -446,7 +768,8 @@ void SimParamsMgr::Set_KernelSuppRatio(float kernelSuppRatio)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_KernelRadius(float kernelRadius)
+void SimParamsMgr::Set_KernelRadius(
+	float kernelRadius, bool verbose)
 {
 	if (!(kernelRadius > 0.0f))
 	{
@@ -461,8 +784,11 @@ void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
-	//	params_.kernelRadius, kernelRadius);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
+			params_.kernelRadius, kernelRadius);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -472,7 +798,8 @@ void SimParamsMgr::Set_KernelRadius(float kernelRadius)
 	EndWrite();
 }
 
-void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
+void SimParamsMgr::Set_BoundaryLayers(
+	int boundaryLayers, bool verbose)
 {
 	if (!(boundaryLayers >= 0))
 	{
@@ -487,8 +814,11 @@ void SimParamsMgr::Set_BoundaryLayers(int boundaryLayers)
 
 	if (!changed) { return; } // nothing to change
 
-	//SPDLOG_INFO("Changed 'boundaryLayers' from {} to {}",
-	//	params_.boundaryLayers, boundaryLayers);
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'boundaryLayers' from {} to {}",
+			params_.boundaryLayers, boundaryLayers);
+	}
 
 	// apply changes
 	BeginWrite();
@@ -634,62 +964,6 @@ bool SimParamsMgr::AssertParamDerivationCorrectness()
 	});
 
 	return ok;
-}
-
-void SimParamsMgr::PresetParams_A()
-{
-	// TODO: differentiate between fluid and boundary particles?
-
-	float timeStep			= 0.0001f;
-	float particleSize		= 0.01f;
-	float restDensity		= 1'000.0f;
-	float gammaPress		= 0.5f;
-	float jacobiOmega		= 0.75f;
-	float viscosity			= 0.000003f;
-	float gravity			= -9.81f;
-	float kernelSuppRatio	= 2.0f;
-
-	Set_SimRunning(false);
-	Set_SimRunNextStep(false);
-	Set_TimeStep(timeStep);
-	Set_ParticleSize(particleSize, Base::ParticleType::Fluid);
-	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
-	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
-	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
-	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
-	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
-	Set_GammaPress(gammaPress);
-	Set_JacobiOmega(jacobiOmega);
-	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
-	Set_KernelSuppRatio(kernelSuppRatio);
-}
-
-void SimParamsMgr::PresetParams_B()
-{
-	// TODO: differentiate between fluid and boundary particles?
-
-	float timeStep			= 0.001f;
-	float particleSize		= 0.01f;
-	float restDensity		= 1'000.0f;
-	float gammaPress		= 0.5f;
-	float jacobiOmega		= 0.75f;
-	float viscosity			= 0.00003f;
-	float gravity			= -9.81f;
-	float kernelSuppRatio	= 2.0f;
-
-	Set_SimRunning(false);
-	Set_SimRunNextStep(false);
-	Set_TimeStep(timeStep);
-	Set_ParticleSize(particleSize, Base::ParticleType::Fluid);
-	Set_ParticleSize(particleSize, Base::ParticleType::Boundary);
-	Set_RestDensity(restDensity, Base::ParticleType::Fluid);
-	Set_RestDensity(restDensity, Base::ParticleType::Boundary);
-	Set_Viscosity(viscosity, Base::ParticleType::Fluid);
-	Set_Viscosity(viscosity, Base::ParticleType::Boundary);
-	Set_GammaPress(gammaPress);
-	Set_JacobiOmega(jacobiOmega);
-	Set_Gravity(glm::vec3{ 0.0f, gravity, 0.0f });
-	Set_KernelSuppRatio(kernelSuppRatio);
 }
 
 void SimParamsMgr::BeginWrite()

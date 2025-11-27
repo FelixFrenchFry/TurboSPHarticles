@@ -14,7 +14,7 @@
 using namespace Bench;
 
 BenchmarksMgr::BenchmarksMgr(const Sim::SimParams& simParams)
-	: maxRecCount_(simParams.maxBenchRecCount)
+	: maxRecCount_(simParams.maxBenchRecs)
 	, curRecCount_(0)
 {
 	recLatest_ = {};
