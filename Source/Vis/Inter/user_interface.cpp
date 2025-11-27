@@ -455,12 +455,16 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 		{
 			Stats::StatMetric::NumF,
 			Stats::StatMetric::NumB,
-			Stats::StatMetric::NumNeighFF_Avg,
-			Stats::StatMetric::NumNeighFB_Avg,
-			Stats::StatMetric::NumNeighFF_Min,
-			Stats::StatMetric::NumNeighFB_Min,
-			Stats::StatMetric::NumNeighFF_Max,
-			Stats::StatMetric::NumNeighFB_Max
+			Stats::StatMetric::NumNbrFF_Avg,
+			Stats::StatMetric::NumNbrFF_P95,
+			Stats::StatMetric::NumNbrFF_P99,
+			Stats::StatMetric::NumNbrFF_Min,
+			Stats::StatMetric::NumNbrFF_Max,
+			Stats::StatMetric::NumNbrFB_Avg,
+			Stats::StatMetric::NumNbrFB_P95,
+			Stats::StatMetric::NumNbrFB_P99,
+			Stats::StatMetric::NumNbrFB_Min,
+			Stats::StatMetric::NumNbrFB_Max
 		});
 
 		ImGui::TreePop();

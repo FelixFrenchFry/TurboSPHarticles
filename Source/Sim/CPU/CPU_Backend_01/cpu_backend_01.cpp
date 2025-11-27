@@ -342,6 +342,8 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 {
 	using namespace Stats;
 
+	return;
+
 	// --- [ particle counts ] -------------------------------------------------
 
 	const uint32_t NF = N_F_;
@@ -357,10 +359,15 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 									Bench::BenchOp::Statistics_Velocity });
 
 	float sumFF = 0.0f;
-	float sumFB = 0.0f;
+	float nbrFF_p95 = 0.0f;
+	float nbrFF_p99 = 0.0f;
 	float minFF = std::numeric_limits<float>::max();
-	float minFB = std::numeric_limits<float>::max();
 	float maxFF = 0.0f;
+
+	float sumFB = 0.0f;
+	float nbrFB_p95 = 0.0f;
+	float nbrFB_p99 = 0.0f;
+	float minFB = std::numeric_limits<float>::max();
 	float maxFB = 0.0f;
 
 	if (NF > 0)
@@ -368,10 +375,10 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		struct NeighStatsLocal
 		{
 			float sumFF;
-			float sumFB;
 			float minFF;
-			float minFB;
 			float maxFF;
+			float sumFB;
+			float minFB;
 			float maxFB;
 		};
 
@@ -380,10 +387,10 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 			NeighStatsLocal
 			{
 				.sumFF = 0.0f,
-				.sumFB = 0.0f,
 				.minFF = std::numeric_limits<float>::max(),
-				.minFB = std::numeric_limits<float>::max(),
 				.maxFF = 0.0f,
+				.sumFB = 0.0f,
+				.minFB = std::numeric_limits<float>::max(),
 				.maxFB = 0.0f
 			},
 			[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
@@ -394,12 +401,11 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 					const float nb = static_cast<float>(neighborsFB_[i].size());
 
 					local.sumFF += nf;
-					local.sumFB += nb;
-
 					if (nf < local.minFF) [[unlikely]] { local.minFF = nf; }
-					if (nb < local.minFB) [[unlikely]] { local.minFB = nb; }
-
 					if (nf > local.maxFF) [[unlikely]] { local.maxFF = nf; }
+
+					local.sumFB += nb;
+					if (nb < local.minFB) [[unlikely]] { local.minFB = nb; }
 					if (nb > local.maxFB) [[unlikely]] { local.maxFB = nb; }
 				}
 				return local;
@@ -409,10 +415,10 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 				NeighStatsLocal r;
 
 				r.sumFF = a.sumFF + b.sumFF;
-				r.sumFB = a.sumFB + b.sumFB;
 				r.minFF = std::min(a.minFF, b.minFF);
-				r.minFB = std::min(a.minFB, b.minFB);
 				r.maxFF = std::max(a.maxFF, b.maxFF);
+				r.sumFB = a.sumFB + b.sumFB;
+				r.minFB = std::min(a.minFB, b.minFB);
 				r.maxFB = std::max(a.maxFB, b.maxFB);
 
 				return r;
@@ -421,10 +427,10 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		);
 
 		sumFF = globalNeigh.sumFF;
-		sumFB = globalNeigh.sumFB;
 		minFF = globalNeigh.minFF;
-		minFB = globalNeigh.minFB;
 		maxFF = globalNeigh.maxFF;
+		sumFB = globalNeigh.sumFB;
+		minFB = globalNeigh.minFB;
 		maxFB = globalNeigh.maxFB;
 	}
 	if (NF == 0) // reasonable defaults for empty sim
@@ -433,9 +439,62 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		minFB = 0.0f;
 	}
 
-	// --- [ density stats ] ---------------------------------------------------
+	if (NF > 0) // determine percentiles
+	{
+		// reuse workBuffer_ for neighbor counts
+		workBuffer_.resize(NF);
 
-	workBuffer_.resize(NF);
+		// FF
+		for (uint32_t i = 0; i < NF; i++)
+		{
+			workBuffer_[i] = static_cast<float>(neighborsFF_[i].size());
+		}
+
+		{
+			// indices of the 95th and 99th percentiles
+			const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
+			const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+
+			auto nth95 = workBuffer_.begin() + i95;
+			auto nth99 = workBuffer_.begin() + i99;
+
+			// partially sort so that the desired percentiles can be extracted
+			std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
+			std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
+
+			nbrFF_p95 = *nth95;
+			nbrFF_p99 = *nth99;
+		}
+
+		// FB
+		for (uint32_t i = 0; i < NF; ++i)
+		{
+			workBuffer_[i] = static_cast<float>(neighborsFB_[i].size());
+		}
+
+		{
+			// indices of the 95th and 99th percentiles
+			const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
+			const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+
+			auto nth95 = workBuffer_.begin() + i95;
+			auto nth99 = workBuffer_.begin() + i99;
+
+			// partially sort so that the desired percentiles can be extracted
+			std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
+			std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
+
+			nbrFB_p95 = *nth95;
+			nbrFB_p99 = *nth99;
+		}
+	}
+	else // reasonable defaults for empty sim
+	{
+		nbrFF_p95 = nbrFF_p99 = 0.0f;
+		nbrFB_p95 = nbrFB_p99 = 0.0f;
+	}
+
+	// --- [ density stats ] ---------------------------------------------------
 
 	float sumRelErr = 0.0f;
 	float minRelErr = std::numeric_limits<float>::max();
@@ -495,8 +554,11 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	float p95 = 0.0f;
 	float p99 = 0.0f;
 
-	if (NF) // determine percentiles
+	if (NF > 0) // determine percentiles
 	{
+		// reuse workBuffer_ for density deviation
+		workBuffer_.resize(NF);
+
 		// indices of the 95th and 99th percentiles
 		const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
 		const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
@@ -586,12 +648,17 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 	// --- [ writes to record ] ------------------------------------------------
 
-	Set(record, StatMetric::NumNeighFF_Avg, sumFF * invNF);
-	Set(record, StatMetric::NumNeighFB_Avg, sumFB * invNF);
-	Set(record, StatMetric::NumNeighFF_Min, minFF);
-	Set(record, StatMetric::NumNeighFB_Min, minFB);
-	Set(record, StatMetric::NumNeighFF_Max, maxFF);
-	Set(record, StatMetric::NumNeighFB_Max, maxFB);
+	Set(record, StatMetric::NumNbrFF_Avg, sumFF * invNF);
+	Set(record, StatMetric::NumNbrFF_P95, nbrFF_p95);
+	Set(record, StatMetric::NumNbrFF_P99, nbrFF_p99);
+	Set(record, StatMetric::NumNbrFF_Min, minFF);
+	Set(record, StatMetric::NumNbrFF_Max, maxFF);
+	
+	Set(record, StatMetric::NumNbrFB_Avg, sumFB * invNF);
+	Set(record, StatMetric::NumNbrFB_P95, nbrFB_p95);
+	Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
+	Set(record, StatMetric::NumNbrFB_Min, minFB);
+	Set(record, StatMetric::NumNbrFB_Max, maxFB);
 
 	Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
 	Set(record, StatMetric::DensRelError_P95, p95);

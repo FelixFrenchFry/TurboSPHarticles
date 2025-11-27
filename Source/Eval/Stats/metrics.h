@@ -19,12 +19,16 @@ namespace Stats
 		// particles and neighbors
 		NumF,				// total number of simulated fluid particles
 		NumB,				// total number of simulated boundary particles
-		NumNeighFF_Avg,		// average number of fluid neighbors
-		NumNeighFB_Avg,		// average number of boundary neighbors
-		NumNeighFF_Min,		// min number of fluid neighbors
-		NumNeighFB_Min,		// min number of boundary neighbors
-		NumNeighFF_Max,		// max number of fluid neighbors
-		NumNeighFB_Max,		// max number of boundary neighbors
+		NumNbrFF_Avg,		// average number of fluid neighbors
+		NumNbrFF_P95,		// top 5% of fluid neighbors
+		NumNbrFF_P99,		// top 1% of fluid neighbors
+		NumNbrFF_Min,		// min number of fluid neighbors
+		NumNbrFF_Max,		// max number of fluid neighbors
+		NumNbrFB_Avg,		// average number of boundary neighbors
+		NumNbrFB_P95,		// top 5% of boundary neighbors
+		NumNbrFB_P99,		// top 1% of boundary neighbors
+		NumNbrFB_Min,		// min number of boundary neighbors
+		NumNbrFB_Max,		// max number of boundary neighbors
 
 		// density
 		// (relative error in % aka deviation)
@@ -71,7 +75,7 @@ namespace Stats
 				"Total number of boundary particles currently simulated"
 			},
 			{
-				.metric = StatMetric::NumNeighFF_Avg,
+				.metric = StatMetric::NumNbrFF_Avg,
 				.name = "num fluid neighbors (avg)",
 				.unit = "",
 				.var = "float",
@@ -79,15 +83,23 @@ namespace Stats
 				"Average number of fluid particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::NumNeighFB_Avg,
-				.name = "num bound neighbors (avg)",
+				.metric = StatMetric::NumNbrFF_P95,
+				.name = "num fluid neighbors (p95)",
 				.unit = "",
 				.var = "float",
 				.tip =
-				"Average number of boundary particles neighboring a fluid particle"
+				"Top 5%% of fluid neighbor counts among fluid particles"
 			},
 			{
-				.metric = StatMetric::NumNeighFF_Min,
+				.metric = StatMetric::NumNbrFF_P99,
+				.name = "num fluid neighbors (p99)",
+				.unit = "",
+				.var = "float",
+				.tip =
+				"Top 1%% of fluid neighbor counts among fluid particles"
+			},
+			{
+				.metric = StatMetric::NumNbrFF_Min,
 				.name = "num fluid neighbors (min)",
 				.unit = "",
 				.var = "int",
@@ -95,15 +107,7 @@ namespace Stats
 				"Minimum number of fluid particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::NumNeighFB_Min,
-				.name = "num bound neighbors (min)",
-				.unit = "",
-				.var = "int",
-				.tip =
-				"Minimum number of boundary particles neighboring a fluid particle"
-			},
-			{
-				.metric = StatMetric::NumNeighFF_Max,
+				.metric = StatMetric::NumNbrFF_Max,
 				.name = "num fluid neighbors (max)",
 				.unit = "",
 				.var = "int",
@@ -111,7 +115,39 @@ namespace Stats
 				"Maximum number of fluid particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::NumNeighFB_Max,
+				.metric = StatMetric::NumNbrFB_Avg,
+				.name = "num bound neighbors (avg)",
+				.unit = "",
+				.var = "float",
+				.tip =
+				"Average number of boundary particles neighboring a fluid particle"
+			},
+			{
+				.metric = StatMetric::NumNbrFB_P95,
+				.name = "num bound neighbors (p95)",
+				.unit = "",
+				.var = "float",
+				.tip =
+				"Top 5%% of boundary neighbor counts among fluid particles"
+			},
+			{
+				.metric = StatMetric::NumNbrFB_P99,
+				.name = "num bound neighbors (p99)",
+				.unit = "",
+				.var = "float",
+				.tip =
+				"Top 1%% of boundary neighbor counts among fluid particles"
+			},
+			{
+				.metric = StatMetric::NumNbrFB_Min,
+				.name = "num bound neighbors (min)",
+				.unit = "",
+				.var = "int",
+				.tip =
+				"Minimum number of boundary particles neighboring a fluid particle"
+			},
+			{
+				.metric = StatMetric::NumNbrFB_Max,
 				.name = "num bound neighbors (max)",
 				.unit = "",
 				.var = "int",
