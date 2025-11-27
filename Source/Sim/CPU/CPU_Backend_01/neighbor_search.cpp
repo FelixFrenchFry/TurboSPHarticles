@@ -702,8 +702,8 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 
 									// position difference
 									const float dx = xi - be_.xPosB_[j];
-									const float dy = yi - be_.xPosB_[j];
-									const float dz = zi - be_.xPosB_[j];
+									const float dy = yi - be_.yPosB_[j];
+									const float dz = zi - be_.zPosB_[j];
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx

@@ -168,8 +168,8 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_idB_;
 
 		// neighbors
-		static constexpr uint32_t N_MAX_FF_ = 96;
-		static constexpr uint32_t N_MAX_FB_ = 64;
+		static constexpr uint32_t N_MAX_FF_ = 48;
+		static constexpr uint32_t N_MAX_FB_ = 24;
 
 		DeviceBuffer<uint8_t> d_neighCountFF_;
 		DeviceBuffer<uint8_t> d_neighCountFB_;
