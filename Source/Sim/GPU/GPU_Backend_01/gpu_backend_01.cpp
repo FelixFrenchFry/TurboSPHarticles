@@ -380,47 +380,8 @@ void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Viscosity_Acceleration,
 									   Bench::BenchOp::External_Acceleration });
 
-		/*
-		// --- [ source-term for density invariance ] --------------------------
-
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm });
-		GPU01::Launch_SourceTerm(
-			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
-			d_densityF_.Data(),
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
-			d_sourceTermF_.Data());
-
-		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm });
-
-		// --- [ diagonal elements of system matrix ] --------------------------
-
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_DiagonalElem });
-		GPU01::Launch_DiagonalElement(
-			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
-			d_diagElemF_.Data());
-
-		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_DiagonalElem });
-
-		// --- [ initialize pressure for jacobi solver ] -----------------------
-
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
-		GPU01::Launch_PressureJacobiInit(
-			d_sourceTermF_.Data(), d_diagElemF_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
-			d_pressureF_.Data());
-		*/
-
 		// --- [ source-term (density invariance) and diagonal elements ] ------
+
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm,
 										Bench::BenchOp::Pressure_DiagonalElem });
 		GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(

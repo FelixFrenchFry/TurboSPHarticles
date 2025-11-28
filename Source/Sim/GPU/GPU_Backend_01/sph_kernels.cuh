@@ -47,43 +47,6 @@ namespace GPU01
 		float* xAccViscF, float* yAccViscF, float* zAccViscF,
 		float* xAccExtF, float* yAccExtF, float* zAccExtF);
 
-	void Launch_SourceTerm(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
-		const float* densityF,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
-		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
-		cudaStream_t stream,
-		// destinations
-		float* sourceTermF);
-
-	void Launch_DiagonalElement(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
-		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
-		cudaStream_t stream,
-		// destinations
-		float* diagElemF);
-
-	void Launch_PressureJacobiInit(
-		const float* sourceTermF,
-		const float* diagElemF,
-		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
-		cudaStream_t stream,
-		// destinations
-		float* pressureF);
-
 	void Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
