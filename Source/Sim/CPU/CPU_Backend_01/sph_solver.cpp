@@ -835,7 +835,6 @@ void CPU01::PressureAcceleration(
 				const float presi = pressureF[i];
 				const float densi = restDensityF;
 				const float densiInvSqu = 1.0f / (densi * densi);
-
 				const float accCoeffF_outer = massF * presi * densiInvSqu;
 
 				float tmp_xAccPressF = 0.0f;

@@ -168,11 +168,11 @@ namespace GPU01
 			const float dz = zi - zPosF[j];
 
 			// kernel weight
-			float w = 0.0f;
-			KernelWeight_CubicSpline(dx, dy, dz, w);
+			float kw = 0.0f;
+			KernelWeight_CubicSpline(dx, dy, dz, kw);
 
 			// density contribution from fluid neighbor j
-			tmp_density += c_massF * w;
+			tmp_density = fmaf(c_massF,kw, tmp_density);
 		}
 
 		const uint32_t baseFB = i * N_MAX_FB;
@@ -190,11 +190,11 @@ namespace GPU01
 			const float dz = zi - zPosB[j];
 
 			// kernel weight
-			float w = 0.0f;
-			KernelWeight_CubicSpline(dx, dy, dz, w);
+			float kw = 0.0f;
+			KernelWeight_CubicSpline(dx, dy, dz, kw);
 
 			// density contribution from boundary neighbor j
-			tmp_density += c_massB * w;
+			tmp_density = fmaf(c_massB, kw, tmp_density);
 		}
 
 		densityF[i] = tmp_density;
@@ -272,13 +272,13 @@ namespace GPU01
 
 			// viscosity acc contribution from fluid neighbor j
 			const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-12f))
-									 * (dvx * dx + dvy * dy + dvz * dz)
-									 / (dx * dx + dy * dy + dz * dz
+									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
+									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
 									 + 0.01f * c_sizeF * c_sizeF);
 
-			tmp_xAccViscF += accViscCoeff * xkg;
-			tmp_yAccViscF += accViscCoeff * ykg;
-			tmp_zAccViscF += accViscCoeff * zkg;
+			tmp_xAccViscF = fmaf(accViscCoeff, xkg, tmp_xAccViscF);
+			tmp_yAccViscF = fmaf(accViscCoeff, ykg, tmp_yAccViscF);
+			tmp_zAccViscF = fmaf(accViscCoeff, zkg, tmp_zAccViscF);
 		}
 
 		// temp accumulation variables
@@ -308,13 +308,13 @@ namespace GPU01
 
 			// viscosity acc contribution from boundary neighbor j
 			const float accViscCoeff = (c_massB / c_restDensityB)
-									 * (vxi * dx + vyi * dy + vzi * dz)
-									 / (dx * dx + dy * dy + dz * dz
+									 * fmaf(vxi, dx, fmaf(vyi, dy, vzi * dz))
+									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
 									 + 0.01f * c_sizeF * c_sizeF);
 
-			tmp_xAccViscB += accViscCoeff * xkg;
-			tmp_yAccViscB += accViscCoeff * ykg;
-			tmp_zAccViscB += accViscCoeff * zkg;
+			tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
+			tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
+			tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
 		}
 
 		// finalize accelerations
@@ -335,9 +335,9 @@ namespace GPU01
 		zAccExtF[i] = c_zGravity;
 
 		// compute predicted velocity from non-pressure accelerations
-		xVelPredF[i] = xVelF[i] + c_timeStep * (xAccViscF[i] + xAccExtF[i]);
-		yVelPredF[i] = yVelF[i] + c_timeStep * (yAccViscF[i] + yAccExtF[i]);
-		zVelPredF[i] = zVelF[i] + c_timeStep * (zAccViscF[i] + zAccExtF[i]);
+		xVelPredF[i] = fmaf(c_timeStep, xAccViscF[i] + xAccExtF[i], xVelF[i]);
+		yVelPredF[i] = fmaf(c_timeStep, yAccViscF[i] + yAccExtF[i], yVelF[i]);
+		zVelPredF[i] = fmaf(c_timeStep, zAccViscF[i] + zAccExtF[i], zVelF[i]);
 	}
 
 	__global__
@@ -406,9 +406,7 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
 			// source term contribution from fluid neighbor
-			tmp_sourceTermF += dvpx * xkg
-							 + dvpy * ykg
-							 + dvpz * zkg;
+			tmp_sourceTermF += fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
 
 			xCTermF += xkg;
 			yCTermF += ykg;
@@ -444,9 +442,7 @@ namespace GPU01
 
 			// source term contribution from boundary neighbor
 			// TODO: subtract actual boundary velocity when adding non-static boundaries?
-			tmp_sourceTermB += vpxi * xkg
-							 + vpyi * ykg
-							 + vpzi * zkg;
+			tmp_sourceTermB += fmaf(vpxi, xkg, fmaf(vpyi, ykg, vpzi * zkg));
 
 			xCTermB += xkg;
 			yCTermB += ykg;
@@ -488,17 +484,13 @@ namespace GPU01
 			float zkg = 0.0f;
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			tmp_diagElemA += xCTerm * xkg
-						   + yCTerm * ykg
-						   + zCTerm * zkg;
+			tmp_diagElemA += fmaf(xCTerm, xkg, fmaf(yCTerm, ykg, zCTerm * zkg));
 
 			const float tmp_x = (c_massF * c_restDensitySquInvF) * (-xkg);
 			const float tmp_y = (c_massF * c_restDensitySquInvF) * (-ykg);
 			const float tmp_z = (c_massF * c_restDensitySquInvF) * (-zkg);
 
-			tmp_diagElemB += tmp_x * xkg
-						   + tmp_y * ykg
-						   + tmp_z * zkg;
+			tmp_diagElemB += fmaf(tmp_x, xkg, fmaf(tmp_y, ykg, tmp_z * zkg));
 		}
 		tmp_diagElemA *= c_massF;
 		tmp_diagElemB *= c_massF;
@@ -521,9 +513,7 @@ namespace GPU01
 			float zkg = 0.0f;
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			tmp_diagElemC += xCTerm * xkg
-						   + yCTerm * ykg
-						   + zCTerm * zkg;
+			tmp_diagElemC += fmaf(xCTerm, xkg, fmaf(yCTerm, ykg, zCTerm * zkg));
 		}
 		tmp_diagElemC *= c_massB;
 
@@ -574,7 +564,10 @@ namespace GPU01
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
-		const float pressi = pressureF[i];
+		const float presi = pressureF[i];
+		const float densi = c_restDensityF;
+		const float densiInvSqu = 1.0f / (densi * densi);
+		const float accCoeffF_outer = c_massF * presi * densiInvSqu;
 
 		// temp accumulation variables
 		float tmp_xAccPressF = 0.0f;
@@ -601,18 +594,20 @@ namespace GPU01
 			float zkg = 0.0f;
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// pressure acc contribution from fluid neighbor j
-			const float accPressCoeff = (c_massF * (pressi / (c_restDensityF * c_restDensityF)
-									  + pressureF[j] / (c_restDensityF * c_restDensityF)));
+			const float accCoeffF = accCoeffF_outer + c_massF
+								  * pressureF[j] * densiInvSqu;
 
-			// TODO: use fmaf for all other accumulation operations too?
-			tmp_xAccPressF = fmaf(accPressCoeff, xkg, tmp_xAccPressF);
-			tmp_yAccPressF = fmaf(accPressCoeff, ykg, tmp_yAccPressF);
-			tmp_zAccPressF = fmaf(accPressCoeff, zkg, tmp_zAccPressF);
+			// pressure acc contribution from fluid neighbor j
+			tmp_xAccPressF = fmaf(accCoeffF, xkg, tmp_xAccPressF);
+			tmp_yAccPressF = fmaf(accCoeffF, ykg, tmp_yAccPressF);
+			tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
 		}
 
 		const uint32_t baseFB = i * N_MAX_FB;
 		const uint32_t cntFB = neighCountFB[i];
+
+		const float accCoeffB = c_gammaPress * c_massB
+							  * 2.0f * presi * densiInvSqu;
 
 		// FB
 		for (uint32_t k = 0; k < cntFB; k++)
@@ -632,12 +627,9 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
 			// pressure acc contribution from boundary neighbor j
-			const float accPressCoeff = c_gammaPress * (c_massB * 2.0f 
-									  * (pressi / (c_restDensityF * c_restDensityF)));
-			// TODO: use fmaf for all other accumulation operations too?
-			tmp_xAccPressF = fmaf(accPressCoeff, xkg, tmp_xAccPressF);
-			tmp_yAccPressF = fmaf(accPressCoeff, ykg, tmp_yAccPressF);
-			tmp_zAccPressF = fmaf(accPressCoeff, zkg, tmp_zAccPressF);
+			tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
+			tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
+			tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
 		}
 
 		// finalize pressure acceleration
@@ -710,9 +702,9 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
 			// system vector element contribution from fluid neighbor j
-			tmp_xSysVecElem += c_massF * (axi - xAccPressF[j]) * xkg;
-			tmp_ySysVecElem += c_massF * (ayi - yAccPressF[j]) * ykg;
-			tmp_zSysVecElem += c_massF * (azi - zAccPressF[j]) * zkg;
+			tmp_xSysVecElem = fmaf(c_massF * (axi - xAccPressF[j]), xkg, tmp_xSysVecElem);
+			tmp_ySysVecElem = fmaf(c_massF * (ayi - yAccPressF[j]), ykg, tmp_ySysVecElem);
+			tmp_zSysVecElem = fmaf(c_massF * (azi - zAccPressF[j]), zkg, tmp_zSysVecElem);
 		}
 
 		const uint32_t baseFB = i * N_MAX_FB;
@@ -736,9 +728,9 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
 			// system vector element contribution from boundary neighbor j
-			tmp_xSysVecElem += c_massB * axi * xkg;
-			tmp_ySysVecElem += c_massB * ayi * ykg;
-			tmp_zSysVecElem += c_massB * azi * zkg;
+			tmp_xSysVecElem = fmaf(c_massB * axi, xkg, tmp_xSysVecElem);
+			tmp_ySysVecElem = fmaf(c_massB * ayi, ykg, tmp_ySysVecElem);
+			tmp_zSysVecElem = fmaf(c_massB * azi, zkg, tmp_zSysVecElem);
 		}
 
 		// finalize system vector element
@@ -779,17 +771,15 @@ namespace GPU01
 
 		// explicit Euler integration for velocity
 		// (now only refining predicted velocity with pressure acc)
-		// TODO: use fmaf here?
-		xVelF[i] = xVelPredF[i] + c_timeStep * xAccPressF[i];
-		yVelF[i] = yVelPredF[i] + c_timeStep * yAccPressF[i];
-		zVelF[i] = zVelPredF[i] + c_timeStep * zAccPressF[i];
+		xVelF[i] = fmaf(c_timeStep, xAccPressF[i], xVelPredF[i]);
+		yVelF[i] = fmaf(c_timeStep, yAccPressF[i], yVelPredF[i]);
+		zVelF[i] = fmaf(c_timeStep, zAccPressF[i], zVelPredF[i]);
 
 		// semi-implicit Euler integration
 		// (using updated velocity for position update)
-		// TODO: use fmaf here?
-		xPosF[i] = xPosF[i] + c_timeStep * xVelF[i];
-		yPosF[i] = yPosF[i] + c_timeStep * yVelF[i];
-		zPosF[i] = zPosF[i] + c_timeStep * zVelF[i];
+		xPosF[i] = fmaf(c_timeStep, xVelF[i], xPosF[i]);
+		yPosF[i] = fmaf(c_timeStep, yVelF[i], yPosF[i]);
+		zPosF[i] = fmaf(c_timeStep, zVelF[i], zPosF[i]);
 	}
 
 } // namespace GPU01
