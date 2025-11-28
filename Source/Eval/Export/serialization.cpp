@@ -5,9 +5,13 @@
 #include <cassert>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
 #include <highfive/H5File.hpp>
+#include <iomanip>
+#include <spdlog/spdlog.h>
+#include <sstream>
 #include <vector>
 
 // internal
@@ -17,10 +21,8 @@
 
 using namespace HighFive;
 
-// ===== helpers =====
-
-namespace {
-
+namespace Export
+{
 	inline DataSetCreateProps MakeDsProps(int64_t N_elements,
 										  int64_t N_elemBytes,
 										  const Export::SaveOptions& opt)
@@ -53,8 +55,8 @@ namespace {
 
 	template <class T>
 	inline void Write1D(Group& group, const char* name,
-		const std::vector<T>& vec,
-		const Export::SaveOptions& opt)
+						const std::vector<T>& vec,
+						const Export::SaveOptions& opt)
 	{
 		auto dsp = DataSpace::From(vec);
 		auto dcp = MakeDsProps(vec.size(), sizeof(T), opt);
@@ -85,7 +87,7 @@ namespace {
 	}
 
 	inline void AtomicReplace(const std::filesystem::path& tmp,
-		const std::filesystem::path& dst)
+							  const std::filesystem::path& dst)
 	{
 		std::error_code ec;
 
@@ -96,6 +98,14 @@ namespace {
 		// remove existing then rename as fallback
 		std::filesystem::remove(dst, ec); // ignore error if not exists
 		std::filesystem::rename(tmp, dst); // let this throw if it still fails
+	}
+
+	inline std::string FormatStepPadded(int64_t step, uint32_t width = 9)
+	{
+		std::ostringstream oss;
+		oss << std::setfill('0') << std::setw(width) << step;
+
+		return oss.str();
 	}
 
 	void CheckFluidConsistent(const Sync::FluidParticles& F)
@@ -124,35 +134,29 @@ namespace {
 		assert(B.xVel.size() == N && B.yVel.size() == N && B.zVel.size() == N);
 	}
 
-} // anonymous namespace
-
-// ===== saving and loading =====
-
-namespace Export {
-
-	void SaveUniversalSimState(const std::string& path,
-							   const Sync::UniversalSimState& state,
-							   const SaveOptions& opt)
+	void SerializationMgr::SaveUniversalSimState(
+		const std::string& path,
+		const Sync::UniversalSimState& state)
 	{
 		// file path handling
 		const std::filesystem::path dstPath{ path };
-		const std::filesystem::path tmpPath = opt.atomicWrite ?
-			std::filesystem::path(dstPath.string() + opt.tempSuffix) : dstPath;
+		const std::filesystem::path tmpPath = saveOptions_.atomicWrite ?
+			std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix) : dstPath;
 
-		// open file (optionally with alignment)
-		File file = OpenFileForWrite(tmpPath.string());
+		// open scope for writer
+		{
+			// open file (optionally with alignment)
+			File file = OpenFileForWrite(tmpPath.string());
 
-		// metadata
-		auto root = file.createGroup("/State");
-		root.createAttribute("schemaVersion", state.schemaVersion);
-		root.createAttribute("step", state.step);
-		root.createAttribute("time", state.time);
+			// metadata
+			auto root = file.createGroup("/State");
+			root.createAttribute("schemaVersion", state.schemaVersion);
+			root.createAttribute("step", state.step);
+			root.createAttribute("time", state.time);
 
-		// sanity check before writing
-		CheckFluidConsistent(state.fluidParticles);
-		CheckBoundaryConsistent(state.boundaryParticles);
-
-		{ // open scope for writer
+			// sanity check before writing
+			CheckFluidConsistent(state.fluidParticles);
+			CheckBoundaryConsistent(state.boundaryParticles);
 
 			// fluid data
 			{
@@ -162,41 +166,41 @@ namespace Export {
 				gF.createAttribute("N_particles", F.N_);
 
 				// write SoA arrays
-				Write1D(gF, "xPos", F.xPos, opt);
-				Write1D(gF, "yPos", F.yPos, opt);
-				Write1D(gF, "zPos", F.zPos, opt);
+				Write1D(gF, "xPos", F.xPos, saveOptions_);
+				Write1D(gF, "yPos", F.yPos, saveOptions_);
+				Write1D(gF, "zPos", F.zPos, saveOptions_);
 
-				Write1D(gF, "xVel", F.xVel, opt);
-				Write1D(gF, "yVel", F.yVel, opt);
-				Write1D(gF, "zVel", F.zVel, opt);
+				Write1D(gF, "xVel", F.xVel, saveOptions_);
+				Write1D(gF, "yVel", F.yVel, saveOptions_);
+				Write1D(gF, "zVel", F.zVel, saveOptions_);
 
-				Write1D(gF, "xVelPred", F.xVelPred, opt);
-				Write1D(gF, "yVelPred", F.yVelPred, opt);
-				Write1D(gF, "zVelPred", F.zVelPred, opt);
+				Write1D(gF, "xVelPred", F.xVelPred, saveOptions_);
+				Write1D(gF, "yVelPred", F.yVelPred, saveOptions_);
+				Write1D(gF, "zVelPred", F.zVelPred, saveOptions_);
 
-				Write1D(gF, "xAcc", F.xAcc, opt);
-				Write1D(gF, "yAcc", F.yAcc, opt);
-				Write1D(gF, "zAcc", F.zAcc, opt);
+				Write1D(gF, "xAcc", F.xAcc, saveOptions_);
+				Write1D(gF, "yAcc", F.yAcc, saveOptions_);
+				Write1D(gF, "zAcc", F.zAcc, saveOptions_);
 
-				Write1D(gF, "xAccPress", F.xAccPress, opt);
-				Write1D(gF, "yAccPress", F.yAccPress, opt);
-				Write1D(gF, "zAccPress", F.zAccPress, opt);
+				Write1D(gF, "xAccPress", F.xAccPress, saveOptions_);
+				Write1D(gF, "yAccPress", F.yAccPress, saveOptions_);
+				Write1D(gF, "zAccPress", F.zAccPress, saveOptions_);
 
-				Write1D(gF, "xAccVisc", F.xAccVisc, opt);
-				Write1D(gF, "yAccVisc", F.yAccVisc, opt);
-				Write1D(gF, "zAccVisc", F.zAccVisc, opt);
+				Write1D(gF, "xAccVisc", F.xAccVisc, saveOptions_);
+				Write1D(gF, "yAccVisc", F.yAccVisc, saveOptions_);
+				Write1D(gF, "zAccVisc", F.zAccVisc, saveOptions_);
 
-				Write1D(gF, "xAccExt", F.xAccExt, opt);
-				Write1D(gF, "yAccExt", F.yAccExt, opt);
-				Write1D(gF, "zAccExt", F.zAccExt, opt);
+				Write1D(gF, "xAccExt", F.xAccExt, saveOptions_);
+				Write1D(gF, "yAccExt", F.yAccExt, saveOptions_);
+				Write1D(gF, "zAccExt", F.zAccExt, saveOptions_);
 
-				Write1D(gF, "sourceTerm", F.sourceTerm, opt);
-				Write1D(gF, "diagElem", F.diagElem, opt);
-				Write1D(gF, "sysVecElem", F.sysVecElem, opt);
-				Write1D(gF, "pressure", F.pressure, opt);
-				Write1D(gF, "density", F.density, opt);
+				Write1D(gF, "sourceTerm", F.sourceTerm, saveOptions_);
+				Write1D(gF, "diagElem", F.diagElem, saveOptions_);
+				Write1D(gF, "sysVecElem", F.sysVecElem, saveOptions_);
+				Write1D(gF, "pressure", F.pressure, saveOptions_);
+				Write1D(gF, "density", F.density, saveOptions_);
 
-				Write1D(gF, "id", F.id, opt);
+				Write1D(gF, "id", F.id, saveOptions_);
 			}
 
 			// boundary data
@@ -207,28 +211,29 @@ namespace Export {
 				gB.createAttribute("N_particles", B.N_);
 
 				// write SoA arrays
-				Write1D(gB, "xPos", B.xPos, opt);
-				Write1D(gB, "yPos", B.yPos, opt);
-				Write1D(gB, "zPos", B.zPos, opt);
+				Write1D(gB, "xPos", B.xPos, saveOptions_);
+				Write1D(gB, "yPos", B.yPos, saveOptions_);
+				Write1D(gB, "zPos", B.zPos, saveOptions_);
 
-				Write1D(gB, "xVel", B.xVel, opt);
-				Write1D(gB, "yVel", B.yVel, opt);
-				Write1D(gB, "zVel", B.zVel, opt);
+				Write1D(gB, "xVel", B.xVel, saveOptions_);
+				Write1D(gB, "yVel", B.yVel, saveOptions_);
+				Write1D(gB, "zVel", B.zVel, saveOptions_);
 
-				Write1D(gB, "id", B.id, opt);
+				Write1D(gB, "id", B.id, saveOptions_);
 			}
 
 		} // end scope for writer
 
 		// close file by going out of scope
-		if (opt.atomicWrite)
+		if (saveOptions_.atomicWrite)
 		{
 			AtomicReplace(tmpPath, dstPath);
 		}
 	}
 
-	void LoadUniversalSimState(const std::string& path,
-							   Sync::UniversalSimState& state)
+	void SerializationMgr::LoadUniversalSimState(
+		const std::string& path,
+		Sync::UniversalSimState& state)
 	{
 		File file = OpenFileForRead(path);
 
@@ -312,6 +317,125 @@ namespace Export {
 			// sanity check
 			B.N_ = NB;
 		}
+	}
+
+	void SerializationMgr::SaveExportSnapshot(const Sync::ExportSnapshot& snap)
+	{
+		const std::string baseName = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
+
+		// file path handling
+		const std::filesystem::path dstPath{ baseName };
+		const std::filesystem::path tmpPath = saveOptions_.atomicWrite ?
+			std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix) : dstPath;
+
+		// open scope for writer
+		{
+			// open file (optionally with alignment)
+			File file = OpenFileForWrite(tmpPath.string());
+
+			// metadata
+			auto root = file.createGroup("/State");
+			root.createAttribute("step", snap.simStep);
+			root.createAttribute("time", snap.simTime);
+
+			{
+				auto gF = root.createGroup("fluidParticles");
+
+				gF.createAttribute("N_particles", snap.N_F);
+
+				Write1D(gF, "xPosF", snap.xPosF, saveOptions_);
+				Write1D(gF, "yPosF", snap.yPosF, saveOptions_);
+				Write1D(gF, "zPosF", snap.zPosF, saveOptions_);
+				Write1D(gF, "velMagF", snap.velMagF, saveOptions_);
+			}
+		} // end scope for writer
+
+		if (saveOptions_.atomicWrite)
+		{
+			AtomicReplace(tmpPath, dstPath);
+		}
+
+		SPDLOG_INFO("Exported sim snapshot to {}", baseName);
+	}
+
+	void SerializationMgr::SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap)
+	{
+		const std::string baseName_h5 = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
+		const std::string baseName_xdmf = "export_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
+
+		const uint32_t NF = snap.N_F;
+
+		// open XDMF file
+		std::ofstream ofs(baseName_xdmf, std::ios::out | std::ios::trunc);
+		if (!ofs)
+		{
+			SPDLOG_ERROR("Failed to open XDMF file for write: {}", baseName_xdmf);
+			return;
+		}
+
+		// XDMF header
+		ofs << R"(<?xml version="1.0" ?>)" << "\n";
+		ofs << R"(<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>)" << "\n";
+		ofs << R"(<Xdmf Version="2.0">)" << "\n";
+		ofs << R"(  <Domain>)" << "\n";
+
+		// one uniform grid per file
+		ofs << "    <Grid Name=\"Step_" << snap.simStep
+			<< "\" GridType=\"Uniform\">" << "\n";
+
+		// time metadata
+		ofs << "      <Time Value=\""
+			<< std::setprecision(16) << snap.simTime
+			<< "\" />\n";
+
+		// topology of point cloud with NF vertices
+		ofs << "      <Topology TopologyType=\"Polyvertex\" "
+			<< "Dimensions=\"" << NF << "\"/>\n";
+
+		// geometry of XYZ coordinates
+		ofs << "      <Geometry GeometryType=\"XYZ\">\n";
+		ofs << "        <DataItem ItemType=\"Function\" "
+			<< "Function=\"JOIN($0, $1, $2)\" "
+			<< "Dimensions=\"" << NF << " 3\" "
+			<< "NumberType=\"Float\" Precision=\"4\">\n";
+
+		// x pos
+		ofs << "          <DataItem Dimensions=\"" << NF
+			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
+		ofs << "            " << baseName_h5
+			<< ":/State/fluidParticles/xPosF\n";
+		ofs << "          </DataItem>\n";
+
+		// y pos
+		ofs << "          <DataItem Dimensions=\"" << NF
+			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
+		ofs << "            " << baseName_h5
+			<< ":/State/fluidParticles/yPosF\n";
+		ofs << "          </DataItem>\n";
+
+		// z pos
+		ofs << "          <DataItem Dimensions=\"" << NF
+			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
+		ofs << "            " << baseName_h5
+			<< ":/State/fluidParticles/zPosF\n";
+		ofs << "          </DataItem>\n";
+		ofs << "        </DataItem>\n";
+		ofs << "      </Geometry>\n";
+
+		// velocity magnitude
+		ofs << "      <Attribute Name=\"velMagF\" "
+			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
+		ofs << "        <DataItem Dimensions=\"" << NF
+			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
+		ofs << "          " << baseName_h5
+			<< ":/State/fluidParticles/velMagF\n";
+		ofs << "        </DataItem>\n";
+		ofs << "      </Attribute>\n";
+
+		// close everything
+		ofs << "    </Grid>\n";
+		ofs << "  </Domain>\n";
+		ofs << "</Xdmf>\n";
 	}
 
 } // namespace Export

@@ -70,7 +70,16 @@ namespace Sync
 	// export the components of an export request individually, because they are in separate files anyway?
 	struct ExportSnapshot
 	{
-		// TODO: implement properly
+		// metadata
+		int64_t simStep;
+		double simTime;
+
+		// data for fluid particles export
+		uint32_t N_F;
+		std::vector<float> xPosF;
+		std::vector<float> yPosF;
+		std::vector<float> zPosF;
+		std::vector<float> velMagF;
 	};
 
 	// data structure for visualizing parts of the simulation state interactively

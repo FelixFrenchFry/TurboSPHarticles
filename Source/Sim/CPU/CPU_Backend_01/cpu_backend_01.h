@@ -143,6 +143,9 @@ namespace Sim
 						   Bench::BenchOp::Statistics_Velocity }
 			},
 			{
+				.ops = { Bench::BenchOp::Snapshot_Export }
+			},
+			{
 				.ops = { Bench::BenchOp::Snapshot_Visual }
 			},
 			{

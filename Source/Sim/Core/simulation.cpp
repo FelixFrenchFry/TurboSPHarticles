@@ -9,6 +9,8 @@
 
 // internal
 #include "simulation.h"
+
+#include "Source/Eval/Export/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/CPU/CPU_Backend_01/cpu_backend_01.h"
 #include "Source/Sim/CPU/CPU_Backend_02/cpu_backend_02.h"
@@ -23,11 +25,13 @@ using namespace Sim;
 SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 							 Scene::ScenarioMgr& scenarioMgr,
 							 Bench::BenchmarksMgr& benchmarksMgr,
-							 Stats::StatisticsMgr& statisticsMgr)
+							 Stats::StatisticsMgr& statisticsMgr,
+							 Export::SerializationMgr& serializationMgr)
 	: simParamsMgr_{ simParamsMgr }
 	, scenarioMgr_{ scenarioMgr }
 	, benchmarksMgr_{ benchmarksMgr }
 	, statisticsMgr_{ statisticsMgr }
+	, serializationMgr_{ serializationMgr }
 {
 	// nothing
 }
@@ -375,6 +379,23 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
 		}
 
+		// TODO: implement this properly
+		if (simStep_ % 100 == 0)
+		{
+			break;
+
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
+
+			// create export snapshot and save to file
+			Sync::ExportSnapshot expSnap{};
+			simBackend_->PackExportSnapshot(expSnap);
+
+			serializationMgr_.SaveExportSnapshot(expSnap);
+			serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
+
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+		}
+
 		SyncParameters();
 
 		if (maxSteps == std::numeric_limits<int64_t>::max())
@@ -478,6 +499,23 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 			auto statSnap = std::make_shared<Sync::StatSnapshot>();
 			statisticsMgr_.PackStatSnapshot(*statSnap);
 			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
+		}
+
+		// TODO: implement this properly
+		if (simStep_ % 100 == 0)
+		{
+			break;
+
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
+
+			// create export snapshot and save to file
+			Sync::ExportSnapshot expSnap{};
+			simBackend_->PackExportSnapshot(expSnap);
+
+			serializationMgr_.SaveExportSnapshot(expSnap);
+			serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
+
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
 		}
 
 		SyncParameters();

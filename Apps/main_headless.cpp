@@ -9,6 +9,7 @@
 #include <tbb/global_control.h>
 
 // internal
+#include "Source/Eval/Export/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Core/simulation.h"
@@ -66,9 +67,10 @@ int main(int argc, char** argv)
 		Scene::ScenarioMgr scenarioMgr{};
 		Bench::BenchmarksMgr benchmarksMgr{ simParamsMgr.SnapshotParams().first };
 		Stats::StatisticsMgr statisticsMgr{ simParamsMgr.SnapshotParams().first };
+		Export::SerializationMgr serializationMgr{};
 
 		// main systems
-		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr };
+		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr, serializationMgr };
 
 		// bench mailbox
 		Sync::BenchSnapMailbox benchMailbox{};

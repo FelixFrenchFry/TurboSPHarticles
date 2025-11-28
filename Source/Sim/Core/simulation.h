@@ -14,6 +14,7 @@
 
 // internal
 #include "Source/Eval/Bench/benchmarks.h"
+#include "Source/Eval/Export/serialization.h"
 #include "Source/Eval/Stats/statistics.h"
 #include "Source/Sim/Scene/builder.h"
 #include "Source/Sim/Scene/scenario_sim.h"
@@ -27,12 +28,13 @@ namespace Sim
 {
 	class SimulationMgr
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 					  Scene::ScenarioMgr& scenarioMgr,
 					  Bench::BenchmarksMgr& benchmarksMgr,
-					  Stats::StatisticsMgr& statisticsMgr);
+					  Stats::StatisticsMgr& statisticsMgr,
+					  Export::SerializationMgr& serializationMgr);
 
 		// initialize sub-systems
 		bool Init();
@@ -77,7 +79,7 @@ namespace Sim
 		int64_t simStep_ = 0;
 		double simTime_ = 0.0;
 
-	private: // ==============================
+	private: // ----------------------------------------------------------------
 
 		friend class DiagnosticsMgr;
 
@@ -110,6 +112,9 @@ namespace Sim
 
 		// statistics management
 		Stats::StatisticsMgr& statisticsMgr_;
+
+		// serialization management
+		Export::SerializationMgr serializationMgr_;
 
 		// visualization management
 		std::chrono::steady_clock::time_point lastVisWall_{};

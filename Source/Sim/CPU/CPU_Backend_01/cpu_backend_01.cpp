@@ -243,25 +243,56 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 {
-	// TODO: implement
+	if (N_F_ == 0) { return; }
+
+	snap.simStep = simStep_;
+	snap.simTime = simTime_;
+	snap.N_F = N_F_;
+
+	snap.xPosF.resize(N_F_);
+	snap.yPosF.resize(N_F_);
+	snap.zPosF.resize(N_F_);
+	snap.velMagF.resize(N_F_);
+
+	// pack into the export snapshot's data structures
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				snap.xPosF[i] = xPosF_[i];
+				snap.yPosF[i] = yPosF_[i];
+				snap.zPosF[i] = zPosF_[i];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// magnitude of velocity vector
+				snap.velMagF[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
+											 + yVelF_[i] * yVelF_[i]
+											 + zVelF_[i] * zVelF_[i]);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	// TODO: add boundary particles
 
-	snap.N_F = N_F_;
+	if (N_F_ == 0) { return; }
+
 	snap.simStep = simStep_;
-
-	if (N_F_ == 0) // empty sim
-	{
-		snap.posF.clear();
-		snap.scalarDataF.clear();
-
-		// TODO: add boundary particles
-
-		return;
-	}
+	snap.N_F = N_F_;
 
 	snap.posF.resize(N_F_);
 	snap.scalarDataF.resize(N_F_);
