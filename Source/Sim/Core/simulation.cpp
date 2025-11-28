@@ -380,10 +380,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 		}
 
 		// TODO: implement this properly
-		if (simStep_ % 100 == 0)
+		if (simStep_ % 100 == 0 && false)
 		{
-			break;
-
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
 
 			// create export snapshot and save to file
@@ -502,10 +500,8 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 		}
 
 		// TODO: implement this properly
-		if (simStep_ % 100 == 0)
+		if (simStep_ % 100 == 0 && false)
 		{
-			break;
-
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
 
 			// create export snapshot and save to file

@@ -84,6 +84,23 @@ namespace GPU01
 		// destinations
 		float* pressureF);
 
+	void Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
+		const float* densityF,
+		const uint8_t* neighCountFF,
+		const uint8_t* neighCountFB,
+		const uint32_t* neighListFF,
+		const uint32_t* neighListFB,
+		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		cudaStream_t stream,
+		// destinations
+		float* sourceTermF,
+		float* diagElemF,
+		float* pressureF);
+
 	void Launch_PressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
