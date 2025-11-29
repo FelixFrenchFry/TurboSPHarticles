@@ -1,0 +1,25 @@
+#!/bin/bash -x
+#SBATCH --job-name=Test_A
+#SBATCH --partition=cpu
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=96
+#SBATCH --time=4:00:00
+#SBATCH --mem=360gb
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
+
+module load compiler/gnu/14.2
+
+# propagate toolchain vars
+export CC=gcc
+export CXX=g++
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export TBB_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+# build it
+cd $HOME/TurboSPHparticles
+cmake --build build-headless-relwithdeb --target TSP_Headless -j
+
+# run it
+./build-headless-relwithdeb/bin/TSP_Headless
