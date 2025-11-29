@@ -257,6 +257,9 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 	// initialize before entering the simulation loop --------------------------
 
+	// local copy for thread safety
+	const auto paramsInit = simParams_;
+
 	// create visual snapshot and push to mailbox
 	auto snap = std::make_shared<Sync::VisualSnapshot>();
 	simBackend_->PackVisualSnapshot(*snap);
@@ -273,9 +276,20 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 	// vis throttle starting point
 	lastVisWall_ = std::chrono::steady_clock::now();
 
-	const bool hasMaxSteps = (maxSteps > 0);
+	// pack and serialize export snapshot of initial state
+	if (paramsInit.exportEnabled)
+	{
+		// create export snapshot and save to file
+		Sync::ExportSnapshot expSnap{};
+		simBackend_->PackExportSnapshot(expSnap);
+
+		serializationMgr_.SaveExportSnapshot(expSnap);
+		serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
+	}
 
 	// enter the simulation loop -----------------------------------------------
+
+	const bool hasMaxSteps = (maxSteps > 0);
 
 	while (!stopToken.stop_requested())
 	{
@@ -352,6 +366,22 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 			}
 		}
 
+		// pack and serialize export snapshot at given frequency
+		if (params.exportEnabled &&
+			simStep_ % params.exportInterval == 0)
+		{
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
+
+			// create export snapshot and save to file
+			Sync::ExportSnapshot expSnap{};
+			simBackend_->PackExportSnapshot(expSnap);
+
+			serializationMgr_.SaveExportSnapshot(expSnap);
+			serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
+
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+		}
+
 		// evaluate the step
 		if (doSimStep)
 		{
@@ -377,21 +407,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 			auto statSnap = std::make_shared<Sync::StatSnapshot>();
 			statisticsMgr_.PackStatSnapshot(*statSnap);
 			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
-		}
-
-		// TODO: implement this properly
-		if (simStep_ % 100 == 0 && false)
-		{
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
-
-			// create export snapshot and save to file
-			Sync::ExportSnapshot expSnap{};
-			simBackend_->PackExportSnapshot(expSnap);
-
-			serializationMgr_.SaveExportSnapshot(expSnap);
-			serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
-
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
 		}
 
 		SyncParameters();
@@ -425,6 +440,22 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 {
 	SPDLOG_INFO("Simulation started running\n");
+
+	// initialize before entering the simulation loop --------------------------
+
+	// local copy for thread safety
+	const auto paramsInit = simParams_;
+
+	// pack and serialize export snapshot of initial state
+	if (paramsInit.exportEnabled)
+	{
+		// create export snapshot and save to file
+		Sync::ExportSnapshot expSnap{};
+		simBackend_->PackExportSnapshot(expSnap);
+
+		serializationMgr_.SaveExportSnapshot(expSnap);
+		serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
+	}
 
 	// enter the simulation loop -----------------------------------------------
 
@@ -472,6 +503,22 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
 		}
 
+		// pack and serialize export snapshot at given interval
+		if (params.exportEnabled &&
+			simStep_ % params.exportInterval == 0)
+		{
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
+
+			// create export snapshot and save to file
+			Sync::ExportSnapshot expSnap{};
+			simBackend_->PackExportSnapshot(expSnap);
+
+			serializationMgr_.SaveExportSnapshot(expSnap);
+			serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
+
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+		}
+
 		// evaluate the step
 		if (doSimStep)
 		{
@@ -497,21 +544,6 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 			auto statSnap = std::make_shared<Sync::StatSnapshot>();
 			statisticsMgr_.PackStatSnapshot(*statSnap);
 			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
-		}
-
-		// TODO: implement this properly
-		if (simStep_ % 100 == 0 && false)
-		{
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
-
-			// create export snapshot and save to file
-			Sync::ExportSnapshot expSnap{};
-			simBackend_->PackExportSnapshot(expSnap);
-
-			serializationMgr_.SaveExportSnapshot(expSnap);
-			serializationMgr_.SaveExportSnapXdmfInfo(expSnap);
-
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
 		}
 
 		SyncParameters();

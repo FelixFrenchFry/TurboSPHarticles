@@ -82,6 +82,10 @@ namespace Sim
 
 		// benchmarks
 		int64_t maxBenchRecs	= 100'000'000;
+
+		// export
+		bool exportEnabled		= true;
+		int64_t exportInterval  = 10;
 	};
 
 	class SimParamsMgr

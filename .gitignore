@@ -78,7 +78,6 @@ build.ninja
 !.vscode/extensions.json
 !.vscode/settings.json
 
-
 # Backup or temporary files --------
 *~
 *.swp
@@ -87,6 +86,10 @@ build.ninja
 
 # Logs -----------------------------
 *.log
+
+# Serialized data ------------------
+*.h5
+*.xdmf
 
 # OS-specific files ----------------
 .DS_Store

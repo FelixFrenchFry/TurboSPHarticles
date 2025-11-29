@@ -1,8 +1,8 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
 
-  "maxSteps": 500,
+  "maxSteps": -1,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -21,5 +21,8 @@
   "boundaryLayers": 2,
 
   "maxStatRecs": 1000000,
-  "maxBenchRecs": 1000000
+  "maxBenchRecs": 1000000,
+
+  "exportEnabled": true,
+  "exportInterval": 10
 }

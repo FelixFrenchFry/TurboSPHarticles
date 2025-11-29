@@ -286,7 +286,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 		Set_BoundaryLayers(it->get<int>(), verbose);
 	}
 
-	// --- [ statistics and benchmarks tracking ] ------------------------------
+	// --- [ statistics, benchmarks, and exports ] -----------------------------
 
 	// TODO: implement setters for maxStatRecs/maxBenchRecs?
 	{
@@ -300,6 +300,16 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 		if (auto it = jfile.find("maxBenchRecs"); it != jfile.end())
 		{
 			params_.maxBenchRecs = it->get<int64_t>();
+		}
+
+		if (auto it = jfile.find("exportEnabled"); it != jfile.end())
+		{
+			params_.exportEnabled = it->get<bool>();
+		}
+
+		if (auto it = jfile.find("exportInterval"); it != jfile.end())
+		{
+			params_.exportInterval = it->get<int64_t>();
 		}
 
 		EndWrite();

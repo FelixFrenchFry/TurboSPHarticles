@@ -22,7 +22,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# path to the /Configs folder
+# paths to certain directiories
+set(TSP_EXPORT_DIR "${CMAKE_SOURCE_DIR}/Export")
 set(TSP_CONFIG_DIR "${CMAKE_SOURCE_DIR}/Configs")
 
 # ==================================
@@ -188,6 +189,7 @@ target_include_directories(TSP_H PUBLIC
 )
 
 target_compile_definitions(TSP_H PUBLIC
+    TSP_EXPORT_DIR=\"${TSP_EXPORT_DIR}\"
     TSP_CONFIG_DIR=\"${TSP_CONFIG_DIR}\"
 )
 

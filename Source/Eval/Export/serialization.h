@@ -6,6 +6,7 @@
 
 // external
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 // internal
@@ -18,13 +19,19 @@ namespace Export
 {
 	struct SaveOptions
 	{
+	#ifdef TSP_EXPORT_DIR
+		std::filesystem::path baseDir = TSP_EXPORT_DIR;
+	#else
+		std::filesystem::path baseDir = "Export";
+	#endif
+
 		// compression
-		int compressionLevel		= 3;    // [0,...,9], 0 = none, 9 = max
+		int compressionLevel		= 1;    // [0,...,9], 0 = none, 9 = max
 		bool compress				= true; // zlib compression (non-contiguous chunks)
 		bool shuffleFilter			= true; // byte shuffle for better compression ratio on FP data
 
 		// chunk target size
-		int64_t targetChunkBytes	= 1u << 22; // 4 MiB (2^22 bytes)
+		int64_t targetChunkBytes	= 1u << 24; // 16 MiB (2^24 bytes)
 
 		// safer saves
 		// (write to temp file and rename on success)

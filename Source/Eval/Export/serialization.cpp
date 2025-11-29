@@ -323,10 +323,21 @@ namespace Export
 	{
 		const std::string baseName = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
 
+		// ensure export directory exists
+		std::error_code ec;
+		std::filesystem::create_directories(saveOptions_.baseDir, ec);
+		if (ec)
+		{
+			SPDLOG_ERROR("Failed to create export directory '{}': {}",
+				saveOptions_.baseDir.string(), ec.message());
+			return;
+		}
+
 		// file path handling
-		const std::filesystem::path dstPath{ baseName };
-		const std::filesystem::path tmpPath = saveOptions_.atomicWrite ?
-			std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix) : dstPath;
+		const std::filesystem::path dstPath = saveOptions_.baseDir / baseName;
+		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
+			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
+			: dstPath;
 
 		// open scope for writer
 		{
@@ -355,7 +366,7 @@ namespace Export
 			AtomicReplace(tmpPath, dstPath);
 		}
 
-		SPDLOG_INFO("Exported sim snapshot to {}", baseName);
+		//SPDLOG_INFO("Exported sim snapshot for step {} to {}", snap.simStep, dstPath.string());
 	}
 
 	void SerializationMgr::SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap)
@@ -363,15 +374,27 @@ namespace Export
 		const std::string baseName_h5 = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
 		const std::string baseName_xdmf = "export_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
 
-		const uint32_t NF = snap.N_F;
-
-		// open XDMF file
-		std::ofstream ofs(baseName_xdmf, std::ios::out | std::ios::trunc);
-		if (!ofs)
+		// ensure export directory exists
+		std::error_code ec;
+		std::filesystem::create_directories(saveOptions_.baseDir, ec);
+		if (ec)
 		{
-			SPDLOG_ERROR("Failed to open XDMF file for write: {}", baseName_xdmf);
+			SPDLOG_ERROR("Failed to create export directory '{}': {}",
+				saveOptions_.baseDir.string(), ec.message());
 			return;
 		}
+
+		const std::filesystem::path xdmfPath = saveOptions_.baseDir / baseName_xdmf;
+
+		// open XDMF file
+		std::ofstream ofs(xdmfPath, std::ios::out | std::ios::trunc);
+		if (!ofs)
+		{
+			SPDLOG_ERROR("Failed to open XDMF file for write: {}", xdmfPath.string());
+			return;
+		}
+
+		const uint32_t NF = snap.N_F;
 
 		// XDMF header
 		ofs << R"(<?xml version="1.0" ?>)" << "\n";
