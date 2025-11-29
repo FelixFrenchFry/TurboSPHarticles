@@ -85,6 +85,7 @@ namespace Sim
 
 		// export
 		bool exportEnabled		= true;
+		std::string exportDir   = "A";
 		int64_t exportInterval  = 10;
 	};
 

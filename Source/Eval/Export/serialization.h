@@ -55,8 +55,8 @@ namespace Export
 								   Sync::UniversalSimState& state);
 
 		// serialization of a subset of the simulation state and metadata into separate files
-		void SaveExportSnapshot(const Sync::ExportSnapshot& snap);
-		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap);
+		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir);
+		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir);
 
 	private: // ----------------------------------------------------------------
 

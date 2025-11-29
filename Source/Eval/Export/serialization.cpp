@@ -319,13 +319,13 @@ namespace Export
 		}
 	}
 
-	void SerializationMgr::SaveExportSnapshot(const Sync::ExportSnapshot& snap)
+	void SerializationMgr::SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir)
 	{
 		const std::string baseName = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
 
 		// ensure export directory exists
 		std::error_code ec;
-		std::filesystem::create_directories(saveOptions_.baseDir, ec);
+		std::filesystem::create_directories(saveOptions_.baseDir / dir, ec);
 		if (ec)
 		{
 			SPDLOG_ERROR("Failed to create export directory '{}': {}",
@@ -334,7 +334,7 @@ namespace Export
 		}
 
 		// file path handling
-		const std::filesystem::path dstPath = saveOptions_.baseDir / baseName;
+		const std::filesystem::path dstPath = saveOptions_.baseDir / dir /  baseName;
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
 			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
 			: dstPath;
@@ -369,14 +369,14 @@ namespace Export
 		//SPDLOG_INFO("Exported sim snapshot for step {} to {}", snap.simStep, dstPath.string());
 	}
 
-	void SerializationMgr::SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap)
+	void SerializationMgr::SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir)
 	{
 		const std::string baseName_h5 = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
 		const std::string baseName_xdmf = "export_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
 
 		// ensure export directory exists
 		std::error_code ec;
-		std::filesystem::create_directories(saveOptions_.baseDir, ec);
+		std::filesystem::create_directories(saveOptions_.baseDir / dir, ec);
 		if (ec)
 		{
 			SPDLOG_ERROR("Failed to create export directory '{}': {}",
@@ -384,7 +384,7 @@ namespace Export
 			return;
 		}
 
-		const std::filesystem::path xdmfPath = saveOptions_.baseDir / baseName_xdmf;
+		const std::filesystem::path xdmfPath = saveOptions_.baseDir / dir / baseName_xdmf;
 
 		// open XDMF file
 		std::ofstream ofs(xdmfPath, std::ios::out | std::ios::trunc);

@@ -307,6 +307,11 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 			params_.exportEnabled = it->get<bool>();
 		}
 
+		if (auto it = jfile.find("exportDir"); it != jfile.end())
+		{
+			params_.exportDir = it->get<std::string>();
+		}
+
 		if (auto it = jfile.find("exportInterval"); it != jfile.end())
 		{
 			params_.exportInterval = it->get<int64_t>();
