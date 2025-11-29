@@ -135,6 +135,7 @@ namespace Sim
 		friend class NS_BruteForce_GPU01;
 		friend class NS_SpatialHashingBasic_GPU01;
 		friend class NS_CellLinkedList_Basic_GPU01;
+		friend class NS_CellLinkedList_Compact_GPU01;
 
 		// CUDA stream
 		cudaStream_t stream_ = nullptr;

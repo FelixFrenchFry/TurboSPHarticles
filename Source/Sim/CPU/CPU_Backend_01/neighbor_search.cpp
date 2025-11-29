@@ -806,6 +806,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	if (N_F > 0)
 	{
+		// TODO: should sortedParticleIdxF_ be initialized to identity in every step?
 		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
@@ -830,6 +831,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	if (N_B > 0)
 	{
+		// TODO: should sortedParticleIdxB_ be initialized to identity in every step?
 		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
@@ -1344,9 +1346,9 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 inline uint32_t NS_CellLinkedList_Compact_CPU01::ZigZag(int v) noexcept
 {
 	// shift left by 1 and XOR with sign bit
-	std::uint32_t uv = static_cast<std::uint32_t>(v);
-	std::uint32_t even = uv << 1;
-	std::uint32_t sign = static_cast<std::uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
+	uint32_t uv = static_cast<uint32_t>(v);
+	uint32_t even = uv << 1;
+	uint32_t sign = static_cast<uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
 
 	return even ^ sign;
 }

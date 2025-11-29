@@ -25,6 +25,7 @@ SimBackend_GPU01::SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr)
 
 	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_GPU01>(*this);
 	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_GPU01>(*this);
+	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_GPU01>(*this);
 }
 
 SimBackend_GPU01::~SimBackend_GPU01()

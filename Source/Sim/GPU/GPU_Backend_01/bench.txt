@@ -134,3 +134,131 @@ total simulation time          |       550.49     ---    |       480.13     ---
 =========================================================================================================================
 ==== after replacing regular math with fmaf() in most of the accumulations ==============================================
 =========================================================================================================================
+
+[2025-11-28 20:31:39.517] [info] Launching TSP (headless application)...
+
+--- [ hardware specifications ] ------------------------------------------------
+--------------------------------------------------------------------------------
+host                     = Z890
+cpu						 = Intel Core Ultra 7 265K
+threads total avail      = 20
+threads used for sim     = 20
+threads used for vis     = 0
+gpu 					 = NVIDIA GeForce RTX 5070 Ti
+
+--- [ simulation parameters ] --------------------------------------------------
+--------------------------------------------------------------------------------
+timeStep                 = 0.001000
+particleSizeF            = 0.010000
+particleSizeB            = 0.010000
+restDensityF             = 1000.000000
+restDensityB             = 1000.000000
+massF                    = 0.001000
+massB                    = 0.001000
+viscosityF               = 0.000060
+viscosityB               = 0.000060
+gammaPress               = 0.500000
+jacobiOmega              = 0.750000
+kernelSuppRatio          = 2.000000
+kernelRadius             = 0.020000
+jitterFracF              = 0.000000
+jitterFracB              = 0.000000
+boundaryLayers           = 2
+gravity                  = (0.000, -9.810, 0.000)
+
+--- [ simulation setup ] -------------------------------------------------------
+--------------------------------------------------------------------------------
+sim backend              = GPU01
+sim scenario             = Breaking Dam
+fluid particles          = 25000000
+boundary particles       = 2853612
+
+[2025-11-28 20:31:40.608] [info] Simulation started running
+
+--- [ benchmark summary ] ------------------------------------------------------
+--------------------------------------------------------------------------------
+operation group                |  latest [ms]       %    |     avg [ms]       %
+--------------------------------------------------------------------------------
+neighCon                       |         7.81     1.1    |         8.47     1.4
+neighQue                       |       151.60    21.5    |       127.82    21.2
+dens                           |        32.56     4.6    |        28.36     4.7
+viscAcc + extAcc               |       117.03    16.6    |        99.10    16.5
+srcTerm + diagElem             |       170.11    24.1    |       145.94    24.2
+jacSolv                        |       182.23    25.9    |       154.79    25.7
+presAcc                        |        39.34     5.6    |        33.63     5.6
+velUpd + posUpd                |         3.90     0.6    |         3.90     0.6
+statPart + statDens + statVel  |         0.00     0.0    |         0.00     0.0
+snapVis                        |         0.00     0.0    |         0.00     0.0
+miscSim                        |         0.00     0.0    |         0.00     0.0
+--------------------------------------------------------------------------------
+total simulation time          |       559.37     ---    |       477.85     ---
+
+00:03:59 elapsed | 500/500 steps (100.0 %) | 1.783 steps/s
+
+[2025-11-28 20:35:40.287] [info] Simulation stopped running
+
+=========================================================================================================================
+==== using compact instead of basic cell linked list neighbor search ====================================================
+=========================================================================================================================
+
+[2025-11-29 18:37:47.051] [info] Launching TSP (headless application)...
+
+--- [ hardware specifications ] ------------------------------------------------
+--------------------------------------------------------------------------------
+host                     = Z890
+cpu						 = Intel Core Ultra 7 265K
+threads total avail      = 20
+threads used for sim     = 20
+threads used for vis     = 0
+gpu 					 = NVIDIA GeForce RTX 5070 Ti
+
+--- [ simulation parameters ] --------------------------------------------------
+--------------------------------------------------------------------------------
+timeStep                 = 0.001000
+particleSizeF            = 0.010000
+particleSizeB            = 0.010000
+restDensityF             = 1000.000000
+restDensityB             = 1000.000000
+massF                    = 0.001000
+massB                    = 0.001000
+viscosityF               = 0.000060
+viscosityB               = 0.000060
+gammaPress               = 0.500000
+jacobiOmega              = 0.750000
+kernelSuppRatio          = 2.000000
+kernelRadius             = 0.020000
+jitterFracF              = 0.000000
+jitterFracB              = 0.000000
+boundaryLayers           = 2
+gravity                  = (0.000, -9.810, 0.000)
+
+--- [ simulation setup ] -------------------------------------------------------
+--------------------------------------------------------------------------------
+sim backend              = GPU01
+sim scenario             = Breaking Dam
+fluid particles          = 25000000
+boundary particles       = 2853612
+
+[2025-11-29 18:37:48.237] [info] Simulation started running
+
+--- [ benchmark summary ] ------------------------------------------------------
+--------------------------------------------------------------------------------
+operation group                |  latest [ms]       %    |     avg [ms]       %
+--------------------------------------------------------------------------------
+neighCon                       |        22.35     2.7    |        21.54     3.2
+neighQue                       |       274.27    33.7    |       233.55    34.4
+dens                           |        31.49     3.9    |        26.47     3.9
+viscAcc + extAcc               |       109.44    13.5    |        88.75    13.1
+srcTerm + diagElem             |       161.72    19.9    |       133.73    19.7
+jacSolv                        |       172.79    21.2    |       140.58    20.7
+presAcc                        |        37.27     4.6    |        30.91     4.5
+velUpd + posUpd                |         3.93     0.5    |         3.94     0.6
+statPart + statDens + statVel  |         0.00     0.0    |         0.00     0.0
+snapVis                        |         0.00     0.0    |         0.00     0.0
+miscSim                        |         0.00     0.0    |         0.00     0.0
+--------------------------------------------------------------------------------
+total simulation time          |       675.98     ---    |       566.55     ---
+
+00:04:43 elapsed | 500/500 steps (100.0 %) | 1.482 steps/s
+
+[2025-11-29 18:42:32.414] [info] Simulation stopped running

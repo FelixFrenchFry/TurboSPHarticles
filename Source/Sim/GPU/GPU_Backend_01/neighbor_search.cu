@@ -310,14 +310,12 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 
 void NS_CellLinkedList_Basic_GPU01::Query(const SimParams& params)
 {
-	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
-
 	// reset per-particle counts/overflow before filling
 	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
 
-	GPU01::Launch_CellLinkedListBasic_Query(
+	GPU01::Launch_CellLinkedList_Basic_Query(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		d_cellStartIdxF_.Data(), d_cellEndIdxF_.Data(),
@@ -329,4 +327,226 @@ void NS_CellLinkedList_Basic_GPU01::Query(const SimParams& params)
 		be_.d_neighOverflowFlag_.Data());
 
 	GPU::StreamSync(be_.stream_);
+}
+
+// -----------------------------------------------------------------------------
+// --- [ cell linked list compact implementation ] -----------------------------
+// -----------------------------------------------------------------------------
+
+void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
+{
+	cellSize_ = 0.0f;
+	cellSizeInv_ = 0.0f;
+	N_NonEmptyCellsF_ = 0;
+	N_NonEmptyCellsB_ = 0;
+
+	d_uniqueCellIdF_.Release();
+	d_cellStartIdxF_.Release();
+	d_cellIdF_.Release();
+	d_sortedParticleIdxF_.Release();
+
+	d_uniqueCellIdB_.Release();
+	d_cellStartIdxB_.Release();
+	d_cellIdB_.Release();
+	d_sortedParticleIdxB_.Release();
+
+	d_cellStartMarkerScan_.Release();
+}
+
+void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
+{
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+
+	if (N_F == 0 && N_B == 0)
+	{
+		std::cerr << "Warning: No construction possible (empty simulation)\n";
+
+		N_NonEmptyCellsF_ = 0;
+		N_NonEmptyCellsB_ = 0;
+
+		d_uniqueCellIdF_.Release();
+		d_cellStartIdxF_.Release();
+		d_cellIdF_.Release();
+		d_sortedParticleIdxF_.Release();
+
+		d_uniqueCellIdB_.Release();
+		d_cellStartIdxB_.Release();
+		d_cellIdB_.Release();
+		d_sortedParticleIdxB_.Release();
+
+		d_cellStartMarkerScan_.Release();
+
+		return;
+	}
+
+	cellSize_ = params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+				 ? 0.0f : (1.0f / params.kernelRadius);
+
+	EnsureStorageAllocation();
+
+	GPU01::NS_ReloadConstants(
+		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, 0.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
+
+	// --- [ cell coordinates and indices for fluid and boundary particles ] ---
+
+	if (N_F > 0) // fluid
+	{
+		GPU01::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+			N_F, be_.stream_, d_cellIdF_.Data(), d_sortedParticleIdxF_.Data());
+	}
+
+	if (N_B > 0) // boundary
+	{
+		GPU01::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
+	}
+
+	// --- [ sort particle indices by cell IDs ] -------------------------------
+
+	if (N_F > 0) // fluid
+	{
+		thrust::device_ptr<uint64_t> keysF(d_cellIdF_.Data());
+		thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
+
+		// using radix sort from thrust
+		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
+			keysF, keysF + N_F,valsF);
+	}
+
+	if (N_B > 0) // boundary
+	{
+		thrust::device_ptr<uint64_t> keysB(d_cellIdB_.Data());
+		thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB_.Data());
+
+		// using radix sort from thrust
+		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
+			keysB, keysB + N_B, valsB);
+	}
+
+	// --- [ build compact cell list and fill in cell start indices ] ----------
+
+	if (N_F > 0) // fluid
+	{
+		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_,
+			d_cellIdF_.Data(),
+			N_F, N_NonEmptyCellsF_);
+	}
+	else
+	{
+		N_NonEmptyCellsF_ = 0;
+	}
+
+	if (N_B > 0) // boundary
+	{
+		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_,
+			d_cellIdB_.Data(),
+			N_B, N_NonEmptyCellsB_);
+	}
+	else
+	{
+		N_NonEmptyCellsB_ = 0;
+	}
+}
+
+void NS_CellLinkedList_Compact_GPU01::Query(const SimParams& params)
+{
+	// reset per-particle counts/overflow before filling
+	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
+
+	GPU01::Launch_CellLinkedList_Compact_Query_Basic(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
+		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_,
+		be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
+		be_.d_neighCountFF_.Data(), be_.d_neighCountFB_.Data(),
+		be_.d_neighListFF_.Data(), be_.d_neighListFB_.Data(),
+		be_.d_neighOverflowFlag_.Data());
+
+	// TODO: implement smart version of this, iterating over cells instead of particles
+
+	GPU::StreamSync(be_.stream_);
+}
+
+void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
+{
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const uint32_t N_MAX = std::max(N_F, N_B);
+
+	if (N_F > 0)
+	{
+		d_uniqueCellIdF_.Resize(N_F);
+		d_cellStartIdxF_.Resize(N_F + 1);
+		d_cellIdF_.Resize(N_F);
+		d_sortedParticleIdxF_.Resize(N_F + 1);
+	}
+
+	if (N_B > 0)
+	{
+		d_uniqueCellIdB_.Resize(N_B);
+		d_cellStartIdxB_.Resize(N_B + 1);
+		d_cellIdB_.Resize(N_B);
+		d_sortedParticleIdxB_.Resize(N_B + 1);
+	}
+
+	if (N_MAX > 0)
+	{
+		d_cellStartMarkerScan_.Resize(N_MAX);
+	}
+}
+
+void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
+	DeviceBuffer<uint64_t>& d_uniqueCellId,
+	DeviceBuffer<uint32_t>& d_cellStartIdx,
+	const uint64_t* d_cellIdSorted,
+	uint32_t N, uint32_t& N_NonEmptyCells)
+{
+	if (N == 0)
+	{
+		N_NonEmptyCells = 0;
+		return;
+	}
+
+	// mark cell starts in the shared marker/scan scratch buffer
+	GPU01::Launch_MarkCellStarts(
+		d_cellIdSorted, N, be_.stream_, d_cellStartMarkerScan_.Data());
+
+	// inclusive scan in-place to get cell indices for each particle
+	{
+		thrust::device_ptr<uint32_t> scanBegin(d_cellStartMarkerScan_.Data());
+		thrust::device_ptr<uint32_t> scanEnd(d_cellStartMarkerScan_.Data() + N);
+
+		thrust::inclusive_scan(thrust::cuda::par.on(be_.stream_),
+			scanBegin, scanEnd, scanBegin);
+	}
+
+	// get last scan value to determine number of unique cells
+	uint32_t lastScan = 0;
+	GPU::Check(cudaMemcpyAsync(&lastScan,
+		d_cellStartMarkerScan_.Data() + (N - 1),
+		sizeof(uint32_t),
+		cudaMemcpyDeviceToHost,
+		be_.stream_));
+	GPU::StreamSync(be_.stream_);
+	N_NonEmptyCells = lastScan;
+
+	// resize cell-related buffers
+	d_uniqueCellId.Resize(N_NonEmptyCells);
+	d_cellStartIdx.Resize(N_NonEmptyCells + 1);
+
+	// fill in cell-related data
+	GPU01::Launch_FillUniqueCellIdAndCellStartIdx(
+		d_cellIdSorted, d_cellStartMarkerScan_.Data(),
+		N, N_NonEmptyCells, be_.stream_,
+		d_uniqueCellId.Data(), d_cellStartIdx.Data());
 }

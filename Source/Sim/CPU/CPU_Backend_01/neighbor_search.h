@@ -159,7 +159,7 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 		static constexpr uint32_t N_NbrDim_ = 3;
-		static  constexpr uint32_t N_NbrCells_ = N_NbrDim_ * N_NbrDim_ * N_NbrDim_;
+		static constexpr uint32_t N_NbrCells_ = N_NbrDim_ * N_NbrDim_ * N_NbrDim_;
 
 		// data structures
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
