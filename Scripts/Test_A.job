@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=96
-#SBATCH --time=4:00:00
+#SBATCH --time=24:00:00
 #SBATCH --mem=360gb
 #SBATCH --output=job_%j.out
 #SBATCH --error=job_%j.err
@@ -18,8 +18,8 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export TBB_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # build it
-cd $HOME/TurboSPHparticles
-cmake --build build-headless-relwithdeb --target TSP_Headless -j
+cd /pfs/work9/workspace/scratch/fr_fl184-particleStorage/TurboSPHarticles
+# cmake --build build-headless-relwithdeb --target TSP_Headless -j
 
 # run it
 ./build-headless-relwithdeb/bin/TSP_Headless

@@ -149,11 +149,15 @@ namespace CPU01
 		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
 		float timeStep, float particleSizeInvF,
 		float kernelRadiusSqu, float cubicSplineAlpha,
-		float massF, float massB, float jacobiOmega,
+		float restDensityF, float massF, float massB,
+		float jacobiOmega,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT sysVecElemF,
-		float* RESTRICT pressureF);
+		float* RESTRICT pressureF,
+		float& avgRelDensityErrorF_raw,
+		float& avgRelDensityErrorF_pos,
+		float& avgRelDensityErrorF_abs);
 
 	void Integration(
 		const float* RESTRICT xVelPredF,

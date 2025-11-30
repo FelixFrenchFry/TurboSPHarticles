@@ -53,6 +53,8 @@ namespace Sim
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;
 
+		bool TerminationConditionSatisfied(uint32_t iterCount);
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
@@ -96,6 +98,12 @@ namespace Sim
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> xVelB_, yVelB_, zVelB_;
 		std::vector<uint32_t> idB_;
+
+		// misc data
+		uint32_t N_solverIterCount_;
+		float avgRelDensityErrorF_raw_;
+		float avgRelDensityErrorF_pos_;
+		float avgRelDensityErrorF_abs_;
 
 		// neighbor storage
 		// TODO: use small vector from boost library for inner vec?

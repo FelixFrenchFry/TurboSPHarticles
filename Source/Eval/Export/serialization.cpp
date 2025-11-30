@@ -321,7 +321,7 @@ namespace Export
 
 	void SerializationMgr::SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir)
 	{
-		const std::string baseName = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
+		const std::string baseName = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".h5";
 
 		// ensure export directory exists
 		std::error_code ec;
@@ -371,8 +371,8 @@ namespace Export
 
 	void SerializationMgr::SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir)
 	{
-		const std::string baseName_h5 = "export_step_" + FormatStepPadded(snap.simStep) + ".h5";
-		const std::string baseName_xdmf = "export_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
+		const std::string baseName_h5 = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".h5";
+		const std::string baseName_xdmf = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
 
 		// ensure export directory exists
 		std::error_code ec;

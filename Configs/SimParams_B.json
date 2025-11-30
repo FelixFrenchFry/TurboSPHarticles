@@ -11,7 +11,7 @@
   "viscosityF": 0.00006,
   "viscosityB": 0.00006,
   "gammaPress": 0.5,
-  "jacobiOmega": 0.75,
+  "jacobiOmega": 0.5,
   "gravity": [ 0.0, -9.81, 0.0 ],
 
   "jitterFracF": 0.0,
@@ -23,7 +23,7 @@
   "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
 
-  "exportEnabled": true,
+  "exportEnabled": false,
   "exportDir": "A",
   "exportInterval": 10
 }

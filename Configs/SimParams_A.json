@@ -11,7 +11,7 @@
   "viscosityF": 0.000003,
   "viscosityB": 0.000003,
   "gammaPress": 0.5,
-  "jacobiOmega": 0.6,
+  "jacobiOmega": 0.5,
   "gravity": [ 0.0, -9.81, 0.0 ],
 
   "jitterFracF": 0.0,

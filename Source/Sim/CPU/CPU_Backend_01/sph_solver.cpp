@@ -3,6 +3,8 @@
 // external
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <iostream>
 #include <numbers>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -157,8 +159,13 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		params.jacobiOmega, N_F_,
 		pressureF);
 
-	int cnt = 0;
-	while (cnt < 2) // TODO: add proper termination condition
+	// rest solver-related variables
+	N_solverIterCount_ = 1;
+	avgRelDensityErrorF_raw_ = 0.0f;
+	avgRelDensityErrorF_pos_ = 0.0f;
+	avgRelDensityErrorF_abs_ = 0.0f;
+
+	do
 	{
 		// compute pressure acceleration from current pressure field
 		CPU01::PressureAcceleration(
@@ -178,11 +185,12 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			sourceTermF, diagElemF,
 			neighborsFF, neighborsFB,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-			massF, massB, params.jacobiOmega, N_F_,
-			sysVecElemF, pressureF);
+			params.restDensityF, massF, massB, params.jacobiOmega, N_F_,
+			sysVecElemF, pressureF, avgRelDensityErrorF_raw_, 
+			avgRelDensityErrorF_pos_, avgRelDensityErrorF_abs_);
 
-		cnt++;
-	}
+		N_solverIterCount_++;
+	} while (!TerminationConditionSatisfied(N_solverIterCount_));
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
@@ -218,6 +226,20 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
 								   Bench::BenchOp::PositionUpdate });
+}
+
+bool SimBackend_CPU01::TerminationConditionSatisfied(uint32_t iterCount)
+{
+	// TODO: implement properly with parameters for choosing condition
+
+	bool satisfied = false;
+
+	if (iterCount > 4) { satisfied = true; }
+	// if (avgRelDensityErrorF_raw_ <= 0.001f) { satisfied = true; }
+	// if (avgRelDensityErrorF_pos_ <= 0.01f) { satisfied = true; }
+	// if (avgRelDensityErrorF_abs_ <= 0.01f) { satisfied = true; }
+
+	return satisfied;
 }
 
 inline void CPU01::KernelWeight_CubicSpline(
@@ -934,19 +956,52 @@ void CPU01::PressureRelaxedJacobiSolver(
 	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
-	const float massF, const float massB, const float jacobiOmega,
+	const float restDensityF, const float massF, const float massB,
+	const float jacobiOmega,
 	const uint32_t N_F,
 	// destinations
 	float* RESTRICT sysVecElemF,
-	float* RESTRICT pressureF)
+	float* RESTRICT pressureF,
+	float& avgRelDensityErrorF_raw,
+	float& avgRelDensityErrorF_pos,
+	float& avgRelDensityErrorF_abs)
 {
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
+	struct DensityErrorAccum
+	{
+		double sumRaw = 0.0;
+		double sumPos = 0.0;
+		double sumAbs = 0.0;
+		uint64_t cntAll = 0;
+		uint64_t cntPos = 0;
+
+		DensityErrorAccum() = default;
+
+		DensityErrorAccum(DensityErrorAccum& other, tbb::split)
+		{
+			sumRaw = 0.0;
+			sumPos = 0.0;
+			sumAbs = 0.0;
+			cntAll = 0;
+			cntPos = 0;
+		}
+
+		void join(const DensityErrorAccum& rhs)
+		{
+			sumRaw += rhs.sumRaw;
+			sumPos += rhs.sumPos;
+			sumAbs += rhs.sumAbs;
+			cntAll += rhs.cntAll;
+			cntPos += rhs.cntPos;
+		}
+	};
+
+	DensityErrorAccum acc = tbb::parallel_reduce(
+		tbb::blocked_range<uint32_t>(0, N_F), DensityErrorAccum{},
+		[&](const tbb::blocked_range<uint32_t>& r, DensityErrorAccum local) -> DensityErrorAccum
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				const float xi = xPosF[i];
+			    const float xi = xPosF[i];
 				const float yi = yPosF[i];
 				const float zi = zPosF[i];
 
@@ -961,7 +1016,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
 				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
 				#pragma omp simd reduction(+:tmp_SysVecElemF)
-				for (uint32_t k = 0; k < N_FF; k++)
+				for (uint32_t k = 0; k < N_FF; ++k)
 				{
 					// global index of neighbor particle
 					const uint32_t j = nbrFF[k];
@@ -985,8 +1040,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 					const float dapz = azi - zAccPressF[j];
 
 					tmp_SysVecElemF += dapx * xkg
-									 + dapy * ykg
-									 + dapz * zkg;
+						+ dapy * ykg
+						+ dapz * zkg;
 				}
 				tmp_SysVecElemF *= massF;
 
@@ -1014,8 +1069,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 
 					// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
 					tmp_SysVecElemB += axi * xkg
-									 + ayi * ykg
-									 + azi * zkg;
+						+ ayi * ykg
+						+ azi * zkg;
 				}
 				tmp_SysVecElemB *= massB;
 
@@ -1023,21 +1078,68 @@ void CPU01::PressureRelaxedJacobiSolver(
 				sysVecElemF[i] = timeStep * timeStep
 							   * (tmp_SysVecElemF + tmp_SysVecElemB);
 
+				const float densityError = sourceTermF[i] - sysVecElemF[i];
 				float tmp_PressureF = 0.0f;
 
-				// only update pressure if particle has neighbors
+				// only update pressure and error if particle has neighbors
 				if (!Base::ApproxEqu(diagElemF[i], 0.0f))
 				{
+					// relaxed Jacobi solver update
 					tmp_PressureF = pressureF[i] + jacobiOmega
-								  * ((sourceTermF[i] - sysVecElemF[i]) / diagElemF[i]);
+						* (densityError / diagElemF[i]);
+
+					// relative density error
+					const float relErr = densityError / restDensityF;
+					const float absErr = std::fabs(relErr);
+
+					local.sumRaw += static_cast<double>(relErr);
+					local.sumAbs += static_cast<double>(absErr);
+					local.cntAll++;
+
+					if (relErr > 0.0f)
+					{
+						local.sumPos += static_cast<double>(relErr);
+						local.cntPos++;
+					}
 				}
 
 				// clamp pressure to non-negative values
 				pressureF[i] = fmaxf(tmp_PressureF, 0.0f);
 			}
+
+			return local;
 		},
-		tbb::auto_partitioner{}
+		[](const DensityErrorAccum& a, const DensityErrorAccum& b) -> DensityErrorAccum
+		{
+			DensityErrorAccum c = a;
+			c.join(b);
+			return c;
+		}
 	);
+
+	// finalize averages and handle degenerate cases
+	if (acc.cntAll > 0)
+	{
+		avgRelDensityErrorF_raw = static_cast<float>(acc.sumRaw 
+							    / static_cast<double>(acc.cntAll));
+		avgRelDensityErrorF_abs = static_cast<float>(acc.sumAbs
+							    / static_cast<double>(acc.cntAll));
+	}
+	else
+	{
+		avgRelDensityErrorF_raw = 0.0f;
+		avgRelDensityErrorF_abs = 0.0f;
+	}
+
+	if (acc.cntPos > 0)
+	{
+		avgRelDensityErrorF_pos = static_cast<float>(acc.sumPos 
+								/ static_cast<double>(acc.cntPos));
+	}
+	else
+	{
+		avgRelDensityErrorF_pos = 0.0f;
+	}
 }
 
 void CPU01::Integration(
