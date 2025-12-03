@@ -27,7 +27,7 @@ namespace Export
 
 		// compression
 		int compressionLevel		= 1;    // [0,...,9], 0 = none, 9 = max
-		bool compress				= true; // zlib compression (non-contiguous chunks)
+		bool compress				= false; // zlib compression (non-contiguous chunks)
 		bool shuffleFilter			= true; // byte shuffle for better compression ratio on FP data
 
 		// chunk target size
