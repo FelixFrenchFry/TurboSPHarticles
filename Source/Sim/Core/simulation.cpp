@@ -413,8 +413,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 		if (maxSteps == std::numeric_limits<int64_t>::max())
 		{
-			//DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-			//	benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
+			DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
+				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
 		}
 		else
 		{
