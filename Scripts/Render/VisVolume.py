@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
@@ -6,6 +8,7 @@ import multiprocessing as mp
 
 import numpy as np
 import pyvista as pv
+
 
 
 # --- [ config ] ---------------------------------------------------------------
@@ -40,8 +43,8 @@ CAMERA_POSITION = [
     (0.0,  1.0,  0.0),   # up
 ]
 
-USE_MULTIPROCESSING = False
-NUM_PROCESSES       = 8
+USE_MULTIPROCESSING = True
+NUM_PROCESSES       = 16
 
 # --- [ helpers ] --------------------------------------------------------------
 
@@ -63,6 +66,23 @@ def choose_scalar_name(dataset: pv.DataSet) -> str | None:
     return None
 
 
+def ensure_single_dataset(mesh: pv.DataSet | pv.MultiBlock) -> pv.DataSet:
+    """Handle MultiBlock with single DataSet"""
+    if isinstance(mesh, pv.MultiBlock):
+        if len(mesh) == 0:
+            raise ValueError("MultiBlock dataset is empty")
+        # combine all blocks into one
+        combined = mesh.combine()
+        if combined.n_points == 0:
+            # fallback just takes the first non-empty block
+            for block in mesh:
+                if block is not None and block.n_points > 0:
+                    return block
+            raise ValueError("All blocks in MultiBlock are empty")
+        return combined
+    return mesh
+
+
 def subsample_points(mesh: pv.DataSet) -> pv.DataSet:
     n_points = mesh.n_points
     if n_points == 0:
@@ -79,7 +99,20 @@ def subsample_points(mesh: pv.DataSet) -> pv.DataSet:
     return mesh
 
 
-def build_uniform_grid_from_bounds(bounds, res) -> pv.UniformGrid:
+def get_uniform_grid_class():
+    """Return a grid class suitable for uniform volume data."""
+    GridType = getattr(pv, "UniformGrid", None)
+    if GridType is None:
+        GridType = getattr(pv, "ImageData", None)
+    if GridType is None:
+        raise RuntimeError(
+            "PyVista has neither 'UniformGrid' nor 'ImageData'. "
+            "Please update pyvista."
+        )
+    return GridType
+
+
+def build_uniform_grid_from_bounds(bounds, res):
     xmin, xmax, ymin, ymax, zmin, zmax = bounds
     nx, ny, nz = res
 
@@ -92,12 +125,27 @@ def build_uniform_grid_from_bounds(bounds, res) -> pv.UniformGrid:
     dy = y_len / (ny - 1)
     dz = z_len / (nz - 1)
 
-    grid = pv.UniformGrid()
+    GridType = get_uniform_grid_class()
+    grid = GridType()
     grid.dimensions = (nx, ny, nz)
     grid.origin = (xmin, ymin, zmin)
     grid.spacing = (dx, dy, dz)
     return grid
 
+
+def clean_scalar_array(volume: pv.DataSet, name: str) -> None:
+    """Replace NaN/inf with finite values to avoid volume-rendering issues."""
+    arr = volume[name]
+    if not isinstance(arr, np.ndarray):
+        return
+    mask_bad = ~np.isfinite(arr)
+    if np.any(mask_bad):
+        finite_vals = arr[np.isfinite(arr)]
+        if finite_vals.size == 0:
+            arr[:] = 0.0 # all values are bad, set to zero
+        else:
+            arr[mask_bad] = np.median(finite_vals)
+        volume[name] = arr
 
 # --- [ core rendering ] -------------------------------------------------------
 
@@ -113,34 +161,35 @@ def render_step(step: int) -> None:
         print(f"[step {step:9d}] reading {in_path}")
         mesh = pv.read(in_path)
 
+        mesh = ensure_single_dataset(mesh)
+
         if mesh.n_points == 0:
             print(f"[step {step:9d}] mesh has no points, skipping")
             return
 
-        # optional subsampling
         mesh = subsample_points(mesh)
 
-        # prepare a uniform grid over the particle bounds
         bounds = mesh.bounds
-        print(f"  bounds: x[{bounds[0]:.3f}, {bounds[1]:.3f}], "
-              f"y[{bounds[2]:.3f}, {bounds[3]:.3f}], "
-              f"z[{bounds[4]:.3f}, {bounds[5]:.3f}]")
+        print(
+            "  bounds: "
+            f"x[{bounds[0]:.3f}, {bounds[1]:.3f}], "
+            f"y[{bounds[2]:.3f}, {bounds[3]:.3f}], "
+            f"z[{bounds[4]:.3f}, {bounds[5]:.3f}]"
+        )
 
         grid = build_uniform_grid_from_bounds(bounds, GRID_RES)
 
-        # resample point data onto the grid
         print(f"  resampling to grid {GRID_RES} (this may take a bit)...")
         volume = grid.sample(mesh)
 
-        # choose scalar for volume rendering
         scalars_name = choose_scalar_name(volume)
         if scalars_name is None:
             print(f"[step {step:9d}] no scalar from {SCALAR_CANDIDATES}, aborting")
             return
 
         print(f"  using scalar '{scalars_name}' for volume rendering")
+        clean_scalar_array(volume, scalars_name)
 
-        # build plotter & render
         plotter = pv.Plotter(off_screen=True)
         plotter.set_background(BACKGROUND)
         plotter.window_size = IMAGE_SIZE
@@ -168,7 +217,9 @@ def render_step(step: int) -> None:
 
 def main():
     try:
-        pv.start_xvfb()
+        start_xvfb = getattr(pv, "start_xvfb", None)
+        if callable(start_xvfb):
+            start_xvfb()
     except Exception:
         pass
 
@@ -182,8 +233,10 @@ def main():
         stride = STEP_STRIDE
 
     steps = list(range(start, end + 1, stride))
-    print(f"Rendering volume steps: {steps[0]} .. {steps[-1]} "
-          f"(stride {stride}), total {len(steps)}")
+    print(
+        f"Rendering volume steps: {steps[0]} .. {steps[-1]} "
+        f"(stride {stride}), total {len(steps)}"
+    )
 
     if USE_MULTIPROCESSING:
         with mp.Pool(NUM_PROCESSES) as pool:

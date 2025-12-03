@@ -103,3 +103,4 @@ Folder.DotSettings.user
 *.exe
 *.out
 *.app
+Export/

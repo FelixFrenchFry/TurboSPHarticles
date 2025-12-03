@@ -23,7 +23,7 @@
   "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
 
-  "exportEnabled": false,
-  "exportDir": "A",
-  "exportInterval": 10
+  "exportEnabled": true,
+  "exportDir": "C",
+  "exportInterval": 20
 }
