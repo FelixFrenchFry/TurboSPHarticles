@@ -168,14 +168,14 @@ namespace Sim
 		DeviceBuffer<float> d_xVelB_, d_yVelB_, d_zVelB_;
 		DeviceBuffer<uint32_t> d_idB_;
 
-		// neighbors
-		static constexpr uint32_t N_MAX_FF_ = 48;
-		static constexpr uint32_t N_MAX_FB_ = 24;
+		// max neighbor counts
+		static constexpr uint32_t N_MAX_FF_ = 64;
+		static constexpr uint32_t N_MAX_FB_ = 32;
 
 		DeviceBuffer<uint8_t> d_neighCountFF_;
 		DeviceBuffer<uint8_t> d_neighCountFB_;
-		DeviceBuffer<uint32_t> d_neighListFF_; // N_F_ * N_MAX_NEIGH_FF_
-		DeviceBuffer<uint32_t> d_neighListFB_; // N_F_ * N_MAX_NEIGH_FB_
+		DeviceBuffer<uint32_t> d_neighListFF_; // N_F_ * N_MAX_FF_
+		DeviceBuffer<uint32_t> d_neighListFB_; // N_F_ * N_MAX_FB_
 		DeviceBuffer<uint32_t> d_neighOverflowFlag_; // TODO: use smaller data type?
 
 		// re-usable work (scratch) buffer for temp storage

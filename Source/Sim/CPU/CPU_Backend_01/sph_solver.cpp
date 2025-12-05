@@ -90,8 +90,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
 	neighborSearchStrat_->Query(params);
-	neighborLists_->Finalize();
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Misc_Sim });
+	neighborLists_->Finalize();
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Misc_Sim });
 
 	// --- [ density computations ] --------------------------------------------
 
@@ -233,7 +236,7 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(uint32_t iterCount)
 
 	bool satisfied = false;
 
-	if (iterCount > 5) { satisfied = true; }
+	if (iterCount > 50) { satisfied = true; }
 	// if (avgRelDensityErrorF_raw_ <= 0.001f) { satisfied = true; }
 	// if (avgRelDensityErrorF_pos_ <= 0.01f) { satisfied = true; }
 	// if (avgRelDensityErrorF_abs_ <= 0.01f) { satisfied = true; }

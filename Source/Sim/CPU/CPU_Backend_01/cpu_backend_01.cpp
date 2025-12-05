@@ -31,7 +31,9 @@ SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
 	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
 	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
 
-	neighborLists_ = std::make_unique<NeighborLists_SmallVector_CPU01>();
+	//neighborLists_ = std::make_unique<NeighborLists_SmallVectors_CPU01>();
+	//neighborLists_ = std::make_unique<NeighborLists_FixedArrays_CPU01>();
+	neighborLists_ = std::make_unique<NeighborLists_CompressedVector_CPU01>();
 }
 
 void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
