@@ -93,7 +93,7 @@ namespace Sim
 
 		virtual void Query(const SimParams& params) = 0;
 
-		// TODO: add re-order and sorting stuff?
+		virtual void DataReOrder(const SimParams& params) = 0;
 	};
 
 	struct NeighborSpan

@@ -34,6 +34,36 @@
 
 using namespace Sim;
 
+namespace
+{
+	template <typename T>
+	void ApplyPermutation(const std::vector<uint32_t>& perm,
+						  std::vector<T>& data)
+	{
+		// (capped at uint32_t to correspond to max particle count)
+		const uint32_t N = static_cast<uint32_t>(perm.size());
+		if (N == 0) { return; }
+
+		assert(data.size() == N && "Permutation and data vector size mismatch");
+
+		std::vector<T> tmp(N);
+
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					tmp[i] = data[perm[i]];
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		data.swap(tmp);
+	}
+} // unnamed
+
 // -----------------------------------------------------------------------------
 // --- [ brute force implementation ] ------------------------------------------
 // -----------------------------------------------------------------------------
@@ -103,6 +133,11 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_BruteForce_CPU01::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 // -----------------------------------------------------------------------------
@@ -288,6 +323,11 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_SpatialHashing_Basic_CPU01::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 // bijective mapping of signed to unsigned integers
@@ -717,6 +757,11 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_CellLinkedList_Basic_CPU01::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 inline uint32_t NS_CellLinkedList_Basic_CPU01::MapToCellId_Basic(
@@ -1281,6 +1326,133 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
+{
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	cellSize_ = params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+				 ? 0.0f : (1.0f / params.kernelRadius);
+
+	if (N_F > 0)
+	{
+		// TODO: use persistent scratch arrays instead of allocating new ones every time?
+		std::vector<uint64_t> mortonF(N_F);
+		std::vector<uint32_t> permF(N_F);
+		std::iota(permF.begin(), permF.end(), 0u);
+
+		// compute Morton codes for fluid particles
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell coordinates
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+					mortonF[i] = MapToCellId_Morton(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// sort indices according to Morton codes
+		tbb::parallel_sort(permF.begin(), permF.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				return mortonF[a] < mortonF[b];
+			}
+		);
+
+		// apply permutation to all fluid SoA arrays
+		ApplyPermutation(permF, be_.xPosF_);
+		ApplyPermutation(permF, be_.yPosF_);
+		ApplyPermutation(permF, be_.zPosF_);
+
+		ApplyPermutation(permF, be_.xVelF_);
+		ApplyPermutation(permF, be_.yVelF_);
+		ApplyPermutation(permF, be_.zVelF_);
+
+		ApplyPermutation(permF, be_.xVelPredF_);
+		ApplyPermutation(permF, be_.yVelPredF_);
+		ApplyPermutation(permF, be_.zVelPredF_);
+
+		ApplyPermutation(permF, be_.xAccF_);
+		ApplyPermutation(permF, be_.yAccF_);
+		ApplyPermutation(permF, be_.zAccF_);
+
+		ApplyPermutation(permF, be_.xAccPressF_);
+		ApplyPermutation(permF, be_.yAccPressF_);
+		ApplyPermutation(permF, be_.zAccPressF_);
+
+		ApplyPermutation(permF, be_.xAccViscF_);
+		ApplyPermutation(permF, be_.yAccViscF_);
+		ApplyPermutation(permF, be_.zAccViscF_);
+
+		ApplyPermutation(permF, be_.xAccExtF_);
+		ApplyPermutation(permF, be_.yAccExtF_);
+		ApplyPermutation(permF, be_.zAccExtF_);
+
+		ApplyPermutation(permF, be_.sourceTermF_);
+		ApplyPermutation(permF, be_.diagElemF_);
+		ApplyPermutation(permF, be_.sysVecElemF_);
+		ApplyPermutation(permF, be_.pressureF_);
+		ApplyPermutation(permF, be_.densityF_);
+
+		ApplyPermutation(permF, be_.idF_);
+	}
+
+	if (N_B > 0)
+	{
+		// TODO: use persistent scratch arrays instead of allocating new ones every time?
+		std::vector<uint64_t> mortonB(N_B);
+		std::vector<uint32_t> permB(N_B);
+		std::iota(permB.begin(), permB.end(), 0u);
+
+		// compute Morton codes for boundary particles
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_B),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell coordinates
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+					mortonB[i] = MapToCellId_Morton(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// sort indices according to Morton codes
+		tbb::parallel_sort(permB.begin(), permB.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				return mortonB[a] < mortonB[b];
+			}
+		);
+
+		// apply permutation to all boundary SoA arrays
+		ApplyPermutation(permB, be_.xPosB_);
+		ApplyPermutation(permB, be_.yPosB_);
+		ApplyPermutation(permB, be_.zPosB_);
+
+		ApplyPermutation(permB, be_.xVelB_);
+		ApplyPermutation(permB, be_.yVelB_);
+		ApplyPermutation(permB, be_.zVelB_);
+
+		ApplyPermutation(permB, be_.idB_);
+	}
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(

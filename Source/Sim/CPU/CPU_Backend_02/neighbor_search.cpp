@@ -100,6 +100,11 @@ void NS_BruteForce_CPU02::Query(const SimParams& params)
 	);
 }
 
+void NS_BruteForce_CPU02::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
+}
+
 // -----------------------------------------------------------------------------
 // --- [ spatial hashing implementation ] --------------------------------------
 // -----------------------------------------------------------------------------
@@ -280,6 +285,11 @@ void NS_SpatialHashing_Basic_CPU02::Query(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_SpatialHashing_Basic_CPU02::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 // bijective mapping of signed to unsigned integers
@@ -713,6 +723,11 @@ void NS_CellLinkedList_Basic_CPU02::Query(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_CellLinkedList_Basic_CPU02::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 inline uint32_t NS_CellLinkedList_Basic_CPU02::MapToCellId_Basic(
@@ -1245,6 +1260,11 @@ void NS_CellLinkedList_Compact_CPU02::Query_Smart(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+void NS_CellLinkedList_Compact_CPU02::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU02::MapToCellId_XYZ(

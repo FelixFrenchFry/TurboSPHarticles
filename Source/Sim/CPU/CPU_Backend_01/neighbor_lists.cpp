@@ -164,14 +164,13 @@ NeighborSpan NeighborLists_FixedArrays_CPU01::FB(uint32_t i) const
 }
 
 // -----------------------------------------------------------------------------
-// --- [ compressed vector neighbor lists implementation ] ---------------------
+// --- [ compact vector neighbor lists implementation ] ------------------------
 // -----------------------------------------------------------------------------
 
-void NeighborLists_CompressedVector_CPU01::Resize(uint32_t N_F, uint32_t N_B)
+void NeighborLists_CompactVector_CPU01::Resize(uint32_t N_F, uint32_t N_B)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
-	finalized_ = false;
 
 	// temporary 2D vector structure
 	tmpFF_.clear();
@@ -179,27 +178,21 @@ void NeighborLists_CompressedVector_CPU01::Resize(uint32_t N_F, uint32_t N_B)
 	tmpFF_.resize(N_F_);
 	tmpFB_.resize(N_F_);
 
-	// compressed vector structure
-	offsetsFF_.clear();
-	offsetsFB_.clear();
+	// compact vector structure
 	offsetsFF_.resize(N_F_ + 1, 0);
 	offsetsFB_.resize(N_F_ + 1, 0);
 	neighborsFF_.clear();
 	neighborsFB_.clear();
 }
 
-void NeighborLists_CompressedVector_CPU01::ClearOne(uint32_t i)
+void NeighborLists_CompactVector_CPU01::ClearOne(uint32_t i)
 {
-	finalized_ = false;
-
 	tmpFF_[i].clear();
 	tmpFB_[i].clear();
 }
 
-void NeighborLists_CompressedVector_CPU01::ClearAll()
+void NeighborLists_CompactVector_CPU01::ClearAll()
 {
-	finalized_ = false;
-
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -214,12 +207,10 @@ void NeighborLists_CompressedVector_CPU01::ClearAll()
 	);
 }
 
-void NeighborLists_CompressedVector_CPU01::Finalize()
+void NeighborLists_CompactVector_CPU01::Finalize()
 {
 	if (N_F_ == 0) // nothing to do for empty sim
 	{
-		finalized_ = true;
-
 		offsetsFF_.assign(1, 0);
 		offsetsFB_.assign(1, 0);
 		neighborsFF_.clear();
@@ -228,7 +219,7 @@ void NeighborLists_CompressedVector_CPU01::Finalize()
 		return;
 	}
 
-	// --- [ build compressed vector for FF ] ----------------------------------
+	// --- [ build compact vector for FF ] -------------------------------------
 
 	// build offsets via prefix sum
 	offsetsFF_[0] = 0;
@@ -262,7 +253,7 @@ void NeighborLists_CompressedVector_CPU01::Finalize()
 		tbb::auto_partitioner{}
 	);
 
-	// --- [ build compressed vector for FB ] ----------------------------------
+	// --- [ build compact vector for FB ] -------------------------------------
 
 	// build offsets via prefix sum
 	offsetsFB_[0] = 0;
@@ -295,48 +286,34 @@ void NeighborLists_CompressedVector_CPU01::Finalize()
 		},
 		tbb::auto_partitioner{}
 	);
-
-	finalized_ = true;
 }
 
-void NeighborLists_CompressedVector_CPU01::AddNbrFF(uint32_t i, uint32_t j)
+void NeighborLists_CompactVector_CPU01::AddNbrFF(uint32_t i, uint32_t j)
 {
 	tmpFF_[i].push_back(j);
 }
 
-void NeighborLists_CompressedVector_CPU01::AddNbrFB(uint32_t i, uint32_t j)
+void NeighborLists_CompactVector_CPU01::AddNbrFB(uint32_t i, uint32_t j)
 {
 	tmpFB_[i].push_back(j);
 }
 
-NeighborSpan NeighborLists_CompressedVector_CPU01::FF(uint32_t i) const
+NeighborSpan NeighborLists_CompactVector_CPU01::FF(uint32_t i) const
 {
-	if (!finalized_)
-	{
-		const auto& v = tmpFF_[i];
-
-		return NeighborSpan{ v.data(), static_cast<uint32_t>(v.size()) };
-	}
-
 	// start and end offsets of the neighbor list for fluid particle i
 	const uint64_t s = offsetsFF_[i];
 	const uint64_t e = offsetsFF_[i + 1];
+	const uint32_t count = static_cast<uint32_t>(e - s);
 
-	return NeighborSpan{ neighborsFF_.data() + s, static_cast<uint32_t>(e - s) };
+	return NeighborSpan{ neighborsFF_.data() + s, count };
 }
 
-NeighborSpan NeighborLists_CompressedVector_CPU01::FB(uint32_t i) const
+NeighborSpan NeighborLists_CompactVector_CPU01::FB(uint32_t i) const
 {
-	if (!finalized_)
-	{
-		const auto& v = tmpFB_[i];
-
-		return NeighborSpan{ v.data(), static_cast<uint32_t>(v.size()) };
-	}
-
 	// start and end offsets of the neighbor list for boundary particle i
 	const uint64_t s = offsetsFB_[i];
 	const uint64_t e = offsetsFB_[i + 1];
+	const uint32_t count = static_cast<uint32_t>(e - s);
 
-	return NeighborSpan{ neighborsFB_.data() + s, static_cast<uint32_t>(e - s) };
+	return NeighborSpan{ neighborsFB_.data() + s, count };
 }

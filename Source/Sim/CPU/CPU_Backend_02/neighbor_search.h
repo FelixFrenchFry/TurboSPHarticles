@@ -35,6 +35,8 @@ namespace Sim
 
 		void Query(const SimParams& params) override;
 
+		void DataReOrder(const SimParams& params) override;
+
 	private: // ----------------------------------------------------------------
 
 		SimBackend_CPU02& be_;
@@ -54,6 +56,8 @@ namespace Sim
 		void Construct(const SimParams& params) override;
 
 		void Query(const SimParams& params) override;
+
+		void DataReOrder(const SimParams& params) override;
 
 	private: // ----------------------------------------------------------------
 
@@ -91,6 +95,8 @@ namespace Sim
 		void Construct(const SimParams& params) override;
 
 		void Query(const SimParams& params) override;
+
+		void DataReOrder(const SimParams& params) override;
 
 	private: // ----------------------------------------------------------------
 
@@ -148,6 +154,8 @@ namespace Sim
 		void Query_Basic(const SimParams& params);
 
 		void Query_Smart(const SimParams& params);
+
+		void DataReOrder(const SimParams& params) override;
 
 		// TODO: implement query with BigMin-LitMax and ternary search and caching of results?
 

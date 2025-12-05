@@ -48,6 +48,15 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float massF = params.massF;
 	const float massB = params.massB;
 
+	// --- [ particle data re-ordering ] ---------------------------------------
+
+	if (dataReOrderInterval_ > 0 && simStep_ % dataReOrderInterval_ == 0)
+	{
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Data_Ordering });
+		neighborSearchStrat_->DataReOrder(params);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Data_Ordering });
+	}
+
 	// restricted pointers for SoA arrays to support compiler optimizations
 	float* RESTRICT xPosF = xPosF_.data();
 	float* RESTRICT yPosF = yPosF_.data();
@@ -86,15 +95,13 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	neighborSearchStrat_->Construct(params);
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	// --- [ neighbor search query ] -------------------------------------------
-
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
 	neighborSearchStrat_->Query(params);
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Misc_Sim });
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborLists_->Finalize();
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Misc_Sim });
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	// --- [ density computations ] --------------------------------------------
 
@@ -981,6 +988,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 
 		DensityErrorAccum() = default;
 
+		// TODO: is this needed?
 		DensityErrorAccum(DensityErrorAccum& other, tbb::split)
 		{
 			sumRaw = 0.0;
@@ -1046,8 +1054,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 					const float dapz = azi - zAccPressF[j];
 
 					tmp_SysVecElemF += dapx * xkg
-						+ dapy * ykg
-						+ dapz * zkg;
+									 + dapy * ykg
+									 + dapz * zkg;
 				}
 				tmp_SysVecElemF *= massF;
 
@@ -1076,8 +1084,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 
 					// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
 					tmp_SysVecElemB += axi * xkg
-						+ ayi * ykg
-						+ azi * zkg;
+									 + ayi * ykg
+									 + azi * zkg;
 				}
 				tmp_SysVecElemB *= massB;
 
@@ -1093,7 +1101,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 				{
 					// relaxed Jacobi solver update
 					tmp_PressureF = pressureF[i] + jacobiOmega
-						* (densityError / diagElemF[i]);
+								  * (densityError / diagElemF[i]);
 
 					// relative density error
 					const float relErr = densityError / restDensityF;

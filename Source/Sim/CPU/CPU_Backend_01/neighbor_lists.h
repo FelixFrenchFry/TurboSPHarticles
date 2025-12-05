@@ -87,10 +87,10 @@ namespace Sim
 	};
 
 	// -------------------------------------------------------------------------
-	// --- [ compressed vector neighbor lists implementation ] -----------------
+	// --- [ compact vector neighbor lists implementation ] --------------------
 	// -------------------------------------------------------------------------
 
-	class NeighborLists_CompressedVector_CPU01 final : public I_NeighborLists
+	class NeighborLists_CompactVector_CPU01 final : public I_NeighborLists
 	{
 	public: // -----------------------------------------------------------------
 
@@ -113,7 +113,6 @@ namespace Sim
 		// metadata
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
-		bool finalized_ = false;
 
 		// temp neighbor lists during construction
 		std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>> tmpFF_;

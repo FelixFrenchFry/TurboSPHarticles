@@ -31,6 +31,8 @@ namespace Sim
 
 		void Query(const SimParams& params) override;
 
+		void DataReOrder(const SimParams& params) override;
+
 	private: // ----------------------------------------------------------------
 
 		SimBackend_GPU01& be_;
@@ -50,6 +52,8 @@ namespace Sim
 		void Construct(const SimParams& params) override;
 
 		void Query(const SimParams& params) override;
+
+		void DataReOrder(const SimParams& params) override;
 
 	private: // ----------------------------------------------------------------
 
@@ -119,6 +123,8 @@ namespace Sim
 		void Construct(const SimParams& params) override;
 
 		void Query(const SimParams& params) override;
+
+		void DataReOrder(const SimParams& params) override;
 
 	private: // ----------------------------------------------------------------
 

@@ -77,6 +77,9 @@ namespace Sim
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
 
+		// TODO: manage this in the param manager
+		uint32_t dataReOrderInterval_ = 20;
+
 		// --- [ backend-specific data structures for operating the simulation ]
 
 		// fluid particles
@@ -96,7 +99,7 @@ namespace Sim
 
 		// boundary particles
 		std::vector<float> xPosB_, yPosB_, zPosB_;
-		std::vector<float> xVelB_, yVelB_, zVelB_;
+		std::vector<float> xVelB_, yVelB_, zVelB_; // TODO: remove velocities because unused?
 		std::vector<uint32_t> idB_;
 
 		// misc data
@@ -114,6 +117,9 @@ namespace Sim
 		// operation benchmarking groups
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
 		{
+			{
+				.ops = { Bench::BenchOp::Data_Ordering }
+			},
 			{
 				.ops = { Bench::BenchOp::Neighbors_Construction }
 			},
@@ -157,9 +163,6 @@ namespace Sim
 			},
 			{
 				.ops = { Bench::BenchOp::Total_Sim }
-			},
-			{
-				.ops = { Bench::BenchOp::Misc_Sim }
 			}
 		};
 	};

@@ -18,7 +18,7 @@ namespace Bench
 	enum class BenchOp : uint16_t
 	{
 		// data structures
-		Data_Sorting,						// re-sorting of the particle attribute data structures
+		Data_Ordering,						// re-ordering of the particle attribute data structures
 
 		// neighbor search
 		Neighbors_Construction,				// construction of the data structure used for the query
@@ -100,9 +100,9 @@ namespace Bench
 	{
 		{
 			{
-				.op = BenchOp::Data_Sorting,
-				.name = "data structure sorting",
-				.alias = "datSort",
+				.op = BenchOp::Data_Ordering,
+				.name = "particle data re-ordering",
+				.alias = "dataOrder",
 				.unit = "ns"
 			},
 			{

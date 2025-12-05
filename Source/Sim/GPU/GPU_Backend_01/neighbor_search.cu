@@ -58,6 +58,11 @@ void NS_BruteForce_GPU01::Query(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
+void NS_BruteForce_GPU01::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
+}
+
 // -----------------------------------------------------------------------------
 // --- [ cell linked list basic implementation ] -------------------------------
 // -----------------------------------------------------------------------------
@@ -329,6 +334,11 @@ void NS_CellLinkedList_Basic_GPU01::Query(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
+void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
+}
+
 // -----------------------------------------------------------------------------
 // --- [ cell linked list compact implementation ] -----------------------------
 // -----------------------------------------------------------------------------
@@ -475,6 +485,11 @@ void NS_CellLinkedList_Compact_GPU01::Query(const SimParams& params)
 	// TODO: implement smart version of this, iterating over cells instead of particles
 
 	GPU::StreamSync(be_.stream_);
+}
+
+void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
+{
+	// TODO: implement
 }
 
 void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
