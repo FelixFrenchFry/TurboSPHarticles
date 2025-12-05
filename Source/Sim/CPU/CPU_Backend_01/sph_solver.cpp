@@ -258,7 +258,8 @@ inline void CPU01::KernelWeight_CubicSpline(
 	// destinations
 	float& kw) noexcept
 {
-	const float distSqu = dx * dx + dy * dy + dz * dz;
+	const float distSqu = std::fmaf(dx, dx, 
+		std::fmaf(dy, dy, dz * dz));
 
 	// outside support radius -> no weight
 	if (distSqu >= kernelRadiusSqu) [[unlikely]]
@@ -300,7 +301,8 @@ inline void CPU01::KernelGradient_CubicSpline(
 	// destinations
 	float& xkg, float& ykg, float& zkg) noexcept
 {
-	const float distSqu = dx * dx + dy * dy + dz * dz;
+	const float distSqu = std::fmaf(dx, dx, 
+		std::fmaf(dy, dy, dz * dz));
 
 	// outside support radius -> no gradient
 	// no distance -> also no gradient
@@ -502,9 +504,9 @@ void CPU01::NonPressureAcceleration(
 										 / (dx * dx + dy * dy + dz * dz
 										 + 0.01f * particleSizeSquF);
 
-					tmp_xAccViscF += accCoeff * xkg;
-					tmp_yAccViscF += accCoeff * ykg;
-					tmp_zAccViscF += accCoeff * zkg;
+					tmp_xAccViscF = std::fmaf(accCoeff, xkg, tmp_xAccViscF);
+					tmp_yAccViscF = std::fmaf(accCoeff, ykg, tmp_yAccViscF);
+					tmp_zAccViscF = std::fmaf(accCoeff, zkg, tmp_zAccViscF);
 				}
 
 				float tmp_xAccViscB = 0.0f;
@@ -540,9 +542,9 @@ void CPU01::NonPressureAcceleration(
 										 / (dx * dx + dy * dy + dz * dz
 										 + 0.01f * particleSizeSquF);
 
-					tmp_xAccViscB += accCoeff * xkg;
-					tmp_yAccViscB += accCoeff * ykg;
-					tmp_zAccViscB += accCoeff * zkg;
+					tmp_xAccViscB = std::fmaf(accCoeff, xkg, tmp_xAccViscB);
+					tmp_yAccViscB = std::fmaf(accCoeff, ykg, tmp_yAccViscB);
+					tmp_zAccViscB = std::fmaf(accCoeff, zkg, tmp_zAccViscB);
 				}
 
 				// finalize accelerations
@@ -564,9 +566,9 @@ void CPU01::NonPressureAcceleration(
 				zAccExtF[i] = zGravity;
 
 				// compute predicted velocity from non-pressure accelerations
-				xVelPredF[i] = xVelF[i] + timeStep * (xAccViscF[i] + xAccExtF[i]);
-				yVelPredF[i] = yVelF[i] + timeStep * (yAccViscF[i] + yAccExtF[i]);
-				zVelPredF[i] = zVelF[i] + timeStep * (zAccViscF[i] + zAccExtF[i]);
+				xVelPredF[i] = std::fmaf(xAccViscF[i] + xAccExtF[i], timeStep, xVelF[i]);
+				yVelPredF[i] = std::fmaf(yAccViscF[i] + yAccExtF[i], timeStep, yVelF[i]);
+				zVelPredF[i] = std::fmaf(zAccViscF[i] + zAccExtF[i], timeStep, zVelF[i]);
 			}
 		},
 		tbb::auto_partitioner{}
@@ -712,9 +714,8 @@ void CPU01::SourceTermAndDiagonalElement(
 				float tmp_DiagElemB = 0.0f;
 				float tmp_DiagElemC = 0.0f;
 
-				// part A
-				// TODO: fuze A, B, and C loops into one loop?
-				#pragma omp simd reduction(+:tmp_DiagElemA)
+				// part A and B
+				#pragma omp simd reduction(+:tmp_DiagElemA,tmp_DiagElemB)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
 					// global index of neighbor particle
@@ -733,45 +734,20 @@ void CPU01::SourceTermAndDiagonalElement(
 						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 						cubicSplineAlpha, xkg, ykg, zkg);
 
-					tmp_DiagElemA += xCTerm * xkg
-								   + yCTerm * ykg
-								   + zCTerm * zkg;
-				}
-				tmp_DiagElemA *= massF;
-
-				// part B
-				// TODO: fuze A, B, and C loops into one loop?
-				#pragma omp simd reduction(+:tmp_DiagElemB)
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFF[k];
-
-					// position difference
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
-
-					// kernel gradient
-					float xkg = 0.0f;
-					float ykg = 0.0f;
-					float zkg = 0.0f;
-					KernelGradient_CubicSpline(
-						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
-						cubicSplineAlpha, xkg, ykg, zkg);
+					tmp_DiagElemA += fmaf(xCTerm, xkg, 
+						fmaf(yCTerm, ykg, zCTerm * zkg));
 
 					const float tmp_x = (massF * restDensitySquInvF) * (-xkg);
 					const float tmp_y = (massF * restDensitySquInvF) * (-ykg);
 					const float tmp_z = (massF * restDensitySquInvF) * (-zkg);
 
-					tmp_DiagElemB += tmp_x * xkg
-								   + tmp_y * ykg
-								   + tmp_z * zkg;
+					tmp_DiagElemB += fmaf(tmp_x, xkg, 
+						fmaf(tmp_y, ykg, tmp_z * zkg));
 				}
+				tmp_DiagElemA *= massF;
 				tmp_DiagElemB *= massF;
 
 				// part C
-				// TODO: fuze A, B, and C loops into one loop?
 				#pragma omp simd reduction(+:tmp_DiagElemC)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -791,9 +767,8 @@ void CPU01::SourceTermAndDiagonalElement(
 						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 						cubicSplineAlpha, xkg, ykg, zkg);
 
-					tmp_DiagElemC += xCTerm * xkg
-								   + yCTerm * ykg
-								   + zCTerm * zkg;
+					tmp_DiagElemC += fmaf(xCTerm, xkg, 
+						fmaf(yCTerm, ykg, zCTerm * zkg));
 				}
 				tmp_DiagElemC *= massB;
 
@@ -901,9 +876,9 @@ void CPU01::PressureAcceleration(
 										  * pressureF[j] * densiInvSqu;
 
 					// pressure acc contribution from fluid neighbor j
-					tmp_xAccPressF += accCoeffF * xkg;
-					tmp_yAccPressF += accCoeffF * ykg;
-					tmp_zAccPressF += accCoeffF * zkg;
+					tmp_xAccPressF = fmaf(accCoeffF, xkg, tmp_xAccPressF);
+					tmp_yAccPressF = fmaf(accCoeffF, ykg, tmp_yAccPressF);
+					tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
 				}
 
 				const float accCoeffB = gammaPress * massB
@@ -933,9 +908,9 @@ void CPU01::PressureAcceleration(
 						cubicSplineAlpha, xkg, ykg, zkg);
 
 					// pressure acc contribution from boundary neighbor j
-					tmp_xAccPressF += accCoeffB * xkg;
-					tmp_yAccPressF += accCoeffB * ykg;
-					tmp_zAccPressF += accCoeffB * zkg;
+					tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
+					tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
+					tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
 				}
 
 				// finalize pressure acceleration
@@ -1053,9 +1028,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 					const float dapy = ayi - yAccPressF[j];
 					const float dapz = azi - zAccPressF[j];
 
-					tmp_SysVecElemF += dapx * xkg
-									 + dapy * ykg
-									 + dapz * zkg;
+					tmp_SysVecElemF += std::fmaf(dapx, xkg, 
+						std::fmaf(dapy, ykg, dapz * zkg));
 				}
 				tmp_SysVecElemF *= massF;
 
@@ -1083,9 +1057,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 						cubicSplineAlpha, xkg, ykg, zkg);
 
 					// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
-					tmp_SysVecElemB += axi * xkg
-									 + ayi * ykg
-									 + azi * zkg;
+					tmp_SysVecElemB += std::fmaf(axi, xkg, 
+						std::fmaf(ayi, ykg, azi * zkg));
 				}
 				tmp_SysVecElemB *= massB;
 
@@ -1196,15 +1169,15 @@ void CPU01::Integration(
 
 				// explicit Euler integration
 				// (refining predicted velocity with pressure acc)
-				xVelF[i] = xVelPredF[i] + timeStep * xAccPressF[i];
-				yVelF[i] = yVelPredF[i] + timeStep * yAccPressF[i];
-				zVelF[i] = zVelPredF[i] + timeStep * zAccPressF[i];
+				xVelF[i] = std::fmaf(timeStep, xAccPressF[i], xVelPredF[i]);
+				yVelF[i] = std::fmaf(timeStep, yAccPressF[i], yVelPredF[i]);
+				zVelF[i] = std::fmaf(timeStep, zAccPressF[i], zVelPredF[i]);
 
 				// semi-implicit Euler integration
 				// (using updated velocity for position update)
-				xPosF[i] = xPosF[i] + timeStep * xVelF[i];
-				yPosF[i] = yPosF[i] + timeStep * yVelF[i];
-				zPosF[i] = zPosF[i] + timeStep * zVelF[i];
+				xPosF[i] = std::fmaf(timeStep, xVelF[i], xPosF[i]);
+				yPosF[i] = std::fmaf(timeStep, yVelF[i], yPosF[i]);
+				zPosF[i] = std::fmaf(timeStep, zVelF[i], zPosF[i]);
 			}
 		},
 		tbb::auto_partitioner{}

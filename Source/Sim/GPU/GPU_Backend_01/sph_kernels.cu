@@ -467,7 +467,6 @@ namespace GPU01
 		float tmp_diagElemC = 0.0f;
 
 		// part A and B
-		// TODO: fuze A, B, and C loops into one loop?
 		for (uint32_t k = 0; k < cntFF; k++)
 		{
 			// global index of neighbor particle
@@ -496,7 +495,6 @@ namespace GPU01
 		tmp_diagElemB *= c_massF;
 
 		// part C
-		// TODO: fuze A, B, and C loops into one loop?
 		for (uint32_t k = 0; k < cntFB; k++)
 		{
 			// global index of neighbor particle
