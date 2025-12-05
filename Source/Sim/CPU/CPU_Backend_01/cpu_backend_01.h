@@ -106,11 +106,7 @@ namespace Sim
 		float avgRelDensityErrorF_abs_;
 
 		// neighbor storage
-		// TODO: use small vector from boost library for inner vec?
-		//std::vector<std::vector<uint32_t>> neighborsFF_;
-		//std::vector<std::vector<uint32_t>> neighborsFB_;
-		std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>> neighborsFF_;
-		std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>> neighborsFB_;
+		std::unique_ptr<I_NeighborLists> neighborLists_;
 
 		// re-usable work (scratch) buffer for temp storage
 		mutable std::vector<float> workBuffer_;
@@ -155,6 +151,9 @@ namespace Sim
 			},
 			{
 				.ops = { Bench::BenchOp::Snapshot_Visual }
+			},
+			{
+				.ops = { Bench::BenchOp::Serialization }
 			},
 			{
 				.ops = { Bench::BenchOp::Total_Sim }

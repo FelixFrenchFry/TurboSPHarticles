@@ -11,17 +11,17 @@ import pyvista as pv
 
 # --- [ config ] ---------------------------------------------------------------
 
-DATA_DIR        = Path("../../Export/B")
+DATA_DIR        = Path("../../Export/C")
 INPUT_TEMPLATE  = "pos_vel_step_{step:09d}.xdmf"
-OUTPUT_DIR      = Path("../../Export/B")
+OUTPUT_DIR      = Path("../../Export/C")
 
 STEP_START      = 0
 STEP_END        = 1000
 STEP_STRIDE     = 10
 
-TARGET_POINTS   = 250_000_000
+TARGET_POINTS   = 320_000_000
 USE_SPHERES     = False
-POINT_SIZE      = 2.0
+POINT_SIZE      = 0.1
 CMAP            = "Blues"
 BACKGROUND      = "black"
 

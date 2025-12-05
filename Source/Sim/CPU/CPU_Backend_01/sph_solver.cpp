@@ -14,6 +14,7 @@
 
 // internal
 #include "Source/Base/helpers.h"
+#include "neighbor_lists.h"
 #include "neighbor_search.h"
 #include "cpu_backend_01.h"
 #include "sph_solver.h"
@@ -77,10 +78,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT sysVecElemF = sysVecElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
-
-	// references for neighbors
-	auto& neighborsFF = neighborsFF_;
-	auto& neighborsFB = neighborsFB_;
+	I_NeighborLists& neighborLists = *neighborLists_;
 
 	// --- [ neighbor search ] -------------------------------------------------
 
@@ -92,6 +90,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
 	neighborSearchStrat_->Query(params);
+	neighborLists_->Finalize();
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 	// --- [ density computations ] --------------------------------------------
@@ -101,7 +100,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	CPU01::Density(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
-		neighborsFF, neighborsFB,
+		neighborLists,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, massF, massB, N_F_,
 		densityF);
 
@@ -117,7 +116,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		xPosB, yPosB, zPosB,
 		xVelF, yVelF, zVelF,
 		densityF,
-		neighborsFF, neighborsFB,
+		neighborLists,
 		timeStep, sizeInvF, sizeSquF, kernelRadiusSqu, cubicSplineAlpha,
 		params.restDensityB, massF, massB, params.viscosityF, params.viscosityB,
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
@@ -138,7 +137,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		xPosB, yPosB, zPosB,
 		xVelPredF, yVelPredF, zVelPredF,
 		densityF,
-		neighborsFF, neighborsFB,
+		neighborLists,
 		timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 		params.restDensityF, restDensitySquInvF,
 		massF, massB, params.gammaPress, N_F_,
@@ -172,7 +171,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
 			pressureF,
-			neighborsFF, neighborsFB,
+			neighborLists,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensityF,
 			massF, massB, params.gammaPress, N_F_,
 			xAccPressF, yAccPressF, zAccPressF);
@@ -183,7 +182,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			xPosB, yPosB, zPosB,
 			xAccPressF, yAccPressF, zAccPressF,
 			sourceTermF, diagElemF,
-			neighborsFF, neighborsFB,
+			neighborLists,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensityF, massF, massB, params.jacobiOmega, N_F_,
 			sysVecElemF, pressureF, avgRelDensityErrorF_raw_, 
@@ -202,7 +201,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		pressureF,
-		neighborsFF, neighborsFB,
+		neighborLists,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensityF,
 		massF, massB, params.gammaPress, N_F_,
 		xAccPressF, yAccPressF, zAccPressF);
@@ -234,7 +233,7 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(uint32_t iterCount)
 
 	bool satisfied = false;
 
-	if (iterCount > 4) { satisfied = true; }
+	if (iterCount > 5) { satisfied = true; }
 	// if (avgRelDensityErrorF_raw_ <= 0.001f) { satisfied = true; }
 	// if (avgRelDensityErrorF_pos_ <= 0.01f) { satisfied = true; }
 	// if (avgRelDensityErrorF_abs_ <= 0.01f) { satisfied = true; }
@@ -335,8 +334,7 @@ void CPU01::Density(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+	const I_NeighborLists& neighborLists,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float massF, const float massB,
 	const uint32_t N_F,
@@ -357,8 +355,9 @@ void CPU01::Density(
 				float tmp_densityB = 0.0f;
 
 				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
+				NeighborSpan nbrListFF = neighborLists.FF(i);
+				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
+				const uint32_t N_FF = nbrListFF.count;
 				#pragma omp simd reduction(+:tmp_densityF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -380,8 +379,9 @@ void CPU01::Density(
 				tmp_densityF *= massF;
 
 				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
+				NeighborSpan nbrListFB = neighborLists.FB(i);
+				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
+				const uint32_t N_FB = nbrListFB.count;
 				#pragma omp simd reduction(+:tmp_densityB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -422,8 +422,7 @@ void CPU01::NonPressureAcceleration(
 	const float* RESTRICT yVelF,
 	const float* RESTRICT zVelF,
 	const float* RESTRICT densityF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+	const I_NeighborLists& neighborLists,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityB,
@@ -460,8 +459,9 @@ void CPU01::NonPressureAcceleration(
 				float tmp_zAccViscF = 0.0f;
 
 				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
+				NeighborSpan nbrListFF = neighborLists.FF(i);
+				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
+				const uint32_t N_FF = nbrListFF.count;
 				#pragma omp simd reduction(+:tmp_xAccViscF,tmp_yAccViscF,tmp_zAccViscF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -502,8 +502,9 @@ void CPU01::NonPressureAcceleration(
 				float tmp_zAccViscB = 0.0f;
 
 				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
+				NeighborSpan nbrListFB = neighborLists.FB(i);
+				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
+				const uint32_t N_FB = nbrListFB.count;
 				#pragma omp simd reduction(+:tmp_xAccViscB,tmp_yAccViscB,tmp_zAccViscB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -574,8 +575,7 @@ void CPU01::SourceTermAndDiagonalElement(
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
 	const float* RESTRICT densityF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+	const I_NeighborLists& neighborLists,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float restDensitySquInvF,
@@ -609,8 +609,9 @@ void CPU01::SourceTermAndDiagonalElement(
 				float zCTermF = 0.0f;
 
 				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
+				NeighborSpan nbrListFF = neighborLists.FF(i);
+				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
+				const uint32_t N_FF = nbrListFF.count;
 				#pragma omp simd reduction(+:tmp_SourceTermF,xCTermF,yCTermF,zCTermF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -651,8 +652,9 @@ void CPU01::SourceTermAndDiagonalElement(
 				float zCTermB = 0.0f;
 
 				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
+				NeighborSpan nbrListFB = neighborLists.FB(i);
+				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
+				const uint32_t N_FB = nbrListFB.count;
 				#pragma omp simd reduction(+:tmp_SourceTermB,xCTermB,yCTermB,zCTermB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -833,8 +835,7 @@ void CPU01::PressureAcceleration(
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
 	const float* RESTRICT pressureF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+	const I_NeighborLists& neighborLists,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityF,
 	const float massF, const float massB, const float gammaPress,
@@ -864,8 +865,9 @@ void CPU01::PressureAcceleration(
 				float tmp_zAccPressF = 0.0f;
 
 				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
+				NeighborSpan nbrListFF = neighborLists.FF(i);
+				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
+				const uint32_t N_FF = nbrListFF.count;
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -898,8 +900,9 @@ void CPU01::PressureAcceleration(
 									  * 2.0f * presi * densiInvSqu;
 
 				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
+				NeighborSpan nbrListFB = neighborLists.FB(i);
+				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
+				const uint32_t N_FB = nbrListFB.count;
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -952,8 +955,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 	const float* RESTRICT zAccPressF,
 	const float* RESTRICT sourceTermF,
 	const float* RESTRICT diagElemF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-	const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+	const I_NeighborLists& neighborLists,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float massF, const float massB,
@@ -1013,8 +1015,9 @@ void CPU01::PressureRelaxedJacobiSolver(
 				float tmp_SysVecElemB = 0.0f;
 
 				// contributions from fluid neighbors
-				const uint32_t* RESTRICT nbrFF = neighborsFF[i].data();
-				const uint32_t N_FF = static_cast<uint32_t>(neighborsFF[i].size());
+				NeighborSpan nbrListFF = neighborLists.FF(i);
+				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
+				const uint32_t N_FF = nbrListFF.count;
 				#pragma omp simd reduction(+:tmp_SysVecElemF)
 				for (uint32_t k = 0; k < N_FF; ++k)
 				{
@@ -1046,8 +1049,9 @@ void CPU01::PressureRelaxedJacobiSolver(
 				tmp_SysVecElemF *= massF;
 
 				// contributions from boundary neighbors
-				const uint32_t* RESTRICT nbrFB = neighborsFB[i].data();
-				const uint32_t N_FB = static_cast<uint32_t>(neighborsFB[i].size());
+				NeighborSpan nbrListFB = neighborLists.FB(i);
+				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
+				const uint32_t N_FB = nbrListFB.count;
 				#pragma omp simd reduction(+:tmp_SysVecElemB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{

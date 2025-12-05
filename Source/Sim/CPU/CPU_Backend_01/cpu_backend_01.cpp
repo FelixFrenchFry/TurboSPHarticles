@@ -15,6 +15,7 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "cpu_backend_01.h"
+#include "neighbor_lists.h"
 #include "neighbor_search.h"
 
 
@@ -29,6 +30,8 @@ SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
 	//neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
 	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
 	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
+
+	neighborLists_ = std::make_unique<NeighborLists_SmallVector_CPU01>();
 }
 
 void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
@@ -152,6 +155,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 		tbb::auto_partitioner{}
 	);
 
+	// neighbor lists
+	neighborLists_->Resize(N_F_, N_B_);
+
 	//SPDLOG_INFO("Pulled universal sim state with {} fluid and "
 	//			"{} boundary particles into data structures of backend CPU01",
 	//			N_F_, N_B_);
@@ -243,6 +249,8 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 {
+	// TODO: only export surface particles?
+
 	if (N_F_ == 0) { return; }
 
 	snap.simStep = simStep_;
@@ -430,16 +438,16 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					const float nf = static_cast<float>(neighborsFF_[i].size());
-					const float nb = static_cast<float>(neighborsFB_[i].size());
+					const uint32_t N_FF = neighborLists_->FF(i).count;
+					const uint32_t N_FB = neighborLists_->FB(i).count;
 
-					local.sumFF += nf;
-					if (nf < local.minFF) [[unlikely]] { local.minFF = nf; }
-					if (nf > local.maxFF) [[unlikely]] { local.maxFF = nf; }
+					local.sumFF += N_FF;
+					if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
+					if (N_FF > local.maxFF) [[unlikely]] { local.maxFF = N_FF; }
 
-					local.sumFB += nb;
-					if (nb < local.minFB) [[unlikely]] { local.minFB = nb; }
-					if (nb > local.maxFB) [[unlikely]] { local.maxFB = nb; }
+					local.sumFB += N_FB;
+					if (N_FB < local.minFB) [[unlikely]] { local.minFB = N_FB; }
+					if (N_FB > local.maxFB) [[unlikely]] { local.maxFB = N_FB; }
 				}
 				return local;
 			},
@@ -480,7 +488,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		// FF
 		for (uint32_t i = 0; i < NF; i++)
 		{
-			workBuffer_[i] = static_cast<float>(neighborsFF_[i].size());
+			workBuffer_[i] = static_cast<float>(neighborLists_->FF(i).count);
 		}
 
 		{
@@ -502,7 +510,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 		// FB
 		for (uint32_t i = 0; i < NF; ++i)
 		{
-			workBuffer_[i] = static_cast<float>(neighborsFB_[i].size());
+			workBuffer_[i] = static_cast<float>(neighborLists_->FB(i).count);
 		}
 
 		{
@@ -712,40 +720,6 @@ void SimBackend_CPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
 		simTime_ += N_steps * params.timeStep;
 
 		return;
-	}
-
-	// --- [ initialization and checks ] ---------------------------------------
-
-	// ensure neighbor storage has enough capacity
-	if (N_F_ != static_cast<uint32_t>(neighborsFF_.size()) ||
-		N_F_ != static_cast<uint32_t>(neighborsFB_.size()))
-	{
-		neighborsFF_.resize(N_F_);
-		neighborsFB_.resize(N_F_);
-
-		// TODO: only use when inner neighbor list is std::vector, not boost::small_vector
-		/*
-		// expected number of fluid and boundary neighbors
-		uint32_t N_expectedNumFF =
-			std::ceilf(2.0f * PI * std::powf(params.kernelSuppRatio, 3.0f));
-
-		uint32_t N_expectedNumFB =
-			std::ceilf(0.5f * PI * std::powf(params.kernelSuppRatio, 3.0f));
-
-		// heuristic reserves (kept and re-used across steps)
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F_),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					neighborsFF_[i].reserve(N_expectedNumFF);
-					neighborsFB_[i].reserve(N_expectedNumFB);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-		*/
 	}
 
 	Step_IISPH(params);

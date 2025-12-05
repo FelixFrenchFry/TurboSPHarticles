@@ -61,6 +61,9 @@ namespace Bench
 		Snapshot_Export,					// packing the sim data into a data structure for export
 		Snapshot_Visual,					// packing the sim data into a data structure for visualization
 
+		// serialization
+		Serialization,						// serialization of sim data to disk (either full serial snap or export snap)
+
 		// visualization
 		Rendering,							// rendering of particles and structures
 		UserInterface,						// updating and processing of the user interface
@@ -206,38 +209,44 @@ namespace Bench
 			},
 			{
 				.op = BenchOp::Statistics_Particles,
-				.name = "stat particles",
+				.name = "stat particles comp",
 				.alias = "statPart",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Statistics_Density,
-				.name = "stat density",
+				.name = "stat density comp",
 				.alias = "statDens",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Statistics_Velocity,
-				.name = "stat velocity",
+				.name = "stat velocity comp",
 				.alias = "statVel",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Snapshot_Serial,
-				.name = "serial snapshot",
+				.name = "serial snapshot fill",
 				.alias = "snapSer",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Snapshot_Export,
-				.name = "export snapshot",
+				.name = "export snapshot fill",
 				.alias = "snapExp",
 				.unit = "ns"
 			},
 			{
 				.op = BenchOp::Snapshot_Visual,
-				.name = "visual snapshot",
+				.name = "visual snapshot fill",
 				.alias = "snapVis",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Serialization,
+				.name = "serialization",
+				.alias = "serial",
 				.unit = "ns"
 			},
 			{

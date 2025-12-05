@@ -10,6 +10,7 @@
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
+#include "neighbor_lists.h"
 
 #if defined(_MSC_VER)
 	#define RESTRICT __restrict
@@ -46,8 +47,7 @@ namespace CPU01
 		const float* RESTRICT xPosB,
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+		const Sim::I_NeighborLists& neighborLists,
 		float particleSizeInvF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float massF, float massB,
 		uint32_t N_F,
@@ -65,8 +65,7 @@ namespace CPU01
 		const float* RESTRICT yVelF,
 		const float* RESTRICT zVelF,
 		const float* RESTRICT densityF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+		const Sim::I_NeighborLists& neighborLists,
 		float timeStep, float particleSizeInvF,
 		float particleSizeSquF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float restDensityB,
@@ -95,8 +94,7 @@ namespace CPU01
 		const float* RESTRICT yVelPredF,
 		const float* RESTRICT zVelPredF,
 		const float* RESTRICT densityF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+		const Sim::I_NeighborLists& neighborLists,
 		float timeStep, float particleSizeInvF,
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensityF, float restDensitySquInvF,
@@ -122,8 +120,7 @@ namespace CPU01
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
 		const float* RESTRICT pressureF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+		const Sim::I_NeighborLists& neighborLists,
 		float particleSizeInvF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float restDensityF,
 		float massF, float massB, float gammaPress,
@@ -145,8 +142,7 @@ namespace CPU01
 		const float* RESTRICT zAccPressF,
 		const float* RESTRICT sourceTermF,
 		const float* RESTRICT diagElemF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountF>>& neighborsFF,
-		const std::vector<boost::container::small_vector<uint32_t, N_expctNbrCountB>>& neighborsFB,
+		const Sim::I_NeighborLists& neighborLists,
 		float timeStep, float particleSizeInvF,
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensityF, float massF, float massB,

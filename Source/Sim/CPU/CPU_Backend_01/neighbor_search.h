@@ -20,6 +20,10 @@ namespace Sim
 	// forward declarations
 	class SimBackend_CPU01;
 
+	// -------------------------------------------------------------------------
+	// --- [ brute force implementation ] --------------------------------------
+	// -------------------------------------------------------------------------
+
 	class NS_BruteForce_CPU01 : public I_NeighborSearchStrat
 	{
 	public: // -----------------------------------------------------------------
@@ -39,6 +43,10 @@ namespace Sim
 		
 		SimBackend_CPU01& be_;
 	};
+
+	// -------------------------------------------------------------------------
+	// --- [ spatial hashing basic implementation ] ----------------------------
+	// -------------------------------------------------------------------------
 
 	class NS_SpatialHashing_Basic_CPU01 : public I_NeighborSearchStrat
 	{
@@ -76,6 +84,10 @@ namespace Sim
 		static inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
 		static inline int FloorToInt(float v) noexcept;
 	};
+
+	// -------------------------------------------------------------------------
+	// --- [ cell linked list basic implementation ] ---------------------------
+	// -------------------------------------------------------------------------
 
 	class NS_CellLinkedList_Basic_CPU01 : public I_NeighborSearchStrat
 	{
@@ -129,6 +141,10 @@ namespace Sim
 		static inline int FloorToInt(float v) noexcept;
 		static inline uint32_t ClampInt(int v, int low, int high) noexcept;
 	};
+
+	// -------------------------------------------------------------------------
+	// --- [ cell linked list compact implementation ] -------------------------
+	// -------------------------------------------------------------------------
 
 	class NS_CellLinkedList_Compact_CPU01 : public I_NeighborSearchStrat
 	{

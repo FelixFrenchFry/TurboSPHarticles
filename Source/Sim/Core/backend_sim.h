@@ -76,7 +76,7 @@ namespace Sim
 												 const SimParams& params);
 
 	// -------------------------------------------------------------------------
-	// --- [ neighbor search interface ] ---------------------------------------
+	// --- [ neighbor search and list interface ] ------------------------------
 	// -------------------------------------------------------------------------
 
 	class I_NeighborSearchStrat
@@ -94,6 +94,37 @@ namespace Sim
 		virtual void Query(const SimParams& params) = 0;
 
 		// TODO: add re-order and sorting stuff?
+	};
+
+	struct NeighborSpan
+	{
+		const uint32_t* data = nullptr;
+		uint32_t count = 0;
+	};
+
+	class I_NeighborLists
+	{
+	public: // -----------------------------------------------------------------
+
+		virtual ~I_NeighborLists() = default;
+
+		virtual void Resize(uint32_t N_F, uint32_t N_B) = 0;
+
+		// clears the fluid and boundary neighbor list of a single fluid particle i
+		virtual void ClearOne(uint32_t i) = 0;
+
+		// clears all neighbor lists
+		virtual void ClearAll() = 0;
+
+		virtual void Finalize() = 0;
+
+		// adds fluid/boundary neighbor j of fluid particle i to its neighbor list
+		virtual void AddNbrFF(uint32_t i, uint32_t j) = 0;
+		virtual void AddNbrFB(uint32_t i, uint32_t j) = 0;
+
+		// gets a "span" of the fluid/boundary neighbor list of fluid particle i
+		virtual NeighborSpan FF(uint32_t i) const = 0;
+		virtual NeighborSpan FB(uint32_t i) const = 0;
 	};
 
 } // namespace Sim

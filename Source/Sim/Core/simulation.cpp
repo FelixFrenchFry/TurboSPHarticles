@@ -10,7 +10,7 @@
 // internal
 #include "simulation.h"
 
-#include "Source/Eval/Export/serialization.h"
+#include "Source/Eval/Serial/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/CPU/CPU_Backend_01/cpu_backend_01.h"
 #include "Source/Sim/CPU/CPU_Backend_02/cpu_backend_02.h"
@@ -371,15 +371,16 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 			simStep_ % params.exportInterval == 0)
 		{
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
-
-			// create export snapshot and save to file
+			// fill export snapshot
 			Sync::ExportSnapshot expSnap{};
 			simBackend_->PackExportSnapshot(expSnap);
-
 			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-			serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
-
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Serialization });
+			// write export snapshot to file
+			serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Serialization });
 		}
 
 		// evaluate the step
@@ -508,15 +509,16 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 			simStep_ % params.exportInterval == 0)
 		{
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
-
-			// create export snapshot and save to file
+			// fill export snapshot
 			Sync::ExportSnapshot expSnap{};
 			simBackend_->PackExportSnapshot(expSnap);
-
 			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-			serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
-
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+
+			benchmarksMgr_.StartBench({ Bench::BenchOp::Serialization });
+			// write export snapshot to file
+			serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
+			benchmarksMgr_.StopBench({ Bench::BenchOp::Serialization });
 		}
 
 		// evaluate the step

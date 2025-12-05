@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <execution>
@@ -17,6 +18,7 @@
 
 // internal
 #include "cpu_backend_01.h"
+#include "neighbor_lists.h"
 #include "neighbor_search.h"
 #include "Source/Base/helpers.h"
 
@@ -56,14 +58,9 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// neighbor lists for particle i
+				// reset neighbor list for particle i
 				// (delete contents, but keep capacity)
-				//std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-				//std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-				//ff.clear();
-				//fb.clear();
-				be_.neighborsFF_[i].clear();
-				be_.neighborsFB_[i].clear();
+				be_.neighborLists_->ClearOne(i);
 
 				const float xi = be_.xPosF_[i];
 				const float yi = be_.yPosF_[i];
@@ -82,7 +79,7 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
 						// add actual neighbor to list
-						be_.neighborsFF_[i].push_back(j);
+						be_.neighborLists_->AddNbrFF(i, j);
 					}
 				}
 
@@ -99,7 +96,7 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
 						// add actual neighbor to list
-						be_.neighborsFB_[i].push_back(j);
+						be_.neighborLists_->AddNbrFB(i, j);
 					}
 				}
 			}
@@ -109,7 +106,7 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 }
 
 // -----------------------------------------------------------------------------
-// --- [ spatial hashing implementation ] --------------------------------------
+// --- [ spatial hashing basic implementation ] --------------------------------
 // -----------------------------------------------------------------------------
 
 void NS_SpatialHashing_Basic_CPU01::Init(const SimParams& params)
@@ -212,14 +209,9 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// neighbor lists for particle i
+				// reset neighbor list for particle i
 				// (delete contents, but keep capacity)
-				//std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-				//std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-				//ff.clear();
-				//fb.clear();
-				be_.neighborsFF_[i].clear();
-				be_.neighborsFB_[i].clear();
+				be_.neighborLists_->ClearOne(i);
 
 				const float xi = be_.xPosF_[i];
 				const float yi = be_.yPosF_[i];
@@ -261,7 +253,7 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										be_.neighborsFF_[i].push_back(j);
+										be_.neighborLists_->AddNbrFF(i, j);
 									}
 								}
 							}
@@ -285,7 +277,7 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										be_.neighborsFB_[i].push_back(j);
+										be_.neighborLists_->AddNbrFB(i, j);
 									}
 								}
 							}
@@ -627,14 +619,9 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// neighbor lists for particle i
+				// reset neighbor list for particle i
 				// (delete contents, but keep capacity)
-				//std::vector<uint32_t>& ff = be_.neighborsFF_[i];
-				//std::vector<uint32_t>& fb = be_.neighborsFB_[i];
-				//ff.clear();
-				//fb.clear();
-				be_.neighborsFF_[i].clear();
-				be_.neighborsFB_[i].clear();
+				be_.neighborLists_->ClearOne(i);
 
 				const float xi = be_.xPosF_[i];
 				const float yi = be_.yPosF_[i];
@@ -690,7 +677,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										be_.neighborsFF_[i].push_back(j);
+										be_.neighborLists_->AddNbrFF(i, j);
 									}
 								}
 							}
@@ -719,7 +706,7 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
 										// add actual neighbor to list
-										be_.neighborsFB_[i].push_back(j);
+										be_.neighborLists_->AddNbrFB(i, j);
 									}
 								}
 							}
@@ -964,8 +951,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 				{
 					const uint32_t i = sortedParticleIdxF_[k];
 
-					be_.neighborsFF_[i].clear();
-					be_.neighborsFB_[i].clear();
+					// reset neighbor list for particle i
+					// (delete contents, but keep capacity)
+					be_.neighborLists_->ClearOne(i);
 				}
 
 				// determine a representative particle i0
@@ -1039,7 +1027,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 										if (distSqu <= kernelRadiusSqu) [[unlikely]]
 										{
 											// add actual neighbor to list
-											be_.neighborsFF_[i].push_back(j);
+											be_.neighborLists_->AddNbrFF(i, j);
 										}
 									}
 								}
@@ -1088,7 +1076,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 										if (distSqu <= kernelRadiusSqu) [[unlikely]]
 										{
 											// add actual neighbor to list
-											be_.neighborsFB_[i].push_back(j);
+											be_.neighborLists_->AddNbrFB(i, j);
 										}
 									}
 								}
@@ -1132,8 +1120,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 				{
 					const uint32_t i = sortedParticleIdxF_[k];
 
-					be_.neighborsFF_[i].clear();
-					be_.neighborsFB_[i].clear();
+					// reset neighbor list for particle i
+					// (delete contents, but keep capacity)
+					be_.neighborLists_->ClearOne(i);
 				}
 
 				// determine a representative particle i0
@@ -1254,7 +1243,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 
 							if (distSqu <= kernelRadiusSqu) [[unlikely]]
 							{
-								be_.neighborsFF_[i].push_back(j);
+								be_.neighborLists_->AddNbrFF(i, j);
 							}
 						}
 					}
@@ -1283,7 +1272,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 
 							if (distSqu <= kernelRadiusSqu) [[unlikely]]
 							{
-								be_.neighborsFB_[i].push_back(j);
+								be_.neighborLists_->AddNbrFB(i, j);
 							}
 						}
 					}

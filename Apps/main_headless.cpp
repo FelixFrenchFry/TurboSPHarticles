@@ -9,7 +9,7 @@
 #include <tbb/global_control.h>
 
 // internal
-#include "Source/Eval/Export/serialization.h"
+#include "Source/Eval/Serial/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Core/simulation.h"

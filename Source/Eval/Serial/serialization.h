@@ -26,17 +26,17 @@ namespace Export
 	#endif
 
 		// compression
-		int compressionLevel		= 1;    // [0,...,9], 0 = none, 9 = max
-		bool compress				= false; // zlib compression (non-contiguous chunks)
-		bool shuffleFilter			= true; // byte shuffle for better compression ratio on FP data
+		int compressionLevel = 1;    // [0,...,9], 0 = none, 9 = max
+		bool compress = false; // zlib compression (non-contiguous chunks)
+		bool shuffleFilter = true; // byte shuffle for better compression ratio on FP data
 
 		// chunk target size
-		int64_t targetChunkBytes	= 1u << 24; // 16 MiB (2^24 bytes)
+		int64_t targetChunkBytes = 1u << 24; // 16 MiB (2^24 bytes)
 
 		// safer saves
 		// (write to temp file and rename on success)
-		std::string tempSuffix		= ".tmp";
-		bool atomicWrite			= true;
+		std::string tempSuffix = ".tmp";
+		bool atomicWrite = true;
 	};
 
 	class SerializationMgr
