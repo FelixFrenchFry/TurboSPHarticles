@@ -14,7 +14,7 @@
 
 namespace Stats
 {
-	enum class StatMetric : uint16_t
+	enum class StatMetric : uint8_t
 	{
 		// particles and neighbors
 		NumF,				// total number of simulated fluid particles
@@ -220,16 +220,16 @@ namespace Stats
 			}
 		}
 	};
-	static_assert(Definitions.size() == static_cast<uint16_t>(StatMetric::Count),
+	static_assert(Definitions.size() == static_cast<uint8_t>(StatMetric::Count),
 		"Stats::Definitions must list all StatMetric entries");
 
-	constexpr inline uint16_t GetIdx(StatMetric metric) { return static_cast<uint16_t>(metric); }
+	constexpr inline uint8_t GetIdx(StatMetric metric) { return static_cast<uint8_t>(metric); }
 
 	// record of all per-metric stat data for one particular sim step
 	struct StatRecordStep
 	{
 		// metadata
-		int64_t simStep = 0;
+		uint32_t simStep = 0;
 		double simTime = 0.0;
 
 		// stat data

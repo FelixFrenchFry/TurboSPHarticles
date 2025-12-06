@@ -4,12 +4,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
-#include <cstring>
 #include <deque>
-#include <iomanip>
-#include <iostream>
 #include <spdlog/spdlog.h>
-#include <sstream>
 #ifdef _WIN32
 	#include <windows.h>
 #else
@@ -126,18 +122,18 @@ namespace Sim
         const Bench::BenchmarksMgr& benchMgr,
         const std::vector<Bench::BenchOpGroupDef>& opGroups,
         Bench::TimeUnit unit,
-        int64_t step,
-        int64_t totalSteps)
+        uint32_t step,
+        uint32_t totalSteps)
     {
         using steady_clock = std::chrono::steady_clock;
 
         // static state for progress, benchmarks, and in-place redraw
         static bool initialized = false;
-        static int64_t lastStep = 0;
+        static uint32_t lastStep = 0;
         static steady_clock::time_point startSteady;
 
         // history for moving-average steps/s over last few samples
-        using Sample = std::pair<int64_t, steady_clock::time_point>;
+        using Sample = std::pair<uint32_t, steady_clock::time_point>;
         static std::deque<Sample> history;
         static int lastNumLines = 0;
 
@@ -159,7 +155,7 @@ namespace Sim
 
         // update history for moving-average steps/s
         history.emplace_back(step, now);
-        constexpr std::size_t MAX_HISTORY = 10;
+        constexpr uint32_t MAX_HISTORY = 10;
         if (history.size() > MAX_HISTORY) { history.pop_front(); }
 
         // total elapsed time since start
@@ -173,7 +169,7 @@ namespace Sim
             const auto& oldest = history.front();
             const auto& newest = history.back();
             double dt = std::chrono::duration<double>(newest.second - oldest.second).count();
-            int64_t ds = newest.first - oldest.first;
+            uint32_t ds = newest.first - oldest.first;
 
             if (dt > 1e-6 && ds > 0)
             {
@@ -241,7 +237,7 @@ namespace Sim
         uint64_t totalNsAvg = 0;
         int totalSimIdx = -1;
 
-        for (std::size_t i = 0; i < opGroups.size(); i++)
+        for (uint32_t i = 0; i < opGroups.size(); i++)
         {
             const auto& group = opGroups[i];
 
@@ -409,7 +405,7 @@ namespace Sim
         const Bench::BenchmarksMgr& benchMgr,
         const std::vector<Bench::BenchOpGroupDef>& opGroups,
         Bench::TimeUnit unit,
-        int64_t step)
+        uint32_t step)
     {
         // per-group timing
         std::vector<uint64_t> groupTimings(opGroups.size(), 0);

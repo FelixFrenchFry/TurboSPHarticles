@@ -1,11 +1,12 @@
 // parameters_sim.cpp
 
 // external
-#include <spdlog/spdlog.h>
-#include <thread>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
+#include <thread>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -16,19 +17,19 @@
 using namespace Sim;
 using nlohmann::json;
 
-std::pair<SimParams, int64_t> SimParamsMgr::SnapshotParams() const
+std::pair<SimParams, uint64_t> SimParamsMgr::SnapshotParams() const
 {
 	while (true)
 	{
 		// check for ongoing write
-		int64_t before = version_.load(std::memory_order_acquire);
+		uint64_t before = version_.load(std::memory_order_acquire);
 		if (before % 2 != 0) { std::this_thread::yield(); continue; }
 
 		// copy parameters
 		SimParams res = params_;
 
 		// make sure no write happened during copy
-		int64_t after = version_.load(std::memory_order_acquire);
+		uint64_t after = version_.load(std::memory_order_acquire);
 		if (before == after) { return { res, after }; }
 
 		// else try again
@@ -36,15 +37,15 @@ std::pair<SimParams, int64_t> SimParamsMgr::SnapshotParams() const
 	}
 }
 
-int64_t SimParamsMgr::StableVersion() const
+uint64_t SimParamsMgr::StableVersion() const
 {
 	while (true)
 	{
 		// make sure no write is ongoing
-		int64_t a = version_.load(std::memory_order_acquire);
+		uint64_t a = version_.load(std::memory_order_acquire);
 		if (a % 2 == 0)
 		{
-			int64_t b = version_.load(std::memory_order_acquire);
+			uint64_t b = version_.load(std::memory_order_acquire);
 			if (a == b) { return a; }
 		}
 
@@ -283,7 +284,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	if (auto it = jfile.find("boundaryLayers"); it != jfile.end())
 	{
-		Set_BoundaryLayers(it->get<int>(), verbose);
+		Set_BoundaryLayers(it->get<uint32_t>(), verbose);
 	}
 
 	// --- [ statistics, benchmarks, and exports ] -----------------------------
@@ -294,12 +295,12 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 		if (auto it = jfile.find("maxStatRecs"); it != jfile.end())
 		{
-			params_.maxStatRecs = it->get<int64_t>();
+			params_.maxStatRecs = it->get<uint32_t>();
 		}
 
 		if (auto it = jfile.find("maxBenchRecs"); it != jfile.end())
 		{
-			params_.maxBenchRecs = it->get<int64_t>();
+			params_.maxBenchRecs = it->get<uint32_t>();
 		}
 
 		if (auto it = jfile.find("exportEnabled"); it != jfile.end())
@@ -314,13 +315,17 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 		if (auto it = jfile.find("exportInterval"); it != jfile.end())
 		{
-			params_.exportInterval = it->get<int64_t>();
+			params_.exportInterval = it->get<uint32_t>();
 		}
 
 		EndWrite();
 	}
 
-	AssertParamDerivationCorrectness();
+	if (!AssertParamDerivationCorrectness())
+	{
+		SPDLOG_ERROR("Parameter derivation is incorrect");
+		return false;
+	}
 
 	return true;
 }
@@ -618,7 +623,9 @@ void SimParamsMgr::Set_Mass(
 
 		// apply changes
 		params_.massF = mass;
-		// TODO: adjust rest density too?
+		params_.restDensityF = mass / (params_.particleSizeF 
+									* params_.particleSizeF
+									* params_.particleSizeF);
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
@@ -631,7 +638,9 @@ void SimParamsMgr::Set_Mass(
 
 		// apply changes
 		params_.massB = mass;
-		// TODO: adjust rest density too?
+		params_.restDensityB = mass / (params_.particleSizeB
+									* params_.particleSizeB
+									* params_.particleSizeB);
 	}
 
 	EndWrite();
@@ -814,14 +823,8 @@ void SimParamsMgr::Set_KernelRadius(
 }
 
 void SimParamsMgr::Set_BoundaryLayers(
-	int boundaryLayers, bool verbose)
+	uint32_t boundaryLayers, bool verbose)
 {
-	if (!(boundaryLayers >= 0))
-	{
-		SPDLOG_ERROR("Param change cancelled, 'boundaryLayers' must be >= 0");
-		return;
-	}
-
 	// detect if parameter would actually change
 	bool changed = false;
 
@@ -841,9 +844,9 @@ void SimParamsMgr::Set_BoundaryLayers(
 	EndWrite();
 }
 
-bool SimParamsMgr::AssertParamDerivationCorrectness()
+bool SimParamsMgr::AssertParamDerivationCorrectness() const
 {
-	auto [par, ver] = SnapshotParams();
+	SimParams par = SnapshotParams().first;
 
 	auto Check = [&](std::string_view msg, bool fail, auto&& pred) -> bool
 	{

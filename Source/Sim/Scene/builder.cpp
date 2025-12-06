@@ -157,7 +157,7 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 {
 	const float size = params.particleSizeB;
 	const float radius = params.particleRadiusB;
-	const int layers = std::max(0, params.boundaryLayers);
+	const int layers = params.boundaryLayers < 0 ? 0 : params.boundaryLayers;
 
 	// shrink OBB lengths by radius in all directions, resulting in "inner" lengths
 	const float uLen_i = box.uLen - 2.0f * radius;

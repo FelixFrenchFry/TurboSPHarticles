@@ -4,12 +4,9 @@
 #include <chrono>
 #include <iostream>
 #include <mutex>
-#include <omp.h>
 #include <spdlog/spdlog.h>
 
 // internal
-#include "simulation.h"
-
 #include "Source/Eval/Serial/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/CPU/CPU_Backend_01/cpu_backend_01.h"
@@ -17,6 +14,7 @@
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 	#include "Source/Sim/GPU/GPU_Backend_01/gpu_backend_01.h"
 #endif
+#include "simulation.h"
 
 
 
@@ -44,7 +42,7 @@ bool SimulationMgr::Init()
 	// default sim state (empty)
 	universalSimState_ = Sync::UniversalSimState{};
 
-	// TODO: load initial sim state from a file
+	// TODO: load initial sim state from a file?
 
 	SelectSimScenario(simParams_.scenarioType);
 
@@ -75,15 +73,10 @@ void SimulationMgr::Shutdown()
 
 void SimulationMgr::SyncParameters(bool force)
 {
-	int64_t latestSimParamsVersion = simParamsMgr_.StableVersion();
-	if (latestSimParamsVersion != simParamsVersion_ ||
-		force)
+	uint64_t latestSimParamsVersion = simParamsMgr_.StableVersion();
+	if (latestSimParamsVersion != simParamsVersion_ || force)
 	{
 		auto snapshot = simParamsMgr_.SnapshotParams();
-
-		// TODO: remove debug log
-		// SPDLOG_INFO("Synced 'simParams' snapshot from version {} to {}",
-		// simParamsVersion_, std::get<1>(snapshot));
 
 		simParams_ = std::get<0>(snapshot);
 		simParamsVersion_ = std::get<1>(snapshot);
@@ -260,18 +253,19 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 
-	// create visual snapshot and push to mailbox
-	auto snap = std::make_shared<Sync::VisualSnapshot>();
-	simBackend_->PackVisualSnapshot(*snap);
+	{
+		// create visual snapshot and push to its mailbox
+		auto visSnap = std::make_shared<Sync::VisualSnapshot>();
+		simBackend_->PackVisualSnapshot(*visSnap);
 
-	// pack misc data into snapshot that is not handled by the backend
-	snap->simStep = simStep_;
-	snap->boxesB = simScenario_->GetBoundaryBoxes();
-	// TODO: add this to vis params instead?
-	//snap->scalarModeF = Base::ColorCodingMode::VelocityMag;
+		// pack misc data into snapshot that is not handled by the backend
+		visSnap->simStep = simStep_;
+		visSnap->boxesB = simScenario_->GetBoundaryBoxes();
+		// TODO: add this to vis params instead?
+		//visSnap->scalarModeF = Base::ColorCodingMode::VelocityMag;
 
-	// move snapshot into mailbox (non-blocking)
-	visualSnapMailbox_->StoreSnapshot(std::move(snap));
+		visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
+	}
 
 	// vis throttle starting point
 	lastVisWall_ = std::chrono::steady_clock::now();
@@ -349,16 +343,16 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 				benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Visual });
 
 				// create visual snapshot and push to its mailbox
-				auto snap = std::make_shared<Sync::VisualSnapshot>();
-				simBackend_->PackVisualSnapshot(*snap);
+				auto visSnap = std::make_shared<Sync::VisualSnapshot>();
+				simBackend_->PackVisualSnapshot(*visSnap);
 
 				// pack misc data into snapshot that is not handled by the backend
-				snap->simStep = simStep_;
-				snap->boxesB = simScenario_->GetBoundaryBoxes();
+				visSnap->simStep = simStep_;
+				visSnap->boxesB = simScenario_->GetBoundaryBoxes();
 				// TODO: add this to vis params instead?
-				//snap->scalarModeF = Base::ColorCodingMode::VelocityMag;
+				//visSnap->scalarModeF = Base::ColorCodingMode::VelocityMag;
 
-				visualSnapMailbox_->StoreSnapshot(std::move(snap));
+				visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
 
 				benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Visual });
 

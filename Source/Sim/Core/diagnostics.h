@@ -7,8 +7,6 @@
 // external
 #include <chrono>
 #include <cstdint>
-#include <string>
-#include <thread>
 
 // internal
 #include "parameters_sim.h"
@@ -38,18 +36,16 @@ namespace Sim
 			const Bench::BenchmarksMgr& benchMgr,
 			const std::vector<Bench::BenchOpGroupDef>& opGroups,
 			Bench::TimeUnit unit,
-			int64_t step,
-			int64_t totalSteps = -1);
+			uint32_t step,
+			uint32_t totalSteps = -1);
 
 		static void PrintAveragePerformanceSummary(
 			const Bench::BenchmarksMgr& benchMgr,
 			const std::vector<Bench::BenchOpGroupDef>& opGroups,
 			Bench::TimeUnit unit,
-			int64_t step);
+			uint32_t step);
 
 		// TODO: print big performance and statistics tables in-place after every step?
-
-		// TODO: print current step and steps/sec periodically?
 	};
 
 } // namespace Sim

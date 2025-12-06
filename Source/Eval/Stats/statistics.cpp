@@ -26,7 +26,7 @@ void StatisticsMgr::BeginStep()
 	recLatest_.stats.fill(0.0f);
 }
 
-void StatisticsMgr::EndStep(int64_t simStep, double simTime)
+void StatisticsMgr::EndStep(uint32_t simStep, double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;

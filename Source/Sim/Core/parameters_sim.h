@@ -75,18 +75,18 @@ namespace Sim
 		// boundary conditions
 		float jitterFracB		= 0.0f; // % of particle size
 		int64_t jitterSeedB		= 42; // RNG seed for jitter
-		int boundaryLayers		= 2;
+		uint32_t boundaryLayers	= 2;
 
 		// statistics
-		int64_t maxStatRecs		= 100'000'000;
+		uint32_t maxStatRecs	= 100'000'000;
 
 		// benchmarks
-		int64_t maxBenchRecs	= 100'000'000;
+		uint32_t maxBenchRecs	= 100'000'000;
 
 		// export
 		bool exportEnabled		= true;
 		std::string exportDir   = "A";
-		int64_t exportInterval  = 10;
+		uint32_t exportInterval = 10;
 	};
 
 	class SimParamsMgr
@@ -96,10 +96,10 @@ namespace Sim
 		SimParamsMgr() = default;
 
 		// returns snapshot and version of current simulation parameters
-		std::pair<SimParams, int64_t> SnapshotParams() const;
+		std::pair<SimParams, uint64_t> SnapshotParams() const;
 
 		// returns current stable version number to check for changes
-		int64_t StableVersion() const;
+		uint64_t StableVersion() const;
 
 		bool LoadSimParamsFromJsonFile(const std::string& fileName, bool verbose = false);
 
@@ -117,14 +117,14 @@ namespace Sim
 		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
 		void Set_KernelSuppRatio(float kernelSuppRatio, bool verbose = false);
 		void Set_KernelRadius(float kernelRadius, bool verbose = false);
-		void Set_BoundaryLayers(int boundaryLayers, bool verbose = false);
+		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
 
-		bool AssertParamDerivationCorrectness();
+		bool AssertParamDerivationCorrectness() const;
 
 	private: // ----------------------------------------------------------------
 
 		alignas(64) SimParams params_{}; // current active copy of visualization parameters
-		alignas(64) std::atomic<int64_t> version_{ 0 }; // even = stable, odd = writing
+		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
 
 		inline void BeginWrite(); // mark beginning of write operation
 		inline void EndWrite(); // mark end of write operation

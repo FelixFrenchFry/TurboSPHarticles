@@ -89,7 +89,6 @@ namespace Bench
 		// start timestamps
 		using Clock = std::chrono::steady_clock;
 		std::array<Clock::time_point, GetIdx(BenchOp::Count)> t0_single_{};
-		std::array<double, GetIdx(BenchOp::Count)> t0_team_{};
 
 		// max and current number of steps for which timings are kept
 		uint32_t maxRecCount_;

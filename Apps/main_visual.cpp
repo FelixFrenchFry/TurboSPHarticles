@@ -47,7 +47,7 @@ int main(int argc, char** argv)
 		application.add_option("--config", configFile, "Configuration file");
 		// TODO: add --version, --threads, --backend, etc... ?
 
-		CLI11_PARSE(application, argc, argv);
+		CLI11_PARSE(application, argc, argv)
 
 		// --- [ hardware budgets ] --------------------------------------------
 

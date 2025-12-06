@@ -28,7 +28,7 @@ namespace Stats
 		void BeginStep();
 
 		// pushes the record to history and aggregates step's stat data
-		void EndStep(int64_t simStep, double simTime);
+		void EndStep(uint32_t simStep, double simTime);
 
 		void PackStatSnapshot(Sync::StatSnapshot& snap) const;
 
@@ -46,8 +46,8 @@ namespace Stats
 	private: // ==============================
 
 		// max and current number of steps for which stats are kept
-		int64_t maxRecCount_;
-		int64_t curRecCount_;
+		uint32_t maxRecCount_;
+		uint32_t curRecCount_;
 
 		StatRecordStep recLatest_;
 

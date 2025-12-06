@@ -243,7 +243,7 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(uint32_t iterCount)
 
 	bool satisfied = false;
 
-	if (iterCount > 50) { satisfied = true; }
+	if (iterCount > 5) { satisfied = true; }
 	// if (avgRelDensityErrorF_raw_ <= 0.001f) { satisfied = true; }
 	// if (avgRelDensityErrorF_pos_ <= 0.01f) { satisfied = true; }
 	// if (avgRelDensityErrorF_abs_ <= 0.01f) { satisfied = true; }

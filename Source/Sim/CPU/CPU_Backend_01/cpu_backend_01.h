@@ -48,7 +48,7 @@ namespace Sim
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
 
 		// advances the simulation by N_steps
-		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
+		void ExecuteSimStep(const SimParams& params, uint32_t N_steps) override;
 
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;
@@ -72,13 +72,13 @@ namespace Sim
 		friend class NS_CellLinkedList_Compact_CPU01;
 
 		// metadata
-		int64_t simStep_ = 0;
+		uint32_t simStep_ = 0;
 		double simTime_ = 0.0;
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
 
 		// TODO: manage this in the param manager
-		uint32_t dataReOrderInterval_ = 20;
+		uint32_t dataReOrderInterval_ = 50;
 
 		// --- [ backend-specific data structures for operating the simulation ]
 

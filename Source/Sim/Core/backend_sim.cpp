@@ -2,7 +2,6 @@
 
 // external
 #include <memory>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 // internal
@@ -24,22 +23,22 @@ namespace Sim
 		switch (version)
 		{
 		case Base::BackendVersion::CPU01:
-		{
-			return std::make_unique<SimBackend_CPU01>(benchmarksMgr);
-		}
+			{
+				return std::make_unique<SimBackend_CPU01>(benchmarksMgr);
+			}
 		case Base::BackendVersion::CPU02:
-		{
-			return std::make_unique<SimBackend_CPU02>(benchmarksMgr);
-		}
+			{
+				return std::make_unique<SimBackend_CPU02>(benchmarksMgr);
+			}
 		#ifdef TURBOSPHARTICLES_WITH_CUDA
 		case Base::BackendVersion::GPU01:
-		{
-			return std::make_unique<SimBackend_GPU01>(benchmarksMgr);
-		}
+			{
+				return std::make_unique<SimBackend_GPU01>(benchmarksMgr);
+			}
 		#endif
-		default:
-			throw std::runtime_error("Unsupported sim backend version requested");
 		}
+
+		throw std::runtime_error("Unsupported sim backend version requested");
 	}
 
 } // namespace Sim

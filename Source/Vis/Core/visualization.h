@@ -72,7 +72,7 @@ namespace Vis
 		int front_ = 0; int back_ = 1; // current / next buffer index
 
 		// current view and scalar (coloring) mode for visualization
-		Base::ColorCodingMode scalarMode_{ Base::None };
+		Base::ColorCodingMode scalarMode_{ Base::ColorCodingMode::None };
 		VisualSnapView view_{};
 
 		// mailbox pointers

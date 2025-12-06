@@ -17,7 +17,6 @@ export CXX=g++
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export TBB_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
-# build it
 cd /pfs/work9/workspace/scratch/fr_fl184-particleStorage/TurboSPHarticles
 
 # run it

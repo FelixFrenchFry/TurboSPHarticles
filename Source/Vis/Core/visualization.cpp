@@ -386,7 +386,7 @@ void VisualizationMgr::SyncVisSimState()
 	scalarMode_ = snap->scalarModeF;
 
 	// ensure scalar data size matches position size
-	if (scalarMode_ != Base::None)
+	if (scalarMode_ != Base::ColorCodingMode::None)
 	{
 		if (scalarDataF_[back_].size() != posF_[back_].size())
 		{
@@ -407,7 +407,7 @@ void VisualizationMgr::SyncVisSimState()
 	// pack the read-only view for the rendering manager to use it
 	view_.N_F = static_cast<uint32_t>(posF_[front_].size());
 	view_.posF = std::span<const glm::vec3>(posF_[front_].data(), posF_[front_].size());
-	view_.scalarDataF = (scalarMode_ == Base::None)
+	view_.scalarDataF = (scalarMode_ == Base::ColorCodingMode::None)
 		? std::span<const float>()
 		: std::span<const float>(scalarDataF_[front_].data(), scalarDataF_[front_].size());
 	view_.scalarModeF = scalarMode_;

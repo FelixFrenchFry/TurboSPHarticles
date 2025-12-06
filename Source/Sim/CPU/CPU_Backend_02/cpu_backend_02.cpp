@@ -230,7 +230,8 @@ void SimBackend_CPU02::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	FillScalarData(snap, snap.scalarModeF);
 }
 
-void SimBackend_CPU02::FillScalarData(Sync::VisualSnapshot& snap,
+void SimBackend_CPU02::FillScalarData(
+	Sync::VisualSnapshot& snap,
 	Base::ColorCodingMode mode) const
 {
 	if (N_F_ == 0) // empty sim
@@ -244,44 +245,43 @@ void SimBackend_CPU02::FillScalarData(Sync::VisualSnapshot& snap,
 
 	switch (mode)
 	{
-	case Base::None:
-	{
-		snap.scalarDataF.clear();
-		return;
-	}
-	case Base::VelocityMag:
-	{
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F_),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+	case Base::ColorCodingMode::None:
+		{
+			snap.scalarDataF.clear();
+			return;
+		}
+	case Base::ColorCodingMode::VelocityMag:
+		{
+			tbb::parallel_for(
+				tbb::blocked_range<uint32_t>(0, N_F_),
+				[&](const tbb::blocked_range<uint32_t>& r)
 				{
-					const Eigen::Vector3f v = velF_[i];
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const Eigen::Vector3f v = velF_[i];
 
-					// magnitude of velocity vector
-					snap.scalarDataF[i] = v.norm();
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-		return;
+						// magnitude of velocity vector
+						snap.scalarDataF[i] = v.norm();
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+			return;
+		}
+	case Base::ColorCodingMode::Density:
+		{
+			snap.scalarDataF = densityF_;
+			return;
+		}
+	case Base::ColorCodingMode::Pressure:
+		{
+			snap.scalarDataF = pressureF_;
+			return;
+		}
 	}
-	case Base::Density:
-	{
-		snap.scalarDataF = densityF_;
-		return;
-	}
-	case Base::Pressure:
-	{
-		snap.scalarDataF = pressureF_;
-		return;
-	}
-	default:
-		SPDLOG_ERROR("Unsupported scalar data mode in backend CPU02");
-		snap.scalarDataF.clear();
-		return;
-	}
+
+	SPDLOG_ERROR("Unsupported scalar data mode in backend CPU02");
+	snap.scalarDataF.clear();
 }
 
 // TODO: add flags to enable/disable certain stats?
@@ -614,12 +614,12 @@ void SimBackend_CPU02::FillStatisticsRecord(Stats::StatRecordStep& record,
 	Set(record, StatMetric::VelMag_Max, velMagMax);
 }
 
-void SimBackend_CPU02::ExecuteSimStep(SimParams params, int64_t N_steps)
+void SimBackend_CPU02::ExecuteSimStep(const SimParams& params, uint32_t N_steps)
 {
 	if (N_F_ == 0) // empty sim
 	{
 		simStep_ += N_steps;
-		simTime_ += N_steps * params.timeStep;
+		simTime_ += static_cast<double>(N_steps) * params.timeStep;
 
 		return;
 	}
@@ -670,5 +670,5 @@ void SimBackend_CPU02::ExecuteSimStep(SimParams params, int64_t N_steps)
 	Step_IISPH(params);
 
 	simStep_ += N_steps;
-	simTime_ += N_steps * params.timeStep;
+	simTime_ += static_cast<double>(N_steps) * params.timeStep;
 }

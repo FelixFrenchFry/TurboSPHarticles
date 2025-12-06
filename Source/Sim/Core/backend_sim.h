@@ -7,15 +7,14 @@
 // external
 #include <cstdint>
 #include <memory>
-#include <span>
 #include <vector>
 
 // internal
-#include "parameters_sim.h"
 #include "Source/Base/enum_hub.h"
 #include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Eval/Bench/operations.h"
 #include "Source/Eval/Stats/statistics.h"
+#include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Sync/snapshots.h"
 #include "Source/Sim/Sync/state_sim.h"
 
@@ -60,7 +59,7 @@ namespace Sim
 		virtual void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const = 0;
 
 		// advances the simulation by N_steps
-		virtual void ExecuteSimStep(SimParams params, int64_t N_steps = 1) = 0;
+		virtual void ExecuteSimStep(const SimParams&, uint32_t N_steps = 1) = 0;
 
 		// IISPH fluid solver step
 		virtual void Step_IISPH(const SimParams& params) = 0;

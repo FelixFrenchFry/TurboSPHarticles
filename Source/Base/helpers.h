@@ -14,23 +14,23 @@
 
 namespace Base
 {
-	// ===== approximate equality helpers for detecting parameter changes =====
+    // --- [ approximate equality helpers for detecting parameter changes ] ----
 
     // float comparison
-    inline bool ApproxEqu(float a, float b, float eps = 1e-6f)
+    inline bool ApproxEqu(const float a, const float b, const float eps = 1e-6f)
 	{
         return std::fabs(a - b) <= eps;
     }
 
     // element-wise vec2 comparison
-    inline bool ApproxEqu(const glm::vec2& a, const glm::vec2& b, float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::vec2& a, const glm::vec2& b, const float eps = 1e-6f)
 	{
         return ApproxEqu(a.x, b.x, eps) &&
                ApproxEqu(a.y, b.y, eps);
     }
 
 	// element-wise vec3 comparison
-    inline bool ApproxEqu(const glm::vec3& a, const glm::vec3& b, float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::vec3& a, const glm::vec3& b, const float eps = 1e-6f)
 	{
         return ApproxEqu(a.x, b.x, eps) &&
                ApproxEqu(a.y, b.y, eps) &&
@@ -38,7 +38,7 @@ namespace Base
     }
 
     // element-wise vec4 comparison
-    inline bool ApproxEqu(const glm::vec4& a, const glm::vec4& b, float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::vec4& a, const glm::vec4& b, const float eps = 1e-6f)
 	{
         return ApproxEqu(a.x, b.x, eps) &&
                ApproxEqu(a.y, b.y, eps) &&
@@ -47,7 +47,7 @@ namespace Base
     }
 
     // element-wise mat4 comparison
-    inline bool ApproxEqu(const glm::mat4& a, const glm::mat4& b, float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::mat4& a, const glm::mat4& b, const float eps = 1e-6f)
 	{
         float maxDiff = 0.0f;
 
@@ -79,35 +79,52 @@ namespace Base
     }
 
 	// overloads that select the right comparator automatically
-    inline void MarkIfChanged(const std::optional<float>& o, const float& cur, bool& ch)
+    inline void MarkIfChanged(const std::optional<int32_t>& old, const int32_t& cur, bool& ch)
     {
-	    if (o && !ApproxEqu(*o, cur)) ch = true;
+        if (old && old != cur) { ch = true; }
     }
-    inline void MarkIfChanged(const std::optional<glm::vec2>& o, const glm::vec2& cur, bool& ch)
+    inline void MarkIfChanged(const std::optional<int64_t>& old, const int64_t& cur, bool& ch)
     {
-	    if (o && !ApproxEqu(*o, cur)) ch = true;
+        if (old && old != cur) { ch = true; }
     }
-    inline void MarkIfChanged(const std::optional<glm::vec3>& o, const glm::vec3& cur, bool& ch)
+    inline void MarkIfChanged(const std::optional<uint32_t>& old, const uint32_t& cur, bool& ch)
     {
-	    if (o && !ApproxEqu(*o, cur)) ch = true;
+        if (old && old != cur) { ch = true; }
     }
-    inline void MarkIfChanged(const std::optional<glm::vec4>& o, const glm::vec4& cur, bool& ch)
+    inline void MarkIfChanged(const std::optional<uint64_t>& old, const uint64_t& cur, bool& ch)
     {
-	    if (o && !ApproxEqu(*o, cur)) ch = true;
+        if (old && old != cur) { ch = true; }
     }
-    inline void MarkIfChanged(const std::optional<glm::mat4>& o, const glm::mat4& cur, bool& ch)
+    inline void MarkIfChanged(const std::optional<float>& old, const float& cur, bool& ch)
     {
-	    if (o && !ApproxEqu(*o, cur)) ch = true;
+	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
+    }
+    inline void MarkIfChanged(const std::optional<glm::vec2>& old, const glm::vec2& cur, bool& ch)
+    {
+	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
+    }
+    inline void MarkIfChanged(const std::optional<glm::vec3>& old, const glm::vec3& cur, bool& ch)
+    {
+	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
+    }
+    inline void MarkIfChanged(const std::optional<glm::vec4>& old, const glm::vec4& cur, bool& ch)
+    {
+	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
+    }
+    inline void MarkIfChanged(const std::optional<glm::mat4>& old, const glm::mat4& cur, bool& ch)
+    {
+	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
     }
 
-    // ===== misc =====
+    // --- [ misc ] ------------------------------------------------------------
 
-    inline bool Float_AlmostEqual(float a, float b,
-                                  float rel_epsilon = 1e-5f,
-                                  float abs_epsilon = 1e-8f) noexcept
+    inline bool Float_AlmostEqual(const float a, const float b,
+                                  const float rel_epsilon = 1e-6f,
+                                  const float abs_epsilon = 1e-9f) noexcept
     {
-        float diff = std::fabs(a - b);
-        if (diff <= abs_epsilon) return true;
+        const float diff = std::fabs(a - b);
+        if (diff <= abs_epsilon) { return true; }
+
         return diff <= rel_epsilon * fmaxf(std::fabs(a), std::fabs(b));
     }
 

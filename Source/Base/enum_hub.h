@@ -8,16 +8,13 @@
 
 namespace Base
 {
-	// TODO: use 'enum class ... : uint16_t' instead?
-	// TODO: put them into separate, local files instead?
-
-	enum ParticleType
+	enum class ParticleType : uint8_t
 	{
 		Fluid,				// 0
 		Boundary			// 1
 	};
 
-	enum BackendVersion
+	enum class BackendVersion : uint8_t
 	{
 		CPU01,				// 0
 		CPU02,				// 1
@@ -25,12 +22,12 @@ namespace Base
 		GPU01				// 2
 	};
 
-	enum ScenarioType
+	enum class ScenarioType : uint8_t
 	{
 		BreakingDam,		// 0
 	};
 
-	enum NeighborSearchMethod
+	enum class NeighborSearchMethod : uint8_t
 	{
 		BruteForce,
 
@@ -49,7 +46,7 @@ namespace Base
 		CellLinkedList_Compact
 	};
 
-	enum ColorCodingMode
+	enum class ColorCodingMode : uint8_t
 	{
 		None,				// 0
 		VelocityMag,		// 1

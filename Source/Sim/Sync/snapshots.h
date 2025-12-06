@@ -71,7 +71,7 @@ namespace Sync
 	struct ExportSnapshot
 	{
 		// metadata
-		int64_t simStep;
+		uint32_t simStep;
 		double simTime;
 
 		// data for fluid particles export
@@ -88,7 +88,7 @@ namespace Sync
 	struct VisualSnapshot
 	{
 		// metadata
-		int64_t simStep;					// simulation step at this snapshot
+		uint32_t simStep;					// simulation step at this snapshot
 
 		// data for fluid particle vis
 		uint32_t N_F;						// number of fluid particles
@@ -105,7 +105,7 @@ namespace Sync
 	struct BenchSnapshot
 	{
 		// metadata
-		int64_t simStep;
+		uint32_t simStep;
 		double simTime;
 
 		// per-operation timings
@@ -119,7 +119,7 @@ namespace Sync
 	struct StatSnapshot
 	{
 		// metadata
-		int64_t simStep;
+		uint32_t simStep;
 		double simTime;
 
 		// per-metric stat data

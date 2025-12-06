@@ -55,9 +55,8 @@ namespace Sim
 
 		void ReBuildInitialSimState();
 
-		// TODO: void Launch(std::uint32_t N_simThreads);
-		// TODO: void RunSim(std::uint32_t N_simThreads);
-
+		// launch the simulation in async (for running live visualization)
+		// or blocking mode (for running headless)
 		void Launch_Async(int64_t maxSteps = -1);
 		void Launch_Blocking(int64_t maxSteps = -1);
 
@@ -66,7 +65,6 @@ namespace Sim
 		void RunSim_Blocking(int64_t maxSteps);
 
 		void RequestStop();
-
 		void JoinThreads();
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
@@ -76,7 +74,7 @@ namespace Sim
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const { out = curBenchOpGroups_; }
 
 		// metadata
-		int64_t simStep_ = 0;
+		uint32_t simStep_ = 0;
 		double simTime_ = 0.0;
 
 	private: // ----------------------------------------------------------------
@@ -86,7 +84,7 @@ namespace Sim
 		// parameter manager and snapshot to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;
-		int64_t simParamsVersion_ = 0;
+		uint64_t simParamsVersion_ = 0;
 
 		// universal simulation state, and backend for compute
 		Sync::UniversalSimState universalSimState_;

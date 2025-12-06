@@ -237,8 +237,9 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	FillScalarData(snap, snap.scalarModeF);
 }
 
-void SimBackend_GPU01::FillScalarData(Sync::VisualSnapshot& snap,
-									  Base::ColorCodingMode mode) const
+void SimBackend_GPU01::FillScalarData(
+	Sync::VisualSnapshot& snap,
+	Base::ColorCodingMode mode) const
 {
 	if (N_F_ == 0) // empty sim
 	{
@@ -253,65 +254,64 @@ void SimBackend_GPU01::FillScalarData(Sync::VisualSnapshot& snap,
 
 	switch (mode)
 	{
-	case Base::None:
-	{
-		snap.scalarDataF.clear();
-		return;
-	}
-	case Base::VelocityMag:
-	{
-		// host staging for velocities
-		std::vector<float> h_xVelF(N_F_);
-		std::vector<float> h_yVelF(N_F_);
-		std::vector<float> h_zVelF(N_F_);
+	case Base::ColorCodingMode::None:
+		{
+			snap.scalarDataF.clear();
+			return;
+		}
+	case Base::ColorCodingMode::VelocityMag:
+		{
+			// host staging for velocities
+			std::vector<float> h_xVelF(N_F_);
+			std::vector<float> h_yVelF(N_F_);
+			std::vector<float> h_zVelF(N_F_);
 
-		// launch async device to host copies
-		GPU::Copy_DeviceToHost(h_xVelF.data(), d_xVelF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(h_yVelF.data(), d_yVelF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(h_zVelF.data(), d_zVelF_.Data(), N_F_, stream_);
-		
-		// wait for all copies to finish
-		GPU::StreamSync(stream_);
+			// launch async device to host copies
+			GPU::Copy_DeviceToHost(h_xVelF.data(), d_xVelF_.Data(), N_F_, stream_);
+			GPU::Copy_DeviceToHost(h_yVelF.data(), d_yVelF_.Data(), N_F_, stream_);
+			GPU::Copy_DeviceToHost(h_zVelF.data(), d_zVelF_.Data(), N_F_, stream_);
 
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F_),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+			// wait for all copies to finish
+			GPU::StreamSync(stream_);
+
+			tbb::parallel_for(
+				tbb::blocked_range<uint32_t>(0, N_F_),
+				[&](const tbb::blocked_range<uint32_t>& r)
 				{
-					const float vxi = h_xVelF[i];
-					const float vyi = h_yVelF[i];
-					const float vzi = h_zVelF[i];
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const float vxi = h_xVelF[i];
+						const float vyi = h_yVelF[i];
+						const float vzi = h_zVelF[i];
 
-					// magnitude of velocity vector
-					snap.scalarDataF[i] = std::sqrt(vxi * vxi
-													 + vyi * vyi
-													 + vzi * vzi);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-		return;
+						// magnitude of velocity vector
+						snap.scalarDataF[i] = std::sqrt(vxi * vxi
+							+ vyi * vyi
+							+ vzi * vzi);
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+			return;
+		}
+	case Base::ColorCodingMode::Density:
+		{
+			// copy density data directly into the host snapshot
+			GPU::Copy_DeviceToHost(snap.scalarDataF.data(), d_densityF_.Data(), N_F_, stream_);
+			GPU::StreamSync(stream_);
+			return;
+		}
+	case Base::ColorCodingMode::Pressure:
+		{
+			// copy pressure data directly into the host snapshot
+			GPU::Copy_DeviceToHost(snap.scalarDataF.data(), d_pressureF_.Data(), N_F_, stream_);
+			GPU::StreamSync(stream_);
+			return;
+		}
 	}
-	case Base::Density:
-	{
-		// copy density data directly into the host snapshot
-		GPU::Copy_DeviceToHost(snap.scalarDataF.data(), d_densityF_.Data(), N_F_, stream_);
-		GPU::StreamSync(stream_);
-		return;
-	}
-	case Base::Pressure:
-	{
-		// copy pressure data directly into the host snapshot
-		GPU::Copy_DeviceToHost(snap.scalarDataF.data(), d_pressureF_.Data(), N_F_, stream_);
-		GPU::StreamSync(stream_);
-		return;
-	}
-	default:
-		SPDLOG_ERROR("Unsupported scalar data mode in backend GPU01");
-		snap.scalarDataF.clear();
-		return;
-	}
+	
+	SPDLOG_ERROR("Unsupported scalar data mode in backend GPU01");
+	snap.scalarDataF.clear();
 }
 
 // TODO: add flags to enable/disable certain stats?
@@ -323,7 +323,7 @@ void SimBackend_GPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	// TODO: implement
 }
 
-void SimBackend_GPU01::ExecuteSimStep(SimParams params, int64_t N_steps)
+void SimBackend_GPU01::ExecuteSimStep(const SimParams& params, uint32_t N_steps)
 {
 	if (N_F_ == 0) // empty sim
 	{

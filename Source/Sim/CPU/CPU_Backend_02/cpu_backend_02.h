@@ -50,7 +50,7 @@ namespace Sim
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
 
 		// advances the simulation by N_steps
-		void ExecuteSimStep(SimParams params, int64_t N_steps) override;
+		void ExecuteSimStep(const SimParams& params, uint32_t N_steps) override;
 
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;

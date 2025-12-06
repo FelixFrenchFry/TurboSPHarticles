@@ -289,7 +289,7 @@ void UserInterfaceMgr::BuildSection_SimulationControl(
 
 	ImGui::Text("step count:");
 	ImGui::SameLine();
-	snprintf(stringBuffer, sizeof(stringBuffer), "%d", simulationMgr.simStep_);
+	snprintf(stringBuffer, sizeof(stringBuffer), "%lld", simulationMgr.simStep_);
 	ImGui::Text(stringBuffer);
 	ImGui::Spacing();
 }
