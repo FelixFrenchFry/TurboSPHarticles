@@ -3,8 +3,6 @@
 // external
 #include <algorithm>
 #include <limits>
-#include <omp.h>
-#include <spdlog/spdlog.h>
 
 // internal
 #include "benchmarks.h"
@@ -28,7 +26,7 @@ void BenchmarksMgr::BeginStep()
 	curStepOcc_.fill(0);
 }
 
-void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
+void BenchmarksMgr::EndStep(const uint32_t simStep, const double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;
@@ -47,7 +45,7 @@ void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
 		benchSum_allTime_ = recLatest_.time;
 		benchMax_allTime_ = recLatest_.time;
 
-		for (uint16_t i = 0; i < GetIdx(BenchOp::Count); i++)
+		for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
 		{
 			// initialize min only for operations that actually occurred
 			benchMin_allTime_[i] = curStepOcc_[i] ? recLatest_.time[i]
@@ -59,7 +57,7 @@ void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
 	}
 	else
 	{
-		for (uint16_t i = 0; i < GetIdx(BenchOp::Count); i++)
+		for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
 		{
 			// update all-time sum
 			benchSum_allTime_[i] += recLatest_.time[i];
@@ -71,8 +69,8 @@ void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
 			}
 
 			// update all-time max
-			benchMax_allTime_[i] = fmaxf(recLatest_.time[i],
-										 benchMax_allTime_[i]);
+			benchMax_allTime_[i] = std::max(recLatest_.time[i],
+											benchMax_allTime_[i]);
 
 			// update occurrence count
 			numOcc_allTime_[i] += curStepOcc_[i] ? 1 : 0;
@@ -82,68 +80,44 @@ void BenchmarksMgr::EndStep(int64_t simStep, double simTime)
 	curRecCount_ += 1;
 }
 
-void BenchmarksMgr::StartBench(std::initializer_list<Bench::BenchOp> ops)
+void BenchmarksMgr::StartBench(const std::initializer_list<BenchOp> ops)
 {
 	if (ops.size() == 0) { return; }
 
 	const BenchOp leader = *ops.begin();
-	const uint16_t i = GetIdx(leader);
+	const uint8_t i = GetIdx(leader);
 
-	if (!omp_in_parallel()) // NOT inside an OMP parallel region
-	{
-		t0_single_[i] = Clock::now();
-		return;
-	}
-
-	// inside an OMP parallel region, all threads must reach the barrier
-	#pragma omp barrier
-	#pragma omp single
-	{
-		t0_team_[i] = omp_get_wtime();
-	}
-	#pragma omp barrier
+	t0_single_[i] = Clock::now();
 }
 
-void BenchmarksMgr::StopBench(std::initializer_list<Bench::BenchOp> ops)
+void BenchmarksMgr::StopBench(const std::initializer_list<BenchOp> ops)
 {
 	if (ops.size() == 0) { return; }
 
 	const BenchOp leader = *ops.begin();
-	const uint16_t i = GetIdx(leader);
+	const uint8_t i = GetIdx(leader);
 
-	if (!omp_in_parallel()) // NOT inside an OMP parallel region
-	{
-		const auto t1 = Clock::now();
-		const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast
-			<std::chrono::nanoseconds>(t1 - t0_single_[i]).count());
-		AddGroupTimingSample(ops, ns); // credit to all ops in the list
-		return;
-	}
+	const auto t1 = Clock::now();
+	const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast
+		<std::chrono::nanoseconds>(t1 - t0_single_[i]).count());
 
-	// inside an OMP parallel region, all threads must reach the barrier
-	#pragma omp barrier
-	#pragma omp single
-	{
-		const double t1 = omp_get_wtime();
-		const uint64_t ns = static_cast<uint64_t>((t1 - t0_team_[i]) * 1e9); // s -> ns
-		AddGroupTimingSample(ops, ns); // credit to all ops in the list
-	}
-	#pragma omp barrier
+	// credit to all ops in the group
+	AddGroupTimingSample(ops, ns);
 }
 
-void BenchmarksMgr::AddTimingSample(BenchOp op, uint64_t ns)
+void BenchmarksMgr::AddTimingSample(const BenchOp op, const uint64_t ns)
 {
-	const uint16_t i = GetIdx(op);
+	const uint8_t i = GetIdx(op);
 
 	curStepNs_[i] += ns;
 	curStepOcc_[i] = 1;
 }
 
-void BenchmarksMgr::AddGroupTimingSample(std::initializer_list<BenchOp> ops, uint64_t ns)
+void BenchmarksMgr::AddGroupTimingSample(const std::initializer_list<BenchOp> ops, const uint64_t ns)
 {
 	for (auto op : ops)
 	{
-		const uint16_t i = GetIdx(op);
+		const uint8_t i = GetIdx(op);
 		curStepNs_[i] += ns;
 		curStepOcc_[i] = 1;
 	}
@@ -156,7 +130,7 @@ void BenchmarksMgr::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
 	snap.simTime = recLatest_.simTime;
 
 	// fill in latest, average over all, average when used, min, max benches
-	for (uint16_t i = 0; i < GetIdx(BenchOp::Count); i++)
+	for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
 	{
 		snap.latest[i] = GetBench_Latest(static_cast<BenchOp>(i));
 		snap.avgAll[i] = GetBench_Avg_OverAll(static_cast<BenchOp>(i));
@@ -166,14 +140,14 @@ void BenchmarksMgr::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
 	}
 }
 
-uint64_t BenchmarksMgr::GetBench_Latest(BenchOp op) const
+uint64_t BenchmarksMgr::GetBench_Latest(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return recLatest_.time[GetIdx(op)];
 }
 
-uint64_t BenchmarksMgr::GetBench_Avg_OverAll(BenchOp op) const
+uint64_t BenchmarksMgr::GetBench_Avg_OverAll(const BenchOp op) const
 {
 	const uint64_t sum = benchSum_allTime_[GetIdx(op)];
 	if (curRecCount_ == 0 || sum == 0) { return 0; }
@@ -182,7 +156,7 @@ uint64_t BenchmarksMgr::GetBench_Avg_OverAll(BenchOp op) const
 	return ((sum - 1) / curRecCount_) + 1;
 }
 
-uint64_t BenchmarksMgr::GetBench_Avg_WhenUsed(BenchOp op) const
+uint64_t BenchmarksMgr::GetBench_Avg_WhenUsed(const BenchOp op) const
 {
 	const uint64_t sum = benchSum_allTime_[GetIdx(op)];
 	const uint64_t numOcc = numOcc_allTime_[GetIdx(op)];
@@ -192,21 +166,21 @@ uint64_t BenchmarksMgr::GetBench_Avg_WhenUsed(BenchOp op) const
 	return ((sum - 1) / numOcc) + 1;
 }
 
-uint64_t BenchmarksMgr::GetBench_Min(BenchOp op) const
+uint64_t BenchmarksMgr::GetBench_Min(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return benchMin_allTime_[GetIdx(op)];
 }
 
-uint64_t BenchmarksMgr::GetBench_Max(BenchOp op) const
+uint64_t BenchmarksMgr::GetBench_Max(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return benchMax_allTime_[GetIdx(op)];
 }
 
-uint64_t BenchmarksMgr::GetBench_NumOcc(BenchOp op) const
+uint64_t BenchmarksMgr::GetBench_NumOcc(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 

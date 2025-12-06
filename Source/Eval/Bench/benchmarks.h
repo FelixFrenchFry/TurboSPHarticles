@@ -25,7 +25,7 @@ namespace Bench
 
 	class BenchmarksMgr
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		BenchmarksMgr(const Sim::SimParams& simParams);
 
@@ -33,7 +33,7 @@ namespace Bench
 		void BeginStep();
 
 		// pushes the record to history and aggregates step's bench data
-		void EndStep(int64_t simStep, double simTime);
+		void EndStep(uint32_t simStep, double simTime);
 
 		// timing start/stop for groups of single or multiple operations
 		void StartBench(std::initializer_list<Bench::BenchOp> ops);
@@ -84,7 +84,7 @@ namespace Bench
 			return "";
 		}
 
-	private: // ==============================
+	private: // ----------------------------------------------------------------
 
 		// start timestamps
 		using Clock = std::chrono::steady_clock;
@@ -92,8 +92,8 @@ namespace Bench
 		std::array<double, GetIdx(BenchOp::Count)> t0_team_{};
 
 		// max and current number of steps for which timings are kept
-		int64_t maxRecCount_;
-		int64_t curRecCount_;
+		uint32_t maxRecCount_;
+		uint32_t curRecCount_;
 
 		// per-step per-operation timing (in nanoseconds) and occurrence flags
 		std::array<uint64_t, GetIdx(BenchOp::Count)> curStepNs_{};

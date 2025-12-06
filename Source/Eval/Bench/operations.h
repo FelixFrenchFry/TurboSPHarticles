@@ -15,7 +15,7 @@
 namespace Bench
 {
 	// "atomic" operations for benchmarking
-	enum class BenchOp : uint16_t
+	enum class BenchOp : uint8_t
 	{
 		// data structures
 		Data_Ordering,						// re-ordering of the particle attribute data structures
@@ -299,10 +299,10 @@ namespace Bench
 			}
 		}
 	};
-	static_assert(Definitions.size() == static_cast<uint16_t>(BenchOp::Count),
+	static_assert(Definitions.size() == static_cast<uint8_t>(BenchOp::Count),
 		"Bench::Definitions must list all BenchOp entries");
 
-	constexpr inline uint16_t GetIdx(BenchOp op) { return static_cast<uint16_t>(op); }
+	constexpr inline uint8_t GetIdx(BenchOp op) { return static_cast<uint8_t>(op); }
 
 	inline bool ValidateOpGroups(const std::vector<BenchOpGroupDef>& opGroups)
 	{
@@ -312,7 +312,7 @@ namespace Bench
 		{
 			for (const auto& op : group.ops)
 			{
-				const uint16_t i = GetIdx(op);
+				const uint8_t i = GetIdx(op);
 
 				if (opIncluded[i]) // duplicate
 				{
@@ -330,7 +330,7 @@ namespace Bench
 	struct BenchRecordStep
 	{
 		// metadata
-		int64_t simStep = 0;
+		uint32_t simStep = 0;
 		double simTime = 0.0;
 
 		// operation timings
