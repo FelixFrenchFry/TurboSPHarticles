@@ -26,7 +26,7 @@ namespace Export
 	#endif
 
 		// compression
-		int compressionLevel = 1;    // [0,...,9], 0 = none, 9 = max
+		int compressionLevel = 1; // [0,...,9], 0 = none, 9 = max
 		bool compress = false; // zlib compression (non-contiguous chunks)
 		bool shuffleFilter = true; // byte shuffle for better compression ratio on FP data
 
@@ -43,20 +43,20 @@ namespace Export
 	{
 	public: // -----------------------------------------------------------------
 
-		explicit SerializationMgr(const SaveOptions& opt = {})
-			: saveOptions_(opt){}
+		explicit SerializationMgr(SaveOptions opt = {})
+			: saveOptions_(std::move(opt)){}
 
 		// lossless, versioned serialization of the full simulation state into a file
-		void SaveUniversalSimState(const std::string& path,
-								   const Sync::UniversalSimState& state);
+		void SaveUniversalSimState(const Sync::UniversalSimState& state,
+								   const std::string& path) const;
 
 		// lossless, versioned de-serialization of the full simulation state from a file
-		void LoadUniversalSimState(const std::string& path,
-								   Sync::UniversalSimState& state);
+		void LoadUniversalSimState(Sync::UniversalSimState& state,
+								   const std::string& path) const;
 
 		// serialization of a subset of the simulation state and metadata into separate files
-		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir);
-		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir);
+		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
+		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
 	private: // ----------------------------------------------------------------
 

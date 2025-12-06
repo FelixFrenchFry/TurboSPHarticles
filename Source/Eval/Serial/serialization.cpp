@@ -23,8 +23,8 @@ using namespace HighFive;
 
 namespace Export
 {
-	inline DataSetCreateProps MakeDsProps(int64_t N_elements,
-										  int64_t N_elemBytes,
+	inline DataSetCreateProps MakeDsProps(uint64_t N_elements,
+										  uint64_t N_elemBytes,
 										  const Export::SaveOptions& opt)
 	{
 		DataSetCreateProps props;
@@ -36,8 +36,8 @@ namespace Export
 		if (!opt.compress) { return props; }
 
 		// chunked + filters
-		const int64_t wantChunkElems = std::max<int64_t>(1, opt.targetChunkBytes / N_elemBytes);
-		const int64_t chunkElems = std::max<int64_t>(1, std::min(N_elements, wantChunkElems));
+		const uint64_t wantChunkElems = std::max<uint64_t>(1, opt.targetChunkBytes / N_elemBytes);
+		const uint64_t chunkElems = std::max<uint64_t>(1, std::min(N_elements, wantChunkElems));
 
 		props.add(Chunking({ static_cast<hsize_t>(chunkElems) }));
 
@@ -100,7 +100,7 @@ namespace Export
 		std::filesystem::rename(tmp, dst); // let this throw if it still fails
 	}
 
-	inline std::string FormatStepPadded(int64_t step, uint32_t width = 9)
+	inline std::string FormatStepPadded(uint32_t step, uint32_t width = 9)
 	{
 		std::ostringstream oss;
 		oss << std::setfill('0') << std::setw(width) << step;
@@ -111,6 +111,7 @@ namespace Export
 	void CheckFluidConsistent(const Sync::FluidParticles& F)
 	{
 		const auto N = static_cast<size_t>(F.N_);
+
 		assert(F.id.size() == N);
 
 		assert(F.xPos.size() == N && F.yPos.size() == N && F.zPos.size() == N);
@@ -128,6 +129,7 @@ namespace Export
 	void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
 	{
 		const auto N = static_cast<size_t>(B.N_);
+
 		assert(B.id.size() == N);
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
@@ -135,13 +137,13 @@ namespace Export
 	}
 
 	void SerializationMgr::SaveUniversalSimState(
-		const std::string& path,
-		const Sync::UniversalSimState& state)
+		const Sync::UniversalSimState& state,
+		const std::string& path) const
 	{
 		// file path handling
 		const std::filesystem::path dstPath{ path };
-		const std::filesystem::path tmpPath = saveOptions_.atomicWrite ?
-			std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix) : dstPath;
+		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
+			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix) : dstPath;
 
 		// open scope for writer
 		{
@@ -232,8 +234,8 @@ namespace Export
 	}
 
 	void SerializationMgr::LoadUniversalSimState(
-		const std::string& path,
-		Sync::UniversalSimState& state)
+		Sync::UniversalSimState& state,
+		const std::string& path) const
 	{
 		File file = OpenFileForRead(path);
 
@@ -319,7 +321,9 @@ namespace Export
 		}
 	}
 
-	void SerializationMgr::SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir)
+	void SerializationMgr::SaveExportSnapshot(
+		const Sync::ExportSnapshot& snap,
+		const std::string& dir) const
 	{
 		const std::string baseName = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".h5";
 
@@ -365,11 +369,11 @@ namespace Export
 		{
 			AtomicReplace(tmpPath, dstPath);
 		}
-
-		//SPDLOG_INFO("Exported sim snapshot for step {} to {}", snap.simStep, dstPath.string());
 	}
 
-	void SerializationMgr::SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir)
+	void SerializationMgr::SaveExportSnapXdmfInfo(
+		const Sync::ExportSnapshot& snap,
+		const std::string& dir) const
 	{
 		const std::string baseName_h5 = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".h5";
 		const std::string baseName_xdmf = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
@@ -390,7 +394,8 @@ namespace Export
 		std::ofstream ofs(xdmfPath, std::ios::out | std::ios::trunc);
 		if (!ofs)
 		{
-			SPDLOG_ERROR("Failed to open XDMF file for write: {}", xdmfPath.string());
+			SPDLOG_ERROR("Failed to open XDMF file for write: {}",
+				xdmfPath.string());
 			return;
 		}
 
@@ -398,8 +403,7 @@ namespace Export
 
 		// XDMF header
 		ofs << R"(<?xml version="1.0" ?>)" << "\n";
-		ofs << R"(<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>)" << "\n";
-		ofs << R"(<Xdmf Version="2.0">)" << "\n";
+		ofs << R"(<Xdmf Version="3.0">)" << "\n";
 		ofs << R"(  <Domain>)" << "\n";
 
 		// one uniform grid per file
