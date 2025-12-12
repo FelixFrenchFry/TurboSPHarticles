@@ -5,7 +5,6 @@
 #pragma once
 
 // external
-#include <cstdint>
 #include <boost/container/small_vector.hpp>
 #include <vector>
 

@@ -3,11 +3,7 @@
 // external
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
-#include <iostream>
 #include <numbers>
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
@@ -962,16 +958,6 @@ void CPU01::PressureRelaxedJacobiSolver(
 		uint64_t cntPos = 0;
 
 		DensityErrorAccum() = default;
-
-		// TODO: is this needed?
-		DensityErrorAccum(DensityErrorAccum& other, tbb::split)
-		{
-			sumRaw = 0.0;
-			sumPos = 0.0;
-			sumAbs = 0.0;
-			cntAll = 0;
-			cntPos = 0;
-		}
 
 		void join(const DensityErrorAccum& rhs)
 		{

@@ -70,7 +70,7 @@ namespace Sim
         printf("%-24s = %.6f\n", "kernelRadius", params.kernelRadius);
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
         printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);
-        printf("%-24s = %d\n", "boundaryLayers", params.boundaryLayers);
+        printf("%-24s = %u\n", "boundaryLayers", params.boundaryLayers);
         printf("%-24s = (%.3f, %.3f, %.3f)\n", "gravity",
             params.gravity.x, params.gravity.y, params.gravity.z);
 

@@ -84,10 +84,10 @@ namespace Render
 		// persistent map pointer
 		unsigned char* mappedBase_ = nullptr;
 		uint64_t mappedSize_ = 0; // total bytes reserved
-		uint64_t capacity_ = 0; // number of instances capacity
+		uint32_t capacity_ = 0; // number of instances capacity
 
 		// draw state
-		uint64_t N_impostorInstances_ = 0;
+		uint32_t N_impostorInstances_ = 0;
 		uint64_t N_lineVertices_ = 0;
 
 		// helpers

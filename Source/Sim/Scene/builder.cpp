@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cmath>
 #include <glm/vec3.hpp>
-#include <omp.h>
 #include <random>
 #include <tbb/blocked_range3d.h>
 #include <tbb/parallel_for.h>
@@ -70,20 +69,20 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 			tbb::blocked_range3d<int>(0, N_w, 0, N_v, 0, N_u),
 			[&](const tbb::blocked_range3d<int>& r)
 			{
-				for (int kw = r.pages().begin(); kw != r.pages().end(); ++kw)      // depth
+				for (int kw = r.pages().begin(); kw != r.pages().end(); ++kw) // depth
 				{
-					for (int jv = r.rows().begin(); jv != r.rows().end(); ++jv)    // height
+					for (int jv = r.rows().begin(); jv != r.rows().end(); ++jv) // height
 					{
 						for (int iu = r.cols().begin(); iu != r.cols().end(); ++iu) // width
 						{
 							// get global index of currently handled particle
-							const uint32_t local = (static_cast<int64_t>(N_v) * kw + jv) * N_u + iu;
+							const uint32_t local = (N_v * kw + jv) * N_u + iu;
 							const uint32_t idx = N_base + local;
 
 							// position components
-							float u = uOff + iu * size;
-							float v = vOff + jv * size;
-							float w = wOff + kw * size;
+							float u = uOff + static_cast<float>(iu) * size;
+							float v = vOff + static_cast<float>(jv) * size;
+							float w = wOff + static_cast<float>(kw) * size;
 
 							// optionally apply jittering
 							if (jitAmp > 0.0f)
@@ -157,7 +156,7 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 {
 	const float size = params.particleSizeB;
 	const float radius = params.particleRadiusB;
-	const int layers = params.boundaryLayers < 0 ? 0 : params.boundaryLayers;
+	const uint32_t layers = params.boundaryLayers < 0 ? 0 : params.boundaryLayers;
 
 	// shrink OBB lengths by radius in all directions, resulting in "inner" lengths
 	const float uLen_i = box.uLen - 2.0f * radius;
@@ -172,10 +171,9 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 
 	// number of particles in each direction
 	// (along the shrunken "inner" OBB)
-	const int N_u = TilesCount(uLen_i, size);
-	const int N_v = TilesCount(vLen_i, size);
-	const int N_w = TilesCount(wLen_i, size);
-	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
+	const uint32_t N_u = TilesCount(uLen_i, size);
+	const uint32_t N_v = TilesCount(vLen_i, size);
+	const uint32_t N_w = TilesCount(wLen_i, size);
 
 	// compute number of particles we keep to make the box hollow
 	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
@@ -195,23 +193,23 @@ void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
 
 	uint32_t idx = N_base;
 
-	for (int kw = 0; kw < N_w; kw++) // loop over depth
+	for (uint32_t kw = 0; kw < N_w; kw++) // loop over depth
 	{
 		// interior particle beyond layers in w, and clamp to prevent drift
 		const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
-		float w = std::min(wLen_i, kw * size);
+		float w = std::min(wLen_i, static_cast<float>(kw) * size);
 
-		for (int jv = 0; jv < N_v; jv++) // loop over height
+		for (uint32_t jv = 0; jv < N_v; jv++) // loop over height
 		{
 			// interior particle beyond layers in v, and clamp to prevent drift
 			const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
-			float v = std::min(vLen_i, jv * size);
+			float v = std::min(vLen_i, static_cast<float>(jv) * size);
 
-			for (int iu = 0; iu < N_u; iu++) // loop over width
+			for (uint32_t iu = 0; iu < N_u; iu++) // loop over width
 			{
 				// interior particle beyond layers in u, and clamp to prevent drift
 				const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
-				float u = std::min(uLen_i, iu * size);
+				float u = std::min(uLen_i, static_cast<float>(iu) * size);
 
 				// inside all three axes -> interior hollow, skip
 				if (uInside && vInside && wInside) { continue; }
@@ -358,18 +356,19 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	// pre-reserve memory for new particles
 	B.reserveAll(B.N_ + N_u * N_v * params.boundaryLayers);
 
-	for (int layer = 0; layer < params.boundaryLayers; layer++)
+	for (uint32_t layer = 0; layer < params.boundaryLayers; layer++)
 	{
-		const float outOffset = params.particleRadiusB + layer * size;
+		const float outOffset = params.particleRadiusB
+							  + static_cast<float>(layer) * size;
 
-		for (int i = 0; i < N_u; i++)
+		for (uint32_t i = 0; i < N_u; i++)
 		{
-			const float su = std::min(i * size, face.uLen);
+			const float su = std::min(static_cast<float>(i) * size, face.uLen);
 			const glm::vec3 bu = face.uHat * su;
 
-			for (int j = 0; j < N_v; j++)
+			for (uint32_t j = 0; j < N_v; j++)
 			{
-				const float sv = std::min(j * size, face.vLen);
+				const float sv = std::min(static_cast<float>(j) * size, face.vLen);
 				const glm::vec3 bv = face.vHat * sv;
 
 				const glm::vec3 pos = face.origin + bu + bv + face.nHat * outOffset;
@@ -433,14 +432,16 @@ inline uint32_t ScenarioMgr::TilesCount(float length, float spacing)
 	return std::max(1, static_cast<int>(std::floor(length / spacing)) + 1);
 }
 
-inline uint32_t ScenarioMgr::ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers)
+inline uint32_t ScenarioMgr::ParticleCountHollowBox(
+	uint32_t N_u, uint32_t N_v, uint32_t N_w, uint32_t layers)
 {
 	// total particle count of "outer" box
 	const uint32_t N_total = N_u * N_v * N_w;
+	const int l = static_cast<int>(layers);
 	// compute particle count in each direction for "inner" box
-	const uint32_t N_u_i = std::max(N_u - 2 * layers, 0);
-	const uint32_t N_v_i = std::max(N_v - 2 * layers, 0);
-	const uint32_t N_w_i = std::max(N_w - 2 * layers, 0);
+	const uint32_t N_u_i = std::max(static_cast<int>(N_u) - 2 * l, 0);
+	const uint32_t N_v_i = std::max(static_cast<int>(N_v) - 2 * l, 0);
+	const uint32_t N_w_i = std::max(static_cast<int>(N_w) - 2 * l, 0);
 	const uint32_t N_inner = N_u_i * N_v_i * N_w_i;
 
 	return N_total - N_inner;

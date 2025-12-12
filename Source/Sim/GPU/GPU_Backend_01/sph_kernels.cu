@@ -2,7 +2,6 @@
 
 // external
 #include <cuda_runtime.h>
-#include <iostream>
 #include <numbers>
 
 // internal

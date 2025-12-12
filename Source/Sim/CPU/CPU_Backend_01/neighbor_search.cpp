@@ -9,9 +9,6 @@
 #include <numeric>
 #include <ranges>
 #include <spdlog/spdlog.h>
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
 #include <vector>
@@ -547,26 +544,22 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 
 	// --- [ sort particle indices by cell IDs ] -------------------------------
 
-	auto ByCellIdPredF = [&](uint32_t a, uint32_t b)
-		{ return cellIdF_[a] < cellIdF_[b]; };
-
-	auto ByCellIdPredB = [&](uint32_t a, uint32_t b)
-		{ return cellIdB_[a] < cellIdB_[b]; };
-
 	// single-threaded basic sorting version
 	/*
-	std::ranges::sort(sortedParticleIdxF_, ByCellIdPredF);
+	std::ranges::sort(sortedParticleIdxF_, 
+		[&](uint32_t a, uint32_t b) { return cellIdF_[a] < cellIdF_[b]; });
 
-	std::ranges::sort(sortedParticleIdxB_, ByCellIdPredB);
+	std::ranges::sort(sortedParticleIdxB_, 
+		[&](uint32_t a, uint32_t b) { return cellIdB_[a] < cellIdB_[b]; });
 	*/
 
 	// multi-threaded parallel sorting version using C++ standard library
 	/*
-	std::sort(std::execution::par, sortedParticleIdxF_.begin(), 
-		sortedParticleIdxF_.end(), ByCellIdPredF);
+	std::sort(std::execution::par, sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(), 
+		[&](uint32_t a, uint32_t b) { return cellIdF_[a] < cellIdF_[b]; });
 
-	std::sort(std::execution::par, sortedParticleIdxB_.begin(),
-		sortedParticleIdxB_.end(), ByCellIdPredB);
+	std::sort(std::execution::par, sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(), 
+		[&](uint32_t a, uint32_t b) { return cellIdB_[a] < cellIdB_[b]; });
 	*/
 
 	// multi-threaded parallel sorting version using TBB

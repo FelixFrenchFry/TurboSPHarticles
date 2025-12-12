@@ -4,7 +4,6 @@
 #include <glm/vec3.hpp>
 #include <cmath>
 #include <spdlog/spdlog.h>
-#include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 
 // internal

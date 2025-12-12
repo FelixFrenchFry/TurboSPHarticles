@@ -59,7 +59,7 @@ namespace Scene
 		BreakingDamConfig config_;
 	};
 
-	BreakingDamConfig inline MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr)
+	inline BreakingDamConfig MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr)
 	{
 		const glm::vec3 U{ 1, 0, 0 }; // forward
 		const glm::vec3 V{ 0, 1, 0 }; // up
@@ -84,7 +84,7 @@ namespace Scene
 		return BreakingDamConfig{ container, fluid };
 	}
 
-	BreakingDamConfig LoadBreakingDamConfigFromJsonFile(ScenarioMgr& scenarioMgr)
+	inline BreakingDamConfig LoadBreakingDamConfigFromJsonFile(ScenarioMgr& scenarioMgr)
 	{
 		namespace fs = std::filesystem;
 

@@ -36,7 +36,7 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 	std::vector<glm::vec4> lut(256);
 	for (int i = 0; i < 256; i++)
 	{
-		float t = i / 255.0f;
+		float t = static_cast<float>(i) / 255.0f;
 		lut[i] = glm::vec4(t, t, t, 1.0f);
 	}
 	UpdateColorMap(lut);

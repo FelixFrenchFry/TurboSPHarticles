@@ -87,7 +87,8 @@ namespace Scene
 
 		static inline uint32_t TilesCount(float length, float spacing);
 
-		static inline uint32_t ParticleCountHollowBox(int N_u, int N_v, int N_w, int layers);
+		static inline uint32_t ParticleCountHollowBox(
+			uint32_t N_u, uint32_t N_v, uint32_t N_w, uint32_t layers);
 	};
 
 } // namespace Scene

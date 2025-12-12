@@ -353,7 +353,6 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 	const Vis::VisParams& visParams)
 {
 	using STV = StatTableView;
-	using SM = Stats::StatMetric;
 
 	ImGui::Spacing();
 

@@ -18,7 +18,7 @@ namespace Sync
 	struct FluidView
 	{
 		// metadata
-		uint32_t N_{ 0 };
+		uint32_t N_ = 0;
 		std::span<uint32_t> id; // unique particle IDs
 
 		// fields
@@ -41,7 +41,7 @@ namespace Sync
 	struct BoundaryView
 	{
 		// metadata
-		uint32_t N_{ 0 };
+		uint32_t N_ = 0;
 		std::span<uint32_t> id; // unique particle IDs
 
 		// fields
@@ -56,7 +56,7 @@ namespace Sync
 	struct FluidParticles
 	{
 		// metadata
-		uint32_t N_{ 0 };
+		uint32_t N_ = 0;
 		std::vector<uint32_t> id; // unique particle IDs
 
 		// positions
@@ -241,7 +241,7 @@ namespace Sync
 	struct BoundaryParticles
 	{
 		// metadata
-		uint32_t N_{ 0 };
+		uint32_t N_ = 0;
 		std::vector<uint32_t> id; // unique particle IDs
 
 		// positions
@@ -332,11 +332,11 @@ namespace Sync
 	struct UniversalSimState
 	{
 		// persistent layout version
-		int64_t schemaVersion{ 1 };
+		uint64_t schemaVersion = 1;
 
 		// simulation metadata
-		int64_t step{ 0 };			// simulation step at this state
-		double time{ 0 };			// simulation time in seconds
+		uint32_t step = 0;			// simulation step at this state
+		double time = 0.0;			// simulation time in seconds
 
 		// particle data
 		FluidParticles fluidParticles;

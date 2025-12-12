@@ -6,10 +6,8 @@
 
 // external
 #include <cstdint>
-#include <vector>
 
 // internal
-#include "Source/Sim/Core/parameters_sim.h"
 #include "neighbor_lists.h"
 
 #if defined(_MSC_VER)

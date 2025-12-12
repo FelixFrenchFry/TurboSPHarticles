@@ -3,12 +3,10 @@
 // external
 #include <cmath>
 #include <thrust/device_ptr.h>
-#include <thrust/functional.h>
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/sequence.h>
 #include <thrust/sort.h>
 #include <thrust/transform_reduce.h>
-#include <thrust/tuple.h>
 
 // internal
 #include "common.cuh"
