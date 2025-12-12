@@ -5,12 +5,15 @@
 #pragma once
 
 // external
+#include <ankerl/unordered_dense.h>
 #include <atomic>
 #include <glm/vec3.hpp>
 #include <string>
 
 // internal
 #include "Source/Base/enum_hub.h"
+#include "Source/Eval/Stats/metrics.h"
+
 static constexpr uint32_t N_expctNbrCountF = 42;
 static constexpr uint32_t N_expctNbrCountB = 20;
 
@@ -78,10 +81,16 @@ namespace Sim
 		uint32_t boundaryLayers	= 2;
 
 		// statistics
-		uint32_t maxStatRecs	= 100'000'000;
+		uint32_t maxStatRecs	= 1'000'000;
+		std::array<bool, static_cast<uint8_t>(Stats::StatGroup::Count)> statGroupsEnabled =
+		{
+			false,	// particles
+			false,	// density
+			false	// velocity
+		};
 
 		// benchmarks
-		uint32_t maxBenchRecs	= 100'000'000;
+		uint32_t maxBenchRecs	= 1'000'000;
 
 		// export
 		bool exportEnabled		= true;

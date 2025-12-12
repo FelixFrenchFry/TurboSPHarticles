@@ -250,6 +250,77 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 {
+	// TODO: only export surface particles?  <-- now actually doing that :)
+
+	if (N_F_ == 0)
+	{
+		snap.N_F = 0;
+		snap.xPosF.clear();
+		snap.yPosF.clear();
+		snap.zPosF.clear();
+		snap.velMagF.clear();
+
+		return;
+	}
+
+	// classify surface particles
+	std::vector<uint8_t> isSurface(N_F_);
+	uint32_t numSurface = 0;
+
+	for (uint32_t i = 0; i < N_F_; ++i)
+	{
+		const bool surface =
+			(neighborLists_->FF(i).count < 30) &&
+			(densityF_[i] < 1'000.0f);
+
+		isSurface[i] = static_cast<uint8_t>(surface);
+		numSurface += surface ? 1u : 0u;
+	}
+
+	if (numSurface == 0)
+	{
+		// nothing to export
+		snap.simStep = simStep_;
+		snap.simTime = simTime_;
+		snap.N_F = 0;
+		snap.xPosF.clear();
+		snap.yPosF.clear();
+		snap.zPosF.clear();
+		snap.velMagF.clear();
+
+		return;
+	}
+
+	// prepare snapshot buffers
+	snap.simStep = simStep_;
+	snap.simTime = simTime_;
+	snap.N_F = numSurface;
+
+	snap.xPosF.resize(numSurface);
+	snap.yPosF.resize(numSurface);
+	snap.zPosF.resize(numSurface);
+	snap.velMagF.resize(numSurface);
+
+	// copy only surface particles
+	uint32_t dst = 0;
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		if (!isSurface[i]) { continue; }
+
+		snap.xPosF[dst] = xPosF_[i];
+		snap.yPosF[dst] = yPosF_[i];
+		snap.zPosF[dst] = zPosF_[i];
+
+		const float vx = xVelF_[i];
+		const float vy = yVelF_[i];
+		const float vz = zVelF_[i];
+
+		snap.velMagF[dst] = glm::sqrt(vx * vx + vy * vy + vz * vz);
+
+		dst++;
+	}
+
+	/*
 	// TODO: only export surface particles?
 
 	if (N_F_ == 0) { return; }
@@ -292,6 +363,7 @@ void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 		},
 		tbb::auto_partitioner{}
 	);
+	*/
 }
 
 void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
@@ -375,17 +447,14 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 	snap.scalarDataF.clear();
 }
 
-// TODO: add flags to enable/disable certain stats?
 void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
-	using namespace Stats;
+	// TODO: add flags to enable/disable certain stats?
 
 	// TODO: FIX BUGS
 
-	return;
-
-	// --- [ particle counts ] -------------------------------------------------
+	using namespace Stats;
 
 	const uint32_t NF = N_F_;
 	const uint32_t NB = N_B_;
@@ -395,321 +464,334 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles,
-									Bench::BenchOp::Statistics_Density,
-									Bench::BenchOp::Statistics_Velocity });
+	// --- [ particle counts ] -------------------------------------------------
 
-	float sumFF = 0.0f;
-	float nbrFF_p95 = 0.0f;
-	float nbrFF_p99 = 0.0f;
-	float minFF = std::numeric_limits<float>::max();
-	float maxFF = 0.0f;
-
-	float sumFB = 0.0f;
-	float nbrFB_p95 = 0.0f;
-	float nbrFB_p99 = 0.0f;
-	float minFB = std::numeric_limits<float>::max();
-	float maxFB = 0.0f;
-
-	if (NF > 0)
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
-		struct NeighStatsLocal
-		{
-			float sumFF;
-			float minFF;
-			float maxFF;
-			float sumFB;
-			float minFB;
-			float maxFB;
-		};
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles });
 
-		NeighStatsLocal globalNeigh = tbb::parallel_reduce(
-			tbb::blocked_range<uint32_t>(0, NF),
-			NeighStatsLocal
+		float sumFF = 0.0f;
+		float nbrFF_p95 = 0.0f;
+		float nbrFF_p99 = 0.0f;
+		float minFF = std::numeric_limits<float>::max();
+		float maxFF = 0.0f;
+
+		float sumFB = 0.0f;
+		float nbrFB_p95 = 0.0f;
+		float nbrFB_p99 = 0.0f;
+		float minFB = std::numeric_limits<float>::max();
+		float maxFB = 0.0f;
+
+		if (NF > 0)
+		{
+			struct NeighStatsLocal
 			{
-				.sumFF = 0.0f,
-				.minFF = std::numeric_limits<float>::max(),
-				.maxFF = 0.0f,
-				.sumFB = 0.0f,
-				.minFB = std::numeric_limits<float>::max(),
-				.maxFB = 0.0f
-			},
-			[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+				float sumFF;
+				float minFF;
+				float maxFF;
+				float sumFB;
+				float minFB;
+				float maxFB;
+			};
+
+			NeighStatsLocal globalNeigh = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, NF),
+				NeighStatsLocal
 				{
-					const uint32_t N_FF = neighborLists_->FF(i).count;
-					const uint32_t N_FB = neighborLists_->FB(i).count;
+					.sumFF = 0.0f,
+					.minFF = std::numeric_limits<float>::max(),
+					.maxFF = 0.0f,
+					.sumFB = 0.0f,
+					.minFB = std::numeric_limits<float>::max(),
+					.maxFB = 0.0f
+				},
+				[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
+				{
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const float N_FF = static_cast<float>(neighborLists_->FF(i).count);
+						const float N_FB = static_cast<float>(neighborLists_->FB(i).count);
 
-					local.sumFF += N_FF;
-					if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
-					if (N_FF > local.maxFF) [[unlikely]] { local.maxFF = N_FF; }
+						local.sumFF += N_FF;
+						if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
+						if (N_FF > local.maxFF) [[unlikely]] { local.maxFF = N_FF; }
 
-					local.sumFB += N_FB;
-					if (N_FB < local.minFB) [[unlikely]] { local.minFB = N_FB; }
-					if (N_FB > local.maxFB) [[unlikely]] { local.maxFB = N_FB; }
-				}
-				return local;
-			},
-			[](const NeighStatsLocal& a, const NeighStatsLocal& b) -> NeighStatsLocal
+						local.sumFB += N_FB;
+						if (N_FB < local.minFB) [[unlikely]] { local.minFB = N_FB; }
+						if (N_FB > local.maxFB) [[unlikely]] { local.maxFB = N_FB; }
+					}
+					return local;
+				},
+				[](const NeighStatsLocal& a, const NeighStatsLocal& b) -> NeighStatsLocal
+				{
+					NeighStatsLocal r;
+
+					r.sumFF = a.sumFF + b.sumFF;
+					r.minFF = std::min(a.minFF, b.minFF);
+					r.maxFF = std::max(a.maxFF, b.maxFF);
+					r.sumFB = a.sumFB + b.sumFB;
+					r.minFB = std::min(a.minFB, b.minFB);
+					r.maxFB = std::max(a.maxFB, b.maxFB);
+
+					return r;
+				},
+				tbb::auto_partitioner{}
+			);
+
+			sumFF = globalNeigh.sumFF;
+			minFF = globalNeigh.minFF;
+			maxFF = globalNeigh.maxFF;
+			sumFB = globalNeigh.sumFB;
+			minFB = globalNeigh.minFB;
+			maxFB = globalNeigh.maxFB;
+		}
+		if (NF == 0) // reasonable defaults for empty sim
+		{
+			minFF = 0.0f;
+			minFB = 0.0f;
+		}
+
+		if (NF > 0) // determine percentiles
+		{
+			// reuse workBuffer_ for neighbor counts
+			workBuffer_.resize(NF);
+
+			// FF
+			for (uint32_t i = 0; i < NF; i++)
 			{
-				NeighStatsLocal r;
+				workBuffer_[i] = static_cast<float>(neighborLists_->FF(i).count);
+			}
 
-				r.sumFF = a.sumFF + b.sumFF;
-				r.minFF = std::min(a.minFF, b.minFF);
-				r.maxFF = std::max(a.maxFF, b.maxFF);
-				r.sumFB = a.sumFB + b.sumFB;
-				r.minFB = std::min(a.minFB, b.minFB);
-				r.maxFB = std::max(a.maxFB, b.maxFB);
+			{
+				// indices of the 95th and 99th percentiles
+				const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
+				const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
 
-				return r;
-			},
-			tbb::auto_partitioner{}
-		);
+				auto nth95 = workBuffer_.begin() + i95;
+				auto nth99 = workBuffer_.begin() + i99;
 
-		sumFF = globalNeigh.sumFF;
-		minFF = globalNeigh.minFF;
-		maxFF = globalNeigh.maxFF;
-		sumFB = globalNeigh.sumFB;
-		minFB = globalNeigh.minFB;
-		maxFB = globalNeigh.maxFB;
-	}
-	if (NF == 0) // reasonable defaults for empty sim
-	{
-		minFF = 0.0f;
-		minFB = 0.0f;
-	}
+				// partially sort so that the desired percentiles can be extracted
+				std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
+				std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
 
-	if (NF > 0) // determine percentiles
-	{
-		// reuse workBuffer_ for neighbor counts
-		workBuffer_.resize(NF);
+				nbrFF_p95 = *nth95;
+				nbrFF_p99 = *nth99;
+			}
 
-		// FF
-		for (uint32_t i = 0; i < NF; i++)
+			// FB
+			for (uint32_t i = 0; i < NF; ++i)
+			{
+				workBuffer_[i] = static_cast<float>(neighborLists_->FB(i).count);
+			}
+
+			{
+				// indices of the 95th and 99th percentiles
+				const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
+				const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+
+				auto nth95 = workBuffer_.begin() + i95;
+				auto nth99 = workBuffer_.begin() + i99;
+
+				// partially sort so that the desired percentiles can be extracted
+				std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
+				std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
+
+				nbrFB_p95 = *nth95;
+				nbrFB_p99 = *nth99;
+			}
+		}
+		else // reasonable defaults for empty sim
 		{
-			workBuffer_[i] = static_cast<float>(neighborLists_->FF(i).count);
+			nbrFF_p95 = nbrFF_p99 = 0.0f;
+			nbrFB_p95 = nbrFB_p99 = 0.0f;
 		}
 
-		{
-			// indices of the 95th and 99th percentiles
-			const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-			const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+		Set(record, StatMetric::NumNbrFF_Avg, sumFF * invNF);
+		Set(record, StatMetric::NumNbrFF_P95, nbrFF_p95);
+		Set(record, StatMetric::NumNbrFF_P99, nbrFF_p99);
+		Set(record, StatMetric::NumNbrFF_Min, minFF);
+		Set(record, StatMetric::NumNbrFF_Max, maxFF);
 
-			auto nth95 = workBuffer_.begin() + i95;
-			auto nth99 = workBuffer_.begin() + i99;
+		Set(record, StatMetric::NumNbrFB_Avg, sumFB * invNF);
+		Set(record, StatMetric::NumNbrFB_P95, nbrFB_p95);
+		Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
+		Set(record, StatMetric::NumNbrFB_Min, minFB);
+		Set(record, StatMetric::NumNbrFB_Max, maxFB);
 
-			// partially sort so that the desired percentiles can be extracted
-			std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-			std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
-
-			nbrFF_p95 = *nth95;
-			nbrFF_p99 = *nth99;
-		}
-
-		// FB
-		for (uint32_t i = 0; i < NF; ++i)
-		{
-			workBuffer_[i] = static_cast<float>(neighborLists_->FB(i).count);
-		}
-
-		{
-			// indices of the 95th and 99th percentiles
-			const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-			const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
-
-			auto nth95 = workBuffer_.begin() + i95;
-			auto nth99 = workBuffer_.begin() + i99;
-
-			// partially sort so that the desired percentiles can be extracted
-			std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-			std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
-
-			nbrFB_p95 = *nth95;
-			nbrFB_p99 = *nth99;
-		}
-	}
-	else // reasonable defaults for empty sim
-	{
-		nbrFF_p95 = nbrFF_p99 = 0.0f;
-		nbrFB_p95 = nbrFB_p99 = 0.0f;
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles });
 	}
 
 	// --- [ density stats ] ---------------------------------------------------
 
-	float sumRelErr = 0.0f;
-	float minRelErr = std::numeric_limits<float>::max();
-	float maxRelErr = 0.0f;
-
-	if (NF > 0)
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
 	{
-		struct DensStatsLocal
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
+
+		float sumRelErr = 0.0f;
+		float minRelErr = std::numeric_limits<float>::max();
+		float maxRelErr = 0.0f;
+
+		if (NF > 0)
 		{
-			float sumRelErr;
-			float minRelErr;
-			float maxRelErr;
-		};
+			struct DensStatsLocal
+			{
+				float sumRelErr;
+				float minRelErr;
+				float maxRelErr;
+			};
 
-		DensStatsLocal globalDens = tbb::parallel_reduce(
-			tbb::blocked_range<uint32_t>(0, NF),
-			DensStatsLocal
-			{
-				.sumRelErr = 0.0f,
-				.minRelErr = std::numeric_limits<float>::max(),
-				.maxRelErr = 0.0f
-			},
-			[&](const tbb::blocked_range<uint32_t>& r, DensStatsLocal local) -> DensStatsLocal
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+			DensStatsLocal globalDens = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, NF),
+				DensStatsLocal
 				{
-					const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
-					const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
+					.sumRelErr = 0.0f,
+					.minRelErr = std::numeric_limits<float>::max(),
+					.maxRelErr = 0.0f
+				},
+				[&](const tbb::blocked_range<uint32_t>& r, DensStatsLocal local) -> DensStatsLocal
+				{
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
+						const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
 
-					workBuffer_[i] = relErr;
-					local.sumRelErr += relErr;
+						workBuffer_[i] = relErr;
+						local.sumRelErr += relErr;
 
-					if (relErr < local.minRelErr) [[unlikely]] { local.minRelErr = relErr; }
-					if (relErr > local.maxRelErr) [[unlikely]] { local.maxRelErr = relErr; }
-				}
+						if (relErr < local.minRelErr) [[unlikely]] { local.minRelErr = relErr; }
+						if (relErr > local.maxRelErr) [[unlikely]] { local.maxRelErr = relErr; }
+					}
 
-				return local;
-			},
-			[](const DensStatsLocal& a, const DensStatsLocal& b) -> DensStatsLocal
-			{
-				DensStatsLocal r;
+					return local;
+				},
+				[](const DensStatsLocal& a, const DensStatsLocal& b) -> DensStatsLocal
+				{
+					DensStatsLocal r;
 
-				r.sumRelErr = a.sumRelErr + b.sumRelErr;
-				r.minRelErr = std::min(a.minRelErr, b.minRelErr);
-				r.maxRelErr = std::max(a.maxRelErr, b.maxRelErr);
+					r.sumRelErr = a.sumRelErr + b.sumRelErr;
+					r.minRelErr = std::min(a.minRelErr, b.minRelErr);
+					r.maxRelErr = std::max(a.maxRelErr, b.maxRelErr);
 
-				return r;
-			},
-			tbb::auto_partitioner{}
-		);
+					return r;
+				},
+				tbb::auto_partitioner{}
+			);
 
-		sumRelErr = globalDens.sumRelErr;
-		minRelErr = globalDens.minRelErr;
-		maxRelErr = globalDens.maxRelErr;
-	}
+			sumRelErr = globalDens.sumRelErr;
+			minRelErr = globalDens.minRelErr;
+			maxRelErr = globalDens.maxRelErr;
+		}
 
-	float p95 = 0.0f;
-	float p99 = 0.0f;
+		float p95 = 0.0f;
+		float p99 = 0.0f;
 
-	if (NF > 0) // determine percentiles
-	{
-		// reuse workBuffer_ for density deviation
-		workBuffer_.resize(NF);
+		if (NF > 0) // determine percentiles
+		{
+			// reuse workBuffer_ for density deviation
+			workBuffer_.resize(NF);
 
-		// indices of the 95th and 99th percentiles
-		const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-		const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+			// indices of the 95th and 99th percentiles
+			const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
+			const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
 
-		auto nth95 = workBuffer_.begin() + i95;
-		auto nth99 = workBuffer_.begin() + i99;
+			auto nth95 = workBuffer_.begin() + i95;
+			auto nth99 = workBuffer_.begin() + i99;
 
-		// partially sort so that the desired percentiles can be extracted
-		std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-		std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
+			// partially sort so that the desired percentiles can be extracted
+			std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
+			std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
 
-		p95 = *nth95;
-		p99 = *nth99;
-	}
-	else // reasonable defaults for empty sim
-	{
-		minRelErr = 0.0f;
-		maxRelErr = 0.0f;
+			p95 = *nth95;
+			p99 = *nth99;
+		}
+		else // reasonable defaults for empty sim
+		{
+			minRelErr = 0.0f;
+			maxRelErr = 0.0f;
+		}
+
+		Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
+		Set(record, StatMetric::DensRelError_P95, p95);
+		Set(record, StatMetric::DensRelError_P99, p99);
+		Set(record, StatMetric::DensRelError_Min, minRelErr);
+		Set(record, StatMetric::DensRelError_Max, maxRelErr);
+
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Density });
 	}
 
 	// --- [ velocity stats ] --------------------------------------------------
 
-	float velMagSum = 0.0f;
-	float velMagMin = std::numeric_limits<float>::max();
-	float velMagMax = 0.0f;
-
-	if (NF > 0)
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{
-		struct VelStatsLocal
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Velocity });
+
+		float velMagSum = 0.0f;
+		float velMagMin = std::numeric_limits<float>::max();
+		float velMagMax = 0.0f;
+
+		if (NF > 0)
 		{
-			float velMagSum;
-			float velMagMin;
-			float velMagMax;
-		};
+			struct VelStatsLocal
+			{
+				float velMagSum;
+				float velMagMin;
+				float velMagMax;
+			};
 
-		VelStatsLocal globalVel = tbb::parallel_reduce(
-			tbb::blocked_range<uint32_t>(0, NF),
-			VelStatsLocal
-			{
-				.velMagSum = 0.0f,
-				.velMagMin = std::numeric_limits<float>::max(),
-				.velMagMax = 0.0f
-			},
-			[&](const tbb::blocked_range<uint32_t>& r, VelStatsLocal local) -> VelStatsLocal
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+			VelStatsLocal globalVel = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, NF),
+				VelStatsLocal
 				{
-					const float vx = xVelF_[i];
-					const float vy = yVelF_[i];
-					const float vz = zVelF_[i];
+					.velMagSum = 0.0f,
+					.velMagMin = std::numeric_limits<float>::max(),
+					.velMagMax = 0.0f
+				},
+				[&](const tbb::blocked_range<uint32_t>& r, VelStatsLocal local) -> VelStatsLocal
+				{
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const float vx = xVelF_[i];
+						const float vy = yVelF_[i];
+						const float vz = zVelF_[i];
 
-					const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
+						const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
 
-					local.velMagSum += velMag;
-					if (velMag < local.velMagMin) [[unlikely]] { local.velMagMin = velMag; }
-					if (velMag > local.velMagMax) [[unlikely]] { local.velMagMax = velMag; }
-				}
+						local.velMagSum += velMag;
+						if (velMag < local.velMagMin) [[unlikely]] { local.velMagMin = velMag; }
+						if (velMag > local.velMagMax) [[unlikely]] { local.velMagMax = velMag; }
+					}
 
-				return local;
-			},
-			[](const VelStatsLocal& a, const VelStatsLocal& b) -> VelStatsLocal
-			{
-				VelStatsLocal r;
+					return local;
+				},
+				[](const VelStatsLocal& a, const VelStatsLocal& b) -> VelStatsLocal
+				{
+					VelStatsLocal r;
 
-				r.velMagSum = a.velMagSum + b.velMagSum;
-				r.velMagMin = std::min(a.velMagMin, b.velMagMin);
-				r.velMagMax = std::max(a.velMagMax, b.velMagMax);
+					r.velMagSum = a.velMagSum + b.velMagSum;
+					r.velMagMin = std::min(a.velMagMin, b.velMagMin);
+					r.velMagMax = std::max(a.velMagMax, b.velMagMax);
 
-				return r;
-			},
-			tbb::auto_partitioner{}
-		);
+					return r;
+				},
+				tbb::auto_partitioner{}
+			);
 
-		velMagSum = globalVel.velMagSum;
-		velMagMin = globalVel.velMagMin;
-		velMagMax = globalVel.velMagMax;
+			velMagSum = globalVel.velMagSum;
+			velMagMin = globalVel.velMagMin;
+			velMagMax = globalVel.velMagMax;
+		}
+		if (NF == 0) // reasonable defaults for empty sim
+		{
+			velMagMin = 0.0f;
+			velMagMax = 0.0f;
+		}
+
+		Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
+		Set(record, StatMetric::VelMag_Min, velMagMin);
+		Set(record, StatMetric::VelMag_Max, velMagMax);
+
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Velocity });
 	}
-	if (NF == 0) // reasonable defaults for empty sim
-	{
-		velMagMin = 0.0f;
-		velMagMax = 0.0f;
-	}
-
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles,
-								   Bench::BenchOp::Statistics_Density,
-								   Bench::BenchOp::Statistics_Velocity });
-
-	// --- [ writes to record ] ------------------------------------------------
-
-	Set(record, StatMetric::NumNbrFF_Avg, sumFF * invNF);
-	Set(record, StatMetric::NumNbrFF_P95, nbrFF_p95);
-	Set(record, StatMetric::NumNbrFF_P99, nbrFF_p99);
-	Set(record, StatMetric::NumNbrFF_Min, minFF);
-	Set(record, StatMetric::NumNbrFF_Max, maxFF);
-	
-	Set(record, StatMetric::NumNbrFB_Avg, sumFB * invNF);
-	Set(record, StatMetric::NumNbrFB_P95, nbrFB_p95);
-	Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
-	Set(record, StatMetric::NumNbrFB_Min, minFB);
-	Set(record, StatMetric::NumNbrFB_Max, maxFB);
-
-	Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
-	Set(record, StatMetric::DensRelError_P95, p95);
-	Set(record, StatMetric::DensRelError_P99, p99);
-	Set(record, StatMetric::DensRelError_Min, minRelErr);
-	Set(record, StatMetric::DensRelError_Max, maxRelErr);
-
-	Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
-	Set(record, StatMetric::VelMag_Min, velMagMin);
-	Set(record, StatMetric::VelMag_Max, velMagMax);
 }
 
 void SimBackend_CPU01::ExecuteSimStep(const SimParams& params, uint32_t N_steps)
