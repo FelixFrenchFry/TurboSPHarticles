@@ -984,12 +984,12 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	return ok;
 }
 
-void SimParamsMgr::BeginWrite()
+inline void SimParamsMgr::BeginWrite()
 {
 	version_.fetch_add(1, std::memory_order_acq_rel);
 }
 
-void SimParamsMgr::EndWrite()
+inline void SimParamsMgr::EndWrite()
 {
 	version_.fetch_add(1, std::memory_order_release);
 }

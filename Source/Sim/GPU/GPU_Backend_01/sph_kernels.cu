@@ -527,9 +527,8 @@ namespace GPU01
 		}
 
 		// finalize pressure value by clamping to non-negative
+		// (and perform final global memory writes)
 		pressureF[i] = fmaxf(tmp_pressureF, 0.0f);
-
-		// (global memory writes)
 		sourceTermF[i] = fin_sourceTermF;
 		diagElemF[i] = fin_diagElemF;
 	}

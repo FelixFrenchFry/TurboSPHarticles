@@ -1,5 +1,5 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
 
   "maxSteps": -1,

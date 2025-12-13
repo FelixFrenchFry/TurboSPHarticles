@@ -26,7 +26,7 @@ namespace Sim
 	{
 		// mode
 		Base::BackendVersion backendVersion = Base::BackendVersion::CPU01;
-		Base::ScenarioType scenarioType		= Base::ScenarioType::BreakingDam;
+		Base::ScenarioType scenarioType	= Base::ScenarioType::BreakingDam;
 
 		// simulation state
 		bool simRunning			= false;

@@ -110,6 +110,29 @@ namespace CPU01
 		// destinations
 		float* RESTRICT pressureF);
 
+	void SourceTermAndDiagonalElementAndPressureJacobiInit(
+		const float* RESTRICT xPosF,
+		const float* RESTRICT yPosF,
+		const float* RESTRICT zPosF,
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
+		const float* RESTRICT xVelPredF,
+		const float* RESTRICT yVelPredF,
+		const float* RESTRICT zVelPredF,
+		const float* RESTRICT densityF,
+		const Sim::I_NeighborLists& neighborLists,
+		float timeStep, float particleSizeInvF,
+		float kernelRadiusSqu, float cubicSplineAlpha,
+		float restDensityF, float restDensitySquInvF,
+		float massF, float massB,
+		float gammaPress, float jacobiOmega,
+		uint32_t N_F,
+		// destinations
+		float* RESTRICT sourceTermF,
+		float* RESTRICT diagElemF,
+		float* RESTRICT pressureF);
+
 	void PressureAcceleration(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,

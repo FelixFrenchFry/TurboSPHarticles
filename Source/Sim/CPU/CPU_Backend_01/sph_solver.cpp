@@ -138,7 +138,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm,
 									Bench::BenchOp::Pressure_DiagonalElem });
 
-	CPU01::SourceTermAndDiagonalElement(
+	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		xVelPredF, yVelPredF, zVelPredF,
@@ -146,9 +146,8 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		neighborLists,
 		timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 		params.restDensityF, restDensitySquInvF,
-		massF, massB, params.gammaPress, N_F_,
-		sourceTermF,
-		diagElemF);
+		massF, massB, params.gammaPress, params.jacobiOmega, N_F_,
+		sourceTermF, diagElemF, pressureF);
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm,
 								   Bench::BenchOp::Pressure_DiagonalElem });
@@ -156,13 +155,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	// --- [ relaxed Jacobi solver for pressure ] ------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
-
-	// initial pressure
-	CPU01::PressureJacobiInit(
-		diagElemF,
-		sourceTermF,
-		params.jacobiOmega, N_F_,
-		pressureF);
 
 	// rest solver-related variables
 	N_solverIterCount_ = 1;
@@ -572,7 +564,7 @@ void CPU01::NonPressureAcceleration(
 }
 
 // TODO: use more explicit SIMD hints, maybe xsimd library?
-void CPU01::SourceTermAndDiagonalElement(
+void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
@@ -583,15 +575,17 @@ void CPU01::SourceTermAndDiagonalElement(
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
 	const float* RESTRICT densityF,
-	const I_NeighborLists& neighborLists,
+	const Sim::I_NeighborLists& neighborLists,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float restDensitySquInvF,
-	const float massF, const float massB, const float gammaPress,
+	const float massF, const float massB,
+	const float gammaPress, const float jacobiOmega,
 	const uint32_t N_F,
 	// destinations
 	float* RESTRICT sourceTermF,
-	float* RESTRICT diagElemF)
+	float* RESTRICT diagElemF,
+	float* RESTRICT pressureF)
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
@@ -695,10 +689,11 @@ void CPU01::SourceTermAndDiagonalElement(
 				tmp_SourceTermB *= massB;
 
 				// finalize source term
-				sourceTermF[i] = restDensityF - densityF[i] - timeStep
-							   * (tmp_SourceTermF + tmp_SourceTermB);
+				const float fin_sourceTermF = restDensityF - densityF[i] - timeStep
+										    * (tmp_SourceTermF + tmp_SourceTermB);
 
 				// finalize c-term
+				// TODO: pre-compute the constant factors?
 				const float xCTerm = -1.0f * (xCTermF * restDensitySquInvF * massF)
 					- 2.0f * gammaPress * (xCTermB * restDensitySquInvF * massB);
 				const float yCTerm = -1.0f * (yCTermF * restDensitySquInvF * massF)
@@ -730,9 +725,10 @@ void CPU01::SourceTermAndDiagonalElement(
 						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 						cubicSplineAlpha, xkg, ykg, zkg);
 
-					tmp_DiagElemA += fmaf(xCTerm, xkg, 
+					tmp_DiagElemA += fmaf(xCTerm, xkg,
 						fmaf(yCTerm, ykg, zCTerm * zkg));
 
+					// TODO: pre-compute the constant factors?
 					const float tmp_x = (massF * restDensitySquInvF) * (-xkg);
 					const float tmp_y = (massF * restDensitySquInvF) * (-ykg);
 					const float tmp_z = (massF * restDensitySquInvF) * (-zkg);
@@ -769,38 +765,22 @@ void CPU01::SourceTermAndDiagonalElement(
 				tmp_DiagElemC *= massB;
 
 				// finalize diagonal element
-				diagElemF[i] = timeStep * timeStep
-							 * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
+				const float fin_diagElemF = timeStep * timeStep
+										  * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);
 
-void CPU01::PressureJacobiInit(
-	const float* RESTRICT diagElemF,
-	const float* RESTRICT sourceTermF,
-	const float jacobiOmega,
-	const uint32_t N_F,
-	// destinations
-	float* RESTRICT pressureF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				float tmp_PressureF = 0.0f;
+				float tmp_pressureF = 0.0f;
 
 				// only update pressure if particle has neighbors
-				if (!Base::ApproxEqu(diagElemF[i], 0.0f))
+				if (!(fabsf(fin_diagElemF) <= 1e-6f))
 				{
-					tmp_PressureF = jacobiOmega * (sourceTermF[i] / diagElemF[i]);
+					tmp_pressureF = jacobiOmega * (fin_sourceTermF / fin_diagElemF);
 				}
 
 				// clamp pressure to non-negative values
-				pressureF[i] = fmaxf(tmp_PressureF, 0.0f);
+				// (and perform final global memory writes)
+				pressureF[i] = fmaxf(tmp_pressureF, 0.0f);
+				sourceTermF[i] = fin_sourceTermF;
+				diagElemF[i] = fin_diagElemF;
 			}
 		},
 		tbb::auto_partitioner{}
