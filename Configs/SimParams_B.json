@@ -24,6 +24,6 @@
   "maxBenchRecs": 1000000,
 
   "exportEnabled": true,
-  "exportDir": "E",
+  "exportDir": "F",
   "exportInterval": 20
 }
