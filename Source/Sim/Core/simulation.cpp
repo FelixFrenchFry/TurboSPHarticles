@@ -275,7 +275,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 	{
 		// create export snapshot and save to file
 		Sync::ExportSnapshot expSnap{};
-		simBackend_->PackExportSnapshot(expSnap);
+		simBackend_->PackExportSnapshot(expSnap, simParams_);
 
 		serializationMgr_.SaveExportSnapshot(expSnap, paramsInit.exportDir);
 		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, paramsInit.exportDir);
@@ -367,7 +367,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
 			// fill export snapshot
 			Sync::ExportSnapshot expSnap{};
-			simBackend_->PackExportSnapshot(expSnap);
+			simBackend_->PackExportSnapshot(expSnap, simParams_);
 			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
 
@@ -446,7 +446,7 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 	{
 		// create export snapshot and save to file
 		Sync::ExportSnapshot expSnap{};
-		simBackend_->PackExportSnapshot(expSnap);
+		simBackend_->PackExportSnapshot(expSnap, simParams_);
 
 		serializationMgr_.SaveExportSnapshot(expSnap, paramsInit.exportDir);
 		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, paramsInit.exportDir);
@@ -505,7 +505,7 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
 			// fill export snapshot
 			Sync::ExportSnapshot expSnap{};
-			simBackend_->PackExportSnapshot(expSnap);
+			simBackend_->PackExportSnapshot(expSnap, simParams_);
 			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
 

@@ -187,7 +187,8 @@ void SimBackend_CPU02::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	//			N_F_, N_B_);
 }
 
-void SimBackend_CPU02::PackExportSnapshot(Sync::ExportSnapshot& snap) const
+void SimBackend_CPU02::PackExportSnapshot(
+	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
 	// TODO: implement
 }

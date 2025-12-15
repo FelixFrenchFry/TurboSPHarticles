@@ -248,12 +248,15 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	//			N_F_, N_B_);
 }
 
-void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
+void SimBackend_CPU01::PackExportSnapshot(
+	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
-	// TODO: only export surface particles?  <-- now actually doing that :)
+	// TODO: only export surface particles?
 
 	if (N_F_ == 0)
 	{
+		snap.simStep = simStep_;
+		snap.simTime = simTime_;
 		snap.N_F = 0;
 		snap.xPosF.clear();
 		snap.yPosF.clear();
@@ -264,22 +267,53 @@ void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 	}
 
 	// classify surface particles
-	std::vector<uint8_t> isSurface(N_F_);
-	uint32_t numSurface = 0;
+	std::vector<uint8_t> surfaceFlags(N_F_);
 
-	for (uint32_t i = 0; i < N_F_; ++i)
+	const uint32_t N_surface = tbb::parallel_reduce(
+		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
+		[&](const tbb::blocked_range<uint32_t>& r, uint32_t localCount)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// particle considered part of the surface
+				// if touching boundary OR low fluid neighbor count
+				bool surface = neighborLists_->FB(i).count > 0 ||
+							   neighborLists_->FF(i).count < 28;
+
+				// if not surface itself, check its fluid neighbors
+				if (!surface)
+				{
+					NeighborSpan nbrListFF = neighborLists_->FF(i);
+					const uint32_t* nbrFF = nbrListFF.data;
+					const uint32_t N_FF = nbrListFF.count;
+
+					for (uint32_t k = 0; k < N_FF; ++k)
+					{
+						const uint32_t j = nbrFF[k];
+
+						if (neighborLists_->FB(j).count > 0 ||
+							neighborLists_->FF(j).count < 24)
+						{
+							surface = true;
+							break;
+						}
+					}
+				}
+
+				surfaceFlags[i] = static_cast<uint8_t>(surface);
+				if (surface) { localCount++; }
+			}
+
+			return localCount;
+		},
+		[](uint32_t a, uint32_t b) -> uint32_t
+		{
+			return a + b;
+		}
+	);
+
+	if (N_surface == 0) // no particles to export
 	{
-		const bool surface =
-			(neighborLists_->FF(i).count < 30) &&
-			(densityF_[i] < 1'000.0f);
-
-		isSurface[i] = static_cast<uint8_t>(surface);
-		numSurface += surface ? 1u : 0u;
-	}
-
-	if (numSurface == 0)
-	{
-		// nothing to export
 		snap.simStep = simStep_;
 		snap.simTime = simTime_;
 		snap.N_F = 0;
@@ -294,18 +328,18 @@ void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 	// prepare snapshot buffers
 	snap.simStep = simStep_;
 	snap.simTime = simTime_;
-	snap.N_F = numSurface;
+	snap.N_F = N_surface;
 
-	snap.xPosF.resize(numSurface);
-	snap.yPosF.resize(numSurface);
-	snap.zPosF.resize(numSurface);
-	snap.velMagF.resize(numSurface);
+	snap.xPosF.resize(N_surface);
+	snap.yPosF.resize(N_surface);
+	snap.zPosF.resize(N_surface);
+	snap.velMagF.resize(N_surface);
 
 	// copy only surface particles
 	uint32_t dst = 0;
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
-		if (!isSurface[i]) { continue; }
+		if (!surfaceFlags[i]) { continue; }
 
 		snap.xPosF[dst] = xPosF_[i];
 		snap.yPosF[dst] = yPosF_[i];
@@ -321,8 +355,6 @@ void SimBackend_CPU01::PackExportSnapshot(Sync::ExportSnapshot& snap) const
 	}
 
 	/*
-	// TODO: only export surface particles?
-
 	if (N_F_ == 0) { return; }
 
 	snap.simStep = simStep_;

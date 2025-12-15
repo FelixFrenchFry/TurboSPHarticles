@@ -337,6 +337,13 @@ namespace Export
 			return;
 		}
 
+		// make sure data for every particle is present
+		const uint32_t NF_size = snap.N_F;
+		assert(snap.xPosF.size() == NF_size);
+		assert(snap.yPosF.size() == NF_size);
+		assert(snap.zPosF.size() == NF_size);
+		assert(snap.velMagF.size() == NF_size);
+
 		// file path handling
 		const std::filesystem::path dstPath = saveOptions_.baseDir / dir /  baseName;
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
@@ -345,7 +352,7 @@ namespace Export
 
 		// open scope for writer
 		{
-			// open file (optionally with alignment)
+			// open file
 			File file = OpenFileForWrite(tmpPath.string());
 
 			// metadata
@@ -356,7 +363,7 @@ namespace Export
 			{
 				auto gF = root.createGroup("fluidParticles");
 
-				gF.createAttribute("N_particles", snap.N_F);
+				gF.createAttribute("N_particles", NF_size);
 
 				Write1D(gF, "xPosF", snap.xPosF, saveOptions_);
 				Write1D(gF, "yPosF", snap.yPosF, saveOptions_);
@@ -399,7 +406,12 @@ namespace Export
 			return;
 		}
 
-		const uint32_t NF = snap.N_F;
+		// make sure data for every particle is present
+		const uint32_t NF_size = snap.N_F;
+		assert(snap.xPosF.size() == NF_size);
+		assert(snap.yPosF.size() == NF_size);
+		assert(snap.zPosF.size() == NF_size);
+		assert(snap.velMagF.size() == NF_size);
 
 		// XDMF header
 		ofs << R"(<?xml version="1.0" ?>)" << "\n";
@@ -417,31 +429,31 @@ namespace Export
 
 		// topology of point cloud with NF vertices
 		ofs << "      <Topology TopologyType=\"Polyvertex\" "
-			<< "Dimensions=\"" << NF << "\"/>\n";
+			<< "Dimensions=\"" << NF_size << "\"/>\n";
 
 		// geometry of XYZ coordinates
 		ofs << "      <Geometry GeometryType=\"XYZ\">\n";
 		ofs << "        <DataItem ItemType=\"Function\" "
 			<< "Function=\"JOIN($0, $1, $2)\" "
-			<< "Dimensions=\"" << NF << " 3\" "
+			<< "Dimensions=\"" << NF_size << " 3\" "
 			<< "NumberType=\"Float\" Precision=\"4\">\n";
 
 		// x pos
-		ofs << "          <DataItem Dimensions=\"" << NF
+		ofs << "          <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
 		ofs << "            " << baseName_h5
 			<< ":/State/fluidParticles/xPosF\n";
 		ofs << "          </DataItem>\n";
 
 		// y pos
-		ofs << "          <DataItem Dimensions=\"" << NF
+		ofs << "          <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
 		ofs << "            " << baseName_h5
 			<< ":/State/fluidParticles/yPosF\n";
 		ofs << "          </DataItem>\n";
 
 		// z pos
-		ofs << "          <DataItem Dimensions=\"" << NF
+		ofs << "          <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
 		ofs << "            " << baseName_h5
 			<< ":/State/fluidParticles/zPosF\n";
@@ -452,7 +464,7 @@ namespace Export
 		// velocity magnitude
 		ofs << "      <Attribute Name=\"velMagF\" "
 			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-		ofs << "        <DataItem Dimensions=\"" << NF
+		ofs << "        <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
 		ofs << "          " << baseName_h5
 			<< ":/State/fluidParticles/velMagF\n";

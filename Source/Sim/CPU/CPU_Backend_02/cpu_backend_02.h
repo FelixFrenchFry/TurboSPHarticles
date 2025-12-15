@@ -38,7 +38,7 @@ namespace Sim
 
 		// packs the current simulation state into a snapshot used for exporting or visualization
 		// (implementation is backend-specific for better performance)
-		void PackExportSnapshot(Sync::ExportSnapshot& snap) const override;
+		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& simParams) const override;
 		void PackVisualSnapshot(Sync::VisualSnapshot& snap) const override;
 
 		// fills in the scalar data based on given different color coding modes

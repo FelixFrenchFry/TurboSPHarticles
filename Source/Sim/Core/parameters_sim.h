@@ -84,7 +84,7 @@ namespace Sim
 		uint32_t maxStatRecs	= 1'000'000;
 		std::array<bool, static_cast<uint8_t>(Stats::StatGroup::Count)> statGroupsEnabled =
 		{
-			false,	// particles
+			true,	// particles
 			false,	// density
 			false	// velocity
 		};

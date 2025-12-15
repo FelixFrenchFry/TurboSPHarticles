@@ -366,7 +366,7 @@ namespace Sim
         {
             std::snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.3f steps/s",
+                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.3f steps/s (recently)",
                 elH, elM, elS,
                 static_cast<long long>(step),
                 static_cast<long long>(totalSteps),
@@ -378,7 +378,7 @@ namespace Sim
         {
             std::snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld steps | %.3f steps/s",
+                "%02d:%02d:%02d elapsed | %lld steps | %.3f steps/s (recently)",
                 elH, elM, elS,
                 static_cast<long long>(step),
                 stepsPerSec
