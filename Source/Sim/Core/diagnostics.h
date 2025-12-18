@@ -37,7 +37,7 @@ namespace Sim
 			const std::vector<Bench::BenchOpGroupDef>& opGroups,
 			Bench::TimeUnit unit,
 			uint32_t step,
-			uint32_t totalSteps = -1);
+			int64_t maxSteps = -1);
 
 		static void PrintAveragePerformanceSummary(
 			const Bench::BenchmarksMgr& benchMgr,

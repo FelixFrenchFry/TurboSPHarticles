@@ -193,7 +193,7 @@ void SimulationMgr::ReBuildInitialSimState()
 	simBackend_->PullFromUniversalSimState(universalSimState_);
 }
 
-void SimulationMgr::Launch_Async(int64_t maxSteps)
+void SimulationMgr::Launch_Async()
 {
 	if (!initialized_.load(std::memory_order_acquire))
 	{
@@ -211,16 +211,14 @@ void SimulationMgr::Launch_Async(int64_t maxSteps)
 		return;
 	}
 
-	if (maxSteps < 0) { maxSteps = std::numeric_limits<int64_t>::max(); }
-
 	// launch the controller thread
-	controllerThread_ = std::jthread([this, maxSteps](const std::stop_token& stopToken)
+	controllerThread_ = std::jthread([this](const std::stop_token& stopToken)
 		{
-			RunSim_Async(stopToken, maxSteps);
+			RunSim_Async(stopToken);
 		});
 }
 
-void SimulationMgr::Launch_Blocking(int64_t maxSteps)
+void SimulationMgr::Launch_Blocking()
 {
 	if (!initialized_.load(std::memory_order_acquire))
 	{
@@ -238,13 +236,11 @@ void SimulationMgr::Launch_Blocking(int64_t maxSteps)
 		return;
 	}
 
-	if (maxSteps < 0) { maxSteps = std::numeric_limits<int64_t>::max(); }
-
 	// launch threads
-	RunSim_Blocking(maxSteps);
+	RunSim_Blocking();
 }
 
-void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSteps)
+void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 {
 	SPDLOG_INFO("Simulation started running\n");
 
@@ -283,8 +279,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 	// enter the simulation loop -----------------------------------------------
 
-	const bool hasMaxSteps = (maxSteps > 0);
-
 	while (!stopToken.stop_requested())
 	{
 		SyncParameters(true);
@@ -294,10 +288,11 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// explicit maximum number of steps reached
-		if (hasMaxSteps && simStep_ >= maxSteps) { break; }
+		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
+			paramsInit.maxSteps > 0) { break; }
 
 		// stop when simRunning is false and at least one step was done
-		if (!hasMaxSteps && !doSimStep && simStep_ > 0) { break; }
+		if (!doSimStep && simStep_ > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet
 		if (!doSimStep)
@@ -406,16 +401,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 
 		SyncParameters();
 
-		if (maxSteps == std::numeric_limits<int64_t>::max())
-		{
-			DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
-		}
-		else
-		{
-			DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
-		}
+		DisplayPerformanceStats(params.maxSteps);
 
 		// TODO: check if scenario or backend need to be switched?
 	}
@@ -432,7 +418,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken, int64_t maxSt
 	SPDLOG_INFO("Simulation stopped running\n");
 }
 
-void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
+void SimulationMgr::RunSim_Blocking()
 {
 	SPDLOG_INFO("Simulation started running\n");
 
@@ -454,8 +440,6 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 
 	// enter the simulation loop -----------------------------------------------
 
-	const bool hasMaxSteps = (maxSteps > 0);
-
 	while (true)
 	{
 		SyncParameters(true);
@@ -465,10 +449,11 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// explicit maximum number of steps reached
-        if (hasMaxSteps && simStep_ >= maxSteps) { break; }
+		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
+			paramsInit.maxSteps > 0) { break; }
 
-        // stop when simRunning is false and at least one step was done
-        if (!hasMaxSteps && !doSimStep && simStep_ > 0) { break; }
+		// stop when simRunning is false and at least one step was done
+		if (!doSimStep && simStep_ > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet
         if (!doSimStep)
@@ -544,16 +529,7 @@ void SimulationMgr::RunSim_Blocking(int64_t maxSteps)
 
 		SyncParameters();
 
-		if (maxSteps == std::numeric_limits<int64_t>::max())
-		{
-			DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_);
-		}
-		else
-		{
-			DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-				benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
-		}
+		DisplayPerformanceStats(params.maxSteps);
 
 		// TODO: check if scenario or backend need to be switched?
 	}
@@ -577,7 +553,6 @@ void SimulationMgr::RequestStop()
 {
 	if (controllerThread_.joinable())
 	{
-		// SPDLOG_INFO("Requesting stop of SimulationMgr...");
 		controllerThread_.request_stop(); // non-blocking
 	}
 }
@@ -587,8 +562,13 @@ void SimulationMgr::JoinThreads()
 {
 	if (controllerThread_.joinable())
 	{
-		// SPDLOG_INFO("Joining SimulationMgr thread...");
 		controllerThread_.join();
 		running_.store(false, std::memory_order_release);
 	}
+}
+
+void SimulationMgr::DisplayPerformanceStats(int64_t maxSteps) const
+{
+	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
+		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
 }

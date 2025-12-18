@@ -57,20 +57,22 @@ namespace Sim
 
 		// launch the simulation in async (for running live visualization)
 		// or blocking mode (for running headless)
-		void Launch_Async(int64_t maxSteps = -1);
-		void Launch_Blocking(int64_t maxSteps = -1);
+		void Launch_Async();
+		void Launch_Blocking();
 
 		// main simulation loop
-		void RunSim_Async(const std::stop_token& stopToken, int64_t maxSteps);
-		void RunSim_Blocking(int64_t maxSteps);
+		void RunSim_Async(const std::stop_token& stopToken);
+		void RunSim_Blocking();
 
 		void RequestStop();
 		void JoinThreads();
 
+		// helpers
+		void DisplayPerformanceStats(int64_t maxSteps) const;
+
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
 		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox) { statSnapMailbox_ = statSnapMailbox; }
-
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const { out = curBenchOpGroups_; }
 
 		// metadata

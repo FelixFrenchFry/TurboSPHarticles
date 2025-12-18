@@ -8,8 +8,8 @@
   "kernelSuppRatio": 2.0,
   "restDensityF": 1000.0,
   "restDensityB": 1000.0,
-  "viscosityF": 0.0004,
-  "viscosityB": 0.0004,
+  "viscosityF": 0.00012,
+  "viscosityB": 0.00012,
   "gammaPress": 0.5,
   "jacobiOmega": 0.5,
   "gravity": [ 0.0, -9.81, 0.0 ],
@@ -23,7 +23,7 @@
   "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
 
-  "exportEnabled": true,
-  "exportDir": "F",
-  "exportInterval": 20
+  "exportEnabled": false,
+  "exportDir": "J",
+  "exportInterval": 10
 }

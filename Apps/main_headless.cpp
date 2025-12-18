@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 		// --- [ main loop ] ---------------------------------------------------
 
 		// simulation runs on all available threads
-		simulationMgr.Launch_Blocking(simParamsMgr.SnapshotParams().first.maxSteps);
+		simulationMgr.Launch_Blocking();
 
 		// --- [ shutdown ] ----------------------------------------------------
 

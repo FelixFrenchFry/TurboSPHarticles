@@ -27,8 +27,8 @@ namespace Sim
 											uint32_t N_visThreads)
     {
         printf("\n");
-        printf("--- [ hardware specifications ] ------------------------------------------------\n");
-        printf("--------------------------------------------------------------------------------\n");
+        printf("--- [ hardware specifications ] ----------------------------------------\n");
+        printf("------------------------------------------------------------------------\n");
 
         // hostname
         char hostname[256] = "unknown";
@@ -51,8 +51,8 @@ namespace Sim
 
     void DiagnosticsMgr::PrintSimParams(const SimParams& params)
     {
-        printf("--- [ simulation parameters ] --------------------------------------------------\n");
-        printf("--------------------------------------------------------------------------------\n");
+        printf("--- [ simulation parameters ] ------------------------------------------\n");
+        printf("------------------------------------------------------------------------\n");
 
         // print table with aligned columns of sim parameters
         printf("%-24s = %.6f\n", "timeStep", params.timeStep);
@@ -79,8 +79,8 @@ namespace Sim
 
     void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr)
     {
-        printf("--- [ simulation setup ] -------------------------------------------------------\n");
-        printf("--------------------------------------------------------------------------------\n");
+        printf("--- [ simulation setup ] -----------------------------------------------\n");
+        printf("------------------------------------------------------------------------\n");
 
         const auto& backend = simMgr.simBackend_;
         const auto& scenario = simMgr.simScenario_;
@@ -112,8 +112,8 @@ namespace Sim
 
     void DiagnosticsMgr::PrintMemoryUsage()
     {
-        printf("--- [ memory usage ] -----------------------------------------------------------\n");
-        printf("--------------------------------------------------------------------------------\n");
+        printf("--- [ memory usage ] ---------------------------------------------------\n");
+        printf("------------------------------------------------------------------------\n");
 
         // TODO: implement
     }
@@ -123,7 +123,7 @@ namespace Sim
         const std::vector<Bench::BenchOpGroupDef>& opGroups,
         Bench::TimeUnit unit,
         uint32_t step,
-        uint32_t totalSteps)
+        int64_t maxSteps)
     {
         using steady_clock = std::chrono::steady_clock;
 
@@ -137,7 +137,7 @@ namespace Sim
         static std::deque<Sample> history;
         static int lastNumLines = 0;
 
-        const bool hasTotal = (totalSteps > 0);
+        const bool hasTotal = (maxSteps > 0);
         const auto now = steady_clock::now();
 
         // re-initialize at start or when step == 0
@@ -185,9 +185,9 @@ namespace Sim
 
         // remaining time based on moving-average speed (only if total steps known)
         double remainingS = 0.0;
-        if (hasTotal && stepsPerSec > 1e-9 && step < totalSteps)
+        if (hasTotal && stepsPerSec > 1e-9 && step < maxSteps)
         {
-            remainingS = static_cast<double>(totalSteps - step) / stepsPerSec;
+            remainingS = static_cast<double>(maxSteps - step) / stepsPerSec;
         }
 
         auto fmt_hms = [](double seconds, int& h, int& m, int& s)
@@ -211,7 +211,7 @@ namespace Sim
         if (hasTotal)
         {
             double progress = std::min(1.0, std::max(0.0,
-                static_cast<double>(step) / static_cast<double>(totalSteps)));
+                static_cast<double>(step) / static_cast<double>(maxSteps)));
             percent = progress * 100.0;
         }
 
@@ -223,9 +223,9 @@ namespace Sim
 
         int lineCount = 0;
 
-        std::printf("--- [ benchmark summary ] ------------------------------------------------------\n");
+        printf("--- [ benchmark summary ] ----------------------------------------------\n");
         lineCount++;
-        std::printf("--------------------------------------------------------------------------------\n");
+        printf("------------------------------------------------------------------------\n");
         lineCount++;
 
         // per-group timing
@@ -268,14 +268,14 @@ namespace Sim
 
         char latestLabel[32];
         char avgLabel[32];
-        std::snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
-        std::snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
+        snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
+        snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
 
         // header: 30 (name) + latest pair + gap + avg pair
-        std::printf("%-30.30s | %12s  %6s    | %12s  %6s\n",
+        printf("%-30.30s | %11s %6s | %11s %6s\n",
             "operation group", latestLabel, "%", avgLabel, "%");
         lineCount++;
-        std::printf("--------------------------------------------------------------------------------\n");
+        printf("------------------------------------------------------------------------\n");
         lineCount++;
 
         auto PrintRow = [&](uint32_t i, bool isTotalSim)
@@ -327,12 +327,12 @@ namespace Sim
 
                 if (isTotalSim)
                 {
-                    std::printf("%-30.30s | %12.2f  %6s    | %12.2f  %6s\n",
-                        alias.c_str(), t_latest, "---", t_avg, "---");
+                    std::printf("%-30.30s | %11.2f %6s | %11.2f %6s\n",
+                        alias.c_str(), t_latest, "100.0", t_avg, "100.0");
                 }
                 else
                 {
-                    std::printf("%-30.30s | %12.2f  %6.1f    | %12.2f  %6.1f\n",
+                    std::printf("%-30.30s | %11.2f %6.1f | %11.2f %6.1f\n",
                         alias.c_str(), t_latest, pctLatest, t_avg, pctAvg);
                 }
 
@@ -349,13 +349,13 @@ namespace Sim
         // total simulation row last
         if (totalSimIdx >= 0)
         {
-            std::printf("--------------------------------------------------------------------------------\n");
+            printf("------------------------------------------------------------------------\n");
             lineCount++;
             PrintRow(static_cast<std::size_t>(totalSimIdx), true);
         }
 
         // blank line separating table and progress line
-        std::printf("\n");
+        printf("\n");
         lineCount++;
 
         // progress line, using printf and padding to overwrite old text cleanly
@@ -364,19 +364,19 @@ namespace Sim
 
         if (hasTotal)
         {
-            std::snprintf(
+            snprintf(
                 buf, sizeof(buf),
                 "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.3f steps/s (recently)",
                 elH, elM, elS,
                 static_cast<long long>(step),
-                static_cast<long long>(totalSteps),
+                static_cast<long long>(maxSteps),
                 percent,
                 stepsPerSec
             );
         }
         else
         {
-            std::snprintf(
+            snprintf(
                 buf, sizeof(buf),
                 "%02d:%02d:%02d elapsed | %lld steps | %.3f steps/s (recently)",
                 elH, elM, elS,
@@ -392,10 +392,10 @@ namespace Sim
         }
         lastProgressLen = line.size();
 
-        std::printf("%s\n", line.c_str());
+        printf("%s\n", line.c_str());
         lineCount++;
 
-        std::fflush(stdout);
+        fflush(stdout);
 
         // remember how many lines were printed
         lastNumLines = lineCount;
@@ -437,12 +437,12 @@ namespace Sim
 
         const char* unitStr = Bench::BenchmarksMgr::UnitLabel(unit);
 
-        std::printf("--- [ benchmark summary (AVERAGE measurement over all executed steps) ----------\n");
-        std::printf("--------------------------------------------------------------------------------\n");
+        printf("--- [ benchmark summary (AVERAGE measurement over all executed steps) ----------\n");
+        printf("--------------------------------------------------------------------------------\n");
 
         // header (same widths as rows: 30 / 10 / 5)
-        std::printf("%-30.30s  %10s  %5s\n", "operation group", unitStr, "%");
-        std::printf("--------------------------------------------------------------------------------\n");
+        printf("%-30.30s  %10s  %5s\n", "operation group", unitStr, "%");
+        printf("--------------------------------------------------------------------------------\n");
 
         auto PrintRow = [&](uint32_t i, bool isTotalSim)
             {
@@ -478,13 +478,13 @@ namespace Sim
 
                 if (isTotalSim)
                 {
-                    std::printf("%-30.30s  %10.2f  %5s  (avg over %lld steps)\n",
+                    printf("%-30.30s  %10.2f  %5s  (avg over %lld steps)\n",
                         alias.c_str(), t_unit, "--",
                         static_cast<long long>(step));
                 }
                 else
                 {
-                    std::printf("%-30.30s  %10.2f  %5.1f\n",
+                    printf("%-30.30s  %10.2f  %5.1f\n",
                         alias.c_str(), t_unit, pct);
                 }
             };
@@ -499,11 +499,11 @@ namespace Sim
         // total simulation row last
         if (totalSimIdx >= 0)
         {
-            std::printf("--------------------------------------------------------------------------------\n");
+            printf("--------------------------------------------------------------------------------\n");
             PrintRow(static_cast<std::size_t>(totalSimIdx), true);
         }
 
-        std::printf("--------------------------------------------------------------------------------\n");
+        printf("--------------------------------------------------------------------------------\n");
     }
 	
 } // namespace Sim

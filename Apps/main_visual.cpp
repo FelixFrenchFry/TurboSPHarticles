@@ -111,7 +111,7 @@ int main(int argc, char** argv)
 
 		// simulation runs on background controller thread
 		// (spawn N-1 worker threads within)
-		simulationMgr.Launch_Async(simParamsMgr.SnapshotParams().first.maxSteps);
+		simulationMgr.Launch_Async();
 
 		// visualization runs on main thread
 		visualizationMgr.RunVis();
