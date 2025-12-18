@@ -480,12 +480,27 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 
 		DrawStatGroupTable("table_density",
 		{
-			Stats::StatMetric::DensRelError_Avg,
-			Stats::StatMetric::DensRelError_Min,
-			Stats::StatMetric::DensRelError_P95,
-			Stats::StatMetric::DensRelError_P99,
-			Stats::StatMetric::DensRelError_Max
+			Stats::StatMetric::DensRelError_Raw_Avg,
+			Stats::StatMetric::DensRelError_Pos_Avg,
+			Stats::StatMetric::DensRelError_Abs_Avg
 		});
+
+		ImGui::TreePop();
+	}
+	else { ImGui::PopStyleColor(1); }
+	ImGui::Spacing();
+
+	// pressure
+	ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 100));
+	if (ImGui::TreeNodeEx("Pressure Stats",
+		ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::PopStyleColor(1);
+
+		DrawStatGroupTable("table_pressure",
+			{
+				Stats::StatMetric::NumSolverIters
+			});
 
 		ImGui::TreePop();
 	}

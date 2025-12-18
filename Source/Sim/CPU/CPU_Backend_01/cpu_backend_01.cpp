@@ -14,6 +14,9 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "cpu_backend_01.h"
+
+#include <iostream>
+
 #include "neighbor_lists.h"
 #include "neighbor_search.h"
 
@@ -659,39 +662,37 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	{
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
 
-		float sumRelErr = 0.0f;
-		float minRelErr = std::numeric_limits<float>::max();
-		float maxRelErr = 0.0f;
+		float sumRelErr_raw = 0.0f;
+		float sumRelErr_pos = 0.0f;
+		float sumRelErr_abs = 0.0f;
 
 		if (NF > 0)
 		{
 			struct DensStatsLocal
 			{
-				float sumRelErr;
-				float minRelErr;
-				float maxRelErr;
+				float sumRelErr_raw;
+				float sumRelErr_pos;
+				float sumRelErr_abs;
 			};
 
 			DensStatsLocal globalDens = tbb::parallel_reduce(
 				tbb::blocked_range<uint32_t>(0, NF),
 				DensStatsLocal
 				{
-					.sumRelErr = 0.0f,
-					.minRelErr = std::numeric_limits<float>::max(),
-					.maxRelErr = 0.0f
+					.sumRelErr_raw = 0.0f,
+					.sumRelErr_pos = 0.0f,
+					.sumRelErr_abs = 0.0f
 				},
 				[&](const tbb::blocked_range<uint32_t>& r, DensStatsLocal local) -> DensStatsLocal
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
 						const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
-						const float relErr = std::fabs(dev) * 100.0f; // deviation in percent
+						const float relErr = dev * 100.0f; // deviation in percent
 
-						workBuffer_[i] = relErr;
-						local.sumRelErr += relErr;
-
-						if (relErr < local.minRelErr) [[unlikely]] { local.minRelErr = relErr; }
-						if (relErr > local.maxRelErr) [[unlikely]] { local.maxRelErr = relErr; }
+						local.sumRelErr_raw += relErr;
+						local.sumRelErr_pos += std::max(0.0f, relErr);
+						local.sumRelErr_abs += std::fabs(relErr);
 					}
 
 					return local;
@@ -700,56 +701,30 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 				{
 					DensStatsLocal r;
 
-					r.sumRelErr = a.sumRelErr + b.sumRelErr;
-					r.minRelErr = std::min(a.minRelErr, b.minRelErr);
-					r.maxRelErr = std::max(a.maxRelErr, b.maxRelErr);
+					r.sumRelErr_raw = a.sumRelErr_raw + b.sumRelErr_raw;
+					r.sumRelErr_pos = a.sumRelErr_pos + b.sumRelErr_pos;
+					r.sumRelErr_abs = a.sumRelErr_abs + b.sumRelErr_abs;
 
 					return r;
 				},
 				tbb::auto_partitioner{}
 			);
 
-			sumRelErr = globalDens.sumRelErr;
-			minRelErr = globalDens.minRelErr;
-			maxRelErr = globalDens.maxRelErr;
+			sumRelErr_raw = globalDens.sumRelErr_raw;
+			sumRelErr_pos = globalDens.sumRelErr_pos;
+			sumRelErr_abs = globalDens.sumRelErr_abs;
 		}
 
-		float p95 = 0.0f;
-		float p99 = 0.0f;
-
-		if (NF > 0) // determine percentiles
-		{
-			// reuse workBuffer_ for density deviation
-			workBuffer_.resize(NF);
-
-			// indices of the 95th and 99th percentiles
-			const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-			const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
-
-			auto nth95 = workBuffer_.begin() + i95;
-			auto nth99 = workBuffer_.begin() + i99;
-
-			// partially sort so that the desired percentiles can be extracted
-			std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-			std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
-
-			p95 = *nth95;
-			p99 = *nth99;
-		}
-		else // reasonable defaults for empty sim
-		{
-			minRelErr = 0.0f;
-			maxRelErr = 0.0f;
-		}
-
-		Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
-		Set(record, StatMetric::DensRelError_P95, p95);
-		Set(record, StatMetric::DensRelError_P99, p99);
-		Set(record, StatMetric::DensRelError_Min, minRelErr);
-		Set(record, StatMetric::DensRelError_Max, maxRelErr);
+		Set(record, StatMetric::DensRelError_Raw_Avg, sumRelErr_raw * invNF);
+		Set(record, StatMetric::DensRelError_Pos_Avg, sumRelErr_pos * invNF);
+		Set(record, StatMetric::DensRelError_Abs_Avg, sumRelErr_abs * invNF);
 
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Density });
 	}
+
+	// --- [ pressure stats ] --------------------------------------------------
+
+	Set(record, StatMetric::NumSolverIters, N_solverIterCount_);
 
 	// --- [ velocity stats ] --------------------------------------------------
 

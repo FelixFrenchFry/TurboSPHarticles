@@ -604,11 +604,14 @@ void SimBackend_CPU02::FillStatisticsRecord(Stats::StatRecordStep& record,
 	Set(record, StatMetric::NumNbrFB_Min, minFB);
 	Set(record, StatMetric::NumNbrFB_Max, maxFB);
 
+	// TODO: adjust this for the new density error metrics
+	/*
 	Set(record, StatMetric::DensRelError_Avg, sumRelErr * invNF);
 	Set(record, StatMetric::DensRelError_P95, p95);
 	Set(record, StatMetric::DensRelError_P99, p99);
 	Set(record, StatMetric::DensRelError_Min, minRelErr);
 	Set(record, StatMetric::DensRelError_Max, maxRelErr);
+	*/
 
 	Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
 	Set(record, StatMetric::VelMag_Min, velMagMin);

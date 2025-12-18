@@ -68,6 +68,9 @@ namespace Sim
 		void JoinThreads();
 
 		// helpers
+		void HandleExportSnapshot(const SimParams& params) const;
+		void HandleBenchAndStatSnapshots() const;
+		void FinalizeBenchAndStatMeasurements() const;
 		void DisplayPerformanceStats(int64_t maxSteps) const;
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }

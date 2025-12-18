@@ -46,6 +46,14 @@ namespace Base
 		CellLinkedList_Compact
 	};
 
+	enum class SolverTerminationCondition : uint8_t
+	{
+		FixedIters,				// 0
+		RelDensityError_Raw,	// 1
+		RelDensityError_Pos,	// 2
+		RelDensityError_Abs		// 3
+	};
+
 	enum class ColorCodingMode : uint8_t
 	{
 		None,				// 0

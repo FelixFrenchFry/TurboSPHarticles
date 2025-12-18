@@ -52,7 +52,7 @@ namespace Sim
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;
 
-		bool TerminationConditionSatisfied(uint32_t iterCount);
+		bool TerminationConditionSatisfied(const SimParams& params) const;
 
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)

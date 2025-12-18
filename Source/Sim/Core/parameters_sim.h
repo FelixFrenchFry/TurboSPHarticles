@@ -64,9 +64,15 @@ namespace Sim
 		float viscosityF		= 0.000003f;
 		float viscosityB		= 0.000003f;
 
-		// pressure
+		// pressure solving
 		float gammaPress		= 0.5f;
 		float jacobiOmega		= 0.6f;
+		float densityDevTarget  = 0.01f;
+		uint32_t fixedIters		= 5;
+		uint32_t minSolverIters = 5;
+		uint32_t maxSolverIters	= 50;
+		Base::SolverTerminationCondition solverTerminationCondition =
+			Base::SolverTerminationCondition::FixedIters;
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
@@ -84,9 +90,9 @@ namespace Sim
 		uint32_t maxStatRecs	= 1'000'000;
 		std::array<bool, static_cast<uint8_t>(Stats::StatGroup::Count)> statGroupsEnabled =
 		{
-			false,	// particles
-			false,	// density
-			false	// velocity
+			true,	// particles
+			true,	// density
+			true	// velocity
 		};
 
 		// benchmarks

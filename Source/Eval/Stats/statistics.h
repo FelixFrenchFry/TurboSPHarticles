@@ -20,7 +20,7 @@ namespace Stats
 {
 	class StatisticsMgr
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		StatisticsMgr(const Sim::SimParams& simParams);
 
@@ -43,7 +43,7 @@ namespace Stats
 		const StatRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<StatRecordStep>& GetHistory() const { return recHistory_; }
 
-	private: // ==============================
+	private: // ----------------------------------------------------------------
 
 		// max and current number of steps for which stats are kept
 		uint32_t maxRecCount_;

@@ -39,15 +39,28 @@ namespace Stats
 		NumNbrFB_Min,		// min number of boundary neighbors
 		NumNbrFB_Max,		// max number of boundary neighbors
 
-		// density
-		// (relative error in % aka deviation)
-		DensRelError_Avg,	// average relative density error
-		DensRelError_P95,	// top 5% of relative density errors
-		DensRelError_P99,	// top 1% of relative density errors
-		DensRelError_Min,	// min relative density error
-		DensRelError_Max,	// max relative density error
+		// density deviation
+		// (relative error in %, aka deviation)
+		DensRelError_Raw_Avg,	// average raw relative density error
+		// TODO: DensRelError_Raw_P95 // top 5% of raw relative density errors
+		// TODO: DensRelError_Raw_P99 // top 1% of raw relative density errors
+		// TODO: DensRelError_Raw_Min // min raw relative density error
+		// TODO: DensRelError_Raw_Max // max raw relative density error
+		DensRelError_Pos_Avg,	// average positive relative density error
+		// TODO: DensRelError_Pos_P95 // top 5% of positive relative density errors
+		// TODO: DensRelError_Pos_P99 // top 1% of positive relative density errors
+		// TODO: DensRelError_Pos_Min // min positive relative density error
+		// TODO: DensRelError_Pos_Max // max positive relative density error
+		DensRelError_Abs_Avg,	// average absolute relative density error
+		// TODO: DensRelError_Abs_P95 // top 5% of absolute relative density errors
+		// TODO: DensRelError_Abs_P99 // top 1% of absolute relative density errors
+		// TODO: DensRelError_Abs_Min // min absolute relative density error
+		// TODO: DensRelError_Abs_Max // max absolute relative density error
 
-		// velocity
+		// pressure solver
+		NumSolverIters,		// number of pressure solver iterations performed
+
+		// velocity stuff
 		VelMag_Avg,			// average velocity magnitude
 		VelMag_Min,			// min velocity magnitude
 		VelMag_Max,			// max velocity magnitude
@@ -135,7 +148,7 @@ namespace Stats
 				.metric = StatMetric::NumNbrFB_P95,
 				.name = "num bound neighbors (p95)",
 				.unit = "",
-				.var = "float",
+				.var = "int",
 				.tip =
 				"Top 5%% of boundary neighbor counts among fluid particles"
 			},
@@ -143,7 +156,7 @@ namespace Stats
 				.metric = StatMetric::NumNbrFB_P99,
 				.name = "num bound neighbors (p99)",
 				.unit = "",
-				.var = "float",
+				.var = "int",
 				.tip =
 				"Top 1%% of boundary neighbor counts among fluid particles"
 			},
@@ -164,44 +177,36 @@ namespace Stats
 				"Maximum number of boundary particles neighboring a fluid particle"
 			},
 			{
-				.metric = StatMetric::DensRelError_Avg,
-				.name = "density rel err (avg)",
+				.metric = StatMetric::DensRelError_Raw_Avg,
+				.name = "dens rel raw err (avg)",
 				.unit = "%",
 				.var = "float",
 				.tip =
-				"Average relative density error among fluid particles"
+				"Average of raw relative density error among fluid particles"
 			},
 			{
-				.metric = StatMetric::DensRelError_P95,
-				.name = "density rel err (p95)",
+				.metric = StatMetric::DensRelError_Pos_Avg,
+				.name = "dens rel pos err (avg)",
 				.unit = "%",
 				.var = "float",
 				.tip =
-				"Top 5%% of relative density errors among fluid particles"
+				"Average of positive relative density error among fluid particles"
 			},
 			{
-				.metric = StatMetric::DensRelError_P99,
-				.name = "density rel err (p99)",
+				.metric = StatMetric::DensRelError_Abs_Avg,
+				.name = "dens rel abs err (avg)",
 				.unit = "%",
 				.var = "float",
 				.tip =
-				"Top 1%% of relative density errors among fluid particles"
+				"Average of absolute relative density error among fluid particles"
 			},
 			{
-				.metric = StatMetric::DensRelError_Min,
-				.name = "density rel err (min)",
-				.unit = "%",
-				.var = "float",
+				.metric = StatMetric::NumSolverIters,
+				.name = "num solver iterations",
+				.unit = "",
+				.var = "int",
 				.tip =
-				"Minimum relative density error among fluid particles"
-			},
-			{
-				.metric = StatMetric::DensRelError_Max,
-				.name = "density rel err (max)",
-				.unit = "%",
-				.var = "float",
-				.tip =
-				"Maximum relative density error among fluid particles"
+				"Number of pressure solver iterations performed"
 			},
 			{
 				.metric = StatMetric::VelMag_Avg,

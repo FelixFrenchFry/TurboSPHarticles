@@ -356,48 +356,15 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		}
 
 		// pack and serialize export snapshot at given frequency
-		if (params.exportEnabled &&
-			simStep_ % params.exportInterval == 0)
-		{
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
-			// fill export snapshot
-			Sync::ExportSnapshot expSnap{};
-			simBackend_->PackExportSnapshot(expSnap, simParams_);
-			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+		if (simStep_ % params.exportInterval == 0 &&
+			params.exportEnabled) { HandleExportSnapshot(params); }
 
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Serialization });
-			// write export snapshot to file
-			serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Serialization });
-		}
-
-		// evaluate the step
-		if (doSimStep)
-		{
-			// record statistics, archive data and update aggregates
-			simBackend_->FillStatisticsRecord(statisticsMgr_.GetCurrentRecord(), simParams_);
-			statisticsMgr_.EndStep(simStep_, simTime_);
-
-			// ending point of total sim benchmark, archive data and update aggregates
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
-			benchmarksMgr_.EndStep(simStep_, simTime_);
-		}
+		// evaluate the benchmarks and statistics for this step
+		if (doSimStep) { FinalizeBenchAndStatMeasurements(); }
 
 		// pack and send benchmark and statistics snapshots
 		// (to be retrieved by the visualization manager)
-		if (doSimStep)
-		{
-			// create bench snapshot and push to its mailbox
-			auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
-			benchmarksMgr_.PackBenchSnapshot(*benchSnap);
-			benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
-
-			// create stat snapshot and push to its mailbox
-			auto statSnap = std::make_shared<Sync::StatSnapshot>();
-			statisticsMgr_.PackStatSnapshot(*statSnap);
-			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
-		}
+		if (doSimStep) { HandleBenchAndStatSnapshots(); }
 
 		SyncParameters();
 
@@ -483,49 +450,16 @@ void SimulationMgr::RunSim_Blocking()
 			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
 		}
 
-		// pack and serialize export snapshot at given interval
-		if (params.exportEnabled &&
-			simStep_ % params.exportInterval == 0)
-		{
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
-			// fill export snapshot
-			Sync::ExportSnapshot expSnap{};
-			simBackend_->PackExportSnapshot(expSnap, simParams_);
-			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+		// pack and serialize export snapshot at given frequency
+		if (simStep_ % params.exportInterval == 0 &&
+			params.exportEnabled) { HandleExportSnapshot(params); }
 
-			benchmarksMgr_.StartBench({ Bench::BenchOp::Serialization });
-			// write export snapshot to file
-			serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Serialization });
-		}
-
-		// evaluate the step
-		if (doSimStep)
-		{
-			// record statistics, archive data and update aggregates
-			simBackend_->FillStatisticsRecord(statisticsMgr_.GetCurrentRecord(), simParams_);
-			statisticsMgr_.EndStep(simStep_, simTime_);
-
-			// ending point of total sim benchmark, archive data and update aggregates
-			benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
-			benchmarksMgr_.EndStep(simStep_, simTime_);
-		}
+		// evaluate the benchmarks and statistics for this step
+		if (doSimStep) { FinalizeBenchAndStatMeasurements(); }
 
 		// pack and send benchmark and statistics snapshots
 		// (to be retrieved by the visualization manager)
-		if (doSimStep)
-		{
-			// create bench snapshot and push to its mailbox
-			auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
-			benchmarksMgr_.PackBenchSnapshot(*benchSnap);
-			benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
-
-			// create stat snapshot and push to its mailbox
-			auto statSnap = std::make_shared<Sync::StatSnapshot>();
-			statisticsMgr_.PackStatSnapshot(*statSnap);
-			statSnapMailbox_->StoreSnapshot(std::move(statSnap));
-		}
+		if (doSimStep) { HandleBenchAndStatSnapshots(); }
 
 		SyncParameters();
 
@@ -565,6 +499,45 @@ void SimulationMgr::JoinThreads()
 		controllerThread_.join();
 		running_.store(false, std::memory_order_release);
 	}
+}
+
+void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
+{
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Snapshot_Export });
+	// fill export snapshot
+	Sync::ExportSnapshot expSnap{};
+	simBackend_->PackExportSnapshot(expSnap, simParams_);
+	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Snapshot_Export });
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Serialization });
+	// write export snapshot to file
+	serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Serialization });
+}
+
+void SimulationMgr::HandleBenchAndStatSnapshots() const
+{
+	// create bench snapshot and push to its mailbox
+	auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
+	benchmarksMgr_.PackBenchSnapshot(*benchSnap);
+	benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
+
+	// create stat snapshot and push to its mailbox
+	auto statSnap = std::make_shared<Sync::StatSnapshot>();
+	statisticsMgr_.PackStatSnapshot(*statSnap);
+	statSnapMailbox_->StoreSnapshot(std::move(statSnap));
+}
+
+void SimulationMgr::FinalizeBenchAndStatMeasurements() const
+{
+	// record statistics, archive data and update aggregates
+	simBackend_->FillStatisticsRecord(statisticsMgr_.GetCurrentRecord(), simParams_);
+	statisticsMgr_.EndStep(simStep_, simTime_);
+
+	// ending point of total sim benchmark, archive data and update aggregates
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });
+	benchmarksMgr_.EndStep(simStep_, simTime_);
 }
 
 void SimulationMgr::DisplayPerformanceStats(int64_t maxSteps) const

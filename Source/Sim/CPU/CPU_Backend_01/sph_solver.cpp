@@ -187,7 +187,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			avgRelDensityErrorF_pos_, avgRelDensityErrorF_abs_);
 
 		N_solverIterCount_++;
-	} while (!TerminationConditionSatisfied(N_solverIterCount_));
+	} while (!TerminationConditionSatisfied(params));
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
@@ -225,16 +225,50 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 								   Bench::BenchOp::PositionUpdate });
 }
 
-bool SimBackend_CPU01::TerminationConditionSatisfied(uint32_t iterCount)
+bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) const
 {
-	// TODO: implement properly with parameters for choosing condition
+	// check min/max iteration condition for potential early-out
+	if (N_solverIterCount_ < params.minSolverIters) { return false; }
+	if (N_solverIterCount_ >= params.maxSolverIters) { return true; }
 
 	bool satisfied = false;
 
-	if (iterCount > 5) { satisfied = true; }
-	// if (avgRelDensityErrorF_raw_ <= 0.001f) { satisfied = true; }
-	// if (avgRelDensityErrorF_pos_ <= 0.01f) { satisfied = true; }
-	// if (avgRelDensityErrorF_abs_ <= 0.01f) { satisfied = true; }
+	// check actual termination condition
+	switch (params.solverTerminationCondition)
+	{
+	case Base::SolverTerminationCondition::FixedIters:
+		if (N_solverIterCount_ >= params.fixedIters)
+		{
+			satisfied = true;
+		}
+		break;
+
+	case Base::SolverTerminationCondition::RelDensityError_Raw:
+		if (avgRelDensityErrorF_raw_ <= params.densityDevTarget)
+		{
+			satisfied = true;
+		}
+		break;
+
+	case Base::SolverTerminationCondition::RelDensityError_Pos:
+		if (avgRelDensityErrorF_pos_ <= params.densityDevTarget)
+		{
+			satisfied = true;
+		}
+		break;
+	case Base::SolverTerminationCondition::RelDensityError_Abs:
+		if (avgRelDensityErrorF_abs_ <= params.densityDevTarget)
+		{
+			satisfied = true;
+		}
+		break;
+	default:
+		if (N_solverIterCount_ >= 3)
+		{
+			satisfied = true;
+		}
+		break;
+	}
 
 	return satisfied;
 }
