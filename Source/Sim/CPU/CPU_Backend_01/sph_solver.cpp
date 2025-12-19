@@ -15,8 +15,6 @@
 #include "cpu_backend_01.h"
 #include "sph_solver.h"
 
-#include <iostream>
-
 #if defined(_MSC_VER)
 	#define RESTRICT __restrict
 #elif defined(__GNUC__) || defined(__clang__)

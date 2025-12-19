@@ -10,7 +10,6 @@
 #include "Source/Eval/Serial/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/CPU/CPU_Backend_01/cpu_backend_01.h"
-#include "Source/Sim/CPU/CPU_Backend_02/cpu_backend_02.h"
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 	#include "Source/Sim/GPU/GPU_Backend_01/gpu_backend_01.h"
 #endif
