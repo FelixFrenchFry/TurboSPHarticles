@@ -662,6 +662,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	{
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
 
+		// TODO: use double for the accumulations?
 		float sumRelErr_raw = 0.0f;
 		float sumRelErr_pos = 0.0f;
 		float sumRelErr_abs = 0.0f;
@@ -687,12 +688,14 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const float dev = (densityF_[i] / simParams.restDensityF) - 1.0f;
-						const float relErr = dev * 100.0f; // deviation in percent
+						// relative density error (aka deviation)
+						const float relErr = (densityF_[i] / simParams.restDensityF) - 1.0f;
+						const float relPosErr = std::max(0.0f, relErr);
+						const float relAbsErr = std::fabs(relErr);
 
 						local.sumRelErr_raw += relErr;
-						local.sumRelErr_pos += std::max(0.0f, relErr);
-						local.sumRelErr_abs += std::fabs(relErr);
+						local.sumRelErr_pos += relPosErr;
+						local.sumRelErr_abs += relAbsErr;
 					}
 
 					return local;

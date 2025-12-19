@@ -1105,11 +1105,11 @@ inline void UserInterfaceMgr::FormatStatValue(
 
 		if (def.unit.empty())
 		{
-			std::snprintf(out, cap, "%lld", static_cast<long long>(ix));
+			snprintf(out, cap, "%lld", static_cast<long long>(ix));
 		}
 		else
 		{
-			std::snprintf(out, cap, "%lld %.*s",
+			snprintf(out, cap, "%lld %.*s",
 				static_cast<long long>(ix),
 				static_cast<int>(def.unit.size()), def.unit.data());
 		}
@@ -1119,15 +1119,15 @@ inline void UserInterfaceMgr::FormatStatValue(
 	// floats
 	if (def.unit == "%")
 	{
-		std::snprintf(out, cap, "%.1f %%", x);
+		snprintf(out, cap, "%.2f %%", x * 100.0f);
 	}
 	else if (def.unit == "m/s" && false) // TODO: use meters per second?
 	{
-		std::snprintf(out, cap, "%.2f m/s", x);
+		snprintf(out, cap, "%.2f m/s", x);
 	}
 	else
 	{
-		std::snprintf(out, cap, "%.2f", x);
+		snprintf(out, cap, "%.2f", x);
 	}
 }
 

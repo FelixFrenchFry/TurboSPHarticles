@@ -41,17 +41,17 @@ namespace Stats
 
 		// density deviation
 		// (relative error in %, aka deviation)
-		DensRelError_Raw_Avg,	// average raw relative density error
+		DensRelError_Raw_Avg,	// average raw value relative density error
 		// TODO: DensRelError_Raw_P95 // top 5% of raw relative density errors
 		// TODO: DensRelError_Raw_P99 // top 1% of raw relative density errors
 		// TODO: DensRelError_Raw_Min // min raw relative density error
 		// TODO: DensRelError_Raw_Max // max raw relative density error
-		DensRelError_Pos_Avg,	// average positive relative density error
+		DensRelError_Pos_Avg,	// average positive value relative density error
 		// TODO: DensRelError_Pos_P95 // top 5% of positive relative density errors
 		// TODO: DensRelError_Pos_P99 // top 1% of positive relative density errors
 		// TODO: DensRelError_Pos_Min // min positive relative density error
 		// TODO: DensRelError_Pos_Max // max positive relative density error
-		DensRelError_Abs_Avg,	// average absolute relative density error
+		DensRelError_Abs_Avg,	// average absolute value relative density error
 		// TODO: DensRelError_Abs_P95 // top 5% of absolute relative density errors
 		// TODO: DensRelError_Abs_P99 // top 1% of absolute relative density errors
 		// TODO: DensRelError_Abs_Min // min absolute relative density error

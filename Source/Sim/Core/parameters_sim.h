@@ -68,11 +68,11 @@ namespace Sim
 		float gammaPress		= 0.5f;
 		float jacobiOmega		= 0.6f;
 		float densityDevTarget  = 0.01f;
-		uint32_t fixedIters		= 5;
+		uint32_t fixedIters		= 10;
 		uint32_t minSolverIters = 5;
-		uint32_t maxSolverIters	= 50;
+		uint32_t maxSolverIters	= 500;
 		Base::SolverTerminationCondition solverTerminationCondition =
-			Base::SolverTerminationCondition::FixedIters;
+			Base::SolverTerminationCondition::RelDensityError_Pos;
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };

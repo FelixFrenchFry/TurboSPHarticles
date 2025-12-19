@@ -22,6 +22,12 @@ namespace Base
         return std::fabs(a - b) <= eps;
     }
 
+    // double comparison
+    inline bool ApproxEqu(const double a, const double b, const double eps = 1e-6)
+    {
+        return std::fabs(a - b) <= eps;
+    }
+
     // element-wise vec2 comparison
     inline bool ApproxEqu(const glm::vec2& a, const glm::vec2& b, const float eps = 1e-6f)
 	{

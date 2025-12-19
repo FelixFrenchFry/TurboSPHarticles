@@ -15,6 +15,8 @@
 #include "cpu_backend_01.h"
 #include "sph_solver.h"
 
+#include <iostream>
+
 #if defined(_MSC_VER)
 	#define RESTRICT __restrict
 #elif defined(__GNUC__) || defined(__clang__)
@@ -968,8 +970,9 @@ void CPU01::PressureRelaxedJacobiSolver(
 		double sumRaw = 0.0;
 		double sumPos = 0.0;
 		double sumAbs = 0.0;
-		uint64_t cntAll = 0;
-		uint64_t cntPos = 0;
+		// has neighbors and is considered in the solver update
+		// TODO: use only "valid" particles or all for averaging?
+		uint64_t NF_valid = 0;
 
 		DensityErrorAccum() = default;
 
@@ -978,14 +981,13 @@ void CPU01::PressureRelaxedJacobiSolver(
 			sumRaw += rhs.sumRaw;
 			sumPos += rhs.sumPos;
 			sumAbs += rhs.sumAbs;
-			cntAll += rhs.cntAll;
-			cntPos += rhs.cntPos;
+			NF_valid += rhs.NF_valid;
 		}
 	};
 
 	DensityErrorAccum acc = tbb::parallel_reduce(
 		tbb::blocked_range<uint32_t>(0, N_F), DensityErrorAccum{},
-		[&](const tbb::blocked_range<uint32_t>& r, DensityErrorAccum local) -> DensityErrorAccum
+		[&](const tbb::blocked_range<uint32_t>& r, DensityErrorAccum local)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
@@ -1066,7 +1068,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 				sysVecElemF[i] = timeStep * timeStep
 							   * (tmp_SysVecElemF + tmp_SysVecElemB);
 
-				const float densityError = sourceTermF[i] - sysVecElemF[i];
+				const float solverResidual = sourceTermF[i] - sysVecElemF[i];
+				const float predDensityError = sysVecElemF[i] - sourceTermF[i];
 				float tmp_PressureF = 0.0f;
 
 				// only update pressure and error if particle has neighbors
@@ -1074,21 +1077,17 @@ void CPU01::PressureRelaxedJacobiSolver(
 				{
 					// relaxed Jacobi solver update
 					tmp_PressureF = pressureF[i] + jacobiOmega
-								  * (densityError / diagElemF[i]);
+								  * (solverResidual / diagElemF[i]);
 
 					// relative density error
-					const float relErr = densityError / restDensityF;
-					const float absErr = std::fabs(relErr);
+					const double relErr = predDensityError / restDensityF;
+					const double relPosErr = std::max(0.0, relErr);
+					const double relAbsErr = std::fabs(relErr);
 
-					local.sumRaw += static_cast<double>(relErr);
-					local.sumAbs += static_cast<double>(absErr);
-					local.cntAll++;
-
-					if (relErr > 0.0f)
-					{
-						local.sumPos += static_cast<double>(relErr);
-						local.cntPos++;
-					}
+					local.sumRaw += relErr;
+					local.sumPos += relPosErr;
+					local.sumAbs += relAbsErr;
+					local.NF_valid++;
 				}
 
 				// clamp pressure to non-negative values
@@ -1105,28 +1104,17 @@ void CPU01::PressureRelaxedJacobiSolver(
 		}
 	);
 
-	// finalize averages and handle degenerate cases
-	if (acc.cntAll > 0)
+	// finalize raw, pos, and abs density deviation averages
+	if (N_F > 0)
 	{
-		avgRelDensityErrorF_raw = static_cast<float>(acc.sumRaw 
-							    / static_cast<double>(acc.cntAll));
-		avgRelDensityErrorF_abs = static_cast<float>(acc.sumAbs
-							    / static_cast<double>(acc.cntAll));
-	}
-	else
-	{
-		avgRelDensityErrorF_raw = 0.0f;
-		avgRelDensityErrorF_abs = 0.0f;
-	}
+		avgRelDensityErrorF_raw = static_cast<float>(acc.sumRaw)
+								/ static_cast<float>(N_F);
 
-	if (acc.cntPos > 0)
-	{
-		avgRelDensityErrorF_pos = static_cast<float>(acc.sumPos 
-								/ static_cast<double>(acc.cntPos));
-	}
-	else
-	{
-		avgRelDensityErrorF_pos = 0.0f;
+		avgRelDensityErrorF_pos = static_cast<float>(acc.sumPos)
+								/ static_cast<float>(N_F);
+
+		avgRelDensityErrorF_abs = static_cast<float>(acc.sumAbs)
+								/ static_cast<float>(N_F);
 	}
 }
 
