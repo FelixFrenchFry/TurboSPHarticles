@@ -70,9 +70,9 @@ namespace Sim
 		float densityDevTarget  = 0.01f;
 		uint32_t fixedIters		= 10;
 		uint32_t minSolverIters = 5;
-		uint32_t maxSolverIters	= 500;
+		uint32_t maxSolverIters	= 50;
 		Base::SolverTerminationCondition solverTerminationCondition =
-			Base::SolverTerminationCondition::RelDensityError_Pos;
+			Base::SolverTerminationCondition::FixedIters;
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
@@ -92,7 +92,7 @@ namespace Sim
 		{
 			true,	// particles
 			true,	// density
-			true	// velocity
+			false	// velocity
 		};
 
 		// benchmarks
@@ -124,14 +124,17 @@ namespace Sim
 		void Set_NumParticles(uint32_t N, Base::ParticleType type, bool verbose = false);
 		void Set_TimeStep(float timeStep, bool verbose = false);
 		void Set_ParticleSize(float particleSize, Base::ParticleType type, bool verbose = false);
+		void Set_KernelSuppRatio(float kernelSuppRatio, bool verbose = false);
+		void Set_KernelRadius(float kernelRadius, bool verbose = false);
 		void Set_RestDensity(float restDensity, Base::ParticleType type, bool verbose = false);
 		void Set_Mass(float mass, Base::ParticleType type, bool verbose = false);
 		void Set_Viscosity(float viscosity, Base::ParticleType type, bool verbose = false);
 		void Set_GammaPress(float gammaPress, bool verbose = false);
 		void Set_JacobiOmega(float jacobiOmega, bool verbose = false);
+		void Set_DensityDevTarget(float densityDevTarget, bool verbose = false);
+		void Set_MinSolverIters(uint32_t minSolverIters, bool verbose = false);
+		void Set_MaxSolverIters(uint32_t maxSolverIters, bool verbose = false);
 		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
-		void Set_KernelSuppRatio(float kernelSuppRatio, bool verbose = false);
-		void Set_KernelRadius(float kernelRadius, bool verbose = false);
 		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
 
 		bool AssertParamDerivationCorrectness() const;

@@ -239,6 +239,49 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 		Set_JacobiOmega(it->get<float>(), verbose);
 	}
 
+	// TODO: implement setters for these
+	{
+		BeginWrite();
+
+		if (auto it = jfile.find("densityDevTarget"); it != jfile.end())
+		{
+			params_.densityDevTarget = it->get<float>();
+		}
+
+		if (auto it = jfile.find("fixedIters"); it != jfile.end())
+		{
+			params_.fixedIters = it->get<uint32_t>();
+		}
+
+		if (auto it = jfile.find("minSolverIters"); it != jfile.end())
+		{
+			params_.minSolverIters = it->get<uint32_t>();
+		}
+
+		if (auto it = jfile.find("maxSolverIters"); it != jfile.end())
+		{
+			params_.maxSolverIters = it->get<uint32_t>();
+		}
+
+		if (auto it = jfile.find("solverTerminationCondition"); it != jfile.end())
+		{
+			using STC = Base::SolverTerminationCondition;
+
+			const std::string s = it->get<std::string>();
+
+			if (s == "FixedIters") { params_.solverTerminationCondition = STC::FixedIters; }
+			else if (s == "RelDensityError_Raw") { params_.solverTerminationCondition = STC::RelDensityError_Raw; }
+			else if (s == "RelDensityError_Pos") { params_.solverTerminationCondition = STC::RelDensityError_Pos; }
+			else if (s == "RelDensityError_Abs") { params_.solverTerminationCondition = STC::RelDensityError_Abs; }
+			else
+			{
+				SPDLOG_WARN("Invalid 'solverTerminationCondition' string in JSON: {}", s);
+			}
+		}
+
+		EndWrite();
+	}
+
 	// --- [ gravity ] ---------------------------------------------------------
 
 	if (auto it = jfile.find("gravity"); it != jfile.end() &&
@@ -335,9 +378,7 @@ void SimParamsMgr::Set_SimRunning(
 {
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(simRunning, params_.simRunning, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)
@@ -357,9 +398,7 @@ void SimParamsMgr::Set_SimRunNextStep(
 {
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(simRunNextStep, params_.simRunNextStep, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (params_.simRunning) { return; } // sim already fully running
@@ -436,9 +475,7 @@ void SimParamsMgr::Set_TimeStep(
 
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(timeStep, params_.timeStep, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)
@@ -517,6 +554,62 @@ void SimParamsMgr::Set_ParticleSize(
 											 * particleSize;
 	}
 
+	EndWrite();
+}
+
+void SimParamsMgr::Set_KernelSuppRatio(
+	float kernelSuppRatio, bool verbose)
+{
+	if (!(kernelSuppRatio >= 1.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be >= 1");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(kernelSuppRatio, params_.kernelSuppRatio, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
+			params_.kernelSuppRatio, kernelSuppRatio);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.kernelSuppRatio = kernelSuppRatio;
+	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
+	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_KernelRadius(
+	float kernelRadius, bool verbose)
+{
+	if (!(kernelRadius > 0.0f))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(kernelRadius, params_.kernelRadius, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
+			params_.kernelRadius, kernelRadius);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.kernelRadius = kernelRadius;
+	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
+	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
 	EndWrite();
 }
 
@@ -700,9 +793,7 @@ void SimParamsMgr::Set_GammaPress(
 {
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(gammaPress, params_.gammaPress, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)
@@ -722,9 +813,7 @@ void SimParamsMgr::Set_JacobiOmega(
 {
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(jacobiOmega, params_.jacobiOmega, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)
@@ -739,14 +828,84 @@ void SimParamsMgr::Set_JacobiOmega(
 	EndWrite();
 }
 
+void SimParamsMgr::Set_DensityDevTarget(
+	float densityDevTarget, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(densityDevTarget, params_.densityDevTarget, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'densityDevTarget' from {} to {}",
+			params_.densityDevTarget, densityDevTarget);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.densityDevTarget = densityDevTarget;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_MinSolverIters(
+	uint32_t minSolverIters, bool verbose)
+{
+	if (minSolverIters <= 0)
+	{
+		SPDLOG_ERROR("Param change cancelled, 'minSolverIters' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(minSolverIters, params_.minSolverIters, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'minSolverIters' from {} to {}",
+			params_.minSolverIters, minSolverIters);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.minSolverIters = minSolverIters;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_MaxSolverIters(
+	uint32_t maxSolverIters, bool verbose)
+{
+	if (maxSolverIters <= 0)
+	{
+		SPDLOG_ERROR("Param change cancelled, 'maxSolverIters' must be > 0");
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(maxSolverIters, params_.maxSolverIters, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'maxSolverIters' from {} to {}",
+			params_.maxSolverIters, maxSolverIters);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.maxSolverIters = maxSolverIters;
+	EndWrite();
+}
+
 void SimParamsMgr::Set_Gravity(
 	glm::vec3 gravity, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(gravity, params_.gravity, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)
@@ -762,74 +921,12 @@ void SimParamsMgr::Set_Gravity(
 	EndWrite();
 }
 
-void SimParamsMgr::Set_KernelSuppRatio(
-	float kernelSuppRatio, bool verbose)
-{
-	if (!(kernelSuppRatio >= 1.0f))
-	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be >= 1");
-		return;
-	}
-
-	// detect if parameter would actually change
-	bool changed = false;
-
-	Base::MarkIfChanged(kernelSuppRatio, params_.kernelSuppRatio, changed);
-
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'kernelSuppRatio' from {} to {}",
-			params_.kernelSuppRatio, kernelSuppRatio);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.kernelSuppRatio = kernelSuppRatio;
-	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
-	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_KernelRadius(
-	float kernelRadius, bool verbose)
-{
-	if (!(kernelRadius > 0.0f))
-	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must be > 0");
-		return;
-	}
-
-	// detect if parameter would actually change
-	bool changed = false;
-
-	Base::MarkIfChanged(kernelRadius, params_.kernelRadius, changed);
-
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'kernelRadius' from {} to {}",
-			params_.kernelRadius, kernelRadius);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.kernelRadius = kernelRadius;
-	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
-	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
-	EndWrite();
-}
-
 void SimParamsMgr::Set_BoundaryLayers(
 	uint32_t boundaryLayers, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
-
 	Base::MarkIfChanged(boundaryLayers, params_.boundaryLayers, changed);
-
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)

@@ -33,37 +33,49 @@ namespace Inter
 	// flags for parameter changes
 	struct ParamChanged
 	{
-		bool gammaPress;
-		bool jacobiOmega;
+		bool timeStep;
 		bool viscosityF;
 		bool viscosityB;
+		bool gammaPress;
+		bool jacobiOmega;
+		bool densityDevTarget;
+		bool minSolverIters;
+		bool maxSolverIters;
 		bool gravity;
 	};
 
 	// magnitudes of parameter changes
 	struct ParamMags
 	{
-		std::array<float, 2> gammaPress;
-		std::array<float, 2> jacobiOmega;
+		std::array<float, 2> timeStep;
 		std::array<float, 2> viscosityF;
 		std::array<float, 2> viscosityB;
+		std::array<float, 2> gammaPress;
+		std::array<float, 2> jacobiOmega;
+		std::array<float, 2> densityDevTarget;
+		std::array<int, 2> minSolverIters;
+		std::array<int, 2> maxSolverIters;
 		std::array<float, 2> gravity;
 	};
 
 	// temporary copies for parameter changes
 	struct ParamTemp
 	{
-		float gammaPress;
-		float jacobiOmega;
+		float timeStep;
 		float viscosityF;
 		float viscosityB;
+		float gammaPress;
+		float jacobiOmega;
+		float densityDevTarget;
+		int minSolverIters;
+		int maxSolverIters;
 		float gravity;
 	};
 
 	// own and manage the ImGui and ImPlot lifecycle
 	class UserInterfaceMgr
 	{
-	public: // ==============================
+	public: // -----------------------------------------------------------------
 
 		UserInterfaceMgr(Sim::SimParamsMgr& simParamsMgr,
 						 Vis::VisParamsMgr& visParamsMgr);
@@ -101,7 +113,7 @@ namespace Inter
 		// helpers
 		void SetDockingEnabled(bool enabled);
 
-	private: // ==============================
+	private: // ----------------------------------------------------------------
 
 		// parameter managers for making changes to parameters
 		Sim::SimParamsMgr& simParamsMgr_;
@@ -125,19 +137,27 @@ namespace Inter
 		// TODO: initialize their values
 		ParamChanged changed_
 		{
-			.gammaPress		= false,
-			.jacobiOmega	= false,
-			.viscosityF		= false,
-			.viscosityB		= false,
-			.gravity		= false
+			.timeStep = false,
+			.viscosityF = false,
+			.viscosityB = false,
+			.gammaPress = false,
+			.jacobiOmega = false,
+			.densityDevTarget = false,
+			.minSolverIters = false,
+			.maxSolverIters = false,
+			.gravity = false
 		};
 		ParamMags mags_
 		{
-			.gammaPress		= { 0.1f,			0.01f },
-			.jacobiOmega	= { 0.1f,			0.01f },
-			.viscosityF		= { 0.00001f,		0.000001f },
-			.viscosityB		= { 0.00001f,		0.000001f },
-			.gravity		= { 1.0f,			0.1f }
+			.timeStep			= { 0.0001f,		0.00001f },
+			.viscosityF			= { 0.00001f,		0.000001f },
+			.viscosityB			= { 0.00001f,		0.000001f },
+			.gammaPress			= { 0.1f,			0.01f },
+			.jacobiOmega		= { 0.1f,			0.01f },
+			.densityDevTarget	= { 0.01f,		0.001f },
+			.minSolverIters		= { 1,			1 },
+			.maxSolverIters		= { 1,			1 },
+			.gravity			= { 0.1f,			0.01f }
 		};
 		ParamTemp temp_{};
 
@@ -186,10 +206,14 @@ namespace Inter
 			const Vis::VisParams& visParams);
 
 		// parameter section elements for parameter changes
-		void BuildParamElement_GammaPress(const Sim::SimParams& simParams);
-		void BuildParamElement_JacobiOmega(const Sim::SimParams& simParams);
+		void BuildParamElement_TimeStep(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityF(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityB(const Sim::SimParams& simParams);
+		void BuildParamElement_GammaPress(const Sim::SimParams& simParams);
+		void BuildParamElement_JacobiOmega(const Sim::SimParams& simParams);
+		void BuildParamElement_DensityDevTarget(const Sim::SimParams& simParams);
+		void BuildParamElement_MinSolverIters(const Sim::SimParams& simParams);
+		void BuildParamElement_MaxSolverIters(const Sim::SimParams& simParams);
 		void BuildParamElement_Gravity(const Sim::SimParams& simParams);
 
 		// helpers
@@ -199,16 +223,16 @@ namespace Inter
 		void RebuildFonts(float dpiScale);
 		void ApplyParamChanges();
 		void ResetParamChanges(const Sim::SimParams& simParams);
-		inline float ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric);
-		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op);
+		inline float ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric) const;
+		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op) const;
 		inline uint64_t ReadOpGroup_Min(const Sync::BenchSnapshot* snap,
-										const Bench::BenchOpGroupDef& opGroup);
-		inline std::string MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup);
-		void TableTextRightAligned(const char* fmt, ...);
-		inline void FormatStatValue(const Stats::StatMetricDef& def, char* out, float x, uint64_t cap);
+										const Bench::BenchOpGroupDef& opGroup) const;
+		static inline std::string MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup);
+		static void TableTextRightAligned(const char* fmt, ...);
+		static inline void FormatStatValue(const Stats::StatMetricDef& def, char* out, float x, uint64_t cap);
 
 		// dockspace
-		void BeginDockspace();
+		static void BeginDockspace();
 	};
 
 } // namespace Inter

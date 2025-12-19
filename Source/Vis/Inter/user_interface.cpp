@@ -1,6 +1,7 @@
 ﻿// user_interface.cpp
 
 // external
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -55,10 +56,14 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 	// initial param values
 	temp_ =
 	{
-		.gammaPress = simParams.gammaPress,
-		.jacobiOmega = simParams.jacobiOmega,
+		.timeStep = simParams.timeStep,
 		.viscosityF = simParams.viscosityF,
 		.viscosityB = simParams.viscosityB,
+		.gammaPress = simParams.gammaPress,
+		.jacobiOmega = simParams.jacobiOmega,
+		.densityDevTarget = simParams.densityDevTarget,
+		.minSolverIters = static_cast<int>(simParams.minSolverIters),
+		.maxSolverIters = static_cast<int>(simParams.maxSolverIters),
 		.gravity = simParams.gravity.y
 	};
 
@@ -301,10 +306,14 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 {
 	ImGui::Spacing();
 
-	BuildParamElement_GammaPress(simParams);
-	BuildParamElement_JacobiOmega(simParams);
+	BuildParamElement_TimeStep(simParams);
 	BuildParamElement_ViscosityF(simParams);
 	BuildParamElement_ViscosityB(simParams);
+	BuildParamElement_GammaPress(simParams);
+	BuildParamElement_JacobiOmega(simParams);
+	BuildParamElement_DensityDevTarget(simParams);
+	BuildParamElement_MinSolverIters(simParams);
+	BuildParamElement_MaxSolverIters(simParams);
 	BuildParamElement_Gravity(simParams);
 
 	ImGui::Spacing();
@@ -761,45 +770,23 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	}
 }
 
-void UserInterfaceMgr::BuildParamElement_GammaPress(const Sim::SimParams& simParams)
+void UserInterfaceMgr::BuildParamElement_TimeStep(const Sim::SimParams& simParams)
 {
-	const bool cached = changed_.gammaPress;
+	const bool cached = changed_.timeStep;
 	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
 	ImGui::SetNextItemWidth(170);
-	if (ImGui::InputFloat(" gamma press##input_gammaPress",
-		&temp_.gammaPress, mags_.gammaPress[0], mags_.gammaPress[1], "%.1f"))
+	if (ImGui::InputFloat(" time step##input_timeStep",
+		&temp_.timeStep, mags_.timeStep[0], mags_.timeStep[1], "%.6f"))
 	{
-		const bool changed = !Base::ApproxEqu(temp_.gammaPress, simParams.gammaPress);
+		const bool changed = !Base::ApproxEqu(temp_.timeStep, simParams.timeStep);
 
 		if (changed && liveParamEditing_) // apply param changes immediately
 		{
-			simParamsMgr_.Set_GammaPress(temp_.gammaPress);
+			simParamsMgr_.Set_TimeStep(temp_.timeStep);
 		}
 
 		// mark unsaved changes when not live editing
-		changed_.gammaPress = changed && !liveParamEditing_;
-		unsavedParamChanges_ = changed && !liveParamEditing_;
-	}
-	if (cached) { ImGui::PopStyleColor(); }
-}
-
-void UserInterfaceMgr::BuildParamElement_JacobiOmega(const Sim::SimParams& simParams)
-{
-	const bool cached = changed_.jacobiOmega;
-	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
-	ImGui::SetNextItemWidth(170);
-	if (ImGui::InputFloat(" jacobi omega##input_jacobiOmega",
-		&temp_.jacobiOmega, mags_.jacobiOmega[0], mags_.jacobiOmega[1], "%.0f"))
-	{
-		const bool changed = !Base::ApproxEqu(temp_.jacobiOmega, simParams.jacobiOmega);
-
-		if (changed && liveParamEditing_) // apply param changes immediately
-		{
-			simParamsMgr_.Set_JacobiOmega(temp_.jacobiOmega);
-		}
-
-		// mark unsaved changes when not live editing
-		changed_.jacobiOmega = changed && !liveParamEditing_;
+		changed_.timeStep = changed && !liveParamEditing_;
 		unsavedParamChanges_ = changed && !liveParamEditing_;
 	}
 	if (cached) { ImGui::PopStyleColor(); }
@@ -844,6 +831,116 @@ void UserInterfaceMgr::BuildParamElement_ViscosityB(const Sim::SimParams& simPar
 
 		// mark unsaved changes when not live editing
 		changed_.viscosityB = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_GammaPress(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.gammaPress;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" gamma press##input_gammaPress",
+		&temp_.gammaPress, mags_.gammaPress[0], mags_.gammaPress[1], "%.2f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.gammaPress, simParams.gammaPress);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_GammaPress(temp_.gammaPress);
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.gammaPress = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_JacobiOmega(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.jacobiOmega;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" jacobi omega##input_jacobiOmega",
+		&temp_.jacobiOmega, mags_.jacobiOmega[0], mags_.jacobiOmega[1], "%.2f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.jacobiOmega, simParams.jacobiOmega);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_JacobiOmega(temp_.jacobiOmega);
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.jacobiOmega = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_DensityDevTarget(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.densityDevTarget;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" density dev target##input_densityDevTarget",
+		&temp_.densityDevTarget, mags_.densityDevTarget[0], mags_.densityDevTarget[1], "%.3f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.densityDevTarget, simParams.densityDevTarget);
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_DensityDevTarget(temp_.densityDevTarget);
+		}
+		// mark unsaved changes when not live editing
+		changed_.densityDevTarget = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_MinSolverIters(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.minSolverIters;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputInt(" min solver iters##input_minSolverIters",
+		&temp_.minSolverIters, mags_.minSolverIters[0], mags_.minSolverIters[1]))
+	{
+		// clamp to non-zero, non-negative
+		temp_.minSolverIters = std::max(temp_.minSolverIters, 1);
+
+		const bool changed = (static_cast<uint32_t>(temp_.minSolverIters) != simParams.minSolverIters);
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_MinSolverIters(static_cast<uint32_t>(temp_.minSolverIters));
+		}
+		// mark unsaved changes when not live editing
+		changed_.minSolverIters = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
+void UserInterfaceMgr::BuildParamElement_MaxSolverIters(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.maxSolverIters;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputInt(" max solver iters##input_maxSolverIters",
+		&temp_.maxSolverIters, mags_.maxSolverIters[0], mags_.maxSolverIters[1]))
+	{
+		// clamp to non-zero, non-negative
+		temp_.maxSolverIters = std::max(temp_.maxSolverIters, 1);
+
+		const bool changed = (static_cast<uint32_t>(temp_.maxSolverIters) != simParams.maxSolverIters);
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_MaxSolverIters(static_cast<uint32_t>(temp_.maxSolverIters));
+		}
+		// mark unsaved changes when not live editing
+		changed_.maxSolverIters = changed && !liveParamEditing_;
 		unsavedParamChanges_ = changed && !liveParamEditing_;
 	}
 	if (cached) { ImGui::PopStyleColor(); }
@@ -941,15 +1038,10 @@ void UserInterfaceMgr::ApplyParamChanges()
 {
 	if (!unsavedParamChanges_) { return; }
 
-	if (changed_.gammaPress)
+	if (changed_.timeStep)
 	{
-		simParamsMgr_.Set_GammaPress(temp_.gammaPress);
-		changed_.gammaPress = false;
-	}
-	if (changed_.jacobiOmega)
-	{
-		simParamsMgr_.Set_JacobiOmega(temp_.jacobiOmega);
-		changed_.jacobiOmega = false;
+		simParamsMgr_.Set_TimeStep(temp_.timeStep);
+		changed_.timeStep = false;
 	}
 	if (changed_.viscosityF)
 	{
@@ -960,6 +1052,31 @@ void UserInterfaceMgr::ApplyParamChanges()
 	{
 		simParamsMgr_.Set_Viscosity(temp_.viscosityB, Base::ParticleType::Boundary);
 		changed_.viscosityB = false;
+	}
+	if (changed_.gammaPress)
+	{
+		simParamsMgr_.Set_GammaPress(temp_.gammaPress);
+		changed_.gammaPress = false;
+	}
+	if (changed_.jacobiOmega)
+	{
+		simParamsMgr_.Set_JacobiOmega(temp_.jacobiOmega);
+		changed_.jacobiOmega = false;
+	}
+	if (changed_.densityDevTarget)
+	{
+		simParamsMgr_.Set_DensityDevTarget(temp_.densityDevTarget);
+		changed_.densityDevTarget = false;
+	}
+	if (changed_.minSolverIters)
+	{
+		simParamsMgr_.Set_MinSolverIters(static_cast<uint32_t>(temp_.minSolverIters));
+		changed_.minSolverIters = false;
+	}
+	if (changed_.maxSolverIters)
+	{
+		simParamsMgr_.Set_MaxSolverIters(static_cast<uint32_t>(temp_.maxSolverIters));
+		changed_.maxSolverIters = false;
 	}
 	if (changed_.gravity)
 	{
@@ -974,15 +1091,10 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 {
 	if (!unsavedParamChanges_) { return; }
 
-	if (changed_.gammaPress)
+	if (changed_.timeStep)
 	{
-		temp_.gammaPress = simParams.gammaPress;
-		changed_.gammaPress = false;
-	}
-	if (changed_.jacobiOmega)
-	{
-		temp_.jacobiOmega = simParams.jacobiOmega;
-		changed_.jacobiOmega = false;
+		temp_.timeStep = simParams.timeStep;
+		changed_.timeStep = false;
 	}
 	if (changed_.viscosityF)
 	{
@@ -994,6 +1106,31 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 		temp_.viscosityB = simParams.viscosityB;
 		changed_.viscosityB = false;
 	}
+	if (changed_.gammaPress)
+	{
+		temp_.gammaPress = simParams.gammaPress;
+		changed_.gammaPress = false;
+	}
+	if (changed_.jacobiOmega)
+	{
+		temp_.jacobiOmega = simParams.jacobiOmega;
+		changed_.jacobiOmega = false;
+	}
+	if (changed_.densityDevTarget)
+	{
+		temp_.densityDevTarget = simParams.densityDevTarget;
+		changed_.densityDevTarget = false;
+	}
+	if (changed_.minSolverIters)
+	{
+		temp_.minSolverIters = static_cast<int>(simParams.minSolverIters);
+		changed_.minSolverIters = false;
+	}
+	if (changed_.maxSolverIters)
+	{
+		temp_.maxSolverIters = static_cast<int>(simParams.maxSolverIters);
+		changed_.maxSolverIters = false;
+	}
 	if (changed_.gravity)
 	{
 		temp_.gravity = simParams.gravity.y;
@@ -1003,7 +1140,8 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 	unsavedParamChanges_ = false;
 }
 
-inline float UserInterfaceMgr::ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric)
+inline float UserInterfaceMgr::ReadStatData(
+	const Sync::StatSnapshot* snap, Stats::StatMetric metric) const
 {
 	if (!snap)
 	{
@@ -1023,7 +1161,8 @@ inline float UserInterfaceMgr::ReadStatData(const Sync::StatSnapshot* snap, Stat
 	return 0;
 }
 
-inline uint64_t UserInterfaceMgr::ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op)
+inline uint64_t UserInterfaceMgr::ReadOpTiming(
+	const Sync::BenchSnapshot* snap, Bench::BenchOp op) const
 {
 	if (!snap)
 	{
@@ -1044,8 +1183,8 @@ inline uint64_t UserInterfaceMgr::ReadOpTiming(const Sync::BenchSnapshot* snap, 
 	return 0;
 }
 
-inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(const Sync::BenchSnapshot* snap,
-												  const Bench::BenchOpGroupDef& opGroup)
+inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(
+	const Sync::BenchSnapshot* snap, const Bench::BenchOpGroupDef& opGroup) const
 {
 	uint64_t res = std::numeric_limits<uint64_t>::max();
 
