@@ -108,7 +108,7 @@ namespace Stats
 				.metric = StatMetric::NumNbrFF_P95,
 				.name = "num fluid neighbors (p95)",
 				.unit = "",
-				.var = "float",
+				.var = "int",
 				.tip =
 				"Top 5%% of fluid neighbor counts among fluid particles"
 			},
@@ -116,7 +116,7 @@ namespace Stats
 				.metric = StatMetric::NumNbrFF_P99,
 				.name = "num fluid neighbors (p99)",
 				.unit = "",
-				.var = "float",
+				.var = "int",
 				.tip =
 				"Top 1%% of fluid neighbor counts among fluid particles"
 			},

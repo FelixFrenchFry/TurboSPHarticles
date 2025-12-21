@@ -482,10 +482,6 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 											const SimParams& simParams) const
 {
-	// TODO: add flags to enable/disable certain stats?
-
-	// TODO: FIX BUGS
-
 	using namespace Stats;
 
 	const uint32_t NF = N_F_;
@@ -596,18 +592,28 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 			{
 				// indices of the 95th and 99th percentiles
-				const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-				const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+				const size_t i95 = (95ull * (NF - 1)) / 100ull;
+				const size_t i99 = (99ull * (NF - 1)) / 100ull;
 
-				auto nth95 = workBuffer_.begin() + i95;
-				auto nth99 = workBuffer_.begin() + i99;
+				auto begin = workBuffer_.begin();
+				auto end = workBuffer_.end();
+				auto nth95 = begin + i95;
+				auto nth99 = begin + i99;
 
-				// partially sort so that the desired percentiles can be extracted
-				std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-				std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
-
+				// select p95 within the full range
+				std::nth_element(begin, nth95, end);
 				nbrFF_p95 = *nth95;
-				nbrFF_p99 = *nth99;
+
+				if (i95 == i99) // handle same index edge case
+				{
+					nbrFF_p99 = *nth95;
+				}
+				else
+				{
+					// select p99 only within the upper part
+					std::nth_element(nth95, nth99, end);
+					nbrFF_p99 = *nth99;
+				}
 			}
 
 			// FB
@@ -618,18 +624,28 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 
 			{
 				// indices of the 95th and 99th percentiles
-				const ptrdiff_t i95 = static_cast<ptrdiff_t>(0.95f * (NF - 1));
-				const ptrdiff_t i99 = static_cast<ptrdiff_t>(0.99f * (NF - 1));
+				const size_t i95 = (95ull * (NF - 1)) / 100ull;
+				const size_t i99 = (99ull * (NF - 1)) / 100ull;
 
-				auto nth95 = workBuffer_.begin() + i95;
-				auto nth99 = workBuffer_.begin() + i99;
+				auto begin = workBuffer_.begin();
+				auto end = workBuffer_.end();
+				auto nth95 = begin + i95;
+				auto nth99 = begin + i99;
 
-				// partially sort so that the desired percentiles can be extracted
-				std::nth_element(workBuffer_.begin(), nth95, workBuffer_.end());
-				std::nth_element(workBuffer_.begin(), nth99, workBuffer_.end());
-
+				// select p95 within the full range
+				std::nth_element(begin, nth95, end);
 				nbrFB_p95 = *nth95;
-				nbrFB_p99 = *nth99;
+
+				if (i95 == i99) // handle same index edge case
+				{
+					nbrFB_p99 = *nth95;
+				}
+				else
+				{
+					// select p99 only within the upper part
+					std::nth_element(nth95, nth99, end);
+					nbrFB_p99 = *nth99;
+				}
 			}
 		}
 		else // reasonable defaults for empty sim

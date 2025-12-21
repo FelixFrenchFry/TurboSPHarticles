@@ -47,7 +47,7 @@ void StatisticsMgr::EndStep(uint32_t simStep, double simTime)
 	}
 	else
 	{
-		for (uint16_t i = 0; i < GetIdx(StatMetric::Count); i++)
+		for (uint8_t i = 0; i < GetIdx(StatMetric::Count); i++)
 		{
 			// update all-time sum
 			statsSum_allTime_[i] += recLatest_.stats[i];
@@ -57,7 +57,7 @@ void StatisticsMgr::EndStep(uint32_t simStep, double simTime)
 										   statsMin_allTime_[i]);
 
 			// update all-time max
-			statsMax_allTime_[i] = std::min(recLatest_.stats[i],
+			statsMax_allTime_[i] = std::max(recLatest_.stats[i],
 										   statsMax_allTime_[i]);
 		}
 	}
@@ -72,7 +72,7 @@ void StatisticsMgr::PackStatSnapshot(Sync::StatSnapshot& snap) const
 	snap.simTime = recLatest_.simTime;
 
 	// fill in the latest, average, min, max stat data
-	for (uint16_t i = 0; i < GetIdx(StatMetric::Count); i++)
+	for (uint8_t i = 0; i < GetIdx(StatMetric::Count); i++)
 	{
 		snap.latest[i] = GetStat_Latest(static_cast<StatMetric>(i));
 		snap.avg[i] = GetStat_Avg(static_cast<StatMetric>(i));
