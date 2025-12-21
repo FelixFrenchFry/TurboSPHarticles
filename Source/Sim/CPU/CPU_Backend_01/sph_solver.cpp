@@ -234,29 +234,29 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) co
 	bool satisfied = false;
 
 	// check actual termination condition
-	switch (params.solverTerminationCondition)
+	switch (params.solverTerminationCond)
 	{
-	case Base::SolverTerminationCondition::FixedIters:
+	case Base::SolverTerminationCond::FixedIters:
 		if (N_solverIterCount_ >= params.fixedIters)
 		{
 			satisfied = true;
 		}
 		break;
 
-	case Base::SolverTerminationCondition::RelDensityError_Raw:
+	case Base::SolverTerminationCond::RelDensityError_Raw:
 		if (avgRelDensityErrorF_raw_ <= params.densityDevTarget)
 		{
 			satisfied = true;
 		}
 		break;
 
-	case Base::SolverTerminationCondition::RelDensityError_Pos:
+	case Base::SolverTerminationCond::RelDensityError_Pos:
 		if (avgRelDensityErrorF_pos_ <= params.densityDevTarget)
 		{
 			satisfied = true;
 		}
 		break;
-	case Base::SolverTerminationCondition::RelDensityError_Abs:
+	case Base::SolverTerminationCond::RelDensityError_Abs:
 		if (avgRelDensityErrorF_abs_ <= params.densityDevTarget)
 		{
 			satisfied = true;

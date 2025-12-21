@@ -263,19 +263,19 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 			params_.maxSolverIters = it->get<uint32_t>();
 		}
 
-		if (auto it = jfile.find("solverTerminationCondition"); it != jfile.end())
+		if (auto it = jfile.find("solverTerminationCond"); it != jfile.end())
 		{
-			using STC = Base::SolverTerminationCondition;
+			using STC = Base::SolverTerminationCond;
 
 			const std::string s = it->get<std::string>();
 
-			if (s == "FixedIters") { params_.solverTerminationCondition = STC::FixedIters; }
-			else if (s == "RelDensityError_Raw") { params_.solverTerminationCondition = STC::RelDensityError_Raw; }
-			else if (s == "RelDensityError_Pos") { params_.solverTerminationCondition = STC::RelDensityError_Pos; }
-			else if (s == "RelDensityError_Abs") { params_.solverTerminationCondition = STC::RelDensityError_Abs; }
+			if (s == "FixedIters") { params_.solverTerminationCond = STC::FixedIters; }
+			else if (s == "RelDensityError_Raw") { params_.solverTerminationCond = STC::RelDensityError_Raw; }
+			else if (s == "RelDensityError_Pos") { params_.solverTerminationCond = STC::RelDensityError_Pos; }
+			else if (s == "RelDensityError_Abs") { params_.solverTerminationCond = STC::RelDensityError_Abs; }
 			else
 			{
-				SPDLOG_WARN("Invalid 'solverTerminationCondition' string in JSON: {}", s);
+				SPDLOG_WARN("Invalid 'solverTerminationCond' string in JSON: {}", s);
 			}
 		}
 

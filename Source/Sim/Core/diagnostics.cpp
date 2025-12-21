@@ -58,6 +58,8 @@ namespace Sim
         printf("%-24s = %.6f\n", "timeStep", params.timeStep);
         printf("%-24s = %.6f\n", "particleSizeF", params.particleSizeF);
         printf("%-24s = %.6f\n", "particleSizeB", params.particleSizeB);
+        printf("%-24s = %.6f\n", "kernelSuppRatio", params.kernelSuppRatio);
+        printf("%-24s = %.6f\n", "kernelRadius", params.kernelRadius);
         printf("%-24s = %.6f\n", "restDensityF", params.restDensityF);
         printf("%-24s = %.6f\n", "restDensityB", params.restDensityB);
         printf("%-24s = %.6f\n", "massF", params.massF);
@@ -66,8 +68,11 @@ namespace Sim
         printf("%-24s = %.6f\n", "viscosityB", params.viscosityB);
         printf("%-24s = %.6f\n", "gammaPress", params.gammaPress);
         printf("%-24s = %.6f\n", "jacobiOmega", params.jacobiOmega);
-        printf("%-24s = %.6f\n", "kernelSuppRatio", params.kernelSuppRatio);
-        printf("%-24s = %.6f\n", "kernelRadius", params.kernelRadius);
+        printf("%-24s = %.6f\n", "densityDevTarget", params.densityDevTarget);
+        printf("%-24s = %u\n", "minSolverIters", params.minSolverIters);
+        printf("%-24s = %u\n", "maxSolverIters", params.maxSolverIters);
+        printf("%-24s = %u\n", "solverTerminationCond",
+            static_cast<uint8_t>(params.solverTerminationCond));
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
         printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);
         printf("%-24s = %u\n", "boundaryLayers", params.boundaryLayers);

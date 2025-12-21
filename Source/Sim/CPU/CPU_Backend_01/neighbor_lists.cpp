@@ -12,10 +12,10 @@
 using namespace Sim;
 
 // -----------------------------------------------------------------------------
-// --- [ small vector neighbor lists implementation ] --------------------------
+// --- [ small buffers neighbor lists implementation ] -------------------------
 // -----------------------------------------------------------------------------
 
-void NeighborLists_SmallVectors_CPU01::Resize(uint32_t N_F, uint32_t N_B)
+void NeighborLists_SmallBuffers_CPU01::Resize(uint32_t N_F, uint32_t N_B)
 {
     N_F_ = N_F;
     N_B_ = N_B;
@@ -24,13 +24,13 @@ void NeighborLists_SmallVectors_CPU01::Resize(uint32_t N_F, uint32_t N_B)
     neighborsFB_.resize(N_F_);
 }
 
-void NeighborLists_SmallVectors_CPU01::ClearOne(uint32_t i)
+void NeighborLists_SmallBuffers_CPU01::ClearOne(uint32_t i)
 {
     neighborsFF_[i].clear();
     neighborsFB_[i].clear();
 }
 
-void NeighborLists_SmallVectors_CPU01::ClearAll()
+void NeighborLists_SmallBuffers_CPU01::ClearAll()
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
@@ -46,35 +46,35 @@ void NeighborLists_SmallVectors_CPU01::ClearAll()
 	);
 }
 
-void NeighborLists_SmallVectors_CPU01::Finalize()
+void NeighborLists_SmallBuffers_CPU01::Finalize()
 {
 	// nothing to do
 }
 
-void NeighborLists_SmallVectors_CPU01::AddNbrFF(uint32_t i, uint32_t j)
+void NeighborLists_SmallBuffers_CPU01::AddNbrFF(uint32_t i, uint32_t j)
 {
 	neighborsFF_[i].push_back(j);
 }
 
-void NeighborLists_SmallVectors_CPU01::AddNbrFB(uint32_t i, uint32_t j)
+void NeighborLists_SmallBuffers_CPU01::AddNbrFB(uint32_t i, uint32_t j)
 {
 	neighborsFB_[i].push_back(j);
 }
 
-NeighborSpan NeighborLists_SmallVectors_CPU01::FF(uint32_t i) const
+NeighborSpan NeighborLists_SmallBuffers_CPU01::FF(uint32_t i) const
 {
 	const auto& nbrs = neighborsFF_[i];
 	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
 }
 
-NeighborSpan NeighborLists_SmallVectors_CPU01::FB(uint32_t i) const
+NeighborSpan NeighborLists_SmallBuffers_CPU01::FB(uint32_t i) const
 {
 	const auto& nbrs = neighborsFB_[i];
 	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
 }
 
 // -----------------------------------------------------------------------------
-// --- [ fixed array neighbor lists implementation ] ---------------------------
+// --- [ fixed arrays neighbor lists implementation ] --------------------------
 // -----------------------------------------------------------------------------
 
 void NeighborLists_FixedArrays_CPU01::Resize(uint32_t N_F, uint32_t N_B)
@@ -163,10 +163,10 @@ NeighborSpan NeighborLists_FixedArrays_CPU01::FB(uint32_t i) const
 }
 
 // -----------------------------------------------------------------------------
-// --- [ compact vector neighbor lists implementation ] ------------------------
+// --- [ compact vectors neighbor lists implementation ] -----------------------
 // -----------------------------------------------------------------------------
 
-void NeighborLists_CompactVector_CPU01::Resize(uint32_t N_F, uint32_t N_B)
+void NeighborLists_CompactVectors_CPU01::Resize(uint32_t N_F, uint32_t N_B)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
@@ -184,13 +184,13 @@ void NeighborLists_CompactVector_CPU01::Resize(uint32_t N_F, uint32_t N_B)
 	neighborsFB_.clear();
 }
 
-void NeighborLists_CompactVector_CPU01::ClearOne(uint32_t i)
+void NeighborLists_CompactVectors_CPU01::ClearOne(uint32_t i)
 {
 	tmpFF_[i].clear();
 	tmpFB_[i].clear();
 }
 
-void NeighborLists_CompactVector_CPU01::ClearAll()
+void NeighborLists_CompactVectors_CPU01::ClearAll()
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
@@ -206,7 +206,7 @@ void NeighborLists_CompactVector_CPU01::ClearAll()
 	);
 }
 
-void NeighborLists_CompactVector_CPU01::Finalize()
+void NeighborLists_CompactVectors_CPU01::Finalize()
 {
 	if (N_F_ == 0) // nothing to do for empty sim
 	{
@@ -287,17 +287,17 @@ void NeighborLists_CompactVector_CPU01::Finalize()
 	);
 }
 
-void NeighborLists_CompactVector_CPU01::AddNbrFF(uint32_t i, uint32_t j)
+void NeighborLists_CompactVectors_CPU01::AddNbrFF(uint32_t i, uint32_t j)
 {
 	tmpFF_[i].push_back(j);
 }
 
-void NeighborLists_CompactVector_CPU01::AddNbrFB(uint32_t i, uint32_t j)
+void NeighborLists_CompactVectors_CPU01::AddNbrFB(uint32_t i, uint32_t j)
 {
 	tmpFB_[i].push_back(j);
 }
 
-NeighborSpan NeighborLists_CompactVector_CPU01::FF(uint32_t i) const
+NeighborSpan NeighborLists_CompactVectors_CPU01::FF(uint32_t i) const
 {
 	// start and end offsets of the neighbor list for fluid particle i
 	const uint64_t s = offsetsFF_[i];
@@ -307,7 +307,7 @@ NeighborSpan NeighborLists_CompactVector_CPU01::FF(uint32_t i) const
 	return NeighborSpan{ neighborsFF_.data() + s, count };
 }
 
-NeighborSpan NeighborLists_CompactVector_CPU01::FB(uint32_t i) const
+NeighborSpan NeighborLists_CompactVectors_CPU01::FB(uint32_t i) const
 {
 	// start and end offsets of the neighbor list for boundary particle i
 	const uint64_t s = offsetsFB_[i];

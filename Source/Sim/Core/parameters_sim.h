@@ -71,8 +71,8 @@ namespace Sim
 		uint32_t fixedIters		= 10;
 		uint32_t minSolverIters = 5;
 		uint32_t maxSolverIters	= 50;
-		Base::SolverTerminationCondition solverTerminationCondition =
-			Base::SolverTerminationCondition::FixedIters;
+		Base::SolverTerminationCond solverTerminationCond =
+			Base::SolverTerminationCond::FixedIters;
 
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
@@ -90,9 +90,9 @@ namespace Sim
 		uint32_t maxStatRecs	= 1'000'000;
 		std::array<bool, static_cast<uint8_t>(Stats::StatGroup::Count)> statGroupsEnabled =
 		{
-			true,	// particles
-			true,	// density
-			true	// velocity
+			false,	// particles
+			false,	// density
+			false	// velocity
 		};
 
 		// benchmarks

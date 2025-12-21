@@ -16,10 +16,10 @@
 namespace Sim
 {
 	// -------------------------------------------------------------------------
-	// --- [ small vectors neighbor lists implementation ] ---------------------
+	// --- [ small buffers neighbor lists implementation ] ---------------------
 	// -------------------------------------------------------------------------
 
-	class NeighborLists_SmallVectors_CPU01 final : public I_NeighborLists
+	class NeighborLists_SmallBuffers_CPU01 final : public I_NeighborLists
 	{
 	public: // -----------------------------------------------------------------
 
@@ -87,10 +87,10 @@ namespace Sim
 	};
 
 	// -------------------------------------------------------------------------
-	// --- [ compact vector neighbor lists implementation ] --------------------
+	// --- [ compact vectors neighbor lists implementation ] -------------------
 	// -------------------------------------------------------------------------
 
-	class NeighborLists_CompactVector_CPU01 final : public I_NeighborLists
+	class NeighborLists_CompactVectors_CPU01 final : public I_NeighborLists
 	{
 	public: // -----------------------------------------------------------------
 
