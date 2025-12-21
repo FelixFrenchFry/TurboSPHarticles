@@ -290,9 +290,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
 			paramsInit.maxSteps > 0) { break; }
 
-		// stop when simRunning is false and at least one step was done
-		if (!doSimStep && simStep_ > 0) { break; }
-
 		// small sleep to avoid busy spin when nothing to do yet
 		if (!doSimStep)
 		{
@@ -417,9 +414,6 @@ void SimulationMgr::RunSim_Blocking()
 		// explicit maximum number of steps reached
 		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
 			paramsInit.maxSteps > 0) { break; }
-
-		// stop when simRunning is false and at least one step was done
-		if (!doSimStep && simStep_ > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet
         if (!doSimStep)

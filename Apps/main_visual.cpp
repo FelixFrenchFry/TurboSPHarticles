@@ -52,9 +52,9 @@ int main(int argc, char** argv)
 		// --- [ hardware budgets ] --------------------------------------------
 
 		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
-		const std::uint32_t N_visThreads = 1; // TODO: make configurable?
-		const std::uint32_t N_simThreads = N_totalThreads > N_visThreads ?
-			N_totalThreads - N_visThreads : 1;
+		const std::uint32_t N_visThreads = 1;
+		const std::uint32_t N_simThreads = N_totalThreads > N_visThreads
+										 ? N_totalThreads - N_visThreads : 1;
 
 		Sim::DiagnosticsMgr::PrintHardwareSpecs(N_totalThreads, N_simThreads, N_visThreads);
 

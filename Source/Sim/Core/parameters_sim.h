@@ -92,7 +92,7 @@ namespace Sim
 		{
 			true,	// particles
 			true,	// density
-			false	// velocity
+			true	// velocity
 		};
 
 		// benchmarks
