@@ -7,6 +7,7 @@
 // external
 #include <boost/container/small_vector.hpp>
 #include <vector>
+#include <tbb/partitioner.h>
 
 // internal
 #include "Source/Eval/Bench/benchmarks.h"
@@ -78,6 +79,9 @@ namespace Sim
 
 		// TODO: manage this in the param manager
 		uint32_t dataReOrderInterval_ = 50;
+
+		// persistent parallelization partitioner for TBB
+		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;
 
 		// --- [ backend-specific data structures for operating the simulation ]
 

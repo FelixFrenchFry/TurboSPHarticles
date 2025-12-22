@@ -24,6 +24,8 @@ using namespace Sim;
 SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
 	: benchmarksMgr_{ benchmarksMgr }
 {
+	affinityPart_ = std::make_unique<tbb::affinity_partitioner>();
+
 	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_CPU01>(*this);
 	//neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
 	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
@@ -41,6 +43,8 @@ void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearc
 
 void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
 {
+	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+
 	const auto& F = src.fluidParticles;
 	const auto& B = src.boundaryParticles;
 	N_F_ = F.N_;

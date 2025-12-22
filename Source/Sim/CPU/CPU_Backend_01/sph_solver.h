@@ -117,6 +117,7 @@ namespace CPU01
 		float cubicSplineAlpha, float restDensityF,
 		float massF, float massB, float gammaPress,
 		uint32_t N_F,
+		tbb::affinity_partitioner& affPart,
 		// destinations
 		float* RESTRICT xAccPressF,
 		float* RESTRICT yAccPressF,
@@ -140,6 +141,7 @@ namespace CPU01
 		float restDensityF, float massF, float massB,
 		float jacobiOmega,
 		uint32_t N_F,
+		tbb::affinity_partitioner& affPart,
 		// destinations
 		float* RESTRICT sysVecElemF,
 		float* RESTRICT pressureF,

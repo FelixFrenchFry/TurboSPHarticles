@@ -50,6 +50,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	{
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Data_Ordering });
 		neighborSearchStrat_->DataReOrder(params);
+		affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Data_Ordering });
 	}
 
@@ -171,7 +172,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			pressureF,
 			neighborLists,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensityF,
-			massF, massB, params.gammaPress, N_F_,
+			massF, massB, params.gammaPress, N_F_, *affinityPart_,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		// update system vector and pressure
@@ -183,7 +184,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborLists,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensityF, massF, massB, params.jacobiOmega, N_F_,
-			sysVecElemF, pressureF, avgRelDensityErrorF_raw_, 
+			*affinityPart_, sysVecElemF, pressureF, avgRelDensityErrorF_raw_,
 			avgRelDensityErrorF_pos_, avgRelDensityErrorF_abs_);
 
 		N_solverIterCount_++;
@@ -201,7 +202,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		pressureF,
 		neighborLists,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensityF,
-		massF, massB, params.gammaPress, N_F_,
+		massF, massB, params.gammaPress, N_F_, *affinityPart_,
 		xAccPressF, yAccPressF, zAccPressF);
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
@@ -835,6 +836,7 @@ void CPU01::PressureAcceleration(
 	const float cubicSplineAlpha, const float restDensityF,
 	const float massF, const float massB, const float gammaPress,
 	const uint32_t N_F,
+	tbb::affinity_partitioner& affPart,
 	// destinations
 	float* RESTRICT xAccPressF,
 	float* RESTRICT yAccPressF,
@@ -933,7 +935,7 @@ void CPU01::PressureAcceleration(
 				zAccPressF[i] = tmp_zAccPressF;
 			}
 		},
-		tbb::auto_partitioner{}
+		affPart
 	);
 }
 
@@ -956,6 +958,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 	const float restDensityF, const float massF, const float massB,
 	const float jacobiOmega,
 	const uint32_t N_F,
+	tbb::affinity_partitioner& affPart,
 	// destinations
 	float* RESTRICT sysVecElemF,
 	float* RESTRICT pressureF,
@@ -1062,12 +1065,15 @@ void CPU01::PressureRelaxedJacobiSolver(
 				}
 				tmp_SysVecElemB *= massB;
 
-				// finalize system vector element
-				sysVecElemF[i] = timeStep * timeStep
-							   * (tmp_SysVecElemF + tmp_SysVecElemB);
+				// TODO: only save this if needed later?
+				// sysVecElemF[i] = timeStep * timeStep * (tmp_SysVecElemF + tmp_SysVecElemB);
 
-				const float solverResidual = sourceTermF[i] - sysVecElemF[i];
-				const float predDensityError = sysVecElemF[i] - sourceTermF[i];
+				// finalize system vector element
+				const float sysVecElemF_i = timeStep * timeStep
+										  * (tmp_SysVecElemF + tmp_SysVecElemB);
+
+				const float solverResidual = sourceTermF[i] - sysVecElemF_i;
+				const float predDensityError = sysVecElemF_i - sourceTermF[i];
 				float tmp_PressureF = 0.0f;
 
 				// only update pressure and error if particle has neighbors
@@ -1099,7 +1105,8 @@ void CPU01::PressureRelaxedJacobiSolver(
 			DensityErrorAccum c = a;
 			c.join(b);
 			return c;
-		}
+		},
+		affPart
 	);
 
 	// finalize raw, pos, and abs density deviation averages
