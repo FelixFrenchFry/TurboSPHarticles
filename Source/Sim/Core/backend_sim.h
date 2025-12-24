@@ -126,8 +126,14 @@ namespace Sim
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 
 		// gets a "span" of the fluid/boundary neighbor list of fluid particle i
+		// (for compressed neighbor lists, the span points to per-thread scratch space, which
+		// gets overwritten on each call, so the data must be processed before that)
 		virtual NeighborSpan FF(uint32_t i) const = 0;
 		virtual NeighborSpan FB(uint32_t i) const = 0;
+
+		// default implementations for neighbor counts, overwritten for compressed neighbor lists
+		virtual uint32_t CountFF(uint32_t i) const { return FF(i).count; }
+		virtual uint32_t CountFB(uint32_t i) const { return FB(i).count; }
 	};
 
 } // namespace Sim

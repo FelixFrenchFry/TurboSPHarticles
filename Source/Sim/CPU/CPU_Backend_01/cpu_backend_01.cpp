@@ -33,8 +33,8 @@ SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
 
 	//neighborLists_ = std::make_unique<NeighborLists_SmallBuffers_CPU01>();
 	//neighborLists_ = std::make_unique<NeighborLists_FixedArrays_CPU01>();
-	neighborLists_ = std::make_unique<NeighborLists_CompactVectors_CPU01>();
-	//neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_ZigZag_CPU01>();
+	//neighborLists_ = std::make_unique<NeighborLists_CompactVectors_CPU01>();
+	neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_ZigZag_CPU01>();
 }
 
 void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
@@ -282,8 +282,8 @@ void SimBackend_CPU01::PackExportSnapshot(
 			{
 				// particle considered part of the surface
 				// if touching boundary OR low fluid neighbor count
-				bool surface = neighborLists_->FB(i).count > 0 ||
-							   neighborLists_->FF(i).count < 28;
+				bool surface = neighborLists_->CountFB(i) > 0 ||
+							   neighborLists_->CountFF(i) < 28;
 
 				// if not surface itself, check its fluid neighbors
 				if (!surface)
@@ -296,8 +296,8 @@ void SimBackend_CPU01::PackExportSnapshot(
 					{
 						const uint32_t j = nbrFF[k];
 
-						if (neighborLists_->FB(j).count > 0 ||
-							neighborLists_->FF(j).count < 24)
+						if (neighborLists_->CountFB(j) > 0 ||
+							neighborLists_->CountFF(j) < 24)
 						{
 							surface = true;
 							break;
@@ -542,8 +542,8 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const float N_FF = static_cast<float>(neighborLists_->FF(i).count);
-						const float N_FB = static_cast<float>(neighborLists_->FB(i).count);
+						const float N_FF = static_cast<float>(neighborLists_->CountFF(i));
+						const float N_FB = static_cast<float>(neighborLists_->CountFB(i));
 
 						local.sumFF += N_FF;
 						if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
@@ -592,7 +592,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 			// FF
 			for (uint32_t i = 0; i < NF; i++)
 			{
-				workBuffer_[i] = static_cast<float>(neighborLists_->FF(i).count);
+				workBuffer_[i] = static_cast<float>(neighborLists_->CountFF(i));
 			}
 
 			{
@@ -624,7 +624,7 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 			// FB
 			for (uint32_t i = 0; i < NF; ++i)
 			{
-				workBuffer_[i] = static_cast<float>(neighborLists_->FB(i).count);
+				workBuffer_[i] = static_cast<float>(neighborLists_->CountFB(i));
 			}
 
 			{

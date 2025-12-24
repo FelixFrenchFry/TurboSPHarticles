@@ -164,6 +164,9 @@ namespace Sim
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
 
+		uint32_t CountFF(uint32_t i) const override { return nbrCountFF_[i]; }
+		uint32_t CountFB(uint32_t i) const override { return nbrCountFB_[i]; }
+
 	private: // ----------------------------------------------------------------
 
 		// metadata

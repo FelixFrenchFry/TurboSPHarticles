@@ -608,12 +608,15 @@ NeighborSpan NeighborLists_CompactVectors_Compressed_ZigZag_CPU01::FF(
 	const uint64_t e = offsetsFF_[i + 1];
 	const uint32_t byteCount = static_cast<uint32_t>(e - s);
 
-	const uint8_t* dataPointer = compressedNeighborsFF_.data() + s;
-
+	// // decode into provided per-thread scratch vector
 	auto& scratch = scratchFF_.local();
-	DecodeNeighborList(dataPointer, count, byteCount, scratch);
+	if (scratch.capacity() < N_expctMaxNbrCountF) // reserve "once" on first call
+	{
+		scratch.reserve(N_expctMaxNbrCountF);
+	}
+	const uint8_t* data = compressedNeighborsFF_.data() + s;
+	DecodeNeighborList(data, count, byteCount, scratch);
 
-	// TODO: is it safe to use count or scratch.size() here?
 	return NeighborSpan{ scratch.data(), count };
 }
 
@@ -628,12 +631,15 @@ NeighborSpan NeighborLists_CompactVectors_Compressed_ZigZag_CPU01::FB(
 	const uint64_t e = offsetsFB_[i + 1];
 	const uint32_t byteCount = static_cast<uint32_t>(e - s);
 
-	const uint8_t* dataPointer = compressedNeighborsFB_.data() + s;
-
+	// // decode into provided per-thread scratch vector
 	auto& scratch = scratchFB_.local();
-	DecodeNeighborList(dataPointer, count, byteCount, scratch);
+	if (scratch.capacity() < N_expctMaxNbrCountB) // reserve "once" on first call
+	{
+		scratch.reserve(N_expctMaxNbrCountB);
+	}
+	const uint8_t* data = compressedNeighborsFB_.data() + s;
+	DecodeNeighborList(data, count, byteCount, scratch);
 
-	// TODO: is it safe to use count or scratch.size() here?
 	return NeighborSpan{ scratch.data(), count };
 }
 
@@ -670,16 +676,17 @@ inline uint32_t NeighborLists_CompactVectors_Compressed_ZigZag_CPU01::GetVarU32(
 	uint32_t result = 0;
 	uint32_t shift = 0;
 
-	// read until continuation bit is 0
-	while (src < end)
+	// read until continuation bit is 0 (or max 5 bytes)
+	for (int i = 0; i < 5 && src < end; i++)
 	{
-		const uint32_t byte = *src++;
-		result |= (byte & 0x7Fu) << shift;
+		uint32_t byte = *src++;
 
-		if ((byte & 0x80u) == 0) { break; }
+		result |= (byte & 0x7Fu) << shift;
+		if ((byte & 0x80u) == 0) break;
 
 		shift += 7;
 	}
+
 	return result;
 }
 
@@ -740,28 +747,31 @@ void NeighborLists_CompactVectors_Compressed_ZigZag_CPU01::EncodeNeighborList(
 void NeighborLists_CompactVectors_Compressed_ZigZag_CPU01::DecodeNeighborList(
 	const uint8_t* data, uint32_t count, uint32_t byteCount, std::vector<uint32_t>& out)
 {
-	out.resize(count);
 	if (count == 0) { return; }
+	if (out.size() < count) { out.resize(count); } // no shrink, only grow
+	// TODO: always .resize() to stay true to size?
 
 	const uint8_t* src = data;
 	const uint8_t* end = data + byteCount;
 
 	uint32_t prev = 0;
+	uint32_t* dst = out.data();
+
 	for (uint32_t k = 0; k < count; k++)
 	{
 		const uint32_t zz = GetVarU32(src, end);
 		const int32_t delta = ZigZag_Decode32(zz);
 
 		// reconstruct current particle index
-		const int64_t curr64 = static_cast<int64_t>(prev) + static_cast<int64_t>(delta);
+		const int64_t tmp_curr = static_cast<int64_t>(prev) + static_cast<int64_t>(delta);
 
 		#ifndef NDEBUG
 		// if this triggers, encoding assumptions (int32 delta) broke
-		assert(curr64 >= 0 && curr64 <= static_cast<int64_t>(UINT32_MAX));
+		assert(tmp_curr >= 0 && tmp_curr <= static_cast<int64_t>(UINT32_MAX));
 		#endif
 
-		const uint32_t curr = static_cast<uint32_t>(curr64);
-		out[k] = curr;
+		const uint32_t curr = static_cast<uint32_t>(tmp_curr);
+		dst[k] = curr;
 		prev = curr;
 	}
 }
