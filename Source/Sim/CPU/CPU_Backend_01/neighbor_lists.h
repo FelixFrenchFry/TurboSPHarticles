@@ -139,7 +139,7 @@ namespace Sim
 	};
 
 	// -------------------------------------------------------------------------
-	// --- [ compact vectors neighbor lists (ZigZag + LEB128 compressed) ] -----
+	// --- [ compact vectors neighbor lists (ULEB128 compression of deltas) ] --
 	// -------------------------------------------------------------------------
 
 	class NeighborLists_CompactVectors_Compressed_ZigZag_CPU01 final
@@ -191,17 +191,16 @@ namespace Sim
 		std::vector<uint8_t> compressedNeighborsFB_; // concatenated bytes
 
 		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> scratchFF_;
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> scratchFB_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFB_;
+
+		// thread-local sorting scratch for EncodeNeighborList() to only have positive deltas
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
 
 		// helpers
-		// TODO: int32_t is not enough to represent particle index delta in worst case, change or not?
-		static inline uint32_t ZigZag_Encode32(int32_t v) noexcept;
-		static inline int32_t ZigZag_Decode32(uint32_t v) noexcept;
-
 		static inline void PutVarU32(uint32_t v, uint8_t*& dst) noexcept;
 		static inline uint32_t GetVarU32(const uint8_t*& src, const uint8_t* end) noexcept;
-		static inline uint32_t VarU32_ByteCount(uint32_t v) noexcept;
 
 		static void EncodeNeighborList(const uint32_t* js, uint32_t count,
 			std::vector<uint8_t>& out);
