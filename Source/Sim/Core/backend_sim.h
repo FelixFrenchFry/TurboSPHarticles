@@ -117,9 +117,13 @@ namespace Sim
 
 		virtual void Finalize() = 0;
 
-		// adds fluid/boundary neighbor j of fluid particle i to its neighbor list
+		// adds single fluid/boundary neighbor j of fluid particle i to its neighbor list
 		virtual void AddNbrFF(uint32_t i, uint32_t j) = 0;
 		virtual void AddNbrFB(uint32_t i, uint32_t j) = 0;
+
+		// adds bulk of fluid/boundary neighbors js of fluid particle i by replacing its neighbor list
+		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 
 		// gets a "span" of the fluid/boundary neighbor list of fluid particle i
 		virtual NeighborSpan FF(uint32_t i) const = 0;

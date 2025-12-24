@@ -16,6 +16,8 @@
 
 static constexpr uint32_t N_expctNbrCountF = 42;
 static constexpr uint32_t N_expctNbrCountB = 20;
+static constexpr uint32_t N_expctMaxNbrCountF = 64;
+static constexpr uint32_t N_expctMaxNbrCountB = 32;
 
 
 

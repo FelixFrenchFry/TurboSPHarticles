@@ -1146,22 +1146,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 		tbb::blocked_range<uint64_t>(0, N_Cells),
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			boost::container::small_vector<uint32_t, N_expctMaxNbrCountF> scratchFF;
+			boost::container::small_vector<uint32_t, N_expctMaxNbrCountB> scratchFB;
+
 			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{
 				// range of all fluid particles in this cell
 				const uint32_t sF = cellStartIdxF_[c]; // start
 				const uint32_t eF = cellStartIdxF_[c + 1]; // end
 				if (sF >= eF) { continue; }
-
-				// clear neighbor lists of all particles in this cell
-				for (uint32_t k = sF; k < eF; k++)
-				{
-					const uint32_t i = sortedParticleIdxF_[k];
-
-					// reset neighbor list for particle i
-					// (delete contents, but keep capacity)
-					be_.neighborLists_->ClearOne(i);
-				}
 
 				// determine a representative particle i0
 				const uint32_t i0 = sortedParticleIdxF_[sF];
@@ -1251,6 +1245,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 				// check all particles j in 27 (3x3x3) neighboring grid cells
 				for (uint32_t k = sF; k < eF; k++)
 				{
+					// reset scratch neighbor lists
+					scratchFF.clear();
+					scratchFB.clear();
+
 					const uint32_t i = sortedParticleIdxF_[k];
 
 					const float xi = xPosF[i];
@@ -1281,7 +1279,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 
 							if (distSqu <= kernelRadiusSqu) [[unlikely]]
 							{
-								be_.neighborLists_->AddNbrFF(i, j);
+								// add neighbor to scratch list
+								scratchFF.push_back(j);
 							}
 						}
 					}
@@ -1310,10 +1309,17 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 
 							if (distSqu <= kernelRadiusSqu) [[unlikely]]
 							{
-								be_.neighborLists_->AddNbrFB(i, j);
+								// add neighbor to scratch list
+								scratchFB.push_back(j);
 							}
 						}
 					}
+
+					// bulk add neighbors from scratch lists to global neighbor list
+					be_.neighborLists_->SetNbrListFF(i, scratchFF.data(), 
+						static_cast<uint32_t>(scratchFF.size()));
+					be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+						static_cast<uint32_t>(scratchFB.size()));
 				}
 			}
 		},

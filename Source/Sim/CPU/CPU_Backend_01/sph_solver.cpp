@@ -842,6 +842,10 @@ void CPU01::PressureAcceleration(
 	float* RESTRICT yAccPressF,
 	float* RESTRICT zAccPressF)
 {
+	// hoisted constants
+	const float densiInvSqu = 1.0f / (restDensityF * restDensityF);
+	const float accCoeffB_outer = 2.0f * gammaPress * massB * densiInvSqu;
+
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -853,8 +857,6 @@ void CPU01::PressureAcceleration(
 				const float zi = zPosF[i];
 
 				const float presi = pressureF[i];
-				const float densi = restDensityF;
-				const float densiInvSqu = 1.0f / (densi * densi);
 				const float accCoeffF_outer = massF * presi * densiInvSqu;
 
 				float tmp_xAccPressF = 0.0f;
@@ -893,8 +895,7 @@ void CPU01::PressureAcceleration(
 					tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
 				}
 
-				const float accCoeffB = gammaPress * massB
-									  * 2.0f * presi * densiInvSqu;
+				const float accCoeffB = accCoeffB_outer * presi;
 
 				// contributions from boundary neighbors
 				NeighborSpan nbrListFB = neighborLists.FB(i);
@@ -926,13 +927,9 @@ void CPU01::PressureAcceleration(
 				}
 
 				// finalize pressure acceleration
-				tmp_xAccPressF *= -1.0f;
-				tmp_yAccPressF *= -1.0f;
-				tmp_zAccPressF *= -1.0f;
-
-				xAccPressF[i] = tmp_xAccPressF;
-				yAccPressF[i] = tmp_yAccPressF;
-				zAccPressF[i] = tmp_zAccPressF;
+				xAccPressF[i] = -tmp_xAccPressF;
+				yAccPressF[i] = -tmp_yAccPressF;
+				zAccPressF[i] = -tmp_zAccPressF;
 			}
 		},
 		affPart
