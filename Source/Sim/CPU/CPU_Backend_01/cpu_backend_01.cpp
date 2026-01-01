@@ -21,21 +21,69 @@
 
 using namespace Sim;
 
-SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr)
+SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr,
+								   const SimParams& params)
 	: benchmarksMgr_{ benchmarksMgr }
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>();
 
-	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_CPU01>(*this);
-	//neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
-	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
-	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
+	// select neighbor search method
+	if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::BruteForce)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_BruteForce_CPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::SpatialHashing_Basic)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::CellLinkedList_Basic)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::CellLinkedList_Compact)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
+	}
+	else
+	{
+		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
+	}
 
-	//neighborLists_ = std::make_unique<NeighborLists_SmallBuffers_CPU01>();
-	//neighborLists_ = std::make_unique<NeighborLists_FixedArrays_CPU01>();
-	neighborLists_ = std::make_unique<NeighborLists_CompactVectors_CPU01>();
-	//neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_ULEB128_CPU01>();
-	//neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01>();
+	// select neighbor list storage
+	if (params.neighborListStorage ==
+		Base::NeighborListStorage::SmallBuffers)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_SmallBuffers_CPU01>();
+	}
+	else if (params.neighborListStorage ==
+		Base::NeighborListStorage::FixedArrays)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_FixedArrays_CPU01>();
+	}
+	else if (params.neighborListStorage ==
+		Base::NeighborListStorage::CompactVectors)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_CompactVectors_CPU01>();
+	}
+	else if (params.neighborListStorage ==
+		Base::NeighborListStorage::CompactVectors_Compressed_ULEB128)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_ULEB128_CPU01>();
+	}
+	else if (params.neighborListStorage ==
+		Base::NeighborListStorage::CompactVectors_Compressed_StreamVByteDelta)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01>();
+	}
+	else
+	{
+		throw std::runtime_error("Unsupported 'NeighborListStorage' requested.");
+	}
+
 	// TODO: compressed neighbor lists using pos in index sorted array for computing deltas?
 }
 

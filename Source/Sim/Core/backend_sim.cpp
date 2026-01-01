@@ -23,12 +23,12 @@ namespace Sim
 		{
 		case Base::BackendVersion::CPU01:
 			{
-				return std::make_unique<SimBackend_CPU01>(benchmarksMgr);
+				return std::make_unique<SimBackend_CPU01>(benchmarksMgr, params);
 			}
 		#ifdef TURBOSPHARTICLES_WITH_CUDA
 		case Base::BackendVersion::GPU01:
 			{
-				return std::make_unique<SimBackend_GPU01>(benchmarksMgr);
+				return std::make_unique<SimBackend_GPU01>(benchmarksMgr, params);
 			}
 		#endif
 		}

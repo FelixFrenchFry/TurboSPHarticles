@@ -28,7 +28,8 @@ namespace Sim
 
 		static void PrintSimParams(const SimParams& params);
 
-		static void PrintSimSetup(const SimulationMgr& simMgr);
+		static void PrintSimSetup(const SimulationMgr& simMgr,
+								  const SimParams& params);
 
 		static void PrintMemoryUsage();
 

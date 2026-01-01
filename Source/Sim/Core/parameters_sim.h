@@ -27,9 +27,15 @@ namespace Sim
 	// snapshot of simulation parameters (passed to compute-heavy functions)
 	struct SimParams
 	{
-		// mode
-		Base::BackendVersion backendVersion = Base::BackendVersion::CPU01;
-		Base::ScenarioType scenarioType	= Base::ScenarioType::BreakingDam;
+		// modes
+		Base::BackendVersion backendVersion =
+			Base::BackendVersion::CPU01;
+		Base::ScenarioType scenarioType	=
+			Base::ScenarioType::BreakingDam;
+		Base::NeighborSearchMethod neighborSearchMethod =
+			Base::NeighborSearchMethod::CellLinkedList_Compact;
+		Base::NeighborListStorage neighborListStorage =
+			Base::NeighborListStorage::CompactVectors;
 
 		// simulation state
 		bool simRunning			= false;

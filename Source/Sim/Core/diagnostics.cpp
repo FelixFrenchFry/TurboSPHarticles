@@ -72,8 +72,8 @@ namespace Sim
         printf("%-24s = %.6f\n", "densityDevTarget", params.densityDevTarget);
         printf("%-24s = %u\n", "minSolverIters", params.minSolverIters);
         printf("%-24s = %u\n", "maxSolverIters", params.maxSolverIters);
-        printf("%-24s = %u\n", "solverTerminationCond",
-            static_cast<uint8_t>(params.solverTerminationCond));
+        printf("%-24s = %s\n", "solverTerminationCond",
+            Base::ToCString(params.solverTerminationCond));
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
         printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);
         printf("%-24s = %u\n", "boundaryLayers", params.boundaryLayers);
@@ -83,29 +83,21 @@ namespace Sim
         printf("\n");
     }
 
-    void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr)
+    void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr,
+									   const SimParams& params)
     {
         printf("--- [ simulation setup ] -----------------------------------------------\n");
         printf("------------------------------------------------------------------------\n");
 
-        const auto& backend = simMgr.simBackend_;
-        const auto& scenario = simMgr.simScenario_;
-
-        // backend
-		std::string backendName = "<unknown>";
-		if (backend)
-		{
-			backendName = simMgr.simBackend_->Name();
-		}
-        printf("%-24s = %s\n", "sim backend", backendName.c_str());
-
-        // scenario
-        std::string scenarioName = "<unknown>";
-        if (scenario)
-        {
-            scenarioName = simMgr.simScenario_->Name();
-        }
-        printf("%-24s = %s\n", "sim scenario", scenarioName.c_str());
+        // modes
+		printf("%-24s = %s\n", "sim backend",
+			Base::ToCString(params.backendVersion));
+        printf("%-24s = %s\n", "sim scenario",
+            Base::ToCString(params.scenarioType));
+        printf("%-24s = %s\n", "neighbor search method",
+			Base::ToCString(params.neighborSearchMethod));
+        printf("%-24s = %s\n", "neighbor list storage",
+            Base::ToCString(params.neighborListStorage));
 
         // particle counts
         printf("%-24s = %u\n", "fluid particles", 

@@ -55,7 +55,7 @@ bool SimulationMgr::Init()
 	SyncParameters(true);
 
 	DiagnosticsMgr::PrintSimParams(simParams_);
-	DiagnosticsMgr::PrintSimSetup(*this);
+	DiagnosticsMgr::PrintSimSetup(*this, simParams_);
 
 	return true;
 }

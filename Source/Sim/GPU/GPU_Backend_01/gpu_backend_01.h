@@ -89,7 +89,7 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr);
+		SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr, const SimParams& params);
 		~SimBackend_GPU01() override;
 
 		const char* Name() const override { return "GPU01"; }

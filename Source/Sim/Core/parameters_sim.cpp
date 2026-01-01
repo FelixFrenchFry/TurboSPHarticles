@@ -64,17 +64,12 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			{
 				const std::string s = v.get<std::string>();
 				if (s == "CPU01") { out = Base::BackendVersion::CPU01; return true; }
-				if (s == "CPU02") { out = Base::BackendVersion::CPU02; return true; }
 				if (s == "GPU01") { out = Base::BackendVersion::GPU01; return true; }
-
-				// TODO: add more
-
 				return false;
 			}
 			else if (v.is_number_integer())
 			{
 				out = static_cast<Base::BackendVersion>(v.get<int>());
-
 				return true;
 			}
 
@@ -87,18 +82,53 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			{
 				const std::string s = v.get<std::string>();
 				if (s == "BreakingDam") { out = Base::ScenarioType::BreakingDam; return true; }
-
-				// TODO: add more
-
 				return false;
 			}
 			else if (v.is_number_integer())
 			{
 				out = static_cast<Base::ScenarioType>(v.get<int>());
-
 				return true;
 			}
 
+			return false;
+		};
+
+	auto ParseNeighborSearchMethod = [](const nlohmann::json& v, Base::NeighborSearchMethod& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "BruteForce") { out = Base::NeighborSearchMethod::BruteForce; return true; }
+				if (s == "SpatialHashing_Basic") { out = Base::NeighborSearchMethod::SpatialHashing_Basic; return true; }
+				if (s == "CellLinkedList_Basic") { out = Base::NeighborSearchMethod::CellLinkedList_Basic; return true; }
+				if (s == "CellLinkedList_Compact") { out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				out = static_cast<Base::NeighborSearchMethod>(v.get<int>());
+				return true;
+			}
+			return false;
+		};
+
+	auto ParseNeighborListStorage = [](const nlohmann::json& v, Base::NeighborListStorage& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "SmallBuffers") { out = Base::NeighborListStorage::SmallBuffers; return true; }
+				if (s == "FixedArrays") { out = Base::NeighborListStorage::FixedArrays; return true; }
+				if (s == "CompactVectors") { out = Base::NeighborListStorage::CompactVectors; return true; }
+				if (s == "CompactVectors_Compressed_ULEB128") { out = Base::NeighborListStorage::CompactVectors_Compressed_ULEB128; return true; }
+				if (s == "CompactVectors_Compressed_StreamVByteDelta") { out = Base::NeighborListStorage::CompactVectors_Compressed_StreamVByteDelta; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				out = static_cast<Base::NeighborListStorage>(v.get<int>());
+				return true;
+			}
 			return false;
 		};
 
@@ -129,6 +159,32 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'scenarioType' in JSON");
+			}
+		}
+
+		if (auto it = j.find("neighborSearchMethod"); it != j.end())
+		{
+			Base::NeighborSearchMethod nsm;
+			if (ParseNeighborSearchMethod(*it, nsm))
+			{
+				params_.neighborSearchMethod = nsm;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'neighborSearchMethod' in JSON");
+			}
+		}
+
+		if (auto it = j.find("neighborListStorage"); it != j.end())
+		{
+			Base::NeighborListStorage nls;
+			if (ParseNeighborListStorage(*it, nls))
+			{
+				params_.neighborListStorage = nls;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'neighborListStorage' in JSON");
 			}
 		}
 
@@ -233,19 +289,37 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			params_.maxSolverIters = it->get<uint32_t>();
 		}
 
+		auto ParseSolverTerminationCond = [](const nlohmann::json& v, Base::SolverTerminationCond& out) -> bool
+			{
+				if (v.is_string())
+				{
+					const std::string s = v.get<std::string>();
+					if (s == "FixedIters") { out = Base::SolverTerminationCond::FixedIters; return true; }
+					if (s == "RelDensityError_Raw") { out = Base::SolverTerminationCond::RelDensityError_Raw; return true; }
+					if (s == "RelDensityError_Pos") { out = Base::SolverTerminationCond::RelDensityError_Pos; return true; }
+					if (s == "RelDensityError_Abs") { out = Base::SolverTerminationCond::RelDensityError_Abs; return true; }
+					return false;
+				}
+				else if (v.is_number_integer())
+				{
+					out = static_cast<Base::SolverTerminationCond>(v.get<int>());
+					return true;
+				}
+				return false;
+			};
+
 		if (auto it = j.find("solverTerminationCond"); it != j.end())
 		{
 			using STC = Base::SolverTerminationCond;
 
-			const std::string s = it->get<std::string>();
-
-			if (s == "FixedIters") { params_.solverTerminationCond = STC::FixedIters; }
-			else if (s == "RelDensityError_Raw") { params_.solverTerminationCond = STC::RelDensityError_Raw; }
-			else if (s == "RelDensityError_Pos") { params_.solverTerminationCond = STC::RelDensityError_Pos; }
-			else if (s == "RelDensityError_Abs") { params_.solverTerminationCond = STC::RelDensityError_Abs; }
+			Base::SolverTerminationCond stc;
+			if (ParseSolverTerminationCond(*it, stc))
+			{
+				params_.solverTerminationCond = stc;
+			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'solverTerminationCond' string in JSON: {}", s);
+				SPDLOG_WARN("Invalid 'solverTerminationCond' in JSON");
 			}
 		}
 

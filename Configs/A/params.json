@@ -1,6 +1,8 @@
 {
   "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
+  "neighborSearchMethod": "CellLinkedList_Compact",
+  "neighborListStorage": "CompactVectors",
 
   "maxSteps": -1,
   "timeStep": 0.001,

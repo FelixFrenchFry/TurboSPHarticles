@@ -26,7 +26,7 @@ namespace Scene
 			return std::make_unique<BreakingDamScene>(scenarioMgr, cfg);
 		}
 		default:
-			throw std::runtime_error("Unsupported sim scenario type request");
+			throw std::runtime_error("Unsupported sim scenario type requested.");
 		}
 	}
 

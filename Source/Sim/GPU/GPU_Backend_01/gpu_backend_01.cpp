@@ -17,14 +17,37 @@
 
 using namespace Sim;
 
-SimBackend_GPU01::SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr)
+SimBackend_GPU01::SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr,
+								   const SimParams& params)
 	: benchmarksMgr_{ benchmarksMgr }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
 
-	//neighborSearchStrat_ = std::make_unique<NS_BruteForce_GPU01>(*this);
-	neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_GPU01>(*this);
-	//neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_GPU01>(*this);
+	// select neighbor search method
+	if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::BruteForce)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_BruteForce_GPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::SpatialHashing_Basic)
+	{
+		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::CellLinkedList_Basic)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_GPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::CellLinkedList_Compact)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_GPU01>(*this);
+	}
+	else
+	{
+		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
+	}
 }
 
 SimBackend_GPU01::~SimBackend_GPU01()

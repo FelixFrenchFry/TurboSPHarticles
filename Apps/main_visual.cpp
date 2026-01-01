@@ -21,9 +21,9 @@
 int main(int argc, char** argv)
 {
 	#if defined(_WIN32)
-	printf("Running on Windows\n");
+	printf("(Running on Windows)\n");
 	#elif defined(__linux__)
-	printf("Running on Linux\n");
+	printf("(Running on Linux)\n");
 	#endif
 
 	// [year-month-day 12:34:56.789] [file.cpp:line] [type] message
