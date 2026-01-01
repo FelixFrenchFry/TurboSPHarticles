@@ -1,0 +1,25 @@
+{
+  "scenarios": {
+    "BreakingDam": {
+      "type": "BreakingDam",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 8.0,
+        "vLen": 4.0,
+        "wLen": 4.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 2.0,
+        "vLen": 2.0,
+        "wLen": 2.0
+      }
+    }
+  }
+}

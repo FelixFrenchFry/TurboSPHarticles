@@ -51,6 +51,7 @@ namespace Sim
 
     void DiagnosticsMgr::PrintSimParams(const SimParams& params)
     {
+        printf("\n");
         printf("--- [ simulation parameters ] ------------------------------------------\n");
         printf("------------------------------------------------------------------------\n");
 

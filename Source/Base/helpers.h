@@ -5,13 +5,14 @@
 #pragma once
 
 // external
-#include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <spdlog/spdlog.h>
+#include <string>
 
 
 
@@ -141,8 +142,8 @@ namespace Base
         std::ifstream in(path);
         if (!in)
         {
-            SPDLOG_ERROR("Failed to open JSON file: {}",
-                path);
+            std::fprintf(stderr, "Failed to open JSON file: %s\n",
+                path.c_str());
             return false;
         }
 
@@ -152,8 +153,8 @@ namespace Base
         }
         catch (const std::exception& e)
         {
-            SPDLOG_ERROR("Failed to parse JSON {}: {}",
-                path, e.what());
+            std::fprintf(stderr, "Failed to parse JSON %s: %s\n",
+                path.c_str(), e.what());
             return false;
         }
 

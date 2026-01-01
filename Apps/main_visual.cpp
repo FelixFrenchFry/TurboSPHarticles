@@ -87,7 +87,7 @@ int main(int argc, char** argv)
 
 		// --- [ initialization of manager systems ] ---------------------------
 
-		// simulation parameters
+		// config profile and simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
 		if (!simParamsMgr.LoadSimParamsFromProfile(profile))
 		{
@@ -108,13 +108,7 @@ int main(int argc, char** argv)
 				return EXIT_FAILURE;
 			}
 		}
-
-		// log used config profile and its files
-		const std::string paramsFile = profile + "/params.json";
-		const std::string scenariosFile = profile + "/scenarios.json";
-		SPDLOG_INFO("Using config profile:   /{}", profile);
-		SPDLOG_INFO("Loading params:         /{}", paramsFile);
-		SPDLOG_INFO("Loading scenarios:      /{}", scenariosFile);
+		SPDLOG_INFO("Using config profile '{}'", profile);
 
 		// sub-systems
 		Vis::VisParamsMgr visParamsMgr{};
