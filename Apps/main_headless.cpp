@@ -39,13 +39,37 @@ int main(int argc, char** argv)
 		SPDLOG_INFO("Launching TSP (headless application)...");
 
 		CLI::App application{ "TSP Headless" };
-		std::string configFile; // TODO: load default config file?
+		std::string profile = "Default"; // fallback config profile
+		application.add_option("-p,--profile", profile,
+			"Name of configuration profile /Configs/<...> with 'A-Z'");
 
-		// TODO: make this required or use default config file, if this is not provided?
-		application.add_option("--config", configFile, "Configuration file");
-		// TODO: add --version, --threads, --backend, etc... ?
+		CLI11_PARSE(application, argc, argv);
 
-		CLI11_PARSE(application, argc, argv)
+		// normalize config profile names (e.g. "a" -> "A", "" -> "Default")
+		auto NormalizeProfile = [](std::string& p) -> void
+			{
+				if (p.empty()) { p = "Default"; return; }
+
+				// single letter -> uppercase
+				if (p.size() == 1 && std::isalpha(static_cast<unsigned char>(p[0])))
+				{
+					p[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(p[0])));
+				}
+			};
+		// hard check for valid profile name
+		auto IsValidProfile = [](const std::string& p) -> bool
+			{
+				if (p == "Default") { return true; }
+				return (p.size() == 1 && p[0] >= 'A' && p[0] <= 'Z');
+			};
+
+		NormalizeProfile(profile);
+		if (!IsValidProfile(profile))
+		{
+			SPDLOG_ERROR("Invalid --profile arg '{}'. Use a single letter 'A-Z' or leave empty for 'Default'.",
+				profile);
+			return EXIT_FAILURE;
+		}
 
 		// --- [ hardware budgets ] --------------------------------------------
 
@@ -60,8 +84,32 @@ int main(int argc, char** argv)
 
 		// simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
-		// TODO: make adjustable via command line argument?
-		simParamsMgr.LoadSimParamsFromJsonFile("SimParams_B.json");
+		if (!simParamsMgr.LoadSimParamsFromProfile(profile))
+		{
+			if (profile != "Default")
+			{
+				SPDLOG_WARN("Failed to load '/{}/params.json'. Falling back to '/Default/params.json'.", profile);
+				profile = "Default";
+
+				if (!simParamsMgr.LoadSimParamsFromProfile(profile))
+				{
+					SPDLOG_ERROR("Failed to load '/Default/params.json' too.");
+					return EXIT_FAILURE;
+				}
+			}
+			else
+			{
+				SPDLOG_ERROR("Failed to load '/Default/params.json'.");
+				return EXIT_FAILURE;
+			}
+		}
+
+		// log used config profile and its files
+		const std::string paramsFile = profile + "/params.json";
+		const std::string scenariosFile = profile + "/scenarios.json";
+		SPDLOG_INFO("Using config profile:   /{}", profile);
+		SPDLOG_INFO("Loading params:         /{}", paramsFile);
+		SPDLOG_INFO("Loading scenarios:      /{}", scenariosFile);
 
 		// sub-systems
 		Scene::ScenarioMgr scenarioMgr{};
@@ -71,6 +119,7 @@ int main(int argc, char** argv)
 
 		// main systems
 		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr, serializationMgr };
+		simulationMgr.SetConfigProfile(profile);
 
 		// bench mailbox
 		Sync::BenchSnapMailbox benchMailbox{};

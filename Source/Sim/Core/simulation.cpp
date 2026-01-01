@@ -43,7 +43,7 @@ bool SimulationMgr::Init()
 
 	// TODO: load initial sim state from a file?
 
-	SelectSimScenario(simParams_.scenarioType);
+	SelectSimScenario(simParams_.scenarioType, configProfile_);
 
 	SelectSimBackend(simParams_.backendVersion);
 
@@ -82,7 +82,7 @@ void SimulationMgr::SyncParameters(bool force)
 	}
 }
 
-void SimulationMgr::SelectSimScenario(Base::ScenarioType type)
+void SimulationMgr::SelectSimScenario(Base::ScenarioType type, std::string& profile)
 {
 	if (running_.load(std::memory_order_acquire))
 	{
@@ -91,7 +91,7 @@ void SimulationMgr::SelectSimScenario(Base::ScenarioType type)
 	}
 
 	// create new scenario
-	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type);
+	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, profile);
 	if (!simScenario_)
 	{
 		SPDLOG_ERROR("Failed to create sim scenario ({})",
@@ -492,6 +492,14 @@ void SimulationMgr::JoinThreads()
 		controllerThread_.join();
 		running_.store(false, std::memory_order_release);
 	}
+}
+
+// sets the configuration profile and updates derived file paths
+void SimulationMgr::SetConfigProfile(std::string profile)
+{
+	configProfile_ = std::move(profile);
+	paramsFile_ = configProfile_ + "/params.json";
+	scenariosFile_ = configProfile_ + "/scenarios.json";
 }
 
 void SimulationMgr::HandleExportSnapshot(const SimParams& params) const

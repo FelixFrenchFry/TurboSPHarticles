@@ -8,6 +8,7 @@
 #include <ankerl/unordered_dense.h>
 #include <atomic>
 #include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
 #include <string>
 
 // internal
@@ -118,7 +119,8 @@ namespace Sim
 		// returns current stable version number to check for changes
 		uint64_t StableVersion() const;
 
-		bool LoadSimParamsFromJsonFile(const std::string& fileName, bool verbose = false);
+		bool LoadSimParamsFromJson(const nlohmann::json& j, bool verbose = false);
+		bool LoadSimParamsFromProfile(const std::string& profile, bool verbose = false);
 
 		// setters for individual parameters and their dependent values
 		void Set_SimRunning(bool simRunning, bool verbose = false);

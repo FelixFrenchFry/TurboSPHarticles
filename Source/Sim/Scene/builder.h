@@ -72,7 +72,7 @@ namespace Scene
 
 		std::array<OBBFace, 6> inline GetFacesFromOBB(const OBB& box);
 
-		static OBB ParseOBBFromJson(const json& jfile, ScenarioMgr& scenarioMgr);
+		static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr);
 
 	private: // ----------------------------------------------------------------
 

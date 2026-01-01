@@ -13,14 +13,15 @@
 namespace Scene
 {
 	std::unique_ptr<ISimScenario> MakeSimScenario(ScenarioMgr& scenarioMgr, 
-												  Base::ScenarioType type)
+												  Base::ScenarioType type,
+												  std::string& profile)
 	{
 		switch (type)
 		{
 		case Base::ScenarioType::BreakingDam:
 		{
 			BreakingDamConfig cfg;
-			cfg = LoadBreakingDamConfigFromJsonFile(scenarioMgr);
+			cfg = LoadBreakingDamConfigFromProfile(profile, scenarioMgr);
 
 			return std::make_unique<BreakingDamScene>(scenarioMgr, cfg);
 		}

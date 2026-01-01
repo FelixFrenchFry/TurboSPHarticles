@@ -7,8 +7,11 @@
 // external
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <glm/glm.hpp>
+#include <nlohmann/json.hpp>
 #include <optional>
+#include <spdlog/spdlog.h>
 
 
 
@@ -120,6 +123,42 @@ namespace Base
     inline void MarkIfChanged(const std::optional<glm::mat4>& old, const glm::mat4& cur, bool& ch)
     {
 	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
+    }
+
+    // --- [ json ] ------------------------------------------------------------
+
+    inline bool LoadJsonObjectFromFile(
+        const std::string& fileName,
+        nlohmann::json& out)
+    {
+        namespace fs = std::filesystem;
+
+        // use TSP_CONFIG_DIR from the build system as base path
+        fs::path base(TSP_CONFIG_DIR);
+        fs::path full = base / fileName;
+        std::string path = full.string();
+
+        std::ifstream in(path);
+        if (!in)
+        {
+            SPDLOG_ERROR("Failed to open JSON file: {}",
+                path);
+            return false;
+        }
+
+        try
+        {
+            in >> out;
+        }
+        catch (const std::exception& e)
+        {
+            SPDLOG_ERROR("Failed to parse JSON {}: {}",
+                path, e.what());
+            return false;
+        }
+
+        // return JSON object
+        return true;
     }
 
     // --- [ misc ] ------------------------------------------------------------

@@ -174,7 +174,6 @@ namespace Sim
 		uint32_t N_B_ = 0;
 
 		// temp compressed neighbor lists during construction (bytes)
-		// TODO: reserve space for each vector?
 		std::vector<std::vector<uint8_t>> tmpCompressedFF_;
 		std::vector<std::vector<uint8_t>> tmpCompressedFB_;
 
@@ -183,6 +182,7 @@ namespace Sim
 		std::vector<uint32_t> nbrCountFB_;
 		std::vector<uint64_t> offsetsFF_; // byte offsets into compressed FF data
 		std::vector<uint64_t> offsetsFB_; // byte offsets into compressed FF data
+		// TODO: just keep them in the tmp vectors instead of concatenating?
 		std::vector<uint8_t> compressedNeighborsFF_; // concatenated bytes
 		std::vector<uint8_t> compressedNeighborsFB_; // concatenated bytes
 
@@ -244,7 +244,6 @@ namespace Sim
 		uint32_t N_B_ = 0;
 
 		// temp compressed neighbor lists during construction (bytes)
-		// TODO: reserve space for each vector?
 		std::vector<std::vector<uint8_t>> tmpCompressedFF_;
 		std::vector<std::vector<uint8_t>> tmpCompressedFB_;
 
@@ -253,6 +252,7 @@ namespace Sim
 		std::vector<uint32_t> nbrCountFB_;
 		std::vector<uint64_t> offsetsFF_; // byte offsets into compressed FF data
 		std::vector<uint64_t> offsetsFB_; // byte offsets into compressed FF data
+		// TODO: just keep them in the tmp vectors instead of concatenating?
 		std::vector<uint8_t> compressedNeighborsFF_; // concatenated bytes
 		std::vector<uint8_t> compressedNeighborsFB_; // concatenated bytes
 

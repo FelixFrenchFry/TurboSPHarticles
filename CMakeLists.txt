@@ -116,8 +116,18 @@ endif()
 # warnings
 add_library(Project_Warnings INTERFACE)
 target_compile_options(Project_Warnings INTERFACE
-    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /utf-8>
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:-Wall -Wextra -Wpedantic>
+    # MSVC C++ compilation
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
+        /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /utf-8
+    >
+    # NVCC compiling CUDA (.cu) with MSVC as host compiler
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CUDA>>:
+        -Xcompiler=/utf-8
+    >
+    # non-MSVC C++ compilation
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
+        -Wall -Wextra -Wpedantic
+    >
 )
 
 # platform defines, eigen debug stuff disabled in non-debug builds

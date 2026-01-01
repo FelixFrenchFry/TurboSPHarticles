@@ -47,7 +47,7 @@ namespace Sim
 
 		// create or switch scenario
 		// (destroys previous scenario and all its data)
-		void SelectSimScenario(Base::ScenarioType type);
+		void SelectSimScenario(Base::ScenarioType type, std::string& profile);
 
 		// create or switch backend
 		// (destroys previous backend and all its data)
@@ -68,6 +68,8 @@ namespace Sim
 		void JoinThreads();
 
 		// helpers
+		void SetConfigProfile(std::string profile);
+
 		void HandleExportSnapshot(const SimParams& params) const;
 		void HandleBenchAndStatSnapshots() const;
 		void FinalizeBenchAndStatMeasurements() const;
@@ -85,6 +87,11 @@ namespace Sim
 	private: // ----------------------------------------------------------------
 
 		friend class DiagnosticsMgr;
+
+		// configuration profile
+		std::string configProfile_ = "Default";
+		std::string paramsFile_ = "Default/params.json";
+		std::string scenariosFile_ = "Default/scenarios.json";
 
 		// parameter manager and snapshot to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;

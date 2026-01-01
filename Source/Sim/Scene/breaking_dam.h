@@ -7,9 +7,13 @@
 // external
 #include <fstream>
 #include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
+#include <optional>
 #include <spdlog/spdlog.h>
+#include <string>
 
 // internal
+#include "Source/Base/helpers.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Sync/state_sim.h"
 #include "builder.h"
@@ -84,56 +88,95 @@ namespace Scene
 		return BreakingDamConfig{ container, fluid };
 	}
 
-	inline BreakingDamConfig LoadBreakingDamConfigFromJsonFile(ScenarioMgr& scenarioMgr)
+	inline BreakingDamConfig LoadBreakingDamConfigFromJson(
+		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
-		namespace fs = std::filesystem;
-
-		// use TSP_CONFIG_DIR from the build system as base path
-		fs::path base(TSP_CONFIG_DIR);
-		fs::path full = base / "BreakingDam.json";
-		std::string path = full.string();
-
-		std::ifstream in(path);
-
-		if (!in)
-		{
-			SPDLOG_ERROR("Failed to open BreakingDam config: {}", path);
-			// fall back to built-in defaults
-			return MakeBreakingDamConfig_Default(scenarioMgr);
-		}
-
-		json jfile;
-		try
-		{
-			in >> jfile;
-		}
-		catch (const std::exception& e)
-		{
-			SPDLOG_ERROR("Failed to parse BreakingDam config {}: {}",
-				path, e.what());
-			return MakeBreakingDamConfig_Default(scenarioMgr);
-		}
+		// cache default config
+		const BreakingDamConfig def = MakeBreakingDamConfig_Default(scenarioMgr);
 
 		BreakingDamConfig cfg{};
-		if (auto it = jfile.find("container"); it != jfile.end())
+		cfg.container = def.container;
+		cfg.fluid = def.fluid;
+
+		if (auto it = j.find("container"); it != j.end())
 		{
 			cfg.container = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
 		}
-		else
-		{
-			cfg.container = MakeBreakingDamConfig_Default(scenarioMgr).container;
-		}
 
-		if (auto it = jfile.find("fluid"); it != jfile.end())
+		if (auto it = j.find("fluid"); it != j.end())
 		{
 			cfg.fluid = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
 		}
-		else
-		{
-			cfg.fluid = MakeBreakingDamConfig_Default(scenarioMgr).fluid;
-		}
 
 		return cfg;
+	}
+
+	inline BreakingDamConfig LoadBreakingDamConfigFromProfile(
+		const std::string& profile, ScenarioMgr& scenarioMgr)
+	{
+		auto TryLoadFromScenarioFile = [&](const std::string& scenariosFile) -> std::optional<BreakingDamConfig>
+			{
+				nlohmann::json root;
+				if (!Base::LoadJsonObjectFromFile(scenariosFile, root))
+				{
+					return std::nullopt;
+				}
+
+				// expect root["scenarios"] object
+				if (!root.contains("scenarios") || !root["scenarios"].is_object())
+				{
+					return std::nullopt;
+				}
+
+				const auto& scenarios = root["scenarios"];
+
+				// expect scenarios["BreakingDam"] object
+				if (!scenarios.contains("BreakingDam") || !scenarios["BreakingDam"].is_object())
+				{
+					return std::nullopt;
+				}
+
+				const auto& jBD = scenarios["BreakingDam"];
+
+				// sanity check of "type" field
+				if (auto it = jBD.find("type"); it != jBD.end() && it->is_string())
+				{
+					const std::string t = it->get<std::string>();
+					if (t != "BreakingDam")
+					{
+						SPDLOG_WARN("BreakingDam entry has type='{}' (expected 'BreakingDam')", t);
+					}
+				}
+
+				return LoadBreakingDamConfigFromJson(jBD, scenarioMgr);
+			};
+
+		// try chosen profile
+		{
+			const std::string file = profile + "/scenarios.json";
+			if (auto cfg = TryLoadFromScenarioFile(file))
+			{
+				return *cfg;
+			}
+
+			SPDLOG_WARN("Could not load BreakingDam from '/{}'.", file);
+		}
+
+		// fallback to default profile if profile was not 'Default' already
+		if (profile != "Default")
+		{
+			const std::string file = "Default/scenarios.json";
+			if (auto cfg = TryLoadFromScenarioFile(file))
+			{
+				return *cfg;
+			}
+
+			SPDLOG_WARN("Could not load BreakingDam from '/{}'.", file);
+		}
+
+		// final fallback to built-in defaults
+		SPDLOG_WARN("Using built-in BreakingDam defaults.");
+		return MakeBreakingDamConfig_Default(scenarioMgr);
 	}
 
 } // namespace Scene

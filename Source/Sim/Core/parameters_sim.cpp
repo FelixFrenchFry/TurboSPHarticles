@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <thread>
 
@@ -15,7 +14,6 @@
 
 
 using namespace Sim;
-using nlohmann::json;
 
 std::pair<SimParams, uint64_t> SimParamsMgr::SnapshotParams() const
 {
@@ -54,41 +52,13 @@ uint64_t SimParamsMgr::StableVersion() const
 	}
 }
 
-bool SimParamsMgr::LoadSimParamsFromJsonFile(
-	const std::string& fileName, bool verbose)
+bool SimParamsMgr::LoadSimParamsFromJson(
+	const nlohmann::json& j, bool verbose)
 {
-	namespace fs = std::filesystem;
-
-	// use TSP_CONFIG_DIR from the build system as base path
-	fs::path base(TSP_CONFIG_DIR);
-	fs::path full = base / fileName;
-	std::string path = full.string();
-
-	std::ifstream in(path);
-
-	if (!in)
-	{
-		SPDLOG_ERROR("Failed to open SimParams JSON file: {}",
-			path.c_str());
-		return false;
-	}
-
-	json jfile;
-	try
-	{
-		in >> jfile;
-	}
-	catch (const std::exception& e)
-	{
-		SPDLOG_ERROR("Failed to parse JSON {}: {}",
-			path.c_str(), e.what());
-		return false;
-	}
-
 	// --- [ modes ] -----------------------------------------------------------
 
 	// helpers for reading enums
-	auto ParseBackendVersion = [](const json& v, Base::BackendVersion& out) -> bool
+	auto ParseBackendVersion = [](const nlohmann::json& v, Base::BackendVersion& out) -> bool
 		{
 			if (v.is_string())
 			{
@@ -111,7 +81,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 			return false;
 		};
 
-	auto ParseScenarioType = [](const json& v, Base::ScenarioType& out) -> bool
+	auto ParseScenarioType = [](const nlohmann::json& v, Base::ScenarioType& out) -> bool
 		{
 			if (v.is_string())
 			{
@@ -136,7 +106,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 	{
 		BeginWrite();
 
-		if (auto it = jfile.find("backendVersion"); it != jfile.end())
+		if (auto it = j.find("backendVersion"); it != j.end())
 		{
 			Base::BackendVersion bv;
 			if (ParseBackendVersion(*it, bv))
@@ -149,7 +119,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 			}
 		}
 
-		if (auto it = jfile.find("scenarioType"); it != jfile.end())
+		if (auto it = j.find("scenarioType"); it != j.end())
 		{
 			Base::ScenarioType st;
 			if (ParseScenarioType(*it, st))
@@ -162,7 +132,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 			}
 		}
 
-		if (auto it = jfile.find("maxSteps"); it != jfile.end())
+		if (auto it = j.find("maxSteps"); it != j.end())
 		{
 			params_.maxSteps = it->get<int64_t>();
 		}
@@ -177,14 +147,14 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	// --- [ time step ] -------------------------------------------------------
 
-	if (auto it = jfile.find("timeStep"); it != jfile.end())
+	if (auto it = j.find("timeStep"); it != j.end())
 	{
 		Set_TimeStep(it->get<float>(), verbose);
 	}
 
 	// --- [ particle size ] ---------------------------------------------------
 
-	if (auto it = jfile.find("particleSize"); it != jfile.end())
+	if (auto it = j.find("particleSize"); it != j.end())
 	{
 		Set_ParticleSize(it->get<float>(),
 			Base::ParticleType::Fluid, verbose);
@@ -194,20 +164,20 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	// --- [ kernel support ratio ] --------------------------------------------
 
-	if (auto it = jfile.find("kernelSuppRatio"); it != jfile.end())
+	if (auto it = j.find("kernelSuppRatio"); it != j.end())
 	{
 		Set_KernelSuppRatio(it->get<float>(), verbose);
 	}
 
 	// --- [ rest density ] ----------------------------------------------------
 
-	if (auto it = jfile.find("restDensityF"); it != jfile.end())
+	if (auto it = j.find("restDensityF"); it != j.end())
 	{
 		Set_RestDensity(it->get<float>(),
 			Base::ParticleType::Fluid, verbose);
 	}
 
-	if (auto it = jfile.find("restDensityB"); it != jfile.end())
+	if (auto it = j.find("restDensityB"); it != j.end())
 	{
 		Set_RestDensity(it->get<float>(),
 			Base::ParticleType::Boundary, verbose);
@@ -215,13 +185,13 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	// --- [ viscosity ] -------------------------------------------------------
 
-	if (auto it = jfile.find("viscosityF"); it != jfile.end())
+	if (auto it = j.find("viscosityF"); it != j.end())
 	{
 		Set_Viscosity(it->get<float>(),
 			Base::ParticleType::Fluid, verbose);
 	}
 
-	if (auto it = jfile.find("viscosityB"); it != jfile.end())
+	if (auto it = j.find("viscosityB"); it != j.end())
 	{
 		Set_Viscosity(it->get<float>(),
 			Base::ParticleType::Boundary, verbose);
@@ -229,12 +199,12 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	// --- [ pressure ] --------------------------------------------------------
 
-	if (auto it = jfile.find("gammaPress"); it != jfile.end())
+	if (auto it = j.find("gammaPress"); it != j.end())
 	{
 		Set_GammaPress(it->get<float>(), verbose);
 	}
 
-	if (auto it = jfile.find("jacobiOmega"); it != jfile.end())
+	if (auto it = j.find("jacobiOmega"); it != j.end())
 	{
 		Set_JacobiOmega(it->get<float>(), verbose);
 	}
@@ -243,27 +213,27 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 	{
 		BeginWrite();
 
-		if (auto it = jfile.find("densityDevTarget"); it != jfile.end())
+		if (auto it = j.find("densityDevTarget"); it != j.end())
 		{
 			params_.densityDevTarget = it->get<float>();
 		}
 
-		if (auto it = jfile.find("fixedIters"); it != jfile.end())
+		if (auto it = j.find("fixedIters"); it != j.end())
 		{
 			params_.fixedIters = it->get<uint32_t>();
 		}
 
-		if (auto it = jfile.find("minSolverIters"); it != jfile.end())
+		if (auto it = j.find("minSolverIters"); it != j.end())
 		{
 			params_.minSolverIters = it->get<uint32_t>();
 		}
 
-		if (auto it = jfile.find("maxSolverIters"); it != jfile.end())
+		if (auto it = j.find("maxSolverIters"); it != j.end())
 		{
 			params_.maxSolverIters = it->get<uint32_t>();
 		}
 
-		if (auto it = jfile.find("solverTerminationCond"); it != jfile.end())
+		if (auto it = j.find("solverTerminationCond"); it != j.end())
 		{
 			using STC = Base::SolverTerminationCond;
 
@@ -284,7 +254,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	// --- [ gravity ] ---------------------------------------------------------
 
-	if (auto it = jfile.find("gravity"); it != jfile.end() &&
+	if (auto it = j.find("gravity"); it != j.end() &&
 		it->is_array() && it->size() == 3)
 	{
 		glm::vec3 g;
@@ -300,22 +270,22 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 	{
 		BeginWrite();
 
-		if (auto it = jfile.find("jitterFracF"); it != jfile.end())
+		if (auto it = j.find("jitterFracF"); it != j.end())
 		{
 			params_.jitterFracF = it->get<float>();
 		}
 
-		if (auto it = jfile.find("jitterSeedF"); it != jfile.end())
+		if (auto it = j.find("jitterSeedF"); it != j.end())
 		{
 			params_.jitterSeedF = it->get<int64_t>();
 		}
 
-		if (auto it = jfile.find("jitterFracB"); it != jfile.end())
+		if (auto it = j.find("jitterFracB"); it != j.end())
 		{
 			params_.jitterFracB = it->get<float>();
 		}
 
-		if (auto it = jfile.find("jitterSeedB"); it != jfile.end())
+		if (auto it = j.find("jitterSeedB"); it != j.end())
 		{
 			params_.jitterSeedB = it->get<int64_t>();
 		}
@@ -325,7 +295,7 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	// --- [ boundary layers ] -------------------------------------------------
 
-	if (auto it = jfile.find("boundaryLayers"); it != jfile.end())
+	if (auto it = j.find("boundaryLayers"); it != j.end())
 	{
 		Set_BoundaryLayers(it->get<uint32_t>(), verbose);
 	}
@@ -336,27 +306,27 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 	{
 		BeginWrite();
 
-		if (auto it = jfile.find("maxStatRecs"); it != jfile.end())
+		if (auto it = j.find("maxStatRecs"); it != j.end())
 		{
 			params_.maxStatRecs = it->get<uint32_t>();
 		}
 
-		if (auto it = jfile.find("maxBenchRecs"); it != jfile.end())
+		if (auto it = j.find("maxBenchRecs"); it != j.end())
 		{
 			params_.maxBenchRecs = it->get<uint32_t>();
 		}
 
-		if (auto it = jfile.find("exportEnabled"); it != jfile.end())
+		if (auto it = j.find("exportEnabled"); it != j.end())
 		{
 			params_.exportEnabled = it->get<bool>();
 		}
 
-		if (auto it = jfile.find("exportDir"); it != jfile.end())
+		if (auto it = j.find("exportDir"); it != j.end())
 		{
 			params_.exportDir = it->get<std::string>();
 		}
 
-		if (auto it = jfile.find("exportInterval"); it != jfile.end())
+		if (auto it = j.find("exportInterval"); it != j.end())
 		{
 			params_.exportInterval = it->get<uint32_t>();
 		}
@@ -366,11 +336,22 @@ bool SimParamsMgr::LoadSimParamsFromJsonFile(
 
 	if (!AssertParamDerivationCorrectness())
 	{
-		SPDLOG_ERROR("Parameter derivation is incorrect");
+		SPDLOG_ERROR("Derivation of simulation parameters is incorrect");
 		return false;
 	}
 
 	return true;
+}
+
+bool SimParamsMgr::LoadSimParamsFromProfile(const std::string& profile, bool verbose)
+{
+	nlohmann::json j;
+	if (!Base::LoadJsonObjectFromFile(profile + "/params.json", j))
+	{
+		return false;
+	}
+
+	return LoadSimParamsFromJson(j, verbose);
 }
 
 void SimParamsMgr::Set_SimRunning(
