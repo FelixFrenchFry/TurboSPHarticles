@@ -12,7 +12,6 @@
   "restDensityB": 1000.0,
   "viscosityF": 0.00015,
   "viscosityB": 0.00015,
-  "surfTensGamma": 0.1,
   "gravity": [ 0.0, -9.81, 0.0 ],
 
   "pressGamma": 0.5,
@@ -28,12 +27,12 @@
   "jitterSeedF": 67,
   "jitterFracB": 0.0,
   "jitterSeedB": 67,
-  "boundaryLayers": 3,
+  "boundaryLayers": 2,
 
   "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
 
-  "exportEnabled": true,
-  "exportDir": "C",
+  "exportEnabled": false,
+  "exportDir": "D",
   "exportInterval": 10
 }

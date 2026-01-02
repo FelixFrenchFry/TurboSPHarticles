@@ -76,9 +76,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT xAccViscF = xAccViscF_.data();
 	float* RESTRICT yAccViscF = yAccViscF_.data();
 	float* RESTRICT zAccViscF = zAccViscF_.data();
-	float* RESTRICT xNormF = xAccSurfTensF_.data();
-	float* RESTRICT yNormF = yAccSurfTensF_.data();
-	float* RESTRICT zNormF = zAccSurfTensF_.data();
 	float* RESTRICT xAccExtF = xAccExtF_.data();
 	float* RESTRICT yAccExtF = yAccExtF_.data();
 	float* RESTRICT zAccExtF = zAccExtF_.data();
@@ -116,17 +113,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving });
 
-	// --- [ surface tension computations ] ------------------------------------
-
-	// TODO: benchmarking group?
-
-	CPU01::SurfaceNormals(
-		xPosF, yPosF, zPosF,
-		densityF,
-		neighborLists,
-		sizeInvF, params.kernelRadius, kernelRadiusSqu, cubicSplineAlpha, massF, N_F_,
-		xNormF, yNormF, zNormF);
-
 	// --- [ non-pressure accelerations ] --------------------------------------
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Viscosity_Acceleration,
@@ -136,12 +122,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		xVelF, yVelF, zVelF,
-		xNormF, yNormF, zNormF,
 		densityF,
 		neighborLists,
-		timeStep, sizeInvF, sizeSquF, params.kernelRadius, kernelRadiusSqu,
+		timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
 		cubicSplineAlpha, params.restDensityF, params.restDensityB, massF, massB,
-		params.viscosityF, params.viscosityB, params.surfTensGamma,
+		params.viscosityF, params.viscosityB,
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
 		xAccViscF, yAccViscF, zAccViscF,
 		xAccExtF, yAccExtF, zAccExtF,
@@ -377,37 +362,6 @@ inline void CPU01::KernelGradient_CubicSpline(
 	zkg = commonFac * dz;
 }
 
-inline void CPU01::CohesionSpline_Akinci(
-	const float dist, const float kernelRadius,
-	const float cohSplineAlpha, const float cohSplineBeta,
-	// destinations
-	float& coh) noexcept
-{
-	// outside support radius -> no weight
-	if (dist >= kernelRadius || dist <= ZERO_EQU_LIM) [[unlikely]]
-	{
-		coh = 0.0f;
-		return;
-	}
-
-	const float hr = kernelRadius - dist;
-	const float hrCub = hr * hr * hr;
-	const float kernelRadiusCub = kernelRadius
-								* kernelRadius
-								* kernelRadius;
-
-	float t = hrCub * kernelRadiusCub;
-
-	// piecewise for r <= h/2
-	if (dist <= 0.5f * kernelRadius)
-	{
-		t = 2.0f * t - cohSplineBeta;
-	}
-
-	// final cohesion spline value
-	coh = cohSplineAlpha * t;
-}
-
 // TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::Density(
 	const float* RESTRICT xPosF,
@@ -493,76 +447,6 @@ void CPU01::Density(
 }
 
 // TODO: use more explicit SIMD hints, maybe xsimd library?
-void CPU01::SurfaceNormals(
-	const float* RESTRICT xPosF,
-	const float* RESTRICT yPosF,
-	const float* RESTRICT zPosF,
-	const float* RESTRICT densityF,
-	const Sim::I_NeighborLists& neighborLists,
-	float particleSizeInvF, float kernelRadius,
-	float kernelRadiusSqu, float cubicSplineAlpha,
-	float massF,
-	uint32_t N_F,
-	// destinations
-	float* RESTRICT xNormF,
-	float* RESTRICT yNormF,
-	float* RESTRICT zNormF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				const float xi = xPosF[i];
-				const float yi = yPosF[i];
-				const float zi = zPosF[i];
-
-				float tmp_xNormF = 0.0f;
-				float tmp_yNormF = 0.0f;
-				float tmp_zNormF = 0.0f;
-
-				// contributions from fluid neighbors
-				NeighborSpan nbrListFF = neighborLists.FF(i);
-				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
-				const uint32_t N_FF = nbrListFF.count;
-				for (uint32_t k = 0; k < N_FF; k++)
-				{
-					// global index of neighbor particle
-					const uint32_t j = nbrFF[k];
-
-					// position difference
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
-
-					// kernel gradient
-					float xkg = 0.0f;
-					float ykg = 0.0f;
-					float zkg = 0.0f;
-					KernelGradient_CubicSpline(
-						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
-						cubicSplineAlpha, xkg, ykg, zkg);
-
-					const float coeff = massF / std::max(densityF[j], 
-														 ZERO_EQU_LIM);
-
-					tmp_xNormF = std::fmaf(coeff, xkg, tmp_xNormF);
-					tmp_yNormF = std::fmaf(coeff, ykg, tmp_yNormF);
-					tmp_zNormF = std::fmaf(coeff, zkg, tmp_zNormF);
-				}
-
-				// multiply by kernel radius to get correct scale
-				xNormF[i] = kernelRadius * tmp_xNormF;
-				yNormF[i] = kernelRadius * tmp_yNormF;
-				zNormF[i] = kernelRadius * tmp_zNormF;
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-// TODO: use more explicit SIMD hints, maybe xsimd library?
 void CPU01::NonPressureAcceleration(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
@@ -573,19 +457,14 @@ void CPU01::NonPressureAcceleration(
 	const float* RESTRICT xVelF,
 	const float* RESTRICT yVelF,
 	const float* RESTRICT zVelF,
-	const float* RESTRICT xNormF,
-	const float* RESTRICT yNormF,
-	const float* RESTRICT zNormF,
 	const float* RESTRICT densityF,
 	const I_NeighborLists& neighborLists,
 	const float timeStep, const float particleSizeInvF,
-	const float particleSizeSquF, const float kernelRadius,
-	const float kernelRadiusSqu,
+	const float particleSizeSquF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityF,
 	const float restDensityB, const float massF, const float massB,
 	const float viscosityF, const float viscosityB,
-	const float surfTensGamma, const float xGravity,
-	const float yGravity, const float zGravity,
+	const float xGravity, const float yGravity, const float zGravity,
 	const uint32_t N_F,
 	// destinations
 	float* RESTRICT xAccViscF,
@@ -598,18 +477,6 @@ void CPU01::NonPressureAcceleration(
 	float* RESTRICT yVelPredF,
 	float* RESTRICT zVelPredF)
 {
-	const float invH = 1.0f / kernelRadius;
-	const float invH2 = invH * invH;
-	const float invH4 = invH2 * invH2;
-	const float invH8 = invH4 * invH4;
-	const float invH9 = invH8 * invH;
-	const float cohSplineAlpha = (32.0f / PI) * invH9;
-
-	const float h2 = kernelRadius * kernelRadius;
-	const float h4 = h2 * h2;
-	const float h6 = h4 * h2;
-	const float cohSplineBeta = h6 * (1.0f / 64.0f);
-
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -624,19 +491,9 @@ void CPU01::NonPressureAcceleration(
 				const float vyi = yVelF[i];
 				const float vzi = zVelF[i];
 
-				const float nix = xNormF[i];
-				const float niy = yNormF[i];
-				const float niz = zNormF[i];
-
-				const float densi = densityF[i];
-
 				float tmp_xAccViscF = 0.0f;
 				float tmp_yAccViscF = 0.0f;
 				float tmp_zAccViscF = 0.0f;
-
-				float tmp_xAccSurf = 0.0f;
-				float tmp_yAccSurf = 0.0f;
-				float tmp_zAccSurf = 0.0f;
 
 				// contributions from fluid neighbors
 				NeighborSpan nbrListFF = neighborLists.FF(i);
@@ -675,40 +532,6 @@ void CPU01::NonPressureAcceleration(
 					tmp_xAccViscF = std::fmaf(accCoeff, xkg, tmp_xAccViscF);
 					tmp_yAccViscF = std::fmaf(accCoeff, ykg, tmp_yAccViscF);
 					tmp_zAccViscF = std::fmaf(accCoeff, zkg, tmp_zAccViscF);
-
-					// surface tension acc contribution from fluid neighbor j
-					const float distSqu = std::fmaf(dx, dx, 
-										std::fmaf(dy, dy, dz * dz));
-					if (surfTensGamma > 0.0f && distSqu > ZERO_EQU_LIM)
-					{
-						const float dist = std::sqrt(distSqu);
-						const float distInv = 1.0f / dist;
-
-						const float rx = dx * distInv;
-						const float ry = dy * distInv;
-						const float rz = dz * distInv;
-
-						// symmetrized correction factor
-						const float k_ij = (2.0f * restDensityF) /
-							std::max(densi + densityF[j], ZERO_EQU_LIM);
-
-						// cohesion term
-						float coh_j_to_i = 0.0f;
-						CohesionSpline_Akinci(dist, kernelRadius,
-							cohSplineAlpha, cohSplineBeta, coh_j_to_i);
-						const float cohCoeff = -surfTensGamma * massF * coh_j_to_i;
-
-						tmp_xAccSurf = std::fmaf(k_ij * cohCoeff, rx, tmp_xAccSurf);
-						tmp_yAccSurf = std::fmaf(k_ij * cohCoeff, ry, tmp_yAccSurf);
-						tmp_zAccSurf = std::fmaf(k_ij * cohCoeff, rz, tmp_zAccSurf);
-
-						// curvature term
-						const float curvCoeff = -surfTensGamma * k_ij;
-
-						tmp_xAccSurf = std::fmaf(curvCoeff, (nix - xNormF[j]), tmp_xAccSurf);
-						tmp_yAccSurf = std::fmaf(curvCoeff, (niy - yNormF[j]), tmp_yAccSurf);
-						tmp_zAccSurf = std::fmaf(curvCoeff, (niz - zNormF[j]), tmp_zAccSurf);
-					}
 				}
 
 				float tmp_xAccViscB = 0.0f;
@@ -763,9 +586,9 @@ void CPU01::NonPressureAcceleration(
 				zAccViscF[i] = tmp_zAccViscF + tmp_zAccViscB;
 
 				// TODO: add surface tension acc contribution
-				xAccExtF[i] = xGravity + tmp_xAccSurf;
-				yAccExtF[i] = yGravity + tmp_yAccSurf;
-				zAccExtF[i] = zGravity + tmp_zAccSurf;
+				xAccExtF[i] = xGravity;
+				yAccExtF[i] = yGravity;
+				zAccExtF[i] = zGravity;
 
 				// compute predicted velocity from non-pressure accelerations
 				xVelPredF[i] = std::fmaf(xAccViscF[i] + xAccExtF[i], timeStep, xVelF[i]);

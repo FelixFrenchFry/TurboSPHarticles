@@ -38,12 +38,6 @@ namespace CPU01
 		// destinations
 		float& xkg, float& ykg, float& zkg) noexcept;
 
-	inline void CohesionSpline_Akinci(
-		float dist, float kernelRadius,
-		float cohSplineAlpha, float cohSplineBeta,
-		// destinations
-		float& coh) noexcept;
-
 	void Density(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
@@ -58,21 +52,6 @@ namespace CPU01
 		// destinations
 		float* RESTRICT densityF);
 
-	void SurfaceNormals(
-		const float* RESTRICT xPosF,
-		const float* RESTRICT yPosF,
-		const float* RESTRICT zPosF,
-		const float* RESTRICT densityF,
-		const Sim::I_NeighborLists& neighborLists,
-		float particleSizeInvF, float kernelRadius,
-		float kernelRadiusSqu, float cubicSplineAlpha,
-		float massF,
-		uint32_t N_F,
-		// destinations
-		float* RESTRICT xNormF,
-		float* RESTRICT yNormF,
-		float* RESTRICT zNormF);
-
 	void NonPressureAcceleration(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
@@ -83,19 +62,14 @@ namespace CPU01
 		const float* RESTRICT xVelF,
 		const float* RESTRICT yVelF,
 		const float* RESTRICT zVelF,
-		const float* RESTRICT xNormF,
-		const float* RESTRICT yNormF,
-		const float* RESTRICT zNormF,
 		const float* RESTRICT densityF,
 		const Sim::I_NeighborLists& neighborLists,
 		float timeStep, float particleSizeInvF,
-		float particleSizeSquF, float kernelRadius,
-		float kernelRadiusSqu,
+		float particleSizeSquF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float restDensityF,
 		float restDensityB, float massF, float massB,
 		float viscosityF, float viscosityB,
-		float surfTensGamma, float xGravity,
-		float yGravity, float zGravity,
+		float xGravity, float yGravity, float zGravity,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT xAccViscF,

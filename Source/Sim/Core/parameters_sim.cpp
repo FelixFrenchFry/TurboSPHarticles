@@ -255,11 +255,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			Base::ParticleType::Boundary, verbose);
 	}
 
-	if (auto it = j.find("surfTensGamma"); it != j.end())
-	{
-		Set_SurfTensGamma(it->get<float>(), verbose);
-	}
-
 	if (auto it = j.find("gravity"); it != j.end() &&
 		it->is_array() && it->size() == 3)
 	{
@@ -852,26 +847,6 @@ void SimParamsMgr::Set_Viscosity(
 		params_.viscosityB = viscosity;
 	}
 
-	EndWrite();
-}
-
-void SimParamsMgr::Set_SurfTensGamma(
-	float surfTensGamma, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-	Base::MarkIfChanged(surfTensGamma, params_.surfTensGamma, changed);
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'surfTensGamma' from {} to {}",
-			params_.surfTensGamma, surfTensGamma);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.surfTensGamma = surfTensGamma;
 	EndWrite();
 }
 

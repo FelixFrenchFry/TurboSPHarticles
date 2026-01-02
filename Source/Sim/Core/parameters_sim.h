@@ -72,7 +72,6 @@ namespace Sim
 		// non-pressure accelerations
 		float viscosityF		= 0.000003f;
 		float viscosityB		= 0.000003f;
-		float surfTensGamma     = 0.0f;
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
 		// pressure solving
@@ -141,7 +140,6 @@ namespace Sim
 		void Set_RestDensity(float restDensity, Base::ParticleType type, bool verbose = false);
 		void Set_Mass(float mass, Base::ParticleType type, bool verbose = false);
 		void Set_Viscosity(float viscosity, Base::ParticleType type, bool verbose = false);
-		void Set_SurfTensGamma(float surfTensGamma, bool verbose = false);
 		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
 		void Set_PressGamma(float pressGamma, bool verbose = false);
 		void Set_JacobiOmega(float jacobiOmega, bool verbose = false);

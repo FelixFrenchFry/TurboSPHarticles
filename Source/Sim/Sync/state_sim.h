@@ -28,7 +28,6 @@ namespace Sync
 		std::span<float> xAcc, yAcc, zAcc;
 		std::span<float> xAccPress, yAccPress, zAccPress;
 		std::span<float> xAccVisc, yAccVisc, zAccVisc;
-		std::span<float> xAccSurfTens, yAccSurfTens, zAccSurfTens;
 		std::span<float> xAccExt, yAccExt, zAccExt;
 		std::span<float> sourceTerm;
 		std::span<float> diagElem;
@@ -90,11 +89,6 @@ namespace Sync
 		std::vector<float> yAccVisc;
 		std::vector<float> zAccVisc;
 
-		// surface tension accelerations
-		std::vector<float> xAccSurfTens;
-		std::vector<float> yAccSurfTens;
-		std::vector<float> zAccSurfTens;
-
 		// external accelerations
 		// (gravity, surface tensions, etc...)
 		std::vector<float> xAccExt;
@@ -137,10 +131,6 @@ namespace Sync
 			yAccVisc.reserve(N);
 			zAccVisc.reserve(N);
 
-			xAccSurfTens.reserve(N);
-			yAccSurfTens.reserve(N);
-			zAccSurfTens.reserve(N);
-
 			xAccExt.reserve(N);
 			yAccExt.reserve(N);
 			zAccExt.reserve(N);
@@ -181,10 +171,6 @@ namespace Sync
 			xAccVisc.resize(N_);
 			yAccVisc.resize(N_);
 			zAccVisc.resize(N_);
-
-			xAccSurfTens.resize(N_);
-			yAccSurfTens.resize(N_);
-			zAccSurfTens.resize(N_);
 
 			xAccExt.resize(N_);
 			yAccExt.resize(N_);
@@ -228,10 +214,6 @@ namespace Sync
 				.xAccVisc = std::span<float>(xAccVisc),
 				.yAccVisc = std::span<float>(yAccVisc),
 				.zAccVisc = std::span<float>(zAccVisc),
-
-				.xAccSurfTens = std::span<float>(xAccSurfTens),
-				.yAccSurfTens = std::span<float>(yAccSurfTens),
-				.zAccSurfTens = std::span<float>(zAccSurfTens),
 
 				.xAccExt = std::span<float>(xAccExt),
 				.yAccExt = std::span<float>(yAccExt),
