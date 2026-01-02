@@ -6,8 +6,10 @@
 
 // external
 #include <array>
+#include <functional>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <string_view>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
@@ -16,6 +18,7 @@
 
 
 using json = nlohmann::json;
+using ParticleKeepPredicate = std::function<bool(float u, float v, float w)>;
 
 namespace Scene
 {
@@ -57,13 +60,20 @@ namespace Scene
 								 Sync::UniversalSimState& dst,
 								 const Sim::SimParams& params);
 
+		// builds a block of fluid particles inside a given OBB,
+		// but only keeps particles for which the given predicate is true
+		void BuildFluidBlock_OBB_Filtered(const OBB& box,
+										  Sync::UniversalSimState& dst,
+										  const Sim::SimParams& params,
+										  const ParticleKeepPredicate& keep);
+
 		// TODO: builds a sphere of fluid particles inside a given sphere
 
 		// builds a hollow block of boundary particles inside a given OBB
 		// (thickness given boundary layers param)
-		void BuildBoundaryBlockHollow_OBB(const OBB& box,
-										  Sync::UniversalSimState& dst,
-										  const Sim::SimParams& params);
+		void BuildBoundaryBlock_OBB_Hollow(const OBB& box,
+										   Sync::UniversalSimState& dst,
+										   const Sim::SimParams& params);
 
 		OBB MakeOBB_FromAxes(glm::vec3 origin,
 							 glm::vec3 uDir, float uLen,

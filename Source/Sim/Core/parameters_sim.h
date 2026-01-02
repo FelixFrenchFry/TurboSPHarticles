@@ -86,6 +86,9 @@ namespace Sim
 		// gravity
 		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
+		// data structuring
+		uint32_t dataReOrderInterval = 50;
+
 		// fluid conditions
 		float jitterFracF		= 0.0f; // % of particle size
 		int64_t jitterSeedF		= 42; // RNG seed for jitter
@@ -145,6 +148,7 @@ namespace Sim
 		void Set_MinSolverIters(uint32_t minSolverIters, bool verbose = false);
 		void Set_MaxSolverIters(uint32_t maxSolverIters, bool verbose = false);
 		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
+		void Set_DataReOrderInterval(uint32_t dataReOrderInterval, bool verbose = false);
 		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
 
 		bool AssertParamDerivationCorrectness() const;

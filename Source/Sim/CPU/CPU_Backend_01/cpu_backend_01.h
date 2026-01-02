@@ -47,8 +47,11 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
 
+		// executes only the neighbor search (construction and query of the data NS structure)
+		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;
+
 		// advances the simulation by N_steps
-		void ExecuteSimStep(const SimParams& params, uint32_t N_steps) override;
+		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
 
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;
@@ -76,9 +79,6 @@ namespace Sim
 		double simTime_ = 0.0;
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
-
-		// TODO: manage this in the param manager
-		uint32_t dataReOrderInterval_ = 50;
 
 		// persistent parallelization partitioner for TBB
 		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;

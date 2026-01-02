@@ -46,7 +46,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	// --- [ particle data re-ordering ] ---------------------------------------
 
-	if (dataReOrderInterval_ > 0 && simStep_ % dataReOrderInterval_ == 0)
+	if (params.dataReOrderInterval > 0 && simStep_ % params.dataReOrderInterval == 0)
 	{
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Data_Ordering });
 		neighborSearchStrat_->DataReOrder(params);

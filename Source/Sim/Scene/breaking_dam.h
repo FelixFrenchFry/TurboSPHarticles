@@ -5,7 +5,6 @@
 #pragma once
 
 // external
-#include <fstream>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -36,40 +35,38 @@ namespace Scene
 	{
 	public: // -----------------------------------------------------------------
 
-		BreakingDamScene(ScenarioMgr& scenarioMgr, BreakingDamConfig config)
-			: scenarioMgr_(scenarioMgr), config_(config) {}
+		BreakingDamScene(ScenarioMgr& scenarioMgr, BreakingDamConfig cfg)
+			: scenarioMgr_(scenarioMgr), cfg_(cfg) {}
 
 		const char* Name() const override { return "Breaking Dam"; }
 
 		void Build(Sync::UniversalSimState& dst, const Sim::SimParams& params) const override
 		{
-			scenarioMgr_.BuildBoundaryContainer_OBB(config_.container, dst, params);
+			scenarioMgr_.BuildBoundaryContainer_OBB(cfg_.container, dst, params);
 
-			scenarioMgr_.BuildFluidBlock_OBB(config_.fluid, dst, params);
+			scenarioMgr_.BuildFluidBlock_OBB(cfg_.fluid, dst, params);
 		}
 
 		std::vector<OBB> GetBoundaryBoxes() const override
 		{
-			std::vector<OBB> res{};
-
-			res.push_back(config_.container);
-
-			return res;
+			return { cfg_.container };
 		}
 
 	private: // ----------------------------------------------------------------
 
 		ScenarioMgr& scenarioMgr_;
-		BreakingDamConfig config_;
+		BreakingDamConfig cfg_;
 	};
 
 	inline BreakingDamConfig MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr)
 	{
-		const glm::vec3 U{ 1, 0, 0 }; // forward
-		const glm::vec3 V{ 0, 1, 0 }; // up
-		const glm::vec3 W{ 0, 0, 1 }; // right
+		constexpr glm::vec3 U{ 1, 0, 0 }; // forward
+		constexpr glm::vec3 V{ 0, 1, 0 }; // up
+		constexpr glm::vec3 W{ 0, 0, 1 }; // right
 
-		OBB container = scenarioMgr.MakeOBB_FromAxes
+		BreakingDamConfig cfg{};
+
+		cfg.container = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0,0,0},
 			/* uDir, uLen */	U, 1.0f,
@@ -77,7 +74,7 @@ namespace Scene
 			/* wDir, wLen */	W, 1.0f
 		);
 
-		OBB fluid = scenarioMgr.MakeOBB_FromAxes
+		cfg.fluid = scenarioMgr.MakeOBB_FromAxes
 		(
 			/* origin */		{0.0,0.0,0.0},
 			/* uDir, uLen */	U, 0.5f,
@@ -85,18 +82,14 @@ namespace Scene
 			/* wDir, wLen */	W, 0.5f
 		);
 
-		return BreakingDamConfig{ container, fluid };
+		return cfg;
 	}
 
 	inline BreakingDamConfig LoadBreakingDamConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
 		// cache default config
-		const BreakingDamConfig def = MakeBreakingDamConfig_Default(scenarioMgr);
-
-		BreakingDamConfig cfg{};
-		cfg.container = def.container;
-		cfg.fluid = def.fluid;
+		BreakingDamConfig cfg = MakeBreakingDamConfig_Default(scenarioMgr);
 
 		if (auto it = j.find("container"); it != j.end())
 		{
@@ -107,6 +100,14 @@ namespace Scene
 		{
 			cfg.fluid = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
 		}
+
+		// sanitize values
+		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen), 
+								  cfg.container.uLen);
+		cfg.fluid.vLen = std::min(std::max(0.0f, cfg.fluid.vLen), 
+								  cfg.container.vLen);
+		cfg.fluid.wLen = std::min(std::max(0.0f, cfg.fluid.wLen), 
+								  cfg.container.wLen);
 
 		return cfg;
 	}
@@ -154,10 +155,7 @@ namespace Scene
 		// try chosen profile
 		{
 			const std::string file = profile + "/scenarios.json";
-			if (auto cfg = TryLoadFromScenarioFile(file))
-			{
-				return *cfg;
-			}
+			if (auto cfg = TryLoadFromScenarioFile(file)) { return *cfg; }
 
 			SPDLOG_WARN("Could not load BreakingDam from '/{}'.", file);
 		}
@@ -166,10 +164,7 @@ namespace Scene
 		if (profile != "Default")
 		{
 			const std::string file = "Default/scenarios.json";
-			if (auto cfg = TryLoadFromScenarioFile(file))
-			{
-				return *cfg;
-			}
+			if (auto cfg = TryLoadFromScenarioFile(file)) { return *cfg; }
 
 			SPDLOG_WARN("Could not load BreakingDam from '/{}'.", file);
 		}

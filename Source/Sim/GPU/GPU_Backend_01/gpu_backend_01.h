@@ -104,7 +104,7 @@ namespace Sim
 
 		// packs the current simulation state into a snapshot used for exporting or visualization
 		// (implementation is backend-specific for better performance)
-		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& simParams) const override;
+		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params) const override;
 		void PackVisualSnapshot(Sync::VisualSnapshot& snap) const override;
 
 		// fills in the scalar data based on given different color coding modes
@@ -113,10 +113,13 @@ namespace Sim
 
 		// computes & fills in the stat data for the current sim step
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
-		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
+		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& params) const override;
+
+		// executes only the neighbor search (construction and query of the data NS structure)
+		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;
 
 		// advances the simulation by N_steps
-		void ExecuteSimStep(const SimParams& params, uint32_t N_steps) override;
+		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
 
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;

@@ -82,6 +82,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			{
 				const std::string s = v.get<std::string>();
 				if (s == "BreakingDam") { out = Base::ScenarioType::BreakingDam; return true; }
+				if (s == "ConvergingDam") { out = Base::ScenarioType::ConvergingDam; return true; }
+				if (s == "BigDroplet") { out = Base::ScenarioType::BigDroplet; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -336,6 +338,13 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		g.y = (*it)[1].get<float>();
 		g.z = (*it)[2].get<float>();
 		Set_Gravity(g, verbose);
+	}
+
+	// --- [ data structuring ] ------------------------------------------------
+
+	if (auto it = j.find("dataReOrderInterval"); it != j.end())
+	{
+		Set_DataReOrderInterval(it->get<uint32_t>(), verbose);
 	}
 
 	// --- [ jitter ] ----------------------------------------------------------
@@ -973,6 +982,26 @@ void SimParamsMgr::Set_Gravity(
 	// apply changes
 	BeginWrite();
 	params_.gravity = gravity;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_DataReOrderInterval(
+	uint32_t dataReOrderInterval, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(dataReOrderInterval, params_.dataReOrderInterval, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'dataReOrderInterval' from {} to {}",
+			params_.dataReOrderInterval, dataReOrderInterval);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.dataReOrderInterval = dataReOrderInterval;
 	EndWrite();
 }
 

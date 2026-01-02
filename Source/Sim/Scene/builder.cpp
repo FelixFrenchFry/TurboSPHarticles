@@ -57,23 +57,24 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	dst.ResizeFluid(N_base + N_add);
 
 	// offsets from box planes
-	const float uOff = radius + StartOffset(uLen_i, size, N_u);
-	const float vOff = radius + StartOffset(vLen_i, size, N_v);
-	const float wOff = radius + StartOffset(wLen_i, size, N_w);
+	const float uOff = radius + StartOffset(uLen_i, size, static_cast<int>(N_u));
+	const float vOff = radius + StartOffset(vLen_i, size, static_cast<int>(N_v));
+	const float wOff = radius + StartOffset(wLen_i, size, static_cast<int>(N_w));
 
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
 
+	// add particles
 	if (N_w > 0 && N_v > 0 && N_u > 0)
 	{
 		tbb::parallel_for(
 			tbb::blocked_range3d<int>(0, N_w, 0, N_v, 0, N_u),
 			[&](const tbb::blocked_range3d<int>& r)
 			{
-				for (int kw = r.pages().begin(); kw != r.pages().end(); ++kw) // depth
+				for (int kw = r.pages().begin(); kw != r.pages().end(); kw++) // depth
 				{
-					for (int jv = r.rows().begin(); jv != r.rows().end(); ++jv) // height
+					for (int jv = r.rows().begin(); jv != r.rows().end(); jv++) // height
 					{
-						for (int iu = r.cols().begin(); iu != r.cols().end(); ++iu) // width
+						for (int iu = r.cols().begin(); iu != r.cols().end(); iu++) // width
 						{
 							// get global index of currently handled particle
 							const uint32_t local = (N_v * kw + jv) * N_u + iu;
@@ -150,9 +151,146 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	}
 }
 
-void ScenarioMgr::BuildBoundaryBlockHollow_OBB(const OBB& box,
+void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 											   Sync::UniversalSimState& dst,
-											   const Sim::SimParams& params)
+											   const Sim::SimParams& params,
+											   const ParticleKeepPredicate& keep)
+{
+	const float size = params.particleSizeF;
+	const float radius = params.particleRadiusF;
+
+	// inner lengths for centers (shrink by one radius per side)
+	const float uLen_i = box.uLen - 2.0f * radius;
+	const float vLen_i = box.vLen - 2.0f * radius;
+	const float wLen_i = box.wLen - 2.0f * radius;
+	if (uLen_i <= 0.0f || vLen_i <= 0.0f || wLen_i <= 0.0f) { return; }
+
+	// number of particles in each direction (inside inner OBB)
+	const uint32_t N_u = TilesCount(uLen_i, size);
+	const uint32_t N_v = TilesCount(vLen_i, size);
+	const uint32_t N_w = TilesCount(wLen_i, size);
+	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
+
+	// offsets from box planes
+	const float uOff = radius + StartOffset(uLen_i, size, static_cast<int>(N_u));
+	const float vOff = radius + StartOffset(vLen_i, size, static_cast<int>(N_v));
+	const float wOff = radius + StartOffset(wLen_i, size, static_cast<int>(N_w));
+
+	// first pass to determine how many particles to keep
+	uint32_t keepCount = 0;
+	for (uint32_t kw = 0; kw < N_w; kw++)
+	{
+		for (uint32_t jv = 0; jv < N_v; jv++)
+		{
+			for (uint32_t iu = 0; iu < N_u; iu++)
+			{
+				// position components
+				float u = uOff + static_cast<float>(iu) * size;
+				float v = vOff + static_cast<float>(jv) * size;
+				float w = wOff + static_cast<float>(kw) * size;
+
+				// clamp to make edge particles remain fully inside the box
+				u = std::clamp(u, radius, box.uLen - radius);
+				v = std::clamp(v, radius, box.vLen - radius);
+				w = std::clamp(w, radius, box.wLen - radius);
+
+				// apply filter
+				if (!keep || keep(u, v, w)) { keepCount++; }
+			}
+		}
+	}
+	if (keepCount == 0) { return; }
+
+	auto& F = dst.fluidParticles;
+
+	// resize fluid particle data structures
+	const uint32_t N_base = F.N_;
+	dst.ResizeFluid(N_base + keepCount);
+
+	const float jitAmp = params.jitterFracF * params.particleSizeF;
+	uint32_t outIdx = N_base;
+
+	// second pass to actually add particles
+	for (uint32_t kw = 0; kw < N_w; kw++)
+	{
+		for (uint32_t jv = 0; jv < N_v; jv++)
+		{
+			for (uint32_t iu = 0; iu < N_u; iu++)
+			{
+				// position components
+				float u = uOff + static_cast<float>(iu) * size;
+				float v = vOff + static_cast<float>(jv) * size;
+				float w = wOff + static_cast<float>(kw) * size;
+
+				// apply filter
+				if (keep && !keep(u, v, w)) { continue; }
+
+				// optionally apply jittering
+				if (jitAmp > 0.0f)
+				{
+					// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
+					const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
+
+					u += Jitter3D(baseSeed, static_cast<uint64_t>(outIdx) * 3ull + 0ull, jitAmp);
+					v += Jitter3D(baseSeed, static_cast<uint64_t>(outIdx) * 3ull + 1ull, jitAmp);
+					w += Jitter3D(baseSeed, static_cast<uint64_t>(outIdx) * 3ull + 2ull, jitAmp);
+				}
+
+				// clamp to make edge particles remain fully inside the box
+				u = std::clamp(u, radius, box.uLen - radius);
+				v = std::clamp(v, radius, box.vLen - radius);
+				w = std::clamp(w, radius, box.wLen - radius);
+
+				const glm::vec3 pos = box.origin
+									+ box.uHat * u
+									+ box.vHat * v
+									+ box.wHat * w;
+
+				// use pos for new particle
+				F.xPos[outIdx] = pos.x;
+				F.yPos[outIdx] = pos.y;
+				F.zPos[outIdx] = pos.z;
+
+				// no velocity by default
+				F.xVel[outIdx] = 0.0f;
+				F.yVel[outIdx] = 0.0f;
+				F.zVel[outIdx] = 0.0f;
+				F.xVelPred[outIdx] = 0.0f;
+				F.yVelPred[outIdx] = 0.0f;
+				F.zVelPred[outIdx] = 0.0f;
+
+				// no acceleration by default
+				F.xAcc[outIdx] = 0.0f;
+				F.yAcc[outIdx] = 0.0f;
+				F.zAcc[outIdx] = 0.0f;
+				F.xAccPress[outIdx] = 0.0f;
+				F.yAccPress[outIdx] = 0.0f;
+				F.zAccPress[outIdx] = 0.0f;
+				F.xAccVisc[outIdx] = 0.0f;
+				F.yAccVisc[outIdx] = 0.0f;
+				F.zAccVisc[outIdx] = 0.0f;
+				F.xAccExt[outIdx] = 0.0f;
+				F.yAccExt[outIdx] = 0.0f;
+				F.zAccExt[outIdx] = 0.0f;
+
+				// default pressure, density, etc...
+				F.sourceTerm[outIdx] = 0.0f;
+				F.diagElem[outIdx] = 0.0f;
+				F.sysVecElem[outIdx] = 0.0f;
+				F.pressure[outIdx] = 0.0f;
+				F.density[outIdx] = params.restDensityF;
+
+				F.id[outIdx] = outIdx;
+
+				outIdx++;
+			}
+		}
+	}
+}
+
+void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
+											    Sync::UniversalSimState& dst,
+											    const Sim::SimParams& params)
 {
 	const float size = params.particleSizeB;
 	const float radius = params.particleRadiusB;

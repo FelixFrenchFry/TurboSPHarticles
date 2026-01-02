@@ -248,6 +248,9 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 
+	// initial neighbor search for correct statistics
+	simBackend_->ExecuteNeighborSearch(simParams_);
+
 	{
 		// create visual snapshot and push to its mailbox
 		auto visSnap = std::make_shared<Sync::VisualSnapshot>();
@@ -308,7 +311,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Total_Sim });
 
 			// perform the actual simulation step
-			simBackend_->ExecuteSimStep(params);
+			simBackend_->ExecuteFullSimStep(params);
 
 			// update metadata
 			simStep_ += 1;
@@ -390,6 +393,9 @@ void SimulationMgr::RunSim_Blocking()
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 
+	// initial neighbor search for correct statistics
+	simBackend_->ExecuteNeighborSearch(simParams_);
+
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
@@ -433,7 +439,7 @@ void SimulationMgr::RunSim_Blocking()
 			benchmarksMgr_.StartBench({ Bench::BenchOp::Total_Sim });
 
 			// perform the actual simulation step
-			simBackend_->ExecuteSimStep(params);
+			simBackend_->ExecuteFullSimStep(params);
 
 			// update metadata
 			simStep_ += 1;

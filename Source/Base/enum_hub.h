@@ -36,12 +36,18 @@ namespace Base
 	enum class ScenarioType : uint8_t
 	{
 		BreakingDam,		// 0
+		ConvergingDam,		// 1
+		BigDroplet,			// 2
+		SmallDroplets		// 3
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
 		switch (v)
 		{
 		case ScenarioType::BreakingDam: return "BreakingDam";
+		case ScenarioType::ConvergingDam: return "ConvergingDam";
+		case ScenarioType::BigDroplet: return "BigDroplet";
+		case ScenarioType::SmallDroplets: return "SmallDroplets";
 		}
 		return "ScenarioType::<unknown>";
 	}

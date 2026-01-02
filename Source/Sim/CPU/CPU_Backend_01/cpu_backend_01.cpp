@@ -342,7 +342,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 					const uint32_t* nbrFF = nbrListFF.data;
 					const uint32_t N_FF = nbrListFF.count;
 
-					for (uint32_t k = 0; k < N_FF; ++k)
+					for (uint32_t k = 0; k < N_FF; k++)
 					{
 						const uint32_t j = nbrFF[k];
 
@@ -872,7 +872,22 @@ void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	}
 }
 
-void SimBackend_CPU01::ExecuteSimStep(const SimParams& params, uint32_t N_steps)
+void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)
+{
+	if (bench) { benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction }); }
+	neighborSearchStrat_->Construct(params);
+	if (bench) { benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction }); }
+
+	if (bench) { benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query }); }
+	neighborSearchStrat_->Query(params);
+	if (bench) { benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query }); }
+
+	if (bench) { benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction }); }	
+	neighborLists_->Finalize();
+	if (bench) { benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction }); }
+}
+
+void SimBackend_CPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)
 {
 	if (N_F_ == 0) // empty sim
 	{

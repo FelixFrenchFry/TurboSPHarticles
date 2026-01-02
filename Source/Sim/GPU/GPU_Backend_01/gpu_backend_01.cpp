@@ -346,7 +346,12 @@ void SimBackend_GPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
 	// TODO: implement
 }
 
-void SimBackend_GPU01::ExecuteSimStep(const SimParams& params, uint32_t N_steps)
+void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench)
+{
+	// TODO: implement	
+}
+
+void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)
 {
 	if (N_F_ == 0) // empty sim
 	{
