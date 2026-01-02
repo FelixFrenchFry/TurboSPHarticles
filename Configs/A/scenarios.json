@@ -42,9 +42,9 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 16.0,
-        "vLen": 16.0,
-        "wLen": 16.0
+        "uLen": 12.0,
+        "vLen": 12.0,
+        "wLen": 12.0
       },
       "poolDepth": 2.0,
       "dropletRadius": 2.0,

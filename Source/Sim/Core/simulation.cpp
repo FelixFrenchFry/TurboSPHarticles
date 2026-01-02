@@ -43,9 +43,9 @@ bool SimulationMgr::Init()
 
 	// TODO: load initial sim state from a file?
 
-	SelectSimBackend(simParams_.backendVersion);
-
 	SelectSimScenario(simParams_.scenarioType, configProfile_);
+
+	SelectSimBackend(simParams_.backendVersion);
 
 	ReBuildInitialSimState();
 
