@@ -25,7 +25,7 @@ namespace GPU01
 	__constant__ float c_restDensitySquInvB;
 	__constant__ float c_massF;
 	__constant__ float c_massB;
-	__constant__ float c_gammaPress;
+	__constant__ float c_pressGamma;
 	__constant__ float c_jacobiOmega;
 	__constant__ float c_viscosityF;
 	__constant__ float c_viscosityB;
@@ -56,7 +56,7 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInvB, &restDensitySquInvB, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_massF, &params.massF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_massB, &params.massB, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_gammaPress, &params.gammaPress, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_pressGamma, &params.pressGamma, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_jacobiOmega, &params.jacobiOmega, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_viscosityF, &params.viscosityF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_viscosityB, &params.viscosityB, sizeof(float)));
@@ -455,11 +455,11 @@ namespace GPU01
 
 		// finalize c-term
 		const float xCTerm = -1.0f * (xCTermF * c_restDensitySquInvF * c_massF)
-			- 2.0f * c_gammaPress * (xCTermB * c_restDensitySquInvF * c_massB);
+			- 2.0f * c_pressGamma * (xCTermB * c_restDensitySquInvF * c_massB);
 		const float yCTerm = -1.0f * (yCTermF * c_restDensitySquInvF * c_massF)
-			- 2.0f * c_gammaPress * (yCTermB * c_restDensitySquInvF * c_massB);
+			- 2.0f * c_pressGamma * (yCTermB * c_restDensitySquInvF * c_massB);
 		const float zCTerm = -1.0f * (zCTermF * c_restDensitySquInvF * c_massF)
-			- 2.0f * c_gammaPress * (zCTermB * c_restDensitySquInvF * c_massB);
+			- 2.0f * c_pressGamma * (zCTermB * c_restDensitySquInvF * c_massB);
 
 		float tmp_diagElemA = 0.0f;
 		float tmp_diagElemB = 0.0f;
@@ -602,7 +602,7 @@ namespace GPU01
 		const uint32_t baseFB = i * N_MAX_FB;
 		const uint32_t cntFB = neighCountFB[i];
 
-		const float accCoeffB = c_gammaPress * c_massB
+		const float accCoeffB = c_pressGamma * c_massB
 							  * 2.0f * presi * densiInvSqu;
 
 		// FB

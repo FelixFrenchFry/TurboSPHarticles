@@ -59,7 +59,7 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 		.timeStep = simParams.timeStep,
 		.viscosityF = simParams.viscosityF,
 		.viscosityB = simParams.viscosityB,
-		.gammaPress = simParams.gammaPress,
+		.pressGamma = simParams.pressGamma,
 		.jacobiOmega = simParams.jacobiOmega,
 		.densityDevTarget = simParams.densityDevTarget,
 		.minSolverIters = static_cast<int>(simParams.minSolverIters),
@@ -309,7 +309,7 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 	BuildParamElement_TimeStep(simParams);
 	BuildParamElement_ViscosityF(simParams);
 	BuildParamElement_ViscosityB(simParams);
-	BuildParamElement_GammaPress(simParams);
+	BuildParamElement_PressGamma(simParams);
 	BuildParamElement_JacobiOmega(simParams);
 	BuildParamElement_DensityDevTarget(simParams);
 	BuildParamElement_MinSolverIters(simParams);
@@ -836,23 +836,23 @@ void UserInterfaceMgr::BuildParamElement_ViscosityB(const Sim::SimParams& simPar
 	if (cached) { ImGui::PopStyleColor(); }
 }
 
-void UserInterfaceMgr::BuildParamElement_GammaPress(const Sim::SimParams& simParams)
+void UserInterfaceMgr::BuildParamElement_PressGamma(const Sim::SimParams& simParams)
 {
-	const bool cached = changed_.gammaPress;
+	const bool cached = changed_.pressGamma;
 	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
 	ImGui::SetNextItemWidth(170);
-	if (ImGui::InputFloat(" gamma press##input_gammaPress",
-		&temp_.gammaPress, mags_.gammaPress[0], mags_.gammaPress[1], "%.2f"))
+	if (ImGui::InputFloat(" gamma press##input_pressGamma",
+		&temp_.pressGamma, mags_.pressGamma[0], mags_.pressGamma[1], "%.2f"))
 	{
-		const bool changed = !Base::ApproxEqu(temp_.gammaPress, simParams.gammaPress);
+		const bool changed = !Base::ApproxEqu(temp_.pressGamma, simParams.pressGamma);
 
 		if (changed && liveParamEditing_) // apply param changes immediately
 		{
-			simParamsMgr_.Set_GammaPress(temp_.gammaPress);
+			simParamsMgr_.Set_PressGamma(temp_.pressGamma);
 		}
 
 		// mark unsaved changes when not live editing
-		changed_.gammaPress = changed && !liveParamEditing_;
+		changed_.pressGamma = changed && !liveParamEditing_;
 		unsavedParamChanges_ = changed && !liveParamEditing_;
 	}
 	if (cached) { ImGui::PopStyleColor(); }
@@ -1053,10 +1053,10 @@ void UserInterfaceMgr::ApplyParamChanges()
 		simParamsMgr_.Set_Viscosity(temp_.viscosityB, Base::ParticleType::Boundary);
 		changed_.viscosityB = false;
 	}
-	if (changed_.gammaPress)
+	if (changed_.pressGamma)
 	{
-		simParamsMgr_.Set_GammaPress(temp_.gammaPress);
-		changed_.gammaPress = false;
+		simParamsMgr_.Set_PressGamma(temp_.pressGamma);
+		changed_.pressGamma = false;
 	}
 	if (changed_.jacobiOmega)
 	{
@@ -1106,10 +1106,10 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 		temp_.viscosityB = simParams.viscosityB;
 		changed_.viscosityB = false;
 	}
-	if (changed_.gammaPress)
+	if (changed_.pressGamma)
 	{
-		temp_.gammaPress = simParams.gammaPress;
-		changed_.gammaPress = false;
+		temp_.pressGamma = simParams.pressGamma;
+		changed_.pressGamma = false;
 	}
 	if (changed_.jacobiOmega)
 	{

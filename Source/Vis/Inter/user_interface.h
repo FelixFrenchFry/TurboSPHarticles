@@ -36,7 +36,7 @@ namespace Inter
 		bool timeStep;
 		bool viscosityF;
 		bool viscosityB;
-		bool gammaPress;
+		bool pressGamma;
 		bool jacobiOmega;
 		bool densityDevTarget;
 		bool minSolverIters;
@@ -50,7 +50,7 @@ namespace Inter
 		std::array<float, 2> timeStep;
 		std::array<float, 2> viscosityF;
 		std::array<float, 2> viscosityB;
-		std::array<float, 2> gammaPress;
+		std::array<float, 2> pressGamma;
 		std::array<float, 2> jacobiOmega;
 		std::array<float, 2> densityDevTarget;
 		std::array<int, 2> minSolverIters;
@@ -64,7 +64,7 @@ namespace Inter
 		float timeStep;
 		float viscosityF;
 		float viscosityB;
-		float gammaPress;
+		float pressGamma;
 		float jacobiOmega;
 		float densityDevTarget;
 		int minSolverIters;
@@ -140,7 +140,7 @@ namespace Inter
 			.timeStep = false,
 			.viscosityF = false,
 			.viscosityB = false,
-			.gammaPress = false,
+			.pressGamma = false,
 			.jacobiOmega = false,
 			.densityDevTarget = false,
 			.minSolverIters = false,
@@ -152,7 +152,7 @@ namespace Inter
 			.timeStep			= { 0.0001f,		0.00001f },
 			.viscosityF			= { 0.00001f,		0.000001f },
 			.viscosityB			= { 0.00001f,		0.000001f },
-			.gammaPress			= { 0.1f,			0.01f },
+			.pressGamma			= { 0.1f,			0.01f },
 			.jacobiOmega		= { 0.1f,			0.01f },
 			.densityDevTarget	= { 0.01f,		0.001f },
 			.minSolverIters		= { 1,			1 },
@@ -209,7 +209,7 @@ namespace Inter
 		void BuildParamElement_TimeStep(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityF(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityB(const Sim::SimParams& simParams);
-		void BuildParamElement_GammaPress(const Sim::SimParams& simParams);
+		void BuildParamElement_PressGamma(const Sim::SimParams& simParams);
 		void BuildParamElement_JacobiOmega(const Sim::SimParams& simParams);
 		void BuildParamElement_DensityDevTarget(const Sim::SimParams& simParams);
 		void BuildParamElement_MinSolverIters(const Sim::SimParams& simParams);

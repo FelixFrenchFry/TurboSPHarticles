@@ -44,7 +44,7 @@ namespace Bench
 		Viscosity_Acceleration,				// computation of the viscosity accelerations
 
 		// external
-		External_Acceleration,				// computation of the viscosity accelerations
+		External_Acceleration,				// computation of the external accelerations
 
 		// advection
 		AccelerationUpdate,

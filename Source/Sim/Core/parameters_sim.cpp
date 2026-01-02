@@ -241,7 +241,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			Base::ParticleType::Boundary, verbose);
 	}
 
-	// --- [ viscosity ] -------------------------------------------------------
+	// --- [ non-pressure accelerations ] ---------------------------------------
 
 	if (auto it = j.find("viscosityF"); it != j.end())
 	{
@@ -255,11 +255,26 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			Base::ParticleType::Boundary, verbose);
 	}
 
+	if (auto it = j.find("surfTensGamma"); it != j.end())
+	{
+		Set_SurfTensGamma(it->get<float>(), verbose);
+	}
+
+	if (auto it = j.find("gravity"); it != j.end() &&
+		it->is_array() && it->size() == 3)
+	{
+		glm::vec3 g;
+		g.x = (*it)[0].get<float>();
+		g.y = (*it)[1].get<float>();
+		g.z = (*it)[2].get<float>();
+		Set_Gravity(g, verbose);
+	}
+
 	// --- [ pressure ] --------------------------------------------------------
 
-	if (auto it = j.find("gammaPress"); it != j.end())
+	if (auto it = j.find("pressGamma"); it != j.end())
 	{
-		Set_GammaPress(it->get<float>(), verbose);
+		Set_PressGamma(it->get<float>(), verbose);
 	}
 
 	if (auto it = j.find("jacobiOmega"); it != j.end())
@@ -326,18 +341,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		}
 
 		EndWrite();
-	}
-
-	// --- [ gravity ] ---------------------------------------------------------
-
-	if (auto it = j.find("gravity"); it != j.end() &&
-		it->is_array() && it->size() == 3)
-	{
-		glm::vec3 g;
-		g.x = (*it)[0].get<float>();
-		g.y = (*it)[1].get<float>();
-		g.z = (*it)[2].get<float>();
-		Set_Gravity(g, verbose);
 	}
 
 	// --- [ data structuring ] ------------------------------------------------
@@ -852,23 +855,64 @@ void SimParamsMgr::Set_Viscosity(
 	EndWrite();
 }
 
-void SimParamsMgr::Set_GammaPress(
-	float gammaPress, bool verbose)
+void SimParamsMgr::Set_SurfTensGamma(
+	float surfTensGamma, bool verbose)
 {
 	// detect if parameter would actually change
 	bool changed = false;
-	Base::MarkIfChanged(gammaPress, params_.gammaPress, changed);
+	Base::MarkIfChanged(surfTensGamma, params_.surfTensGamma, changed);
 	if (!changed) { return; } // nothing to change
 
 	if (verbose)
 	{
-		SPDLOG_INFO("Changed 'gammaPress' from {} to {}",
-			params_.gammaPress, gammaPress);
+		SPDLOG_INFO("Changed 'surfTensGamma' from {} to {}",
+			params_.surfTensGamma, surfTensGamma);
 	}
 
 	// apply changes
 	BeginWrite();
-	params_.gammaPress = gammaPress;
+	params_.surfTensGamma = surfTensGamma;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_Gravity(
+	glm::vec3 gravity, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(gravity, params_.gravity, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
+			params_.gravity.x, params_.gravity.y, params_.gravity.z,
+			gravity.x, gravity.y, gravity.z);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.gravity = gravity;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_PressGamma(
+	float pressGamma, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(pressGamma, params_.pressGamma, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'pressGamma' from {} to {}",
+			params_.pressGamma, pressGamma);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.pressGamma = pressGamma;
 	EndWrite();
 }
 
@@ -961,27 +1005,6 @@ void SimParamsMgr::Set_MaxSolverIters(
 	// apply changes
 	BeginWrite();
 	params_.maxSolverIters = maxSolverIters;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_Gravity(
-	glm::vec3 gravity, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-	Base::MarkIfChanged(gravity, params_.gravity, changed);
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'gravity' from ({}, {}, {}) to ({}, {}, {})",
-			params_.gravity.x, params_.gravity.y, params_.gravity.z,
-			gravity.x, gravity.y, gravity.z);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.gravity = gravity;
 	EndWrite();
 }
 
@@ -1100,9 +1123,9 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		return par.massB > 0.0f;
 	});
-	ok &= Check("gammaPress < 0", true, [&]()
+	ok &= Check("pressGamma < 0", true, [&]()
 	{
-		return par.gammaPress >= 0.0f;
+		return par.pressGamma >= 0.0f;
 	});
 	ok &= Check("jacobiOmega < 0", true, [&]()
 	{

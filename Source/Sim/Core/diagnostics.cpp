@@ -67,7 +67,7 @@ namespace Sim
         printf("%-24s = %.6f\n", "massB", params.massB);
         printf("%-24s = %.6f\n", "viscosityF", params.viscosityF);
         printf("%-24s = %.6f\n", "viscosityB", params.viscosityB);
-        printf("%-24s = %.6f\n", "gammaPress", params.gammaPress);
+        printf("%-24s = %.6f\n", "pressGamma", params.pressGamma);
         printf("%-24s = %.6f\n", "jacobiOmega", params.jacobiOmega);
         printf("%-24s = %.6f\n", "densityDevTarget", params.densityDevTarget);
         printf("%-24s = %u\n", "minSolverIters", params.minSolverIters);

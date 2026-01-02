@@ -92,6 +92,7 @@ namespace Sim
 		std::vector<float> xAccF_, yAccF_, zAccF_;
 		std::vector<float> xAccPressF_, yAccPressF_, zAccPressF_;
 		std::vector<float> xAccViscF_, yAccViscF_, zAccViscF_;
+		std::vector<float> xAccSurfTensF_, yAccSurfTensF_, zAccSurfTensF_;
 		std::vector<float> xAccExtF_, yAccExtF_, zAccExtF_;
 		std::vector<float> sourceTermF_;
 		std::vector<float> diagElemF_;

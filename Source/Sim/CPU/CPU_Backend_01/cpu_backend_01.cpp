@@ -127,6 +127,10 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	yAccViscF_.resize(N_F_);
 	zAccViscF_.resize(N_F_);
 
+	xAccSurfTensF_.resize(N_F_);
+	yAccSurfTensF_.resize(N_F_);
+	zAccSurfTensF_.resize(N_F_);
+
 	xAccExtF_.resize(N_F_);
 	yAccExtF_.resize(N_F_);
 	zAccExtF_.resize(N_F_);
@@ -173,6 +177,10 @@ void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 				xAccViscF_[i] = F.xAccVisc[i];
 				yAccViscF_[i] = F.yAccVisc[i];
 				zAccViscF_[i] = F.zAccVisc[i];
+
+				xAccSurfTensF_[i] = F.xAccSurfTens[i];
+				yAccSurfTensF_[i] = F.yAccSurfTens[i];
+				zAccSurfTensF_[i] = F.zAccSurfTens[i];
 
 				xAccExtF_[i] = F.xAccExt[i];
 				yAccExtF_[i] = F.yAccExt[i];
@@ -258,6 +266,10 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				F.xAccVisc[i] = xAccViscF_[i];
 				F.yAccVisc[i] = yAccViscF_[i];
 				F.zAccVisc[i] = zAccViscF_[i];
+
+				F.xAccSurfTens[i] = xAccSurfTensF_[i];
+				F.yAccSurfTens[i] = yAccSurfTensF_[i];
+				F.zAccSurfTens[i] = zAccSurfTensF_[i];
 
 				F.xAccExt[i] = xAccExtF_[i];
 				F.yAccExt[i] = yAccExtF_[i];

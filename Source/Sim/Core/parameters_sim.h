@@ -69,12 +69,14 @@ namespace Sim
 		float massF				= 0.001f;
 		float massB				= 0.001f;
 
-		// viscosity
+		// non-pressure accelerations
 		float viscosityF		= 0.000003f;
 		float viscosityB		= 0.000003f;
+		float surfTensGamma     = 0.0f;
+		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
 		// pressure solving
-		float gammaPress		= 0.5f;
+		float pressGamma		= 0.5f;
 		float jacobiOmega		= 0.6f;
 		float densityDevTarget  = 0.01f;
 		uint32_t fixedIters		= 10;
@@ -82,9 +84,6 @@ namespace Sim
 		uint32_t maxSolverIters	= 50;
 		Base::SolverTerminationCond solverTerminationCond =
 			Base::SolverTerminationCond::FixedIters;
-
-		// gravity
-		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
 
 		// data structuring
 		uint32_t dataReOrderInterval = 50;
@@ -142,12 +141,13 @@ namespace Sim
 		void Set_RestDensity(float restDensity, Base::ParticleType type, bool verbose = false);
 		void Set_Mass(float mass, Base::ParticleType type, bool verbose = false);
 		void Set_Viscosity(float viscosity, Base::ParticleType type, bool verbose = false);
-		void Set_GammaPress(float gammaPress, bool verbose = false);
+		void Set_SurfTensGamma(float surfTensGamma, bool verbose = false);
+		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
+		void Set_PressGamma(float pressGamma, bool verbose = false);
 		void Set_JacobiOmega(float jacobiOmega, bool verbose = false);
 		void Set_DensityDevTarget(float densityDevTarget, bool verbose = false);
 		void Set_MinSolverIters(uint32_t minSolverIters, bool verbose = false);
 		void Set_MaxSolverIters(uint32_t maxSolverIters, bool verbose = false);
-		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
 		void Set_DataReOrderInterval(uint32_t dataReOrderInterval, bool verbose = false);
 		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
 
