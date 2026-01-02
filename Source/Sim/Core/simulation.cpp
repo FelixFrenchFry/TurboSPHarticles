@@ -43,9 +43,9 @@ bool SimulationMgr::Init()
 
 	// TODO: load initial sim state from a file?
 
-	SelectSimScenario(simParams_.scenarioType, configProfile_);
-
 	SelectSimBackend(simParams_.backendVersion);
+
+	SelectSimScenario(simParams_.scenarioType, configProfile_);
 
 	ReBuildInitialSimState();
 
@@ -56,6 +56,9 @@ bool SimulationMgr::Init()
 
 	DiagnosticsMgr::PrintSimParams(simParams_);
 	DiagnosticsMgr::PrintSimSetup(*this, simParams_);
+
+	// TODO: reset universal sim state until it is needed again?
+	//universalSimState_ = Sync::UniversalSimState{};
 
 	return true;
 }

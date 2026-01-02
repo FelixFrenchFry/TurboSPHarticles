@@ -22,7 +22,42 @@ void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 											 Sync::UniversalSimState& dst,
 											 const Sim::SimParams& params)
 {
-	const auto faces = GetFacesFromOBB(box);
+	/*
+	auto faces = GetFacesFromOBB(box);
+
+	for (const auto& face : faces)
+	{
+		BuildBoundaryLayersOnFace(face, dst, params);
+	}
+	*/
+
+	if (params.boundaryLayers <= 0) { return; }
+
+	const float sizeB = params.particleSizeB;
+	const float radiusB = params.particleRadiusB;
+
+	// max normal offset of the outermost layer
+	const float pad = radiusB + (static_cast<float>(params.boundaryLayers) - 1.0f) * sizeB;
+
+	// helper for extending a face in the tangential directions
+	auto ExtendFaceUV = [](OBBFace f, float padU, float padV) -> OBBFace
+		{
+			f.origin -= f.uHat * padU + f.vHat * padV;
+			f.uLen += 2.0f * padU;
+			f.vLen += 2.0f * padV;
+			return f;
+		};
+
+	auto faces = GetFacesFromOBB(box);
+
+	// zMin (0), zMax (1) -> no extension
+	// xMin (2), xMax (3) -> extended in BOTH tangential directions (u and v)
+	faces[2] = ExtendFaceUV(faces[2], pad, pad);
+	faces[3] = ExtendFaceUV(faces[3], pad, pad);
+
+	// yMin (4), yMax (5) -> extended ONLY along face.vHat (z for these faces)
+	faces[4] = ExtendFaceUV(faces[4], 0.0f, pad);
+	faces[5] = ExtendFaceUV(faces[5], 0.0f, pad);
 
 	for (const auto& face : faces)
 	{
