@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "BreakingDam",
+  "scenarioType": "BigDroplet",
   "neighborSearchMethod": 3,
   "neighborListStorage": 2,
 

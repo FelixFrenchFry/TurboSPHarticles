@@ -48,7 +48,7 @@
       },
       "poolDepth": 0.4,
       "dropletRadius": 0.4,
-      "dropletGap": 0.1,
+      "dropletGap": 0.0,
       "dropletOffset": [ 0.0, 0.0 ],
       "dropletInitVel": [ 0.0, 0.0, 0.0 ]
     }
