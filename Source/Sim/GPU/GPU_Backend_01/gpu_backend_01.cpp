@@ -337,9 +337,19 @@ void SimBackend_GPU01::FillScalarData(
 	snap.scalarDataF.clear();
 }
 
+void SimBackend_GPU01::FillMemoryRecord(
+	Mem::MemRecordStep& record,
+	const SimParams& params) const
+{
+	using namespace Mem;
+
+	// TODO: implement
+}
+
 // TODO: add flags to enable/disable certain stats?
-void SimBackend_GPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
-											const SimParams& simParams) const
+void SimBackend_GPU01::FillStatisticsRecord(
+	Stats::StatRecordStep& record,
+	const SimParams& simParams) const
 {
 	using namespace Stats;
 

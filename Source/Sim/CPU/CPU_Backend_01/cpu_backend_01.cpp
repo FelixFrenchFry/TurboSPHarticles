@@ -534,8 +534,120 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 	snap.scalarDataF.clear();
 }
 
-void SimBackend_CPU01::FillStatisticsRecord(Stats::StatRecordStep& record,
-											const SimParams& simParams) const
+void SimBackend_CPU01::FillMemoryRecord(
+	Mem::MemRecordStep& record,
+	const SimParams& params) const
+{
+	using namespace Mem;
+
+	// --- [ particle properties ] ---------------------------------------------
+
+	// fluid
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(xPosF_));
+		Add(usage, MemUsageOf_Vector(yPosF_));
+		Add(usage, MemUsageOf_Vector(zPosF_));
+
+		Add(usage, MemUsageOf_Vector(xVelF_));
+		Add(usage, MemUsageOf_Vector(yVelF_));
+		Add(usage, MemUsageOf_Vector(zVelF_));
+
+		Add(usage, MemUsageOf_Vector(xVelPredF_));
+		Add(usage, MemUsageOf_Vector(yVelPredF_));
+		Add(usage, MemUsageOf_Vector(zVelPredF_));
+
+		Add(usage, MemUsageOf_Vector(xAccF_));
+		Add(usage, MemUsageOf_Vector(yAccF_));
+		Add(usage, MemUsageOf_Vector(zAccF_));
+
+		Add(usage, MemUsageOf_Vector(xAccPressF_));
+		Add(usage, MemUsageOf_Vector(yAccPressF_));
+		Add(usage, MemUsageOf_Vector(zAccPressF_));
+
+		Add(usage, MemUsageOf_Vector(xAccViscF_));
+		Add(usage, MemUsageOf_Vector(yAccViscF_));
+		Add(usage, MemUsageOf_Vector(zAccViscF_));
+
+		Add(usage, MemUsageOf_Vector(xAccExtF_));
+		Add(usage, MemUsageOf_Vector(yAccExtF_));
+		Add(usage, MemUsageOf_Vector(zAccExtF_));
+
+		Add(usage, MemUsageOf_Vector(sourceTermF_));
+		Add(usage, MemUsageOf_Vector(diagElemF_));
+		Add(usage, MemUsageOf_Vector(sysVecElemF_));
+		Add(usage, MemUsageOf_Vector(pressureF_));
+		Add(usage, MemUsageOf_Vector(densityF_));
+		Add(usage, MemUsageOf_Vector(idF_));
+
+		// finalize
+		Set(record, MemBucket::ParticlePropertiesF, usage);
+	}
+
+	// boundary
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(xPosB_));
+		Add(usage, MemUsageOf_Vector(yPosB_));
+		Add(usage, MemUsageOf_Vector(zPosB_));
+
+		Add(usage, MemUsageOf_Vector(xVelB_));
+		Add(usage, MemUsageOf_Vector(yVelB_));
+		Add(usage, MemUsageOf_Vector(zVelB_));
+
+		Add(usage, MemUsageOf_Vector(idB_));
+
+		// finalize
+		Set(record, MemBucket::ParticlePropertiesB, usage);
+	}
+
+	// --- [ neighbor search data structures ] ---------------------------------
+
+	{
+		MemUsage usageF{};
+		MemUsage usageB{};
+		std::pair<MemUsage, MemUsage> usageFB = neighborSearchStrat_->GetMemUsage(params);
+
+		Add(usageF, usageFB.first);
+		Add(usageB, usageFB.second);
+
+		// finalize
+		Set(record, MemBucket::Neighbors_SearchDataStructF, usageF);
+		Set(record, MemBucket::Neighbors_SearchDataStructB, usageB);
+	}
+
+	// --- [ neighbor list storage ] -------------------------------------------
+
+	{
+		MemUsage usageF{};
+		MemUsage usageB{};
+		std::pair<MemUsage, MemUsage> usageFB = neighborLists_->GetMemUsage(params);
+
+		Add(usageF, usageFB.first);
+		Add(usageB, usageFB.second);
+
+		// finalize
+		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
+		Set(record, MemBucket::Neighbors_ListStorageB, usageB);
+	}
+
+	// --- [ scratch buffers ] -------------------------------------------------
+
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(workBuffer_));
+
+		// finalize
+		Set(record, MemBucket::ScratchBuffers, usage);
+	}
+}
+
+void SimBackend_CPU01::FillStatisticsRecord(
+	Stats::StatRecordStep& record,
+	const SimParams& simParams) const
 {
 	using namespace Stats;
 

@@ -33,6 +33,7 @@ namespace Sim
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 					  Scene::ScenarioMgr& scenarioMgr,
 					  Bench::BenchmarksMgr& benchmarksMgr,
+					  Mem::MemoryTracker& memoryTracker,
 					  Stats::StatisticsMgr& statisticsMgr,
 					  Export::SerializationMgr& serializationMgr);
 
@@ -71,12 +72,13 @@ namespace Sim
 		void SetConfigProfile(std::string profile);
 
 		void HandleExportSnapshot(const SimParams& params) const;
-		void HandleBenchAndStatSnapshots() const;
-		void FinalizeBenchAndStatMeasurements() const;
+		void HandleBenchMemStatSnapshots() const;
+		void FinalizeBenchMemStatMeasurements() const;
 		void DisplayPerformanceStats(int64_t maxSteps) const;
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
+		void SetMemMailbox(Sync::MemSnapMailbox* memSnapMailbox) { memSnapMailbox_ = memSnapMailbox; }
 		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox) { statSnapMailbox_ = statSnapMailbox; }
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const { out = curBenchOpGroups_; }
 
@@ -109,6 +111,7 @@ namespace Sim
 		// mailbox pointers
 		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };
 		Sync::BenchSnapMailbox* benchSnapMailbox_{ nullptr };
+		Sync::MemSnapMailbox* memSnapMailbox_{ nullptr };
 		Sync::StatSnapMailbox* statSnapMailbox_{ nullptr };
 
 		// controller thread spawns worker threads within OpenMP parallel regions
@@ -116,11 +119,14 @@ namespace Sim
 		std::atomic<bool> running_{ false };
 		std::atomic<bool> initialized_{ false };
 
-		// benchmark management
+		// benchmark tracking
 		Bench::BenchmarksMgr& benchmarksMgr_;
 		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
 
-		// statistics management
+		// memory tracking
+		Mem::MemoryTracker& memoryTracker_;
+
+		// statistics tracking
 		Stats::StatisticsMgr& statisticsMgr_;
 
 		// serialization management

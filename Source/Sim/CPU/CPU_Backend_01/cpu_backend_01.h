@@ -43,6 +43,10 @@ namespace Sim
 		// (backend-specific such that possible transformations can be applied efficiently)
 		void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const override;
 
+		// computes & fills in the memory usage data for the current sim step
+		// (backend-specific so that the memory usage can be computed from the custom data structures efficiently)
+		void FillMemoryRecord(Mem::MemRecordStep& record, const SimParams& params) const override;
+
 		// computes & fills in the stat data for the current sim step
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;

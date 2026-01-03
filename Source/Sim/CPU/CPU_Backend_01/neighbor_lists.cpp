@@ -102,6 +102,17 @@ NeighborSpan NeighborLists_SmallBuffers_CPU01::FB(
 	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
 }
 
+std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_SmallBuffers_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	// TODO: fill
+
+	return { usageF, usageB };
+}
+
 // -----------------------------------------------------------------------------
 // --- [ fixed arrays neighbor lists ] -----------------------------------------
 // -----------------------------------------------------------------------------
@@ -223,6 +234,17 @@ NeighborSpan NeighborLists_FixedArrays_CPU01::FB(
 
 	// data pointer to the start of the neighbor list for particle i and its size
 	return NeighborSpan{ neighborsFB_.data() + base, counter };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_FixedArrays_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	// TODO: fill
+
+	return { usageF, usageB };
 }
 
 // -----------------------------------------------------------------------------
@@ -404,6 +426,17 @@ NeighborSpan NeighborLists_CompactVectors_CPU01::FB(
 	const uint32_t count = static_cast<uint32_t>(e - s);
 
 	return NeighborSpan{ neighborsFB_.data() + s, count };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	// TODO: fill
+
+	return { usageF, usageB };
 }
 
 // -----------------------------------------------------------------------------
@@ -669,6 +702,17 @@ NeighborSpan NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::FB(
 	DecodeNeighborList_ULEB128(data, count, byteCount, scratch);
 
 	return NeighborSpan{ scratch.data(), count };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	// TODO: fill
+
+	return { usageF, usageB };
 }
 
 inline void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::PutU32(
@@ -1014,6 +1058,17 @@ NeighborSpan NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::FB(
 	DecodeNeighborList_StreamVByteDelta(data, count, byteCount, scratch);
 
 	return NeighborSpan{ scratch.data(), count };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	// TODO: fill
+
+	return { usageF, usageB };
 }
 
 inline void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::PutU32(

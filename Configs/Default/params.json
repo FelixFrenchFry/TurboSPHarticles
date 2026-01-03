@@ -1,11 +1,11 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "BigDroplet",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 3,
   "neighborListStorage": 2,
 
   "maxSteps": -1,
-  "timeStep": 0.001,
+  "timeStep": 0.0005,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensityF": 1000.0,
@@ -32,7 +32,7 @@
   "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
 
-  "exportEnabled": false,
-  "exportDir": "D",
+  "exportEnabled": true,
+  "exportDir": "E",
   "exportInterval": 10
 }

@@ -13,10 +13,10 @@ using namespace Bench;
 
 BenchmarksMgr::BenchmarksMgr(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxBenchRecs)
-	, curRecCount_(0)
+	, curRecCount_(0u)
 {
 	recLatest_ = {};
-	recLatest_.time.fill(0);
+	recLatest_.time.fill(0ull);
 	ClearAllTime();
 }
 

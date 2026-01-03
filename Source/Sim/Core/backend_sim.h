@@ -5,14 +5,13 @@
 #pragma once
 
 // external
-#include <cstdint>
 #include <memory>
 #include <vector>
 
 // internal
 #include "Source/Base/enum_hub.h"
 #include "Source/Eval/Bench/benchmarks.h"
-#include "Source/Eval/Bench/operations.h"
+#include "Source/Eval/Mem/memory.h"
 #include "Source/Eval/Stats/statistics.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Sync/snapshots.h"
@@ -53,6 +52,10 @@ namespace Sim
 		// computes & fills in the scalar data based on different color coding modes
 		// (backend-specific so that possible transformations can be applied efficiently)
 		virtual void FillScalarData(Sync::VisualSnapshot& snap, Base::ColorCodingMode mode) const = 0;
+
+		// computes & fills in the memory usage data for the current sim step
+		// (backend-specific so that the memory usage can be computed from the custom data structures efficiently)
+		virtual void FillMemoryRecord(Mem::MemRecordStep& record, const SimParams& params) const = 0;
 
 		// computes & fills in the stat data for the current sim step
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
@@ -96,6 +99,8 @@ namespace Sim
 		virtual void Query(const SimParams& params) = 0;
 
 		virtual void DataReOrder(const SimParams& params) = 0;
+
+		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const = 0;
 	};
 
 	struct NeighborSpan
@@ -137,6 +142,8 @@ namespace Sim
 		// default implementations for neighbor counts, overwritten for compressed neighbor lists
 		virtual uint32_t CountFF(uint32_t i) const { return FF(i).count; }
 		virtual uint32_t CountFB(uint32_t i) const { return FB(i).count; }
+
+		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const = 0;
 	};
 
 } // namespace Sim

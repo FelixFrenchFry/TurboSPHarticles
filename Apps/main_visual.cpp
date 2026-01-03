@@ -114,11 +114,12 @@ int main(int argc, char** argv)
 		Vis::VisParamsMgr visParamsMgr{};
 		Scene::ScenarioMgr scenarioMgr{};
 		Bench::BenchmarksMgr benchmarksMgr{ simParamsMgr.SnapshotParams().first };
+		Mem::MemoryTracker memoryTracker{ simParamsMgr.SnapshotParams().first };
 		Stats::StatisticsMgr statisticsMgr{ simParamsMgr.SnapshotParams().first };
 		Export::SerializationMgr serializationMgr{};
 
 		// main systems
-		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, statisticsMgr, serializationMgr };
+		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, memoryTracker, statisticsMgr, serializationMgr };
 		simulationMgr.SetConfigProfile(profile);
 		Vis::VisualizationMgr visualizationMgr{ simulationMgr, benchmarksMgr, simParamsMgr, visParamsMgr };
 
@@ -131,6 +132,11 @@ int main(int argc, char** argv)
 		Sync::BenchSnapMailbox benchMailbox{};
 		simulationMgr.SetBenchMailbox(&benchMailbox);
 		visualizationMgr.SetBenchMailbox(&benchMailbox);
+
+		// memory mailbox
+		Sync::MemSnapMailbox memMailbox{};
+		simulationMgr.SetMemMailbox(&memMailbox);
+		visualizationMgr.SetMemMailbox(&memMailbox);
 
 		// stat mailbox
 		Sync::StatSnapMailbox statMailbox{};

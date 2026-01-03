@@ -96,6 +96,12 @@ namespace Sim
 		int64_t jitterSeedB		= 42; // RNG seed for jitter
 		uint32_t boundaryLayers	= 2;
 
+		// benchmarks
+		uint32_t maxBenchRecs	= 1'000'000;
+
+		// memory
+		uint32_t maxMemRecs		= 1'000'000;
+
 		// statistics
 		uint32_t maxStatRecs	= 1'000'000;
 		std::array<bool, static_cast<uint8_t>(Stats::StatGroup::Count)> statGroupsEnabled =
@@ -104,9 +110,6 @@ namespace Sim
 			false,	// density
 			false	// velocity
 		};
-
-		// benchmarks
-		uint32_t maxBenchRecs	= 1'000'000;
 
 		// export
 		bool exportEnabled		= true;

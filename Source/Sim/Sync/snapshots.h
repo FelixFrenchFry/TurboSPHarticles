@@ -5,12 +5,15 @@
 #pragma once
 
 // external
+#include <array>
+#include <cstdint>
 #include <glm/vec3.hpp>
 #include <vector>
 
 // internal
 #include "Source/Base/enum_hub.h"
 #include "Source/Eval/Bench/operations.h"
+#include "Source/Eval/Mem/metrics_mem.h"
 #include "Source/Eval/Stats/metrics.h"
 #include "Source/Sim/Scene/builder.h"
 
@@ -114,6 +117,17 @@ namespace Sync
 		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> avgUsed{};
 		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> min{};
 		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> max{};
+	};
+
+	struct MemSnapshot
+	{
+		// metadata
+		uint32_t simStep;
+		double simTime;
+
+		// per-bucket memory usage
+		std::array<Mem::MemUsage, Mem::GetIdx(Mem::MemBucket::Count)> latest{};
+		std::array<Mem::MemUsage, Mem::GetIdx(Mem::MemBucket::Count)> max{};
 	};
 
 	struct StatSnapshot

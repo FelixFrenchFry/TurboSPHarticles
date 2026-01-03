@@ -61,6 +61,14 @@ void NS_BruteForce_GPU01::DataReOrder(const SimParams& params)
 	// TODO: implement
 }
 
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_GPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	// TODO: implement
+
+	return {};
+}
+
 // -----------------------------------------------------------------------------
 // --- [ cell linked list basic implementation ] -------------------------------
 // -----------------------------------------------------------------------------
@@ -337,6 +345,14 @@ void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 	// TODO: implement
 }
 
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Basic_GPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	// TODO: implement
+
+	return {};
+}
+
 // -----------------------------------------------------------------------------
 // --- [ cell linked list compact implementation ] -----------------------------
 // -----------------------------------------------------------------------------
@@ -488,6 +504,14 @@ void NS_CellLinkedList_Compact_GPU01::Query(const SimParams& params)
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 {
 	// TODO: implement
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	// TODO: implement
+
+	return {};
 }
 
 void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()

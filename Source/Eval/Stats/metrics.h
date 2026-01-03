@@ -251,10 +251,9 @@ namespace Stats
 		std::array<float, GetIdx(StatMetric::Count)> stats{};
 	};
 
-	inline float Get(const StatRecordStep& record, StatMetric metric) { return record.stats[GetIdx(metric)]; }
-	inline void Set(StatRecordStep& record, StatMetric metric, float x) { record.stats[GetIdx(metric)] = x; }
-	inline void Add(StatRecordStep& record, StatMetric metric, float x) { record.stats[GetIdx(metric)] += x; }
-	inline void MaxWith(StatRecordStep& record, StatMetric metric, float x)
-		{ record.stats[GetIdx(metric)] = std::max(x, record.stats[GetIdx(metric)]); }
+	inline float Get(const StatRecordStep& record, StatMetric metric)
+		{ return record.stats[GetIdx(metric)]; }
+	inline void Set(StatRecordStep& record, StatMetric metric, float x)
+		{ record.stats[GetIdx(metric)] = x; }
 
 } // namespace Stats

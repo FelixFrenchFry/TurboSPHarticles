@@ -22,11 +22,13 @@ using namespace Sim;
 SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 							 Scene::ScenarioMgr& scenarioMgr,
 							 Bench::BenchmarksMgr& benchmarksMgr,
+							 Mem::MemoryTracker& memoryTracker,
 							 Stats::StatisticsMgr& statisticsMgr,
 							 Export::SerializationMgr& serializationMgr)
 	: simParamsMgr_{ simParamsMgr }
 	, scenarioMgr_{ scenarioMgr }
 	, benchmarksMgr_{ benchmarksMgr }
+	, memoryTracker_{ memoryTracker }
 	, statisticsMgr_{ statisticsMgr }
 	, serializationMgr_{ serializationMgr }
 {
@@ -308,6 +310,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		{
 			// reset data records for the new step
 			benchmarksMgr_.BeginStep();
+			memoryTracker_.BeginStep();
 			statisticsMgr_.BeginStep();
 
 			// starting point of total sim benchmark
@@ -361,12 +364,11 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		if (simStep_ % params.exportInterval == 0 &&
 			params.exportEnabled) { HandleExportSnapshot(params); }
 
-		// evaluate the benchmarks and statistics for this step
-		if (doSimStep) { FinalizeBenchAndStatMeasurements(); }
+		// evaluate the benchmarks, memory usage, and statistics for this step
+		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
 
 		// pack and send benchmark and statistics snapshots
-		// (to be retrieved by the visualization manager)
-		if (doSimStep) { HandleBenchAndStatSnapshots(); }
+		if (doSimStep) { HandleBenchMemStatSnapshots(); }
 
 		SyncParameters();
 
@@ -436,6 +438,7 @@ void SimulationMgr::RunSim_Blocking()
 		{
 			// reset data records for the new step
 			benchmarksMgr_.BeginStep();
+			memoryTracker_.BeginStep();
 			statisticsMgr_.BeginStep();
 
 			// starting point of total sim benchmark
@@ -456,12 +459,11 @@ void SimulationMgr::RunSim_Blocking()
 		if (simStep_ % params.exportInterval == 0 &&
 			params.exportEnabled) { HandleExportSnapshot(params); }
 
-		// evaluate the benchmarks and statistics for this step
-		if (doSimStep) { FinalizeBenchAndStatMeasurements(); }
+		// evaluate the benchmarks, memory usage, and statistics for this step
+		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
 
 		// pack and send benchmark and statistics snapshots
-		// (to be retrieved by the visualization manager)
-		if (doSimStep) { HandleBenchAndStatSnapshots(); }
+		if (doSimStep) { HandleBenchMemStatSnapshots(); }
 
 		SyncParameters();
 
@@ -526,12 +528,17 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Serialization });
 }
 
-void SimulationMgr::HandleBenchAndStatSnapshots() const
+void SimulationMgr::HandleBenchMemStatSnapshots() const
 {
 	// create bench snapshot and push to its mailbox
 	auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
 	benchmarksMgr_.PackBenchSnapshot(*benchSnap);
 	benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
+
+	// create mem snapshot and push to its mailbox
+	auto memSnap = std::make_shared<Sync::MemSnapshot>();
+	memoryTracker_.PackMemSnapshot(*memSnap);
+	memSnapMailbox_->StoreSnapshot(std::move(memSnap));
 
 	// create stat snapshot and push to its mailbox
 	auto statSnap = std::make_shared<Sync::StatSnapshot>();
@@ -539,11 +546,15 @@ void SimulationMgr::HandleBenchAndStatSnapshots() const
 	statSnapMailbox_->StoreSnapshot(std::move(statSnap));
 }
 
-void SimulationMgr::FinalizeBenchAndStatMeasurements() const
+void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 {
 	// record statistics, archive data and update aggregates
 	simBackend_->FillStatisticsRecord(statisticsMgr_.GetCurrentRecord(), simParams_);
 	statisticsMgr_.EndStep(simStep_, simTime_);
+
+	// record memory usage, archive data and update aggregates
+	simBackend_->FillMemoryRecord(memoryTracker_.GetCurrentRecord(), simParams_);
+	memoryTracker_.EndStep(simStep_, simTime_);
 
 	// ending point of total sim benchmark, archive data and update aggregates
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Total_Sim });

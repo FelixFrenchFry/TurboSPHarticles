@@ -41,6 +41,8 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+
 	private: // ----------------------------------------------------------------
 		
 		SimBackend_CPU01& be_;
@@ -66,6 +68,8 @@ namespace Sim
 		void Query(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 	private: // ----------------------------------------------------------------
 
@@ -109,6 +113,8 @@ namespace Sim
 		void Query(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 	private: // ----------------------------------------------------------------
 
@@ -172,6 +178,8 @@ namespace Sim
 		void Query_Smart(const SimParams& params);
 
 		void DataReOrder(const SimParams& params) override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 		// TODO: implement query with BigMin-LitMax and ternary search and caching of results?
 

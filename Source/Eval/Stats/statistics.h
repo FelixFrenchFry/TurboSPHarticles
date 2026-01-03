@@ -45,13 +45,13 @@ namespace Stats
 
 	private: // ----------------------------------------------------------------
 
-		// max and current number of steps for which stats are kept
+		// max and current number of steps for which stat data is kept
 		uint32_t maxRecCount_;
 		uint32_t curRecCount_;
 
 		StatRecordStep recLatest_;
 
-		// rolling buffer for the stats for the last maxCount_ steps
+		// rolling buffer for the stat data for the last maxCount_ steps
 		std::deque<StatRecordStep> recHistory_;
 
 		// all-time per-metric aggregates

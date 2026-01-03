@@ -132,9 +132,19 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 	);
 }
 
-void NS_BruteForce_CPU01::DataReOrder(const SimParams& params)
+void NS_BruteForce_CPU01::DataReOrder(
+	const SimParams& params)
 {
 	// TODO: implement
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	return { usageF, usageB };
 }
 
 // -----------------------------------------------------------------------------
@@ -322,9 +332,22 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 	);
 }
 
-void NS_SpatialHashing_Basic_CPU01::DataReOrder(const SimParams& params)
+void NS_SpatialHashing_Basic_CPU01::DataReOrder(
+	const SimParams& params)
 {
 	// TODO: implement
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Basic_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
+	Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
+
+	return { usageF, usageB };
 }
 
 // bijective mapping of signed to unsigned integers
@@ -752,9 +775,29 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 	);
 }
 
-void NS_CellLinkedList_Basic_CPU01::DataReOrder(const SimParams& params)
+void NS_CellLinkedList_Basic_CPU01::DataReOrder(
+	const SimParams& params)
 {
 	// TODO: implement
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Basic_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellEndIdxF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(sortedParticleIdxF_));
+
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellEndIdxB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(sortedParticleIdxB_));
+
+	return { usageF, usageB };
 }
 
 inline uint32_t NS_CellLinkedList_Basic_CPU01::MapToCellId_Basic(
@@ -1452,6 +1495,25 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 
 		ApplyPermutation(permB, be_.idB_);
 	}
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(sortedParticleIdxF_));
+
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(sortedParticleIdxB_));
+
+	return { usageF, usageB };
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(

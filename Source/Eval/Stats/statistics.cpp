@@ -13,7 +13,7 @@ using namespace Stats;
 
 StatisticsMgr::StatisticsMgr(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxStatRecs)
-	, curRecCount_(0)
+	, curRecCount_(0u)
 {
 	recLatest_ = {};
 	recLatest_.stats.fill(0.0f);
@@ -54,11 +54,11 @@ void StatisticsMgr::EndStep(uint32_t simStep, double simTime)
 
 			// update all-time min
 			statsMin_allTime_[i] = std::min(recLatest_.stats[i],
-										   statsMin_allTime_[i]);
+										    statsMin_allTime_[i]);
 
 			// update all-time max
 			statsMax_allTime_[i] = std::max(recLatest_.stats[i],
-										   statsMax_allTime_[i]);
+										    statsMax_allTime_[i]);
 		}
 	}
 

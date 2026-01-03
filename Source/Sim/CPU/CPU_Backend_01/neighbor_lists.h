@@ -5,8 +5,6 @@
 #pragma once
 
 // external
-#include <atomic>
-#include <cstdint>
 #include <vector>
 #include <boost/container/small_vector.hpp>
 #include <tbb/enumerable_thread_specific.h>
@@ -43,6 +41,8 @@ namespace Sim
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
 
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+
 	private: // ----------------------------------------------------------------
 
 		// metadata
@@ -78,6 +78,8 @@ namespace Sim
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 	private: // ----------------------------------------------------------------
 
@@ -120,6 +122,8 @@ namespace Sim
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 	private: // ----------------------------------------------------------------
 
@@ -166,6 +170,8 @@ namespace Sim
 
 		uint32_t CountFF(uint32_t i) const override { return nbrCountFF_[i]; }
 		uint32_t CountFB(uint32_t i) const override { return nbrCountFB_[i]; }
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 	private: // ----------------------------------------------------------------
 
@@ -236,6 +242,8 @@ namespace Sim
 
 		uint32_t CountFF(uint32_t i) const override { return nbrCountFF_[i]; }
 		uint32_t CountFB(uint32_t i) const override { return nbrCountFB_[i]; }
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
 	private: // ----------------------------------------------------------------
 
