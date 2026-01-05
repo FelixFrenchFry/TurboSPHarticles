@@ -105,12 +105,15 @@ NeighborSpan NeighborLists_SmallBuffers_CPU01::FB(
 std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_SmallBuffers_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
 
-	// TODO: fill
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfSmallVector<
+		uint32_t, N_expctNbrCountF>(neighborsFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfSmallVector<
+		uint32_t, N_expctNbrCountB>(neighborsFB_));
 
-	return { usageF, usageB };
+	return { usageFF, usageFB };
 }
 
 // -----------------------------------------------------------------------------
@@ -239,12 +242,16 @@ NeighborSpan NeighborLists_FixedArrays_CPU01::FB(
 std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_FixedArrays_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
 
-	// TODO: fill
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(neighborsFF_));
 
-	return { usageF, usageB };
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(neighborsFB_));
+
+	return { usageFF, usageFB };
 }
 
 // -----------------------------------------------------------------------------
@@ -431,12 +438,23 @@ NeighborSpan NeighborLists_CompactVectors_CPU01::FB(
 std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
 
-	// TODO: fill
+	// temporary construction storage
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfSmallVector<
+		uint32_t, N_expctNbrCountF>(tmpFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfSmallVector<
+		uint32_t, N_expctNbrCountB>(tmpFB_));
 
-	return { usageF, usageB };
+	// compact storage
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(offsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(neighborsFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(offsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(neighborsFB_));
+
+	return { usageFF, usageFB };
 }
 
 // -----------------------------------------------------------------------------
@@ -707,12 +725,43 @@ NeighborSpan NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::FB(
 std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
 
-	// TODO: fill
+	// tmp per-particle compressed vectors
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFB_));
 
-	return { usageF, usageB };
+	// compressed storage
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(offsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(compressedNeighborsFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(offsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(compressedNeighborsFB_));
+
+	// thread-local decode scratch
+	for (auto const& v : nbrScratchFF_)
+	{
+		Mem::Add(usageFF, Mem::MemUsageOf_Vector(v));
+	}
+	for (auto const& v : nbrScratchFB_)
+	{
+		Mem::Add(usageFB, Mem::MemUsageOf_Vector(v));
+	}
+
+	// thread-local sort scratch
+	for (auto const& v : sortScratchFF_)
+	{
+		Mem::Add(usageFF, Mem::MemUsageOf_Vector(v));
+	}
+	for (auto const& v : sortScratchFB_)
+	{
+		Mem::Add(usageFB, Mem::MemUsageOf_Vector(v));
+	}
+
+	return { usageFF, usageFB };
 }
 
 inline void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::PutU32(
@@ -1063,12 +1112,43 @@ NeighborSpan NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::FB(
 std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
 
-	// TODO: fill
+	// tmp per-particle compressed vectors
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFB_));
 
-	return { usageF, usageB };
+	// compressed storage
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(offsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(compressedNeighborsFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(offsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(compressedNeighborsFB_));
+
+	// thread-local decode scratch
+	for (auto const& v : nbrScratchFF_)
+	{
+		Mem::Add(usageFF, Mem::MemUsageOf_Vector(v));
+	}
+	for (auto const& v : nbrScratchFB_)
+	{
+		Mem::Add(usageFB, Mem::MemUsageOf_Vector(v));
+	}
+
+	// thread-local sort scratch
+	for (auto const& v : sortScratchFF_)
+	{
+		Mem::Add(usageFF, Mem::MemUsageOf_Vector(v));
+	}
+	for (auto const& v : sortScratchFB_)
+	{
+		Mem::Add(usageFB, Mem::MemUsageOf_Vector(v));
+	}
+
+	return { usageFF, usageFB };
 }
 
 inline void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::PutU32(

@@ -344,8 +344,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Basic_CPU01::GetMemUsa
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 
-	Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
-	Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
+	//Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
+	//Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
 
 	return { usageF, usageB };
 }

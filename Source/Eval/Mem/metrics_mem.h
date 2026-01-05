@@ -22,6 +22,7 @@ namespace Mem
 	{
 		uint64_t usedBytes = 0;
 		uint64_t allocBytes = 0;
+		// TODO: uint64_t occupiedBytes = 0;
 	};
 
 	// "buckets" of data structures used by the sim that allocate memory
@@ -177,6 +178,50 @@ namespace Mem
 		return MemUsage{ used, alloc };
 	}
 
+	template<class T, std::size_t N, class Alloc>
+	inline MemUsage MemUsageOf_VectorOfSmallVector(
+		const std::vector<boost::container::small_vector<T, N, Alloc>>& src)
+	{
+		uint64_t used = 0;
+		uint64_t alloc = 0;
+
+		// outer vector of small_vector objects
+		used += static_cast<uint64_t>(src.size()) * sizeof(boost::container::small_vector<T, N, Alloc>);
+		alloc += static_cast<uint64_t>(src.capacity()) * sizeof(boost::container::small_vector<T, N, Alloc>);
+
+		// heap spill inside each small_vector
+		for (auto const& sv : src)
+		{
+			if (sv.capacity() > N)
+			{
+				used += static_cast<uint64_t>(sv.size()) * sizeof(T);
+				alloc += static_cast<uint64_t>(sv.capacity()) * sizeof(T);
+			}
+		}
+
+		return MemUsage{ used, alloc };
+	}
+
+	inline MemUsage MemUsageOf_VectorOfVectorU8(const std::vector<std::vector<uint8_t>>& src)
+	{
+		uint64_t used = 0;
+		uint64_t alloc = 0;
+
+		used += static_cast<uint64_t>(src.size()) * sizeof(std::vector<uint8_t>);
+		alloc += static_cast<uint64_t>(src.capacity()) * sizeof(std::vector<uint8_t>);
+
+		for (auto const& v : src)
+		{
+			MemUsage usage{};
+			Add(usage, MemUsageOf_Vector(v)); // counts v.size/capacity * sizeof(uint8_t)
+			used += usage.usedBytes;
+			alloc += usage.allocBytes;
+		}
+
+		return MemUsage{ used, alloc };
+	}
+
+	/*
 	// helper for computing memory usage of an unordered dense map with std::vector<uint32_t> for values
 	template<class K, class... Rest>
 	inline MemUsage MemUsageOf_UnorderedDenseMap(
@@ -209,5 +254,6 @@ namespace Mem
 
 		return MemUsage{ used, alloc };
 	}
+	*/
 
 } // namespace Mem
