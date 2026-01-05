@@ -76,7 +76,8 @@ if(ENABLE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89 90 100 120)
+    #TODO: build for multiple architectures with set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89 90 100 120)
+    set(CMAKE_CUDA_ARCHITECTURES 120)
     #if(NOT CMAKE_CUDA_ARCHITECTURES)
     #    set(CMAKE_CUDA_ARCHITECTURES native)
     #endif()
@@ -169,7 +170,7 @@ if(ENABLE_NATIVE_OPT)
         >
         # GCC/Clang C++ only
         $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
-            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-march:native>
+            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:--march=native>
         >
     )
 endif()

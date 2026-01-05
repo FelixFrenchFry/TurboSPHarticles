@@ -9,46 +9,73 @@
     {
       "name": "base",
       "hidden": true,
-      "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/External/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_FEATURE_FLAGS": "manifests",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/out/vcpkg_installed",
         "ENABLE_CUDA": "ON",
         "ENABLE_VIS": "ON"
       }
     },
 
     {
-      "name": "Win-x64-Debug",
+      "name": "base-win",
+      "hidden": true,
       "inherits": "base",
-      "binaryDir": "${sourceDir}/out/build/win-x64-debug",
+      "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_HOST_TRIPLET": "x64-windows",
-        "VCPKG_BUILD_TYPE": "debug"
+        "VCPKG_HOST_TRIPLET": "x64-windows"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+
+    {
+      "name": "base-linux",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_HOST_TRIPLET": "x64-linux"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+
+    {
+      "name": "Windows-x64-Debug",
+      "inherits": "base-win",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "Win-x64-RelWithDeb",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/out/build/win-x64-relwithdeb",
+      "name": "Windows-x64-RelWithDeb",
+      "inherits": "base-win",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_HOST_TRIPLET": "x64-windows",
         "VCPKG_BUILD_TYPE": "release",
         "ENABLE_NATIVE_OPT": "ON"
       }
     },
     {
-      "name": "Win-x64-Release",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/out/build/win-x64-release",
+      "name": "Windows-x64-Release",
+      "inherits": "base-win",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_HOST_TRIPLET": "x64-windows",
         "VCPKG_BUILD_TYPE": "release",
         "ENABLE_NATIVE_OPT": "ON"
       }
@@ -56,35 +83,28 @@
 
     {
       "name": "Linux-x64-Debug",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/out/build/linux-x64-debug",
+      "inherits": "base-linux",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-linux",
-        "VCPKG_HOST_TRIPLET": "x64-linux",
-        "VCPKG_BUILD_TYPE": "debug"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
       "name": "Linux-x64-RelWithDeb",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/out/build/linux-x64-relwithdeb",
+      "inherits": "base-linux",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-linux",
-        "VCPKG_HOST_TRIPLET": "x64-linux",
         "VCPKG_BUILD_TYPE": "release",
         "ENABLE_NATIVE_OPT": "ON"
       }
     },
     {
       "name": "Linux-x64-Release",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/out/build/linux-x64-release",
+      "inherits": "base-linux",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-linux",
-        "VCPKG_HOST_TRIPLET": "x64-linux",
         "VCPKG_BUILD_TYPE": "release",
         "ENABLE_NATIVE_OPT": "ON"
       }
@@ -93,27 +113,28 @@
 
   "buildPresets": [
     {
-      "name": "Win-x64-Debug",
-      "configurePreset": "Win-x64-Debug"
+      "name": "Windows-Debug",
+      "configurePreset": "Windows-x64-Debug"
     },
     {
-      "name": "Win-x64-RelWithDeb",
-      "configurePreset": "Win-x64-RelWithDeb"
+      "name": "Windows-RelWithDeb",
+      "configurePreset": "Windows-x64-RelWithDeb"
     },
     {
-      "name": "Win-x64-Release",
-      "configurePreset": "Win-x64-Release"
+      "name": "Windows-Release",
+      "configurePreset": "Windows-x64-Release"
     },
+
     {
-      "name": "Linux-x64-Debug",
+      "name": "Linux-Debug",
       "configurePreset": "Linux-x64-Debug"
     },
     {
-      "name": "Linux-x64-RelWithDeb",
+      "name": "Linux-RelWithDeb",
       "configurePreset": "Linux-x64-RelWithDeb"
     },
     {
-      "name": "Linux-x64-Release",
+      "name": "Linux-Release",
       "configurePreset": "Linux-x64-Release"
     }
   ]
