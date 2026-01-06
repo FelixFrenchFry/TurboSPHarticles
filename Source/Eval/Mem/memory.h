@@ -38,8 +38,10 @@ namespace Mem
 		// per-metric queries
 		uint64_t GetMem_Latest_Used(MemBucket bucket) const;
 		uint64_t GetMem_Latest_Alloc(MemBucket bucket) const;
+		uint64_t GetMem_Latest_Occupied(MemBucket bucket) const;
 		uint64_t GetMem_Max_Used(MemBucket bucket) const;
 		uint64_t GetMem_Max_Alloc(MemBucket bucket) const;
+		uint64_t GetMem_Max_Occupied(MemBucket bucket) const;
 
 		// helpers
 		MemRecordStep& GetCurrentRecord() { return recLatest_; }

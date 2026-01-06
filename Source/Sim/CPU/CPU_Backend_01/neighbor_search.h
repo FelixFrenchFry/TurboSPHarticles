@@ -86,6 +86,8 @@ namespace Sim
 		// data structures
 		ankerl::unordered_dense::map<Key, Bucket> cellGridF_{};
 		ankerl::unordered_dense::map<Key, Bucket> cellGridB_{};
+		//std::unordered_map<Key, Bucket> cellGridF_{};
+		//std::unordered_map<Key, Bucket> cellGridB_{};
 
 		// helpers
 		static inline uint32_t ZigZag(int v) noexcept;

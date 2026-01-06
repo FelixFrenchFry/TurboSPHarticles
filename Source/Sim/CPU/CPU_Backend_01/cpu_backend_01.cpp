@@ -632,17 +632,6 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
 		Set(record, MemBucket::Neighbors_ListStorageB, usageB);
 	}
-
-	// --- [ scratch buffers ] -------------------------------------------------
-
-	{
-		MemUsage usage{};
-
-		Add(usage, MemUsageOf_Vector(workBuffer_));
-
-		// finalize
-		Set(record, MemBucket::ScratchBuffers, usage);
-	}
 }
 
 void SimBackend_CPU01::FillStatisticsRecord(

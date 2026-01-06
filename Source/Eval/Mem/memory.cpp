@@ -53,6 +53,9 @@ void MemoryTracker::EndStep(uint32_t simStep, double simTime)
 			memMax_allTime_[i].allocBytes =
 				std::max(recLatest_.mem[i].allocBytes,
 						 memMax_allTime_[i].allocBytes);
+			memMax_allTime_[i].occupiedBytes =
+				std::max(recLatest_.mem[i].occupiedBytes,
+						 memMax_allTime_[i].occupiedBytes);
 		}
 	}
 
@@ -87,6 +90,13 @@ uint64_t MemoryTracker::GetMem_Latest_Alloc(MemBucket bucket) const
 	return recLatest_.mem[GetIdx(bucket)].allocBytes;
 }
 
+uint64_t MemoryTracker::GetMem_Latest_Occupied(MemBucket bucket) const
+{
+	if (curRecCount_ == 0) { return 0ull; }
+
+	return recLatest_.mem[GetIdx(bucket)].occupiedBytes;
+}
+
 uint64_t MemoryTracker::GetMem_Max_Used(MemBucket bucket) const
 {
 	if (curRecCount_ == 0) { return 0ull; }
@@ -99,6 +109,13 @@ uint64_t MemoryTracker::GetMem_Max_Alloc(MemBucket bucket) const
 	if (curRecCount_ == 0) { return 0ull; }
 
 	return memMax_allTime_[GetIdx(bucket)].allocBytes;
+}
+
+uint64_t MemoryTracker::GetMem_Max_Occupied(MemBucket bucket) const
+{
+	if (curRecCount_ == 0) { return 0ull; }
+
+	return memMax_allTime_[GetIdx(bucket)].occupiedBytes;
 }
 
 void MemoryTracker::ClearAllTime()

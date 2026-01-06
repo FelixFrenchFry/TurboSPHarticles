@@ -379,6 +379,9 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 	// finalize after exiting the simulation loop ------------------------------
 
+	DiagnosticsMgr::PrintMemorySummary_Standalone(
+		memoryTracker_, Mem::ByteUnit::MiB, Mem::MemUsageType::Alloc);
+
 	{
 		// transfer last sim state into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
@@ -474,6 +477,9 @@ void SimulationMgr::RunSim_Blocking()
 
 	// finalize after exiting the simulation loop ------------------------------
 
+	DiagnosticsMgr::PrintMemorySummary_Standalone(
+		memoryTracker_, Mem::ByteUnit::MiB, Mem::MemUsageType::Alloc);
+
 	{
 		// transfer last sim state into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
@@ -563,6 +569,14 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 
 void SimulationMgr::DisplayPerformanceStats(int64_t maxSteps) const
 {
+	// TODO: print memory usage table?
+	/*
+	DiagnosticsMgr::PrintLatestPerformanceAndMemorySummaryAndProgress(
+		memoryTracker_, benchmarksMgr_, curBenchOpGroups_,
+		Mem::ByteUnit::MiB, Bench::TimeUnit::ms,
+		simStep_, maxSteps);
+	*/
+
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
 		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
 }

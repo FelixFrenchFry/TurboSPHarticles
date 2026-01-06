@@ -729,8 +729,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_Compressed_
 	Mem::MemUsage usageFB{};
 
 	// tmp per-particle compressed vectors
-	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFF_));
-	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFB_));
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(tmpCompressedFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(tmpCompressedFB_));
 
 	// compressed storage
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
@@ -1116,8 +1116,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_Compressed_
 	Mem::MemUsage usageFB{};
 
 	// tmp per-particle compressed vectors
-	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFF_));
-	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVectorU8(tmpCompressedFB_));
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(tmpCompressedFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(tmpCompressedFB_));
 
 	// compressed storage
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));

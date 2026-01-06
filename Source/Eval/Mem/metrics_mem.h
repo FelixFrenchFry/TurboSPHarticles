@@ -8,6 +8,7 @@
 #include <ankerl/unordered_dense.h>
 #include <array>
 #include <boost/container/small_vector.hpp>
+#include <cmath>
 #include <cstdint>
 #include <string_view>
 #include <type_traits>
@@ -18,11 +19,18 @@
 
 namespace Mem
 {
+	enum class MemUsageType : uint8_t
+	{
+		Used,
+		Alloc,
+		Occupied
+	};
+
 	struct MemUsage
 	{
 		uint64_t usedBytes = 0;
 		uint64_t allocBytes = 0;
-		// TODO: uint64_t occupiedBytes = 0;
+		uint64_t occupiedBytes = 0;
 	};
 
 	// "buckets" of data structures used by the sim that allocate memory
@@ -36,11 +44,8 @@ namespace Mem
 		Neighbors_ListStorageF,			// data structures used for the storage of references to fluid neighbors of fluid particles
 		Neighbors_ListStorageB,			// data structures used for the storage of references to boundary neighbors of fluid particles
 
-		ScratchBuffers,
-
 		Misc,
 
-		Test,
 		Count
 	};
 
@@ -99,22 +104,10 @@ namespace Mem
 				"boundary particle neighbors of fluid particles"
 			},
 			{
-				.bucket = MemBucket::ScratchBuffers,
-				.name = "scratch buffers",
-				.tip =
-				"TODO"
-			},
-			{
 				.bucket = MemBucket::Misc,
-				.name = "Misc",
+				.name = "misc",
 				.tip =
 				"TODO"
-			},
-			{
-				.bucket = MemBucket::Test,
-				.name = "Test",
-				.tip =
-				"Memory used/allocated by custom test data structures"
 			}
 		}
 	};
@@ -136,123 +129,166 @@ namespace Mem
 
 	inline MemUsage Get(const MemRecordStep& record, MemBucket bucket)
 		{ return record.mem[GetIdx(bucket)]; }
-	inline void Set(MemRecordStep& record, MemBucket bucket, MemUsage xy)
-		{ record.mem[GetIdx(bucket)] = xy; }
+	inline void Set(MemRecordStep& record, MemBucket bucket, const MemUsage& mem)
+		{ record.mem[GetIdx(bucket)] = mem; }
 	inline void Add(MemUsage& a, const MemUsage& b)
-		{ a.usedBytes += b.usedBytes; a.allocBytes += b.allocBytes; }
+	{
+		a.usedBytes += b.usedBytes;
+		a.allocBytes += b.allocBytes;
+		a.occupiedBytes += b.occupiedBytes;
+	}
 
-	// helper for computing memory usage of array storing arbitrary type T
+	// helpers for computing memory usage of common data structures
 	template<class T, size_t N>
-	inline MemUsage MemUsageOf_Array(const std::array<T, N>& src)
+	inline MemUsage MemUsageOf_Array([[maybe_unused]] const std::array<T, N>& src)
 	{
 		const uint64_t used = static_cast<uint64_t>(N) * sizeof(T);
 		const uint64_t alloc = static_cast<uint64_t>(N) * sizeof(T);
+		const uint64_t occupied = sizeof(src);
 
-		return MemUsage{ used, alloc };
+		return MemUsage{ used, alloc, occupied };
 	}
 
-	// helper for computing memory usage of vector storing arbitrary type T
-	template<class T>
-	inline MemUsage MemUsageOf_Vector(const std::vector<T>& src)
+	template<class T, class Alloc>
+	inline MemUsage MemUsageOf_Vector(const std::vector<T, Alloc>& src)
 	{
 		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
 		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+		const uint64_t occupied = sizeof(src) + alloc;
 
-		return MemUsage{ used, alloc };
+		return MemUsage{ used, alloc, occupied };
 	}
 
-	// helper for computing memory usage of a small vector storing arbitrary type T
+	template<class T, class Alloc>
+	inline MemUsage MemUsageOf_Vector_HeapOnly(const std::vector<T, Alloc>& src)
+	{
+		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
+		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+		// only count heap allocation as occupied memory
+		// (to prevent double-counting if nested in another data struct)
+		const uint64_t occupied = alloc;
+
+		return MemUsage{ used, alloc, occupied };
+	}
+
 	template<class T, std::size_t N, class Alloc>
 	inline MemUsage MemUsageOf_SmallVector(const boost::container::small_vector<T, N, Alloc>& src)
 	{
 		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
-		uint64_t alloc = static_cast<uint64_t>(N) * sizeof(T);
+		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
 
-		// if inlined size is exceeded, use size of the spill into heap allocation
-		if (src.capacity() > N)
+		// if inlined size is exceeded, add size of the spill into heap to the occupied amount
+		const bool spilled = src.capacity() > N;
+		const uint64_t heap = spilled ? static_cast<uint64_t>(src.capacity()) * sizeof(T) : 0ull;
+		const uint64_t occupied = heap + sizeof(src); // (inlined mem is included in sizeof(src))
+
+		return MemUsage{ used, alloc, occupied };
+	}
+
+	template<class T, std::size_t N, class Alloc>
+	inline MemUsage MemUsageOf_SmallVector_HeapOnly(const boost::container::small_vector<T, N, Alloc>& src)
+	{
+		if (src.capacity() <= N) // no spill -> no heap allocation
 		{
-			// TODO: add instead of overwriting to get actual footprint?
-			alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+			return MemUsage{ 0ull, 0ull, 0ull };
 		}
 
-		return MemUsage{ used, alloc };
+		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
+		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+		// only count heap allocation as occupied memory
+		// (to prevent double-counting if nested in another data struct)
+		const uint64_t occupied = alloc;
+
+		return MemUsage{ used, alloc, occupied };
+	}
+
+	template<class T, class AllocInner, class AllocOuter>
+	inline MemUsage MemUsageOf_VectorOfVector(
+		const std::vector<std::vector<T, AllocInner>, AllocOuter>& src)
+	{
+		// outer object + outer heap block containing inner vector objects
+		MemUsage mem = MemUsageOf_Vector(src);
+
+		// add only the heap blocks of inner vectors (no sizeof(inner vector))
+		for (auto const& v : src)
+		{
+			Add(mem, MemUsageOf_Vector_HeapOnly(v));
+		}
+
+		return mem;
 	}
 
 	template<class T, std::size_t N, class Alloc>
 	inline MemUsage MemUsageOf_VectorOfSmallVector(
 		const std::vector<boost::container::small_vector<T, N, Alloc>>& src)
 	{
-		uint64_t used = 0;
-		uint64_t alloc = 0;
+		// outer object + outer heap block containing inner vector objects
+		MemUsage total = MemUsageOf_Vector(src);
 
-		// outer vector of small_vector objects
-		used += static_cast<uint64_t>(src.size()) * sizeof(boost::container::small_vector<T, N, Alloc>);
-		alloc += static_cast<uint64_t>(src.capacity()) * sizeof(boost::container::small_vector<T, N, Alloc>);
-
-		// heap spill inside each small_vector
+		// add only the heap blocks of inner small_vectors (no sizeof(inner small_vector))
 		for (auto const& sv : src)
 		{
-			if (sv.capacity() > N)
-			{
-				used += static_cast<uint64_t>(sv.size()) * sizeof(T);
-				alloc += static_cast<uint64_t>(sv.capacity()) * sizeof(T);
-			}
+			Add(total, MemUsageOf_SmallVector_HeapOnly(sv)); // only spill heap
 		}
 
-		return MemUsage{ used, alloc };
+		return total;
 	}
 
-	inline MemUsage MemUsageOf_VectorOfVectorU8(const std::vector<std::vector<uint8_t>>& src)
-	{
-		uint64_t used = 0;
-		uint64_t alloc = 0;
-
-		used += static_cast<uint64_t>(src.size()) * sizeof(std::vector<uint8_t>);
-		alloc += static_cast<uint64_t>(src.capacity()) * sizeof(std::vector<uint8_t>);
-
-		for (auto const& v : src)
-		{
-			MemUsage usage{};
-			Add(usage, MemUsageOf_Vector(v)); // counts v.size/capacity * sizeof(uint8_t)
-			used += usage.usedBytes;
-			alloc += usage.allocBytes;
-		}
-
-		return MemUsage{ used, alloc };
-	}
-
+	// TODO: implement this using a custom allocator to track the memory usage and avoid non-compiling templates
 	/*
-	// helper for computing memory usage of an unordered dense map with std::vector<uint32_t> for values
-	template<class K, class... Rest>
-	inline MemUsage MemUsageOf_UnorderedDenseMap(
-		const ankerl::unordered_dense::map<K, std::vector<uint32_t>, Rest...>& src)
+	template<class MapT>
+	inline MemUsage MemUsageOf_UnorderedDenseMap_TableOnly(const MapT& src)
 	{
-		uint64_t used = 0;
-		uint64_t alloc = 0;
+		using BucketT = typename MapT::bucket_type;
 
-		// container that holds the hash map keys
-		const auto& keyStorage = src.keys();
-		used += static_cast<uint64_t>(keyStorage.size()) * sizeof(K);
-		alloc += static_cast<uint64_t>(keyStorage.capacity()) * sizeof(K);
+		MemUsage total{};
 
-		// container that holds the hash map values
-		const auto& valueStorage = src.values(); // stores std::vector<uint32_t> objects, not the data inside
-		used += static_cast<uint64_t>(valueStorage.size()) * sizeof(std::vector<uint32_t>);
-		alloc += static_cast<uint64_t>(valueStorage.capacity()) * sizeof(std::vector<uint32_t>);
+		// values storage (dense array of value_type, typically std::pair<K, V>)
+		auto const& values = src.values();
+		using ValueT = typename std::decay_t<decltype(values)>::value_type;
 
-		// container that holds the hash map bucket metadata (heuristic)
-		constexpr uint64_t bucketOverheadBytes = 8ull; // in this case of ankerl::unordered_dense::map<...>
-		used += static_cast<uint64_t>(src.bucket_count()) * bucketOverheadBytes;
-		alloc += static_cast<uint64_t>(src.bucket_count()) * bucketOverheadBytes;
+		const uint64_t valuesUsed = static_cast<uint64_t>(values.size()) * sizeof(ValueT);
+		const uint64_t valuesAlloc = static_cast<uint64_t>(values.capacity()) * sizeof(ValueT);
 
-		// nested allocations in the values (in this case of std::vector<uint32_t>)
-		for (auto const& bucketVec : valueStorage)
+		// heap-only for the values array
+		Add(total, MemUsage{ valuesUsed, valuesAlloc, valuesAlloc });
+
+		// buckets storage
+		const size_t bucketCount = src.bucket_count();
+		const uint64_t bucketsAlloc = static_cast<uint64_t>(bucketCount) * sizeof(BucketT);
+
+		// bucket array is fully present -> used == alloc (simple and consistent)
+		Add(total, MemUsage{ bucketsAlloc, bucketsAlloc, bucketsAlloc });
+
+		// root object storage
+		total.occupiedBytes += sizeof(src);
+
+		return total;
+	}
+
+	template<class K, class V, class... Rest>
+	inline MemUsage MemUsageOf_UnorderedDenseMap(
+		const ankerl::unordered_dense::map<K, V, Rest...>& src)
+	{
+		using MapT = ankerl::unordered_dense::map<K, V, Rest...>;
+		return MemUsageOf_UnorderedDenseMap_TableOnly<MapT>(src);
+	}
+
+	template<class K, class T, class AllocV, class... Rest>
+	inline MemUsage MemUsageOf_UnorderedDenseMap(
+		const ankerl::unordered_dense::map<K, std::vector<T, AllocV>, Rest...>& src)
+	{
+		// generic table cost (entries + buckets + sizeof(map))
+		using MapT = ankerl::unordered_dense::map<K, std::vector<T, AllocV>, Rest...>;
+		MemUsage total = MemUsageOf_UnorderedDenseMap_TableOnly<MapT>(src);
+
+		// add only the heap blocks of inner vectors (prevents double-counting sizeof(vector))
+		for (auto const& kv : src.values())
 		{
-			used += static_cast<uint64_t>(bucketVec.size()) * sizeof(uint32_t);
-			alloc += static_cast<uint64_t>(bucketVec.capacity()) * sizeof(uint32_t);
+			Add(total, MemUsageOf_Vector_HeapOnly(kv.second));
 		}
 
-		return MemUsage{ used, alloc };
+		return total;
 	}
 	*/
 
