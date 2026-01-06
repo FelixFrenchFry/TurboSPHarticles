@@ -1,11 +1,11 @@
 #!/bin/bash -x
-#SBATCH --job-name=SparseExport_A
+#SBATCH --job-name=Test_D
 #SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=96
 #SBATCH --time=72:00:00
-#SBATCH --mem=360gb
+#SBATCH --mem=380000mb
 #SBATCH --output=job_%j.out
 #SBATCH --error=job_%j.err
 
@@ -20,4 +20,4 @@ export TBB_NUM_THREADS=$SLURM_CPUS_PER_TASK
 cd /pfs/work9/workspace/scratch/fr_fl184-particleStorage/TurboSPHarticles
 
 # run it
-./build-headless-relwithdeb/bin/TSP_Headless
+./build-headless-relwithdeb/bin/TSP_Headless -p D

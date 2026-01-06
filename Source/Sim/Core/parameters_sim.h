@@ -43,8 +43,8 @@ namespace Sim
 		int64_t maxSteps		= -1;
 
 		// particles
-		uint32_t N_F			= 0;
-		uint32_t N_B			= 0;
+		uint32_t N_F = 0; // TODO: is this always updated correctly?
+		uint32_t N_B = 0; // TODO: is this always updated correctly?
 
 		// time
 		float timeStep			= 0.0001f;

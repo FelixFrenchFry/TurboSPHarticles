@@ -199,9 +199,9 @@ namespace Sim
 
         // particle counts
         printf("%-24s = %u\n", "fluid particles", 
-            simMgr.universalSimState_.fluidParticles.N_);
+            simMgr.simBackend_->GetNumFluidParticles());
         printf("%-24s = %u\n", "boundary particles", 
-            simMgr.universalSimState_.boundaryParticles.N_);
+            simMgr.simBackend_->GetNumBoundaryParticles());
     }
 
     void DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(

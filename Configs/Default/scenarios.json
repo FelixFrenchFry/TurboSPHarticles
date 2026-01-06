@@ -7,18 +7,18 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 8.0,
-        "vLen": 8.0,
-        "wLen": 8.0
+        "uLen": 0.8,
+        "vLen": 0.4,
+        "wLen": 0.2
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 4.0,
-        "vLen": 4.0,
-        "wLen": 4.0
+        "uLen": 0.2,
+        "vLen": 0.4,
+        "wLen": 0.2
       }
     },
     "ConvergingDam": {
@@ -33,7 +33,7 @@
         "wLen": 1.0
       },
       "fluidHeight": 0.25,
-      "holeSize": 0.5
+      "holeSize": 0.75
     },
     "BigDroplet": {
       "type": "BigDroplet",

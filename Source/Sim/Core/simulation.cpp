@@ -49,7 +49,7 @@ bool SimulationMgr::Init()
 	SelectSimScenario(simParams_.scenarioType, configProfile_);
 	SelectSimBackend(simParams_.backendVersion);
 
-	SPDLOG_INFO("Initializing data structures...");
+	SPDLOG_INFO("Initializing backend data structures...");
 	ReBuildInitialSimState();
 
 	initialized_.store(true, std::memory_order_release);
@@ -190,9 +190,6 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	// transfer universal state into backend-specific data structures
 	simBackend_->PullFromUniversalSimState(universalSimState_);
-
-	// clear universal state to free up memory
-	universalSimState_ = {};
 }
 
 void SimulationMgr::Launch_Async()
@@ -570,7 +567,7 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 void SimulationMgr::DisplayPerformanceStats(int64_t maxSteps) const
 {
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
+		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::s, simStep_, maxSteps);
 }
 
 void SimulationMgr::DisplayMemoryUsageStats(const bool force) const
@@ -578,5 +575,11 @@ void SimulationMgr::DisplayMemoryUsageStats(const bool force) const
 	if (!force && simStep_ != 1) { return; }
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, Mem::ByteUnit::MiB, Mem::MemUsageType::Alloc);
+		memoryTracker_, Mem::ByteUnit::GiB, Mem::MemUsageType::Used);
+
+	DiagnosticsMgr::PrintMemorySummary_Standalone(
+		memoryTracker_, Mem::ByteUnit::GiB, Mem::MemUsageType::Alloc);
+
+	DiagnosticsMgr::PrintMemorySummary_Standalone(
+		memoryTracker_, Mem::ByteUnit::GiB, Mem::MemUsageType::Occupied);
 }

@@ -73,6 +73,10 @@ namespace Sim
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		virtual void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const = 0;
+
+		// info
+		virtual uint32_t GetNumFluidParticles() const = 0;
+		virtual uint32_t GetNumBoundaryParticles() const = 0;
 	};
 
 	// backend factory

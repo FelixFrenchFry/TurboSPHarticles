@@ -132,6 +132,10 @@ namespace Sim
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
 
+		// info
+		uint32_t GetNumFluidParticles() const override { return N_F_; }
+		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
+
 	private: // ----------------------------------------------------------------
 
 		// managers
