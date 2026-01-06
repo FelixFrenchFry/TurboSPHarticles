@@ -246,7 +246,8 @@ void SimulationMgr::Launch_Blocking()
 
 void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 {
-	SPDLOG_INFO("Simulation started running\n");
+	printf("\n");
+	SPDLOG_INFO("Simulation started running");
 
 	// initialize before entering the simulation loop --------------------------
 
@@ -372,6 +373,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 		SyncParameters();
 
+		DisplayMemoryUsageStats();
 		DisplayPerformanceStats(params.maxSteps);
 
 		// TODO: check if scenario or backend need to be switched?
@@ -379,8 +381,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 	// finalize after exiting the simulation loop ------------------------------
 
-	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, Mem::ByteUnit::MiB, Mem::MemUsageType::Alloc);
+	DisplayMemoryUsageStats(true);
 
 	{
 		// transfer last sim state into the universal state to save it
@@ -389,12 +390,13 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	}
 
 	printf("\n");
-	SPDLOG_INFO("Simulation stopped running\n");
+	SPDLOG_INFO("Simulation stopped running");
 }
 
 void SimulationMgr::RunSim_Blocking()
 {
-	SPDLOG_INFO("Simulation started running\n");
+	printf("\n");
+	SPDLOG_INFO("Simulation started running");
 
 	// initialize before entering the simulation loop --------------------------
 
@@ -470,6 +472,7 @@ void SimulationMgr::RunSim_Blocking()
 
 		SyncParameters();
 
+		DisplayMemoryUsageStats();
 		DisplayPerformanceStats(params.maxSteps);
 
 		// TODO: check if scenario or backend need to be switched?
@@ -477,8 +480,7 @@ void SimulationMgr::RunSim_Blocking()
 
 	// finalize after exiting the simulation loop ------------------------------
 
-	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, Mem::ByteUnit::MiB, Mem::MemUsageType::Alloc);
+	DisplayMemoryUsageStats(true);
 
 	{
 		// transfer last sim state into the universal state to save it
@@ -489,7 +491,7 @@ void SimulationMgr::RunSim_Blocking()
 	running_.store(false, std::memory_order_release);
 
 	printf("\n");
-	SPDLOG_INFO("Simulation stopped running\n");
+	SPDLOG_INFO("Simulation stopped running");
 }
 
 // requests the controller thread to stop cleanly
@@ -569,14 +571,14 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 
 void SimulationMgr::DisplayPerformanceStats(int64_t maxSteps) const
 {
-	// TODO: print memory usage table?
-	/*
-	DiagnosticsMgr::PrintLatestPerformanceAndMemorySummaryAndProgress(
-		memoryTracker_, benchmarksMgr_, curBenchOpGroups_,
-		Mem::ByteUnit::MiB, Bench::TimeUnit::ms,
-		simStep_, maxSteps);
-	*/
-
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
 		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::ms, simStep_, maxSteps);
+}
+
+void SimulationMgr::DisplayMemoryUsageStats(const bool force) const
+{
+	if (!force && simStep_ != 1) { return; }
+
+	DiagnosticsMgr::PrintMemorySummary_Standalone(
+		memoryTracker_, Mem::ByteUnit::MiB, Mem::MemUsageType::Alloc);
 }

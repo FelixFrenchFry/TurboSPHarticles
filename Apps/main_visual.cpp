@@ -108,6 +108,7 @@ int main(int argc, char** argv)
 				return EXIT_FAILURE;
 			}
 		}
+		printf("\n");
 		SPDLOG_INFO("Using config profile '{}'", profile);
 
 		// sub-systems

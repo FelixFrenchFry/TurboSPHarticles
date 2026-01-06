@@ -38,15 +38,6 @@ namespace Sim
 			uint32_t step,
 			int64_t maxSteps = -1);
 
-		static void PrintLatestPerformanceAndMemorySummaryAndProgress(
-			const Mem::MemoryTracker& memTracker,
-			const Bench::BenchmarksMgr& benchMgr,
-			const std::vector<Bench::BenchOpGroupDef>& opGroups,
-			Mem::ByteUnit memUnit,
-			Bench::TimeUnit benchUnit,
-			uint32_t step,
-			int64_t maxSteps = -1);
-
 		static void PrintMemorySummary_Standalone(
 			const Mem::MemoryTracker& memTracker,
 			Mem::ByteUnit unit,

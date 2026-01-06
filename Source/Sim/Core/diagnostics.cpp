@@ -128,8 +128,8 @@ namespace Sim
 											uint32_t N_visThreads)
     {
         printf("\n");
-        printf("--- [ hardware specifications ] ----------------------------------------\n");
-        printf("------------------------------------------------------------------------\n");
+        printf("--- [ hardware specifications ] ------------------------------------------\n");
+        printf("--------------------------------------------------------------------------\n");
 
         // hostname
         char hostname[256] = "unknown";
@@ -146,15 +146,13 @@ namespace Sim
         printf("%-24s = %u\n", "threads total avail", N_totalThreads);
         printf("%-24s = %u\n", "threads used for sim", N_simThreads);
         printf("%-24s = %u\n", "threads used for vis", N_visThreads);
-
-        printf("\n");
     }
 
     void DiagnosticsMgr::PrintSimParams(const SimParams& params)
     {
         printf("\n");
-        printf("--- [ simulation parameters ] ------------------------------------------\n");
-        printf("------------------------------------------------------------------------\n");
+        printf("--- [ simulation parameters ] --------------------------------------------\n");
+        printf("--------------------------------------------------------------------------\n");
 
         // print table with aligned columns of sim parameters
         printf("%-24s = %.6f\n", "timeStep", params.timeStep);
@@ -180,15 +178,14 @@ namespace Sim
         printf("%-24s = %u\n", "boundaryLayers", params.boundaryLayers);
         printf("%-24s = (%.3f, %.3f, %.3f)\n", "gravity",
             params.gravity.x, params.gravity.y, params.gravity.z);
-
-        printf("\n");
     }
 
     void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr,
 									   const SimParams& params)
     {
-        printf("--- [ simulation setup ] -----------------------------------------------\n");
-        printf("------------------------------------------------------------------------\n");
+        printf("\n");
+        printf("--- [ simulation setup ] -------------------------------------------------\n");
+        printf("--------------------------------------------------------------------------\n");
 
         // modes
 		printf("%-24s = %s\n", "sim backend",
@@ -205,8 +202,6 @@ namespace Sim
             simMgr.universalSimState_.fluidParticles.N_);
         printf("%-24s = %u\n", "boundary particles", 
             simMgr.universalSimState_.boundaryParticles.N_);
-
-        printf("\n");
     }
 
     void DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
@@ -314,11 +309,6 @@ namespace Sim
 
         int lineCount = 0;
 
-        printf("--- [ benchmark summary ] ----------------------------------------------\n");
-        lineCount++;
-        printf("------------------------------------------------------------------------\n");
-        lineCount++;
-
         // per-group timing
         std::vector<uint64_t> groupLatest(opGroups.size(), 0);
         std::vector<uint64_t> groupAvg(opGroups.size(), 0);
@@ -362,11 +352,13 @@ namespace Sim
         snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
         snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
 
-        // header: 30 (name) + latest pair + gap + avg pair
-        printf("%-30.30s | %11s %6s | %11s %6s\n",
-            "operation group", latestLabel, "%", avgLabel, "%");
+        std::printf("\n");
         lineCount++;
-        printf("------------------------------------------------------------------------\n");
+        // header
+        printf("%-30.30s | %12s %6s | %12s %6s\n",
+            "benchmark summary", latestLabel, "%", avgLabel, "%");
+        lineCount++;
+        printf("--------------------------------------------------------------------------\n");
         lineCount++;
 
         auto PrintRow = [&](uint32_t i, bool isTotalSim)
@@ -418,12 +410,12 @@ namespace Sim
 
                 if (isTotalSim)
                 {
-                    std::printf("%-30.30s | %11.2f %6s | %11.2f %6s\n",
+                    std::printf("%-30.30s | %12.2f %6s | %12.2f %6s\n",
                         alias.c_str(), t_latest, "---", t_avg, "---");
                 }
                 else
                 {
-                    std::printf("%-30.30s | %11.2f %6.1f | %11.2f %6.1f\n",
+                    std::printf("%-30.30s | %12.2f %6.1f | %12.2f %6.1f\n",
                         alias.c_str(), t_latest, pctLatest, t_avg, pctAvg);
                 }
 
@@ -440,7 +432,7 @@ namespace Sim
         // total simulation row last
         if (totalSimIdx >= 0)
         {
-            printf("------------------------------------------------------------------------\n");
+            printf("--------------------------------------------------------------------------\n");
             lineCount++;
             PrintRow(static_cast<std::size_t>(totalSimIdx), true);
         }
@@ -490,365 +482,6 @@ namespace Sim
 
         // remember how many lines were printed
         lastNumLines = lineCount;
-    }
-
-    void DiagnosticsMgr::PrintLatestPerformanceAndMemorySummaryAndProgress(
-        const Mem::MemoryTracker& memTracker,
-        const Bench::BenchmarksMgr& benchMgr,
-        const std::vector<Bench::BenchOpGroupDef>& opGroups,
-        Mem::ByteUnit memUnit,
-        Bench::TimeUnit benchUnit,
-        uint32_t step,
-        int64_t maxSteps)
-    {
-        using steady_clock = std::chrono::steady_clock;
-
-        // ---------------------------------------------------------------------
-        // alt screen (enter once)
-        // ---------------------------------------------------------------------
-        EnterAltScreenOnce();
-
-        // ---------------------------------------------------------------------
-        // static state for progress + redraw filtering
-        // ---------------------------------------------------------------------
-        static bool initialized = false;
-        static uint32_t lastStep = 0;
-        static steady_clock::time_point startSteady;
-
-        using Sample = std::pair<uint32_t, steady_clock::time_point>;
-        static std::deque<Sample> history;
-
-        static std::size_t lastProgressLen = 0;
-
-        const bool hasTotal = (maxSteps > 0);
-        const auto now = steady_clock::now();
-
-        // re-initialize at start or when step == 0
-        if (!initialized || step == 0)
-        {
-            initialized = true;
-            lastStep = 0;
-            startSteady = now;
-            history.clear();
-            lastProgressLen = 0;
-        }
-
-        if (step <= lastStep) { return; }
-        lastStep = step;
-
-        // update history for moving-average steps/s
-        history.emplace_back(step, now);
-        constexpr uint32_t MAX_HISTORY = 10;
-        if (history.size() > MAX_HISTORY) { history.pop_front(); }
-
-        // total elapsed time since start
-        double elapsedS = std::chrono::duration<double>(now - startSteady).count();
-        elapsedS = std::max(elapsedS, 1e-9);
-
-        // compute steps/s
-        double stepsPerSec = 0.0;
-        if (history.size() >= 2)
-        {
-            const auto& oldest = history.front();
-            const auto& newest = history.back();
-            double dt = std::chrono::duration<double>(newest.second - oldest.second).count();
-            uint32_t ds = newest.first - oldest.first;
-
-            if (dt > 1e-6 && ds > 0)
-            {
-                stepsPerSec = static_cast<double>(ds) / dt;
-            }
-        }
-        if (stepsPerSec <= 0.0)
-        {
-            stepsPerSec = static_cast<double>(step) / elapsedS;
-        }
-
-        // remaining time
-        double remainingS = 0.0;
-        if (hasTotal && stepsPerSec > 1e-9 && step < static_cast<uint32_t>(maxSteps))
-        {
-            remainingS = static_cast<double>(maxSteps - step) / stepsPerSec;
-        }
-
-        auto fmt_hms = [](double seconds, int& h, int& m, int& s)
-            {
-                seconds = std::max(seconds, 0.0);
-                int total = static_cast<int>(seconds + 0.5);
-                h = total / 3600;
-                m = (total % 3600) / 60;
-                s = total % 60;
-            };
-
-        int elH, elM, elS;
-        int etaH = 0, etaM = 0, etaS = 0;
-        fmt_hms(elapsedS, elH, elM, elS);
-        if (hasTotal) { fmt_hms(remainingS, etaH, etaM, etaS); }
-
-        double percent = 0.0;
-        if (hasTotal)
-        {
-            double progress = std::min(1.0, std::max(0.0,
-                static_cast<double>(step) / static_cast<double>(maxSteps)));
-            percent = progress * 100.0;
-        }
-
-        // ---------------------------------------------------------------------
-        // choose memory field + title
-        // ---------------------------------------------------------------------
-        const char* memTitle = "USED";
-        uint64_t Mem::MemUsage::* memField = &Mem::MemUsage::usedBytes;
-
-        uint32_t x = 1;
-        switch (x)
-        {
-        case 0:
-            memTitle = "USED";
-            memField = &Mem::MemUsage::usedBytes;
-            break;
-        case 1:
-            memTitle = "ALLOC";
-            memField = &Mem::MemUsage::allocBytes;
-            break;
-        case 2:
-            memTitle = "OCCUPIED";
-            memField = &Mem::MemUsage::occupiedBytes;
-            break;
-        }
-
-        // ---------------------------------------------------------------------
-        // build full frame in one string (minimizes flicker)
-        // ---------------------------------------------------------------------
-        std::string frame;
-        frame.reserve(64 * 1024);
-
-        // go home (top-left) before drawing
-        frame += "\x1b[H\x1b[0J";
-
-        // ---------------------------------------------------------------------
-        // MEMORY TABLE
-        // ---------------------------------------------------------------------
-        Sync::MemSnapshot memSnap{};
-        memTracker.PackMemSnapshot(memSnap);
-
-        constexpr uint8_t BUCKET_COUNT = Mem::GetIdx(Mem::MemBucket::Count);
-
-        uint64_t totalLatestBytes = 0;
-        uint64_t totalMaxBytes = 0;
-        for (uint8_t i = 0; i < BUCKET_COUNT; ++i)
-        {
-            totalLatestBytes += (memSnap.latest[i].*memField);
-            totalMaxBytes += (memSnap.max[i].*memField);
-        }
-
-        const char* memUnitStr = Mem::MemoryTracker::UnitLabel(memUnit);
-
-        char memLatestLabel[32];
-        char memMaxLabel[32];
-        std::snprintf(memLatestLabel, sizeof(memLatestLabel), "latest [%s]", memUnitStr);
-        std::snprintf(memMaxLabel, sizeof(memMaxLabel), "max [%s]", memUnitStr);
-
-        Appendf(frame, "--- [ memory usage: %s ] ----------------------------------------------\n", memTitle);
-        Appendf(frame, "------------------------------------------------------------------------\n");
-        Appendf(frame, "%-30.30s | %11s %6s | %11s %6s\n", "bucket", memLatestLabel, "%", memMaxLabel, "%");
-        Appendf(frame, "------------------------------------------------------------------------\n");
-
-        for (uint8_t i = 0; i < BUCKET_COUNT; ++i)
-        {
-            const auto& def = Mem::Definitions[i];
-
-            const uint64_t bLatest = (memSnap.latest[i].*memField);
-            const uint64_t bMax = (memSnap.max[i].*memField);
-
-            const double vLatest = Mem::MemoryTracker::ConvertFromBytes(memUnit, bLatest);
-            const double vMax = Mem::MemoryTracker::ConvertFromBytes(memUnit, bMax);
-
-            const double pctLatest = (totalLatestBytes > 0)
-                ? (100.0 * static_cast<double>(bLatest) / static_cast<double>(totalLatestBytes))
-                : 0.0;
-
-            const double pctMax = (totalMaxBytes > 0)
-                ? (100.0 * static_cast<double>(bMax) / static_cast<double>(totalMaxBytes))
-                : 0.0;
-
-            Appendf(frame, "%-30.30s | %11.2f %6.1f | %11.2f %6.1f\n",
-                def.name.data(), vLatest, pctLatest, vMax, pctMax);
-        }
-
-        Appendf(frame, "------------------------------------------------------------------------\n");
-        Appendf(frame, "%-30.30s | %11.2f %6s | %11.2f %6s\n",
-            "TOTAL",
-            Mem::MemoryTracker::ConvertFromBytes(memUnit, totalLatestBytes), "---",
-            Mem::MemoryTracker::ConvertFromBytes(memUnit, totalMaxBytes), "---");
-
-        Appendf(frame, "\n");
-
-        // ---------------------------------------------------------------------
-        // PERFORMANCE TABLE (your working logic, but appended into `frame`)
-        // ---------------------------------------------------------------------
-        Appendf(frame, "--- [ benchmark summary ] ----------------------------------------------\n");
-        Appendf(frame, "------------------------------------------------------------------------\n");
-
-        std::vector<uint64_t> groupLatest(opGroups.size(), 0);
-        std::vector<uint64_t> groupAvg(opGroups.size(), 0);
-
-        uint64_t totalNsLatest = 0;
-        uint64_t totalNsAvg = 0;
-        int totalSimIdx = -1;
-
-        for (uint32_t i = 0; i < opGroups.size(); i++)
-        {
-            const auto& group = opGroups[i];
-
-            uint64_t groupNsLatest = 0;
-            uint64_t groupNsAvg = 0;
-
-            for (auto op : group.ops)
-            {
-                groupNsLatest += benchMgr.GetBench_Latest(op);
-                groupNsAvg += benchMgr.GetBench_Avg_OverAll(op);
-            }
-
-            groupLatest[i] = groupNsLatest;
-            groupAvg[i] = groupNsAvg;
-
-            if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total_Sim)
-            {
-                totalSimIdx = static_cast<int>(i);
-            }
-            else
-            {
-                totalNsLatest += groupNsLatest;
-                totalNsAvg += groupNsAvg;
-            }
-        }
-
-        const char* unitStr = Bench::BenchmarksMgr::UnitLabel(benchUnit);
-
-        char latestLabel[32];
-        char avgLabel[32];
-        std::snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
-        std::snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
-
-        Appendf(frame, "%-30.30s | %11s %6s | %11s %6s\n",
-            "operation group", latestLabel, "%", avgLabel, "%");
-        Appendf(frame, "------------------------------------------------------------------------\n");
-
-        auto AppendBenchRow = [&](uint32_t i, bool isTotalSim)
-            {
-                const auto& group = opGroups[i];
-
-                const uint64_t nsLatest = groupLatest[i];
-                const uint64_t nsAvg = groupAvg[i];
-
-                const double t_latest = Bench::BenchmarksMgr::ConvertFromNs(benchUnit, nsLatest);
-                const double t_avg = Bench::BenchmarksMgr::ConvertFromNs(benchUnit, nsAvg);
-
-                std::string alias;
-                if (isTotalSim)
-                {
-                    alias = "total simulation time";
-                }
-                else if (!group.ops.empty())
-                {
-                    for (std::size_t k = 0; k < group.ops.size(); ++k)
-                    {
-                        const auto op = group.ops[k];
-                        const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-                        if (k > 0) { alias += " + "; }
-                        alias += def.alias.data();
-                    }
-                }
-                else
-                {
-                    alias = "<empty>";
-                }
-
-                double pctLatest = 0.0;
-                double pctAvg = 0.0;
-
-                if (!isTotalSim)
-                {
-                    if (totalNsLatest > 0)
-                    {
-                        pctLatest = 100.0 * static_cast<double>(nsLatest)
-                            / static_cast<double>(totalNsLatest);
-                    }
-                    if (totalNsAvg > 0)
-                    {
-                        pctAvg = 100.0 * static_cast<double>(nsAvg)
-                            / static_cast<double>(totalNsAvg);
-                    }
-                }
-
-                if (isTotalSim)
-                {
-                    Appendf(frame, "%-30.30s | %11.2f %6s | %11.2f %6s\n",
-                        alias.c_str(), t_latest, "---", t_avg, "---");
-                }
-                else
-                {
-                    Appendf(frame, "%-30.30s | %11.2f %6.1f | %11.2f %6.1f\n",
-                        alias.c_str(), t_latest, pctLatest, t_avg, pctAvg);
-                }
-            };
-
-        for (uint32_t i = 0; i < opGroups.size(); i++)
-        {
-            if (static_cast<int>(i) == totalSimIdx) { continue; }
-            AppendBenchRow(i, false);
-        }
-
-        if (totalSimIdx >= 0)
-        {
-            Appendf(frame, "------------------------------------------------------------------------\n");
-            AppendBenchRow(static_cast<uint32_t>(totalSimIdx), true);
-        }
-
-        Appendf(frame, "\n");
-
-        // ---------------------------------------------------------------------
-        // PROGRESS LINE (pad if shorter than previous)
-        // ---------------------------------------------------------------------
-        char buf[512];
-
-        if (hasTotal)
-        {
-            std::snprintf(
-                buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.3f steps/s (recently) | ETA %02d:%02d:%02d",
-                elH, elM, elS,
-                static_cast<long long>(step),
-                static_cast<long long>(maxSteps),
-                percent,
-                stepsPerSec,
-                etaH, etaM, etaS
-            );
-        }
-        else
-        {
-            std::snprintf(
-                buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld steps | %.3f steps/s (recently)",
-                elH, elM, elS,
-                static_cast<long long>(step),
-                stepsPerSec
-            );
-        }
-
-        std::string line(buf);
-        if (line.size() < lastProgressLen)
-        {
-            line.append(lastProgressLen - line.size(), ' ');
-        }
-        lastProgressLen = line.size();
-
-        Appendf(frame, "%s\n", line.c_str());
-
-        // ---------------------------------------------------------------------
-        // single write
-        // ---------------------------------------------------------------------
-        WriteFrame(frame);
     }
 
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(
@@ -901,6 +534,7 @@ namespace Sim
         std::snprintf(maxLabel, sizeof(maxLabel), "max [%s]", unitStr);
 
         std::printf("\n");
+        // header
         std::printf("%-30.30s | %12s %6s | %12s %6s\n",
             title, latestLabel, "%", maxLabel, "%");
         std::printf("--------------------------------------------------------------------------\n");
