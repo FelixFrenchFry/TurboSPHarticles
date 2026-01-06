@@ -29,7 +29,7 @@ namespace Sim
 		void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) override;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
-		void PullFromUniversalSimState(const Sync::UniversalSimState& src) override;
+		void PullFromUniversalSimState(Sync::UniversalSimState& src) override;
 
 		// copies & translates backend-specific data structures into -> universal simulation state
 		void PushToUniversalSimState(Sync::UniversalSimState& dst) const override;

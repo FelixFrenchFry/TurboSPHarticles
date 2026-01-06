@@ -39,7 +39,7 @@ namespace Sim
 		virtual void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) = 0;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
-		virtual void PullFromUniversalSimState(const Sync::UniversalSimState& src) = 0;
+		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src) = 0;
 
 		// copies & translates backend-specific data structures into -> universal simulation state
 		virtual void PushToUniversalSimState(Sync::UniversalSimState& dst) const = 0;

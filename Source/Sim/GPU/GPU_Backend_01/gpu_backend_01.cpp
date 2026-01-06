@@ -63,10 +63,11 @@ void SimBackend_GPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearc
 	neighborSearchStrat_ = std::move(strat);
 }
 
-void SimBackend_GPU01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
+// TODO: re-implement this to free up memory as soon as copied in!
+void SimBackend_GPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 {
-	const auto& F = src.fluidParticles;
-	const auto& B = src.boundaryParticles;
+	auto& F = src.fluidParticles;
+	auto& B = src.boundaryParticles;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
 	simStep_ = src.step;
@@ -129,12 +130,9 @@ void SimBackend_GPU01::PullFromUniversalSimState(const Sync::UniversalSimState& 
 	GPU::MemsetZero(d_neighOverflowFlag_.Data(), 1, stream_);
 
 	GPU::StreamSync(stream_);
-
-	//SPDLOG_INFO("Pulled universal sim state with {} fluid and "
-	//			"{} boundary particles into data structures of backend GPU01",
-	//			N_F_, N_B_);
 }
 
+// TODO: re-implement this to free up memory as soon as copied out!
 void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
 {
 	auto& F = dst.fluidParticles;
@@ -200,10 +198,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
-
-	//SPDLOG_INFO("Pushed from data structures of backend GPU01 with "
-	//			"{} fluid and {} boundary particles to universal sim state",
-	//			N_F_, N_B_);
 }
 
 void SimBackend_GPU01::PackExportSnapshot(

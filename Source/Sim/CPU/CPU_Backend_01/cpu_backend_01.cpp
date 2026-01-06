@@ -92,132 +92,68 @@ void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearc
 	neighborSearchStrat_ = std::move(strat);
 }
 
-void SimBackend_CPU01::PullFromUniversalSimState(const Sync::UniversalSimState& src)
+void SimBackend_CPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 
-	const auto& F = src.fluidParticles;
-	const auto& B = src.boundaryParticles;
+	auto& F = src.fluidParticles;
+	auto& B = src.boundaryParticles;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
 	simStep_ = src.step;
 
-	// resize backend fluid data structures
-	xPosF_.resize(N_F_);
-	yPosF_.resize(N_F_);
-	zPosF_.resize(N_F_);
+	// transfer to backend fluid data structures
+	xPosF_ = std::move(F.xPos);
+	yPosF_ = std::move(F.yPos);
+	zPosF_ = std::move(F.zPos);
 
-	xVelF_.resize(N_F_);
-	yVelF_.resize(N_F_);
-	zVelF_.resize(N_F_);
+	xVelF_ = std::move(F.xVel);
+	yVelF_ = std::move(F.yVel);
+	zVelF_ = std::move(F.zVel);
 
-	xVelPredF_.resize(N_F_);
-	yVelPredF_.resize(N_F_);
-	zVelPredF_.resize(N_F_);
+	xVelPredF_ = std::move(F.xVelPred);
+	yVelPredF_ = std::move(F.yVelPred);
+	zVelPredF_ = std::move(F.zVelPred);
 
-	xAccF_.resize(N_F_);
-	yAccF_.resize(N_F_);
-	zAccF_.resize(N_F_);
+	xAccF_ = std::move(F.xAcc);
+	yAccF_ = std::move(F.yAcc);
+	zAccF_ = std::move(F.zAcc);
 
-	xAccPressF_.resize(N_F_);
-	yAccPressF_.resize(N_F_);
-	zAccPressF_.resize(N_F_);
+	xAccPressF_ = std::move(F.xAccPress);
+	yAccPressF_ = std::move(F.yAccPress);
+	zAccPressF_ = std::move(F.zAccPress);
 
-	xAccViscF_.resize(N_F_);
-	yAccViscF_.resize(N_F_);
-	zAccViscF_.resize(N_F_);
+	xAccViscF_ = std::move(F.xAccVisc);
+	yAccViscF_ = std::move(F.yAccVisc);
+	zAccViscF_ = std::move(F.zAccVisc);
 
-	xAccExtF_.resize(N_F_);
-	yAccExtF_.resize(N_F_);
-	zAccExtF_.resize(N_F_);
+	xAccExtF_ = std::move(F.xAccExt);
+	yAccExtF_ = std::move(F.yAccExt);
+	zAccExtF_ = std::move(F.zAccExt);
 
-	sourceTermF_.resize(N_F_);
-	diagElemF_.resize(N_F_);
-	sysVecElemF_.resize(N_F_);
-	pressureF_.resize(N_F_);
-	densityF_.resize(N_F_);
-	idF_.resize(N_F_);
+	sourceTermF_ = std::move(F.sourceTerm);
+	diagElemF_ = std::move(F.diagElem);
+	sysVecElemF_ = std::move(F.sysVecElem);
+	pressureF_ = std::move(F.pressure);
+	densityF_ = std::move(F.density);
+	idF_ = std::move(F.id);
 
-	// resize backend boundary data structures
-	xPosB_.resize(N_B_); yPosB_.resize(N_B_); zPosB_.resize(N_B_);
-	xVelB_.resize(N_B_); yVelB_.resize(N_B_); zVelB_.resize(N_B_);
-	idB_.resize(N_B_);
+	// transfer to boundary data structures
+	xPosB_ = std::move(B.xPos);
+	yPosB_ = std::move(B.yPos);
+	zPosB_ = std::move(B.zPos);
 
-	// fluid particles
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				xPosF_[i] = F.xPos[i];
-				yPosF_[i] = F.yPos[i];
-				zPosF_[i] = F.zPos[i];
+	xVelB_ = std::move(B.xVel);
+	yVelB_ = std::move(B.yVel);
+	zVelB_ = std::move(B.zVel);
 
-				xVelF_[i] = F.xVel[i];
-				yVelF_[i] = F.yVel[i];
-				zVelF_[i] = F.zVel[i];
+	idB_ = std::move(B.id);
 
-				xVelPredF_[i] = F.xVelPred[i];
-				yVelPredF_[i] = F.yVelPred[i];
-				zVelPredF_[i] = F.zVelPred[i];
-
-				xAccF_[i] = F.xAcc[i];
-				yAccF_[i] = F.yAcc[i];
-				zAccF_[i] = F.zAcc[i];
-
-				xAccPressF_[i] = F.xAccPress[i];
-				yAccPressF_[i] = F.yAccPress[i];
-				zAccPressF_[i] = F.zAccPress[i];
-
-				xAccViscF_[i] = F.xAccVisc[i];
-				yAccViscF_[i] = F.yAccVisc[i];
-				zAccViscF_[i] = F.zAccVisc[i];
-
-				xAccExtF_[i] = F.xAccExt[i];
-				yAccExtF_[i] = F.yAccExt[i];
-				zAccExtF_[i] = F.zAccExt[i];
-
-				sourceTermF_[i] = F.sourceTerm[i];
-				diagElemF_[i] = F.diagElem[i];
-				sysVecElemF_[i] = F.sysVecElem[i];
-				pressureF_[i] = F.pressure[i];
-				densityF_[i] = F.density[i];
-				idF_[i] = F.id[i];
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	// boundary particles
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_B_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				xPosB_[i] = B.xPos[i];
-				yPosB_[i] = B.yPos[i];
-				zPosB_[i] = B.zPos[i];
-
-				xVelB_[i] = B.xVel[i];
-				yVelB_[i] = B.yVel[i];
-				zVelB_[i] = B.zVel[i];
-
-				idB_[i] = B.id[i];
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	// neighbor lists
+	// init neighbor list sizes
 	neighborLists_->Resize(N_F_, N_B_);
-
-	//SPDLOG_INFO("Pulled universal sim state with {} fluid and "
-	//			"{} boundary particles into data structures of backend CPU01",
-	//			N_F_, N_B_);
 }
 
+// TODO: re-implement this to free up memory as soon as copied out!
 void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
 {
 	auto& F = dst.fluidParticles;
@@ -297,10 +233,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
-
-	//SPDLOG_INFO("Pushed from data structures of backend CPU01 with "
-	//			"{} fluid and {} boundary particles to universal sim state",
-	//			N_F_, N_B_);
 }
 
 void SimBackend_CPU01::PackExportSnapshot(

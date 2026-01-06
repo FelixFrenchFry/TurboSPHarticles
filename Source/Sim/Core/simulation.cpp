@@ -45,10 +45,11 @@ bool SimulationMgr::Init()
 
 	// TODO: load initial sim state from a file?
 
+	SPDLOG_INFO("Initializing simulation state...");
 	SelectSimScenario(simParams_.scenarioType, configProfile_);
-
 	SelectSimBackend(simParams_.backendVersion);
 
+	SPDLOG_INFO("Initializing data structures...");
 	ReBuildInitialSimState();
 
 	initialized_.store(true, std::memory_order_release);
@@ -103,9 +104,6 @@ void SimulationMgr::SelectSimScenario(Base::ScenarioType type, std::string& prof
 			static_cast<int>(type));
 		return;
 	}
-
-	//SPDLOG_INFO("Selected sim scenario ({})",
-	//	static_cast<int>(type));
 }
 
 void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
@@ -151,9 +149,6 @@ void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 			static_cast<int>(version));
 		return;
 	}
-
-	//SPDLOG_INFO("Selected sim backend ({})",
-	//	static_cast<int>(version));
 }
 
 void SimulationMgr::ReBuildInitialSimState()
@@ -195,6 +190,9 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	// transfer universal state into backend-specific data structures
 	simBackend_->PullFromUniversalSimState(universalSimState_);
+
+	// clear universal state to free up memory
+	universalSimState_ = {};
 }
 
 void SimulationMgr::Launch_Async()
@@ -247,7 +245,7 @@ void SimulationMgr::Launch_Blocking()
 void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 {
 	printf("\n");
-	SPDLOG_INFO("Simulation started running");
+	SPDLOG_INFO("Simulation started running...");
 
 	// initialize before entering the simulation loop --------------------------
 
@@ -396,7 +394,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 void SimulationMgr::RunSim_Blocking()
 {
 	printf("\n");
-	SPDLOG_INFO("Simulation started running");
+	SPDLOG_INFO("Simulation started running...");
 
 	// initialize before entering the simulation loop --------------------------
 

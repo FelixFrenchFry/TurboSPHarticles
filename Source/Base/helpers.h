@@ -174,4 +174,10 @@ namespace Base
         return diff <= rel_epsilon * fmaxf(std::fabs(a), std::fabs(b));
     }
 
+    template <class T>
+    static void ReleaseVectorMemory(std::vector<T>& v)
+    {
+        std::vector<T>().swap(v); // guarantees capacity is returned to allocator
+    }
+
 } // namespace Base
