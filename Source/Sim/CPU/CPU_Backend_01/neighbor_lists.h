@@ -17,6 +17,44 @@
 namespace Sim
 {
 	// -------------------------------------------------------------------------
+	// --- [ individual vectors neighbor lists ] -------------------------------
+	// -------------------------------------------------------------------------
+
+	class NeighborLists_IndividualVectors_CPU01 final : public I_NeighborLists
+	{
+	public: // -----------------------------------------------------------------
+
+		void Resize(uint32_t N_F, uint32_t N_B) override;
+
+		void ClearOne(uint32_t i) override;
+
+		void ClearAll() override;
+
+		void Finalize() override;
+
+		void AddNbrFF(uint32_t i, uint32_t j) override;
+		void AddNbrFB(uint32_t i, uint32_t j) override;
+
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+
+		NeighborSpan FF(uint32_t i) const override;
+		NeighborSpan FB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+
+	private: // ----------------------------------------------------------------
+
+		// metadata
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+
+		// neighbor storage
+		std::vector<std::vector<uint32_t>> neighborsFF_;
+		std::vector<std::vector<uint32_t>> neighborsFB_;
+	};
+
+	// -------------------------------------------------------------------------
 	// --- [ small buffers neighbor lists ] ------------------------------------
 	// -------------------------------------------------------------------------
 
@@ -90,8 +128,8 @@ namespace Sim
 		// neighbor storage
 		std::vector<uint32_t> nbrCountFF_;
 		std::vector<uint32_t> nbrCountFB_;
-		std::vector<uint32_t> neighborsFF_; // N_F_ * N_MAX_FF_
-		std::vector<uint32_t> neighborsFB_; // N_F_ * N_MAX_FB_
+		std::vector<uint32_t> neighborsFF_; // fixed to N_F_ * N_MAX_FF_
+		std::vector<uint32_t> neighborsFB_; // fixed to N_F_ * N_MAX_FB_
 
 		// max neighbor counts
 		static constexpr uint32_t N_MAX_FF_ = 64;

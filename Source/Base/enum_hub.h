@@ -76,18 +76,20 @@ namespace Base
 
 	enum class NeighborListStorage : uint8_t
 	{
-		SmallBuffers,								// 0
-		FixedArrays,								// 1
-		CompactVectors,								// 2
-		CompactVectors_Compressed_ULEB128,			// 3
+		IndividualVectors,							// 0
+		SmallBuffers,								// 1
+		FixedArrays,								// 2
+		CompactVectors,								// 3
+		CompactVectors_Compressed_ULEB128,			// 4
 		// derived from paper:
 		// "Compressed Neighbor Lists for SPH" (2019)
-		CompactVectors_Compressed_StreamVByteDelta	// 4
+		CompactVectors_Compressed_StreamVByteDelta	// 5
 	};
 	constexpr const char* ToCString(NeighborListStorage v) noexcept
 	{
 		switch (v)
 		{
+		case NeighborListStorage::IndividualVectors: return "IndividualVectors";
 		case NeighborListStorage::SmallBuffers: return "SmallBuffers";
 		case NeighborListStorage::FixedArrays: return "FixedArrays";
 		case NeighborListStorage::CompactVectors: return "CompactVectors";

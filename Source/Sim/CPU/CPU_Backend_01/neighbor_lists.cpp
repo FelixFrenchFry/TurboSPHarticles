@@ -7,14 +7,136 @@
 #include <cassert>
 #include <tbb/parallel_for.h>
 #include <tbb/partitioner.h>
+#include "spdlog/spdlog.h"
 
 // internal
 #include "neighbor_lists.h"
 
-#include "spdlog/spdlog.h"
 
 
 using namespace Sim;
+
+// -------------------------------------------------------------------------
+// --- [ vectors neighbor lists ] ------------------------------------------
+// -------------------------------------------------------------------------
+
+void NeighborLists_IndividualVectors_CPU01::Resize(
+	const uint32_t N_F, const uint32_t N_B)
+{
+	N_F_ = N_F;
+	N_B_ = N_B;
+
+	neighborsFF_.resize(N_F_);
+	neighborsFB_.resize(N_F_);
+
+	// reserve expected capacities to reduce re-allocations
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				if (neighborsFF_[i].capacity() < N_expctNbrCountF)
+				{
+					neighborsFF_[i].reserve(N_expctNbrCountF);
+				}
+
+				if (neighborsFB_[i].capacity() < N_expctNbrCountB)
+				{
+					neighborsFB_[i].reserve(N_expctNbrCountB);
+				}
+
+				neighborsFF_[i].clear();
+				neighborsFB_[i].clear();
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NeighborLists_IndividualVectors_CPU01::ClearOne(
+	const uint32_t i)
+{
+	neighborsFF_[i].clear();
+	neighborsFB_[i].clear();
+}
+
+void NeighborLists_IndividualVectors_CPU01::ClearAll()
+{
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				neighborsFF_[i].clear();
+				neighborsFB_[i].clear();
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NeighborLists_IndividualVectors_CPU01::Finalize()
+{
+	// nothing to do
+}
+
+void NeighborLists_IndividualVectors_CPU01::AddNbrFF(
+	const uint32_t i, const uint32_t j)
+{
+	neighborsFF_[i].push_back(j);
+}
+
+void NeighborLists_IndividualVectors_CPU01::AddNbrFB(
+	const uint32_t i, const uint32_t j)
+{
+	neighborsFB_[i].push_back(j);
+}
+
+void NeighborLists_IndividualVectors_CPU01::SetNbrListFF(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	if (count == 0) { neighborsFF_[i].clear(); return; }
+
+	// overwrite and resize combined
+	neighborsFF_[i].assign(js, js + count);
+}
+
+void NeighborLists_IndividualVectors_CPU01::SetNbrListFB(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	if (count == 0) { neighborsFB_[i].clear(); return; }
+
+	// overwrite and resize combined
+	neighborsFB_[i].assign(js, js + count);
+}
+
+NeighborSpan NeighborLists_IndividualVectors_CPU01::FF(
+	const uint32_t i) const
+{
+	const auto& nbrs = neighborsFF_[i];
+	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
+}
+
+NeighborSpan NeighborLists_IndividualVectors_CPU01::FB(
+	const uint32_t i) const
+{
+	const auto& nbrs = neighborsFB_[i];
+	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_IndividualVectors_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
+
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(neighborsFF_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(neighborsFB_));
+
+	return { usageFF, usageFB };
+}
 
 // -----------------------------------------------------------------------------
 // --- [ small buffers neighbor lists ] ----------------------------------------

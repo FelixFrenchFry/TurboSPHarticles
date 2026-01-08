@@ -58,6 +58,11 @@ SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr,
 
 	// select neighbor list storage
 	if (params.neighborListStorage ==
+		Base::NeighborListStorage::IndividualVectors)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_CPU01>();
+	}
+	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::SmallBuffers)
 	{
 		neighborLists_ = std::make_unique<NeighborLists_SmallBuffers_CPU01>();
