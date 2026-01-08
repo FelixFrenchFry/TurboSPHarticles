@@ -121,19 +121,14 @@ namespace Sim
 
 		virtual void Resize(uint32_t N_F, uint32_t N_B) = 0;
 
-		// clears the fluid and boundary neighbor list of a single fluid particle i
-		virtual void ClearOne(uint32_t i) = 0;
-
-		// clears all neighbor lists
+		// clears the individual and/or shared neighbor lists of all fluid particles
 		virtual void ClearAll() = 0;
 
+		// applies potential post-processing on individual neighbor lists like concatenation into shared list
 		virtual void Finalize() = 0;
 
-		// adds single fluid/boundary neighbor j of fluid particle i to its neighbor list
-		virtual void AddNbrFF(uint32_t i, uint32_t j) = 0;
-		virtual void AddNbrFB(uint32_t i, uint32_t j) = 0;
-
-		// adds bulk of fluid/boundary neighbors js of fluid particle i by replacing its neighbor list
+		// sets the full neighbor list js of fluid particle i by replacing it with the one gathered in a scratch vector
+		// (optionally applying compression and other post-processing if the implementation uses it)
 		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 

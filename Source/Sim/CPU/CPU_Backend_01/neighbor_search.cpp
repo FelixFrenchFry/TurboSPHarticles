@@ -79,53 +79,74 @@ void NS_BruteForce_CPU01::Query(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		tbb::blocked_range<uint32_t>(0, N_F),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
 				// reset neighbor list for particle i
 				// (delete contents, but keep capacity)
-				be_.neighborLists_->ClearOne(i);
+				scratchFF.clear();
+				scratchFB.clear();
 
-				const float xi = be_.xPosF_[i];
-				const float yi = be_.yPosF_[i];
-				const float zi = be_.zPosF_[i];
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
 
 				// check all fluid particles j
-				for (uint32_t j = 0; j < be_.N_F_; j++)
+				for (uint32_t j = 0; j < N_F; j++)
 				{
-					const float dx = xi - be_.xPosF_[j];
-					const float dy = yi - be_.yPosF_[j];
-					const float dz = zi - be_.zPosF_[j];
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
 
 					// squared distance between particles i and j
 					const float distSqu = dx * dx + dy * dy + dz * dz;
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
-						// add actual neighbor to list
-						be_.neighborLists_->AddNbrFF(i, j);
+						// accumulate actual neighbors in scratch list
+						scratchFF.push_back(j);
 					}
 				}
 
 				// check all boundary particles j
-				for (uint32_t j = 0; j < be_.N_B_; j++)
+				for (uint32_t j = 0; j < N_B; j++)
 				{
-					const float dx = xi - be_.xPosB_[j];
-					const float dy = yi - be_.yPosB_[j];
-					const float dz = zi - be_.zPosB_[j];
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
 
 					// squared distance between particles i and j
 					const float distSqu = dx * dx + dy * dy + dz * dz;
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
-						// add actual neighbor to list
-						be_.neighborLists_->AddNbrFB(i, j);
+						// accumulate actual neighbors in scratch list
+						scratchFB.push_back(j);
 					}
 				}
+
+				// commit final neighbor lists from scratch to backend storage
+				be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+					static_cast<uint32_t>(scratchFF.size()));
+				be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+					static_cast<uint32_t>(scratchFB.size()));
 			}
 		},
 		tbb::auto_partitioner{}
@@ -245,19 +266,31 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		tbb::blocked_range<uint32_t>(0, N_F),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// reset neighbor list for particle i
-				// (delete contents, but keep capacity)
-				be_.neighborLists_->ClearOne(i);
+				scratchFF.clear();
+				scratchFB.clear();
 
-				const float xi = be_.xPosF_[i];
-				const float yi = be_.yPosF_[i];
-				const float zi = be_.zPosF_[i];
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
 
 				// cell ID of particle i
 				const int cxi = FloorToInt(xi * cellSizeInv_);
@@ -283,9 +316,9 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 								// check all neighbor candidates in the cell bucket
 								for (const uint32_t j : bucket->second)
 								{
-									const float dx = xi - be_.xPosF_[j];
-									const float dy = yi - be_.yPosF_[j];
-									const float dz = zi - be_.zPosF_[j];
+									const float dx = xi - xPosF[j];
+									const float dy = yi - yPosF[j];
+									const float dz = zi - zPosF[j];
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
@@ -294,8 +327,8 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
-										// add actual neighbor to list
-										be_.neighborLists_->AddNbrFF(i, j);
+										// accumulate actual neighbors in scratch list
+										scratchFF.push_back(j);
 									}
 								}
 							}
@@ -307,9 +340,9 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 								// check all neighbor candidates in the cell bucket
 								for (const uint32_t j : bucket->second)
 								{
-									const float dx = xi - be_.xPosB_[j];
-									const float dy = yi - be_.yPosB_[j];
-									const float dz = zi - be_.zPosB_[j];
+									const float dx = xi - xPosB[j];
+									const float dy = yi - yPosB[j];
+									const float dz = zi - zPosB[j];
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
@@ -318,14 +351,20 @@ void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
-										// add actual neighbor to list
-										be_.neighborLists_->AddNbrFB(i, j);
+										// accumulate actual neighbors in scratch list
+										scratchFB.push_back(j);
 									}
 								}
 							}
 						}
 					}
 				}
+
+				// commit final neighbor lists from scratch to backend storage
+				be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+					static_cast<uint32_t>(scratchFF.size()));
+				be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+					static_cast<uint32_t>(scratchFB.size()));
 			}
 		},
 		tbb::auto_partitioner{}
@@ -669,19 +708,31 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, be_.N_F_),
+		tbb::blocked_range<uint32_t>(0, N_F),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// reset neighbor list for particle i
-				// (delete contents, but keep capacity)
-				be_.neighborLists_->ClearOne(i);
+				scratchFF.clear();
+				scratchFB.clear();
 
-				const float xi = be_.xPosF_[i];
-				const float yi = be_.yPosF_[i];
-				const float zi = be_.zPosF_[i];
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
 
 				// cell coordinates of particle i
 				const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
@@ -721,9 +772,9 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 									const uint32_t j = sortedParticleIdxF_[k];
 
 									// position difference
-									const float dx = xi - be_.xPosF_[j];
-									const float dy = yi - be_.yPosF_[j];
-									const float dz = zi - be_.zPosF_[j];
+									const float dx = xi - xPosF[j];
+									const float dy = yi - yPosF[j];
+									const float dz = zi - zPosF[j];
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
@@ -732,8 +783,8 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
-										// add actual neighbor to list
-										be_.neighborLists_->AddNbrFF(i, j);
+										// accumulate actual neighbors in scratch list
+										scratchFF.push_back(j);
 									}
 								}
 							}
@@ -750,9 +801,9 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 									const uint32_t j = sortedParticleIdxB_[k];
 
 									// position difference
-									const float dx = xi - be_.xPosB_[j];
-									const float dy = yi - be_.yPosB_[j];
-									const float dz = zi - be_.zPosB_[j];
+									const float dx = xi - xPosB[j];
+									const float dy = yi - yPosB[j];
+									const float dz = zi - zPosB[j];
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
@@ -761,14 +812,20 @@ void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
-										// add actual neighbor to list
-										be_.neighborLists_->AddNbrFB(i, j);
+										// accumulate actual neighbors in scratch list
+										scratchFB.push_back(j);
 									}
 								}
 							}
 						}
 					}
 				}
+
+				// commit final neighbor lists from scratch to backend storage
+				be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+					static_cast<uint32_t>(scratchFF.size()));
+				be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+					static_cast<uint32_t>(scratchFB.size()));
 			}
 		},
 		tbb::auto_partitioner{}
@@ -1014,12 +1071,24 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// local references for fewer pointer indirections
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
 	// loop over all non-empty grid cells
 	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
 	tbb::parallel_for(
 		tbb::blocked_range<uint64_t>(0, N_Cells),
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+
 			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{
 				// range of all fluid particles in this cell
@@ -1027,67 +1096,58 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 				const uint32_t eF = cellStartIdxF_[c + 1]; // end
 				if (sF >= eF) { continue; }
 
-				// clear neighbor lists of all particles in this cell
-				for (uint32_t k = sF; k < eF; k++)
-				{
-					const uint32_t i = sortedParticleIdxF_[k];
-
-					// reset neighbor list for particle i
-					// (delete contents, but keep capacity)
-					be_.neighborLists_->ClearOne(i);
-				}
-
 				// determine a representative particle i0
 				const uint32_t i0 = sortedParticleIdxF_[sF];
 
-				const float xi0 = be_.xPosF_[i0];
-				const float yi0 = be_.yPosF_[i0];
-				const float zi0 = be_.zPosF_[i0];
+				const float xi0 = xPosF[i0];
+				const float yi0 = yPosF[i0];
+				const float zi0 = zPosF[i0];
 
 				// cell coordinates of all particles in this cell
 				const int cx = FloorToInt(xi0 * cellSizeInv_);
 				const int cy = FloorToInt(yi0 * cellSizeInv_);
 				const int cz = FloorToInt(zi0 * cellSizeInv_);
 
-				// check all particles j in 27 (3x3x3) neighboring grid cells
-				for (int rz = -1; rz <= 1; rz++)
+				// loop over all particles i in this cell
+				for (uint32_t k = sF; k < eF; k++)
 				{
-					int nz = cz + rz; // target cell coordinate in z-direction
+					const uint32_t i = sortedParticleIdxF_[k];
 
-					for (int ry = -1; ry <= 1; ry++)
+					scratchFF.clear();
+					scratchFB.clear();
+
+					const float xi = xPosF[i];
+					const float yi = yPosF[i];
+					const float zi = zPosF[i];
+
+					// check all particles j in 27 (3x3x3) neighboring grid cells
+					for (int rz = -1; rz <= 1; rz++)
 					{
-						int ny = cy + ry; // target cell coordinate in y-direction
+						int nz = cz + rz; // target cell coordinate in z-direction
 
-						for (int rx = -1; rx <= 1; rx++)
+						for (int ry = -1; ry <= 1; ry++)
 						{
-							int nx = cx + rx; // target cell coordinate in x-direction
+							int ny = cy + ry; // target cell coordinate in y-direction
 
-							// cell ID of the neighbor cell
-							const uint64_t cid_nbr = MapToCellId_Morton(nx, ny, nz);
-
-							// find neighbor fluid cell in compact list (binary search)
-							// TODO: use ternary search and BigMin-LitMax instead?
-							auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
-
-							// check fluid candidates in this neighbor cell
-							if (itF != uniqueCellIdF_.end() && *itF == cid_nbr)
+							for (int rx = -1; rx <= 1; rx++)
 							{
-								const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
+								int nx = cx + rx; // target cell coordinate in x-direction
 
-								// range of all fluid particles in the neighbor cell
-								const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
-								const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
-								if (sF_nbr >= eF_nbr) { continue; }
+								// cell ID of the neighbor cell
+								const uint64_t cid_nbr = MapToCellId_Morton(nx, ny, nz);
 
-								// outer loop over particles in this cell (c)
-								// inner loop over all particles in the neighbor cell (cF_nbr)
-								for (uint32_t k = sF; k < eF; k++)
+								// find neighbor fluid cell in compact list (binary search)
+								// TODO: use ternary search and BigMin-LitMax instead?
+								auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+
+								// check fluid candidates in this neighbor cell
+								if (itF != uniqueCellIdF_.end() && *itF == cid_nbr)
 								{
-									const uint32_t i = sortedParticleIdxF_[k];
+									const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
 
-									const float xi = be_.xPosF_[i];
-									const float yi = be_.yPosF_[i];
-									const float zi = be_.zPosF_[i];
+									// range of all fluid particles in the neighbor cell
+									const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
+									const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
 
 									#pragma omp simd
 									for (uint32_t l = sF_nbr; l < eF_nbr; l++)
@@ -1096,9 +1156,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 										const uint32_t j = sortedParticleIdxF_[l];
 
 										// position difference
-										const float dx = xi - be_.xPosF_[j];
-										const float dy = yi - be_.yPosF_[j];
-										const float dz = zi - be_.zPosF_[j];
+										const float dx = xi - xPosF[j];
+										const float dy = yi - yPosF[j];
+										const float dz = zi - zPosF[j];
 
 										// squared distance between particles i and j
 										const float distSqu = dx * dx
@@ -1107,36 +1167,24 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 
 										if (distSqu <= kernelRadiusSqu) [[unlikely]]
 										{
-											// add actual neighbor to list
-											be_.neighborLists_->AddNbrFF(i, j);
+											// accumulate actual neighbors in scratch list
+											scratchFF.push_back(j);
 										}
 									}
 								}
-							}
 
-							// find neighbor boundary cell in compact list (binary search)
-							// TODO: use ternary search and BigMin-LitMax instead?
-							auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
+								// find neighbor boundary cell in compact list (binary search)
+								// TODO: use ternary search and BigMin-LitMax instead?
+								auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
 
-							// check fluid candidates in this neighbor cell
-							if (itB != uniqueCellIdB_.end() && *itB == cid_nbr)
-							{
-								const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
-
-								// range of all boundary particles in the neighbor cell
-								const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
-								const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
-								if (sB_nbr >= eB_nbr) { continue; }
-
-								// outer loop over particles in this cell (c)
-								// inner loop over all particles in the neighbor cell (cB_nbr)
-								for (uint32_t k = sF; k < eF; k++)
+								// check boundary candidates in this neighbor cell
+								if (itB != uniqueCellIdB_.end() && *itB == cid_nbr)
 								{
-									const uint32_t i = sortedParticleIdxF_[k];
+									const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
 
-									const float xi = be_.xPosF_[i];
-									const float yi = be_.yPosF_[i];
-									const float zi = be_.zPosF_[i];
+									// range of all boundary particles in the neighbor cell
+									const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
+									const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
 
 									#pragma omp simd
 									for (uint32_t l = sB_nbr; l < eB_nbr; l++)
@@ -1145,9 +1193,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 										const uint32_t j = sortedParticleIdxB_[l];
 
 										// position difference
-										const float dx = xi - be_.xPosB_[j];
-										const float dy = yi - be_.yPosB_[j];
-										const float dz = zi - be_.zPosB_[j];
+										const float dx = xi - xPosB[j];
+										const float dy = yi - yPosB[j];
+										const float dz = zi - zPosB[j];
 
 										// squared distance between particles i and j
 										const float distSqu = dx * dx
@@ -1156,14 +1204,20 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 
 										if (distSqu <= kernelRadiusSqu) [[unlikely]]
 										{
-											// add actual neighbor to list
-											be_.neighborLists_->AddNbrFB(i, j);
+											// accumulate actual neighbors in scratch list
+											scratchFB.push_back(j);
 										}
 									}
 								}
 							}
 						}
 					}
+
+					// commit final neighbor lists from scratch to backend storage
+					be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+						static_cast<uint32_t>(scratchFF.size()));
+					be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+						static_cast<uint32_t>(scratchFB.size()));
 				}
 			}
 		},
@@ -1190,8 +1244,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
 			// per-thread neighbor vectors for local accumulation and then bulk add
-			boost::container::small_vector<uint32_t, N_expctMaxNbrCountF> scratchFF;
-			boost::container::small_vector<uint32_t, N_expctMaxNbrCountB> scratchFB;
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
 
 			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{
@@ -1322,7 +1376,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 
 							if (distSqu <= kernelRadiusSqu) [[unlikely]]
 							{
-								// add neighbor to scratch list
+								// accumulate actual neighbors in scratch list
 								scratchFF.push_back(j);
 							}
 						}
@@ -1352,13 +1406,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
 
 							if (distSqu <= kernelRadiusSqu) [[unlikely]]
 							{
-								// add neighbor to scratch list
+								// accumulate actual neighbors in scratch list
 								scratchFB.push_back(j);
 							}
 						}
 					}
 
-					// bulk add neighbors from scratch lists to global neighbor list
+					// commit final neighbor lists from scratch to backend storage
 					be_.neighborLists_->SetNbrListFF(i, scratchFF.data(), 
 						static_cast<uint32_t>(scratchFF.size()));
 					be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),

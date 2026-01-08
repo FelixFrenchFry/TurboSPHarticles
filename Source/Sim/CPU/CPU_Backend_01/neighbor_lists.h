@@ -26,14 +26,9 @@ namespace Sim
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
-		void ClearOne(uint32_t i) override;
-
 		void ClearAll() override;
 
 		void Finalize() override;
-
-		void AddNbrFF(uint32_t i, uint32_t j) override;
-		void AddNbrFB(uint32_t i, uint32_t j) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
@@ -64,14 +59,9 @@ namespace Sim
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
-		void ClearOne(uint32_t i) override;
-
 		void ClearAll() override;
 
 		void Finalize() override;
-
-		void AddNbrFF(uint32_t i, uint32_t j) override;
-		void AddNbrFB(uint32_t i, uint32_t j) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
@@ -102,14 +92,9 @@ namespace Sim
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
-		void ClearOne(uint32_t i) override;
-
 		void ClearAll() override;
 
 		void Finalize() override;
-
-		void AddNbrFF(uint32_t i, uint32_t j) override;
-		void AddNbrFB(uint32_t i, uint32_t j) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
@@ -146,14 +131,9 @@ namespace Sim
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
-		void ClearOne(uint32_t i) override;
-
 		void ClearAll() override;
 
 		void Finalize() override;
-
-		void AddNbrFF(uint32_t i, uint32_t j) override;
-		void AddNbrFB(uint32_t i, uint32_t j) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
@@ -191,14 +171,9 @@ namespace Sim
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
-		void ClearOne(uint32_t i) override;
-
 		void ClearAll() override;
 
 		void Finalize() override;
-
-		void AddNbrFF(uint32_t i, uint32_t j) override;
-		void AddNbrFB(uint32_t i, uint32_t j) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
@@ -263,14 +238,9 @@ namespace Sim
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
-		void ClearOne(uint32_t i) override;
-
 		void ClearAll() override;
 
 		void Finalize() override;
-
-		void AddNbrFF(uint32_t i, uint32_t j) override;
-		void AddNbrFB(uint32_t i, uint32_t j) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;

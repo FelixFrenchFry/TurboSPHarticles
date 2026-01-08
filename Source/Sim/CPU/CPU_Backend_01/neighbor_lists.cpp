@@ -54,13 +54,6 @@ void NeighborLists_IndividualVectors_CPU01::Resize(
 	);
 }
 
-void NeighborLists_IndividualVectors_CPU01::ClearOne(
-	const uint32_t i)
-{
-	neighborsFF_[i].clear();
-	neighborsFB_[i].clear();
-}
-
 void NeighborLists_IndividualVectors_CPU01::ClearAll()
 {
 	tbb::parallel_for(
@@ -80,18 +73,6 @@ void NeighborLists_IndividualVectors_CPU01::ClearAll()
 void NeighborLists_IndividualVectors_CPU01::Finalize()
 {
 	// nothing to do
-}
-
-void NeighborLists_IndividualVectors_CPU01::AddNbrFF(
-	const uint32_t i, const uint32_t j)
-{
-	neighborsFF_[i].push_back(j);
-}
-
-void NeighborLists_IndividualVectors_CPU01::AddNbrFB(
-	const uint32_t i, const uint32_t j)
-{
-	neighborsFB_[i].push_back(j);
 }
 
 void NeighborLists_IndividualVectors_CPU01::SetNbrListFF(
@@ -152,13 +133,6 @@ void NeighborLists_SmallBuffers_CPU01::Resize(
     neighborsFB_.resize(N_F_);
 }
 
-void NeighborLists_SmallBuffers_CPU01::ClearOne(
-	const uint32_t i)
-{
-    neighborsFF_[i].clear();
-    neighborsFB_[i].clear();
-}
-
 void NeighborLists_SmallBuffers_CPU01::ClearAll()
 {
 	tbb::parallel_for(
@@ -178,18 +152,6 @@ void NeighborLists_SmallBuffers_CPU01::ClearAll()
 void NeighborLists_SmallBuffers_CPU01::Finalize()
 {
 	// nothing to do
-}
-
-void NeighborLists_SmallBuffers_CPU01::AddNbrFF(
-	const uint32_t i, const uint32_t j)
-{
-	neighborsFF_[i].push_back(j);
-}
-
-void NeighborLists_SmallBuffers_CPU01::AddNbrFB(
-	const uint32_t i, const uint32_t j)
-{
-	neighborsFB_[i].push_back(j);
 }
 
 void NeighborLists_SmallBuffers_CPU01::SetNbrListFF(
@@ -255,13 +217,6 @@ void NeighborLists_FixedArrays_CPU01::Resize(
 	neighborsFB_.resize(static_cast<size_t>(N_F_) * N_MAX_FB_);
 }
 
-void NeighborLists_FixedArrays_CPU01::ClearOne(
-	const uint32_t i)
-{
-	nbrCountFF_[i] = 0;
-	nbrCountFB_[i] = 0;
-}
-
 void NeighborLists_FixedArrays_CPU01::ClearAll()
 {
 	tbb::parallel_for(
@@ -281,36 +236,6 @@ void NeighborLists_FixedArrays_CPU01::ClearAll()
 void NeighborLists_FixedArrays_CPU01::Finalize()
 {
 	// nothing to do
-}
-
-void NeighborLists_FixedArrays_CPU01::AddNbrFF(
-	const uint32_t i, const uint32_t j)
-{
-	uint32_t& count = nbrCountFF_[i];
-
-	if (count >= N_MAX_FF_) // neighbor list full, ignore new neighbor
-	{
-		return;
-	}
-
-	const uint64_t base = static_cast<size_t>(i) * N_MAX_FF_;
-	neighborsFF_[base + count] = j;
-	count++;
-}
-
-void NeighborLists_FixedArrays_CPU01::AddNbrFB(
-	const uint32_t i, const uint32_t j)
-{
-	uint32_t& count = nbrCountFB_[i];
-
-	if (count >= N_MAX_FB_) // neighbor list full, ignore new neighbor
-	{
-		return;
-	}
-
-	const uint64_t base = static_cast<size_t>(i) * N_MAX_FB_;
-	neighborsFB_[base + count] = j;
-	count++;
 }
 
 void NeighborLists_FixedArrays_CPU01::SetNbrListFF(
@@ -397,13 +322,6 @@ void NeighborLists_CompactVectors_CPU01::Resize(
 	offsetsFB_.resize(N_F_ + 1, 0);
 	neighborsFF_.clear();
 	neighborsFB_.clear();
-}
-
-void NeighborLists_CompactVectors_CPU01::ClearOne(
-	const uint32_t i)
-{
-	tmpFF_[i].clear();
-	tmpFB_[i].clear();
 }
 
 void NeighborLists_CompactVectors_CPU01::ClearAll()
@@ -503,18 +421,6 @@ void NeighborLists_CompactVectors_CPU01::Finalize()
 		},
 		tbb::auto_partitioner{}
 	);
-}
-
-void NeighborLists_CompactVectors_CPU01::AddNbrFF(
-	const uint32_t i, const uint32_t j)
-{
-	tmpFF_[i].push_back(j);
-}
-
-void NeighborLists_CompactVectors_CPU01::AddNbrFB(
-	const uint32_t i, const uint32_t j)
-{
-	tmpFB_[i].push_back(j);
 }
 
 void NeighborLists_CompactVectors_CPU01::SetNbrListFF(
@@ -628,16 +534,6 @@ void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::Resize(
 	compressedNeighborsFB_.clear();
 }
 
-void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::ClearOne(
-	const uint32_t i)
-{
-	nbrCountFF_[i] = 0;
-	nbrCountFB_[i] = 0;
-
-	tmpCompressedFF_[i].clear();
-	tmpCompressedFB_[i].clear();
-}
-
 void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::ClearAll()
 {
 	tbb::parallel_for(
@@ -738,18 +634,6 @@ void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::Finalize()
 		},
 		tbb::auto_partitioner{}
 	);
-}
-
-void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::AddNbrFF(
-	const uint32_t i, const uint32_t j)
-{
-	SPDLOG_ERROR("AddNbrFF() -> not implemented for compressed neighbor lists");
-}
-
-void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::AddNbrFB(
-	const uint32_t i, const uint32_t j)
-{
-	SPDLOG_ERROR("AddNbrFB() -> not implemented for compressed neighbor lists");
 }
 
 void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::SetNbrListFF(
@@ -1013,16 +897,6 @@ void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::Resize(
 	compressedNeighborsFB_.clear();
 }
 
-void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::ClearOne(
-	const uint32_t i)
-{
-	nbrCountFF_[i] = 0;
-	nbrCountFB_[i] = 0;
-
-	tmpCompressedFF_[i].clear();
-	tmpCompressedFB_[i].clear();
-}
-
 void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::ClearAll()
 {
 	tbb::parallel_for(
@@ -1123,18 +997,6 @@ void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::Finalize()
 		},
 		tbb::auto_partitioner{}
 	);
-}
-
-void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::AddNbrFF(
-	const uint32_t i, const uint32_t j)
-{
-	SPDLOG_ERROR("AddNbrFF() -> not implemented for compressed neighbor lists");
-}
-
-void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::AddNbrFB(
-	const uint32_t i, const uint32_t j)
-{
-	SPDLOG_ERROR("AddNbrFB() -> not implemented for compressed neighbor lists");
 }
 
 void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::SetNbrListFF(

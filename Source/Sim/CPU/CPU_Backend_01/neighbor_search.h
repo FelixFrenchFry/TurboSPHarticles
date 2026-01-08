@@ -6,8 +6,10 @@
 
 // external
 #include <ankerl/unordered_dense.h>
+#include <boost/container/small_vector.hpp>
 #include <cstdint>
 #include <limits>
+#include <tbb/enumerable_thread_specific.h>
 #include <vector>
 
 // internal
@@ -46,6 +48,12 @@ namespace Sim
 	private: // ----------------------------------------------------------------
 		
 		SimBackend_CPU01& be_;
+
+		// query scratch
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
 	};
 
 	// -------------------------------------------------------------------------
@@ -82,6 +90,12 @@ namespace Sim
 		// grid of cells, each made up of a key and a bucket
 		using Key = uint64_t;
 		using Bucket = std::vector<uint32_t>;
+
+		// query scratch
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
 
 		// data structures
 		ankerl::unordered_dense::map<Key, Bucket> cellGridF_{};
@@ -136,6 +150,12 @@ namespace Sim
 		uint32_t N_DimY_ = 0;
 		uint32_t N_DimZ_ = 0;
 		uint32_t N_Cells_ = 0;
+
+		// query scratch
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
 
 		// data structures
 		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the sorted particle index array
@@ -194,6 +214,12 @@ namespace Sim
 		float cellSizeInv_ = 0.0f;
 		static constexpr uint32_t N_NbrDim_ = 3;
 		static constexpr uint32_t N_NbrCells_ = N_NbrDim_ * N_NbrDim_ * N_NbrDim_;
+
+		// query scratch
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
 
 		// data structures
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
