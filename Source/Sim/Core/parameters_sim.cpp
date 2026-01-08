@@ -322,8 +322,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 		if (auto it = j.find("solverTerminationCond"); it != j.end())
 		{
-			using STC = Base::SolverTerminationCond;
-
 			Base::SolverTerminationCond stc;
 			if (ParseSolverTerminationCond(*it, stc))
 			{
@@ -387,14 +385,77 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	{
 		BeginWrite();
 
+		if (auto it = j.find("maxBenchRecs"); it != j.end())
+		{
+			params_.maxBenchRecs = it->get<uint32_t>();
+		}
+
 		if (auto it = j.find("maxStatRecs"); it != j.end())
 		{
 			params_.maxStatRecs = it->get<uint32_t>();
 		}
 
-		if (auto it = j.find("maxBenchRecs"); it != j.end())
+		auto ParseTimeUnit = [](const nlohmann::json& v, Bench::TimeUnit& out) -> bool
+			{
+				if (v.is_string())
+				{
+					const std::string s = v.get<std::string>();
+					if (s == "s") { out = Bench::TimeUnit::s; return true; }
+					if (s == "ms") { out = Bench::TimeUnit::ms; return true; }
+					if (s == "us") { out = Bench::TimeUnit::us; return true; }
+					return false;
+				}
+				else if (v.is_number_integer())
+				{
+					out = static_cast<Bench::TimeUnit>(v.get<int>());
+					return true;
+				}
+				return false;
+			};
+
+		if (auto it = j.find("timeUnit"); it != j.end())
 		{
-			params_.maxBenchRecs = it->get<uint32_t>();
+			Bench::TimeUnit tu;
+			if (ParseTimeUnit(*it, tu))
+			{
+				params_.timeUnit = tu;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'timeUnit' in JSON");
+			}
+		}
+
+		auto ParseByteUnit = [](const nlohmann::json& v, Mem::ByteUnit& out) -> bool
+			{
+				if (v.is_string())
+				{
+					const std::string s = v.get<std::string>();
+					if (s == "GiB") { out = Mem::ByteUnit::GiB; return true; }
+					if (s == "MiB") { out = Mem::ByteUnit::MiB; return true; }
+					if (s == "KiB") { out = Mem::ByteUnit::KiB; return true; }
+					if (s == "B") { out = Mem::ByteUnit::B; return true; }
+					return false;
+				}
+				else if (v.is_number_integer())
+				{
+					out = static_cast<Mem::ByteUnit>(v.get<int>());
+					return true;
+				}
+				return false;
+			};
+
+		if (auto it = j.find("byteUnit"); it != j.end())
+		{
+			Mem::ByteUnit bu;
+			if (ParseByteUnit(*it, bu))
+			{
+				params_.byteUnit = bu;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'byteUnit' in JSON");
+			}
 		}
 
 		if (auto it = j.find("exportEnabled"); it != j.end())

@@ -18,11 +18,6 @@
 
 namespace Bench
 {
-	enum class TimeUnit : uint8_t
-	{
-		s, ms, us
-	};
-
 	class BenchmarksMgr
 	{
 	public: // -----------------------------------------------------------------
@@ -59,30 +54,6 @@ namespace Bench
 		BenchRecordStep& GetCurrentRecord() { return recLatest_; }
 		const BenchRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<BenchRecordStep>& GetHistory() const { return recHistory_; }
-
-		static inline double ConvertFromNs(TimeUnit unit, uint64_t ns)
-		{
-			switch (unit)
-			{
-			case TimeUnit::s:  { return static_cast<double>(ns) / 1'000'000'000.0; }
-			case TimeUnit::ms: { return static_cast<double>(ns) / 1'000'000.0; }
-			case TimeUnit::us: { return static_cast<double>(ns) / 1'000.0; }
-			}
-
-			return static_cast<double>(ns);
-		}
-
-		static inline const char* UnitLabel(TimeUnit unit)
-		{
-			switch (unit)
-			{
-			case TimeUnit::s:  { return "s"; }
-			case TimeUnit::ms: { return "ms"; }
-			case TimeUnit::us: { return "us"; }
-			}
-
-			return "";
-		}
 
 	private: // ----------------------------------------------------------------
 

@@ -74,8 +74,8 @@ namespace Sim
 		void HandleExportSnapshot(const SimParams& params) const;
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;
-		void DisplayPerformanceStats(int64_t maxSteps) const;
-		void DisplayMemoryUsageStats(bool force = false) const;
+		void DisplayPerformanceStats(const SimParams& params) const;
+		void DisplayMemoryUsageStats(const SimParams& params, bool force = false) const;
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }

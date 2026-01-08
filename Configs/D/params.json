@@ -29,8 +29,10 @@
   "jitterSeedB": 67,
   "boundaryLayers": 2,
 
-  "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
+  "maxStatRecs": 1000000,
+  "timeUnit": "s",
+  "byteUnit": "GiB",
 
   "exportEnabled": true,
   "exportDir": "D",

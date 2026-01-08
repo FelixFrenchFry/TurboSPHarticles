@@ -634,7 +634,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		// column headers
 		ImGui::TableSetupColumn("operation group",
 			ImGuiTableColumnFlags_WidthStretch, 0.65f);
-		ImGui::TableSetupColumn(Bench::BenchmarksMgr::UnitLabel(benchTimeUnit_),
+		ImGui::TableSetupColumn(Bench::UnitLabel(benchTimeUnit_),
 			ImGuiTableColumnFlags_WidthStretch, 0.20f);
 		if (showPercent)
 		{
@@ -648,7 +648,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		{
 			const auto& group = opGroups[rowIdx];
 			const uint64_t t = groupTimings[rowIdx];
-			const double t_unit = Bench::BenchmarksMgr::ConvertFromNs(benchTimeUnit_, t);
+			const double t_unit = Bench::ConvertFromNs(benchTimeUnit_, t);
 
 			ImGui::TableNextRow();
 

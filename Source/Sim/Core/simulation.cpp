@@ -368,15 +368,18 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 		SyncParameters();
 
-		DisplayMemoryUsageStats();
-		DisplayPerformanceStats(params.maxSteps);
+		DisplayMemoryUsageStats(params);
+		DisplayPerformanceStats(params);
 
 		// TODO: check if scenario or backend need to be switched?
 	}
 
 	// finalize after exiting the simulation loop ------------------------------
 
-	DisplayMemoryUsageStats(true);
+	// local copy for thread safety
+	const auto paramsFinal = simParams_;
+
+	DisplayMemoryUsageStats(paramsFinal, true);
 
 	{
 		// transfer last sim state into the universal state to save it
@@ -467,15 +470,18 @@ void SimulationMgr::RunSim_Blocking()
 
 		SyncParameters();
 
-		DisplayMemoryUsageStats();
-		DisplayPerformanceStats(params.maxSteps);
+		DisplayMemoryUsageStats(params);
+		DisplayPerformanceStats(params);
 
 		// TODO: check if scenario or backend need to be switched?
 	}
 
 	// finalize after exiting the simulation loop ------------------------------
 
-	DisplayMemoryUsageStats(true);
+	// local copy for thread safety
+	const auto paramsFinal = simParams_;
+
+	DisplayMemoryUsageStats(paramsFinal, true);
 
 	{
 		// transfer last sim state into the universal state to save it
@@ -564,22 +570,24 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 	benchmarksMgr_.EndStep(simStep_, simTime_);
 }
 
-void SimulationMgr::DisplayPerformanceStats(int64_t maxSteps) const
+void SimulationMgr::DisplayPerformanceStats(
+	const SimParams& params) const
 {
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-		benchmarksMgr_, curBenchOpGroups_, Bench::TimeUnit::s, simStep_, maxSteps);
+		benchmarksMgr_, curBenchOpGroups_, params.timeUnit, simStep_, params.maxSteps);
 }
 
-void SimulationMgr::DisplayMemoryUsageStats(const bool force) const
+void SimulationMgr::DisplayMemoryUsageStats(
+	const SimParams& params, const bool force) const
 {
 	if (!force && simStep_ != 1) { return; }
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, Mem::ByteUnit::GiB, Mem::MemUsageType::Used);
+		memoryTracker_, params.byteUnit, Mem::MemUsageType::Used);
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, Mem::ByteUnit::GiB, Mem::MemUsageType::Alloc);
+		memoryTracker_, params.byteUnit, Mem::MemUsageType::Alloc);
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, Mem::ByteUnit::GiB, Mem::MemUsageType::Occupied);
+		memoryTracker_, params.byteUnit, Mem::MemUsageType::Occupied);
 }

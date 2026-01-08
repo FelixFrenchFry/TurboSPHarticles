@@ -16,11 +16,6 @@
 
 namespace Mem
 {
-	enum class ByteUnit : uint8_t
-	{
-		GiB, MiB, KiB, B
-	};
-
 	class MemoryTracker
 	{
 	public: // -----------------------------------------------------------------
@@ -47,30 +42,6 @@ namespace Mem
 		MemRecordStep& GetCurrentRecord() { return recLatest_; }
 		const MemRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<MemRecordStep>& GetHistory() const { return recHistory_; }
-
-		static inline double ConvertFromBytes(ByteUnit unit, uint64_t bytes)
-		{
-			switch (unit)
-			{
-			case ByteUnit::GiB: { return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0); }
-			case ByteUnit::MiB: { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
-			case ByteUnit::KiB: { return static_cast<double>(bytes) / 1024.0; }
-			case ByteUnit::B: { return static_cast<double>(bytes); }
-			}
-			return static_cast<double>(bytes);
-		}
-
-		static inline const char* UnitLabel(ByteUnit u)
-		{
-			switch (u)
-			{
-			case ByteUnit::GiB: { return "GiB"; }
-			case ByteUnit::MiB: { return "MiB"; }
-			case ByteUnit::KiB: { return "KiB"; }
-			case ByteUnit::B: { return "B"; }
-			}
-			return "";
-		}
 
 	private: // ----------------------------------------------------------------
 

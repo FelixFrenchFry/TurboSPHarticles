@@ -13,6 +13,7 @@
 
 // internal
 #include "Source/Base/enum_hub.h"
+#include "Source/Base/helpers.h"
 #include "Source/Eval/Stats/metrics.h"
 
 static constexpr uint32_t N_expctNbrCountF = 42;
@@ -97,13 +98,15 @@ namespace Sim
 		uint32_t boundaryLayers	= 2;
 
 		// benchmarks
-		uint32_t maxBenchRecs	= 1'000'000;
+		uint32_t maxBenchRecs = 1'000'000;
+		Bench::TimeUnit timeUnit = Bench::TimeUnit::ms;
 
 		// memory
-		uint32_t maxMemRecs		= 1'000'000;
+		uint32_t maxMemRecs	= 1'000'000;
+		Mem::ByteUnit byteUnit = Mem::ByteUnit::MiB;
 
 		// statistics
-		uint32_t maxStatRecs	= 1'000'000;
+		uint32_t maxStatRecs = 1'000'000;
 		std::array<bool, static_cast<uint8_t>(Stats::StatGroup::Count)> statGroupsEnabled =
 		{
 			false,	// particles

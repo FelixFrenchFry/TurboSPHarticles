@@ -181,3 +181,67 @@ namespace Base
     }
 
 } // namespace Base
+
+namespace Bench
+{
+    enum class TimeUnit : uint8_t
+    {
+        s, ms, us
+    };
+
+    static inline double ConvertFromNs(TimeUnit unit, uint64_t ns)
+    {
+        switch (unit)
+        {
+        case TimeUnit::s: { return static_cast<double>(ns) / 1'000'000'000.0; }
+        case TimeUnit::ms: { return static_cast<double>(ns) / 1'000'000.0; }
+        case TimeUnit::us: { return static_cast<double>(ns) / 1'000.0; }
+        }
+        return static_cast<double>(ns);
+    }
+
+    static inline const char* UnitLabel(TimeUnit unit)
+    {
+        switch (unit)
+        {
+        case TimeUnit::s: { return "s"; }
+        case TimeUnit::ms: { return "ms"; }
+        case TimeUnit::us: { return "us"; }
+        }
+        return "";
+    }
+
+} // namespace Bench
+
+namespace Mem
+{
+    enum class ByteUnit : uint8_t
+    {
+        GiB, MiB, KiB, B
+    };
+
+    static inline double ConvertFromBytes(ByteUnit unit, uint64_t bytes)
+    {
+        switch (unit)
+        {
+        case ByteUnit::GiB: { return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0); }
+        case ByteUnit::MiB: { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
+        case ByteUnit::KiB: { return static_cast<double>(bytes) / 1024.0; }
+        case ByteUnit::B: { return static_cast<double>(bytes); }
+        }
+        return static_cast<double>(bytes);
+    }
+
+    static inline const char* UnitLabel(ByteUnit u)
+    {
+        switch (u)
+        {
+        case ByteUnit::GiB: { return "GiB"; }
+        case ByteUnit::MiB: { return "MiB"; }
+        case ByteUnit::KiB: { return "KiB"; }
+        case ByteUnit::B: { return "B"; }
+        }
+        return "";
+    }
+	
+} // namespace Mem

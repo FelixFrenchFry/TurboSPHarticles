@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "ConvergingDam",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 3,
   "neighborListStorage": 2,
 
@@ -17,8 +17,8 @@
   "pressGamma": 0.5,
   "jacobiOmega": 0.5,
   "densityDevTarget": 0.01,
-  "fixedIters": 10,
-  "minSolverIters": 5,
+  "fixedIters": 5,
+  "minSolverIters": 3,
   "maxSolverIters": 50,
   "solverTerminationCond": 2,
 
@@ -29,8 +29,10 @@
   "jitterSeedB": 67,
   "boundaryLayers": 2,
 
-  "maxStatRecs": 1000000,
   "maxBenchRecs": 1000000,
+  "maxStatRecs": 1000000,
+  "timeUnit": "ms",
+  "byteUnit": "MiB",
 
   "exportEnabled": false,
   "exportDir": "F",

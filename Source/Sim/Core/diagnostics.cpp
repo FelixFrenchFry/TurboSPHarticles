@@ -345,7 +345,7 @@ namespace Sim
             }
         }
 
-        const char* unitStr = Bench::BenchmarksMgr::UnitLabel(unit);
+        const char* unitStr = Bench::UnitLabel(unit);
 
         char latestLabel[32];
         char avgLabel[32];
@@ -368,8 +368,8 @@ namespace Sim
                 const uint64_t nsLatest = groupLatest[i];
                 const uint64_t nsAvg = groupAvg[i];
 
-                const double t_latest = Bench::BenchmarksMgr::ConvertFromNs(unit, nsLatest);
-                const double t_avg = Bench::BenchmarksMgr::ConvertFromNs(unit, nsAvg);
+                const double t_latest = Bench::ConvertFromNs(unit, nsLatest);
+                const double t_avg = Bench::ConvertFromNs(unit, nsAvg);
 
                 std::string alias;
                 if (isTotalSim)
@@ -526,7 +526,7 @@ namespace Sim
             totalMaxBytes += (snap.max[i].*field);
         }
 
-        const char* unitStr = Mem::MemoryTracker::UnitLabel(unit);
+        const char* unitStr = Mem::UnitLabel(unit);
 
         char latestLabel[32];
         char maxLabel[32];
@@ -546,8 +546,8 @@ namespace Sim
             const uint64_t bLatest = (snap.latest[i].*field);
             const uint64_t bMax = (snap.max[i].*field);
 
-            const double vLatest = Mem::MemoryTracker::ConvertFromBytes(unit, bLatest);
-            const double vMax = Mem::MemoryTracker::ConvertFromBytes(unit, bMax);
+            const double vLatest = Mem::ConvertFromBytes(unit, bLatest);
+            const double vMax = Mem::ConvertFromBytes(unit, bMax);
 
             const double pctLatest = (totalLatestBytes > 0)
                 ? (100.0 * static_cast<double>(bLatest) / static_cast<double>(totalLatestBytes))
@@ -563,8 +563,8 @@ namespace Sim
 
         std::printf("--------------------------------------------------------------------------\n");
 
-        const double tLatest = Mem::MemoryTracker::ConvertFromBytes(unit, totalLatestBytes);
-        const double tMax = Mem::MemoryTracker::ConvertFromBytes(unit, totalMaxBytes);
+        const double tLatest = Mem::ConvertFromBytes(unit, totalLatestBytes);
+        const double tMax = Mem::ConvertFromBytes(unit, totalMaxBytes);
 
         std::printf("%-30.30s | %12.2f %6s | %12.2f %6s\n",
             "total", tLatest, "---", tMax, "---");
