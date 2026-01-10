@@ -17,11 +17,11 @@
 using namespace Vis;
 
 VisualizationMgr::VisualizationMgr(Sim::SimulationMgr& simulationMgr,
-								   Bench::BenchmarksMgr& benchmarksMgr,
+								   Bench::BenchmarksTracker& benchmarksTracker,
 								   Sim::SimParamsMgr& simParamsMgr,
 								   Vis::VisParamsMgr& visParamsMgr)
 	: simulationMgr_{ simulationMgr }
-	, benchmarksMgr_{ benchmarksMgr }
+	, benchmarksTracker_{ benchmarksTracker }
 	, simParamsMgr_{ simParamsMgr }
 	, visParamsMgr_{ visParamsMgr }
 	, userInputMgr_{ simParamsMgr, visParamsMgr }

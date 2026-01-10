@@ -18,11 +18,11 @@
 
 namespace Stats
 {
-	class StatisticsMgr
+	class StatisticsTracker
 	{
 	public: // -----------------------------------------------------------------
 
-		StatisticsMgr(const Sim::SimParams& simParams);
+		StatisticsTracker(const Sim::SimParams& simParams);
 
 		// resets the latest stat data before pulling in a new record
 		void BeginStep();

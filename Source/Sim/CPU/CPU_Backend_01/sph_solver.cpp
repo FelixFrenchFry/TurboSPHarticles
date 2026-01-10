@@ -48,10 +48,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	if (params.dataReOrderInterval > 0 && simStep_ % params.dataReOrderInterval == 0)
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Data_Ordering });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
 		neighborSearchStrat_->DataReOrder(params);
 		affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Data_Ordering });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
 	}
 
 	// restricted pointers for all the SoA particle properties
@@ -67,56 +67,49 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT xVelPredF = xVelPredF_.data();
 	float* RESTRICT yVelPredF = yVelPredF_.data();
 	float* RESTRICT zVelPredF = zVelPredF_.data();
-	float* RESTRICT xAccF = xAccF_.data();
-	float* RESTRICT yAccF = yAccF_.data();
-	float* RESTRICT zAccF = zAccF_.data();
 	float* RESTRICT xAccPressF = xAccPressF_.data();
 	float* RESTRICT yAccPressF = yAccPressF_.data();
 	float* RESTRICT zAccPressF = zAccPressF_.data();
-	float* RESTRICT xAccViscF = xAccViscF_.data();
-	float* RESTRICT yAccViscF = yAccViscF_.data();
-	float* RESTRICT zAccViscF = zAccViscF_.data();
-	float* RESTRICT xAccExtF = xAccExtF_.data();
-	float* RESTRICT yAccExtF = yAccExtF_.data();
-	float* RESTRICT zAccExtF = zAccExtF_.data();
+	float* RESTRICT xAccNonPressF = xAccNonPressF_.data();
+	float* RESTRICT yAccNonPressF = yAccNonPressF_.data();
+	float* RESTRICT zAccNonPressF = zAccNonPressF_.data();
 	float* RESTRICT sourceTermF = sourceTermF_.data();
 	float* RESTRICT diagElemF = diagElemF_.data();
-	float* RESTRICT sysVecElemF = sysVecElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
 	I_NeighborLists& neighborLists = *neighborLists_;
 
 	// --- [ neighbor search ] -------------------------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborSearchStrat_->Construct(params);
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	if (params.runCountQuery)
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearchStrat_->Query_Count(params);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 	}
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborLists_->Finalize_Count();
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	if (params.runFillQuery)
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearchStrat_->Query_Fill(params);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 	}
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborLists_->Finalize_Fill();
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	// --- [ density computations ] --------------------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });
 
 	CPU01::Density(
 		xPosF, yPosF, zPosF,
@@ -125,12 +118,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, massF, massB, N_F_,
 		densityF);
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Solving });
 
 	// --- [ non-pressure accelerations ] --------------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Viscosity_Acceleration,
-									Bench::BenchOp::External_Acceleration });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
 	CPU01::NonPressureAcceleration(
 		xPosF, yPosF, zPosF,
@@ -142,17 +134,14 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		cubicSplineAlpha, params.restDensityF, params.restDensityB, massF, massB,
 		params.viscosityF, params.viscosityB,
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
-		xAccViscF, yAccViscF, zAccViscF,
-		xAccExtF, yAccExtF, zAccExtF,
-		xVelPredF, yVelPredF, zVelPredF);
+		xVelPredF, yVelPredF, zVelPredF,
+		xAccNonPressF, yAccNonPressF, zAccNonPressF);
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Viscosity_Acceleration,
-								   Bench::BenchOp::External_Acceleration });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
 	// --- [ source-term (density invariance) and diagonal elements ] ----------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm,
-									Bench::BenchOp::Pressure_DiagonalElem });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
 	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 		xPosF, yPosF, zPosF,
@@ -165,12 +154,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		massF, massB, params.pressGamma, params.jacobiOmega, N_F_,
 		sourceTermF, diagElemF, pressureF);
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm,
-								   Bench::BenchOp::Pressure_DiagonalElem });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
 	// --- [ relaxed Jacobi solver for pressure ] ------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
 	// rest solver-related variables
 	N_solverIterCount_ = 1;
@@ -199,17 +187,17 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborLists,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensityF, massF, massB, params.jacobiOmega, N_F_,
-			*affinityPart_, sysVecElemF, pressureF, avgRelDensityErrorF_raw_,
+			*affinityPart_, pressureF, avgRelDensityErrorF_raw_,
 			avgRelDensityErrorF_pos_, avgRelDensityErrorF_abs_);
 
 		N_solverIterCount_++;
 	} while (!TerminationConditionSatisfied(params));
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
 	// --- [ finalize pressure acceleration ] ----------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 
 	CPU01::PressureAcceleration(
 		xPosF, yPosF, zPosF,
@@ -220,25 +208,20 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		massF, massB, params.pressGamma, N_F_, *affinityPart_,
 		xAccPressF, yAccPressF, zAccPressF);
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
 	// --- [ integrate velocity and position ] ---------------------------------
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
-									Bench::BenchOp::PositionUpdate });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 
 	CPU01::Integration(
 		xVelPredF, yVelPredF, zVelPredF,
 		xAccPressF, yAccPressF, zAccPressF,
-		xAccViscF, yAccViscF, zAccViscF,
-		xAccExtF, yAccExtF, zAccExtF,
 		timeStep, N_F_,
 		xPosF, yPosF, zPosF,
-		xVelF, yVelF, zVelF,
-		xAccF, yAccF, zAccF);
+		xVelF, yVelF, zVelF);
 
-	benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
-								   Bench::BenchOp::PositionUpdate });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 }
 
 bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) const
@@ -481,15 +464,12 @@ void CPU01::NonPressureAcceleration(
 	const float xGravity, const float yGravity, const float zGravity,
 	const uint32_t N_F,
 	// destinations
-	float* RESTRICT xAccViscF,
-	float* RESTRICT yAccViscF,
-	float* RESTRICT zAccViscF,
-	float* RESTRICT xAccExtF,
-	float* RESTRICT yAccExtF,
-	float* RESTRICT zAccExtF,
 	float* RESTRICT xVelPredF,
 	float* RESTRICT yVelPredF,
-	float* RESTRICT zVelPredF)
+	float* RESTRICT zVelPredF,
+	float* RESTRICT xAccNonPressF,
+	float* RESTRICT yAccNonPressF,
+	float* RESTRICT zAccNonPressF)
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
@@ -595,19 +575,15 @@ void CPU01::NonPressureAcceleration(
 				tmp_yAccViscB *= 10.0f * viscosityB;
 				tmp_zAccViscB *= 10.0f * viscosityB;
 
-				xAccViscF[i] = tmp_xAccViscF + tmp_xAccViscB;
-				yAccViscF[i] = tmp_yAccViscF + tmp_yAccViscB;
-				zAccViscF[i] = tmp_zAccViscF + tmp_zAccViscB;
-
 				// TODO: add surface tension acc contribution
-				xAccExtF[i] = xGravity;
-				yAccExtF[i] = yGravity;
-				zAccExtF[i] = zGravity;
+				xAccNonPressF[i] = tmp_xAccViscF + tmp_xAccViscB + xGravity;
+				yAccNonPressF[i] = tmp_yAccViscF + tmp_yAccViscB + yGravity;
+				zAccNonPressF[i] = tmp_zAccViscF + tmp_zAccViscB + zGravity;
 
 				// compute predicted velocity from non-pressure accelerations
-				xVelPredF[i] = std::fmaf(xAccViscF[i] + xAccExtF[i], timeStep, xVelF[i]);
-				yVelPredF[i] = std::fmaf(yAccViscF[i] + yAccExtF[i], timeStep, yVelF[i]);
-				zVelPredF[i] = std::fmaf(zAccViscF[i] + zAccExtF[i], timeStep, zVelF[i]);
+				xVelPredF[i] = std::fmaf(xAccNonPressF[i], timeStep, xVelF[i]);
+				yVelPredF[i] = std::fmaf(yAccNonPressF[i], timeStep, yVelF[i]);
+				zVelPredF[i] = std::fmaf(zAccNonPressF[i], timeStep, zVelF[i]);
 			}
 		},
 		tbb::auto_partitioner{}
@@ -973,7 +949,6 @@ void CPU01::PressureRelaxedJacobiSolver(
 	const uint32_t N_F,
 	tbb::affinity_partitioner& affPart,
 	// destinations
-	float* RESTRICT sysVecElemF,
 	float* RESTRICT pressureF,
 	float& avgRelDensityErrorF_raw,
 	float& avgRelDensityErrorF_pos,
@@ -1143,12 +1118,6 @@ void CPU01::Integration(
 	const float* RESTRICT xAccPressF,
 	const float* RESTRICT yAccPressF,
 	const float* RESTRICT zAccPressF,
-	const float* RESTRICT xAccViscF,
-	const float* RESTRICT yAccViscF,
-	const float* RESTRICT zAccViscF,
-	const float* RESTRICT xAccExtF,
-	const float* RESTRICT yAccExtF,
-	const float* RESTRICT zAccExtF,
 	const float timeStep,
 	const uint32_t N_F,
 	// destinations
@@ -1157,10 +1126,7 @@ void CPU01::Integration(
 	float* RESTRICT zPosF,
 	float* RESTRICT xVelF,
 	float* RESTRICT yVelF,
-	float* RESTRICT zVelF,
-	float* RESTRICT xAccF,
-	float* RESTRICT yAccF,
-	float* RESTRICT zAccF)
+	float* RESTRICT zVelF)
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
@@ -1168,11 +1134,6 @@ void CPU01::Integration(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// total acceleration update
-				xAccF[i] = xAccPressF[i] + xAccViscF[i] + xAccExtF[i];
-				yAccF[i] = yAccPressF[i] + yAccViscF[i] + yAccExtF[i];
-				zAccF[i] = zAccPressF[i] + zAccViscF[i] + zAccExtF[i];
-
 				// explicit Euler integration
 				// (refining predicted velocity with pressure acc)
 				xVelF[i] = std::fmaf(timeStep, xAccPressF[i], xVelPredF[i]);

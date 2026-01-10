@@ -32,9 +32,9 @@ namespace Sim
 
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 					  Scene::ScenarioMgr& scenarioMgr,
-					  Bench::BenchmarksMgr& benchmarksMgr,
+					  Bench::BenchmarksTracker& benchmarksTracker,
 					  Mem::MemoryTracker& memoryTracker,
-					  Stats::StatisticsMgr& statisticsMgr,
+					  Stats::StatisticsTracker& statisticsTracker,
 					  Export::SerializationMgr& serializationMgr);
 
 		// initialize sub-systems
@@ -121,14 +121,14 @@ namespace Sim
 		std::atomic<bool> initialized_{ false };
 
 		// benchmark tracking
-		Bench::BenchmarksMgr& benchmarksMgr_;
+		Bench::BenchmarksTracker& benchmarksTracker_;
 		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
 
 		// memory tracking
 		Mem::MemoryTracker& memoryTracker_;
 
 		// statistics tracking
-		Stats::StatisticsMgr& statisticsMgr_;
+		Stats::StatisticsTracker& statisticsTracker_;
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_;

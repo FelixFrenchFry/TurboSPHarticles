@@ -180,25 +180,16 @@ namespace Export
 				Write1D(gF, "yVelPred", F.yVelPred, saveOptions_);
 				Write1D(gF, "zVelPred", F.zVelPred, saveOptions_);
 
-				Write1D(gF, "xAcc", F.xAcc, saveOptions_);
-				Write1D(gF, "yAcc", F.yAcc, saveOptions_);
-				Write1D(gF, "zAcc", F.zAcc, saveOptions_);
-
 				Write1D(gF, "xAccPress", F.xAccPress, saveOptions_);
 				Write1D(gF, "yAccPress", F.yAccPress, saveOptions_);
 				Write1D(gF, "zAccPress", F.zAccPress, saveOptions_);
 
-				Write1D(gF, "xAccVisc", F.xAccVisc, saveOptions_);
-				Write1D(gF, "yAccVisc", F.yAccVisc, saveOptions_);
-				Write1D(gF, "zAccVisc", F.zAccVisc, saveOptions_);
-
-				Write1D(gF, "xAccExt", F.xAccExt, saveOptions_);
-				Write1D(gF, "yAccExt", F.yAccExt, saveOptions_);
-				Write1D(gF, "zAccExt", F.zAccExt, saveOptions_);
+				Write1D(gF, "xAccNonPress", F.xAccNonPress, saveOptions_);
+				Write1D(gF, "yAccNonPress", F.yAccNonPress, saveOptions_);
+				Write1D(gF, "zAccNonPress", F.zAccNonPress, saveOptions_);
 
 				Write1D(gF, "sourceTerm", F.sourceTerm, saveOptions_);
 				Write1D(gF, "diagElem", F.diagElem, saveOptions_);
-				Write1D(gF, "sysVecElem", F.sysVecElem, saveOptions_);
 				Write1D(gF, "pressure", F.pressure, saveOptions_);
 				Write1D(gF, "density", F.density, saveOptions_);
 
@@ -216,10 +207,6 @@ namespace Export
 				Write1D(gB, "xPos", B.xPos, saveOptions_);
 				Write1D(gB, "yPos", B.yPos, saveOptions_);
 				Write1D(gB, "zPos", B.zPos, saveOptions_);
-
-				Write1D(gB, "xVel", B.xVel, saveOptions_);
-				Write1D(gB, "yVel", B.yVel, saveOptions_);
-				Write1D(gB, "zVel", B.zVel, saveOptions_);
 
 				Write1D(gB, "id", B.id, saveOptions_);
 			}
@@ -268,25 +255,16 @@ namespace Export
 			Read1D(gF, "yVelPred", F.yVelPred);
 			Read1D(gF, "zVelPred", F.zVelPred);
 
-			Read1D(gF, "xAcc", F.xAcc);
-			Read1D(gF, "yAcc", F.yAcc);
-			Read1D(gF, "zAcc", F.zAcc);
-
 			Read1D(gF, "xAccPress", F.xAccPress);
 			Read1D(gF, "yAccPress", F.yAccPress);
 			Read1D(gF, "zAccPress", F.zAccPress);
 
-			Read1D(gF, "xAccVisc", F.xAccVisc);
-			Read1D(gF, "yAccVisc", F.yAccVisc);
-			Read1D(gF, "zAccVisc", F.zAccVisc);
-
-			Read1D(gF, "xAccExt", F.xAccExt);
-			Read1D(gF, "yAccExt", F.yAccExt);
-			Read1D(gF, "zAccExt", F.zAccExt);
+			Read1D(gF, "xAccNonPress", F.xAccNonPress);
+			Read1D(gF, "yAccNonPress", F.yAccNonPress);
+			Read1D(gF, "zAccNonPress", F.zAccNonPress);
 
 			Read1D(gF, "sourceTerm", F.sourceTerm);
 			Read1D(gF, "diagElem", F.diagElem);
-			Read1D(gF, "sysVecElem", F.sysVecElem);
 			Read1D(gF, "pressure", F.pressure);
 			Read1D(gF, "density", F.density);
 
@@ -309,10 +287,6 @@ namespace Export
 			Read1D(gB, "xPos", B.xPos);
 			Read1D(gB, "yPos", B.yPos);
 			Read1D(gB, "zPos", B.zPos);
-
-			Read1D(gB, "xVel", B.xVel);
-			Read1D(gB, "yVel", B.yVel);
-			Read1D(gB, "zVel", B.zVel);
 
 			Read1D(gB, "id", B.id);
 

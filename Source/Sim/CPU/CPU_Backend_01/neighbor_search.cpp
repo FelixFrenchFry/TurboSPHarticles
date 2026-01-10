@@ -1963,25 +1963,16 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation(permF, be_.yVelPredF_);
 		ApplyPermutation(permF, be_.zVelPredF_);
 
-		ApplyPermutation(permF, be_.xAccF_);
-		ApplyPermutation(permF, be_.yAccF_);
-		ApplyPermutation(permF, be_.zAccF_);
-
 		ApplyPermutation(permF, be_.xAccPressF_);
 		ApplyPermutation(permF, be_.yAccPressF_);
 		ApplyPermutation(permF, be_.zAccPressF_);
 
-		ApplyPermutation(permF, be_.xAccViscF_);
-		ApplyPermutation(permF, be_.yAccViscF_);
-		ApplyPermutation(permF, be_.zAccViscF_);
-
-		ApplyPermutation(permF, be_.xAccExtF_);
-		ApplyPermutation(permF, be_.yAccExtF_);
-		ApplyPermutation(permF, be_.zAccExtF_);
+		ApplyPermutation(permF, be_.xAccNonPressF_);
+		ApplyPermutation(permF, be_.yAccNonPressF_);
+		ApplyPermutation(permF, be_.zAccNonPressF_);
 
 		ApplyPermutation(permF, be_.sourceTermF_);
 		ApplyPermutation(permF, be_.diagElemF_);
-		ApplyPermutation(permF, be_.sysVecElemF_);
 		ApplyPermutation(permF, be_.pressureF_);
 		ApplyPermutation(permF, be_.densityF_);
 
@@ -2025,10 +2016,6 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation(permB, be_.xPosB_);
 		ApplyPermutation(permB, be_.yPosB_);
 		ApplyPermutation(permB, be_.zPosB_);
-
-		ApplyPermutation(permB, be_.xVelB_);
-		ApplyPermutation(permB, be_.yVelB_);
-		ApplyPermutation(permB, be_.zVelB_);
 
 		ApplyPermutation(permB, be_.idB_);
 	}

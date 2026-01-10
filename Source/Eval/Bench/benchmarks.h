@@ -18,11 +18,11 @@
 
 namespace Bench
 {
-	class BenchmarksMgr
+	class BenchmarksTracker
 	{
 	public: // -----------------------------------------------------------------
 
-		BenchmarksMgr(const Sim::SimParams& simParams);
+		BenchmarksTracker(const Sim::SimParams& simParams);
 
 		// resets the latest bench data before pulling in a new record
 		void BeginStep();

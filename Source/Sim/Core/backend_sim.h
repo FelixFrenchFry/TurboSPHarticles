@@ -82,7 +82,7 @@ namespace Sim
 	// backend factory
 	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendVersion version,
 												 Sim::SimParamsMgr& simParamsMgr,
-												 Bench::BenchmarksMgr& benchmarksMgr,
+												 Bench::BenchmarksTracker& benchmarksTracker,
 												 const SimParams& params);
 
 	// -------------------------------------------------------------------------

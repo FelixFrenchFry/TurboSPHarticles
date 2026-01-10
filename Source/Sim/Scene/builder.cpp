@@ -155,23 +155,16 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 							F.zVelPred[idx] = 0.0f;
 
 							// no acceleration by default
-							F.xAcc[idx] = 0.0f;
-							F.yAcc[idx] = 0.0f;
-							F.zAcc[idx] = 0.0f;
 							F.xAccPress[idx] = 0.0f;
 							F.yAccPress[idx] = 0.0f;
 							F.zAccPress[idx] = 0.0f;
-							F.xAccVisc[idx] = 0.0f;
-							F.yAccVisc[idx] = 0.0f;
-							F.zAccVisc[idx] = 0.0f;
-							F.xAccExt[idx] = 0.0f;
-							F.yAccExt[idx] = 0.0f;
-							F.zAccExt[idx] = 0.0f;
+							F.xAccNonPress[idx] = 0.0f;
+							F.yAccNonPress[idx] = 0.0f;
+							F.zAccNonPress[idx] = 0.0f;
 
 							// default pressure, density, etc...
 							F.sourceTerm[idx] = 0.0f;
 							F.diagElem[idx] = 0.0f;
-							F.sysVecElem[idx] = 0.0f;
 							F.pressure[idx] = 0.0f;
 							F.density[idx] = params.restDensityF;
 
@@ -295,23 +288,16 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				F.zVelPred[outIdx] = 0.0f;
 
 				// no acceleration by default
-				F.xAcc[outIdx] = 0.0f;
-				F.yAcc[outIdx] = 0.0f;
-				F.zAcc[outIdx] = 0.0f;
 				F.xAccPress[outIdx] = 0.0f;
 				F.yAccPress[outIdx] = 0.0f;
 				F.zAccPress[outIdx] = 0.0f;
-				F.xAccVisc[outIdx] = 0.0f;
-				F.yAccVisc[outIdx] = 0.0f;
-				F.zAccVisc[outIdx] = 0.0f;
-				F.xAccExt[outIdx] = 0.0f;
-				F.yAccExt[outIdx] = 0.0f;
-				F.zAccExt[outIdx] = 0.0f;
+				F.xAccNonPress[outIdx] = 0.0f;
+				F.yAccNonPress[outIdx] = 0.0f;
+				F.zAccNonPress[outIdx] = 0.0f;
 
 				// default pressure, density, etc...
 				F.sourceTerm[outIdx] = 0.0f;
 				F.diagElem[outIdx] = 0.0f;
-				F.sysVecElem[outIdx] = 0.0f;
 				F.pressure[outIdx] = 0.0f;
 				F.density[outIdx] = params.restDensityF;
 
@@ -409,15 +395,6 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 				B.xPos[idx] = pos.x;
 				B.yPos[idx] = pos.y;
 				B.zPos[idx] = pos.z;
-
-				// no velocity by default
-				B.xVel[idx] = 0.0f;
-				B.yVel[idx] = 0.0f;
-				B.zVel[idx] = 0.0f;
-
-				// default pressure, density, etc...
-				B.pressure[idx] = 0.0f;
-				B.density[idx] = params.restDensityB;
 
 				// use global idx as ID
 				B.id[idx] = static_cast<std::uint32_t>(idx);
@@ -552,15 +529,6 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				B.xPos.push_back(pos.x);
 				B.yPos.push_back(pos.y);
 				B.zPos.push_back(pos.z);
-
-				// no velocity by default
-				B.xVel.push_back(0.0f);
-				B.yVel.push_back(0.0f);
-				B.zVel.push_back(0.0f);
-
-				// default pressure, density, etc...
-				B.pressure.push_back(0.0f);
-				B.density.push_back(params.restDensityB);
 
 				// simple running ID
 				B.id.push_back(static_cast<uint32_t>(B.id.size()));

@@ -11,7 +11,7 @@
 
 using namespace Bench;
 
-BenchmarksMgr::BenchmarksMgr(const Sim::SimParams& simParams)
+BenchmarksTracker::BenchmarksTracker(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxBenchRecs)
 	, curRecCount_(0u)
 {
@@ -20,13 +20,13 @@ BenchmarksMgr::BenchmarksMgr(const Sim::SimParams& simParams)
 	ClearAllTime();
 }
 
-void BenchmarksMgr::BeginStep()
+void BenchmarksTracker::BeginStep()
 {
 	curStepNs_.fill(0);
 	curStepOcc_.fill(0);
 }
 
-void BenchmarksMgr::EndStep(const uint32_t simStep, const double simTime)
+void BenchmarksTracker::EndStep(const uint32_t simStep, const double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;
@@ -80,7 +80,7 @@ void BenchmarksMgr::EndStep(const uint32_t simStep, const double simTime)
 	curRecCount_ += 1;
 }
 
-void BenchmarksMgr::StartBench(const std::initializer_list<BenchOp> ops)
+void BenchmarksTracker::StartBench(const std::initializer_list<BenchOp> ops)
 {
 	if (ops.size() == 0) { return; }
 
@@ -90,7 +90,7 @@ void BenchmarksMgr::StartBench(const std::initializer_list<BenchOp> ops)
 	t0_single_[i] = Clock::now();
 }
 
-void BenchmarksMgr::StopBench(const std::initializer_list<BenchOp> ops)
+void BenchmarksTracker::StopBench(const std::initializer_list<BenchOp> ops)
 {
 	if (ops.size() == 0) { return; }
 
@@ -105,7 +105,7 @@ void BenchmarksMgr::StopBench(const std::initializer_list<BenchOp> ops)
 	AddGroupTimingSample(ops, ns);
 }
 
-void BenchmarksMgr::AddTimingSample(const BenchOp op, const uint64_t ns)
+void BenchmarksTracker::AddTimingSample(const BenchOp op, const uint64_t ns)
 {
 	const uint8_t i = GetIdx(op);
 
@@ -113,7 +113,7 @@ void BenchmarksMgr::AddTimingSample(const BenchOp op, const uint64_t ns)
 	curStepOcc_[i] = 1;
 }
 
-void BenchmarksMgr::AddGroupTimingSample(const std::initializer_list<BenchOp> ops, const uint64_t ns)
+void BenchmarksTracker::AddGroupTimingSample(const std::initializer_list<BenchOp> ops, const uint64_t ns)
 {
 	for (auto op : ops)
 	{
@@ -123,7 +123,7 @@ void BenchmarksMgr::AddGroupTimingSample(const std::initializer_list<BenchOp> op
 	}
 }
 
-void BenchmarksMgr::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
+void BenchmarksTracker::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
 {
 	// metadata
 	snap.simStep = recLatest_.simStep;
@@ -140,14 +140,14 @@ void BenchmarksMgr::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
 	}
 }
 
-uint64_t BenchmarksMgr::GetBench_Latest(const BenchOp op) const
+uint64_t BenchmarksTracker::GetBench_Latest(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return recLatest_.time[GetIdx(op)];
 }
 
-uint64_t BenchmarksMgr::GetBench_Avg_OverAll(const BenchOp op) const
+uint64_t BenchmarksTracker::GetBench_Avg_OverAll(const BenchOp op) const
 {
 	const uint64_t sum = benchSum_allTime_[GetIdx(op)];
 	if (curRecCount_ == 0 || sum == 0) { return 0; }
@@ -156,7 +156,7 @@ uint64_t BenchmarksMgr::GetBench_Avg_OverAll(const BenchOp op) const
 	return ((sum - 1) / curRecCount_) + 1;
 }
 
-uint64_t BenchmarksMgr::GetBench_Avg_WhenUsed(const BenchOp op) const
+uint64_t BenchmarksTracker::GetBench_Avg_WhenUsed(const BenchOp op) const
 {
 	const uint64_t sum = benchSum_allTime_[GetIdx(op)];
 	const uint64_t numOcc = numOcc_allTime_[GetIdx(op)];
@@ -166,28 +166,28 @@ uint64_t BenchmarksMgr::GetBench_Avg_WhenUsed(const BenchOp op) const
 	return ((sum - 1) / numOcc) + 1;
 }
 
-uint64_t BenchmarksMgr::GetBench_Min(const BenchOp op) const
+uint64_t BenchmarksTracker::GetBench_Min(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return benchMin_allTime_[GetIdx(op)];
 }
 
-uint64_t BenchmarksMgr::GetBench_Max(const BenchOp op) const
+uint64_t BenchmarksTracker::GetBench_Max(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return benchMax_allTime_[GetIdx(op)];
 }
 
-uint64_t BenchmarksMgr::GetBench_NumOcc(const BenchOp op) const
+uint64_t BenchmarksTracker::GetBench_NumOcc(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
 	return numOcc_allTime_[GetIdx(op)];
 }
 
-void BenchmarksMgr::ClearRecordHistory()
+void BenchmarksTracker::ClearRecordHistory()
 {
 	recHistory_.clear();
 	curRecCount_ = 0;
@@ -198,7 +198,7 @@ void BenchmarksMgr::ClearRecordHistory()
 	ClearAllTime();
 }
 
-void BenchmarksMgr::ClearAllTime()
+void BenchmarksTracker::ClearAllTime()
 {
 	benchSum_allTime_.fill(0);
 	benchMin_allTime_.fill(std::numeric_limits<uint64_t>::max());

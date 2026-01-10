@@ -72,15 +72,12 @@ namespace CPU01
 		float xGravity, float yGravity, float zGravity,
 		uint32_t N_F,
 		// destinations
-		float* RESTRICT xAccViscF,
-		float* RESTRICT yAccViscF,
-		float* RESTRICT zAccViscF,
-		float* RESTRICT xAccExtF,
-		float* RESTRICT yAccExtF,
-		float* RESTRICT zAccExtF,
 		float* RESTRICT xVelPredF,
 		float* RESTRICT yVelPredF,
-		float* RESTRICT zVelPredF);
+		float* RESTRICT zVelPredF,
+		float* RESTRICT xAccNonPressF,
+		float* RESTRICT yAccNonPressF,
+		float* RESTRICT zAccNonPressF);
 
 	void SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* RESTRICT xPosF,
@@ -144,7 +141,6 @@ namespace CPU01
 		uint32_t N_F,
 		tbb::affinity_partitioner& affPart,
 		// destinations
-		float* RESTRICT sysVecElemF,
 		float* RESTRICT pressureF,
 		float& avgRelDensityErrorF_raw,
 		float& avgRelDensityErrorF_pos,
@@ -157,12 +153,6 @@ namespace CPU01
 		const float* RESTRICT xAccPressF,
 		const float* RESTRICT yAccPressF,
 		const float* RESTRICT zAccPressF,
-		const float* RESTRICT xAccViscF,
-		const float* RESTRICT yAccViscF,
-		const float* RESTRICT zAccViscF,
-		const float* RESTRICT xAccExtF,
-		const float* RESTRICT yAccExtF,
-		const float* RESTRICT zAccExtF,
 		float timeStep,
 		uint32_t N_F,
 		// destinations
@@ -171,9 +161,6 @@ namespace CPU01
 		float* RESTRICT zPosF,
 		float* RESTRICT xVelF,
 		float* RESTRICT yVelF,
-		float* RESTRICT zVelF,
-		float* RESTRICT xAccF,
-		float* RESTRICT yAccF,
-		float* RESTRICT zAccF);
+		float* RESTRICT zVelF);
 
 } // namespace CPU01

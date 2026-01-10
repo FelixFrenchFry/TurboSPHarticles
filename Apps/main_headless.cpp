@@ -108,13 +108,19 @@ int main(int argc, char** argv)
 
 		// sub-systems
 		Scene::ScenarioMgr scenarioMgr{};
-		Bench::BenchmarksMgr benchmarksMgr{ simParamsMgr.SnapshotParams().first };
+		Bench::BenchmarksTracker benchmarksTracker{ simParamsMgr.SnapshotParams().first };
 		Mem::MemoryTracker memoryTracker{ simParamsMgr.SnapshotParams().first };
-		Stats::StatisticsMgr statisticsMgr{ simParamsMgr.SnapshotParams().first };
+		Stats::StatisticsTracker statisticsTracker{ simParamsMgr.SnapshotParams().first };
 		Export::SerializationMgr serializationMgr{};
 
 		// main systems
-		Sim::SimulationMgr simulationMgr{ simParamsMgr, scenarioMgr, benchmarksMgr, memoryTracker, statisticsMgr, serializationMgr };
+		Sim::SimulationMgr simulationMgr{
+			simParamsMgr,
+			scenarioMgr,
+			benchmarksTracker,
+			memoryTracker,
+			statisticsTracker,
+			serializationMgr };
 		simulationMgr.SetConfigProfile(profile);
 
 		// bench mailbox

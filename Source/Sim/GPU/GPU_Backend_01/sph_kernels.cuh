@@ -44,8 +44,7 @@ namespace GPU01
 		cudaStream_t stream,
 		// destinations
 		float* xVelPredF, float* yVelPredF, float* zVelPredF,
-		float* xAccViscF, float* yAccViscF, float* zAccViscF,
-		float* xAccExtF, float* yAccExtF, float* zAccExtF);
+		float* xAccNonPressF, float* yAccNonPressF, float* zAccNonPressF);
 
 	void Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -94,7 +93,6 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		float* sysVecElemF,
 		float* pressureF);
 
 	void Launch_Integration(

@@ -90,7 +90,7 @@ namespace Sim
 	public: // -----------------------------------------------------------------
 
 		SimBackend_GPU01(Sim::SimParamsMgr& simParamsMgr,
-						 Bench::BenchmarksMgr& benchmarksMgr,
+						 Bench::BenchmarksTracker& benchmarksTracker,
 						 const SimParams& params);
 		~SimBackend_GPU01() override;
 
@@ -142,7 +142,7 @@ namespace Sim
 
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;
-		Bench::BenchmarksMgr& benchmarksMgr_;
+		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search
 		std::unique_ptr<I_NeighborSearchStrat> neighborSearchStrat_;
@@ -166,20 +166,16 @@ namespace Sim
 		DeviceBuffer<float> d_xPosF_, d_yPosF_, d_zPosF_;
 		DeviceBuffer<float> d_xVelF_, d_yVelF_, d_zVelF_;
 		DeviceBuffer<float> d_xVelPredF_, d_yVelPredF_, d_zVelPredF_;
-		DeviceBuffer<float> d_xAccF_, d_yAccF_, d_zAccF_;
 		DeviceBuffer<float> d_xAccPressF_, d_yAccPressF_, d_zAccPressF_;
-		DeviceBuffer<float> d_xAccViscF_, d_yAccViscF_, d_zAccViscF_;
-		DeviceBuffer<float> d_xAccExtF_, d_yAccExtF_, d_zAccExtF_;
+		DeviceBuffer<float> d_xAccNonPressF_, d_yAccNonPressF_, d_zAccNonPressF_;
 		DeviceBuffer<float> d_sourceTermF_;
 		DeviceBuffer<float> d_diagElemF_;
-		DeviceBuffer<float> d_sysVecElemF_;
 		DeviceBuffer<float> d_pressureF_;
 		DeviceBuffer<float> d_densityF_;
 		DeviceBuffer<uint32_t> d_idF_;
 
 		// boundary particles
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
-		DeviceBuffer<float> d_xVelB_, d_yVelB_, d_zVelB_;
 		DeviceBuffer<uint32_t> d_idB_;
 
 		// max neighbor counts
@@ -253,11 +249,9 @@ namespace Sim
 				d_xPosF_.Size() != N_F_new || d_yPosF_.Size() != N_F_new || d_zPosF_.Size() != N_F_new ||
 				d_xVelF_.Size() != N_F_new || d_yVelF_.Size() != N_F_new || d_zVelF_.Size() != N_F_new ||
 				d_xVelPredF_.Size() != N_F_new || d_yVelPredF_.Size() != N_F_new || d_zVelPredF_.Size() != N_F_new ||
-				d_xAccF_.Size() != N_F_new || d_yAccF_.Size() != N_F_new || d_zAccF_.Size() != N_F_new ||
 				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
-				d_xAccViscF_.Size() != N_F_new || d_yAccViscF_.Size() != N_F_new || d_zAccViscF_.Size() != N_F_new ||
-				d_xAccExtF_.Size() != N_F_new || d_yAccExtF_.Size() != N_F_new || d_zAccExtF_.Size() != N_F_new ||
-				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new || d_sysVecElemF_.Size() != N_F_new ||
+				d_xAccNonPressF_.Size() != N_F_new || d_yAccNonPressF_.Size() != N_F_new || d_zAccNonPressF_.Size() != N_F_new ||
+				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
 				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new || d_idF_.Size() != N_F_new ||
 				d_neighCountFF_.Size() != N_F_new || d_neighCountFB_.Size() != N_F_new ||
 				d_neighListFF_.Size() != static_cast<size_t>(N_F_new) * N_MAX_FF_ ||
@@ -267,7 +261,6 @@ namespace Sim
 				force ||
 				(N_B_new != N_B_) ||
 				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
-				d_xVelB_.Size() != N_B_new || d_yVelB_.Size() != N_B_new || d_zVelB_.Size() != N_B_new ||
 				d_idB_.Size() != N_B_new;
 
 			// detect if (re)allocation of buffers is needed
@@ -281,27 +274,23 @@ namespace Sim
 			d_xPosF_.Resize(N_F_); d_yPosF_.Resize(N_F_); d_zPosF_.Resize(N_F_);
 			d_xVelF_.Resize(N_F_); d_yVelF_.Resize(N_F_); d_zVelF_.Resize(N_F_);
 			d_xVelPredF_.Resize(N_F_); d_yVelPredF_.Resize(N_F_); d_zVelPredF_.Resize(N_F_);
-			d_xAccF_.Resize(N_F_); d_yAccF_.Resize(N_F_); d_zAccF_.Resize(N_F_);
 			d_xAccPressF_.Resize(N_F_); d_yAccPressF_.Resize(N_F_); d_zAccPressF_.Resize(N_F_);
-			d_xAccViscF_.Resize(N_F_); d_yAccViscF_.Resize(N_F_); d_zAccViscF_.Resize(N_F_);
-			d_xAccExtF_.Resize(N_F_); d_yAccExtF_.Resize(N_F_); d_zAccExtF_.Resize(N_F_);
+			d_xAccNonPressF_.Resize(N_F_); d_yAccNonPressF_.Resize(N_F_); d_zAccNonPressF_.Resize(N_F_);
 			d_sourceTermF_.Resize(N_F_);
 			d_diagElemF_.Resize(N_F_);
-			d_sysVecElemF_.Resize(N_F_);
 			d_pressureF_.Resize(N_F_);
 			d_densityF_.Resize(N_F_);
 			d_idF_.Resize(N_F_);
 
 			// boundary
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
-			d_xVelB_.Resize(N_B_); d_yVelB_.Resize(N_B_); d_zVelB_.Resize(N_B_);
 			d_idB_.Resize(N_B_);
 
 			// neighbors
 			d_neighCountFF_.Resize(N_F_);
 			d_neighCountFB_.Resize(N_F_);
-			d_neighListFF_.Resize(N_F_ * N_MAX_FF_);
-			d_neighListFB_.Resize(N_F_ * N_MAX_FB_);
+			d_neighListFF_.Resize(static_cast<uint64_t>(N_F_) * N_MAX_FF_);
+			d_neighListFB_.Resize(static_cast<uint64_t>(N_F_) * N_MAX_FB_);
 			d_neighOverflowFlag_.Resize(1);
 		}
 	};

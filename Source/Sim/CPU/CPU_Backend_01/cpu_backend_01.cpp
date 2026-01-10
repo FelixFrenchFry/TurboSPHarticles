@@ -22,9 +22,9 @@
 using namespace Sim;
 
 SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
-								   Bench::BenchmarksMgr& benchmarksMgr,
+								   Bench::BenchmarksTracker& benchmarksTracker,
 								   const SimParams& params)
-	: simParamsMgr_{ simParamsMgr }, benchmarksMgr_{ benchmarksMgr }
+	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_{ benchmarksTracker }
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>();
 
@@ -119,25 +119,16 @@ void SimBackend_CPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 	yVelPredF_ = std::move(F.yVelPred);
 	zVelPredF_ = std::move(F.zVelPred);
 
-	xAccF_ = std::move(F.xAcc);
-	yAccF_ = std::move(F.yAcc);
-	zAccF_ = std::move(F.zAcc);
-
 	xAccPressF_ = std::move(F.xAccPress);
 	yAccPressF_ = std::move(F.yAccPress);
 	zAccPressF_ = std::move(F.zAccPress);
 
-	xAccViscF_ = std::move(F.xAccVisc);
-	yAccViscF_ = std::move(F.yAccVisc);
-	zAccViscF_ = std::move(F.zAccVisc);
-
-	xAccExtF_ = std::move(F.xAccExt);
-	yAccExtF_ = std::move(F.yAccExt);
-	zAccExtF_ = std::move(F.zAccExt);
+	xAccNonPressF_ = std::move(F.xAccNonPress);
+	yAccNonPressF_ = std::move(F.yAccNonPress);
+	zAccNonPressF_ = std::move(F.zAccNonPress);
 
 	sourceTermF_ = std::move(F.sourceTerm);
 	diagElemF_ = std::move(F.diagElem);
-	sysVecElemF_ = std::move(F.sysVecElem);
 	pressureF_ = std::move(F.pressure);
 	densityF_ = std::move(F.density);
 	idF_ = std::move(F.id);
@@ -146,10 +137,6 @@ void SimBackend_CPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 	xPosB_ = std::move(B.xPos);
 	yPosB_ = std::move(B.yPos);
 	zPosB_ = std::move(B.zPos);
-
-	xVelB_ = std::move(B.xVel);
-	yVelB_ = std::move(B.yVel);
-	zVelB_ = std::move(B.zVel);
 
 	idB_ = std::move(B.id);
 
@@ -187,25 +174,16 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				F.yVelPred[i] = yVelPredF_[i];
 				F.zVelPred[i] = zVelPredF_[i];
 
-				F.xAcc[i] = xAccF_[i];
-				F.yAcc[i] = yAccF_[i];
-				F.zAcc[i] = zAccF_[i];
-
 				F.xAccPress[i] = xAccPressF_[i];
 				F.yAccPress[i] = yAccPressF_[i];
 				F.zAccPress[i] = zAccPressF_[i];
 
-				F.xAccVisc[i] = xAccViscF_[i];
-				F.yAccVisc[i] = yAccViscF_[i];
-				F.zAccVisc[i] = zAccViscF_[i];
-
-				F.xAccExt[i] = xAccExtF_[i];
-				F.yAccExt[i] = yAccExtF_[i];
-				F.zAccExt[i] = zAccExtF_[i];
+				F.xAccNonPress[i] = xAccNonPressF_[i];
+				F.yAccNonPress[i] = yAccNonPressF_[i];
+				F.zAccNonPress[i] = zAccNonPressF_[i];
 
 				F.sourceTerm[i] = sourceTermF_[i];
 				F.diagElem[i] = diagElemF_[i];
-				F.sysVecElem[i] = sysVecElemF_[i];
 				F.pressure[i] = pressureF_[i];
 				F.density[i] = densityF_[i];
 				F.id[i] = idF_[i];
@@ -224,10 +202,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				B.xPos[i] = xPosB_[i];
 				B.yPos[i] = yPosB_[i];
 				B.zPos[i] = zPosB_[i];
-
-				B.xVel[i] = xVelB_[i];
-				B.yVel[i] = yVelB_[i];
-				B.zVel[i] = zVelB_[i];
 
 				B.id[i] = idB_[i];
 			}
@@ -494,25 +468,16 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(yVelPredF_));
 		Add(usage, MemUsageOf_Vector(zVelPredF_));
 
-		Add(usage, MemUsageOf_Vector(xAccF_));
-		Add(usage, MemUsageOf_Vector(yAccF_));
-		Add(usage, MemUsageOf_Vector(zAccF_));
-
 		Add(usage, MemUsageOf_Vector(xAccPressF_));
 		Add(usage, MemUsageOf_Vector(yAccPressF_));
 		Add(usage, MemUsageOf_Vector(zAccPressF_));
 
-		Add(usage, MemUsageOf_Vector(xAccViscF_));
-		Add(usage, MemUsageOf_Vector(yAccViscF_));
-		Add(usage, MemUsageOf_Vector(zAccViscF_));
-
-		Add(usage, MemUsageOf_Vector(xAccExtF_));
-		Add(usage, MemUsageOf_Vector(yAccExtF_));
-		Add(usage, MemUsageOf_Vector(zAccExtF_));
+		Add(usage, MemUsageOf_Vector(xAccNonPressF_));
+		Add(usage, MemUsageOf_Vector(yAccNonPressF_));
+		Add(usage, MemUsageOf_Vector(zAccNonPressF_));
 
 		Add(usage, MemUsageOf_Vector(sourceTermF_));
 		Add(usage, MemUsageOf_Vector(diagElemF_));
-		Add(usage, MemUsageOf_Vector(sysVecElemF_));
 		Add(usage, MemUsageOf_Vector(pressureF_));
 		Add(usage, MemUsageOf_Vector(densityF_));
 		Add(usage, MemUsageOf_Vector(idF_));
@@ -528,10 +493,6 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(xPosB_));
 		Add(usage, MemUsageOf_Vector(yPosB_));
 		Add(usage, MemUsageOf_Vector(zPosB_));
-
-		Add(usage, MemUsageOf_Vector(xVelB_));
-		Add(usage, MemUsageOf_Vector(yVelB_));
-		Add(usage, MemUsageOf_Vector(zVelB_));
 
 		Add(usage, MemUsageOf_Vector(idB_));
 
@@ -588,7 +549,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Particles });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Particles });
 
 		float sumFF = 0.0f;
 		float nbrFF_p95 = 0.0f;
@@ -758,14 +719,14 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::NumNbrFB_Min, minFB);
 		Set(record, StatMetric::NumNbrFB_Max, maxFB);
 
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Particles });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Particles });
 	}
 
 	// --- [ density stats ] ---------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Density });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Density });
 
 		// TODO: use double for the accumulations?
 		float sumRelErr_raw = 0.0f;
@@ -827,7 +788,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::DensRelError_Pos_Avg, sumRelErr_pos * invNF);
 		Set(record, StatMetric::DensRelError_Abs_Avg, sumRelErr_abs * invNF);
 
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Density });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Density });
 	}
 
 	// --- [ pressure stats ] --------------------------------------------------
@@ -838,7 +799,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Statistics_Velocity });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Velocity });
 
 		float velMagSum = 0.0f;
 		float velMagMin = std::numeric_limits<float>::max();
@@ -905,37 +866,37 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::VelMag_Min, velMagMin);
 		Set(record, StatMetric::VelMag_Max, velMagMax);
 
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Statistics_Velocity });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Velocity });
 	}
 }
 
 void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)
 {
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborSearchStrat_->Construct(params);
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	if (params.runCountQuery)
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearchStrat_->Query_Count(params);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 	}
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborLists_->Finalize_Count();
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	if (params.runFillQuery)
 	{
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearchStrat_->Query_Fill(params);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 	}
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborLists_->Finalize_Fill();
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 }
 
 void SimBackend_CPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)

@@ -220,12 +220,9 @@ namespace GPU01
 		float* __restrict__ xVelPredF,
 		float* __restrict__ yVelPredF,
 		float* __restrict__ zVelPredF,
-		float* __restrict__ xAccViscF,
-		float* __restrict__ yAccViscF,
-		float* __restrict__ zAccViscF,
-		float* __restrict__ xAccExtF,
-		float* __restrict__ yAccExtF,
-		float* __restrict__ zAccExtF)
+		float* __restrict__ xAccNonPressF,
+		float* __restrict__ yAccNonPressF,
+		float* __restrict__ zAccNonPressF)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_N_F) { return; }
@@ -325,18 +322,15 @@ namespace GPU01
 		tmp_yAccViscB *= 2.0f * (3 + 2) * c_viscosityB;
 		tmp_zAccViscB *= 2.0f * (3 + 2) * c_viscosityB;
 
-		xAccViscF[i] = tmp_xAccViscF + tmp_xAccViscB;
-		yAccViscF[i] = tmp_yAccViscF + tmp_yAccViscB;
-		zAccViscF[i] = tmp_zAccViscF + tmp_zAccViscB;
-
-		xAccExtF[i] = c_xGravity;
-		yAccExtF[i] = c_yGravity;
-		zAccExtF[i] = c_zGravity;
+		// TODO: add surface tension acc contribution
+		xAccNonPressF[i] = tmp_xAccViscF + tmp_xAccViscB + c_xGravity;
+		yAccNonPressF[i] = tmp_yAccViscF + tmp_yAccViscB + c_yGravity;
+		zAccNonPressF[i] = tmp_zAccViscF + tmp_zAccViscB + c_zGravity;
 
 		// compute predicted velocity from non-pressure accelerations
-		xVelPredF[i] = fmaf(c_timeStep, xAccViscF[i] + xAccExtF[i], xVelF[i]);
-		yVelPredF[i] = fmaf(c_timeStep, yAccViscF[i] + yAccExtF[i], yVelF[i]);
-		zVelPredF[i] = fmaf(c_timeStep, zAccViscF[i] + zAccExtF[i], zVelF[i]);
+		xVelPredF[i] = fmaf(c_timeStep, xAccNonPressF[i], xVelF[i]);
+		yVelPredF[i] = fmaf(c_timeStep, yAccNonPressF[i], yVelF[i]);
+		zVelPredF[i] = fmaf(c_timeStep, zAccNonPressF[i], zVelF[i]);
 	}
 
 	__global__
@@ -657,7 +651,6 @@ namespace GPU01
 		const uint32_t* __restrict__ neighListFB,
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		// destinations
-		float* __restrict__ sysVecElemF,
 		float* __restrict__ pressureF)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -729,17 +722,15 @@ namespace GPU01
 			tmp_zSysVecElem = fmaf(c_massB * azi, zkg, tmp_zSysVecElem);
 		}
 
-		// finalize system vector element
-		sysVecElemF[i] = c_timeStep * c_timeStep
-					   * (tmp_xSysVecElem + tmp_ySysVecElem + tmp_zSysVecElem);
-
 		float tmp_pressureF = 0.0f;
 
 		// only update pressure if particle has neighbors
 		if (!(fabsf(diagElemF[i]) <= 1e-6f))
 		{
 			tmp_pressureF = pressureF[i] + c_jacobiOmega
-						  * ((sourceTermF[i] - sysVecElemF[i]) / diagElemF[i]);
+						  * ((sourceTermF[i] - (c_timeStep * c_timeStep
+						  * (tmp_xSysVecElem + tmp_ySysVecElem + tmp_zSysVecElem)))
+						  / diagElemF[i]);
 		}
 
 		// finalize pressure value by clamping to non-negative
@@ -823,8 +814,7 @@ namespace GPU01
 		cudaStream_t stream,
 		// destinations
 		float* xVelPredF, float* yVelPredF, float* zVelPredF,
-		float* xAccViscF, float* yAccViscF, float* zAccViscF,
-		float* xAccExtF, float* yAccExtF, float* zAccExtF)
+		float* xAccNonPressF, float* yAccNonPressF, float* zAccNonPressF)
 	{
 		// TODO: initialize constants if needed
 
@@ -834,7 +824,7 @@ namespace GPU01
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, densityF,
 			neighCountFF, neighCountFB, neighListFF, neighListFB, N_MAX_FF, N_MAX_FB,
-			xVelPredF, yVelPredF, zVelPredF, xAccViscF, yAccViscF, zAccViscF, xAccExtF, yAccExtF, zAccExtF);
+			xVelPredF, yVelPredF, zVelPredF, xAccNonPressF, yAccNonPressF, zAccNonPressF);
 
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
 	}
@@ -912,7 +902,6 @@ namespace GPU01
 		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
-		float* sysVecElemF,
 		float* pressureF)
 	{
 		// TODO: initialize constants if needed
@@ -923,7 +912,7 @@ namespace GPU01
 		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xAccPressF, yAccPressF, zAccPressF,
 			sourceTermF, diagElemF, neighCountFF, neighCountFB, neighListFF, neighListFB,
-			N_MAX_FF, N_MAX_FB, sysVecElemF, pressureF);
+			N_MAX_FF, N_MAX_FB, pressureF);
 
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
 	}

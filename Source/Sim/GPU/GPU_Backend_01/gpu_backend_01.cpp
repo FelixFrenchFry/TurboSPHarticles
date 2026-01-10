@@ -18,8 +18,8 @@
 using namespace Sim;
 
 SimBackend_GPU01::SimBackend_GPU01(
-	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksMgr& benchmarksMgr, const SimParams& params)
-	: simParamsMgr_{ simParamsMgr }, benchmarksMgr_ { benchmarksMgr }
+	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
+	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_ { benchmarksTracker }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
 
@@ -88,21 +88,13 @@ void SimBackend_GPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 		GPU::Copy_HostToDevice(d_yVelF_.Data(), F.yVel.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zVelF_.Data(), F.zVel.data(), N_F_, stream_);
 
-		GPU::Copy_HostToDevice(d_xAccF_.Data(), F.xAcc.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_yAccF_.Data(), F.yAcc.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_zAccF_.Data(), F.zAcc.data(), N_F_, stream_);
-
 		GPU::Copy_HostToDevice(d_xAccPressF_.Data(), F.xAccPress.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_yAccPressF_.Data(), F.yAccPress.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zAccPressF_.Data(), F.zAccPress.data(), N_F_, stream_);
 
-		GPU::Copy_HostToDevice(d_xAccViscF_.Data(), F.xAccVisc.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_yAccViscF_.Data(), F.yAccVisc.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_zAccViscF_.Data(), F.zAccVisc.data(), N_F_, stream_);
-
-		GPU::Copy_HostToDevice(d_xAccExtF_.Data(), F.xAccExt.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_yAccExtF_.Data(), F.yAccExt.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_zAccExtF_.Data(), F.zAccExt.data(), N_F_, stream_);
+		GPU::Copy_HostToDevice(d_xAccNonPressF_.Data(), F.xAccNonPress.data(), N_F_, stream_);
+		GPU::Copy_HostToDevice(d_yAccNonPressF_.Data(), F.yAccNonPress.data(), N_F_, stream_);
+		GPU::Copy_HostToDevice(d_zAccNonPressF_.Data(), F.zAccNonPress.data(), N_F_, stream_);
 
 		GPU::Copy_HostToDevice(d_sourceTermF_.Data(), F.sourceTerm.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_pressureF_.Data(), F.pressure.data(), N_F_, stream_);
@@ -116,10 +108,6 @@ void SimBackend_GPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 		GPU::Copy_HostToDevice(d_xPosB_.Data(), B.xPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_yPosB_.Data(), B.yPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_zPosB_.Data(), B.zPos.data(), N_B_, stream_);
-
-		GPU::Copy_HostToDevice(d_xVelB_.Data(), B.xVel.data(), N_B_, stream_);
-		GPU::Copy_HostToDevice(d_yVelB_.Data(), B.yVel.data(), N_B_, stream_);
-		GPU::Copy_HostToDevice(d_zVelB_.Data(), B.zVel.data(), N_B_, stream_);
 
 		GPU::Copy_HostToDevice(d_idB_.Data(), B.id.data(), N_B_, stream_);
 	}
@@ -156,25 +144,16 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(F.yVel.data(), d_yVelF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zVel.data(), d_zVelF_.Data(), N_F_, stream_);
 
-		GPU::Copy_DeviceToHost(F.xAcc.data(), d_xAccF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.yAcc.data(), d_yAccF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.zAcc.data(), d_zAccF_.Data(), N_F_, stream_);
-
 		GPU::Copy_DeviceToHost(F.xAccPress.data(), d_xAccPressF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.yAccPress.data(), d_yAccPressF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zAccPress.data(), d_zAccPressF_.Data(), N_F_, stream_);
 
-		GPU::Copy_DeviceToHost(F.xAccVisc.data(), d_xAccViscF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.yAccVisc.data(), d_yAccViscF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.zAccVisc.data(), d_zAccViscF_.Data(), N_F_, stream_);
-
-		GPU::Copy_DeviceToHost(F.xAccExt.data(), d_xAccExtF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.yAccExt.data(), d_yAccExtF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.zAccExt.data(), d_zAccExtF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.xAccNonPress.data(), d_xAccNonPressF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.yAccNonPress.data(), d_yAccNonPressF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(F.zAccNonPress.data(), d_zAccNonPressF_.Data(), N_F_, stream_);
 
 		GPU::Copy_DeviceToHost(F.sourceTerm.data(), d_sourceTermF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.diagElem.data(), d_diagElemF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.sysVecElem.data(), d_sysVecElemF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.pressure.data(), d_pressureF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.density.data(), d_densityF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.id.data(), d_idF_.Data(), N_F_, stream_);
@@ -186,10 +165,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(B.xPos.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.yPos.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.zPos.data(), d_zPosB_.Data(), N_B_, stream_);
-
-		GPU::Copy_DeviceToHost(B.xVel.data(), d_xVelB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(B.yVel.data(), d_yVelB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(B.zVel.data(), d_zVelB_.Data(), N_B_, stream_);
 
 		GPU::Copy_DeviceToHost(B.id.data(), d_idB_.Data(), N_B_, stream_);
 	}
@@ -371,17 +346,17 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 		// --- [ neighbor search ] ---------------------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 		neighborSearchStrat_->Construct(params);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearchStrat_->Query_Fill(params);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 		// --- [ density computations ] ----------------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Density_Solving });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });
 		GPU01::Launch_Density(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -391,12 +366,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_densityF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Density_Solving });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Solving });
 
 		// --- [ non-pressure accelerations ] ----------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Viscosity_Acceleration,
-										Bench::BenchOp::External_Acceleration });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 		GPU01::Launch_NonPressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -406,17 +380,14 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_neighListFF_.Data(), d_neighListFB_.Data(),
 			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
-			d_xAccViscF_.Data(), d_yAccViscF_.Data(), d_zAccViscF_.Data(),
-			d_xAccExtF_.Data(), d_yAccExtF_.Data(), d_zAccExtF_.Data());
+			d_xAccNonPressF_.Data(), d_yAccNonPressF_.Data(), d_zAccNonPressF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Viscosity_Acceleration,
-									   Bench::BenchOp::External_Acceleration });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
 		// --- [ source-term (density invariance) and diagonal elements ] ------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_SourceTerm,
-										Bench::BenchOp::Pressure_DiagonalElem });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 		GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -428,14 +399,13 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_sourceTermF_.Data(), d_diagElemF_.Data(), d_pressureF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_SourceTerm,
-									   Bench::BenchOp::Pressure_DiagonalElem });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
 		// --- [ relaxed jacobi solver for pressure ] --------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
 		int cnt = 0;
-		while (cnt < 2)
+		while (cnt < 3)
 		{
 			// [ loop 1: pressure acceleration ] -------------------------------
 			GPU01::Launch_PressureAcceleration(
@@ -458,17 +428,17 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_neighCountFF_.Data(), d_neighCountFB_.Data(),
 				d_neighListFF_.Data(), d_neighListFB_.Data(),
 				N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
-				d_sysVecElemF_.Data(), d_pressureF_.Data());
+				d_pressureF_.Data());
 
 			GPU::StreamSync(stream_);
 
 			cnt++;
 		}
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
 		// --- [ finalize pressure acceleration for integration ] --------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 		GPU01::Launch_PressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -479,12 +449,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
 		// --- [ velocity and position updates ] -------------------------------
 
-		benchmarksMgr_.StartBench({ Bench::BenchOp::VelocityUpdate,
-										Bench::BenchOp::PositionUpdate });
+		benchmarksTracker_.StartBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 		GPU01::Launch_Integration(
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
@@ -493,8 +462,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksMgr_.StopBench({ Bench::BenchOp::VelocityUpdate,
-									   Bench::BenchOp::PositionUpdate });
+		benchmarksTracker_.StopBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 	}
 
 	simStep_ += N_steps;

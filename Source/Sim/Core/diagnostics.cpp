@@ -205,7 +205,7 @@ namespace Sim
     }
 
     void DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-        const Bench::BenchmarksMgr& benchMgr,
+        const Bench::BenchmarksTracker& benchmarksTracker,
         const std::vector<Bench::BenchOpGroupDef>& opGroups,
         Bench::TimeUnit unit,
         uint32_t step,
@@ -327,8 +327,8 @@ namespace Sim
 
             for (auto op : group.ops)
             {
-                groupNsLatest += benchMgr.GetBench_Latest(op);
-                groupNsAvg += benchMgr.GetBench_Avg_OverAll(op);
+                groupNsLatest += benchmarksTracker.GetBench_Latest(op);
+                groupNsAvg += benchmarksTracker.GetBench_Avg_OverAll(op);
             }
 
             groupLatest[i] = groupNsLatest;

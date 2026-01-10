@@ -11,7 +11,7 @@
 
 using namespace Stats;
 
-StatisticsMgr::StatisticsMgr(const Sim::SimParams& simParams)
+StatisticsTracker::StatisticsTracker(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxStatRecs)
 	, curRecCount_(0u)
 {
@@ -20,13 +20,13 @@ StatisticsMgr::StatisticsMgr(const Sim::SimParams& simParams)
 	ClearAllTime();
 }
 
-void StatisticsMgr::BeginStep()
+void StatisticsTracker::BeginStep()
 {
 	recLatest_ = {};
 	recLatest_.stats.fill(0.0f);
 }
 
-void StatisticsMgr::EndStep(uint32_t simStep, double simTime)
+void StatisticsTracker::EndStep(uint32_t simStep, double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;
@@ -65,7 +65,7 @@ void StatisticsMgr::EndStep(uint32_t simStep, double simTime)
 	curRecCount_ += 1;
 }
 
-void StatisticsMgr::PackStatSnapshot(Sync::StatSnapshot& snap) const
+void StatisticsTracker::PackStatSnapshot(Sync::StatSnapshot& snap) const
 {
 	// metadata
 	snap.simStep = recLatest_.simStep;
@@ -81,35 +81,35 @@ void StatisticsMgr::PackStatSnapshot(Sync::StatSnapshot& snap) const
 	}
 }
 
-float StatisticsMgr::GetStat_Latest(StatMetric metric) const
+float StatisticsTracker::GetStat_Latest(StatMetric metric) const
 {
 	if (curRecCount_ == 0) { return 0.0f; }
 
 	return recLatest_.stats[GetIdx(metric)];
 }
 
-float StatisticsMgr::GetStat_Avg(StatMetric metric) const
+float StatisticsTracker::GetStat_Avg(StatMetric metric) const
 {
 	if (curRecCount_ == 0) { return 0.0f; }
 
 	return statsSum_allTime_[GetIdx(metric)] / static_cast<float>(curRecCount_);
 }
 
-float StatisticsMgr::GetStat_Min(StatMetric metric) const
+float StatisticsTracker::GetStat_Min(StatMetric metric) const
 {
 	if (curRecCount_ == 0) { return 0.0f; }
 
 	return statsMin_allTime_[GetIdx(metric)];
 }
 
-float StatisticsMgr::GetStat_Max(StatMetric metric) const
+float StatisticsTracker::GetStat_Max(StatMetric metric) const
 {
 	if (curRecCount_ == 0) { return 0.0f; }
 
 	return statsMax_allTime_[GetIdx(metric)];
 }
 
-void StatisticsMgr::ClearAllTime()
+void StatisticsTracker::ClearAllTime()
 {
 	statsSum_allTime_.fill(0.0f);
 	statsMin_allTime_.fill(std::numeric_limits<float>::max());

@@ -17,19 +17,19 @@ namespace Sim
 {
 	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendVersion version,
 												 Sim::SimParamsMgr& simParamsMgr,
-												 Bench::BenchmarksMgr& benchmarksMgr,
+												 Bench::BenchmarksTracker& benchmarksTracker,
 												 SimParams const& params)
 	{
 		switch (version)
 		{
 		case Base::BackendVersion::CPU01:
 			{
-				return std::make_unique<SimBackend_CPU01>(simParamsMgr, benchmarksMgr, params);
+				return std::make_unique<SimBackend_CPU01>(simParamsMgr, benchmarksTracker, params);
 			}
 		#ifdef TURBOSPHARTICLES_WITH_CUDA
 		case Base::BackendVersion::GPU01:
 			{
-				return std::make_unique<SimBackend_GPU01>(simParamsMgr, benchmarksMgr, params);
+				return std::make_unique<SimBackend_GPU01>(simParamsMgr, benchmarksTracker, params);
 			}
 		#endif
 		}

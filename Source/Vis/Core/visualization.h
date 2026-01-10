@@ -30,7 +30,7 @@ namespace Vis
 	public: // -----------------------------------------------------------------
 
 		VisualizationMgr(Sim::SimulationMgr& simulationMgr,
-						 Bench::BenchmarksMgr& benchmarksMgr,
+						 Bench::BenchmarksTracker& benchmarksTracker,
 						 Sim::SimParamsMgr& simParamsMgr,
 						 Vis::VisParamsMgr& visParamsMgr);
 
@@ -51,7 +51,7 @@ namespace Vis
 	private: // ----------------------------------------------------------------
 
 		Sim::SimulationMgr& simulationMgr_;
-		Bench::BenchmarksMgr& benchmarksMgr_;
+		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// parameter managers and snapshots to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;
