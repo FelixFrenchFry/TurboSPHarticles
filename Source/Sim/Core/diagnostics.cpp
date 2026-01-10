@@ -25,104 +25,6 @@
 
 namespace Sim
 {
-    static void LeaveAltScreenOnce();
-    static void OnExit_PauseThenLeaveAlt();
-
-	#ifdef _WIN32
-    static void PauseIfStandaloneConsole();
-	#endif
-
-    static void Appendf(std::string& out, const char* fmt, ...)
-    {
-        char buf[1024];
-
-        va_list args;
-        va_start(args, fmt);
-        int n = std::vsnprintf(buf, sizeof(buf), fmt, args);
-        va_end(args);
-
-        if (n <= 0) { return; }
-
-        if (n < static_cast<int>(sizeof(buf)))
-        {
-            out.append(buf, static_cast<size_t>(n));
-            return;
-        }
-
-        // if it didn't fit, allocate exact size
-        std::string tmp;
-        tmp.resize(static_cast<size_t>(n) + 1);
-
-        va_start(args, fmt);
-        std::vsnprintf(tmp.data(), tmp.size(), fmt, args);
-        va_end(args);
-
-        out.append(tmp.data(), static_cast<size_t>(n));
-    }
-
-    static void WriteFrame(const std::string& frame)
-    {
-        std::fwrite(frame.data(), 1, frame.size(), stdout);
-        std::fflush(stdout);
-    }
-
-    static void EnterAltScreenOnce()
-    {
-        static bool entered = false;
-        if (entered) { return; }
-        entered = true;
-
-        std::printf("\x1b[?1049h"); // enter alt screen
-        std::printf("\x1b[?25l");   // hide cursor
-        std::printf("\x1b[?7l");    // disable auto-wrap
-        std::fflush(stdout);
-
-        // Make sure we restore state even if main() returns or you early-exit.
-        std::atexit(OnExit_PauseThenLeaveAlt);
-    }
-
-    static void LeaveAltScreenOnce()
-    {
-        std::printf("\x1b[?7h");    // enable auto-wrap again
-        std::printf("\x1b[?25h");   // show cursor
-        std::printf("\x1b[?1049l"); // leave alt screen
-        std::fflush(stdout);
-    }
-
-	#ifdef _WIN32
-    static void PauseIfStandaloneConsole()
-    {
-        // If this exe was launched into its own console (common for "external console" / double-click),
-        // the window will disappear as soon as the process exits. Pause so the user can read the panel.
-        DWORD pids[2] = {};
-        DWORD n = GetConsoleProcessList(pids, 2);
-
-        if (n <= 1)
-        {
-            // clear any pending input so we don't instantly exit
-            HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
-            if (hIn != INVALID_HANDLE_VALUE)
-            {
-                FlushConsoleInputBuffer(hIn);
-            }
-
-            std::printf("\nPress ENTER to exit...");
-            std::fflush(stdout);
-            (void)std::getchar();
-        }
-    }
-	#endif
-
-    static void OnExit_PauseThenLeaveAlt()
-    {
-		#ifdef _WIN32
-        // Pause first so the live panel stays visible (we're still in alt screen at this point).
-        PauseIfStandaloneConsole();
-		#endif
-        // Then restore terminal state.
-        LeaveAltScreenOnce();
-    }
-
     void DiagnosticsMgr::PrintHardwareSpecs(uint32_t N_totalThreads,
 											uint32_t N_simThreads,
 											uint32_t N_visThreads)
@@ -374,7 +276,7 @@ namespace Sim
                 std::string alias;
                 if (isTotalSim)
                 {
-                    alias = "total simulation time";
+                    alias = "total";
                 }
                 else if (!group.ops.empty())
                 {
@@ -487,7 +389,9 @@ namespace Sim
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(
         const Mem::MemoryTracker& memTracker,
         Mem::ByteUnit unit,
-        Mem::MemUsageType type)
+        Mem::MemUsageType type,
+        const uint32_t N_F, 
+        const uint32_t N_B)
     {
         // pack snapshot
         Sync::MemSnapshot snap{};
@@ -500,15 +404,15 @@ namespace Sim
         switch (type)
         {
         case Mem::MemUsageType::Used:
-            title = "memory usage (used)";
+            title = "memory usage (max used)";
             field = &Mem::MemUsage::usedBytes;
             break;
         case Mem::MemUsageType::Alloc:
-            title = "memory usage (allocated)";
+            title = "memory usage (max allocated)";
             field = &Mem::MemUsage::allocBytes;
             break;
         case Mem::MemUsageType::Occupied:
-            title = "memory usage (occupied)";
+            title = "memory usage (max occupied)";
             field = &Mem::MemUsage::occupiedBytes;
             break;
         default:
@@ -518,56 +422,65 @@ namespace Sim
         constexpr uint8_t BUCKET_COUNT = Mem::GetIdx(Mem::MemBucket::Count);
 
         // totals for percentages
-        uint64_t totalLatestBytes = 0;
         uint64_t totalMaxBytes = 0;
         for (uint8_t i = 0; i < BUCKET_COUNT; i++)
         {
-            totalLatestBytes += (snap.latest[i].*field);
             totalMaxBytes += (snap.max[i].*field);
         }
 
         const char* unitStr = Mem::UnitLabel(unit);
 
-        char latestLabel[32];
+        char perParticleLabel[32];
         char maxLabel[32];
-        std::snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
+        std::snprintf(perParticleLabel, sizeof(perParticleLabel), "bytes/particle");
         std::snprintf(maxLabel, sizeof(maxLabel), "max [%s]", unitStr);
 
         std::printf("\n");
         // header
-        std::printf("%-30.30s | %12s %6s | %12s %6s\n",
-            title, latestLabel, "%", maxLabel, "%");
+        std::printf("%-30.30s | %18s | %12s %6s\n",
+            title, perParticleLabel, maxLabel, "%");
         std::printf("--------------------------------------------------------------------------\n");
+
+		// helper to pick divisor based on particle domain
+        auto PerParticleDivisor = [&](const Mem::MemBucketDef& def) -> uint32_t
+            {
+                switch (def.type)
+                {
+                case Base::ParticleType::Fluid:
+                	return N_F;
+                case Base::ParticleType::Boundary:
+                	return N_B;
+                default:
+                    return 0;
+                }
+            };
 
         for (uint8_t i = 0; i < BUCKET_COUNT; i++)
         {
             const auto& def = Mem::Definitions[i];
-
-            const uint64_t bLatest = (snap.latest[i].*field);
             const uint64_t bMax = (snap.max[i].*field);
-
-            const double vLatest = Mem::ConvertFromBytes(unit, bLatest);
             const double vMax = Mem::ConvertFromBytes(unit, bMax);
 
-            const double pctLatest = (totalLatestBytes > 0)
-                ? (100.0 * static_cast<double>(bLatest) / static_cast<double>(totalLatestBytes))
-                : 0.0;
+            const uint64_t denom = static_cast<uint64_t>(PerParticleDivisor(def));
+            const uint64_t bytesPerParticle = (denom > 0)
+                ? ((bMax + denom - 1) / denom) // ceil(bMax/denom)
+                : 0;
 
             const double pctMax = (totalMaxBytes > 0)
                 ? (100.0 * static_cast<double>(bMax) / static_cast<double>(totalMaxBytes))
                 : 0.0;
 
-            std::printf("%-30.30s | %12.2f %6.1f | %12.2f %6.1f\n",
-                def.name.data(), vLatest, pctLatest, vMax, pctMax);
+            std::printf("%-30.30s | %18llu | %12.2f %6.1f\n",
+                def.name.data(), static_cast<uint64_t>(bytesPerParticle),
+                vMax, pctMax);
         }
 
         std::printf("--------------------------------------------------------------------------\n");
 
-        const double tLatest = Mem::ConvertFromBytes(unit, totalLatestBytes);
         const double tMax = Mem::ConvertFromBytes(unit, totalMaxBytes);
 
-        std::printf("%-30.30s | %12.2f %6s | %12.2f %6s\n",
-            "total", tLatest, "---", tMax, "---");
+        std::printf("%-30.30s | %18s | %12.2f %6s\n",
+            "total", "---", tMax, "---");
 
         std::fflush(stdout);
     }

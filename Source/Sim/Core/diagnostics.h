@@ -41,7 +41,9 @@ namespace Sim
 		static void PrintMemorySummary_Standalone(
 			const Mem::MemoryTracker& memTracker,
 			Mem::ByteUnit unit,
-			Mem::MemUsageType type);
+			Mem::MemUsageType type,
+			uint32_t N_F,
+			uint32_t N_B);
 	};
 
 } // namespace Sim

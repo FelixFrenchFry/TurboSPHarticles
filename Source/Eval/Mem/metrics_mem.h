@@ -52,6 +52,7 @@ namespace Mem
 	struct MemBucketDef
 	{
 		MemBucket bucket;
+		Base::ParticleType type;
 		std::string_view name; // display name
 		std::string_view tip;  // tooltip description
 	};
@@ -61,6 +62,7 @@ namespace Mem
 		{
 			{
 				.bucket = MemBucket::ParticlePropertiesF,
+				.type = Base::ParticleType::Fluid,
 				.name = "fluid particle properties",
 				.tip =
 				"Memory used/allocated by buffers that store fluid particle properties, namely:\n"
@@ -70,6 +72,7 @@ namespace Mem
 			},
 			{
 				.bucket = MemBucket::ParticlePropertiesB,
+				.type = Base::ParticleType::Boundary,
 				.name = "bound particle properties",
 				.tip =
 				"Memory used/allocated by buffers that store boundary particle properties, namely:\n"
@@ -77,6 +80,7 @@ namespace Mem
 			},
 			{
 				.bucket = MemBucket::Neighbors_SearchDataStructF,
+				.type = Base::ParticleType::Fluid,
 				.name = "fluid neighbor search data struct",
 				.tip =
 				"Memory used/allocated by data structures used for the neighbor search query\n"
@@ -84,6 +88,7 @@ namespace Mem
 			},
 			{
 				.bucket = MemBucket::Neighbors_SearchDataStructB,
+				.type = Base::ParticleType::Boundary,
 				.name = "bound neighbor search data struct",
 				.tip =
 				"Memory used/allocated by data structures used for the neighbor search query\n"
@@ -91,6 +96,7 @@ namespace Mem
 			},
 			{
 				.bucket = MemBucket::Neighbors_ListStorageF,
+				.type = Base::ParticleType::Fluid,
 				.name = "fluid neighbor list storage",
 				.tip =
 				"Memory used/allocated by data structures used for storing references to the\n"
@@ -98,6 +104,7 @@ namespace Mem
 			},
 			{
 				.bucket = MemBucket::Neighbors_ListStorageB,
+				.type = Base::ParticleType::Boundary,
 				.name = "bound neighbor list storage",
 				.tip =
 				"Memory used/allocated by data structures used for storing references to the\n"
@@ -105,6 +112,7 @@ namespace Mem
 			},
 			{
 				.bucket = MemBucket::Misc,
+				.type = Base::ParticleType::Fluid,
 				.name = "misc",
 				.tip =
 				"TODO"
