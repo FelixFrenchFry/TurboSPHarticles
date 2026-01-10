@@ -214,6 +214,7 @@ target_link_libraries(TSP_H PUBLIC
     Eigen3::Eigen
     glm::glm
     TBB::tbb
+    TBB::tbbmalloc
     $<$<BOOL:${ENABLE_CUDA}>:CUDA::cudart>
     Project_Warnings
     Project_Defines

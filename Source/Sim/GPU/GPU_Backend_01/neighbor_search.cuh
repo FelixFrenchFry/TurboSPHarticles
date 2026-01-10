@@ -29,7 +29,9 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override {}
+
+		void Query_Fill(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -53,7 +55,9 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override {}
+
+		void Query_Fill(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -126,7 +130,9 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override {}
+
+		void Query_Fill(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
 

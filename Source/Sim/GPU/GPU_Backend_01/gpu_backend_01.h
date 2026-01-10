@@ -89,7 +89,9 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr, const SimParams& params);
+		SimBackend_GPU01(Sim::SimParamsMgr& simParamsMgr,
+						 Bench::BenchmarksMgr& benchmarksMgr,
+						 const SimParams& params);
 		~SimBackend_GPU01() override;
 
 		const char* Name() const override { return "GPU01"; }
@@ -139,6 +141,7 @@ namespace Sim
 	private: // ----------------------------------------------------------------
 
 		// managers
+		Sim::SimParamsMgr& simParamsMgr_;
 		Bench::BenchmarksMgr& benchmarksMgr_;
 
 		// neighbor search

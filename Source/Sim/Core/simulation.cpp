@@ -123,7 +123,7 @@ void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 	}
 
 	// create new backend and initialize it with the universal state
-	simBackend_ = MakeSimBackend(version, benchmarksMgr_, simParams_);
+	simBackend_ = MakeSimBackend(version, simParamsMgr_, benchmarksMgr_, simParams_);
 	if (!simBackend_)
 	{
 		SPDLOG_ERROR("Failed to create sim backend ({})",
@@ -588,6 +588,8 @@ void SimulationMgr::DisplayMemoryUsageStats(
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
 		memoryTracker_, params.byteUnit, Mem::MemUsageType::Alloc);
 
+	/*
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
 		memoryTracker_, params.byteUnit, Mem::MemUsageType::Occupied);
+	*/
 }

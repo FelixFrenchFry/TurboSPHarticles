@@ -16,7 +16,7 @@
 #include "Source/Base/helpers.h"
 #include "Source/Eval/Stats/metrics.h"
 
-static constexpr uint32_t N_expctNbrCountF = 42;
+static constexpr uint32_t N_expctNbrCountF = 40;
 static constexpr uint32_t N_expctNbrCountB = 20;
 static constexpr uint32_t N_expctMaxNbrCountF = 64;
 static constexpr uint32_t N_expctMaxNbrCountB = 32;
@@ -36,7 +36,11 @@ namespace Sim
 		Base::NeighborSearchMethod neighborSearchMethod =
 			Base::NeighborSearchMethod::CellLinkedList_Compact;
 		Base::NeighborListStorage neighborListStorage =
-			Base::NeighborListStorage::CompactVectors;
+			Base::NeighborListStorage::CSRVector_FinalConcat;
+
+		// mode flags
+		bool runCountQuery		= false; // depends on the neighbor list storage
+		bool runFillQuery		= true; // always true for now
 
 		// simulation state
 		bool simRunning			= false;
@@ -136,6 +140,8 @@ namespace Sim
 		bool LoadSimParamsFromProfile(const std::string& profile, bool verbose = false);
 
 		// setters for individual parameters and their dependent values
+		void Set_RunCountQuery(bool runCountQuery, bool verbose = false);
+		void Set_RunFillQuery(bool runFillQuery, bool verbose = false);
 		void Set_SimRunning(bool simRunning, bool verbose = false);
 		void Set_SimRunNextStep(bool simRunNextStep, bool verbose = false);
 		void Set_NumParticles(uint32_t N, Base::ParticleType type, bool verbose = false);

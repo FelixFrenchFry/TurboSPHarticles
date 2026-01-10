@@ -39,7 +39,9 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override;
+
+		void Query_Fill(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -73,7 +75,9 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override;
+
+		void Query_Fill(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -126,7 +130,9 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override;
+
+		void Query_Fill(const SimParams& params) override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -193,11 +199,13 @@ namespace Sim
 
 		void Construct(const SimParams& params) override;
 
-		void Query(const SimParams& params) override;
+		void Query_Count(const SimParams& params) override;
 
-		void Query_Basic(const SimParams& params);
+		void Query_Fill(const SimParams& params) override;
 
-		void Query_Smart(const SimParams& params);
+		void Query_Fill_Basic(const SimParams& params);
+
+		void Query_Fill_Smart(const SimParams& params);
 
 		void DataReOrder(const SimParams& params) override;
 

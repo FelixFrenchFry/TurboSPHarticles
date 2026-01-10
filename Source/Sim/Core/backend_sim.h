@@ -81,6 +81,7 @@ namespace Sim
 
 	// backend factory
 	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendVersion version,
+												 Sim::SimParamsMgr& simParamsMgr,
 												 Bench::BenchmarksMgr& benchmarksMgr,
 												 const SimParams& params);
 
@@ -100,11 +101,14 @@ namespace Sim
 
 		virtual void Construct(const SimParams& params) = 0;
 
-		virtual void Query(const SimParams& params) = 0;
+		virtual void Query_Count(const SimParams& params) = 0;
+
+		virtual void Query_Fill(const SimParams& params) = 0;
 
 		virtual void DataReOrder(const SimParams& params) = 0;
 
-		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const = 0;
+		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+			const SimParams& params) const = 0;
 	};
 
 	struct NeighborSpan
@@ -124,10 +128,21 @@ namespace Sim
 		// clears the individual and/or shared neighbor lists of all fluid particles
 		virtual void ClearAll() = 0;
 
-		// applies potential post-processing on individual neighbor lists like concatenation into shared list
-		virtual void Finalize() = 0;
+		// applies potential post-processing on the data structures after the count-query
+		// (e.g. construction of the CSR neighbor storage)
+		virtual void Finalize_Count() = 0;
 
-		// sets the full neighbor list js of fluid particle i by replacing it with the one gathered in a scratch vector
+		// applies potential post-processing on the data structures after the fill-query
+		// (e.g. concatenation of individual neighbor lists into CSR neighbor storage)
+		virtual void Finalize_Fill() = 0;
+
+		// sets the neighbor count of fluid particle i
+		// (computed in a count-query)
+		virtual void SetNbrCountFF(uint32_t i, uint32_t count) = 0;
+		virtual void SetNbrCountFB(uint32_t i, uint32_t count) = 0;
+
+		// sets the full neighbor list js of fluid particle i
+		// (accumulated in a scratch array in a fill-query)
 		// (optionally applying compression and other post-processing if the implementation uses it)
 		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
@@ -142,7 +157,8 @@ namespace Sim
 		virtual uint32_t CountFF(uint32_t i) const { return FF(i).count; }
 		virtual uint32_t CountFB(uint32_t i) const { return FB(i).count; }
 
-		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const = 0;
+		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+			const SimParams& params) const = 0;
 	};
 
 } // namespace Sim

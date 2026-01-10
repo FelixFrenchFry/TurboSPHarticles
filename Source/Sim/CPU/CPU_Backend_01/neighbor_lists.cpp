@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cassert>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_scan.h>
 #include <tbb/partitioner.h>
 #include "spdlog/spdlog.h"
 
@@ -17,7 +18,7 @@
 using namespace Sim;
 
 // -------------------------------------------------------------------------
-// --- [ vectors neighbor lists ] ------------------------------------------
+// --- [ individual vectors neighbor lists ] -------------------------------
 // -------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_CPU01::Resize(
@@ -26,32 +27,20 @@ void NeighborLists_IndividualVectors_CPU01::Resize(
 	N_F_ = N_F;
 	N_B_ = N_B;
 
-	neighborsFF_.resize(N_F_);
-	neighborsFB_.resize(N_F_);
+	// individual neighbor lists
+	nbrListFF_.resize(N_F_);
+	nbrListFB_.resize(N_F_);
 
 	// reserve expected capacities to reduce re-allocations
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				if (neighborsFF_[i].capacity() < N_expctNbrCountF)
-				{
-					neighborsFF_[i].reserve(N_expctNbrCountF);
-				}
+	// (single-threaded to minimize fragmentation and alloc contention)
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		nbrListFF_[i].reserve(N_expctNbrCountF);
+		nbrListFB_[i].reserve(N_expctNbrCountB);
 
-				if (neighborsFB_[i].capacity() < N_expctNbrCountB)
-				{
-					neighborsFB_[i].reserve(N_expctNbrCountB);
-				}
-
-				neighborsFF_[i].clear();
-				neighborsFB_[i].clear();
-			}
-		},
-		tbb::auto_partitioner{}
-	);
+		nbrListFF_[i].clear();
+		nbrListFB_[i].clear();
+	}
 }
 
 void NeighborLists_IndividualVectors_CPU01::ClearAll()
@@ -62,78 +51,93 @@ void NeighborLists_IndividualVectors_CPU01::ClearAll()
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				neighborsFF_[i].clear();
-				neighborsFB_[i].clear();
+				nbrListFF_[i].clear();
+				nbrListFF_[i].clear();
 			}
 		},
 		tbb::auto_partitioner{}
 	);
 }
 
-void NeighborLists_IndividualVectors_CPU01::Finalize()
-{
-	// nothing to do
-}
-
 void NeighborLists_IndividualVectors_CPU01::SetNbrListFF(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	if (count == 0) { neighborsFF_[i].clear(); return; }
+	if (count == 0) { nbrListFF_[i].clear(); return; }
 
 	// overwrite and resize combined
-	neighborsFF_[i].assign(js, js + count);
+	nbrListFF_[i].assign(js, js + count);
 }
 
 void NeighborLists_IndividualVectors_CPU01::SetNbrListFB(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	if (count == 0) { neighborsFB_[i].clear(); return; }
+	if (count == 0) { nbrListFB_[i].clear(); return; }
 
 	// overwrite and resize combined
-	neighborsFB_[i].assign(js, js + count);
+	nbrListFB_[i].assign(js, js + count);
 }
 
 NeighborSpan NeighborLists_IndividualVectors_CPU01::FF(
 	const uint32_t i) const
 {
-	const auto& nbrs = neighborsFF_[i];
+	const auto& nbrs = nbrListFF_[i];
 	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
 }
 
 NeighborSpan NeighborLists_IndividualVectors_CPU01::FB(
 	const uint32_t i) const
 {
-	const auto& nbrs = neighborsFB_[i];
+	const auto& nbrs = nbrListFB_[i];
 	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
 }
 
-std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_IndividualVectors_CPU01::GetMemUsage(
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_IndividualVectors_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	Mem::MemUsage usageFF{};
 	Mem::MemUsage usageFB{};
 
-	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(neighborsFF_));
-	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(neighborsFB_));
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(nbrListFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(nbrListFB_));
 
 	return { usageFF, usageFB };
 }
 
-// -----------------------------------------------------------------------------
-// --- [ small buffers neighbor lists ] ----------------------------------------
-// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// --- [ CSR vector neighbor lists, final concat ] -------------------------
+// -------------------------------------------------------------------------
 
-void NeighborLists_SmallBuffers_CPU01::Resize(
+void NeighborLists_CSRVector_FinalConcat_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B)
 {
-    N_F_ = N_F;
-    N_B_ = N_B;
+	N_F_ = N_F;
+	N_B_ = N_B;
 
-    neighborsFF_.resize(N_F_);
-    neighborsFB_.resize(N_F_);
+	// individual neighbor lists scratch
+	nbrTempFF_.resize(N_F_);
+	nbrTempFB_.resize(N_F_);
+
+	// reserve expected capacities to reduce re-allocations
+	// (single-threaded to minimize fragmentation and alloc contention)
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		nbrTempFF_[i].reserve(N_expctNbrCountF);
+		nbrTempFB_[i].reserve(N_expctNbrCountB);
+
+		nbrTempFF_[i].clear();
+		nbrTempFB_[i].clear();
+	}
+
+	// CSR vector structure
+	nbrOffsetsFF_.resize(static_cast<uint64_t>(N_F_) + 1, 0);
+	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1, 0);
+	nbrListFF_.clear();
+	nbrListFB_.clear();
 }
 
-void NeighborLists_SmallBuffers_CPU01::ClearAll()
+void NeighborLists_CSRVector_FinalConcat_CPU01::ClearAll()
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
@@ -141,70 +145,374 @@ void NeighborLists_SmallBuffers_CPU01::ClearAll()
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-                neighborsFF_[i].clear();
-                neighborsFB_[i].clear();
+				nbrTempFF_[i].clear();
+				nbrTempFB_[i].clear();
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// TODO: .assign() instead of only .resize() to make sure values are overwritten?
+	nbrOffsetsFF_.resize(static_cast<uint64_t>(N_F_) + 1);
+	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1);
+	nbrListFF_.clear();
+	nbrListFB_.clear();
+}
+
+void NeighborLists_CSRVector_FinalConcat_CPU01::Finalize_Fill()
+{
+	if (N_F_ == 0) // nothing to do for empty sim
+	{
+		nbrOffsetsFF_.assign(1, 0);
+		nbrOffsetsFB_.assign(1, 0);
+		nbrListFF_.clear();
+		nbrListFB_.clear();
+		return;
+	}
+
+	// --- [ build CSR neighbor storage for for FF ] ---------------------------
+
+	nbrOffsetsFF_.resize(static_cast<uint64_t>(N_F_) + 1);
+
+	// compute total size via parallel prefix sum
+	const uint64_t N_totalFF = tbb::parallel_scan(
+		tbb::blocked_range<uint32_t>(0, N_F_), uint64_t{ 0 },
+		[&](const tbb::blocked_range<uint32_t>& r, uint64_t sum, const bool isFinal)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				if (isFinal)
+				{
+					nbrOffsetsFF_[i] = sum;
+				}
+				sum += static_cast<uint64_t>(nbrTempFF_[i].size());
+			}
+			return sum;
+		},
+		[](const uint64_t a, const uint64_t b) { return a + b; }
+	);
+
+	// finalize total fluid neighbor count
+	nbrOffsetsFF_[N_F_] = N_totalFF;
+	if (nbrListFF_.capacity() < N_totalFF)
+	{
+		const uint64_t capTarget = N_totalFF
+			+ Base::ExtraPercent(N_totalFF, extraAllocCapacityPct_);
+		nbrListFF_.reserve(capTarget);
+	}
+	nbrListFF_.resize(N_totalFF);
+
+	// concatenate individual lists into final CSR neighbor storage
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				const auto& src = nbrTempFF_[i];
+				const uint64_t base = nbrOffsetsFF_[i];
+				const uint32_t count = static_cast<uint32_t>(src.size());
+
+				if (count)
+				{
+					std::memcpy(nbrListFF_.data() + base, src.data(),
+						count * sizeof(uint32_t));
+				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// --- [ build CSR neighbor storage for for FB ] ---------------------------
+
+	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1);
+
+	// compute total size via parallel prefix sum
+	const uint64_t N_totalFB = tbb::parallel_scan(
+		tbb::blocked_range<uint32_t>(0, N_F_), uint64_t{ 0 },
+		[&](const tbb::blocked_range<uint32_t>& r, uint64_t sum, const bool isFinal)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				if (isFinal)
+				{
+					nbrOffsetsFB_[i] = sum;
+				}
+				sum += static_cast<uint64_t>(nbrTempFB_[i].size());
+			}
+			return sum;
+		},
+		[](const uint64_t a, const uint64_t b) { return a + b; }
+	);
+
+	// finalize total boundary neighbor count
+	nbrOffsetsFB_[N_F_] = N_totalFB;
+	if (nbrListFB_.capacity() < N_totalFB)
+	{
+		const uint64_t capTarget = N_totalFB
+			+ Base::ExtraPercent(N_totalFB, extraAllocCapacityPct_);
+		nbrListFB_.reserve(capTarget);
+	}
+	nbrListFB_.resize(N_totalFB);
+
+	// concatenate individual lists into final CSR neighbor storage
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				const auto& src = nbrTempFB_[i];
+				const uint64_t base = nbrOffsetsFB_[i];
+				const uint32_t count = static_cast<uint32_t>(src.size());
+
+				if (count)
+				{
+					std::memcpy(nbrListFB_.data() + base, src.data(),
+						count * sizeof(uint32_t));
+				}
 			}
 		},
 		tbb::auto_partitioner{}
 	);
 }
 
-void NeighborLists_SmallBuffers_CPU01::Finalize()
-{
-	// nothing to do
-}
-
-void NeighborLists_SmallBuffers_CPU01::SetNbrListFF(
+void NeighborLists_CSRVector_FinalConcat_CPU01::SetNbrListFF(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	if (count == 0) { neighborsFF_[i].clear(); return; }
+	if (count == 0) { nbrTempFF_[i].clear(); return; }
 
 	// overwrite and resize combined
-	neighborsFF_[i].assign(js, js + count);
+	nbrTempFF_[i].assign(js, js + count);
 }
 
-void NeighborLists_SmallBuffers_CPU01::SetNbrListFB(
+void NeighborLists_CSRVector_FinalConcat_CPU01::SetNbrListFB(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	if (count == 0) { neighborsFB_[i].clear(); return; }
+	if (count == 0) { nbrTempFB_[i].clear(); return; }
 
 	// overwrite and resize combined
-	neighborsFB_[i].assign(js, js + count);
+	nbrTempFB_[i].assign(js, js + count);
 }
 
-NeighborSpan NeighborLists_SmallBuffers_CPU01::FF(
+NeighborSpan NeighborLists_CSRVector_FinalConcat_CPU01::FF(
 	const uint32_t i) const
 {
-	const auto& nbrs = neighborsFF_[i];
-	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
+	// start and end offsets of the neighbor list for fluid particle i
+	const uint64_t s = nbrOffsetsFF_[i];
+	const uint64_t e = nbrOffsetsFF_[i + 1];
+	const uint32_t count = static_cast<uint32_t>(e - s);
+
+	return NeighborSpan{ nbrListFF_.data() + s, count };
 }
 
-NeighborSpan NeighborLists_SmallBuffers_CPU01::FB(
+NeighborSpan NeighborLists_CSRVector_FinalConcat_CPU01::FB(
 	const uint32_t i) const
 {
-	const auto& nbrs = neighborsFB_[i];
-	return NeighborSpan{ nbrs.data(), static_cast<uint32_t>(nbrs.size()) };
+	// start and end offsets of the neighbor list for boundary particle i
+	const uint64_t s = nbrOffsetsFB_[i];
+	const uint64_t e = nbrOffsetsFB_[i + 1];
+	const uint32_t count = static_cast<uint32_t>(e - s);
+
+	return NeighborSpan{ nbrListFB_.data() + s, count };
 }
 
-std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_SmallBuffers_CPU01::GetMemUsage(
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_CSRVector_FinalConcat_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	Mem::MemUsage usageFF{};
 	Mem::MemUsage usageFB{};
 
-	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfSmallVector<
-		uint32_t, N_expctNbrCountF>(neighborsFF_));
-	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfSmallVector<
-		uint32_t, N_expctNbrCountB>(neighborsFB_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrTempFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrOffsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrTempFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrOffsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListFB_));
 
 	return { usageFF, usageFB };
 }
 
-// -----------------------------------------------------------------------------
-// --- [ fixed arrays neighbor lists ] -----------------------------------------
-// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// --- [ CSR vector neighbor lists, double query ] -------------------------
+// -------------------------------------------------------------------------
 
-void NeighborLists_FixedArrays_CPU01::Resize(
+void NeighborLists_CSRVector_DoubleQuery_CPU01::Resize(
+	const uint32_t N_F, const uint32_t N_B)
+{
+	N_F_ = N_F;
+	N_B_ = N_B;
+
+	nbrOffsetsFF_.assign(static_cast<uint64_t>(N_F_) + 1, 0);
+	nbrOffsetsFB_.assign(static_cast<uint64_t>(N_F_) + 1, 0);
+	nbrListFF_.clear();
+	nbrListFB_.clear();
+}
+
+void NeighborLists_CSRVector_DoubleQuery_CPU01::ClearAll()
+{
+	// TODO: .assign() instead of only .resize() to make sure values are overwritten?
+	nbrOffsetsFF_.resize(static_cast<uint64_t>(N_F_) + 1);
+	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1);
+	nbrListFF_.clear();
+	nbrListFB_.clear();
+}
+
+void NeighborLists_CSRVector_DoubleQuery_CPU01::Finalize_Count()
+{
+	if (N_F_ == 0) // nothing to do for empty sim
+	{
+		nbrOffsetsFF_.assign(1, 0);
+		nbrOffsetsFB_.assign(1, 0);
+		nbrListFF_.clear();
+		nbrListFB_.clear();
+		return;
+	}
+
+	// turn temporary counts into actual offsets for FF
+	const uint64_t N_totalFF = tbb::parallel_scan(
+		tbb::blocked_range<uint32_t>(0, N_F_), uint64_t{ 0 },
+		[&](const tbb::blocked_range<uint32_t>& r, uint64_t sum, const bool isFinal)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// neighbor counts stored by count-query
+				const uint64_t count = nbrOffsetsFF_[i];
+
+				// now become CSR offset
+				if (isFinal) { nbrOffsetsFF_[i] = sum; }
+
+				sum += count;
+			}
+			return sum;
+		},
+		[](const uint64_t a, const uint64_t b) { return a + b; }
+	);
+
+	// finalize total fluid neighbor count
+	nbrOffsetsFF_[N_F_] = N_totalFF;
+	if (nbrListFF_.capacity() < N_totalFF)
+	{
+		const uint64_t capTarget = N_totalFF
+			+ Base::ExtraPercent(N_totalFF, extraAllocCapacityPct_);
+		nbrListFF_.reserve(capTarget);
+	}
+	nbrListFF_.resize(N_totalFF);
+
+	// turn temporary counts into actual offsets for FB
+	const uint64_t N_totalFB = tbb::parallel_scan(
+		tbb::blocked_range<uint32_t>(0, N_F_), uint64_t{ 0 },
+		[&](const tbb::blocked_range<uint32_t>& r, uint64_t sum, const bool isFinal)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// neighbor counts stored by count-query
+				const uint64_t count = nbrOffsetsFB_[i];
+
+				// now become CSR offset
+				if (isFinal) { nbrOffsetsFB_[i] = sum; }
+
+				sum += count;
+			}
+			return sum;
+		},
+		[](const uint64_t a, const uint64_t b) { return a + b; }
+	);
+
+	// finalize total boundary neighbor count
+	nbrOffsetsFB_[N_F_] = N_totalFB;
+	if (nbrListFB_.capacity() < N_totalFB)
+	{
+		const uint64_t capTarget = N_totalFB
+			+ Base::ExtraPercent(N_totalFB, extraAllocCapacityPct_);
+		nbrListFB_.reserve(capTarget);
+	}
+	nbrListFB_.resize(N_totalFB);
+}
+
+void NeighborLists_CSRVector_DoubleQuery_CPU01::SetNbrCountFF(
+	const uint32_t i, const uint32_t count)
+{
+	nbrOffsetsFF_[i] = static_cast<uint64_t>(count);
+}
+
+void NeighborLists_CSRVector_DoubleQuery_CPU01::SetNbrCountFB(
+	const uint32_t i, const uint32_t count)
+{
+	nbrOffsetsFB_[i] = static_cast<uint64_t>(count);
+}
+
+void NeighborLists_CSRVector_DoubleQuery_CPU01::SetNbrListFF(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	// (count-query and fill-query MUST find the same number of neighbors)
+	const uint64_t s = nbrOffsetsFF_[i];
+
+	if (count)
+	{
+		std::memcpy(nbrListFF_.data() + s, js, 
+			count * sizeof(uint32_t));
+	}
+}
+
+void NeighborLists_CSRVector_DoubleQuery_CPU01::SetNbrListFB(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	// (count-query and fill-query MUST find the same number of neighbors)
+	const uint64_t s = nbrOffsetsFB_[i];
+
+	if (count)
+	{
+		std::memcpy(nbrListFB_.data() + s, js,
+			count * sizeof(uint32_t));
+	}
+}
+
+NeighborSpan NeighborLists_CSRVector_DoubleQuery_CPU01::FF(
+	const uint32_t i) const
+{
+	// start and end offsets of the neighbor list for fluid particle i
+	const uint64_t s = nbrOffsetsFF_[i];
+	const uint64_t e = nbrOffsetsFF_[i + 1];
+	const uint32_t count = static_cast<uint32_t>(e - s);
+
+	return NeighborSpan{ nbrListFF_.data() + s, count };
+}
+
+NeighborSpan NeighborLists_CSRVector_DoubleQuery_CPU01::FB(
+	const uint32_t i) const
+{
+	// start and end offsets of the neighbor list for boundary particle i
+	const uint64_t s = nbrOffsetsFB_[i];
+	const uint64_t e = nbrOffsetsFB_[i + 1];
+	const uint32_t count = static_cast<uint32_t>(e - s);
+
+	return NeighborSpan{ nbrListFB_.data() + s, count };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_CSRVector_DoubleQuery_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
+
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrOffsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrOffsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListFB_));
+
+	return { usageFF, usageFB };
+}
+
+// -------------------------------------------------------------------------
+// --- [ individual vectors neighbor lists, adaptive compression ] ---------
+// -------------------------------------------------------------------------
+
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B)
 {
 	N_F_ = N_F;
@@ -213,11 +521,24 @@ void NeighborLists_FixedArrays_CPU01::Resize(
 	nbrCountFF_.assign(N_F_, 0);
 	nbrCountFB_.assign(N_F_, 0);
 
-	neighborsFF_.resize(static_cast<size_t>(N_F_) * N_MAX_FF_);
-	neighborsFB_.resize(static_cast<size_t>(N_F_) * N_MAX_FB_);
+	nbrListCompressedFF_.resize(N_F_);
+	nbrListCompressedFB_.resize(N_F_);
+
+	// reserve expected capacities to reduce re-allocations
+	// (single-threaded to minimize fragmentation and alloc contention)
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		nbrListCompressedFF_[i].reserve(
+			1 + 4 + (N_expctNbrCountF - 1) * expctBytesPerNbrCeil_);
+		nbrListCompressedFB_[i].reserve(
+			1 + 4 + (N_expctNbrCountB - 1) * expctBytesPerNbrCeil_);
+
+		nbrListCompressedFF_[i].clear();
+		nbrListCompressedFB_[i].clear();
+	}
 }
 
-void NeighborLists_FixedArrays_CPU01::ClearAll()
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::ClearAll()
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
@@ -227,263 +548,269 @@ void NeighborLists_FixedArrays_CPU01::ClearAll()
 			{
 				nbrCountFF_[i] = 0;
 				nbrCountFB_[i] = 0;
+
+				nbrListCompressedFF_[i].clear();
+				nbrListCompressedFB_[i].clear();
 			}
 		},
 		tbb::auto_partitioner{}
 	);
 }
 
-void NeighborLists_FixedArrays_CPU01::Finalize()
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::SetNbrListFF(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	// nothing to do
-}
-
-void NeighborLists_FixedArrays_CPU01::SetNbrListFF(
-	const uint32_t i, const uint32_t* js, uint32_t count)
-{
-	// clamp to max size
-	count = std::min(count, N_MAX_FF_);
 	nbrCountFF_[i] = count;
 
-	const uint64_t base = static_cast<uint64_t>(i) * N_MAX_FF_;
-	if (count)
-	{
-		std::memcpy(neighborsFF_.data() + base, js, sizeof(uint32_t) * count);
-	}
+	auto& dst = nbrListCompressedFF_[i];
+	auto& scratch = sortScratchFF_.local();
+
+	EncodeNeighborList(dst, js, count, scratch);
 }
 
-void NeighborLists_FixedArrays_CPU01::SetNbrListFB(
-	const uint32_t i, const uint32_t* js, uint32_t count)
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::SetNbrListFB(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	// clamp to max size
-	count = std::min(count, N_MAX_FB_);
 	nbrCountFB_[i] = count;
 
-	const uint64_t base = static_cast<uint64_t>(i) * N_MAX_FB_;
-	if (count)
+	auto& dst = nbrListCompressedFB_[i];
+	auto& scratch = sortScratchFB_.local();
+
+	EncodeNeighborList(dst, js, count, scratch);
+}
+
+NeighborSpan NeighborLists_IndividualVectors_AdaptCompress_CPU01::FF(
+	const uint32_t i) const
+{
+	const uint32_t count = nbrCountFF_[i];
+	if (count == 0)
 	{
-		std::memcpy(neighborsFB_.data() + base, js, sizeof(uint32_t) * count);
+		return NeighborSpan{ nullptr, 0 };
 	}
+
+	const auto& src = nbrListCompressedFF_[i];
+
+	// decode into per-thread scratch
+	auto& out = nbrScratchFF_.local();
+	DecodeToU32(src, count, out);
+
+	return NeighborSpan{ out.data(), count };
 }
 
-NeighborSpan NeighborLists_FixedArrays_CPU01::FF(
+NeighborSpan NeighborLists_IndividualVectors_AdaptCompress_CPU01::FB(
 	const uint32_t i) const
 {
-	const uint64_t base = static_cast<uint64_t>(i) * N_MAX_FF_;
-	const uint32_t counter = nbrCountFF_[i];
+	const uint32_t count = nbrCountFB_[i];
+	if (count == 0)
+	{
+		return NeighborSpan{ nullptr, 0 };
+	}
 
-	// data pointer to the start of the neighbor list for particle i and its size
-	return NeighborSpan{ neighborsFF_.data() + base, counter};
+	const auto& src = nbrListCompressedFB_[i];
+
+	// decode into per-thread scratch
+	auto& out = nbrScratchFB_.local();
+	DecodeToU32(src, count, out);
+
+	return NeighborSpan{ out.data(), count };
 }
 
-NeighborSpan NeighborLists_FixedArrays_CPU01::FB(
-	const uint32_t i) const
-{
-	const uint64_t base = static_cast<uint64_t>(i) * N_MAX_FB_;
-	const uint32_t counter = nbrCountFB_[i];
-
-	// data pointer to the start of the neighbor list for particle i and its size
-	return NeighborSpan{ neighborsFB_.data() + base, counter };
-}
-
-std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_FixedArrays_CPU01::GetMemUsage(
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_IndividualVectors_AdaptCompress_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	Mem::MemUsage usageFF{};
 	Mem::MemUsage usageFB{};
 
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(neighborsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(nbrListCompressedFF_));
 
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(neighborsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(nbrListCompressedFB_));
 
 	return { usageFF, usageFB };
 }
 
-// -----------------------------------------------------------------------------
-// --- [ compact vectors neighbor lists ] --------------------------------------
-// -----------------------------------------------------------------------------
-
-void NeighborLists_CompactVectors_CPU01::Resize(
-	const uint32_t N_F, const uint32_t N_B)
+uint8_t NeighborLists_IndividualVectors_AdaptCompress_CPU01::ChooseWidthCode(
+	const uint32_t maxDelta) noexcept
 {
-	N_F_ = N_F;
-	N_B_ = N_B;
-
-	// temporary 2D vector structure
-	tmpFF_.clear();
-	tmpFB_.clear();
-	tmpFF_.resize(N_F_);
-	tmpFB_.resize(N_F_);
-
-	// compact vector structure
-	offsetsFF_.resize(N_F_ + 1, 0);
-	offsetsFB_.resize(N_F_ + 1, 0);
-	neighborsFF_.clear();
-	neighborsFB_.clear();
+	if (maxDelta <= 0xFFu) { return 0; }
+	if (maxDelta <= 0xFFFFu) { return 1; }
+	return 2;
 }
 
-void NeighborLists_CompactVectors_CPU01::ClearAll()
+uint32_t NeighborLists_IndividualVectors_AdaptCompress_CPU01::GetNumWidthBytes(
+	const uint8_t widthCode) noexcept
 {
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				tmpFF_[i].clear();
-				tmpFB_[i].clear();
-			}
-		},
-		tbb::auto_partitioner{}
-	);
+	if (widthCode == 0) { return 1u; }
+	if (widthCode == 1) { return 2u; }
+	return 4u;
 }
 
-void NeighborLists_CompactVectors_CPU01::Finalize()
+inline uint16_t NeighborLists_IndividualVectors_AdaptCompress_CPU01::ReadU16LE(
+	const uint8_t* src) noexcept
 {
-	if (N_F_ == 0) // nothing to do for empty sim
+	return static_cast<uint16_t>(src[0])
+		| (static_cast<uint16_t>(src[1]) << 8);
+}
+
+inline uint32_t NeighborLists_IndividualVectors_AdaptCompress_CPU01::ReadU32LE(
+	const uint8_t* src) noexcept
+{
+	return static_cast<uint32_t>(src[0])
+		| (static_cast<uint32_t>(src[1]) << 8)
+		| (static_cast<uint32_t>(src[2]) << 16)
+		| (static_cast<uint32_t>(src[3]) << 24);
+}
+
+inline void NeighborLists_IndividualVectors_AdaptCompress_CPU01::WriteU16LE(
+	uint8_t* dst, const uint16_t v) noexcept
+{
+	dst[0] = static_cast<uint8_t>(v);
+	dst[1] = static_cast<uint8_t>(v >> 8);
+}
+
+inline void NeighborLists_IndividualVectors_AdaptCompress_CPU01::WriteU32LE(
+	uint8_t* dst, const uint32_t v) noexcept
+{
+	dst[0] = static_cast<uint8_t>(v);
+	dst[1] = static_cast<uint8_t>(v >> 8);
+	dst[2] = static_cast<uint8_t>(v >> 16);
+	dst[3] = static_cast<uint8_t>(v >> 24);
+}
+
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::DecodeToU32(
+	const std::vector<uint8_t, uint8_tbb_alloc>& src, const uint32_t count,
+	std::vector<uint32_t>& out)
+{
+	if (count == 0)
 	{
-		offsetsFF_.assign(1, 0);
-		offsetsFB_.assign(1, 0);
-		neighborsFF_.clear();
-		neighborsFB_.clear();
-		
+		out.clear();
 		return;
 	}
 
-	// --- [ build compact vector for FF ] -------------------------------------
+	const uint8_t widthCode = src[0];
 
-	// build offsets via prefix sum
-	offsetsFF_[0] = 0;
-	uint64_t runningFF = 0;
-	for (uint32_t i = 0; i < N_F_; i++)
+	// expected size check (debug only)
+	#if defined(_DEBUG)
+	const uint64_t expectedBytes =
+		1ull + 4ull + static_cast<uint64_t>(count - 1) * GetNumWidthBytes(widthCode);
+	assert(src.size() == expectedBytes && "Compressed list size mismatch");
+	#endif
+
+	out.resize(count);
+
+	// encode width and first element
+	const uint8_t* p = src.data();
+	uint32_t v = ReadU32LE(p + 1);
+	out[0] = v;
+
+	// decode deltas of remaining elements relative to each other
+	const uint8_t* q = p + 1 + 4;
+	if (widthCode == 0)
 	{
-		offsetsFF_[i] = runningFF;
-		runningFF += static_cast<uint64_t>(tmpFF_[i].size());
-	}
-	offsetsFF_[N_F_] = runningFF;
-
-	// allocate flat neighbor storage
-	neighborsFF_.resize(runningFF);
-
-	// copy data from temp into final data structure
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
+		for (uint32_t k = 1; k < count; k++)
 		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				const uint64_t base = offsetsFF_[i];
-				const uint32_t count = static_cast<uint32_t>(tmpFF_[i].size());
-
-				if (count)
-				{
-					std::memcpy(neighborsFF_.data() + base, tmpFF_[i].data(),
-						count * sizeof(uint32_t));
-				}
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	// --- [ build compact vector for FB ] -------------------------------------
-
-	// build offsets via prefix sum
-	offsetsFB_[0] = 0;
-	uint64_t runningFB = 0;
-	for (uint32_t i = 0; i < N_F_; i++)
+			const uint32_t d = static_cast<uint32_t>(*q++);
+			v += d;
+			out[k] = v;
+		}
+	}
+	else if (widthCode == 1)
 	{
-		offsetsFB_[i] = runningFB;
-		runningFB += static_cast<uint64_t>(tmpFB_[i].size());
-	}
-	offsetsFB_[N_F_] = runningFB;
-
-	// allocate flat neighbor storage
-	neighborsFB_.resize(runningFB);
-
-	// copy data from temp into final data structure
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
+		for (uint32_t k = 1; k < count; k++)
 		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				const uint64_t base = offsetsFB_[i];
-				const uint32_t count = static_cast<uint32_t>(tmpFB_[i].size());
-
-				if (count)
-				{
-					std::memcpy(neighborsFB_.data() + base, tmpFB_[i].data(),
-						count * sizeof(uint32_t));
-				}
-			}
-		},
-		tbb::auto_partitioner{}
-	);
+			const uint32_t d = static_cast<uint32_t>(ReadU16LE(q));
+			q += 2;
+			v += d;
+			out[k] = v;
+		}
+	}
+	else
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			const uint32_t d = ReadU32LE(q);
+			q += 4;
+			v += d;
+			out[k] = v;
+		}
+	}
 }
 
-void NeighborLists_CompactVectors_CPU01::SetNbrListFF(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
+	std::vector<uint8_t, uint8_tbb_alloc>& dst, const uint32_t* js,
+	const uint32_t count, std::vector<uint32_t>& scratch)
 {
-	if (count == 0) { tmpFF_[i].clear(); return; }
+	if (count == 0)
+	{
+		dst.clear();
+		return;
+	}
 
-	// overwrite and resize combined
-	tmpFF_[i].assign(js, js + count);
+	// copy into thread-local scratch and sort to avoid negative deltas
+	scratch.assign(js, js + count);
+	std::sort(scratch.begin(), scratch.end());
+
+	// compute max delta (needed to choose encoding width)
+	uint32_t maxDelta = 0;
+	if (count > 1)
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			const uint32_t d = scratch[k] - scratch[k - 1];
+			maxDelta = std::max(d, maxDelta);
+		}
+	}
+
+	const uint8_t widthCode = ChooseWidthCode(maxDelta);
+	const uint32_t widthBytes = GetNumWidthBytes(widthCode);
+
+	// determine size of encoded data
+	const uint64_t requiredBytes = 1ull + 4ull + static_cast<uint64_t>(count - 1) * widthBytes;
+	dst.resize(requiredBytes);
+
+	// encode width and first element
+	uint8_t* p = dst.data();
+	p[0] = widthCode;
+	WriteU32LE(p + 1, scratch[0]);
+
+	// encode deltas of remaining elements relative to each other
+	uint8_t* q = p + 1 + 4;
+	if (widthCode == 0) // 1 byte
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			const uint32_t d = scratch[k] - scratch[k - 1];
+			*q++ = static_cast<uint8_t>(d);
+		}
+	}
+	else if (widthCode == 1) // 2 bytes
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			const uint32_t d = scratch[k] - scratch[k - 1];
+			WriteU16LE(q, static_cast<uint16_t>(d));
+			q += 2;
+		}
+	}
+	else // 4 bytes
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			const uint32_t d = scratch[k] - scratch[k - 1];
+			WriteU32LE(q, d);
+			q += 4;
+		}
+	}
+
+	#if defined(_DEBUG)
+	// make sure pointer arithmetic matches the expected size
+	assert(q == dst.data() + dst.size() && "Encoded byte count mismatch");
+	#endif
 }
 
-void NeighborLists_CompactVectors_CPU01::SetNbrListFB(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
-{
-	if (count == 0) { tmpFB_[i].clear(); return; }
-
-	// overwrite and resize combined
-	tmpFB_[i].assign(js, js + count);
-}
-
-NeighborSpan NeighborLists_CompactVectors_CPU01::FF(
-	const uint32_t i) const
-{
-	// start and end offsets of the neighbor list for fluid particle i
-	const uint64_t s = offsetsFF_[i];
-	const uint64_t e = offsetsFF_[i + 1];
-	const uint32_t count = static_cast<uint32_t>(e - s);
-
-	return NeighborSpan{ neighborsFF_.data() + s, count };
-}
-
-NeighborSpan NeighborLists_CompactVectors_CPU01::FB(
-	const uint32_t i) const
-{
-	// start and end offsets of the neighbor list for boundary particle i
-	const uint64_t s = offsetsFB_[i];
-	const uint64_t e = offsetsFB_[i + 1];
-	const uint32_t count = static_cast<uint32_t>(e - s);
-
-	return NeighborSpan{ neighborsFB_.data() + s, count };
-}
-
-std::pair<Mem::MemUsage, Mem::MemUsage> NeighborLists_CompactVectors_CPU01::GetMemUsage(
-	const SimParams& params) const
-{
-	Mem::MemUsage usageFF{};
-	Mem::MemUsage usageFB{};
-
-	// temporary construction storage
-	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfSmallVector<
-		uint32_t, N_expctNbrCountF>(tmpFF_));
-	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfSmallVector<
-		uint32_t, N_expctNbrCountB>(tmpFB_));
-
-	// compact storage
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(offsetsFF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(neighborsFF_));
-
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(offsetsFB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(neighborsFB_));
-
-	return { usageFF, usageFB };
-}
+/*
 
 // -----------------------------------------------------------------------------
 // --- [ compact vectors neighbor lists (ULEB128 compression of deltas) ] ------
@@ -1297,3 +1624,4 @@ void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::DecodeNeigh
 		prev = curr;
 	}
 }
+*/

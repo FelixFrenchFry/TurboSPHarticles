@@ -2,7 +2,7 @@
   "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 3,
-  "neighborListStorage": 1,
+  "neighborListStorage": 2,
 
   "maxSteps": -1,
   "timeStep": 0.001,
@@ -17,10 +17,10 @@
   "pressGamma": 0.5,
   "jacobiOmega": 0.5,
   "densityDevTarget": 0.01,
-  "fixedIters": 5,
+  "fixedIters": 10,
   "minSolverIters": 3,
   "maxSolverIters": 50,
-  "solverTerminationCond": 0,
+  "solverTerminationCond": 2,
 
   "dataReOrderInterval": 50,
   "jitterFracF": 0.0,

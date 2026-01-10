@@ -14,9 +14,6 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "cpu_backend_01.h"
-
-#include <iostream>
-
 #include "neighbor_lists.h"
 #include "neighbor_search.h"
 
@@ -24,9 +21,10 @@
 
 using namespace Sim;
 
-SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr,
+SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
+								   Bench::BenchmarksMgr& benchmarksMgr,
 								   const SimParams& params)
-	: benchmarksMgr_{ benchmarksMgr }
+	: simParamsMgr_{ simParamsMgr }, benchmarksMgr_{ benchmarksMgr }
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>();
 
@@ -61,31 +59,29 @@ SimBackend_CPU01::SimBackend_CPU01(Bench::BenchmarksMgr& benchmarksMgr,
 		Base::NeighborListStorage::IndividualVectors)
 	{
 		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_CPU01>();
+		simParamsMgr_.Set_RunCountQuery(false);
+		simParamsMgr_.Set_RunFillQuery(true);
 	}
 	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::SmallBuffers)
+		Base::NeighborListStorage::CSRVector_FinalConcat)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_SmallBuffers_CPU01>();
+		neighborLists_ = std::make_unique<NeighborLists_CSRVector_FinalConcat_CPU01>();
+		simParamsMgr_.Set_RunCountQuery(false);
+		simParamsMgr_.Set_RunFillQuery(true);
 	}
 	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::FixedArrays)
+		Base::NeighborListStorage::CSRVector_DoubleQuery)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_FixedArrays_CPU01>();
+		neighborLists_ = std::make_unique<NeighborLists_CSRVector_DoubleQuery_CPU01>();
+		simParamsMgr_.Set_RunCountQuery(true);
+		simParamsMgr_.Set_RunFillQuery(true);
 	}
 	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::CompactVectors)
+		Base::NeighborListStorage::IndividualVectors_AdaptCompress)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_CompactVectors_CPU01>();
-	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::CompactVectors_Compressed_ULEB128)
-	{
-		neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_ULEB128_CPU01>();
-	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::CompactVectors_Compressed_StreamVByteDelta)
-	{
-		neighborLists_ = std::make_unique<NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01>();
+		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_AdaptCompress_CPU01>();
+		simParamsMgr_.Set_RunCountQuery(false);
+		simParamsMgr_.Set_RunFillQuery(true);
 	}
 	else
 	{
@@ -915,17 +911,31 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)
 {
-	if (bench) { benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction }); }
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborSearchStrat_->Construct(params);
-	if (bench) { benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction }); }
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	if (bench) { benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query }); }
-	neighborSearchStrat_->Query(params);
-	if (bench) { benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query }); }
+	if (params.runCountQuery)
+	{
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Count(params);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+	}
 
-	if (bench) { benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction }); }	
-	neighborLists_->Finalize();
-	if (bench) { benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction }); }
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	neighborLists_->Finalize_Count();
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+
+	if (params.runFillQuery)
+	{
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Fill(params);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+	}
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	neighborLists_->Finalize_Fill();
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 }
 
 void SimBackend_CPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)

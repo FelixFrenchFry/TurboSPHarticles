@@ -26,8 +26,10 @@ namespace Base
 	{
 		switch (v)
 		{
-		case BackendVersion::CPU01: return "CPU01";
-		case BackendVersion::GPU01: return "GPU01";
+		case BackendVersion::CPU01:
+			return "CPU01";
+		case BackendVersion::GPU01:
+			return "GPU01";
 		}
 		return "BackendVersion::<unknown>";
 	}
@@ -43,10 +45,14 @@ namespace Base
 	{
 		switch (v)
 		{
-		case ScenarioType::BreakingDam: return "BreakingDam";
-		case ScenarioType::ConvergingDam: return "ConvergingDam";
-		case ScenarioType::BigDroplet: return "BigDroplet";
-		case ScenarioType::SmallDroplets: return "SmallDroplets";
+		case ScenarioType::BreakingDam:
+			return "BreakingDam";
+		case ScenarioType::ConvergingDam:
+			return "ConvergingDam";
+		case ScenarioType::BigDroplet:
+			return "BigDroplet";
+		case ScenarioType::SmallDroplets:
+			return "SmallDroplets";
 		}
 		return "ScenarioType::<unknown>";
 	}
@@ -55,21 +61,21 @@ namespace Base
 	{
 		BruteForce,				// 0
 		SpatialHashing_Basic,	// 1
-		// derived from paper:
-		// "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013)
-		CellLinkedList_Basic,	// 2
-		// derived from paper:
-		// "Compressed Neighbor Lists for SPH" (2019)
-		CellLinkedList_Compact	// 3
+		CellLinkedList_Basic,	// 2 (derived from paper: "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013))
+		CellLinkedList_Compact	// 3 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
 	};
 	constexpr const char* ToCString(NeighborSearchMethod v) noexcept
 	{
 		switch (v)
 		{
-		case NeighborSearchMethod::BruteForce: return "BruteForce";
-		case NeighborSearchMethod::SpatialHashing_Basic: return "SpatialHashing_Basic";
-		case NeighborSearchMethod::CellLinkedList_Basic: return "CellLinkedList_Basic";
-		case NeighborSearchMethod::CellLinkedList_Compact: return "CellLinkedList_Compact";
+		case NeighborSearchMethod::BruteForce: return
+			"BruteForce";
+		case NeighborSearchMethod::SpatialHashing_Basic: return
+			"SpatialHashing_Basic";
+		case NeighborSearchMethod::CellLinkedList_Basic: return
+			"CellLinkedList_Basic";
+		case NeighborSearchMethod::CellLinkedList_Compact: return
+			"CellLinkedList_Compact";
 		}
 		return "NeighborSearchMethod::<unknown>";
 	}
@@ -77,24 +83,31 @@ namespace Base
 	enum class NeighborListStorage : uint8_t
 	{
 		IndividualVectors,							// 0
-		SmallBuffers,								// 1
-		FixedArrays,								// 2
-		CompactVectors,								// 3
-		CompactVectors_Compressed_ULEB128,			// 4
-		// derived from paper:
-		// "Compressed Neighbor Lists for SPH" (2019)
-		CompactVectors_Compressed_StreamVByteDelta	// 5
+		CSRVector_FinalConcat,						// 1
+		CSRVector_DoubleQuery,						// 2
+		IndividualVectors_AdaptCompress,			// 3
+		IndividualVectors_VByteDerivedCompress,		// 4
+		CSRVector_FinalConcat_ULEB128Compress,		// 5
+		CSRVector_FinalConcat_VByteDerivedCompress	// 6 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
 	};
 	constexpr const char* ToCString(NeighborListStorage v) noexcept
 	{
 		switch (v)
 		{
-		case NeighborListStorage::IndividualVectors: return "IndividualVectors";
-		case NeighborListStorage::SmallBuffers: return "SmallBuffers";
-		case NeighborListStorage::FixedArrays: return "FixedArrays";
-		case NeighborListStorage::CompactVectors: return "CompactVectors";
-		case NeighborListStorage::CompactVectors_Compressed_ULEB128: return "CompactVectors_Compressed_ULEB128";
-		case NeighborListStorage::CompactVectors_Compressed_StreamVByteDelta: return "CompactVectors_Compressed_StreamVByteDelta";
+		case NeighborListStorage::IndividualVectors:
+			return "IndividualVectors";
+		case NeighborListStorage::CSRVector_FinalConcat:
+			return "CSRVector_FinalConcat";
+		case NeighborListStorage::CSRVector_DoubleQuery:
+			return "CSRVector_DoubleQuery";
+		case NeighborListStorage::IndividualVectors_AdaptCompress:
+			return "IndividualVectors_AdaptCompress";
+		case NeighborListStorage::IndividualVectors_VByteDerivedCompress:
+			return "IndividualVectors_VByteDerivedCompress";
+		case NeighborListStorage::CSRVector_FinalConcat_ULEB128Compress:
+			return "CSRVector_FinalConcat_ULEB128Compress";
+		case NeighborListStorage::CSRVector_FinalConcat_VByteDerivedCompress:
+			return "CSRVector_FinalConcat_VByteDerivedCompress";
 		}
 		return "NeighborListStorage::<unknown>";
 	}
@@ -110,10 +123,14 @@ namespace Base
 	{
 		switch (v)
 		{
-		case SolverTerminationCond::FixedIters: return "FixedIters";
-		case SolverTerminationCond::RelDensityError_Raw: return "RelDensityError_Raw";
-		case SolverTerminationCond::RelDensityError_Pos: return "RelDensityError_Pos";
-		case SolverTerminationCond::RelDensityError_Abs: return "RelDensityError_Abs";
+		case SolverTerminationCond::FixedIters:
+			return "FixedIters";
+		case SolverTerminationCond::RelDensityError_Raw:
+			return "RelDensityError_Raw";
+		case SolverTerminationCond::RelDensityError_Pos:
+			return "RelDensityError_Pos";
+		case SolverTerminationCond::RelDensityError_Abs:
+			return "RelDensityError_Abs";
 		}
 		return "SolverTerminationCond::<unknown>";
 	}

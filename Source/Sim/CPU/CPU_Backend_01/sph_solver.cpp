@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include "spdlog/spdlog.h"
 #include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
@@ -14,7 +15,6 @@
 #include "neighbor_search.h"
 #include "cpu_backend_01.h"
 #include "sph_solver.h"
-
 #if defined(_MSC_VER)
 	#define RESTRICT __restrict
 #elif defined(__GNUC__) || defined(__clang__)
@@ -92,12 +92,26 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	neighborSearchStrat_->Construct(params);
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
-	neighborSearchStrat_->Query(params);
-	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+	if (params.runCountQuery)
+	{
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Count(params);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+	}
 
 	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-	neighborLists_->Finalize();
+	neighborLists_->Finalize_Count();
+	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+
+	if (params.runFillQuery)
+	{
+		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Fill(params);
+		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
+	}
+
+	benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	neighborLists_->Finalize_Fill();
 	benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 	// --- [ density computations ] --------------------------------------------

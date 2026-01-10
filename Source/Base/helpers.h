@@ -174,6 +174,12 @@ namespace Base
         return diff <= rel_epsilon * fmaxf(std::fabs(a), std::fabs(b));
     }
 
+    // returns ceil(n * pct / 100) using pure integer math
+    constexpr uint64_t ExtraPercent(uint64_t n, uint32_t pct) noexcept
+	{
+        return (n * pct + 99u) / 100u;
+    }
+
     template <class T>
     static void ReleaseVectorMemory(std::vector<T>& v)
     {

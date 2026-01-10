@@ -43,7 +43,7 @@ void NS_BruteForce_GPU01::Construct(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-void NS_BruteForce_GPU01::Query(const SimParams& params)
+void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
 {
 	GPU01::Launch_BruteForce_Query(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
@@ -319,7 +319,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Basic_GPU01::Query(const SimParams& params)
+void NS_CellLinkedList_Basic_GPU01::Query_Fill(const SimParams& params)
 {
 	// reset per-particle counts/overflow before filling
 	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
@@ -477,7 +477,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Compact_GPU01::Query(const SimParams& params)
+void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 {
 	// reset per-particle counts/overflow before filling
 	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);

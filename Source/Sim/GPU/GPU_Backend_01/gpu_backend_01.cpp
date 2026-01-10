@@ -17,9 +17,9 @@
 
 using namespace Sim;
 
-SimBackend_GPU01::SimBackend_GPU01(Bench::BenchmarksMgr& benchmarksMgr,
-								   const SimParams& params)
-	: benchmarksMgr_{ benchmarksMgr }
+SimBackend_GPU01::SimBackend_GPU01(
+	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksMgr& benchmarksMgr, const SimParams& params)
+	: simParamsMgr_{ simParamsMgr }, benchmarksMgr_ { benchmarksMgr }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
 
@@ -376,7 +376,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 		benchmarksMgr_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		neighborSearchStrat_->Query(params);
+		neighborSearchStrat_->Query_Fill(params);
 		benchmarksMgr_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 		// --- [ density computations ] ----------------------------------------

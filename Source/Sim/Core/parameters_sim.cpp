@@ -100,10 +100,14 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
-				if (s == "BruteForce") { out = Base::NeighborSearchMethod::BruteForce; return true; }
-				if (s == "SpatialHashing_Basic") { out = Base::NeighborSearchMethod::SpatialHashing_Basic; return true; }
-				if (s == "CellLinkedList_Basic") { out = Base::NeighborSearchMethod::CellLinkedList_Basic; return true; }
-				if (s == "CellLinkedList_Compact") { out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
+				if (s == "BruteForce")
+					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
+				if (s == "SpatialHashing_Basic")
+					{ out = Base::NeighborSearchMethod::SpatialHashing_Basic; return true; }
+				if (s == "CellLinkedList_Basic")
+					{ out = Base::NeighborSearchMethod::CellLinkedList_Basic; return true; }
+				if (s == "CellLinkedList_Compact")
+					{ out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -119,12 +123,20 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
-				if (s == "IndividualVectors") { out = Base::NeighborListStorage::IndividualVectors; return true; }
-				if (s == "SmallBuffers") { out = Base::NeighborListStorage::SmallBuffers; return true; }
-				if (s == "FixedArrays") { out = Base::NeighborListStorage::FixedArrays; return true; }
-				if (s == "CompactVectors") { out = Base::NeighborListStorage::CompactVectors; return true; }
-				if (s == "CompactVectors_Compressed_ULEB128") { out = Base::NeighborListStorage::CompactVectors_Compressed_ULEB128; return true; }
-				if (s == "CompactVectors_Compressed_StreamVByteDelta") { out = Base::NeighborListStorage::CompactVectors_Compressed_StreamVByteDelta; return true; }
+				if (s == "IndividualVectors")
+					{ out = Base::NeighborListStorage::IndividualVectors; return true; }
+				if (s == "CSRVector_FinalConcat")
+					{ out = Base::NeighborListStorage::CSRVector_FinalConcat; return true; }
+				if (s == "CSRVector_DoubleQuery")
+					{ out = Base::NeighborListStorage::CSRVector_DoubleQuery; return true; }
+				if (s == "IndividualVectors_AdaptCompress")
+					{ out = Base::NeighborListStorage::IndividualVectors_AdaptCompress; return true; }
+				if (s == "IndividualVectors_VByteDerivedCompress")
+					{ out = Base::NeighborListStorage::IndividualVectors_VByteDerivedCompress; return true; }
+				if (s == "CSRVector_FinalConcat_ULEB128Compress")
+					{ out = Base::NeighborListStorage::CSRVector_FinalConcat_ULEB128Compress; return true; }
+				if (s == "CSRVector_FinalConcat_VByteDerivedCompress")
+					{ out = Base::NeighborListStorage::CSRVector_FinalConcat_VByteDerivedCompress; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -307,10 +319,14 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				if (v.is_string())
 				{
 					const std::string s = v.get<std::string>();
-					if (s == "FixedIters") { out = Base::SolverTerminationCond::FixedIters; return true; }
-					if (s == "RelDensityError_Raw") { out = Base::SolverTerminationCond::RelDensityError_Raw; return true; }
-					if (s == "RelDensityError_Pos") { out = Base::SolverTerminationCond::RelDensityError_Pos; return true; }
-					if (s == "RelDensityError_Abs") { out = Base::SolverTerminationCond::RelDensityError_Abs; return true; }
+					if (s == "FixedIters")
+						{ out = Base::SolverTerminationCond::FixedIters; return true; }
+					if (s == "RelDensityError_Raw")
+						{ out = Base::SolverTerminationCond::RelDensityError_Raw; return true; }
+					if (s == "RelDensityError_Pos")
+						{ out = Base::SolverTerminationCond::RelDensityError_Pos; return true; }
+					if (s == "RelDensityError_Abs")
+						{ out = Base::SolverTerminationCond::RelDensityError_Abs; return true; }
 					return false;
 				}
 				else if (v.is_number_integer())
@@ -495,6 +511,46 @@ bool SimParamsMgr::LoadSimParamsFromProfile(const std::string& profile, bool ver
 	}
 
 	return LoadSimParamsFromJson(j, verbose);
+}
+
+void SimParamsMgr::Set_RunCountQuery(
+	bool runCountQuery, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(runCountQuery, params_.runCountQuery, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'runCountQuery' from {} to {}",
+			params_.runCountQuery, runCountQuery);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.runCountQuery = runCountQuery;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_RunFillQuery(
+	bool runFillQuery, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(runFillQuery, params_.runFillQuery, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'runFillQuery' from {} to {}",
+			params_.runFillQuery, runFillQuery);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.runFillQuery = runFillQuery;
+	EndWrite();
 }
 
 void SimParamsMgr::Set_SimRunning(

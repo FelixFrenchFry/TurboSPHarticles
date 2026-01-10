@@ -75,7 +75,75 @@ void NS_BruteForce_CPU01::Construct(const SimParams& params)
 	// nothing
 }
 
-void NS_BruteForce_CPU01::Query(const SimParams& params)
+void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t cntFF = 0;
+				uint32_t cntFB = 0;
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// check all fluid particles j
+				for (uint32_t j = 0; j < N_F; j++)
+				{
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+
+					// squared distance between particles i and j
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						cntFF++;
+					}
+				}
+
+				// check all boundary particles j
+				for (uint32_t j = 0; j < N_B; j++)
+				{
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+
+					// squared distance between particles i and j
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						cntFB++;
+					}
+				}
+
+				// commit final neighbor counts to backend storage
+				be_.neighborLists_->SetNbrCountFF(i, cntFF);
+				be_.neighborLists_->SetNbrCountFB(i, cntFB);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -262,7 +330,108 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_SpatialHashing_Basic_CPU01::Query(const SimParams& params)
+void NS_SpatialHashing_Basic_CPU01::Query_Count(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t cntFF = 0;
+				uint32_t cntFB = 0;
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// cell ID of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_);
+				const int cyi = FloorToInt(yi * cellSizeInv_);
+				const int czi = FloorToInt(zi * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							// current cell key
+							const uint64_t key = PackKey(cxi + rx,
+														 cyi + ry,
+														 czi + rz);
+
+							// fluid particles
+							if (auto bucket = cellGridF_.find(key);
+								bucket != cellGridF_.end())
+							{
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const float dx = xi - xPosF[j];
+									const float dy = yi - yPosF[j];
+									const float dz = zi - zPosF[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										cntFF++;
+									}
+								}
+							}
+
+							// boundary particles
+							if (auto bucket = cellGridB_.find(key);
+								bucket != cellGridB_.end())
+							{
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const float dx = xi - xPosB[j];
+									const float dy = yi - yPosB[j];
+									const float dz = zi - zPosB[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										cntFB++;
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// commit final neighbor counts to backend storage
+				be_.neighborLists_->SetNbrCountFF(i, cntFF);
+				be_.neighborLists_->SetNbrCountFB(i, cntFB);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -700,7 +869,131 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Basic_CPU01::Query(const SimParams& params)
+void NS_CellLinkedList_Basic_CPU01::Query_Count(const SimParams& params)
+{
+	// TODO: instead of iterating over particles in the outermost loop,
+	// TODO: iterate over cells and their particles, because for all particles
+	// TODO: in a cell, the neighboring cells and neighbor candidates are the same?
+
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t cntFF = 0;
+				uint32_t cntFB = 0;
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// cell coordinates of particle i
+				const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+				const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+				const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					int cz = czi + rz; // target cell coordinate in z-direction
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						int cy = cyi + ry; // target cell coordinate in y-direction
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							int cx = cxi + rx; // target cell coordinate in x-direction
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+							// cell ID
+							const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
+																   static_cast<uint32_t>(cy),
+																   static_cast<uint32_t>(cz));
+
+							// check fluid candidates
+							const uint32_t sF = cellStartIdxF_[cid];
+							const uint32_t eF = cellEndIdxF_[cid];
+							if (sF != EMPTY && eF != EMPTY)
+							{
+								// check all neighbor candidates in the cell
+								for (uint32_t k = sF; k < eF; k++)
+								{
+									// index of neighbor candidate
+									const uint32_t j = sortedParticleIdxF_[k];
+
+									// position difference
+									const float dx = xi - xPosF[j];
+									const float dy = yi - yPosF[j];
+									const float dz = zi - zPosF[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										cntFF++;
+									}
+								}
+							}
+
+							// check boundary candidates
+							const uint32_t sB = cellStartIdxB_[cid];
+							const uint32_t eB = cellEndIdxB_[cid];
+							if (sB != EMPTY && eB != EMPTY)
+							{
+								// check all neighbor candidates in the cell
+								for (uint32_t k = sB; k < eB; k++)
+								{
+									// index of neighbor candidate
+									const uint32_t j = sortedParticleIdxB_[k];
+
+									// position difference
+									const float dx = xi - xPosB[j];
+									const float dy = yi - yPosB[j];
+									const float dz = zi - zPosB[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										cntFB++;
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// commit final neighbor counts to backend storage
+				be_.neighborLists_->SetNbrCountFF(i, cntFF);
+				be_.neighborLists_->SetNbrCountFB(i, cntFB);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 {
 	// TODO: instead of iterating over particles in the outermost loop,
 	// TODO: iterate over cells and their particles, because for all particles
@@ -1062,12 +1355,202 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Compact_CPU01::Query(const SimParams& params)
+void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 {
-	Query_Smart(params);
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	float* RESTRICT xPosF = be_.xPosF_.data();
+	float* RESTRICT yPosF = be_.yPosF_.data();
+	float* RESTRICT zPosF = be_.zPosF_.data();
+	float* RESTRICT xPosB = be_.xPosB_.data();
+	float* RESTRICT yPosB = be_.yPosB_.data();
+	float* RESTRICT zPosB = be_.zPosB_.data();
+
+	// loop over all non-empty grid cells
+	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
+	tbb::parallel_for(
+		tbb::blocked_range<uint64_t>(0, N_Cells),
+		[&](const tbb::blocked_range<uint64_t>& range)
+		{
+			for (uint64_t c = range.begin(); c != range.end(); c++)
+			{
+				// range of all fluid particles in this cell
+				const uint32_t sF = cellStartIdxF_[c]; // start
+				const uint32_t eF = cellStartIdxF_[c + 1]; // end
+				if (sF >= eF) { continue; }
+
+				// determine a representative particle i0
+				const uint32_t i0 = sortedParticleIdxF_[sF];
+
+				const float xi0 = xPosF[i0];
+				const float yi0 = yPosF[i0];
+				const float zi0 = zPosF[i0];
+
+				// cell coordinates of all particles in this cell
+				const int cx = FloorToInt(xi0 * cellSizeInv_);
+				const int cy = FloorToInt(yi0 * cellSizeInv_);
+				const int cz = FloorToInt(zi0 * cellSizeInv_);
+
+				// pre-compute neighbor cell IDs
+				std::array<uint8_t, N_NbrCells_> hasFluidCell{};
+				std::array<uint32_t, N_NbrCells_> sNbrF{};
+				std::array<uint32_t, N_NbrCells_> eNbrF{};
+
+				std::array<uint8_t, N_NbrCells_> hasBoundaryCell{};
+				std::array<uint32_t, N_NbrCells_> sNbrB{};
+				std::array<uint32_t, N_NbrCells_> eNbrB{};
+
+				// check existence and location of all 27 (3x3x3) neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					const int oz = cz + rz; // target cell coordinate in z-direction
+
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						const int oy = cy + ry; // target cell coordinate in y-direction
+
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							const int ox = cx + rx; // target cell coordinate in x-direction
+
+							// index of this neighbor cell in the 3x3x3 neighborhood
+							const int idx_nbr = NeighborOffset(rx, ry, rz);
+
+							// cell ID of this neighbor cell
+							const uint64_t cid_nbr = MapToCellId_Morton(ox, oy, oz);
+
+							// fluid scope
+							{
+								// find out if neighbor cell exists in compact cell list
+								auto iterF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+								if (iterF != uniqueCellIdF_.end() && *iterF == cid_nbr)
+								{
+									// get range of all fluid particles in the neighbor cell
+									const uint32_t cF_nbr = static_cast<uint32_t>(iterF - uniqueCellIdF_.begin());
+									const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
+									const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
+
+									hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
+									sNbrF[idx_nbr] = sF_nbr;
+									eNbrF[idx_nbr] = eF_nbr;
+								}
+								else
+								{
+									hasFluidCell[idx_nbr] = false;
+								}
+							}
+
+							// boundary scope
+							{
+								// find out if neighbor cell exists in compact cell list
+								auto iterB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
+								if (iterB != uniqueCellIdB_.end() && *iterB == cid_nbr)
+								{
+									// get range of all boundary particles in the neighbor cell
+									const uint32_t cB_nbr = static_cast<uint32_t>(iterB - uniqueCellIdB_.begin());
+									const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
+									const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
+
+									hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
+									sNbrB[idx_nbr] = sB_nbr;
+									eNbrB[idx_nbr] = eB_nbr;
+								}
+								else
+								{
+									hasBoundaryCell[idx_nbr] = false;
+								}
+							}
+						}
+					}
+				}
+
+				// check all particles j in 27 (3x3x3) neighboring grid cells
+				for (uint32_t k = sF; k < eF; k++)
+				{
+					uint32_t cntFF = 0;
+					uint32_t cntFB = 0;
+
+					const uint32_t i = sortedParticleIdxF_[k];
+
+					const float xi = xPosF[i];
+					const float yi = yPosF[i];
+					const float zi = zPosF[i];
+
+					// fluid neighbors
+					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells_; idx_nbr++)
+					{
+						if (!hasFluidCell[idx_nbr]) { continue; }
+
+						const uint32_t sF_nbr = sNbrF[idx_nbr];
+						const uint32_t eF_nbr = eNbrF[idx_nbr];
+
+						#pragma omp simd
+						for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+						{
+							const uint32_t j = sortedParticleIdxF_[l];
+
+							// position difference
+							const float dx = xi - xPosF[j];
+							const float dy = yi - yPosF[j];
+							const float dz = zi - zPosF[j];
+
+							const float distSqu = dx * dx
+												+ dy * dy
+												+ dz * dz;
+
+							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							{
+								cntFF++;
+							}
+						}
+					}
+
+					// boundary neighbors
+					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells_; idx_nbr++)
+					{
+						if (!hasBoundaryCell[idx_nbr]) { continue; }
+
+						const uint32_t sB_nbr = sNbrB[idx_nbr];
+						const uint32_t eB_nbr = eNbrB[idx_nbr];
+
+						#pragma omp simd
+						for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+						{
+							const uint32_t j = sortedParticleIdxB_[l];
+
+							// position difference
+							const float dx = xi - xPosB[j];
+							const float dy = yi - yPosB[j];
+							const float dz = zi - zPosB[j];
+
+							const float distSqu = dx * dx
+												+ dy * dy
+												+ dz * dz;
+
+							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							{
+								cntFB++;
+							}
+						}
+					}
+
+					// commit final neighbor counts to backend storage
+					be_.neighborLists_->SetNbrCountFF(i, cntFF);
+					be_.neighborLists_->SetNbrCountFB(i, cntFB);
+				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
-void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
+void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
+{
+	Query_Fill_Smart(params);
+}
+
+void NS_CellLinkedList_Compact_CPU01::Query_Fill_Basic(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -1225,14 +1708,14 @@ void NS_CellLinkedList_Compact_CPU01::Query_Basic(const SimParams& params)
 	);
 }
 
-void NS_CellLinkedList_Compact_CPU01::Query_Smart(const SimParams& params)
+void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
+	// local references for fewer pointer indirections
 	float* RESTRICT xPosF = be_.xPosF_.data();
 	float* RESTRICT yPosF = be_.yPosF_.data();
 	float* RESTRICT zPosF = be_.zPosF_.data();
-
 	float* RESTRICT xPosB = be_.xPosB_.data();
 	float* RESTRICT yPosB = be_.yPosB_.data();
 	float* RESTRICT zPosB = be_.zPosB_.data();
