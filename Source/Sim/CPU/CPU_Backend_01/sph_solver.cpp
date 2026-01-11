@@ -37,6 +37,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float sizeInvF = params.particleSizeInvF;
 	const float sizeSquF = params.particleSizeF * params.particleSizeF;
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
+	// TODO: use particle size OR kernel supp radius / ratio ?
 	const float cubicSplineAlpha = static_cast<float>(
 		(1.0 / (4.0 * static_cast<double>(PI))) * static_cast<double>(sizeInvF) *
 		static_cast<double>(sizeInvF) * static_cast<double>(sizeInvF));
@@ -290,7 +291,7 @@ inline void CPU01::KernelWeight_CubicSpline(
 	}
 
 	// no distance -> shortcut computation
-	if (distSqu < ZERO_EQU_LIM) [[unlikely]]
+	if (distSqu < ZERO_EQU_LIM_F) [[unlikely]]
 	{
 		kw = 4.0f * cubicSplineAlpha;
 		return;
@@ -299,11 +300,11 @@ inline void CPU01::KernelWeight_CubicSpline(
 	const float dist = std::sqrt(distSqu);
 	const float distNorm = dist * particleSizeInv;
 
-	// clamp t1 to [0, 1]
-	// no clamp for t2 needed, distNorm < 2 here
+	// clamp to [0, 1]
 	float t1 = 1.0f - distNorm;
 	t1 = std::max(t1, 0.0f);
-	const float t2 = 2.0f - distNorm;
+	float t2 = 2.0f - distNorm;
+	t2 = std::max(t2, 0.0f);
 
 	// common sub-expressions
 	const float t1_2 = t1 * t1;
@@ -328,7 +329,7 @@ inline void CPU01::KernelGradient_CubicSpline(
 	// outside support radius -> no gradient
 	// no distance -> also no gradient
 	if (distSqu >= kernelRadiusSqu ||
-		distSqu < ZERO_EQU_LIM) [[unlikely]]
+		distSqu < ZERO_EQU_LIM_F) [[unlikely]]
 	{
 		xkg = 0.0f;
 		ykg = 0.0f;
@@ -339,11 +340,11 @@ inline void CPU01::KernelGradient_CubicSpline(
 	const float dist = std::sqrt(distSqu);
 	const float distNorm = dist * particleSizeInv;
 
-	// clamp t1 to [0, 1]
-	// no clamp for t2 needed, distNorm < 2 here
+	// clamp to [0, 1]
 	float t1 = 1.0f - distNorm;
 	t1 = std::max(t1, 0.0f);
-	const float t2 = 2.0f - distNorm;
+	float t2 = 2.0f - distNorm;
+	t2 = std::max(t2, 0.0f);
 
 	// common sub-expressions
 	const float t1_2 = t1 * t1;
@@ -518,7 +519,7 @@ void CPU01::NonPressureAcceleration(
 						cubicSplineAlpha, xkg, ykg, zkg);
 
 					// viscosity acc contribution from fluid neighbor j
-					const float accCoeff = (massF / fmaxf(densityF[j], 1e-12f))
+					const float accCoeff = (massF / fmaxf(densityF[j], ZERO_EQU_LIM_F))
 										 * (dvx * dx + dvy * dy + dvz * dz)
 										 / (dx * dx + dy * dy + dz * dz
 										 + 0.01f * particleSizeSquF);
@@ -798,7 +799,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 				float tmp_pressureF = 0.0f;
 
 				// only update pressure if particle has neighbors
-				if (!(fabsf(fin_diagElemF) <= 1e-6f))
+				if (!(fabsf(fin_diagElemF) <= ZERO_EQU_LIM_F))
 				{
 					tmp_pressureF = jacobiOmega * (fin_sourceTermF / fin_diagElemF);
 				}
@@ -1065,7 +1066,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 				float tmp_PressureF = 0.0f;
 
 				// only update pressure and error if particle has neighbors
-				if (!Base::ApproxEqu(diagElemF[i], 0.0f))
+				if (!(fabsf(diagElemF[i]) <= ZERO_EQU_LIM_F))
 				{
 					// relaxed Jacobi solver update
 					tmp_PressureF = pressureF[i] + jacobiOmega

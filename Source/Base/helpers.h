@@ -21,26 +21,26 @@ namespace Base
     // --- [ approximate equality helpers for detecting parameter changes ] ----
 
     // float comparison
-    inline bool ApproxEqu(const float a, const float b, const float eps = 1e-6f)
+    inline bool ApproxEqu(const float a, const float b, const float eps = 1e-7f)
 	{
         return std::fabs(a - b) <= eps;
     }
 
     // double comparison
-    inline bool ApproxEqu(const double a, const double b, const double eps = 1e-6)
+    inline bool ApproxEqu(const double a, const double b, const double eps = 1e-14)
     {
         return std::fabs(a - b) <= eps;
     }
 
     // element-wise vec2 comparison
-    inline bool ApproxEqu(const glm::vec2& a, const glm::vec2& b, const float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::vec2& a, const glm::vec2& b, const float eps = 1e-7f)
 	{
         return ApproxEqu(a.x, b.x, eps) &&
                ApproxEqu(a.y, b.y, eps);
     }
 
 	// element-wise vec3 comparison
-    inline bool ApproxEqu(const glm::vec3& a, const glm::vec3& b, const float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::vec3& a, const glm::vec3& b, const float eps = 1e-7f)
 	{
         return ApproxEqu(a.x, b.x, eps) &&
                ApproxEqu(a.y, b.y, eps) &&
@@ -48,7 +48,7 @@ namespace Base
     }
 
     // element-wise vec4 comparison
-    inline bool ApproxEqu(const glm::vec4& a, const glm::vec4& b, const float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::vec4& a, const glm::vec4& b, const float eps = 1e-7f)
 	{
         return ApproxEqu(a.x, b.x, eps) &&
                ApproxEqu(a.y, b.y, eps) &&
@@ -57,7 +57,7 @@ namespace Base
     }
 
     // element-wise mat4 comparison
-    inline bool ApproxEqu(const glm::mat4& a, const glm::mat4& b, const float eps = 1e-6f)
+    inline bool ApproxEqu(const glm::mat4& a, const glm::mat4& b, const float eps = 1e-7f)
 	{
         float maxDiff = 0.0f;
 
@@ -165,8 +165,8 @@ namespace Base
     // --- [ misc ] ------------------------------------------------------------
 
     inline bool Float_AlmostEqual(const float a, const float b,
-                                  const float rel_epsilon = 1e-6f,
-                                  const float abs_epsilon = 1e-9f) noexcept
+                                  const float rel_epsilon = 1e-7f,
+                                  const float abs_epsilon = 1e-7f) noexcept
     {
         const float diff = std::fabs(a - b);
         if (diff <= abs_epsilon) { return true; }

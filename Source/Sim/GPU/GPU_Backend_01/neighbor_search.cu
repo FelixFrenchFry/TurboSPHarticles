@@ -190,7 +190,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	}
 
 	// padding to avoid edge clamp issues
-	const float pad = 1e-6f;
+	const float pad = 1e-7f;
 	box.xMin -= pad; box.yMin -= pad; box.zMin -= pad;
 	box.xMax += pad; box.yMax += pad; box.zMax += pad;
 

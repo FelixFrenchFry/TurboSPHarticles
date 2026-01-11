@@ -22,7 +22,8 @@
 
 namespace CPU01
 {
-	constexpr float ZERO_EQU_LIM = 1e-12f;
+	constexpr float ZERO_EQU_LIM_F = 1e-7f;
+	constexpr double ZERO_EQU_LIM_D = 1e-14;
 
 	inline void KernelWeight_CubicSpline(
 		float dx, float dy, float dz,

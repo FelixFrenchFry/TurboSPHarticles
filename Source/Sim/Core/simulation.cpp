@@ -332,7 +332,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 			// compute minimum interval from the target rate
 			const auto minInterval = std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::duration<double>(1.0 / fmaxf(1e-6f, visMaxHz_)));
+				std::chrono::duration<double>(1.0 / fmaxf(1e-7f, visMaxHz_)));
 
 			if (now - lastVisWall_ >= minInterval)
 			{

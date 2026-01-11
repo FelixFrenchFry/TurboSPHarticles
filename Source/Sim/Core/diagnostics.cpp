@@ -148,7 +148,7 @@ namespace Sim
 
         // total elapsed time since start
         double elapsedS = std::chrono::duration<double>(now - startSteady).count();
-        elapsedS = std::max(elapsedS, 1e-9);
+        elapsedS = std::max(elapsedS, 1e-14);
 
         // compute outputs on every call (no throttling)
         double stepsPerSec = 0.0;
@@ -159,7 +159,7 @@ namespace Sim
             double dt = std::chrono::duration<double>(newest.second - oldest.second).count();
             uint32_t ds = newest.first - oldest.first;
 
-            if (dt > 1e-6 && ds > 0)
+            if (dt > 1e-14 && ds > 0)
             {
                 stepsPerSec = static_cast<double>(ds) / dt;
             }
@@ -173,7 +173,7 @@ namespace Sim
 
         // remaining time based on moving-average speed (only if total steps known)
         double remainingS = 0.0;
-        if (hasTotal && stepsPerSec > 1e-9 && step < maxSteps)
+        if (hasTotal && stepsPerSec > 1e-14 && step < maxSteps)
         {
             remainingS = static_cast<double>(maxSteps - step) / stepsPerSec;
         }

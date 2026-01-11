@@ -102,7 +102,7 @@ namespace GPU01
 		float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
 
 		// kernel gradient
-		if (dist > 1e-12f && distNorm > 0.0f)
+		if (dist > 1e-7f && distNorm > 0.0f)
 		{
 			float commonFac = c_cubicSplineAlpha
 							* (-3.0f * t2 * t2 + 12.0f * t1 * t1)
@@ -267,7 +267,7 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
 			// viscosity acc contribution from fluid neighbor j
-			const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-12f))
+			const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-7f))
 									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
 									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
 									 + 0.01f * c_sizeF * c_sizeF);
@@ -515,7 +515,7 @@ namespace GPU01
 		float tmp_pressureF = 0.0f;
 
 		// only update pressure if particle has neighbors
-		if (!(fabsf(fin_diagElemF) <= 1e-6f))
+		if (!(fabsf(fin_diagElemF) <= 1e-7f))
 		{
 			tmp_pressureF = c_jacobiOmega * (fin_sourceTermF / fin_diagElemF);
 		}
@@ -725,7 +725,7 @@ namespace GPU01
 		float tmp_pressureF = 0.0f;
 
 		// only update pressure if particle has neighbors
-		if (!(fabsf(diagElemF[i]) <= 1e-6f))
+		if (!(fabsf(diagElemF[i]) <= 1e-7f))
 		{
 			tmp_pressureF = pressureF[i] + c_jacobiOmega
 						  * ((sourceTermF[i] - (c_timeStep * c_timeStep

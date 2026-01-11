@@ -251,7 +251,8 @@ void NS_SpatialHashing_Basic_CPU01::Init(const SimParams& params)
 void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 {
 	cellSize_ = params.kernelRadius;
-	cellSizeInv_ = 1.0f / params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+				 ? 0.0f : (1.0f / params.kernelRadius);
 
 	// clear hash tables completely, including per-cell vectors
 	cellGridF_.clear();
@@ -260,10 +261,12 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 	// reserve memory for cells, assuming average of ~4 particles per cell
 	if (be_.N_F_)
 	{
+		// TODO: fine-tune heuristic?
 		cellGridF_.reserve(std::max<uint32_t>(1024, be_.N_F_ / 4));
 	}
 	if (be_.N_B_)
 	{
+		// TODO: fine-tune heuristic?
 		cellGridB_.reserve(std::max<uint32_t>(1024, be_.N_B_ / 4));
 	}
 
@@ -677,7 +680,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	}
 
 	// padding to avoid edge clamp issues
-	constexpr float pad = 1e-6f;
+	constexpr float pad = 1e-7f;
 	xMin -= pad; yMin -= pad; zMin -= pad;
 	xMax += pad; yMax += pad; zMax += pad;
 

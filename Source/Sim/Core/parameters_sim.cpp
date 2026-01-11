@@ -477,8 +477,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 		if (auto it = j.find("statGroupsEnabled"); it != j.end() && it->is_object())
 		{
-			BeginWrite();
-
 			auto& sge = params_.statGroupsEnabled;
 
 			if (auto v = it->find("particles"); v != it->end() && v->is_boolean())
@@ -495,8 +493,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			{
 				sge[static_cast<uint8_t>(Stats::StatGroup::Velocity)] = v->get<bool>();
 			}
-
-			EndWrite();
 		}
 
 		if (auto it = j.find("exportEnabled"); it != j.end())
@@ -739,6 +735,8 @@ void SimParamsMgr::Set_ParticleSize(
 		params_.massF = params_.restDensityF * particleSize
 											 * particleSize
 											 * particleSize;
+		params_.kernelRadius = params_.kernelSuppRatio * params_.particleSizeF;
+		params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
@@ -756,6 +754,8 @@ void SimParamsMgr::Set_ParticleSize(
 		params_.massB = params_.restDensityB * particleSize
 											 * particleSize
 											 * particleSize;
+		params_.kernelRadius = params_.kernelSuppRatio * params_.particleSizeF;
+		params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 	}
 
 	EndWrite();
@@ -1292,14 +1292,19 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 										* par.particleSizeB;
 		return Base::ApproxEqu(par.massB, expect);
 	});
+	ok &= Check("kernelSuppRatio < 1", true, [&]()
+	{
+		return par.kernelSuppRatio >= 1.0f;
+	});
 	ok &= Check("kernelRadius != kernelSuppRatio * particleSizeF", true, [&]()
 	{
 		float expect = par.kernelSuppRatio * par.particleSizeF;
 		return Base::ApproxEqu(par.kernelRadius, expect);
 	});
-	ok &= Check("kernelSuppRatio < 1", true, [&]()
+	ok &= Check("kernelRadiusSqu != kernelRadius^2", true, [&]()
 	{
-		return par.kernelSuppRatio >= 1.0f;
+		float expect = par.kernelRadius * par.kernelRadius;
+		return Base::ApproxEqu(par.kernelRadiusSqu, expect);
 	});
 
 	return ok;
