@@ -217,7 +217,7 @@ namespace Sim
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
 		static inline void WriteU16LE(uint8_t* dst, uint16_t v) noexcept;
 		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
-		static void DecodeToU32(const std::vector<uint8_t, uint8_tbb_alloc>& src,
+		static void DecodeNeighborList(const std::vector<uint8_t, uint8_tbb_alloc>& src,
 			uint32_t count, std::vector<uint32_t>& out);
 		static void EncodeNeighborList(std::vector<uint8_t, uint8_tbb_alloc>& dst,
 			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
@@ -227,17 +227,70 @@ namespace Sim
 	// --- [ individual vectors neighbor lists, VByteDerived compression ] -----
 	// -------------------------------------------------------------------------
 
-	/*
 	class NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01 final
 		: public I_NeighborLists
 	{
+	public: // -----------------------------------------------------------------
 
+		void Resize(uint32_t N_F, uint32_t N_B) override;
+
+		void ClearAll() override;
+
+		void Finalize_Count() override {}
+
+		void Finalize_Fill() override {}
+
+		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
+
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+
+		NeighborSpan FF(uint32_t i) const override;
+		NeighborSpan FB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+			const SimParams& params) const override;
+
+	private: // ----------------------------------------------------------------
+
+		// metadata
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+
+		// compressed neighbor storage
+		std::vector<uint32_t> nbrCountFF_;
+		std::vector<uint32_t> nbrCountFB_;
+		std::vector<std::vector<uint8_t, uint8_tbb_alloc>> nbrListCompressedFF_;
+		std::vector<std::vector<uint8_t, uint8_tbb_alloc>> nbrListCompressedFB_;
+
+		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFB_;
+
+		// thread-local sorting scratch for EncodeNeighborList() to only have positive deltas
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
+
+		// misc
+		const uint32_t expctBytesPerNbrCeil_ = 1;
+
+		// helpers
+		static uint32_t ControlBytesFor(uint32_t count) noexcept;
+		static uint8_t DeltaMask(uint32_t delta) noexcept;
+		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
+		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
+		static void DecodeNeighborList(const std::vector<uint8_t, uint8_tbb_alloc>& src,
+			uint32_t count, std::vector<uint32_t>& out);
+		static void EncodeNeighborList(std::vector<uint8_t, uint8_tbb_alloc>& dst,
+			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
 	};
 
 	// -------------------------------------------------------------------------
 	// --- [ CSR vector neighbor lists, final concat, ULEB128 compression ] ----
 	// -------------------------------------------------------------------------
 
+	/*
 	class NeighborLists_CSRVector_FinalConcat_ULEB128Compress_CPU01 final
 		: public I_NeighborLists
 	{

@@ -529,9 +529,9 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::Resize(
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
 		nbrListCompressedFF_[i].reserve(
-			1 + 4 + (N_expctNbrCountF - 1) * expctBytesPerNbrCeil_);
+			1 + 4 + N_expctNbrCountF * expctBytesPerNbrCeil_);
 		nbrListCompressedFB_[i].reserve(
-			1 + 4 + (N_expctNbrCountB - 1) * expctBytesPerNbrCeil_);
+			1 + 4 + N_expctNbrCountB * expctBytesPerNbrCeil_);
 
 		nbrListCompressedFF_[i].clear();
 		nbrListCompressedFB_[i].clear();
@@ -592,7 +592,7 @@ NeighborSpan NeighborLists_IndividualVectors_AdaptCompress_CPU01::FF(
 
 	// decode into per-thread scratch
 	auto& out = nbrScratchFF_.local();
-	DecodeToU32(src, count, out);
+	DecodeNeighborList(src, count, out);
 
 	return NeighborSpan{ out.data(), count };
 }
@@ -610,7 +610,7 @@ NeighborSpan NeighborLists_IndividualVectors_AdaptCompress_CPU01::FB(
 
 	// decode into per-thread scratch
 	auto& out = nbrScratchFB_.local();
-	DecodeToU32(src, count, out);
+	DecodeNeighborList(src, count, out);
 
 	return NeighborSpan{ out.data(), count };
 }
@@ -679,7 +679,8 @@ inline void NeighborLists_IndividualVectors_AdaptCompress_CPU01::WriteU32LE(
 	dst[3] = static_cast<uint8_t>(v >> 24);
 }
 
-void NeighborLists_IndividualVectors_AdaptCompress_CPU01::DecodeToU32(
+// TODO: implement with SIMD optimizations?
+void NeighborLists_IndividualVectors_AdaptCompress_CPU01::DecodeNeighborList(
 	const std::vector<uint8_t, uint8_tbb_alloc>& src, const uint32_t count,
 	std::vector<uint32_t>& out)
 {
@@ -699,9 +700,9 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::DecodeToU32(
 	#endif
 
 	out.resize(count);
-
-	// encode width and first element
 	const uint8_t* p = src.data();
+
+	// decode width and first element
 	uint32_t v = ReadU32LE(p + 1);
 	out[0] = v;
 
@@ -738,6 +739,7 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::DecodeToU32(
 	}
 }
 
+// TODO: implement with SIMD optimizations?
 void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
 	std::vector<uint8_t, uint8_tbb_alloc>& dst, const uint32_t* js,
 	const uint32_t count, std::vector<uint32_t>& scratch)
@@ -749,6 +751,7 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
 	}
 
 	// copy into thread-local scratch and sort to avoid negative deltas
+	// TODO: guarantee sorted input from in the query to avoid sorting here?
 	scratch.assign(js, js + count);
 	std::sort(scratch.begin(), scratch.end());
 
@@ -769,9 +772,9 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
 	// determine size of encoded data
 	const uint64_t requiredBytes = 1ull + 4ull + static_cast<uint64_t>(count - 1) * widthBytes;
 	dst.resize(requiredBytes);
+	uint8_t* p = dst.data();
 
 	// encode width and first element
-	uint8_t* p = dst.data();
 	p[0] = widthCode;
 	WriteU32LE(p + 1, scratch[0]);
 
@@ -807,6 +810,326 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
 	#if defined(_DEBUG)
 	// make sure pointer arithmetic matches the expected size
 	assert(q == dst.data() + dst.size() && "Encoded byte count mismatch");
+	#endif
+}
+
+// -------------------------------------------------------------------------
+// --- [ individual vectors neighbor lists, VByteDerived compression ] -----
+// -------------------------------------------------------------------------
+
+void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::Resize(
+	const uint32_t N_F, const uint32_t N_B)
+{
+	N_F_ = N_F;
+	N_B_ = N_B;
+
+	nbrCountFF_.assign(N_F_, 0);
+	nbrCountFB_.assign(N_F_, 0);
+
+	nbrListCompressedFF_.resize(N_F_);
+	nbrListCompressedFB_.resize(N_F_);
+
+	// reserve expected capacities to reduce re-allocations
+	// (single-threaded to minimize fragmentation and alloc contention)
+	const uint32_t ctrlF = ControlBytesFor(N_expctNbrCountF);
+	const uint32_t ctrlB = ControlBytesFor(N_expctNbrCountB);
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		nbrListCompressedFF_[i].reserve(
+			4 + ctrlF + N_expctNbrCountF * expctBytesPerNbrCeil_);
+		nbrListCompressedFB_[i].reserve(
+			4 + ctrlB + N_expctNbrCountB * expctBytesPerNbrCeil_);
+
+		nbrListCompressedFF_[i].clear();
+		nbrListCompressedFB_[i].clear();
+	}
+}
+
+void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::ClearAll()
+{
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				nbrCountFF_[i] = 0;
+				nbrCountFB_[i] = 0;
+
+				nbrListCompressedFF_[i].clear();
+				nbrListCompressedFB_[i].clear();
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::SetNbrListFF(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	nbrCountFF_[i] = count;
+
+	auto& dst = nbrListCompressedFF_[i];
+	auto& scratch = sortScratchFF_.local();
+
+	EncodeNeighborList(dst, js, count, scratch);
+}
+
+void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::SetNbrListFB(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	nbrCountFB_[i] = count;
+
+	auto& dst = nbrListCompressedFB_[i];
+	auto& scratch = sortScratchFB_.local();
+
+	EncodeNeighborList(dst, js, count, scratch);
+}
+
+NeighborSpan NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::FF(
+	const uint32_t i) const
+{
+	const uint32_t count = nbrCountFF_[i];
+	if (count == 0)
+	{
+		return NeighborSpan{ nullptr, 0 };
+	}
+
+	const auto& src = nbrListCompressedFF_[i];
+
+	// decode into per-thread scratch
+	auto& out = nbrScratchFF_.local();
+	DecodeNeighborList(src, count, out);
+
+	return NeighborSpan{ out.data(), count };
+}
+
+NeighborSpan NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::FB(
+	const uint32_t i) const
+{
+	const uint32_t count = nbrCountFB_[i];
+	if (count == 0)
+	{
+		return NeighborSpan{ nullptr, 0 };
+	}
+
+	const auto& src = nbrListCompressedFB_[i];
+
+	// decode into per-thread scratch
+	auto& out = nbrScratchFB_.local();
+	DecodeNeighborList(src, count, out);
+
+	return NeighborSpan{ out.data(), count };
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
+
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_VectorOfVector(nbrListCompressedFF_));
+
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_VectorOfVector(nbrListCompressedFB_));
+
+	return { usageFF, usageFB };
+}
+
+uint32_t NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::ControlBytesFor(
+	const uint32_t count) noexcept
+{
+	// there are (count - 1) deltas, and 4 masks fit into one control byte
+	return (count <= 1) ? 0u : ((count - 1u + 3u) / 4u);
+}
+
+uint8_t NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::DeltaMask(
+	const uint32_t delta) noexcept
+{
+	if (delta == 0u) { return 0u; } // 00 (-> 0 data bytes encoded via mask)
+	if (delta == 1u) { return 1u; } // 01 (-> 0 data bytes, encoded via mask)
+	if (delta < 256u) { return 2u; } // 10 (-> 1 data byte)
+	return 3u; // 11 (-> 4 data bytes)
+}
+
+inline uint32_t NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::ReadU32LE(
+	const uint8_t* src) noexcept
+{
+	return static_cast<uint32_t>(src[0])
+		| (static_cast<uint32_t>(src[1]) << 8)
+		| (static_cast<uint32_t>(src[2]) << 16)
+		| (static_cast<uint32_t>(src[3]) << 24);
+}
+
+inline void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::WriteU32LE(
+	uint8_t* dst, const uint32_t v) noexcept
+{
+	dst[0] = static_cast<uint8_t>(v);
+	dst[1] = static_cast<uint8_t>(v >> 8);
+	dst[2] = static_cast<uint8_t>(v >> 16);
+	dst[3] = static_cast<uint8_t>(v >> 24);
+}
+
+// TODO: implement with SIMD optimizations?
+void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::DecodeNeighborList(
+	const std::vector<uint8_t, uint8_tbb_alloc>& src, const uint32_t count,
+	std::vector<uint32_t>& out)
+{
+	if (count == 0)
+	{
+		out.clear();
+		return;
+	}
+
+	// expected size check (debug only)
+	#if defined(_DEBUG)
+	{
+		// must at least hold first neighbor
+		assert(src.size() >= 4 && "Compressed list too small");
+
+		const uint32_t ctrlBytes = ControlBytesFor(count);
+		assert(src.size() >= 4ull + ctrlBytes && "Compressed list too small for control stream");
+
+		uint64_t expectedDataBytes = 0;
+		const uint8_t* ctrlDbg = src.data() + 4;
+
+		for (uint32_t idx = 0; idx < count - 1; idx++)
+		{
+			const uint8_t c = ctrlDbg[idx >> 2];
+			const uint8_t mask = static_cast<uint8_t>((c >> ((idx & 3u) * 2u)) & 0x3u);
+
+			if (mask == 2u) { expectedDataBytes += 1ull; }
+			else if (mask == 3u) { expectedDataBytes += 4ull; }
+			// mask 0/1 => 0 bytes
+		}
+
+		const uint64_t expectedBytes = 4ull + static_cast<uint64_t>(ctrlBytes) + expectedDataBytes;
+		assert(src.size() == expectedBytes && "Compressed list size mismatch");
+	}
+	#endif
+
+	out.resize(count);
+	const uint8_t* p = src.data();
+
+	// decode first element (uncompressed)
+	uint32_t v = ReadU32LE(p);
+	out[0] = v;
+	if (count == 1) { return; }
+
+	// control bytes after first element
+	const uint32_t ctrlBytes = ControlBytesFor(count);
+	const uint8_t* ctrl = p + 4;
+	const uint8_t* data = ctrl + ctrlBytes;
+
+	// decode (count - 1) deltas, then undo (gap = delta + 1, prefix sum)
+	for (uint32_t idx = 0; idx < count - 1; idx++)
+	{
+		const uint8_t c = ctrl[idx >> 2];
+		const uint8_t mask = static_cast<uint8_t>((c >> ((idx & 3u) * 2u)) & 0x3u);
+
+		uint32_t delta = 0;
+		if (mask == 0u)
+		{
+			delta = 0u;
+		}
+		else if (mask == 1u)
+		{
+			delta = 1u;
+		}
+		else if (mask == 2u)
+		{
+			delta = static_cast<uint32_t>(*data++);
+		}
+		else // mask == 3
+		{
+			delta = ReadU32LE(data);
+			data += 4;
+		}
+
+		v += (delta + 1u);
+		out[idx + 1] = v;
+	}
+
+	#if defined(_DEBUG)
+	assert(data == src.data() + src.size() && "Decoded byte count mismatch");
+	#endif
+}
+
+// TODO: implement with SIMD optimizations?
+void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::EncodeNeighborList(
+	std::vector<uint8_t, uint8_tbb_alloc>& dst, const uint32_t* js,
+	const uint32_t count, std::vector<uint32_t>& scratch)
+{
+	if (count == 0)
+	{
+		dst.clear();
+		return;
+	}
+
+	// copy into thread-local scratch and sort to avoid negative deltas
+	// TODO: guarantee sorted input from in the query to avoid sorting here?
+	scratch.assign(js, js + count);
+	std::sort(scratch.begin(), scratch.end());
+
+	// determine size of encoded data
+	const uint32_t ctrlBytes = ControlBytesFor(count);
+	uint64_t dataBytes = 0;
+	for (uint32_t k = 1; k < count; k++)
+	{
+		const uint32_t gap = scratch[k] - scratch[k - 1];
+
+		// gap must be >= 1 for delta = gap - 1 to be non-negative
+		#if defined(_DEBUG)
+		assert(gap >= 1u && "Neighbor list must be strictly increasing");
+		#endif
+
+		const uint32_t delta = gap - 1u;
+
+		// map to size after encoding (0/1 => 0B, [2,256) => 1B, else 4B)
+		if (delta >= 2u && delta < 256u) { dataBytes += 1ull; }
+		else if (delta >= 256u) { dataBytes += 4ull; }
+	}
+	const uint64_t requiredBytes = 4ull + static_cast<uint64_t>(ctrlBytes) + dataBytes;
+	dst.resize(requiredBytes);
+	uint8_t* p = dst.data();
+
+	// encode first element (uncompressed)
+	WriteU32LE(p, scratch[0]);
+
+	// control bytes after first element
+	uint8_t* ctrl = p + 4;
+	std::memset(ctrl, 0, ctrlBytes);
+
+	// data bytes after control bytes
+	uint8_t* data = ctrl + ctrlBytes;
+
+	// encode (count - 1) deltas
+	for (uint32_t idx = 0; idx < count - 1; idx++)
+	{
+		const uint32_t k = idx + 1;
+
+		const uint32_t gap = scratch[k] - scratch[k - 1];
+		const uint32_t delta = gap - 1u;
+
+		const uint8_t mask = DeltaMask(delta);
+		ctrl[idx >> 2] |= static_cast<uint8_t>(mask << ((idx & 3u) * 2u));
+
+		// mask 0/1 -> 0 data bytes
+		if (mask == 2u) // 1 data byte
+		{
+			*data++ = static_cast<uint8_t>(delta);
+		}
+		else if (mask == 3u) // 4 data bytes
+		{
+			WriteU32LE(data, delta);
+			data += 4;
+		}
+	}
+
+	#if defined(_DEBUG)
+	assert(data == dst.data() + dst.size() && "Encoded byte count mismatch");
 	#endif
 }
 

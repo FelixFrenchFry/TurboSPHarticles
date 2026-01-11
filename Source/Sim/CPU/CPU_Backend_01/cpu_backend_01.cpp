@@ -83,6 +83,13 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		simParamsMgr_.Set_RunCountQuery(false);
 		simParamsMgr_.Set_RunFillQuery(true);
 	}
+	else if (params.neighborListStorage ==
+		Base::NeighborListStorage::IndividualVectors_VByteDerivedCompress)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01>();
+		simParamsMgr_.Set_RunCountQuery(false);
+		simParamsMgr_.Set_RunFillQuery(true);
+	}
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborListStorage' requested.");
