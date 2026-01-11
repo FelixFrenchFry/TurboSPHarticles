@@ -36,13 +36,11 @@ if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 find_package(TBB CONFIG REQUIRED)
-find_package(benchmark CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(HighFive CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
-find_package(Eigen3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
 # probe for /openmp:llvm on MSVC and fall back
@@ -131,12 +129,10 @@ target_compile_options(Project_Warnings INTERFACE
     >
 )
 
-# platform defines, eigen debug stuff disabled in non-debug builds
+# platform defines
 add_library(Project_Defines INTERFACE)
 target_compile_definitions(Project_Defines INTERFACE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE>
-    $<$<CONFIG:Release>:EIGEN_NO_DEBUG>
-    $<$<CONFIG:RelWithDebInfo>:EIGEN_NO_DEBUG>
 )
 
 # C++ optimization flags
@@ -205,13 +201,11 @@ target_compile_definitions(TSP_H PUBLIC
 )
 
 target_link_libraries(TSP_H PUBLIC
-    benchmark::benchmark
     spdlog::spdlog
     nlohmann_json::nlohmann_json
     HighFive
     CLI11::CLI11
     Boost::boost
-    Eigen3::Eigen
     glm::glm
     TBB::tbb
     TBB::tbbmalloc
