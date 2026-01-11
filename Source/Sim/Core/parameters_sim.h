@@ -16,9 +16,6 @@
 #include "Source/Base/helpers.h"
 #include "Source/Eval/Stats/metrics.h"
 
-static constexpr uint32_t N_expctNbrCountF = 40;
-static constexpr uint32_t N_expctNbrCountB = 20;
-
 
 
 namespace Sim

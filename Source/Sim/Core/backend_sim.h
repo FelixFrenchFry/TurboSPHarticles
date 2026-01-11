@@ -39,7 +39,7 @@ namespace Sim
 		virtual void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) = 0;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
-		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src) = 0;
+		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) = 0;
 
 		// copies & translates backend-specific data structures into -> universal simulation state
 		virtual void PushToUniversalSimState(Sync::UniversalSimState& dst) const = 0;
@@ -123,7 +123,7 @@ namespace Sim
 
 		virtual ~I_NeighborLists() = default;
 
-		virtual void Resize(uint32_t N_F, uint32_t N_B) = 0;
+		virtual void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) = 0;
 
 		// clears the individual and/or shared neighbor lists of all fluid particles
 		virtual void ClearAll() = 0;

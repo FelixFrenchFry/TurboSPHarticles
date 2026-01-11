@@ -64,7 +64,8 @@ void SimBackend_GPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearc
 }
 
 // TODO: re-implement this to free up memory as soon as copied in!
-void SimBackend_GPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
+void SimBackend_GPU01::PullFromUniversalSimState(
+	Sync::UniversalSimState& src, const SimParams& params)
 {
 	auto& F = src.fluidParticles;
 	auto& B = src.boundaryParticles;

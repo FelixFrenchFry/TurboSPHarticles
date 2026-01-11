@@ -104,7 +104,8 @@ void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearc
 	neighborSearchStrat_ = std::move(strat);
 }
 
-void SimBackend_CPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
+void SimBackend_CPU01::PullFromUniversalSimState(
+	Sync::UniversalSimState& src, const SimParams& params)
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 
@@ -149,7 +150,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(Sync::UniversalSimState& src)
 	idB_ = std::move(B.id);
 
 	// init neighbor list sizes
-	neighborLists_->Resize(N_F_, N_B_);
+	neighborLists_->Resize(N_F_, N_B_, params);
 }
 
 // TODO: re-implement this to free up memory as soon as copied out!

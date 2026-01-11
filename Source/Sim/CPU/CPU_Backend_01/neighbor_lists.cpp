@@ -22,7 +22,7 @@ using namespace Sim;
 // -------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_CPU01::Resize(
-	const uint32_t N_F, const uint32_t N_B)
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
@@ -35,8 +35,8 @@ void NeighborLists_IndividualVectors_CPU01::Resize(
 	// (single-threaded to minimize fragmentation and alloc contention)
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
-		nbrListFF_[i].reserve(N_expctNbrCountF);
-		nbrListFB_[i].reserve(N_expctNbrCountB);
+		nbrListFF_[i].reserve(params.expctdNbrCountSoftMax_FF);
+		nbrListFB_[i].reserve(params.expctdNbrCountSoftMax_FB);
 
 		nbrListFF_[i].clear();
 		nbrListFB_[i].clear();
@@ -110,7 +110,7 @@ NeighborLists_IndividualVectors_CPU01::GetMemUsage(
 // -------------------------------------------------------------------------
 
 void NeighborLists_CSRVector_FinalConcat_CPU01::Resize(
-	const uint32_t N_F, const uint32_t N_B)
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
@@ -123,8 +123,8 @@ void NeighborLists_CSRVector_FinalConcat_CPU01::Resize(
 	// (single-threaded to minimize fragmentation and alloc contention)
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
-		nbrTempFF_[i].reserve(N_expctNbrCountF);
-		nbrTempFB_[i].reserve(N_expctNbrCountB);
+		nbrTempFF_[i].reserve(params.expctdNbrCountSoftMax_FF);
+		nbrTempFB_[i].reserve(params.expctdNbrCountSoftMax_FB);
 
 		nbrTempFF_[i].clear();
 		nbrTempFB_[i].clear();
@@ -340,7 +340,7 @@ NeighborLists_CSRVector_FinalConcat_CPU01::GetMemUsage(
 // -------------------------------------------------------------------------
 
 void NeighborLists_CSRVector_DoubleQuery_CPU01::Resize(
-	const uint32_t N_F, const uint32_t N_B)
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
@@ -513,7 +513,7 @@ NeighborLists_CSRVector_DoubleQuery_CPU01::GetMemUsage(
 // -------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_AdaptCompress_CPU01::Resize(
-	const uint32_t N_F, const uint32_t N_B)
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
@@ -529,9 +529,9 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::Resize(
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
 		nbrListCompressedFF_[i].reserve(
-			1 + 4 + N_expctNbrCountF * expctBytesPerNbrCeil_);
+			1 + 4 + params.expctdNbrCountSoftMax_FF * expctBytesPerNbrCeil_);
 		nbrListCompressedFB_[i].reserve(
-			1 + 4 + N_expctNbrCountB * expctBytesPerNbrCeil_);
+			1 + 4 + params.expctdNbrCountSoftMax_FB * expctBytesPerNbrCeil_);
 
 		nbrListCompressedFF_[i].clear();
 		nbrListCompressedFB_[i].clear();
@@ -818,7 +818,7 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
 // -------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::Resize(
-	const uint32_t N_F, const uint32_t N_B)
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
 {
 	N_F_ = N_F;
 	N_B_ = N_B;
@@ -831,14 +831,14 @@ void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::Resize(
 
 	// reserve expected capacities to reduce re-allocations
 	// (single-threaded to minimize fragmentation and alloc contention)
-	const uint32_t ctrlF = ControlBytesFor(N_expctNbrCountF);
-	const uint32_t ctrlB = ControlBytesFor(N_expctNbrCountB);
+	const uint32_t ctrlF = ControlBytesFor(params.expctdNbrCountSoftMax_FF);
+	const uint32_t ctrlB = ControlBytesFor(params.expctdNbrCountSoftMax_FB);
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
 		nbrListCompressedFF_[i].reserve(
-			4 + ctrlF + N_expctNbrCountF * expctBytesPerNbrCeil_);
+			4 + ctrlF + params.expctdNbrCountSoftMax_FF * expctBytesPerNbrCeil_);
 		nbrListCompressedFB_[i].reserve(
-			4 + ctrlB + N_expctNbrCountB * expctBytesPerNbrCeil_);
+			4 + ctrlB + params.expctdNbrCountSoftMax_FB * expctBytesPerNbrCeil_);
 
 		nbrListCompressedFF_[i].clear();
 		nbrListCompressedFB_[i].clear();

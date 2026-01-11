@@ -135,7 +135,7 @@ void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
 		std::scoped_lock lock(stateMutex_);
 
 		// transfer universal state into backend-specific data structures
-		simBackend_->PullFromUniversalSimState(universalSimState_);
+		simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
 	}
 
 	// clear benchmarks from previous backend
@@ -189,7 +189,7 @@ void SimulationMgr::ReBuildInitialSimState()
 	simScenario_->Build(universalSimState_, simParams_);
 
 	// transfer universal state into backend-specific data structures
-	simBackend_->PullFromUniversalSimState(universalSimState_);
+	simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
 }
 
 void SimulationMgr::Launch_Async()

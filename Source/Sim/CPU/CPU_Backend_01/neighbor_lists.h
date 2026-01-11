@@ -30,7 +30,7 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B) override;
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
 		void ClearAll() override;
 
@@ -71,7 +71,7 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B) override;
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
 		void ClearAll() override;
 
@@ -121,7 +121,7 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B) override;
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
 		void ClearAll() override;
 
@@ -167,7 +167,7 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B) override;
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
 		void ClearAll() override;
 
@@ -232,7 +232,7 @@ namespace Sim
 	{
 	public: // -----------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B) override;
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
 		void ClearAll() override;
 
