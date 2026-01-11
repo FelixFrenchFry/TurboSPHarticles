@@ -1,5 +1,5 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 3,
   "neighborListStorage": 2,
@@ -17,7 +17,7 @@
   "pressGamma": 0.5,
   "jacobiOmega": 0.5,
   "densityDevTarget": 0.01,
-  "fixedIters": 10,
+  "fixedIters": 5,
   "minSolverIters": 3,
   "maxSolverIters": 50,
   "solverTerminationCond": 2,

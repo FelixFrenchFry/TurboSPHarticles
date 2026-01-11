@@ -84,7 +84,7 @@ namespace Scene
 			const uint32_t startIdx = dst.fluidParticles.N_;
 
 			// effective radius to prevent particle centers on the sphere edge
-			const float effRadius = std::max(0.0f, cfg_.dropletRadius - params.particleRadiusF);
+			const float effRadius = std::max(0.0f, cfg_.dropletRadius - params.particleSizeF * 0.5f);
 			const float effRadiusSqu = effRadius * effRadius;
 
 			// predicate to filter out particles outside the sphere

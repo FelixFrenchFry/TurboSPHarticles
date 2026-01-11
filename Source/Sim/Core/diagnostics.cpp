@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <cinttypes>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -60,26 +61,40 @@ namespace Sim
         printf("%-24s = %.6f\n", "timeStep", params.timeStep);
         printf("%-24s = %.6f\n", "particleSizeF", params.particleSizeF);
         printf("%-24s = %.6f\n", "particleSizeB", params.particleSizeB);
+        printf("%-24s = %.6f\n", "particleSizeInvF", params.particleSizeInvF);
+        printf("%-24s = %.6f\n", "particleSizeInvB", params.particleSizeInvB);
         printf("%-24s = %.6f\n", "kernelSuppRatio", params.kernelSuppRatio);
         printf("%-24s = %.6f\n", "kernelRadius", params.kernelRadius);
+        printf("%-24s = %.6f\n", "kernelRadiusSqu", params.kernelRadiusSqu);
+        printf("%-24s = %u\n", "expctdNbrCountSoftMax_FF", params.expctdNbrCountSoftMax_FF);
+        printf("%-24s = %u\n", "expctdNbrCountSoftMax_FB", params.expctdNbrCountSoftMax_FB);
+        printf("%-24s = %u\n", "expctdNbrCountHardMax_FF", params.expctdNbrCountHardMax_FF);
+        printf("%-24s = %u\n", "expctdNbrCountHardMax_FB", params.expctdNbrCountHardMax_FB);
         printf("%-24s = %.6f\n", "restDensityF", params.restDensityF);
         printf("%-24s = %.6f\n", "restDensityB", params.restDensityB);
         printf("%-24s = %.6f\n", "massF", params.massF);
         printf("%-24s = %.6f\n", "massB", params.massB);
         printf("%-24s = %.6f\n", "viscosityF", params.viscosityF);
         printf("%-24s = %.6f\n", "viscosityB", params.viscosityB);
+        printf("%-24s = (%.3f, %.3f, %.3f)\n", "gravity",
+            params.gravity.x, params.gravity.y, params.gravity.z);
         printf("%-24s = %.6f\n", "pressGamma", params.pressGamma);
         printf("%-24s = %.6f\n", "jacobiOmega", params.jacobiOmega);
         printf("%-24s = %.6f\n", "densityDevTarget", params.densityDevTarget);
+        printf("%-24s = %u\n", "fixedIters", params.fixedIters);
         printf("%-24s = %u\n", "minSolverIters", params.minSolverIters);
         printf("%-24s = %u\n", "maxSolverIters", params.maxSolverIters);
         printf("%-24s = %s\n", "solverTerminationCond",
             Base::ToCString(params.solverTerminationCond));
+        printf("%-24s = %u\n", "dataReOrderInterval", params.dataReOrderInterval);
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
+        printf("%-24s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);
         printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);
+        printf("%-24s = %" PRId64 "\n", "jitterSeedB", params.jitterSeedB);
         printf("%-24s = %u\n", "boundaryLayers", params.boundaryLayers);
-        printf("%-24s = (%.3f, %.3f, %.3f)\n", "gravity",
-            params.gravity.x, params.gravity.y, params.gravity.z);
+        printf("%-24s = %s\n", "exportEnabled", params.exportEnabled ? "true" : "false");
+        printf("%-24s = %s\n", "exportDir", params.exportDir.c_str());
+		printf("%-24s = %u\n", "exportInterval", params.exportInterval);
     }
 
     void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr,

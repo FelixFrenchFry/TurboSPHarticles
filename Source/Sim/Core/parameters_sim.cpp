@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <numbers>
 #include <spdlog/spdlog.h>
 #include <thread>
 
@@ -11,8 +12,10 @@
 #include "Source/Base/helpers.h"
 #include "parameters_sim.h"
 
+#include <iostream>
 
 
+constexpr float PI = std::numbers::pi_v<float>;
 using namespace Sim;
 
 std::pair<SimParams, uint64_t> SimParamsMgr::SnapshotParams() const
@@ -239,6 +242,17 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	{
 		Set_KernelSuppRatio(it->get<float>(), verbose);
 	}
+
+	// --- [ neighbor count heuristics ] ---------------------------------------
+
+	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
 
 	// --- [ rest density ] ----------------------------------------------------
 
@@ -615,55 +629,6 @@ void SimParamsMgr::Set_SimRunNextStep(
 	EndWrite();
 }
 
-void SimParamsMgr::Set_NumParticles(
-	uint32_t N, Base::ParticleType type, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-
-	if (type == Base::ParticleType::Fluid)
-	{
-		Base::MarkIfChanged(N, params_.N_F, changed);
-	}
-	else if (type == Base::ParticleType::Boundary)
-	{
-		Base::MarkIfChanged(N, params_.N_B, changed);
-	}
-	else
-	{
-		SPDLOG_WARN("Change of 'N' not implemented for this type");
-	}
-
-	if (!changed) { return; } // nothing to change
-
-	BeginWrite();
-
-	if (type == Base::ParticleType::Fluid)
-	{
-		if (verbose)
-		{
-			SPDLOG_INFO("Changed 'N_F' from {} to {}",
-				params_.N_F, N);
-		}
-
-		// apply changes
-		params_.N_F = N;
-	}
-	else if (type == Base::ParticleType::Boundary)
-	{
-		if (verbose)
-		{
-			SPDLOG_INFO("Changed 'N_B' from {} to {}",
-				params_.N_B, N);
-		}
-
-		// apply changes
-		params_.N_B = N;
-	}
-
-	EndWrite();
-}
-
 void SimParamsMgr::Set_TimeStep(
 	float timeStep, bool verbose)
 {
@@ -731,7 +696,6 @@ void SimParamsMgr::Set_ParticleSize(
 		// apply changes
 		params_.particleSizeF = particleSize;
 		params_.particleSizeInvF = 1.0f / particleSize;
-		params_.particleRadiusF = 0.5f * particleSize;
 		params_.massF = params_.restDensityF * particleSize
 											 * particleSize
 											 * particleSize;
@@ -750,7 +714,6 @@ void SimParamsMgr::Set_ParticleSize(
 		// apply changes
 		params_.particleSizeB = particleSize;
 		params_.particleSizeInvB = 1.0f / particleSize;
-		params_.particleRadiusB = 0.5f * particleSize;
 		params_.massB = params_.restDensityB * particleSize
 											 * particleSize
 											 * particleSize;
@@ -786,6 +749,14 @@ void SimParamsMgr::Set_KernelSuppRatio(
 	params_.kernelSuppRatio = kernelSuppRatio;
 	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
 	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
+	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
+		kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
+		kernelSuppRatio, Base::ParticleType::Boundary);
+	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
+		kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
+		kernelSuppRatio, Base::ParticleType::Boundary);
 	EndWrite();
 }
 
@@ -814,6 +785,14 @@ void SimParamsMgr::Set_KernelRadius(
 	params_.kernelRadius = kernelRadius;
 	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
 	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
+	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
 	EndWrite();
 }
 
@@ -1216,14 +1195,6 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		return par.particleSizeInvB > 0.0f;
 	});
-	ok &= Check("particleRadiusF <= 0", true, [&]()
-	{
-		return par.particleRadiusF > 0.0f;
-	});
-	ok &= Check("particleRadiusB <= 0", true, [&]()
-	{
-		return par.particleRadiusB > 0.0f;
-	});
 	ok &= Check("restDensityF <= 0", true, [&]()
 	{
 		return par.restDensityF > 0.0f;
@@ -1268,16 +1239,6 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 		float expect = 1.0f / par.particleSizeB;
 		return Base::ApproxEqu(par.particleSizeInvB, expect);
 	});
-	ok &= Check("particleRadiusF != 0.5 * particleSizeF", true, [&]()
-	{
-		float expect = 0.5f * par.particleSizeF;
-		return Base::ApproxEqu(par.particleRadiusF, expect);
-	});
-	ok &= Check("particleRadiusB != 0.5 * particleSizeB", true, [&]()
-	{
-		float expect = 0.5f * par.particleSizeB;
-		return Base::ApproxEqu(par.particleRadiusB, expect);
-	});
 	ok &= Check("massF != restDensityF * particleSizeF^3", true, [&]()
 	{
 		float expect = par.restDensityF * par.particleSizeF
@@ -1308,6 +1269,28 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	});
 
 	return ok;
+}
+
+uint32_t SimParamsMgr::HeuristicExpectedNeighborCount_SoftMax(
+	float kernelSuppRatio, Base::ParticleType type) const
+{
+	float volume = (4.0f / 3.0f) * PI * std::powf(kernelSuppRatio, 3.0f);
+	float occupancy = type == Base::ParticleType::Fluid ? 1.0f : 0.5f;
+	float margin = 0.2f;
+
+	float heuristic = std::ceilf(volume * occupancy * (1.0f + margin));
+	return static_cast<uint32_t>(heuristic);
+}
+
+uint32_t SimParamsMgr::HeuristicExpectedNeighborCount_HardMax(
+	float kernelSuppRatio, Base::ParticleType type) const
+{
+	float volume = (4.0f / 3.0f) * PI * std::powf(kernelSuppRatio, 3.0f);
+	float occupancy = type == Base::ParticleType::Fluid ? 1.0f : 0.75f;
+	float margin = 0.8f;
+
+	float heuristic = std::ceilf(volume * occupancy * (1.0f + margin));
+	return static_cast<uint32_t>(heuristic);
 }
 
 inline void SimParamsMgr::BeginWrite()

@@ -75,7 +75,7 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
 	// TODO: differentiate between fluid and boundary particles?
-	const float rad = simParams.particleRadiusF;
+	const float rad = simParams.particleSizeF * 0.5f;
 	const bool hasScalar = (view.scalarModeF != Base::ColorCodingMode::None) &&
 							!view.scalarDataF.empty();
 

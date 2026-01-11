@@ -18,8 +18,6 @@
 
 static constexpr uint32_t N_expctNbrCountF = 40;
 static constexpr uint32_t N_expctNbrCountB = 20;
-static constexpr uint32_t N_expctMaxNbrCountF = 64;
-static constexpr uint32_t N_expctMaxNbrCountB = 32;
 
 
 
@@ -47,26 +45,27 @@ namespace Sim
 		bool simRunNextStep		= false;
 		int64_t maxSteps		= -1;
 
-		// particles
-		uint32_t N_F = 0; // TODO: is this always updated correctly?
-		uint32_t N_B = 0; // TODO: is this always updated correctly?
-
 		// time
 		float timeStep			= 0.0001f;
 
 		// particle sizes
-		// (size of particles is treated as smoothing length and spacing)
+		// (is treated as smoothing length and spacing "h")
 		float particleSizeF		= 0.01f;
 		float particleSizeB		= 0.01f;
 		float particleSizeInvF	= 100.0f;
-		float particleSizeInvB  = 100.0f;
-		float particleRadiusF	= 0.005f;
-		float particleRadiusB	= 0.005f;
+		float particleSizeInvB	= 100.0f;
 
 		// kernel
 		float kernelSuppRatio	= 2.0f;
 		float kernelRadius		= 0.02f; // radius = size * supp ratio
 		float kernelRadiusSqu	= 0.0004f;
+
+		// neighbor count heuristics
+		// TODO: use p95 and p99 values for heuristics?
+		uint32_t expctdNbrCountSoftMax_FF = 40;
+		uint32_t expctdNbrCountSoftMax_FB = 20;
+		uint32_t expctdNbrCountHardMax_FF = 64;
+		uint32_t expctdNbrCountHardMax_FB = 32;
 
 		// density and mass
 		float restDensityF		= 1'000.0f;
@@ -82,9 +81,9 @@ namespace Sim
 		// pressure solving
 		float pressGamma		= 0.5f;
 		float jacobiOmega		= 0.6f;
-		float densityDevTarget  = 0.01f;
+		float densityDevTarget	= 0.01f;
 		uint32_t fixedIters		= 10;
-		uint32_t minSolverIters = 5;
+		uint32_t minSolverIters	= 5;
 		uint32_t maxSolverIters	= 50;
 		Base::SolverTerminationCond solverTerminationCond =
 			Base::SolverTerminationCond::FixedIters;
@@ -120,8 +119,8 @@ namespace Sim
 
 		// export
 		bool exportEnabled		= true;
-		std::string exportDir   = "A";
-		uint32_t exportInterval = 10;
+		std::string exportDir	= "A";
+		uint32_t exportInterval	= 10;
 	};
 
 	class SimParamsMgr
@@ -144,7 +143,6 @@ namespace Sim
 		void Set_RunFillQuery(bool runFillQuery, bool verbose = false);
 		void Set_SimRunning(bool simRunning, bool verbose = false);
 		void Set_SimRunNextStep(bool simRunNextStep, bool verbose = false);
-		void Set_NumParticles(uint32_t N, Base::ParticleType type, bool verbose = false);
 		void Set_TimeStep(float timeStep, bool verbose = false);
 		void Set_ParticleSize(float particleSize, Base::ParticleType type, bool verbose = false);
 		void Set_KernelSuppRatio(float kernelSuppRatio, bool verbose = false);
@@ -161,7 +159,12 @@ namespace Sim
 		void Set_DataReOrderInterval(uint32_t dataReOrderInterval, bool verbose = false);
 		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
 
+		// helpers
 		bool AssertParamDerivationCorrectness() const;
+		uint32_t HeuristicExpectedNeighborCount_SoftMax(
+			float kernelSuppRatio, Base::ParticleType type) const;
+		uint32_t HeuristicExpectedNeighborCount_HardMax(
+			float kernelSuppRatio, Base::ParticleType type) const;
 
 	private: // ----------------------------------------------------------------
 

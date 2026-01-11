@@ -34,7 +34,7 @@ void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 	if (params.boundaryLayers <= 0) { return; }
 
 	const float sizeB = params.particleSizeB;
-	const float radiusB = params.particleRadiusB;
+	const float radiusB = params.particleSizeB * 0.5f;
 
 	// max normal offset of the outermost layer
 	const float pad = radiusB + (static_cast<float>(params.boundaryLayers) - 1.0f) * sizeB;
@@ -70,7 +70,7 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 									  const Sim::SimParams& params)
 {
 	const float size = params.particleSizeF;
-	const float radius = params.particleRadiusF;
+	const float radius = params.particleSizeF * 0.5f;
 
 	// inner lengths for centers (shrink by one radius per side)
 	const float uLen_i = box.uLen - 2.0f * radius;
@@ -185,7 +185,7 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 											   const ParticleKeepPredicate& keep)
 {
 	const float size = params.particleSizeF;
-	const float radius = params.particleRadiusF;
+	const float radius = params.particleSizeF * 0.5f;
 
 	// inner lengths for centers (shrink by one radius per side)
 	const float uLen_i = box.uLen - 2.0f * radius;
@@ -314,7 +314,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 											    const Sim::SimParams& params)
 {
 	const float size = params.particleSizeB;
-	const float radius = params.particleRadiusB;
+	const float radius = params.particleSizeB * 0.5f;
 	const uint32_t layers = params.boundaryLayers < 0 ? 0 : params.boundaryLayers;
 
 	// shrink OBB lengths by radius in all directions, resulting in "inner" lengths
@@ -508,7 +508,7 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 
 	for (uint32_t layer = 0; layer < params.boundaryLayers; layer++)
 	{
-		const float outOffset = params.particleRadiusB
+		const float outOffset = params.particleSizeB * 0.5f
 							  + static_cast<float>(layer) * size;
 
 		for (uint32_t i = 0; i < N_u; i++)
