@@ -475,6 +475,30 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 		}
 
+		if (auto it = j.find("statGroupsEnabled"); it != j.end() && it->is_object())
+		{
+			BeginWrite();
+
+			auto& sge = params_.statGroupsEnabled;
+
+			if (auto v = it->find("particles"); v != it->end() && v->is_boolean())
+			{
+				sge[static_cast<uint8_t>(Stats::StatGroup::Particles)] = v->get<bool>();
+			}
+
+			if (auto v = it->find("density"); v != it->end() && v->is_boolean())
+			{
+				sge[static_cast<uint8_t>(Stats::StatGroup::Density)] = v->get<bool>();
+			}
+
+			if (auto v = it->find("velocity"); v != it->end() && v->is_boolean())
+			{
+				sge[static_cast<uint8_t>(Stats::StatGroup::Velocity)] = v->get<bool>();
+			}
+
+			EndWrite();
+		}
+
 		if (auto it = j.find("exportEnabled"); it != j.end())
 		{
 			params_.exportEnabled = it->get<bool>();

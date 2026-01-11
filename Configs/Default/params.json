@@ -33,6 +33,11 @@
   "maxStatRecs": 1000000,
   "timeUnit": "ms",
   "byteUnit": "MiB",
+  "statGroupsEnabled": {
+    "particles": true,
+    "density": false,
+    "velocity": false
+  },
 
   "exportEnabled": false,
   "exportDir": "F",
