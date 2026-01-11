@@ -17,6 +17,9 @@
 
 
 
+static constexpr uint32_t N_perScratchInlineFF = 64;
+static constexpr uint32_t N_perScratchInlineFB = 48;
+
 namespace Sim
 {
 	// forward declarations
@@ -53,9 +56,9 @@ namespace Sim
 
 		// query scratch
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+			uint32_t, N_perScratchInlineFF>> scratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
+			uint32_t, N_perScratchInlineFB>> scratchFB_;
 	};
 
 	// -------------------------------------------------------------------------
@@ -97,9 +100,9 @@ namespace Sim
 
 		// query scratch
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+			uint32_t, N_perScratchInlineFF>> scratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
+			uint32_t, N_perScratchInlineFB>> scratchFB_;
 
 		// data structures
 		ankerl::unordered_dense::map<Key, Bucket> cellGridF_{};
@@ -159,9 +162,9 @@ namespace Sim
 
 		// query scratch
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+			uint32_t, N_perScratchInlineFF>> scratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
+			uint32_t, N_perScratchInlineFB>> scratchFB_;
 
 		// data structures
 		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the sorted particle index array
@@ -225,9 +228,9 @@ namespace Sim
 
 		// query scratch
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountF>> scratchFF_;
+			uint32_t, N_perScratchInlineFF>> scratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_expctMaxNbrCountB>> scratchFB_;
+			uint32_t, N_perScratchInlineFB>> scratchFB_;
 
 		// data structures
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells

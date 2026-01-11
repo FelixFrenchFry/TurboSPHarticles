@@ -67,12 +67,12 @@ namespace
 
 void NS_BruteForce_CPU01::Init(const SimParams& params)
 {
-	// nothing
+	// nothing to do
 }
 
 void NS_BruteForce_CPU01::Construct(const SimParams& params)
 {
-	// nothing
+	// nothing to do
 }
 
 void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
@@ -162,8 +162,17 @@ void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
 			auto& scratchFF = scratchFF_.local();
 			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
 
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
@@ -452,8 +461,17 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
 			auto& scratchFF = scratchFF_.local();
 			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
 
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
@@ -1018,8 +1036,17 @@ void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
 			auto& scratchFF = scratchFF_.local();
 			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
 
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
@@ -1572,8 +1599,17 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Basic(const SimParams& params)
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
 			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
 			auto& scratchFF = scratchFF_.local();
 			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
 
 			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{
@@ -1730,8 +1766,17 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
 			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
 			auto& scratchFF = scratchFF_.local();
 			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
 
 			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{

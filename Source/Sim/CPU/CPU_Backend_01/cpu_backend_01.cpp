@@ -53,6 +53,7 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
+	neighborSearchStrat_->Init(params);
 
 	// select neighbor list storage
 	if (params.neighborListStorage ==
