@@ -316,19 +316,210 @@ void SimBackend_GPU01::FillMemoryRecord(
 	// TODO: implement
 }
 
-// TODO: add flags to enable/disable certain stats?
 void SimBackend_GPU01::FillStatisticsRecord(
 	Stats::StatRecordStep& record,
 	const SimParams& simParams) const
 {
 	using namespace Stats;
 
-	// TODO: implement
+	const uint32_t NF = N_F_;
+	const uint32_t NB = N_B_;
+
+	Set(record, StatMetric::NumF, static_cast<float>(NF));
+	Set(record, StatMetric::NumB, static_cast<float>(NB));
+
+	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
+
+	// --- [ particle counts ] -------------------------------------------------
+
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Particles });
+
+		float sumFF = 0.0f;
+		float nbrFF_p95 = 0.0f;
+		float nbrFF_p99 = 0.0f;
+		float minFF = std::numeric_limits<float>::max();
+		float maxFF = 0.0f;
+
+		float sumFB = 0.0f;
+		float nbrFB_p95 = 0.0f;
+		float nbrFB_p99 = 0.0f;
+		float minFB = std::numeric_limits<float>::max();
+		float maxFB = 0.0f;
+
+		if (NF > 0)
+		{
+			
+		}
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+		/*
+		if (NF > 0)
+		{
+			struct NeighStatsLocal
+			{
+				float sumFF;
+				float minFF;
+				float maxFF;
+				float sumFB;
+				float minFB;
+				float maxFB;
+			};
+
+			NeighStatsLocal globalNeigh = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, NF),
+				NeighStatsLocal
+				{
+					.sumFF = 0.0f,
+					.minFF = std::numeric_limits<float>::max(),
+					.maxFF = 0.0f,
+					.sumFB = 0.0f,
+					.minFB = std::numeric_limits<float>::max(),
+					.maxFB = 0.0f
+				},
+				[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
+				{
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const float N_FF = static_cast<float>(neighborLists_->CountFF(i));
+						const float N_FB = static_cast<float>(neighborLists_->CountFB(i));
+
+						local.sumFF += N_FF;
+						if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
+						if (N_FF > local.maxFF) [[unlikely]] { local.maxFF = N_FF; }
+
+						local.sumFB += N_FB;
+						if (N_FB < local.minFB) [[unlikely]] { local.minFB = N_FB; }
+						if (N_FB > local.maxFB) [[unlikely]] { local.maxFB = N_FB; }
+					}
+					return local;
+				},
+				[](const NeighStatsLocal& a, const NeighStatsLocal& b) -> NeighStatsLocal
+				{
+					NeighStatsLocal r;
+
+					r.sumFF = a.sumFF + b.sumFF;
+					r.minFF = std::min(a.minFF, b.minFF);
+					r.maxFF = std::max(a.maxFF, b.maxFF);
+					r.sumFB = a.sumFB + b.sumFB;
+					r.minFB = std::min(a.minFB, b.minFB);
+					r.maxFB = std::max(a.maxFB, b.maxFB);
+
+					return r;
+				},
+				tbb::auto_partitioner{}
+			);
+
+			sumFF = globalNeigh.sumFF;
+			minFF = globalNeigh.minFF;
+			maxFF = globalNeigh.maxFF;
+			sumFB = globalNeigh.sumFB;
+			minFB = globalNeigh.minFB;
+			maxFB = globalNeigh.maxFB;
+		}
+		if (NF == 0) // reasonable defaults for empty sim
+		{
+			minFF = 0.0f;
+			minFB = 0.0f;
+		}
+
+		if (NF > 0) // determine percentiles
+		{
+			// reuse workBuffer_ for neighbor counts
+			workBuffer_.resize(NF);
+
+			// FF
+			for (uint32_t i = 0; i < NF; i++)
+			{
+				workBuffer_[i] = static_cast<float>(neighborLists_->CountFF(i));
+			}
+
+			{
+				// indices of the 95th and 99th percentiles
+				const size_t i95 = (95ull * (NF - 1)) / 100ull;
+				const size_t i99 = (99ull * (NF - 1)) / 100ull;
+
+				auto begin = workBuffer_.begin();
+				auto end = workBuffer_.end();
+				auto nth95 = begin + i95;
+				auto nth99 = begin + i99;
+
+				// select p95 within the full range
+				std::nth_element(begin, nth95, end);
+				nbrFF_p95 = *nth95;
+
+				if (i95 == i99) // handle same index edge case
+				{
+					nbrFF_p99 = *nth95;
+				}
+				else
+				{
+					// select p99 only within the upper part
+					std::nth_element(nth95, nth99, end);
+					nbrFF_p99 = *nth99;
+				}
+			}
+
+			// FB
+			for (uint32_t i = 0; i < NF; ++i)
+			{
+				workBuffer_[i] = static_cast<float>(neighborLists_->CountFB(i));
+			}
+
+			{
+				// indices of the 95th and 99th percentiles
+				const size_t i95 = (95ull * (NF - 1)) / 100ull;
+				const size_t i99 = (99ull * (NF - 1)) / 100ull;
+
+				auto begin = workBuffer_.begin();
+				auto end = workBuffer_.end();
+				auto nth95 = begin + i95;
+				auto nth99 = begin + i99;
+
+				// select p95 within the full range
+				std::nth_element(begin, nth95, end);
+				nbrFB_p95 = *nth95;
+
+				if (i95 == i99) // handle same index edge case
+				{
+					nbrFB_p99 = *nth95;
+				}
+				else
+				{
+					// select p99 only within the upper part
+					std::nth_element(nth95, nth99, end);
+					nbrFB_p99 = *nth99;
+				}
+			}
+		}
+		else // reasonable defaults for empty sim
+		{
+			nbrFF_p95 = nbrFF_p99 = 0.0f;
+			nbrFB_p95 = nbrFB_p99 = 0.0f;
+		}
+
+		Set(record, StatMetric::NumNbrFF_Avg, sumFF * invNF);
+		Set(record, StatMetric::NumNbrFF_P95, nbrFF_p95);
+		Set(record, StatMetric::NumNbrFF_P99, nbrFF_p99);
+		Set(record, StatMetric::NumNbrFF_Min, minFF);
+		Set(record, StatMetric::NumNbrFF_Max, maxFF);
+
+		Set(record, StatMetric::NumNbrFB_Avg, sumFB * invNF);
+		Set(record, StatMetric::NumNbrFB_P95, nbrFB_p95);
+		Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
+		Set(record, StatMetric::NumNbrFB_Min, minFB);
+		Set(record, StatMetric::NumNbrFB_Max, maxFB);
+		*/
+
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Particles });
+	}
 }
 
 void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench)
 {
-	// TODO: implement	
+	// TODO: implement
 }
 
 void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)

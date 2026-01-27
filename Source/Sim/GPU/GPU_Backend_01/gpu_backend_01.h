@@ -180,7 +180,7 @@ namespace Sim
 
 		// max neighbor counts
 		static constexpr uint32_t N_MAX_FF_ = 64;
-		static constexpr uint32_t N_MAX_FB_ = 32;
+		static constexpr uint32_t N_MAX_FB_ = 48;
 
 		DeviceBuffer<uint8_t> d_neighCountFF_;
 		DeviceBuffer<uint8_t> d_neighCountFB_;
