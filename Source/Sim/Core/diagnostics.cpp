@@ -239,13 +239,21 @@ namespace Sim
         {
             const auto& group = opGroups[i];
 
+            auto MinOrZero = [](uint64_t a, uint64_t b)
+        	{
+                if (a == 0) { return b; }
+                if (b == 0) { return a; }
+
+                return std::min(a, b);
+        	};
+
             uint64_t groupNsLatest = 0;
             uint64_t groupNsAvg = 0;
 
             for (auto op : group.ops)
             {
-                groupNsLatest += benchmarksTracker.GetBench_Latest(op);
-                groupNsAvg += benchmarksTracker.GetBench_Avg_OverAll(op);
+                groupNsLatest = MinOrZero(groupNsLatest, benchmarksTracker.GetBench_Latest(op));
+                groupNsAvg = MinOrZero(groupNsAvg, benchmarksTracker.GetBench_Avg_OverAll(op));
             }
 
             groupLatest[i] = groupNsLatest;

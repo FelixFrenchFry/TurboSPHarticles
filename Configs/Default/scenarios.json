@@ -42,15 +42,15 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 8.0,
-        "vLen": 8.0,
-        "wLen": 8.0
+        "uLen": 10.0,
+        "vLen": 10.0,
+        "wLen": 10.0
       },
-      "poolDepth": 1.0,
+      "poolDepth": 0.4,
       "dropletRadius": 1.0,
       "dropletGap": 0.0,
-      "dropletOffset": [ 0.0, 0.0 ],
-      "dropletInitVel": [ 0.0, 0.0, 0.0 ]
+      "dropletOffset": [ -5.0, -5.0 ],
+      "dropletInitVel": [ 6.0, 0.0, 6.0 ]
     }
   }
 }

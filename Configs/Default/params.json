@@ -10,8 +10,8 @@
   "kernelSuppRatio": 2.0,
   "restDensityF": 1000.0,
   "restDensityB": 1000.0,
-  "viscosityF": 0.00015,
-  "viscosityB": 0.00015,
+  "viscosityF": 0.00012,
+  "viscosityB": 0.00012,
   "gravity": [ 0.0, -9.81, 0.0 ],
 
   "pressGamma": 0.5,
@@ -35,11 +35,11 @@
   "byteUnit": "MiB",
   "statGroupsEnabled": {
     "particles": true,
-    "density": false,
-    "velocity": false
+    "density": true,
+    "velocity": true
   },
 
   "exportEnabled": false,
-  "exportDir": "F",
+  "exportDir": "I",
   "exportInterval": 10
 }
