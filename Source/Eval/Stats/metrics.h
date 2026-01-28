@@ -61,6 +61,7 @@ namespace Stats
 		NumSolverIters,		// number of pressure solver iterations performed
 
 		// velocity stuff
+		CFL_Number,			// CFL number given the max velocity magnitude
 		VelMag_Avg,			// average velocity magnitude
 		VelMag_Min,			// min velocity magnitude
 		VelMag_Max,			// max velocity magnitude
@@ -207,6 +208,15 @@ namespace Stats
 				.var = "int",
 				.tip =
 				"Number of pressure solver iterations performed"
+			},
+			{
+				.metric = StatMetric::CFL_Number,
+				.name = "CFL number",
+				.unit = "",
+				.var = "float",
+				.tip =
+				"Maximum distance covered by any particle, given as a fraction"
+				"of its size using (max|v| * dt / h)"
 			},
 			{
 				.metric = StatMetric::VelMag_Avg,

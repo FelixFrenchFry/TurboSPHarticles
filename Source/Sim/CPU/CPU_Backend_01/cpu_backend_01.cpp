@@ -554,12 +554,15 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
+	benchmarksTracker_.StartBench({
+		Bench::BenchOp::Statistics_Particles,
+		Bench::BenchOp::Statistics_Density,
+		Bench::BenchOp::Statistics_Velocity });
+
 	// --- [ particle counts ] -------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Particles });
-
 		float sumFF = 0.0f;
 		float nbrFF_p95 = 0.0f;
 		float nbrFF_p99 = 0.0f;
@@ -727,16 +730,12 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
 		Set(record, StatMetric::NumNbrFB_Min, minFB);
 		Set(record, StatMetric::NumNbrFB_Max, maxFB);
-
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Particles });
 	}
 
 	// --- [ density stats ] ---------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Density });
-
 		// TODO: use double for the accumulations?
 		float sumRelErr_raw = 0.0f;
 		float sumRelErr_pos = 0.0f;
@@ -796,8 +795,6 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::DensRelError_Raw_Avg, sumRelErr_raw * invNF);
 		Set(record, StatMetric::DensRelError_Pos_Avg, sumRelErr_pos * invNF);
 		Set(record, StatMetric::DensRelError_Abs_Avg, sumRelErr_abs * invNF);
-
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Density });
 	}
 
 	// --- [ pressure stats ] --------------------------------------------------
@@ -808,8 +805,6 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Velocity });
-
 		float velMagSum = 0.0f;
 		float velMagMin = std::numeric_limits<float>::max();
 		float velMagMax = 0.0f;
@@ -871,12 +866,16 @@ void SimBackend_CPU01::FillStatisticsRecord(
 			velMagMax = 0.0f;
 		}
 
+		Set(record, StatMetric::CFL_Number, velMagMax* simParams.timeStep / simParams.particleSizeF);
 		Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
 		Set(record, StatMetric::VelMag_Min, velMagMin);
 		Set(record, StatMetric::VelMag_Max, velMagMax);
-
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Velocity });
 	}
+
+	benchmarksTracker_.StopBench({
+		Bench::BenchOp::Statistics_Particles,
+		Bench::BenchOp::Statistics_Density,
+		Bench::BenchOp::Statistics_Velocity });
 }
 
 void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)

@@ -525,6 +525,7 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 
 		DrawStatGroupTable("table_velocity",
 		{
+			Stats::StatMetric::CFL_Number,
 			Stats::StatMetric::VelMag_Avg,
 			Stats::StatMetric::VelMag_Min,
 			Stats::StatMetric::VelMag_Max
