@@ -11,7 +11,7 @@ import pyvista as pv
 
 
 
-# --- [ config ] ---------------------------------------------------------------
+# --- [ config ] ----------------------------------------------------------------------------------
 
 DATA_DIR        = Path("../../Export/B")
 INPUT_TEMPLATE  = "pos_vel_step_{step:09d}.xdmf"
@@ -46,7 +46,7 @@ CAMERA_POSITION = [
 USE_MULTIPROCESSING = True
 NUM_PROCESSES       = 16
 
-# --- [ helpers ] --------------------------------------------------------------
+# --- [ helpers ] ---------------------------------------------------------------------------------
 
 def step_to_filename(step: int) -> Path:
     name = INPUT_TEMPLATE.format(step=step)
@@ -147,7 +147,7 @@ def clean_scalar_array(volume: pv.DataSet, name: str) -> None:
             arr[mask_bad] = np.median(finite_vals)
         volume[name] = arr
 
-# --- [ core rendering ] -------------------------------------------------------
+# --- [ core rendering ] --------------------------------------------------------------------------
 
 def render_step(step: int) -> None:
     in_path = step_to_filename(step)
@@ -213,7 +213,7 @@ def render_step(step: int) -> None:
     except Exception as e:
         print(f"[step {step:9d}] ERROR: {e}")
 
-# --- [ main ] -----------------------------------------------------------------
+# --- [ main ] ------------------------------------------------------------------------------------
 
 def main():
     try:

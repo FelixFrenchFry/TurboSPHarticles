@@ -20,7 +20,7 @@ namespace Sim
 {
 	class SimBackend_CPU01 final : public I_SimBackend
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 						 Bench::BenchmarksTracker& benchmarksTracker,
@@ -72,7 +72,7 @@ namespace Sim
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;

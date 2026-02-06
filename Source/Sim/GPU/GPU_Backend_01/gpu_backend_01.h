@@ -32,7 +32,7 @@ namespace Sim
 	template <class T>
 	class DeviceBuffer
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		DeviceBuffer() = default;
 		~DeviceBuffer() { Release(); }
@@ -73,7 +73,7 @@ namespace Sim
 			size_ = 0;
 		}
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		void Swap_(DeviceBuffer& o) noexcept
 		{
@@ -87,7 +87,7 @@ namespace Sim
 
 	class SimBackend_GPU01 final : public I_SimBackend
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		SimBackend_GPU01(Sim::SimParamsMgr& simParamsMgr,
 						 Bench::BenchmarksTracker& benchmarksTracker,
@@ -138,7 +138,7 @@ namespace Sim
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;

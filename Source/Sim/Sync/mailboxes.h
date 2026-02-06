@@ -18,7 +18,7 @@ namespace Sync
 	// single-producer, single-consumer, lock-free mailbox for vis-specific simulation state snapshots
 	class VisualSnapMailbox
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<VisualSnapshot> snap) noexcept
 		{
@@ -35,7 +35,7 @@ namespace Sync
 			return true;
 		}
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// latest snapshot of the vis-specific simulation state
 		std::atomic<std::shared_ptr<VisualSnapshot>> latestSnap_{ nullptr };
@@ -44,7 +44,7 @@ namespace Sync
 	// single-producer, single-consumer, lock-free mailbox for operation benchmark snapshots
 	class BenchSnapMailbox
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<BenchSnapshot> snap) noexcept
 		{
@@ -61,7 +61,7 @@ namespace Sync
 			return true;
 		}
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// latest snapshot of the operation benchmarks
 		std::atomic<std::shared_ptr<BenchSnapshot>> latestSnap_{ nullptr };
@@ -70,7 +70,7 @@ namespace Sync
 	// single-producer, single-consumer, lock-free mailbox for memory usage snapshots
 	class MemSnapMailbox
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<MemSnapshot> snap) noexcept
 		{
@@ -87,7 +87,7 @@ namespace Sync
 			return true;
 		}
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// latest snapshot of the operation benchmarks
 		std::atomic<std::shared_ptr<MemSnapshot>> latestSnap_{ nullptr };
@@ -96,7 +96,7 @@ namespace Sync
 	// single-producer, single-consumer, lock-free mailbox for statistics data snapshots
 	class StatSnapMailbox
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<StatSnapshot> snap) noexcept
 		{
@@ -113,7 +113,7 @@ namespace Sync
 			return true;
 		}
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// latest snapshot of the statistics data
 		std::atomic<std::shared_ptr<StatSnapshot>> latestSnap_{ nullptr };

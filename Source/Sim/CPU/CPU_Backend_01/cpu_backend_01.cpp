@@ -459,7 +459,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 {
 	using namespace Mem;
 
-	// --- [ particle properties ] ---------------------------------------------
+	// --- [ particle properties ] -------------------------------------------------------------------
 
 	// fluid
 	{
@@ -509,7 +509,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Set(record, MemBucket::ParticlePropertiesB, usage);
 	}
 
-	// --- [ neighbor search data structures ] ---------------------------------
+	// --- [ neighbor search data structures ] -------------------------------------------------------
 
 	{
 		MemUsage usageF{};
@@ -524,7 +524,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Set(record, MemBucket::Neighbors_SearchDataStructB, usageB);
 	}
 
-	// --- [ neighbor list storage ] -------------------------------------------
+	// --- [ neighbor list storage ] -----------------------------------------------------------------
 
 	{
 		MemUsage usageF{};
@@ -559,7 +559,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Bench::BenchOp::Statistics_Density,
 		Bench::BenchOp::Statistics_Velocity });
 
-	// --- [ particle counts ] -------------------------------------------------
+	// --- [ particle counts ] -----------------------------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
@@ -732,7 +732,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::NumNbrFB_Max, maxFB);
 	}
 
-	// --- [ density stats ] ---------------------------------------------------
+	// --- [ density stats ] -------------------------------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
 	{
@@ -797,11 +797,11 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::DensRelError_Abs_Avg, sumRelErr_abs * invNF);
 	}
 
-	// --- [ pressure stats ] --------------------------------------------------
+	// --- [ pressure stats ] ------------------------------------------------------------------------
 
 	Set(record, StatMetric::NumSolverIters, N_solverIterCount_);
 
-	// --- [ velocity stats ] --------------------------------------------------
+	// --- [ velocity stats ] ------------------------------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{

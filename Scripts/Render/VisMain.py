@@ -9,7 +9,7 @@ import pyvista as pv
 
 
 
-# --- [ config ] ---------------------------------------------------------------
+# --- [ config ] ----------------------------------------------------------------------------------
 
 DATA_DIR        = Path("../../Export/C")
 INPUT_TEMPLATE  = "pos_vel_step_{step:09d}.xdmf"
@@ -37,7 +37,7 @@ CAMERA_POSITION = [
 USE_MULTIPROCESSING = False
 NUM_PROCESSES       = 8
 
-# --- [ logic ] ----------------------------------------------------------------
+# --- [ logic ] -----------------------------------------------------------------------------------
 
 def step_to_filename(step: int) -> Path:
     name = INPUT_TEMPLATE.format(step=step)

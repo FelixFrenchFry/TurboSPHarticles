@@ -41,7 +41,7 @@ namespace Export
 
 	class SerializationMgr
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit SerializationMgr(SaveOptions opt = {})
 			: saveOptions_(std::move(opt)){}
@@ -58,7 +58,7 @@ namespace Export
 		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SaveOptions saveOptions_;
 	};

@@ -71,7 +71,7 @@ int main(int argc, char** argv)
 			return EXIT_FAILURE;
 		}
 
-		// --- [ hardware budgets ] --------------------------------------------
+		// --- [ hardware budgets ] ---------------------------------------------------------------------
 
 		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
 
@@ -80,7 +80,7 @@ int main(int argc, char** argv)
 		// limit TBB to N_simThreads worker threads
 		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_totalThreads);
 
-		// --- [ initialization of manager systems ] ---------------------------
+		// --- [ initialization of manager systems ] ----------------------------------------------------
 
 		// config profile and simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
@@ -142,12 +142,12 @@ int main(int argc, char** argv)
 		}
 		simParamsMgr.Set_SimRunning(true);
 
-		// --- [ main loop ] ---------------------------------------------------
+		// --- [ main loop ] ----------------------------------------------------------------------------
 
 		// simulation runs on all available threads
 		simulationMgr.Launch_Blocking();
 
-		// --- [ shutdown ] ----------------------------------------------------
+		// --- [ shutdown ] -----------------------------------------------------------------------------
 
 		simulationMgr.Shutdown();
 	}

@@ -20,15 +20,15 @@ using uint32_tbb_alloc = tbb::scalable_allocator<uint32_t>;
 
 namespace Sim
 {
-	// -------------------------------------------------------------------------
-	// --- [ individual vectors neighbor lists ] -------------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ individual vectors neighbor lists ] -----------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	// TODO: implement alternative using boost::small_vector ?
 	class NeighborLists_IndividualVectors_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -50,7 +50,7 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -61,15 +61,15 @@ namespace Sim
 		std::vector<std::vector<uint32_t, uint32_tbb_alloc>> nbrListFB_;
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ CSR vector neighbor lists, final concat ] -------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ CSR vector neighbor lists, final concat ] -----------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	// TODO: implement alternative using boost::small_vector ?
 	class NeighborLists_CSRVector_FinalConcat_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -91,8 +91,8 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
-
+	private: // --------------------------------------------------------------------------------------
+		
 		// metadata
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
@@ -111,15 +111,15 @@ namespace Sim
 		const uint32_t extraAllocCapacityPct_ = 5;
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ CSR vector neighbor lists, double query ] -------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ CSR vector neighbor lists, double query ] -----------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	// TODO: implement alternative using boost::small_vector ?
 	class NeighborLists_CSRVector_DoubleQuery_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -141,7 +141,7 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -158,14 +158,14 @@ namespace Sim
 		const uint32_t extraAllocCapacityPct_ = 5;
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ individual vectors neighbor lists, adaptive compression ] ---------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ individual vectors neighbor lists, adaptive compression ] -------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NeighborLists_IndividualVectors_AdaptCompress_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -187,7 +187,7 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -223,14 +223,14 @@ namespace Sim
 			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ individual vectors neighbor lists, VByteDerived compression ] -----
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ individual vectors neighbor lists, VByteDerived compression ] ---------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -252,7 +252,7 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -286,9 +286,9 @@ namespace Sim
 			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ CSR vector neighbor lists, final concat, ULEB128 compression ] ----
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ CSR vector neighbor lists, final concat, ULEB128 compression ] --------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	/*
 	class NeighborLists_CSRVector_FinalConcat_ULEB128Compress_CPU01 final
@@ -297,9 +297,9 @@ namespace Sim
 
 	};
 
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 	// --- [ CSR vector neighbor lists, final concat, VByteDerived compression ] 
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NeighborLists_CSRVector_FinalConcat_VByteDerivedCompress_CPU01 final
 		: public I_NeighborLists
@@ -307,14 +307,14 @@ namespace Sim
 
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ compact vectors neighbor lists (ULEB128 compression of deltas) ] --
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ compact vectors neighbor lists (ULEB128 compression of deltas) ] ------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NeighborLists_CompactVectors_Compressed_ULEB128_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
@@ -333,7 +333,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -374,14 +374,14 @@ namespace Sim
 		static constexpr uint32_t N_COMPRESSED_NBR_SIZE_FB_ = N_expctNbrCountB * 2; // bytes
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ compact vectors neighbor lists (Stream VByte delta compression) ] -
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ compact vectors neighbor lists (Stream VByte delta compression) ] -----------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01 final
 		: public I_NeighborLists
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		void Resize(uint32_t N_F, uint32_t N_B) override;
 
@@ -400,7 +400,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;

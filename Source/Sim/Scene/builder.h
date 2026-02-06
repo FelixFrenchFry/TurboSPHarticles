@@ -45,7 +45,7 @@ namespace Scene
 
 	class ScenarioMgr
 	{
-	public: // -----------------------------------------------------------------s
+	public: // ---------------------------------------------------------------------------------------
 
 		ScenarioMgr() = default;
 
@@ -84,7 +84,7 @@ namespace Scene
 
 		static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr);
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// builds a slab of boundary particles on a given OBB face
 		void BuildBoundaryLayersOnFace(const OBBFace& face,

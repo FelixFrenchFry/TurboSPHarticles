@@ -58,7 +58,7 @@ uint64_t SimParamsMgr::StableVersion() const
 bool SimParamsMgr::LoadSimParamsFromJson(
 	const nlohmann::json& j, bool verbose)
 {
-	// --- [ modes ] -----------------------------------------------------------
+	// --- [ modes ] ---------------------------------------------------------------------------------
 
 	// helpers for reading enums
 	auto ParseBackendVersion = [](const nlohmann::json& v, Base::BackendVersion& out) -> bool
@@ -214,19 +214,19 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		EndWrite();
 	}
 
-	// --- [ simulation state flags ] ------------------------------------------
+	// --- [ simulation state flags ] ----------------------------------------------------------------
 
 	Set_SimRunning(false, verbose);
 	Set_SimRunNextStep(false, verbose);
 
-	// --- [ time step ] -------------------------------------------------------
+	// --- [ time step ] -----------------------------------------------------------------------------
 
 	if (auto it = j.find("timeStep"); it != j.end())
 	{
 		Set_TimeStep(it->get<float>(), verbose);
 	}
 
-	// --- [ particle size ] ---------------------------------------------------
+	// --- [ particle size ] -------------------------------------------------------------------------
 
 	if (auto it = j.find("particleSize"); it != j.end())
 	{
@@ -236,14 +236,14 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			Base::ParticleType::Boundary, verbose);
 	}
 
-	// --- [ kernel support ratio ] --------------------------------------------
+	// --- [ kernel support ratio ] ------------------------------------------------------------------
 
 	if (auto it = j.find("kernelSuppRatio"); it != j.end())
 	{
 		Set_KernelSuppRatio(it->get<float>(), verbose);
 	}
 
-	// --- [ neighbor count heuristics ] ---------------------------------------
+	// --- [ neighbor count heuristics ] -------------------------------------------------------------
 
 	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
 		params_.kernelSuppRatio, Base::ParticleType::Fluid);
@@ -254,7 +254,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
 		params_.kernelSuppRatio, Base::ParticleType::Boundary);
 
-	// --- [ rest density ] ----------------------------------------------------
+	// --- [ rest density ] --------------------------------------------------------------------------
 
 	if (auto it = j.find("restDensityF"); it != j.end())
 	{
@@ -268,7 +268,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			Base::ParticleType::Boundary, verbose);
 	}
 
-	// --- [ non-pressure accelerations ] ---------------------------------------
+	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
 	if (auto it = j.find("viscosityF"); it != j.end())
 	{
@@ -292,7 +292,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		Set_Gravity(g, verbose);
 	}
 
-	// --- [ pressure ] --------------------------------------------------------
+	// --- [ pressure ] ------------------------------------------------------------------------------
 
 	if (auto it = j.find("pressGamma"); it != j.end())
 	{
@@ -367,14 +367,14 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		EndWrite();
 	}
 
-	// --- [ data structuring ] ------------------------------------------------
+	// --- [ data structuring ] ----------------------------------------------------------------------
 
 	if (auto it = j.find("dataReOrderInterval"); it != j.end())
 	{
 		Set_DataReOrderInterval(it->get<uint32_t>(), verbose);
 	}
 
-	// --- [ jitter ] ----------------------------------------------------------
+	// --- [ jitter ] --------------------------------------------------------------------------------
 
 	// TODO: implement setters for jitterFrac/jitterSeed stuff?
 	{
@@ -403,14 +403,14 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		EndWrite();
 	}
 
-	// --- [ boundary layers ] -------------------------------------------------
+	// --- [ boundary layers ] -----------------------------------------------------------------------
 
 	if (auto it = j.find("boundaryLayers"); it != j.end())
 	{
 		Set_BoundaryLayers(it->get<uint32_t>(), verbose);
 	}
 
-	// --- [ statistics, benchmarks, and exports ] -----------------------------
+	// --- [ statistics, benchmarks, and exports ] ---------------------------------------------------
 
 	// TODO: implement setters for maxStatRecs/maxBenchRecs?
 	{
@@ -1170,7 +1170,7 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 		return pass;
 	};
 
-	// --- [ hard invariants ] -------------------------------------------------
+	// --- [ hard invariants ] -----------------------------------------------------------------------
 
 	bool ok = true;
 

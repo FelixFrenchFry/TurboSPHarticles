@@ -330,7 +330,7 @@ void SimBackend_GPU01::FillStatisticsRecord(
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
-	// --- [ particle counts ] -------------------------------------------------
+	// --- [ particle counts ] -----------------------------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
@@ -536,7 +536,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 	{
 		GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
 
-		// --- [ neighbor search ] ---------------------------------------------
+		// --- [ neighbor search ] ----------------------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 		neighborSearchStrat_->Construct(params);
@@ -546,7 +546,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		neighborSearchStrat_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
-		// --- [ density computations ] ----------------------------------------
+		// --- [ density computations ] -----------------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });
 		GPU01::Launch_Density(
@@ -560,7 +560,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Solving });
 
-		// --- [ non-pressure accelerations ] ----------------------------------
+		// --- [ non-pressure accelerations ] -----------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 		GPU01::Launch_NonPressureAcceleration(
@@ -577,7 +577,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
-		// --- [ source-term (density invariance) and diagonal elements ] ------
+		// --- [ source-term (density invariance) and diagonal elements ] -------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 		GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
@@ -593,13 +593,13 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
-		// --- [ relaxed jacobi solver for pressure ] --------------------------
+		// --- [ relaxed jacobi solver for pressure ] ---------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
 		int cnt = 0;
 		while (cnt < 3)
 		{
-			// [ loop 1: pressure acceleration ] -------------------------------
+			// [ loop 1: pressure acceleration ] --------------------------------------------------------
 			GPU01::Launch_PressureAcceleration(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -611,7 +611,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 			GPU::StreamSync(stream_);
 
-			// [ loop 2: relaxed jacobi solver ] -------------------------------
+			// [ loop 2: relaxed jacobi solver ] --------------------------------------------------------
 			GPU01::Launch_PressureRelaxedJacobiSolver(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -628,7 +628,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		}
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
-		// --- [ finalize pressure acceleration for integration ] --------------
+		// --- [ finalize pressure acceleration for integration ] ---------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 		GPU01::Launch_PressureAcceleration(
@@ -643,7 +643,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
-		// --- [ velocity and position updates ] -------------------------------
+		// --- [ velocity and position updates ] --------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 		GPU01::Launch_Integration(

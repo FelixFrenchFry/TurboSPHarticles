@@ -1,4 +1,4 @@
-# CMake build folders --------------
+# CMake build folders -----------------------------------------------------------------------------
 Build/
 build/
 build-*/
@@ -8,7 +8,7 @@ out-*/
 bin/
 lib/
 
-# CMake generated files ------------
+# CMake generated files ---------------------------------------------------------------------------
 CMakeFiles/
 CMakeScripts/
 Testing/
@@ -20,11 +20,11 @@ compile_commands.json
 CTestTestfile.cmake
 _deps/
 
-# Ninja ----------------------------
+# Ninja -------------------------------------------------------------------------------------------
 .ninja*
 build.ninja
 
-# Compiler outputs -----------------
+# Compiler outputs --------------------------------------------------------------------------------
 # GCC/Clang
 *.o
 *.a
@@ -50,7 +50,7 @@ build.ninja
 *.pch
 *.pchi
 
-# CUDA / NVCC ----------------------
+# CUDA / NVCC -------------------------------------------------------------------------------------
 *.cubin
 *.fatbin
 *.ptx
@@ -62,7 +62,7 @@ build.ninja
 *.nsight*
 *.optixir
 
-# Visual Studio --------------------
+# Visual Studio -----------------------------------------------------------------------------------
 .vs/
 *.VC.db
 *.VC.VC.opendb
@@ -73,33 +73,33 @@ build.ninja
 *.vcxproj.filters
 *.vcxproj.user
 
-# Visual Studio Code ---------------
+# Visual Studio Code ------------------------------------------------------------------------------
 .vscode/
 !.vscode/extensions.json
 !.vscode/settings.json
 
-# Backup or temporary files --------
+# Backup or temporary files -----------------------------------------------------------------------
 *~
 *.swp
 *.bak
 *.tmp
 
-# Logs -----------------------------
+# Logs --------------------------------------------------------------------------------------------
 *.log
 
-# Serialized data ------------------
+# Serialized data ---------------------------------------------------------------------------------
 *.h5
 *.xdmf
 
-# OS-specific files ----------------
+# OS-specific files -------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 Folder.DotSettings.user
 
-# IDE metadata ---------------------
+# IDE metadata ------------------------------------------------------------------------------------
 .idea/
 
-# Executables ----------------------
+# Executables -------------------------------------------------------------------------------------
 *.exe
 *.out
 *.app

@@ -88,7 +88,7 @@ void SimulationMgr::SyncParameters(bool force)
 	}
 }
 
-void SimulationMgr::SelectSimScenario(Base::ScenarioType type, std::string& profile)
+void SimulationMgr::SelectSimScenario(Base::ScenarioType type, const std::string& profile)
 {
 	if (running_.load(std::memory_order_acquire))
 	{
@@ -244,7 +244,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	printf("\n");
 	SPDLOG_INFO("Simulation started running...");
 
-	// initialize before entering the simulation loop --------------------------
+	// --- [ initialize before entering the simulation loop ] ----------------------------------------
 
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
@@ -280,7 +280,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, paramsInit.exportDir);
 	}
 
-	// enter the simulation loop -----------------------------------------------
+	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
 	while (!stopToken.stop_requested())
 	{
@@ -374,7 +374,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		// TODO: check if scenario or backend need to be switched?
 	}
 
-	// finalize after exiting the simulation loop ------------------------------
+	// --- [ finalize after exiting the simulation loop ] --------------------------------------------
 
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
@@ -396,7 +396,7 @@ void SimulationMgr::RunSim_Blocking()
 	printf("\n");
 	SPDLOG_INFO("Simulation started running...");
 
-	// initialize before entering the simulation loop --------------------------
+	// --- [ initialize before entering the simulation loop ] ----------------------------------------
 
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
@@ -415,7 +415,7 @@ void SimulationMgr::RunSim_Blocking()
 		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, paramsInit.exportDir);
 	}
 
-	// enter the simulation loop -----------------------------------------------
+	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
 	while (true)
 	{
@@ -476,7 +476,7 @@ void SimulationMgr::RunSim_Blocking()
 		// TODO: check if scenario or backend need to be switched?
 	}
 
-	// finalize after exiting the simulation loop ------------------------------
+	// --- [ finalize after exiting the simulation loop ] --------------------------------------------
 
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;

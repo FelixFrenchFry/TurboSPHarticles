@@ -27,7 +27,7 @@ namespace Vis
 {
 	class VisualizationMgr
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		VisualizationMgr(Sim::SimulationMgr& simulationMgr,
 						 Bench::BenchmarksTracker& benchmarksTracker,
@@ -43,12 +43,16 @@ namespace Vis
 		// main visualization loop (handle input, interface, render)
 		void RunVis();
 
-		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
-		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
-		void SetMemMailbox(Sync::MemSnapMailbox* memSnapMailbox) { memSnapMailbox_ = memSnapMailbox; }
-		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox) { statSnapMailbox_ = statSnapMailbox; }
+		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
+			{ visualSnapMailbox_ = visualSnapMailbox; }
+		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox)
+			{ benchSnapMailbox_ = benchSnapMailbox; }
+		void SetMemMailbox(Sync::MemSnapMailbox* memSnapMailbox)
+			{ memSnapMailbox_ = memSnapMailbox; }
+		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox)
+			{ statSnapMailbox_ = statSnapMailbox; }
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		Sim::SimulationMgr& simulationMgr_;
 		Bench::BenchmarksTracker& benchmarksTracker_;
