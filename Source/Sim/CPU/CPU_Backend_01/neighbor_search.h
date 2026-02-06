@@ -17,6 +17,7 @@
 
 
 
+// TODO: make these used the params based on heuristic expected values?
 static constexpr uint32_t N_perScratchInlineFF = 64;
 static constexpr uint32_t N_perScratchInlineFB = 48;
 
@@ -25,13 +26,13 @@ namespace Sim
 	// forward declarations
 	class SimBackend_CPU01;
 
-	// -------------------------------------------------------------------------
-	// --- [ brute force implementation ] --------------------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ brute force implementation ] ------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NS_BruteForce_CPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_BruteForce_CPU01(SimBackend_CPU01& backend)
 			: be_{ backend } {}
@@ -50,7 +51,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // -------------------------------------------------------------------------------------
 		
 		SimBackend_CPU01& be_;
 
@@ -61,13 +62,13 @@ namespace Sim
 			uint32_t, N_perScratchInlineFB>> scratchFB_;
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ spatial hashing basic implementation ] ----------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ spatial hashing basic implementation ] --------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NS_SpatialHashing_Basic_CPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_SpatialHashing_Basic_CPU01(SimBackend_CPU01& backend)
 			: be_{ backend } {}
@@ -86,7 +87,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SimBackend_CPU01& be_;
 
@@ -116,13 +117,13 @@ namespace Sim
 		static inline int FloorToInt(float v) noexcept;
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ cell linked list basic implementation ] ---------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ cell linked list basic implementation ] -------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NS_CellLinkedList_Basic_CPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_CellLinkedList_Basic_CPU01(SimBackend_CPU01& backend)
 			: be_{ backend } {}
@@ -141,7 +142,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SimBackend_CPU01& be_;
 
@@ -185,13 +186,13 @@ namespace Sim
 		static inline uint32_t ClampInt(int v, int low, int high) noexcept;
 	};
 
-	// -------------------------------------------------------------------------
-	// --- [ cell linked list compact implementation ] -------------------------
-	// -------------------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+	// --- [ cell linked list compact implementation ] -----------------------------------------------
+	// -----------------------------------------------------------------------------------------------
 
 	class NS_CellLinkedList_Compact_CPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_CellLinkedList_Compact_CPU01(SimBackend_CPU01& backend)
 			: be_{ backend } {}
@@ -216,7 +217,7 @@ namespace Sim
 
 		// TODO: implement query with BigMin-LitMax and ternary search and caching of results?
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SimBackend_CPU01& be_;
 
