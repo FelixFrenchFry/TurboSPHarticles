@@ -2109,6 +2109,7 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
 	int cx, int cy, int cz) noexcept
 {
 	// zig-zag encoding of coordinates to handle negative values
+	// TODO: shift so all of them are positive instead of zig-zag?
 	const uint32_t ux = ZigZag(cx);
 	const uint32_t uy = ZigZag(cy);
 	const uint32_t uz = ZigZag(cz);
