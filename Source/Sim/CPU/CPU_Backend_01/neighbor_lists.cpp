@@ -17,9 +17,9 @@
 
 using namespace Sim;
 
-// -------------------------------------------------------------------------
-// --- [ individual vectors neighbor lists ] -------------------------------
-// -------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ individual vectors neighbor lists ] ------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
@@ -105,9 +105,9 @@ NeighborLists_IndividualVectors_CPU01::GetMemUsage(
 	return { usageFF, usageFB };
 }
 
-// -------------------------------------------------------------------------
-// --- [ CSR vector neighbor lists, final concat ] -------------------------
-// -------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ CSR vector neighbor lists, final concat ] ------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_CSRVector_FinalConcat_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
@@ -170,7 +170,7 @@ void NeighborLists_CSRVector_FinalConcat_CPU01::Finalize_Fill()
 		return;
 	}
 
-	// --- [ build CSR neighbor storage for for FF ] ---------------------------
+	// --- [ build CSR neighbor storage for for FF ] -------------------------------------------------
 
 	nbrOffsetsFF_.resize(static_cast<uint64_t>(N_F_) + 1);
 
@@ -223,7 +223,7 @@ void NeighborLists_CSRVector_FinalConcat_CPU01::Finalize_Fill()
 		tbb::auto_partitioner{}
 	);
 
-	// --- [ build CSR neighbor storage for for FB ] ---------------------------
+	// --- [ build CSR neighbor storage for for FB ] -------------------------------------------------
 
 	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1);
 
@@ -335,9 +335,9 @@ NeighborLists_CSRVector_FinalConcat_CPU01::GetMemUsage(
 	return { usageFF, usageFB };
 }
 
-// -------------------------------------------------------------------------
-// --- [ CSR vector neighbor lists, double query ] -------------------------
-// -------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ CSR vector neighbor lists, double query ] ------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_CSRVector_DoubleQuery_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
@@ -508,9 +508,9 @@ NeighborLists_CSRVector_DoubleQuery_CPU01::GetMemUsage(
 	return { usageFF, usageFB };
 }
 
-// -------------------------------------------------------------------------
-// --- [ individual vectors neighbor lists, adaptive compression ] ---------
-// -------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ individual vectors neighbor lists, adaptive compression ] --------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_AdaptCompress_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
@@ -813,9 +813,9 @@ void NeighborLists_IndividualVectors_AdaptCompress_CPU01::EncodeNeighborList(
 	#endif
 }
 
-// -------------------------------------------------------------------------
-// --- [ individual vectors neighbor lists, VByteDerived compression ] -----
-// -------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ individual vectors neighbor lists, VByteDerived compression ] ----------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
@@ -1135,9 +1135,9 @@ void NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01::EncodeNeighborL
 
 /*
 
-// -----------------------------------------------------------------------------
-// --- [ compact vectors neighbor lists (ULEB128 compression of deltas) ] ------
-// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ compact vectors neighbor lists (ULEB128 compression of deltas) ] -------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B)
@@ -1215,7 +1215,7 @@ void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::Finalize()
 		return;
 	}
 
-	// --- [ build compact vector for compressed FF ] --------------------------
+	// --- [ build compact vector for compressed FF ] ------------------------------------------------
 
 	// build offsets via prefix sum of byte sizes
 	offsetsFF_[0] = 0;
@@ -1250,7 +1250,7 @@ void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::Finalize()
 		tbb::auto_partitioner{}
 	);
 
-	// --- [ build compact vector for compressed FB ] --------------------------
+	// --- [ build compact vector for compressed FB ] ------------------------------------------------
 
 	// build offsets via prefix sum of byte sizes
 	offsetsFB_[0] = 0;
@@ -1498,9 +1498,9 @@ void NeighborLists_CompactVectors_Compressed_ULEB128_CPU01::DecodeNeighborList_U
 	}
 }
 
-// -----------------------------------------------------------------------------
-// --- [ compact vectors neighbor lists (Stream VByte delta compression) ] -----
-// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ compact vectors neighbor lists (Stream VByte delta compression) ] ------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B)
@@ -1578,7 +1578,7 @@ void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::Finalize()
 		return;
 	}
 
-	// --- [ build compact vector for compressed FF ] --------------------------
+	// --- [ build compact vector for compressed FF ] ------------------------------------------------
 
 	// build offsets via prefix sum of byte sizes
 	offsetsFF_[0] = 0;
@@ -1613,7 +1613,7 @@ void NeighborLists_CompactVectors_Compressed_StreamVByteDelta_CPU01::Finalize()
 		tbb::auto_partitioner{}
 	);
 
-	// --- [ build compact vector for compressed FB ] --------------------------
+	// --- [ build compact vector for compressed FB ] ------------------------------------------------
 
 	// build offsets via prefix sum of byte sizes
 	offsetsFB_[0] = 0;

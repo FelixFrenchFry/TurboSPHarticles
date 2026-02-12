@@ -161,7 +161,7 @@ void UserInterfaceMgr::RenderDrawData()
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-// ===== callback instance handlers =====
+// --- [ callback instance handlers ] -------------------------------------------------------------
 
 bool UserInterfaceMgr::OnKey(int key, int scancode, int action, int mods)
 {
@@ -221,7 +221,7 @@ void UserInterfaceMgr::OnDPIScaleChanged(float dpiScale)
 	RebuildFonts(dpiScale);
 }
 
-// ===== sections =====
+// --- [ sections ] -------------------------------------------------------------------------------
 
 void UserInterfaceMgr::BuildSection_SceneManagement(
 	Sim::SimulationMgr& simulationMgr,
@@ -372,7 +372,7 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 		return;
 	}
 
-	// --- [ tab bar for selecting the table view ] ----------------------------
+	// --- [ tab bar for selecting the table view ] --------------------------------------------------
 
 	if (ImGui::BeginTabBar("tabBar_stats"))
 	{
@@ -450,7 +450,7 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 		}
 	};
 
-	// --- [ per-group stat tables ] -------------------------------------------
+	// --- [ per-group stat tables ] -----------------------------------------------------------------
 
 	// particles and neighbors
 	ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 100));
@@ -565,7 +565,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		return;
 	}
 
-	// tab bar for selecting the table view ------------------------------------
+	// --- [ tab bar for selecting the table view ] --------------------------------------------------
 
 	if (ImGui::BeginTabBar("tabBar_bench"))
 	{
@@ -591,7 +591,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	const bool showPercent = !(benchTableView_ == BTV::Min ||
 							   benchTableView_ == BTV::Max);
 
-	// per-group timing and totals ---------------------------------------------
+	// --- [ per-group timing and totals ] -----------------------------------------------------------
 
 	// timing per group (row)
 	std::vector<uint64_t> groupTimings(opGroups.size(), 0);
@@ -622,7 +622,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		}
 	}
 
-	// benchmark table ---------------------------------------------------------
+	// --- [ benchmark table ] -----------------------------------------------------------------------
 
 	const int numCols = showPercent ? 3 : 2;
 
@@ -743,9 +743,9 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	}
 
 	// TODO: sparkline?
-	// sparkline for BenchOp::Total_Sim ----------------------------------------
+	// sparkline for BenchOp::Total_Sim
 
-	// display settings --------------------------------------------------------
+	// --- [ display settings ] ----------------------------------------------------------------------
 
 	if (ImGui::TreeNodeEx("Benchmark Settings"))
 	{
@@ -969,7 +969,7 @@ void UserInterfaceMgr::BuildParamElement_Gravity(const Sim::SimParams& simParams
 	if (cached) { ImGui::PopStyleColor(); }
 }
 
-// ===== helpers =====
+// --- [ helpers ] --------------------------------------------------------------------------------
 
 void UserInterfaceMgr::SetDockingEnabled(bool enabled)
 {
@@ -1271,7 +1271,7 @@ inline void UserInterfaceMgr::FormatStatValue(
 	}
 }
 
-// --- [ dockspace ] -----------------------------------------------------------
+// --- [ dockspace ] ------------------------------------------------------------------------------
 
 void UserInterfaceMgr::BeginDockspace()
 {

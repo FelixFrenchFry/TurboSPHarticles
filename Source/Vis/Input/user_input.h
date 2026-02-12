@@ -17,7 +17,7 @@ namespace Input
 {
 	class UserInputMgr
 	{
-	public: // ==============================
+	public: // ---------------------------------------------------------------------------------------
 
 		UserInputMgr(Sim::SimParamsMgr& simParamsMgr,
 					 Vis::VisParamsMgr& visParamsMgr);
@@ -37,7 +37,7 @@ namespace Input
 		bool OnCursorPos(double xPos, double yPos);
 		bool OnScroll(double xOff, double yOff);
 
-	private: // ==============================
+	private: // --------------------------------------------------------------------------------------
 
 		// parameter managers for making changes to parameters
 		Sim::SimParamsMgr& simParamsMgr_;
@@ -47,7 +47,7 @@ namespace Input
 		Vis::CameraState defaultCamera_;
 
 		// input state
-		std::bitset<512> keys_{};		// key pressed state
+		std::bitset<512> keys_{}; // key pressed state
 	};
 
 } // namespace Input

@@ -120,7 +120,7 @@ namespace Vis
 
 	class VisParamsMgr
 	{
-	public: // ==============================
+	public: // ---------------------------------------------------------------------------------------
 
 		VisParamsMgr() = default;
 
@@ -136,7 +136,7 @@ namespace Vis
 		void SetParam(const CameraPatch& patch);
 		void SetParam(const RenderPatch& patch);
 
-	private: // ==============================
+	private: // --------------------------------------------------------------------------------------
 
 		alignas(64) VisParams params_{}; // current active copy of visualization parameters
 		alignas(64) std::atomic<int64_t> version_{ 0 }; // even = stable, odd = writing

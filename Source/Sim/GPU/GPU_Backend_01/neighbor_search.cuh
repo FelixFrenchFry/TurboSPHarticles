@@ -18,7 +18,7 @@ namespace Sim
 {
 	class NS_BruteForce_GPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_BruteForce_GPU01(SimBackend_GPU01& backend)
 			: be_{ backend } {}
@@ -37,14 +37,14 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SimBackend_GPU01& be_;
 	};
 
 	class NS_CellLinkedList_Basic_GPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_CellLinkedList_Basic_GPU01(SimBackend_GPU01& backend)
 			: be_{ backend } {}
@@ -63,7 +63,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SimBackend_GPU01& be_;
 
@@ -119,7 +119,7 @@ namespace Sim
 
 	class NS_CellLinkedList_Compact_GPU01 : public I_NeighborSearchStrat
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		explicit NS_CellLinkedList_Compact_GPU01(SimBackend_GPU01& backend)
 			: be_{ backend } {}
@@ -138,7 +138,7 @@ namespace Sim
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		SimBackend_GPU01& be_;
 

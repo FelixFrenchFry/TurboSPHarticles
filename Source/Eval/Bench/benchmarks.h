@@ -20,7 +20,7 @@ namespace Bench
 {
 	class BenchmarksTracker
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		BenchmarksTracker(const Sim::SimParams& simParams);
 
@@ -55,7 +55,7 @@ namespace Bench
 		const BenchRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<BenchRecordStep>& GetHistory() const { return recHistory_; }
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// start timestamps
 		using Clock = std::chrono::steady_clock;

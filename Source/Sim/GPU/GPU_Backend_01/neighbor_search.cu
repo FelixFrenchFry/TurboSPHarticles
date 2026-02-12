@@ -20,9 +20,9 @@
 
 using namespace Sim;
 
-// -----------------------------------------------------------------------------
-// --- [ brute force implementation ] ------------------------------------------
-// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ brute force implementation ] -------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NS_BruteForce_GPU01::Init(const SimParams& params)
 {
@@ -69,9 +69,9 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_GPU01::GetMemUsage(
 	return {};
 }
 
-// -----------------------------------------------------------------------------
-// --- [ cell linked list basic implementation ] -------------------------------
-// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ cell linked list basic implementation ] --------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NS_CellLinkedList_Basic_GPU01::Init(const SimParams& params)
 {
@@ -117,7 +117,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
 				 ? 0.0f : (1.0f / params.kernelRadius);
 
-	// --- [ combined AABB over fluid and boundary particles ] -----------------
+	// --- [ combined AABB over fluid and boundary particles ] ---------------------------------------
 
 	// accumulators
 	float initMin = std::numeric_limits<float>::max();
@@ -225,7 +225,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		N_Cells_ = static_cast<uint32_t>(N_Cells);
 	}
 
-	// --- [ preparation data structures ] -------------------------------------
+	// --- [ preparation data structures ] -----------------------------------------------------------
 
 	EnsureCapacity(be_.N_F_, be_.N_B_, N_Cells_);
 
@@ -233,7 +233,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_,
 		N_DimX_, N_DimY_, N_DimZ_, N_Cells_, EMPTY, be_.stream_);
 
-	// --- [ compute cell IDs and init sorted indices ] ------------------------
+	// --- [ compute cell IDs and init sorted indices ] ----------------------------------------------
 
 	if (hasF)
 	{
@@ -263,7 +263,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 			0u);
 	}
 
-	// --- [ sort particle indices by cell IDs ] -------------------------------
+	// --- [ sort particle indices by cell IDs ] -----------------------------------------------------
 
 	if (hasF)
 	{
@@ -283,7 +283,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data()));
 	}
 
-	// --- [ fill in cell start/end indices ] ----------------------------------
+	// --- [ fill in cell start/end indices ] --------------------------------------------------------
 
 	if (N_Cells_ > 0)
 	{
@@ -353,9 +353,9 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Basic_GPU01::GetMemUsa
 	return {};
 }
 
-// -----------------------------------------------------------------------------
-// --- [ cell linked list compact implementation ] -----------------------------
-// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+// --- [ cell linked list compact implementation ] ------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
 void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 {
@@ -414,7 +414,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, 0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
-	// --- [ cell coordinates and indices for fluid and boundary particles ] ---
+	// --- [ cell coordinates and indices for fluid and boundary particles ] -------------------------
 
 	if (N_F > 0) // fluid
 	{
@@ -430,7 +430,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 			N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
 	}
 
-	// --- [ sort particle indices by cell IDs ] -------------------------------
+	// --- [ sort particle indices by cell IDs ] -----------------------------------------------------
 
 	if (N_F > 0) // fluid
 	{
@@ -452,7 +452,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 			keysB, keysB + N_B, valsB);
 	}
 
-	// --- [ build compact cell list and fill in cell start indices ] ----------
+	// --- [ build compact cell list and fill in cell start indices ] --------------------------------
 
 	if (N_F > 0) // fluid
 	{

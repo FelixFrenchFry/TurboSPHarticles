@@ -30,7 +30,7 @@ using namespace Sim;
 
 void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 {
-	// --- [ temporary pre-computed constants ] --------------------------------
+	// --- [ temporary pre-computed constants ] ------------------------------------------------------
 
 	// misc hoisted constants
 	const float timeStep = params.timeStep;
@@ -45,7 +45,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float massF = params.massF;
 	const float massB = params.massB;
 
-	// --- [ particle data re-ordering ] ---------------------------------------
+	// --- [ particle data re-ordering ] -------------------------------------------------------------
 
 	if (params.dataReOrderInterval > 0 && simStep_ % params.dataReOrderInterval == 0)
 	{
@@ -80,7 +80,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT densityF = densityF_.data();
 	I_NeighborLists& neighborLists = *neighborLists_;
 
-	// --- [ neighbor search ] -------------------------------------------------
+	// --- [ neighbor search ] -----------------------------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborSearchStrat_->Construct(params);
@@ -108,7 +108,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	neighborLists_->Finalize_Fill();
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	// --- [ density computations ] --------------------------------------------
+	// --- [ density computations ] ------------------------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });
 
@@ -121,7 +121,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Solving });
 
-	// --- [ non-pressure accelerations ] --------------------------------------
+	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
@@ -140,7 +140,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
-	// --- [ source-term (density invariance) and diagonal elements ] ----------
+	// --- [ source-term (density invariance) and diagonal elements ] --------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
@@ -157,7 +157,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
-	// --- [ relaxed Jacobi solver for pressure ] ------------------------------
+	// --- [ relaxed Jacobi solver for pressure ] ----------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
@@ -196,7 +196,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
-	// --- [ finalize pressure acceleration ] ----------------------------------
+	// --- [ finalize pressure acceleration ] --------------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 
@@ -211,7 +211,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
-	// --- [ integrate velocity and position ] ---------------------------------
+	// --- [ integrate velocity and position ] -------------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 

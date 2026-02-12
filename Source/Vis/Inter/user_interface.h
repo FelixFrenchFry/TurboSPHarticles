@@ -75,7 +75,7 @@ namespace Inter
 	// own and manage the ImGui and ImPlot lifecycle
 	class UserInterfaceMgr
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		UserInterfaceMgr(Sim::SimParamsMgr& simParamsMgr,
 						 Vis::VisParamsMgr& visParamsMgr);
@@ -113,7 +113,7 @@ namespace Inter
 		// helpers
 		void SetDockingEnabled(bool enabled);
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// parameter managers for making changes to parameters
 		Sim::SimParamsMgr& simParamsMgr_;

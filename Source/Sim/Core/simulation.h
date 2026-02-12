@@ -28,7 +28,7 @@ namespace Sim
 {
 	class SimulationMgr
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 					  Scene::ScenarioMgr& scenarioMgr,
@@ -48,7 +48,7 @@ namespace Sim
 
 		// create or switch scenario
 		// (destroys previous scenario and all its data)
-		void SelectSimScenario(Base::ScenarioType type, std::string& profile);
+		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
 
 		// create or switch backend
 		// (destroys previous backend and all its data)
@@ -87,7 +87,7 @@ namespace Sim
 		uint32_t simStep_ = 0;
 		double simTime_ = 0.0;
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		friend class DiagnosticsMgr;
 

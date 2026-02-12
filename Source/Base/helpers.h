@@ -18,7 +18,7 @@
 
 namespace Base
 {
-    // --- [ approximate equality helpers for detecting parameter changes ] ----
+    // --- [ approximate equality helpers for detecting parameter changes ] -----------------------
 
     // float comparison
     inline bool ApproxEqu(const float a, const float b, const float eps = 1e-7f)
@@ -126,7 +126,7 @@ namespace Base
 	    if (old && !ApproxEqu(*old, cur)) { ch = true; }
     }
 
-    // --- [ json ] ------------------------------------------------------------
+    // --- [ json ] -------------------------------------------------------------------------------
 
     inline bool LoadJsonObjectFromFile(
         const std::string& fileName,
@@ -162,7 +162,7 @@ namespace Base
         return true;
     }
 
-    // --- [ misc ] ------------------------------------------------------------
+    // --- [ misc ] -------------------------------------------------------------------------------
 
     inline bool Float_AlmostEqual(const float a, const float b,
                                   const float rel_epsilon = 1e-7f,

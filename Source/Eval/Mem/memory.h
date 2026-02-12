@@ -18,7 +18,7 @@ namespace Mem
 {
 	class MemoryTracker
 	{
-	public: // -----------------------------------------------------------------
+	public: // ---------------------------------------------------------------------------------------
 
 		MemoryTracker(const Sim::SimParams& simParams);
 
@@ -43,7 +43,7 @@ namespace Mem
 		const MemRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<MemRecordStep>& GetHistory() const { return recHistory_; }
 
-	private: // ----------------------------------------------------------------
+	private: // --------------------------------------------------------------------------------------
 
 		// max and current number of steps for which memory usage is kept
 		uint32_t maxRecCount_;
