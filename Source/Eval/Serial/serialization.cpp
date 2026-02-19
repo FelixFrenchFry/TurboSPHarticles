@@ -115,12 +115,15 @@ namespace Export
 		assert(F.id.size() == N);
 
 		assert(F.xPos.size() == N && F.yPos.size() == N && F.zPos.size() == N);
+
 		assert(F.xVel.size() == N && F.yVel.size() == N && F.zVel.size() == N);
-		assert(F.xAcc.size() == N && F.yAcc.size() == N && F.zAcc.size() == N);
+		assert(F.xVelPred.size() == N && F.yVelPred.size() == N && F.zVelPred.size() == N);
 
 		assert(F.xAccPress.size() == N && F.yAccPress.size() == N && F.zAccPress.size() == N);
-		assert(F.xAccVisc.size() == N && F.yAccVisc.size() == N && F.zAccVisc.size() == N);
-		assert(F.xAccExt.size() == N && F.yAccExt.size() == N && F.zAccExt.size() == N);
+		assert(F.xAccNonPress.size() == N && F.yAccNonPress.size() == N && F.zAccNonPress.size() == N);
+
+		assert(F.sourceTerm.size() == N);
+		assert(F.diagElem.size() == N);
 
 		assert(F.density.size() == N);
 		assert(F.pressure.size() == N);
@@ -133,7 +136,6 @@ namespace Export
 		assert(B.id.size() == N);
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
-		assert(B.xVel.size() == N && B.yVel.size() == N && B.zVel.size() == N);
 	}
 
 	void SerializationMgr::SaveUniversalSimState(

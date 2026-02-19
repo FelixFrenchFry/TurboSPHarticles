@@ -18,16 +18,16 @@ namespace Sync
 	// single-producer, single-consumer, lock-free mailbox for vis-specific simulation state snapshots
 	class VisualSnapMailbox
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public: // -------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<VisualSnapshot> snap) noexcept
 		{
-			latestSnap_.store(std::move(snap), std::memory_order_release);
+			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
 		}
 
 		bool TryFetchLatestSnapshot(std::shared_ptr<VisualSnapshot>& dst) noexcept
 		{
-			auto snap = latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<VisualSnapshot>{}, std::memory_order_acq_rel);
 			if (!snap) { return false; } // failed fetch
 
 			// successful fetch
@@ -35,25 +35,25 @@ namespace Sync
 			return true;
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private: // ------------------------------------------------------------------------------------
 
 		// latest snapshot of the vis-specific simulation state
-		std::atomic<std::shared_ptr<VisualSnapshot>> latestSnap_{ nullptr };
+		std::shared_ptr<VisualSnapshot> latestSnap_{ nullptr };
 	};
 
 	// single-producer, single-consumer, lock-free mailbox for operation benchmark snapshots
 	class BenchSnapMailbox
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public: // -------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<BenchSnapshot> snap) noexcept
 		{
-			latestSnap_.store(std::move(snap), std::memory_order_release);
+			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
 		}
 
 		bool TryFetchLatestSnapshot(std::shared_ptr<BenchSnapshot>& dst) noexcept
 		{
-			auto snap = latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<BenchSnapshot>{}, std::memory_order_acq_rel);
 			if (!snap) { return false; } // failed fetch
 
 			// successful fetch
@@ -61,25 +61,25 @@ namespace Sync
 			return true;
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private: // ------------------------------------------------------------------------------------
 
 		// latest snapshot of the operation benchmarks
-		std::atomic<std::shared_ptr<BenchSnapshot>> latestSnap_{ nullptr };
+		std::shared_ptr<BenchSnapshot> latestSnap_{ nullptr };
 	};
 
 	// single-producer, single-consumer, lock-free mailbox for memory usage snapshots
 	class MemSnapMailbox
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public: // -------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<MemSnapshot> snap) noexcept
 		{
-			latestSnap_.store(std::move(snap), std::memory_order_release);
+			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
 		}
 
 		bool TryFetchLatestSnapshot(std::shared_ptr<MemSnapshot>& dst) noexcept
 		{
-			auto snap = latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<MemSnapshot>{}, std::memory_order_acq_rel);
 			if (!snap) { return false; } // failed fetch
 
 			// successful fetch
@@ -87,25 +87,25 @@ namespace Sync
 			return true;
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private: // ------------------------------------------------------------------------------------
 
 		// latest snapshot of the operation benchmarks
-		std::atomic<std::shared_ptr<MemSnapshot>> latestSnap_{ nullptr };
+		std::shared_ptr<MemSnapshot> latestSnap_{ nullptr };
 	};
 
 	// single-producer, single-consumer, lock-free mailbox for statistics data snapshots
 	class StatSnapMailbox
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public: // -------------------------------------------------------------------------------------
 
 		void StoreSnapshot(std::shared_ptr<StatSnapshot> snap) noexcept
 		{
-			latestSnap_.store(std::move(snap), std::memory_order_release);
+			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
 		}
 
 		bool TryFetchLatestSnapshot(std::shared_ptr<StatSnapshot>& dst) noexcept
 		{
-			auto snap = latestSnap_.exchange(nullptr, std::memory_order_acq_rel);
+			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<StatSnapshot>{}, std::memory_order_acq_rel);
 			if (!snap) { return false; } // failed fetch
 
 			// successful fetch
@@ -113,10 +113,10 @@ namespace Sync
 			return true;
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private: // ------------------------------------------------------------------------------------
 
 		// latest snapshot of the statistics data
-		std::atomic<std::shared_ptr<StatSnapshot>> latestSnap_{ nullptr };
+		std::shared_ptr<StatSnapshot> latestSnap_{ nullptr };
 	};
 
 } // namespace Sync

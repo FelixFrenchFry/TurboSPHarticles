@@ -1,6 +1,7 @@
 // parameters_sim.cpp
 
 // external
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -12,7 +13,6 @@
 #include "Source/Base/helpers.h"
 #include "parameters_sim.h"
 
-#include <iostream>
 
 
 constexpr float PI = std::numbers::pi_v<float>;
@@ -1282,22 +1282,22 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 uint32_t SimParamsMgr::HeuristicExpectedNeighborCount_SoftMax(
 	float kernelSuppRatio, Base::ParticleType type) const
 {
-	float volume = (4.0f / 3.0f) * PI * std::powf(kernelSuppRatio, 3.0f);
+	float volume = (4.0f / 3.0f) * PI * std::pow(kernelSuppRatio, 3.0f);
 	float occupancy = type == Base::ParticleType::Fluid ? 1.0f : 0.5f;
 	float margin = 0.2f;
 
-	float heuristic = std::ceilf(volume * occupancy * (1.0f + margin));
+	float heuristic = std::ceil(volume * occupancy * (1.0f + margin));
 	return static_cast<uint32_t>(heuristic);
 }
 
 uint32_t SimParamsMgr::HeuristicExpectedNeighborCount_HardMax(
 	float kernelSuppRatio, Base::ParticleType type) const
 {
-	float volume = (4.0f / 3.0f) * PI * std::powf(kernelSuppRatio, 3.0f);
+	float volume = (4.0f / 3.0f) * PI * std::pow(kernelSuppRatio, 3.0f);
 	float occupancy = type == Base::ParticleType::Fluid ? 1.0f : 0.75f;
 	float margin = 0.8f;
 
-	float heuristic = std::ceilf(volume * occupancy * (1.0f + margin));
+	float heuristic = std::ceil(volume * occupancy * (1.0f + margin));
 	return static_cast<uint32_t>(heuristic);
 }
 
