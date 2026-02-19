@@ -6,7 +6,6 @@
     "tbb",
     "spdlog",
     "nlohmann-json",
-    "highfive",
     "cli11",
     "boost-container",
     "unordered-dense",
