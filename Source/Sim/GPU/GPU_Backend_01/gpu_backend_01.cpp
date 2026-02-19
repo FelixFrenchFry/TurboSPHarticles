@@ -17,6 +17,18 @@
 
 using namespace Sim;
 
+namespace
+{
+	template <typename T>
+	inline Mem::MemUsage MemUsageOf_DeviceBuffer(
+		const DeviceBuffer<T>& src) noexcept
+	{
+		const uint64_t bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
+
+		return Mem::MemUsage{ bytes, bytes, bytes };
+	}
+}
+
 SimBackend_GPU01::SimBackend_GPU01(
 	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
 	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_ { benchmarksTracker }
@@ -313,7 +325,102 @@ void SimBackend_GPU01::FillMemoryRecord(
 {
 	using namespace Mem;
 
-	// TODO: implement
+	// --- [ particle properties ] -------------------------------------------------------------------
+
+	// fluid
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_xPosF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yPosF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zPosF_));
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_xVelF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yVelF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zVelF_));
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_xVelPredF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yVelPredF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zVelPredF_));
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_xAccPressF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yAccPressF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zAccPressF_));
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_xAccNonPressF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yAccNonPressF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zAccNonPressF_));
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_sourceTermF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_diagElemF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_pressureF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_densityF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_idF_));
+
+		// finalize
+		Set(record, MemBucket::ParticlePropertiesF, usage);
+	}
+
+	// boundary
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_xPosB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yPosB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zPosB_));
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_idB_));
+
+		// finalize
+		Set(record, MemBucket::ParticlePropertiesB, usage);
+	}
+
+	// --- [ neighbor search data structures ] -------------------------------------------------------
+
+	{
+		MemUsage usageF{};
+		MemUsage usageB{};
+		std::pair<MemUsage, MemUsage> usageFB = neighborSearchStrat_->GetMemUsage(params);
+
+		Add(usageF, usageFB.first);
+		Add(usageB, usageFB.second);
+
+		// finalize
+		Set(record, MemBucket::Neighbors_SearchDataStructF, usageF);
+		Set(record, MemBucket::Neighbors_SearchDataStructB, usageB);
+	}
+
+	// --- [ neighbor list storage ] -----------------------------------------------------------------
+
+	{
+		MemUsage usageF{};
+		MemUsage usageB{};
+
+		Add(usageF, MemUsageOf_DeviceBuffer(d_neighCountFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_neighListFF_));
+
+		Add(usageB, MemUsageOf_DeviceBuffer(d_neighCountFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_neighListFB_));
+
+		// shared overflow flag is accounted in the fluid-side bucket
+		// to avoid double-counting.
+		Add(usageF, MemUsageOf_DeviceBuffer(d_neighOverflowFlag_));
+
+		// finalize
+		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
+		Set(record, MemBucket::Neighbors_ListStorageB, usageB);
+	}
+
+	// --- [ misc ] ----------------------------------------------------------------------------------
+
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_workBuffer_));
+
+		// finalize
+		Set(record, MemBucket::Misc, usage);
+	}
 }
 
 void SimBackend_GPU01::FillStatisticsRecord(

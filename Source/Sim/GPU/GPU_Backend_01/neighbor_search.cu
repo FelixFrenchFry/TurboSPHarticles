@@ -20,6 +20,18 @@
 
 using namespace Sim;
 
+namespace
+{
+	template <typename T>
+	inline Mem::MemUsage MemUsageOf_DeviceBuffer(
+		const DeviceBuffer<T>& src) noexcept
+	{
+		const uint64_t bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
+
+		return Mem::MemUsage{ bytes, bytes, bytes };
+	}
+}
+
 // ------------------------------------------------------------------------------------------------
 // --- [ brute force implementation ] -------------------------------------------------------------
 // ------------------------------------------------------------------------------------------------
@@ -64,9 +76,12 @@ void NS_BruteForce_GPU01::DataReOrder(const SimParams& params)
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_GPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	// TODO: implement
+	(void)params;
 
-	return {};
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	return { usageF, usageB };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -348,9 +363,22 @@ void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Basic_GPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	// TODO: implement
+	(void)params;
 
-	return {};
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartIdxF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellEndIdxF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellIdF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_sortedParticleIdxF_));
+
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellStartIdxB_));
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellEndIdxB_));
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellIdB_));
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_sortedParticleIdxB_));
+
+	return { usageF, usageB };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -509,9 +537,26 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemUsage(
 	const SimParams& params) const
 {
-	// TODO: implement
+	(void)params;
 
-	return {};
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartIdxF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellIdF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_sortedParticleIdxF_));
+
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_uniqueCellIdB_));
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellStartIdxB_));
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellIdB_));
+	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_sortedParticleIdxB_));
+
+	// shared scan scratch is accounted in the fluid-side bucket
+	// to avoid double-counting.
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartMarkerScan_));
+
+	return { usageF, usageB };
 }
 
 void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
