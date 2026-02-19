@@ -13,8 +13,6 @@
 #include "Source/Sim/Sync/snapshots.h"
 #include "Source/Sim/Sync/state_sim.h"
 
-
-
 namespace Export
 {
 	struct SaveOptions
@@ -25,40 +23,32 @@ namespace Export
 		std::filesystem::path baseDir = "Export";
 	#endif
 
-		// compression
-		int compressionLevel = 1; // [0,...,9], 0 = none, 9 = max
-		bool compress = false; // zlib compression (non-contiguous chunks)
-		bool shuffleFilter = true; // byte shuffle for better compression ratio on FP data
-
-		// chunk target size
-		int64_t targetChunkBytes = 1u << 24; // 16 MiB (2^24 bytes)
-
-		// safer saves
-		// (write to temp file and rename on success)
+		// write to temp file and rename on success
 		std::string tempSuffix = ".tmp";
 		bool atomicWrite = true;
 	};
 
 	class SerializationMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public: // -------------------------------------------------------------------------------------
 
 		explicit SerializationMgr(SaveOptions opt = {})
-			: saveOptions_(std::move(opt)){}
+			: saveOptions_(std::move(opt)) {
+		}
 
 		// lossless, versioned serialization of the full simulation state into a file
 		void SaveUniversalSimState(const Sync::UniversalSimState& state,
-								   const std::string& path) const;
+			const std::string& path) const;
 
 		// lossless, versioned de-serialization of the full simulation state from a file
 		void LoadUniversalSimState(Sync::UniversalSimState& state,
-								   const std::string& path) const;
+			const std::string& path) const;
 
 		// serialization of a subset of the simulation state and metadata into separate files
 		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
-	private: // --------------------------------------------------------------------------------------
+	private: // ------------------------------------------------------------------------------------
 
 		SaveOptions saveOptions_;
 	};

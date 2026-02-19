@@ -1,17 +1,17 @@
 // serialization.cpp
 
 // external
-#include <algorithm>
 #include <cassert>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <highfive/H5DataSet.hpp>
-#include <highfive/H5DataSpace.hpp>
-#include <highfive/H5File.hpp>
 #include <iomanip>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <string>
+#include <type_traits>
 #include <vector>
 
 // internal
@@ -19,96 +19,143 @@
 
 
 
-using namespace HighFive;
-
 namespace Export
 {
-	inline DataSetCreateProps MakeDsProps(uint64_t N_elements,
-										  uint64_t N_elemBytes,
-										  const Export::SaveOptions& opt)
+	// binary format helpers
+	static constexpr uint32_t kEndianLE = 0x01020304u;
+
+	static bool IsLittleEndian()
 	{
-		DataSetCreateProps props;
+		const uint32_t x = 0x01020304u;
+		return *reinterpret_cast<const uint8_t*>(&x) == 0x04u;
+	}
 
-		// no elements -> nothing to do
-		if (N_elements == 0) return props;
+	#pragma pack(push, 1)
+	struct BinHeaderSimCommon
+	{
+		char magic[8];        // "TSPSIM\1"
+		uint32_t endianTag;   // kEndianLE
+		uint32_t headerBytes; // sizeof(BinHeaderSim)
+	};
 
-		// contiguous layout -> nothing to do
-		if (!opt.compress) { return props; }
+	struct BinHeaderSimV1
+	{
+		char magic[8];        // "TSPSIM\1"
+		uint32_t endianTag;   // kEndianLE
+		uint32_t headerBytes; // sizeof(BinHeaderSimV1)
 
-		// chunked + filters
-		const uint64_t wantChunkElems = std::max<uint64_t>(1, opt.targetChunkBytes / N_elemBytes);
-		const uint64_t chunkElems = std::max<uint64_t>(1, std::min(N_elements, wantChunkElems));
+		uint32_t schemaVersion;
+		uint32_t step;
+		double time;
 
-		props.add(Chunking({ static_cast<hsize_t>(chunkElems) }));
+		uint32_t NF;
+		uint32_t NB;
+	};
 
-		// byte shuffle
-		if (opt.shuffleFilter)
+	struct BinHeaderSim
+	{
+		char magic[8];        // "TSPSIM\1"
+		uint32_t endianTag;   // kEndianLE
+		uint32_t headerBytes; // sizeof(BinHeaderSim)
+
+		uint64_t schemaVersion;
+		uint32_t step;
+		double time;
+
+		uint32_t NF;
+		uint32_t NB;
+	};
+
+	struct BinHeaderSnap
+	{
+		char magic[8];        // "TSPSNAP\1"
+		uint32_t endianTag;   // kEndianLE
+		uint32_t headerBytes; // sizeof(BinHeaderSnap)
+
+		uint32_t step;
+		double time;
+
+		uint32_t NF;
+	};
+	#pragma pack(pop)
+
+	static void EnsureStreamOk(const std::ios& s, const char* what, const std::string& path)
+	{
+		if (!s.good())
 		{
-			props.add(Shuffle());
+			SPDLOG_ERROR("I/O error while {}: {}", what, path);
+			throw std::runtime_error("I/O error");
 		}
+	}
 
-		// compression
-		props.add(Deflate(opt.compressionLevel));
+	static void WriteExact(std::ofstream& ofs, const void* data, size_t bytes)
+	{
+		ofs.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(bytes));
+	}
 
-		return props;
+	static void ReadExact(std::ifstream& ifs, void* data, size_t bytes)
+	{
+		ifs.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(bytes));
 	}
 
 	template <class T>
-	inline void Write1D(Group& group, const char* name,
-						const std::vector<T>& vec,
-						const Export::SaveOptions& opt)
+	static void WritePod(std::ofstream& ofs, const T& v)
 	{
-		auto dsp = DataSpace::From(vec);
-		auto dcp = MakeDsProps(vec.size(), sizeof(T), opt);
-		auto ds = group.createDataSet<T>(name, dsp, dcp);
-
-		ds.write(vec);
+		static_assert(std::is_trivially_copyable_v<T>, "WritePod requires trivially copyable type");
+		WriteExact(ofs, &v, sizeof(T));
 	}
 
 	template <class T>
-	inline void Read1D(const Group& group, const char* name, std::vector<T>& vec)
+	static void ReadPod(std::ifstream& ifs, T& v)
 	{
-		auto ds = group.getDataSet(name);
-
-		ds.read(vec);
+		static_assert(std::is_trivially_copyable_v<T>, "ReadPod requires trivially copyable type");
+		ReadExact(ifs, &v, sizeof(T));
 	}
 
-	inline File OpenFileForWrite(const std::string& path)
+	template <class T>
+	static void WriteVec(std::ofstream& ofs, const std::vector<T>& v)
 	{
-		FileCreateProps fcp;
-		FileAccessProps fap;
-
-		return File(path, File::Overwrite, fcp, fap);
+		static_assert(std::is_trivially_copyable_v<T>, "WriteVec requires trivially copyable element type");
+		if (!v.empty())
+		{
+			WriteExact(ofs, v.data(), v.size() * sizeof(T));
+		}
 	}
 
-	inline File OpenFileForRead(const std::string& path)
+	template <class T>
+	static void ReadVec(std::ifstream& ifs, std::vector<T>& v)
 	{
-		return File(path, File::ReadOnly);
+		static_assert(std::is_trivially_copyable_v<T>, "ReadVec requires trivially copyable element type");
+		if (!v.empty())
+		{
+			ReadExact(ifs, v.data(), v.size() * sizeof(T));
+		}
 	}
 
-	inline void AtomicReplace(const std::filesystem::path& tmp,
-							  const std::filesystem::path& dst)
+	// --- [ small utilities ] ---------------------------------------------------------------------
+
+	static void AtomicReplace(const std::filesystem::path& tmp,
+		const std::filesystem::path& dst)
 	{
 		std::error_code ec;
 
 		// try to rename directly
 		std::filesystem::rename(tmp, dst, ec);
-		if (!ec) return;
+		if (!ec) { return; }
 
 		// remove existing then rename as fallback
-		std::filesystem::remove(dst, ec); // ignore error if not exists
-		std::filesystem::rename(tmp, dst); // let this throw if it still fails
+		std::filesystem::remove(dst, ec);
+		std::filesystem::rename(tmp, dst);
 	}
 
-	inline std::string FormatStepPadded(uint32_t step, uint32_t width = 9)
+	static std::string FormatStepPadded(uint32_t step, uint32_t width = 9)
 	{
 		std::ostringstream oss;
 		oss << std::setfill('0') << std::setw(width) << step;
-
 		return oss.str();
 	}
 
-	void CheckFluidConsistent(const Sync::FluidParticles& F)
+	static void CheckFluidConsistent(const Sync::FluidParticles& F)
 	{
 		const auto N = static_cast<size_t>(F.N_);
 
@@ -129,7 +176,7 @@ namespace Export
 		assert(F.pressure.size() == N);
 	}
 
-	void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
+	static void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
 	{
 		const auto N = static_cast<size_t>(B.N_);
 
@@ -138,6 +185,8 @@ namespace Export
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
 	}
 
+	// --- [ UniversalSimState <-> .bin ] ----------------------------------------------------------
+
 	void SerializationMgr::SaveUniversalSimState(
 		const Sync::UniversalSimState& state,
 		const std::string& path) const
@@ -145,77 +194,84 @@ namespace Export
 		// file path handling
 		const std::filesystem::path dstPath{ path };
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
-			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix) : dstPath;
+			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
+			: dstPath;
+
+		// sanity check before writing
+		CheckFluidConsistent(state.fluidParticles);
+		CheckBoundaryConsistent(state.boundaryParticles);
 
 		// open scope for writer
 		{
-			// open file (optionally with alignment)
-			File file = OpenFileForWrite(tmpPath.string());
+			std::ofstream ofs(tmpPath, std::ios::binary | std::ios::out | std::ios::trunc);
+			if (!ofs)
+			{
+				SPDLOG_ERROR("Failed to open file for write: {}", tmpPath.string());
+				return;
+			}
 
-			// metadata
-			auto root = file.createGroup("/State");
-			root.createAttribute("schemaVersion", state.schemaVersion);
-			root.createAttribute("step", state.step);
-			root.createAttribute("time", state.time);
+			// header
+			BinHeaderSim hdr{};
+			std::memcpy(hdr.magic, "TSPSIM\1", 7);
+			hdr.magic[7] = '\0';
+			hdr.endianTag = kEndianLE;
+			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSim));
 
-			// sanity check before writing
-			CheckFluidConsistent(state.fluidParticles);
-			CheckBoundaryConsistent(state.boundaryParticles);
+			hdr.schemaVersion = state.schemaVersion;
+			hdr.step = state.step;
+			hdr.time = state.time;
 
-			// fluid data
+			hdr.NF = state.fluidParticles.N_;
+			hdr.NB = state.boundaryParticles.N_;
+
+			WritePod(ofs, hdr);
+
+			// fluid data (fixed order)
 			{
 				const auto& F = state.fluidParticles;
-				auto gF = root.createGroup("fluidParticles");
 
-				gF.createAttribute("N_particles", F.N_);
+				WriteVec(ofs, F.xPos);
+				WriteVec(ofs, F.yPos);
+				WriteVec(ofs, F.zPos);
 
-				// write SoA arrays
-				Write1D(gF, "xPos", F.xPos, saveOptions_);
-				Write1D(gF, "yPos", F.yPos, saveOptions_);
-				Write1D(gF, "zPos", F.zPos, saveOptions_);
+				WriteVec(ofs, F.xVel);
+				WriteVec(ofs, F.yVel);
+				WriteVec(ofs, F.zVel);
 
-				Write1D(gF, "xVel", F.xVel, saveOptions_);
-				Write1D(gF, "yVel", F.yVel, saveOptions_);
-				Write1D(gF, "zVel", F.zVel, saveOptions_);
+				WriteVec(ofs, F.xVelPred);
+				WriteVec(ofs, F.yVelPred);
+				WriteVec(ofs, F.zVelPred);
 
-				Write1D(gF, "xVelPred", F.xVelPred, saveOptions_);
-				Write1D(gF, "yVelPred", F.yVelPred, saveOptions_);
-				Write1D(gF, "zVelPred", F.zVelPred, saveOptions_);
+				WriteVec(ofs, F.xAccPress);
+				WriteVec(ofs, F.yAccPress);
+				WriteVec(ofs, F.zAccPress);
 
-				Write1D(gF, "xAccPress", F.xAccPress, saveOptions_);
-				Write1D(gF, "yAccPress", F.yAccPress, saveOptions_);
-				Write1D(gF, "zAccPress", F.zAccPress, saveOptions_);
+				WriteVec(ofs, F.xAccNonPress);
+				WriteVec(ofs, F.yAccNonPress);
+				WriteVec(ofs, F.zAccNonPress);
 
-				Write1D(gF, "xAccNonPress", F.xAccNonPress, saveOptions_);
-				Write1D(gF, "yAccNonPress", F.yAccNonPress, saveOptions_);
-				Write1D(gF, "zAccNonPress", F.zAccNonPress, saveOptions_);
+				WriteVec(ofs, F.sourceTerm);
+				WriteVec(ofs, F.diagElem);
+				WriteVec(ofs, F.pressure);
+				WriteVec(ofs, F.density);
 
-				Write1D(gF, "sourceTerm", F.sourceTerm, saveOptions_);
-				Write1D(gF, "diagElem", F.diagElem, saveOptions_);
-				Write1D(gF, "pressure", F.pressure, saveOptions_);
-				Write1D(gF, "density", F.density, saveOptions_);
-
-				Write1D(gF, "id", F.id, saveOptions_);
+				WriteVec(ofs, F.id);
 			}
 
-			// boundary data
+			// boundary data (fixed order)
 			{
 				const auto& B = state.boundaryParticles;
-				auto gB = root.createGroup("boundaryParticles");
 
-				gB.createAttribute("N_particles", B.N_);
+				WriteVec(ofs, B.xPos);
+				WriteVec(ofs, B.yPos);
+				WriteVec(ofs, B.zPos);
 
-				// write SoA arrays
-				Write1D(gB, "xPos", B.xPos, saveOptions_);
-				Write1D(gB, "yPos", B.yPos, saveOptions_);
-				Write1D(gB, "zPos", B.zPos, saveOptions_);
-
-				Write1D(gB, "id", B.id, saveOptions_);
+				WriteVec(ofs, B.id);
 			}
 
-		} // end scope for writer
+			EnsureStreamOk(ofs, "writing", tmpPath.string());
+		}
 
-		// close file by going out of scope
 		if (saveOptions_.atomicWrite)
 		{
 			AtomicReplace(tmpPath, dstPath);
@@ -226,82 +282,138 @@ namespace Export
 		Sync::UniversalSimState& state,
 		const std::string& path) const
 	{
-		File file = OpenFileForRead(path);
+		std::ifstream ifs(path, std::ios::binary | std::ios::in);
+		if (!ifs)
+		{
+			SPDLOG_ERROR("Failed to open file for read: {}", path);
+			return;
+		}
+
+		// common header prefix
+		BinHeaderSimCommon hdrCommon{};
+		ReadPod(ifs, hdrCommon);
+
+		// basic validation
+		if (std::memcmp(hdrCommon.magic, "TSPSIM\1", 7) != 0)
+		{
+			SPDLOG_ERROR("Invalid sim state file magic: {}", path);
+			return;
+		}
+		if (!IsLittleEndian() || hdrCommon.endianTag != kEndianLE)
+		{
+			SPDLOG_ERROR("Endianness mismatch (file is LE, host must be LE): {}", path);
+			return;
+		}
+		// parse the remaining header bytes
+		uint64_t schemaVersion = 0;
+		uint32_t step = 0;
+		double time = 0.0;
+		uint32_t NF = 0;
+		uint32_t NB = 0;
+
+		if (hdrCommon.headerBytes == sizeof(BinHeaderSim))
+		{
+			BinHeaderSim hdr{};
+			std::memcpy(&hdr, &hdrCommon, sizeof(BinHeaderSimCommon));
+			ReadExact(ifs,
+				reinterpret_cast<char*>(&hdr) + sizeof(BinHeaderSimCommon),
+				sizeof(BinHeaderSim) - sizeof(BinHeaderSimCommon));
+
+			schemaVersion = hdr.schemaVersion;
+			step = hdr.step;
+			time = hdr.time;
+			NF = hdr.NF;
+			NB = hdr.NB;
+		}
+		else if (hdrCommon.headerBytes == sizeof(BinHeaderSimV1))
+		{
+			BinHeaderSimV1 hdr{};
+			std::memcpy(&hdr, &hdrCommon, sizeof(BinHeaderSimCommon));
+			ReadExact(ifs,
+				reinterpret_cast<char*>(&hdr) + sizeof(BinHeaderSimCommon),
+				sizeof(BinHeaderSimV1) - sizeof(BinHeaderSimCommon));
+
+			schemaVersion = hdr.schemaVersion;
+			step = hdr.step;
+			time = hdr.time;
+			NF = hdr.NF;
+			NB = hdr.NB;
+		}
+		else
+		{
+			SPDLOG_ERROR("Unexpected sim header size ({}): {}",
+				hdrCommon.headerBytes, path);
+			return;
+		}
 
 		// metadata
-		// TODO: branch on schemaVersion?
-		auto root = file.getGroup("/State");
-		root.getAttribute("schemaVersion").read(state.schemaVersion);
-		root.getAttribute("step").read(state.step);
-		root.getAttribute("time").read(state.time);
+		state.schemaVersion = schemaVersion;
+		state.step = step;
+		state.time = time;
 
-		// fluid data
+		// resize storage
+		state.ResizeFluid(NF);
+		state.ResizeBoundary(NB);
+
+		// fluid data (fixed order)
 		{
-			auto gF = root.getGroup("fluidParticles");
-			uint32_t NF = 0;
-			gF.getAttribute("N_particles").read(NF);
-			state.ResizeFluid(NF);
-
 			auto& F = state.fluidParticles;
 
-			// read SoA arrays
-			Read1D(gF, "xPos", F.xPos);
-			Read1D(gF, "yPos", F.yPos);
-			Read1D(gF, "zPos", F.zPos);
+			ReadVec(ifs, F.xPos);
+			ReadVec(ifs, F.yPos);
+			ReadVec(ifs, F.zPos);
 
-			Read1D(gF, "xVel", F.xVel);
-			Read1D(gF, "yVel", F.yVel);
-			Read1D(gF, "zVel", F.zVel);
+			ReadVec(ifs, F.xVel);
+			ReadVec(ifs, F.yVel);
+			ReadVec(ifs, F.zVel);
 
-			Read1D(gF, "xVelPred", F.xVelPred);
-			Read1D(gF, "yVelPred", F.yVelPred);
-			Read1D(gF, "zVelPred", F.zVelPred);
+			ReadVec(ifs, F.xVelPred);
+			ReadVec(ifs, F.yVelPred);
+			ReadVec(ifs, F.zVelPred);
 
-			Read1D(gF, "xAccPress", F.xAccPress);
-			Read1D(gF, "yAccPress", F.yAccPress);
-			Read1D(gF, "zAccPress", F.zAccPress);
+			ReadVec(ifs, F.xAccPress);
+			ReadVec(ifs, F.yAccPress);
+			ReadVec(ifs, F.zAccPress);
 
-			Read1D(gF, "xAccNonPress", F.xAccNonPress);
-			Read1D(gF, "yAccNonPress", F.yAccNonPress);
-			Read1D(gF, "zAccNonPress", F.zAccNonPress);
+			ReadVec(ifs, F.xAccNonPress);
+			ReadVec(ifs, F.yAccNonPress);
+			ReadVec(ifs, F.zAccNonPress);
 
-			Read1D(gF, "sourceTerm", F.sourceTerm);
-			Read1D(gF, "diagElem", F.diagElem);
-			Read1D(gF, "pressure", F.pressure);
-			Read1D(gF, "density", F.density);
+			ReadVec(ifs, F.sourceTerm);
+			ReadVec(ifs, F.diagElem);
+			ReadVec(ifs, F.pressure);
+			ReadVec(ifs, F.density);
 
-			Read1D(gF, "id", F.id);
+			ReadVec(ifs, F.id);
 
 			// sanity check
 			F.N_ = NF;
 		}
 
-		// boundary data
+		// boundary data (fixed order)
 		{
-			auto gB = root.getGroup("boundaryParticles");
-			uint32_t NB = 0;
-			gB.getAttribute("N_particles").read(NB);
-			state.ResizeBoundary(NB);
-
 			auto& B = state.boundaryParticles;
 
-			// read SoA arrays
-			Read1D(gB, "xPos", B.xPos);
-			Read1D(gB, "yPos", B.yPos);
-			Read1D(gB, "zPos", B.zPos);
+			ReadVec(ifs, B.xPos);
+			ReadVec(ifs, B.yPos);
+			ReadVec(ifs, B.zPos);
 
-			Read1D(gB, "id", B.id);
+			ReadVec(ifs, B.id);
 
 			// sanity check
 			B.N_ = NB;
 		}
+
+		EnsureStreamOk(ifs, "reading", path);
 	}
+
+	// --- [ ExportSnapshot (.bin) + XDMF ] --------------------------------------------------------
 
 	void SerializationMgr::SaveExportSnapshot(
 		const Sync::ExportSnapshot& snap,
 		const std::string& dir) const
 	{
-		const std::string baseName = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".h5";
+		const std::string baseName = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".bin";
 
 		// ensure export directory exists
 		std::error_code ec;
@@ -321,32 +433,42 @@ namespace Export
 		assert(snap.velMagF.size() == NF_size);
 
 		// file path handling
-		const std::filesystem::path dstPath = saveOptions_.baseDir / dir /  baseName;
+		const std::filesystem::path dstPath = saveOptions_.baseDir / dir / baseName;
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
 			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
 			: dstPath;
 
 		// open scope for writer
 		{
-			// open file
-			File file = OpenFileForWrite(tmpPath.string());
-
-			// metadata
-			auto root = file.createGroup("/State");
-			root.createAttribute("step", snap.simStep);
-			root.createAttribute("time", snap.simTime);
-
+			std::ofstream ofs(tmpPath, std::ios::binary | std::ios::out | std::ios::trunc);
+			if (!ofs)
 			{
-				auto gF = root.createGroup("fluidParticles");
-
-				gF.createAttribute("N_particles", NF_size);
-
-				Write1D(gF, "xPosF", snap.xPosF, saveOptions_);
-				Write1D(gF, "yPosF", snap.yPosF, saveOptions_);
-				Write1D(gF, "zPosF", snap.zPosF, saveOptions_);
-				Write1D(gF, "velMagF", snap.velMagF, saveOptions_);
+				SPDLOG_ERROR("Failed to open snapshot file for write: {}",
+					tmpPath.string());
+				return;
 			}
-		} // end scope for writer
+
+			// arrays are written in the same order as referenced by the XDMF file:
+			// xPosF, yPosF, zPosF, velMagF
+
+			BinHeaderSnap hdr{};
+			std::memcpy(hdr.magic, "TSPSNAP\1", 8);
+			hdr.endianTag = kEndianLE;
+			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
+			hdr.step = snap.simStep;
+			hdr.time = snap.simTime;
+			hdr.NF = NF_size;
+
+			WritePod(ofs, hdr);
+
+			// arrays (fixed order)
+			WriteVec(ofs, snap.xPosF);
+			WriteVec(ofs, snap.yPosF);
+			WriteVec(ofs, snap.zPosF);
+			WriteVec(ofs, snap.velMagF);
+
+			EnsureStreamOk(ofs, "writing", tmpPath.string());
+		}
 
 		if (saveOptions_.atomicWrite)
 		{
@@ -358,7 +480,7 @@ namespace Export
 		const Sync::ExportSnapshot& snap,
 		const std::string& dir) const
 	{
-		const std::string baseName_h5 = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".h5";
+		const std::string baseName_bin = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".bin";
 		const std::string baseName_xdmf = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
 
 		// ensure export directory exists
@@ -389,6 +511,22 @@ namespace Export
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
 
+		// byte offsets (Seek) into the .bin file
+		//
+		// layout:
+		// [BinHeaderSnap]
+		// xPosF[NF] (float32)
+		// yPosF[NF] (float32)
+		// zPosF[NF] (float32)
+		// velMagF[NF] (float32)
+		const uint64_t headerBytes = sizeof(BinHeaderSnap);
+		const uint64_t elemBytes = 4; // float32
+
+		const uint64_t off_x = headerBytes;
+		const uint64_t off_y = off_x + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_z = off_y + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_v = off_z + uint64_t(NF_size) * elemBytes;
+
 		// XDMF header
 		ofs << R"(<?xml version="1.0" ?>)" << "\n";
 		ofs << R"(<Xdmf Version="3.0">)" << "\n";
@@ -414,36 +552,41 @@ namespace Export
 			<< "Dimensions=\"" << NF_size << " 3\" "
 			<< "NumberType=\"Float\" Precision=\"4\">\n";
 
-		// x pos
+		// x pos (Binary)
 		ofs << "          <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
-		ofs << "            " << baseName_h5
-			<< ":/State/fluidParticles/xPosF\n";
+			<< "\" NumberType=\"Float\" Precision=\"4\" "
+			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+			<< off_x << "\">\n";
+		ofs << "            " << baseName_bin << "\n";
 		ofs << "          </DataItem>\n";
 
-		// y pos
+		// y pos (Binary)
 		ofs << "          <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
-		ofs << "            " << baseName_h5
-			<< ":/State/fluidParticles/yPosF\n";
+			<< "\" NumberType=\"Float\" Precision=\"4\" "
+			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+			<< off_y << "\">\n";
+		ofs << "            " << baseName_bin << "\n";
 		ofs << "          </DataItem>\n";
 
-		// z pos
+		// z pos (Binary)
 		ofs << "          <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
-		ofs << "            " << baseName_h5
-			<< ":/State/fluidParticles/zPosF\n";
+			<< "\" NumberType=\"Float\" Precision=\"4\" "
+			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+			<< off_z << "\">\n";
+		ofs << "            " << baseName_bin << "\n";
 		ofs << "          </DataItem>\n";
+
 		ofs << "        </DataItem>\n";
 		ofs << "      </Geometry>\n";
 
-		// velocity magnitude
+		// velocity magnitude (Binary)
 		ofs << "      <Attribute Name=\"velMagF\" "
 			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
 		ofs << "        <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n";
-		ofs << "          " << baseName_h5
-			<< ":/State/fluidParticles/velMagF\n";
+			<< "\" NumberType=\"Float\" Precision=\"4\" "
+			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+			<< off_v << "\">\n";
+		ofs << "          " << baseName_bin << "\n";
 		ofs << "        </DataItem>\n";
 		ofs << "      </Attribute>\n";
 
