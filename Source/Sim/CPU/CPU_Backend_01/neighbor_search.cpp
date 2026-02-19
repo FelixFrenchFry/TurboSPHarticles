@@ -78,6 +78,240 @@ namespace
 		const int t = (v < low) ? low : v;
 		return static_cast<uint32_t>((t > high) ? high : t);
 	}
+
+	struct FluidParticleSoARefs
+	{
+		std::vector<float>& xPos;
+		std::vector<float>& yPos;
+		std::vector<float>& zPos;
+		std::vector<float>& xVel;
+		std::vector<float>& yVel;
+		std::vector<float>& zVel;
+		std::vector<float>& xVelPred;
+		std::vector<float>& yVelPred;
+		std::vector<float>& zVelPred;
+		std::vector<float>& xAccPress;
+		std::vector<float>& yAccPress;
+		std::vector<float>& zAccPress;
+		std::vector<float>& xAccNonPress;
+		std::vector<float>& yAccNonPress;
+		std::vector<float>& zAccNonPress;
+		std::vector<float>& sourceTerm;
+		std::vector<float>& diagElem;
+		std::vector<float>& pressure;
+		std::vector<float>& density;
+		std::vector<uint32_t>& id;
+	};
+
+	struct BoundaryParticleSoARefs
+	{
+		std::vector<float>& xPos;
+		std::vector<float>& yPos;
+		std::vector<float>& zPos;
+		std::vector<uint32_t>& id;
+	};
+
+	struct SceneAABB
+	{
+		float minX = std::numeric_limits<float>::max();
+		float minY = std::numeric_limits<float>::max();
+		float minZ = std::numeric_limits<float>::max();
+		float maxX = std::numeric_limits<float>::lowest();
+		float maxY = std::numeric_limits<float>::lowest();
+		float maxZ = std::numeric_limits<float>::lowest();
+	};
+
+	// expand lower 10 bits into every-third-bit positions: 0b...xyz -> 0b...00x00y00z
+	inline uint32_t ExpandBits10_30bit(uint32_t v) noexcept
+	{
+		v = (v | (v << 16)) & 0x030000FFu;
+		v = (v | (v <<  8)) & 0x0300F00Fu;
+		v = (v | (v <<  4)) & 0x030C30C3u;
+		v = (v | (v <<  2)) & 0x09249249u;
+		return v;
+	}
+
+	// compute a 30-bit Morton code for a point in the unit cube [0, 1]^3
+	inline uint32_t Morton3D_30bit_Normalized(float nx, float ny, float nz) noexcept
+	{
+		// clamp to [0, 1] and quantize to 10-bit integer (0..1023)
+		const auto Quantize = [](float v) -> uint32_t
+			{
+				return std::min(1023u, static_cast<uint32_t>(
+					std::max(0.0f, std::min(1.0f, v)) * 1023.0f));
+			};
+
+		const uint32_t ix = Quantize(nx);
+		const uint32_t iy = Quantize(ny);
+		const uint32_t iz = Quantize(nz);
+
+		return (ExpandBits10_30bit(ix) << 2) | (ExpandBits10_30bit(iy) << 1)
+			| ExpandBits10_30bit(iz);
+	}
+
+	inline SceneAABB ComputeSceneAABB(
+		const std::vector<float>& xPos,
+		const std::vector<float>& yPos,
+		const std::vector<float>& zPos)
+	{
+		const uint32_t N = static_cast<uint32_t>(xPos.size());
+		assert(yPos.size() == N && zPos.size() == N && "Position vector size mismatch");
+
+		SceneAABB init{};
+		if (N == 0) { return init; }
+
+		return tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(0, N),
+			init,
+			[&](const tbb::blocked_range<uint32_t>& r, SceneAABB val) -> SceneAABB
+			{
+				float lMinX = val.minX, lMinY = val.minY, lMinZ = val.minZ;
+				float lMaxX = val.maxX, lMaxY = val.maxY, lMaxZ = val.maxZ;
+
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					lMinX = std::min(lMinX, xPos[i]);
+					lMinY = std::min(lMinY, yPos[i]);
+					lMinZ = std::min(lMinZ, zPos[i]);
+					lMaxX = std::max(lMaxX, xPos[i]);
+					lMaxY = std::max(lMaxY, yPos[i]);
+					lMaxZ = std::max(lMaxZ, zPos[i]);
+				}
+
+				val.minX = lMinX; val.minY = lMinY; val.minZ = lMinZ;
+				val.maxX = lMaxX; val.maxY = lMaxY; val.maxZ = lMaxZ;
+				return val;
+			},
+			[](SceneAABB a, const SceneAABB& b) -> SceneAABB
+			{
+				a.minX = std::min(a.minX, b.minX);
+				a.minY = std::min(a.minY, b.minY);
+				a.minZ = std::min(a.minZ, b.minZ);
+				a.maxX = std::max(a.maxX, b.maxX);
+				a.maxY = std::max(a.maxY, b.maxY);
+				a.maxZ = std::max(a.maxZ, b.maxZ);
+				return a;
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
+	void BuildMortonPermutation_30bitNormalized(
+		const std::vector<float>& xPos,
+		const std::vector<float>& yPos,
+		const std::vector<float>& zPos,
+		std::vector<uint32_t>& outPerm)
+	{
+		const uint32_t N = static_cast<uint32_t>(xPos.size());
+		assert(yPos.size() == N && zPos.size() == N && "Position vector size mismatch");
+
+		outPerm.resize(N);
+		std::iota(outPerm.begin(), outPerm.end(), 0u);
+		if (N <= 1) { return; }
+
+		const SceneAABB sceneAABB = ComputeSceneAABB(xPos, yPos, zPos);
+
+		constexpr float eps = 1e-6f;
+		const float invExtX = 1.0f / std::max(eps, sceneAABB.maxX - sceneAABB.minX);
+		const float invExtY = 1.0f / std::max(eps, sceneAABB.maxY - sceneAABB.minY);
+		const float invExtZ = 1.0f / std::max(eps, sceneAABB.maxZ - sceneAABB.minZ);
+
+		std::vector<uint32_t> morton(N);
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float nx = (xPos[i] - sceneAABB.minX) * invExtX;
+					const float ny = (yPos[i] - sceneAABB.minY) * invExtY;
+					const float nz = (zPos[i] - sceneAABB.minZ) * invExtZ;
+					morton[i] = Morton3D_30bit_Normalized(nx, ny, nz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		tbb::parallel_sort(outPerm.begin(), outPerm.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				const uint32_t ma = morton[a];
+				const uint32_t mb = morton[b];
+				return (ma != mb) ? (ma < mb) : (a < b);
+			}
+		);
+	}
+
+	void ApplyPermutationFluidSoA(
+		const std::vector<uint32_t>& perm,
+		FluidParticleSoARefs fluid)
+	{
+		ApplyPermutation(perm, fluid.xPos);
+		ApplyPermutation(perm, fluid.yPos);
+		ApplyPermutation(perm, fluid.zPos);
+
+		ApplyPermutation(perm, fluid.xVel);
+		ApplyPermutation(perm, fluid.yVel);
+		ApplyPermutation(perm, fluid.zVel);
+
+		ApplyPermutation(perm, fluid.xVelPred);
+		ApplyPermutation(perm, fluid.yVelPred);
+		ApplyPermutation(perm, fluid.zVelPred);
+
+		ApplyPermutation(perm, fluid.xAccPress);
+		ApplyPermutation(perm, fluid.yAccPress);
+		ApplyPermutation(perm, fluid.zAccPress);
+
+		ApplyPermutation(perm, fluid.xAccNonPress);
+		ApplyPermutation(perm, fluid.yAccNonPress);
+		ApplyPermutation(perm, fluid.zAccNonPress);
+
+		ApplyPermutation(perm, fluid.sourceTerm);
+		ApplyPermutation(perm, fluid.diagElem);
+		ApplyPermutation(perm, fluid.pressure);
+		ApplyPermutation(perm, fluid.density);
+
+		ApplyPermutation(perm, fluid.id);
+	}
+
+	void ApplyPermutationBoundarySoA(
+		const std::vector<uint32_t>& perm,
+		BoundaryParticleSoARefs boundary)
+	{
+		ApplyPermutation(perm, boundary.xPos);
+		ApplyPermutation(perm, boundary.yPos);
+		ApplyPermutation(perm, boundary.zPos);
+
+		ApplyPermutation(perm, boundary.id);
+	}
+
+	void DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs fluid,
+		BoundaryParticleSoARefs boundary,
+		uint32_t N_F, uint32_t N_B)
+	{
+		if (N_F > 0)
+		{
+			assert(fluid.xPos.size() == N_F && fluid.yPos.size() == N_F
+				&& fluid.zPos.size() == N_F && "Fluid position vector size mismatch");
+
+			std::vector<uint32_t> permF{};
+			BuildMortonPermutation_30bitNormalized(fluid.xPos, fluid.yPos, fluid.zPos, permF);
+			ApplyPermutationFluidSoA(permF, fluid);
+		}
+
+		if (N_B > 0)
+		{
+			assert(boundary.xPos.size() == N_B && boundary.yPos.size() == N_B
+				&& boundary.zPos.size() == N_B && "Boundary position vector size mismatch");
+
+			std::vector<uint32_t> permB{};
+			BuildMortonPermutation_30bitNormalized(boundary.xPos, boundary.yPos, boundary.zPos,
+				permB);
+			ApplyPermutationBoundarySoA(permB, boundary);
+		}
+	}
+
 } // unnamed
 
 // -------------------------------------------------------------------------------------------------
@@ -252,7 +486,27 @@ void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 void NS_BruteForce_CPU01::DataReOrder(
 	const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_CPU01::GetMemUsage(
@@ -583,7 +837,27 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 	const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Basic_CPU01::GetMemUsage(
@@ -1100,7 +1374,27 @@ void NS_SpatialHashing_Explicit_CPU01::Query_Fill(const SimParams& params)
 void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 	const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Explicit_CPU01::GetMemUsage(
@@ -1668,7 +1962,27 @@ void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 	const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Basic_CPU01::GetMemUsage(
@@ -2722,119 +3036,27 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 
 void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 {
+	(void)params;
+
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, params.kernelRadius);
-	cellSize_ = params.kernelRadius;
-	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-		? 0.0f : (1.0f / params.kernelRadius);
-	if (cellSizeChanged) { cellFrameValid_ = false; }
-	UpdateCellFrame();
-
-	if (N_F > 0)
-	{
-		// TODO: use persistent scratch arrays instead of allocating new ones every time?
-		std::vector<uint64_t> mortonF(N_F);
-		std::vector<uint32_t> permF(N_F);
-		std::iota(permF.begin(), permF.end(), 0u);
-
-		// compute Morton codes for fluid particles
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					// compute cell coordinates
-					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
-
-					mortonF[i] = MapToCellId_Morton(cx, cy, cz);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
-		// sort indices according to Morton codes
-		tbb::parallel_sort(permF.begin(), permF.end(),
-			[&](uint32_t a, uint32_t b)
-			{
-				return mortonF[a] < mortonF[b];
-			}
-		);
-
-		// apply permutation to all fluid SoA arrays
-		ApplyPermutation(permF, be_.xPosF_);
-		ApplyPermutation(permF, be_.yPosF_);
-		ApplyPermutation(permF, be_.zPosF_);
-
-		ApplyPermutation(permF, be_.xVelF_);
-		ApplyPermutation(permF, be_.yVelF_);
-		ApplyPermutation(permF, be_.zVelF_);
-
-		ApplyPermutation(permF, be_.xVelPredF_);
-		ApplyPermutation(permF, be_.yVelPredF_);
-		ApplyPermutation(permF, be_.zVelPredF_);
-
-		ApplyPermutation(permF, be_.xAccPressF_);
-		ApplyPermutation(permF, be_.yAccPressF_);
-		ApplyPermutation(permF, be_.zAccPressF_);
-
-		ApplyPermutation(permF, be_.xAccNonPressF_);
-		ApplyPermutation(permF, be_.yAccNonPressF_);
-		ApplyPermutation(permF, be_.zAccNonPressF_);
-
-		ApplyPermutation(permF, be_.sourceTermF_);
-		ApplyPermutation(permF, be_.diagElemF_);
-		ApplyPermutation(permF, be_.pressureF_);
-		ApplyPermutation(permF, be_.densityF_);
-
-		ApplyPermutation(permF, be_.idF_);
-	}
-
-	if (N_B > 0)
-	{
-		// TODO: use persistent scratch arrays instead of allocating new ones every time?
-		std::vector<uint64_t> mortonB(N_B);
-		std::vector<uint32_t> permB(N_B);
-		std::iota(permB.begin(), permB.end(), 0u);
-
-		// compute Morton codes for boundary particles
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_B),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					// compute cell coordinates
-					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
-
-					mortonB[i] = MapToCellId_Morton(cx, cy, cz);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
-		// sort indices according to Morton codes
-		tbb::parallel_sort(permB.begin(), permB.end(),
-			[&](uint32_t a, uint32_t b)
-			{
-				return mortonB[a] < mortonB[b];
-			}
-		);
-
-		// apply permutation to all boundary SoA arrays
-		ApplyPermutation(permB, be_.xPosB_);
-		ApplyPermutation(permB, be_.yPosB_);
-		ApplyPermutation(permB, be_.zPosB_);
-
-		ApplyPermutation(permB, be_.idB_);
-	}
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemUsage(
@@ -3711,6 +3933,8 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::QueryBVH_Count(
 
 void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 {
+	(void)params;
+
 	// particle arrays are permuted; cached boundary tree/index mapping is no longer valid
 	boundaryBVHValid_ = false;
 
@@ -3718,154 +3942,21 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	// reuse the scene AABB and Morton code computation from BuildBVH for reordering
-
-	if (N_F > 0)
-	{
-		std::vector<uint32_t> mortonTmp(N_F);
-		std::vector<uint32_t> permF(N_F);
-		std::iota(permF.begin(), permF.end(), 0u);
-
-		// compute scene AABB
-		float sMinX = std::numeric_limits<float>::max();
-		float sMinY = std::numeric_limits<float>::max();
-		float sMinZ = std::numeric_limits<float>::max();
-		float sMaxX = std::numeric_limits<float>::lowest();
-		float sMaxY = std::numeric_limits<float>::lowest();
-		float sMaxZ = std::numeric_limits<float>::lowest();
-
-		for (uint32_t i = 0; i < N_F; i++)
-		{
-			sMinX = std::min(sMinX, be_.xPosF_[i]);
-			sMinY = std::min(sMinY, be_.yPosF_[i]);
-			sMinZ = std::min(sMinZ, be_.zPosF_[i]);
-			sMaxX = std::max(sMaxX, be_.xPosF_[i]);
-			sMaxY = std::max(sMaxY, be_.yPosF_[i]);
-			sMaxZ = std::max(sMaxZ, be_.zPosF_[i]);
-		}
-
-		constexpr float eps = 1e-6f;
-		const float invExtX = 1.0f / std::max(eps, sMaxX - sMinX);
-		const float invExtY = 1.0f / std::max(eps, sMaxY - sMinY);
-		const float invExtZ = 1.0f / std::max(eps, sMaxZ - sMinZ);
-
-		// compute Morton codes
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					const float nx = (be_.xPosF_[i] - sMinX) * invExtX;
-					const float ny = (be_.yPosF_[i] - sMinY) * invExtY;
-					const float nz = (be_.zPosF_[i] - sMinZ) * invExtZ;
-					mortonTmp[i] = Morton3D_30bit(nx, ny, nz);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
-		// sort indices according to Morton codes
-		tbb::parallel_sort(permF.begin(), permF.end(),
-			[&](uint32_t a, uint32_t b)
-			{
-				const uint32_t ma = mortonTmp[a];
-				const uint32_t mb = mortonTmp[b];
-				return (ma != mb) ? (ma < mb) : (a < b);
-			}
-		);
-
-		// apply permutation to all fluid SoA arrays
-		ApplyPermutation(permF, be_.xPosF_);
-		ApplyPermutation(permF, be_.yPosF_);
-		ApplyPermutation(permF, be_.zPosF_);
-
-		ApplyPermutation(permF, be_.xVelF_);
-		ApplyPermutation(permF, be_.yVelF_);
-		ApplyPermutation(permF, be_.zVelF_);
-
-		ApplyPermutation(permF, be_.xVelPredF_);
-		ApplyPermutation(permF, be_.yVelPredF_);
-		ApplyPermutation(permF, be_.zVelPredF_);
-
-		ApplyPermutation(permF, be_.xAccPressF_);
-		ApplyPermutation(permF, be_.yAccPressF_);
-		ApplyPermutation(permF, be_.zAccPressF_);
-
-		ApplyPermutation(permF, be_.xAccNonPressF_);
-		ApplyPermutation(permF, be_.yAccNonPressF_);
-		ApplyPermutation(permF, be_.zAccNonPressF_);
-
-		ApplyPermutation(permF, be_.sourceTermF_);
-		ApplyPermutation(permF, be_.diagElemF_);
-		ApplyPermutation(permF, be_.pressureF_);
-		ApplyPermutation(permF, be_.densityF_);
-
-		ApplyPermutation(permF, be_.idF_);
-	}
-
-	if (N_B > 0)
-	{
-		std::vector<uint32_t> mortonTmp(N_B);
-		std::vector<uint32_t> permB(N_B);
-		std::iota(permB.begin(), permB.end(), 0u);
-
-		// compute scene AABB
-		float sMinX = std::numeric_limits<float>::max();
-		float sMinY = std::numeric_limits<float>::max();
-		float sMinZ = std::numeric_limits<float>::max();
-		float sMaxX = std::numeric_limits<float>::lowest();
-		float sMaxY = std::numeric_limits<float>::lowest();
-		float sMaxZ = std::numeric_limits<float>::lowest();
-
-		for (uint32_t i = 0; i < N_B; i++)
-		{
-			sMinX = std::min(sMinX, be_.xPosB_[i]);
-			sMinY = std::min(sMinY, be_.yPosB_[i]);
-			sMinZ = std::min(sMinZ, be_.zPosB_[i]);
-			sMaxX = std::max(sMaxX, be_.xPosB_[i]);
-			sMaxY = std::max(sMaxY, be_.yPosB_[i]);
-			sMaxZ = std::max(sMaxZ, be_.zPosB_[i]);
-		}
-
-		constexpr float eps = 1e-6f;
-		const float invExtX = 1.0f / std::max(eps, sMaxX - sMinX);
-		const float invExtY = 1.0f / std::max(eps, sMaxY - sMinY);
-		const float invExtZ = 1.0f / std::max(eps, sMaxZ - sMinZ);
-
-		// compute Morton codes
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_B),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					const float nx = (be_.xPosB_[i] - sMinX) * invExtX;
-					const float ny = (be_.yPosB_[i] - sMinY) * invExtY;
-					const float nz = (be_.zPosB_[i] - sMinZ) * invExtZ;
-					mortonTmp[i] = Morton3D_30bit(nx, ny, nz);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
-		// sort indices according to Morton codes
-		tbb::parallel_sort(permB.begin(), permB.end(),
-			[&](uint32_t a, uint32_t b)
-			{
-				const uint32_t ma = mortonTmp[a];
-				const uint32_t mb = mortonTmp[b];
-				return (ma != mb) ? (ma < mb) : (a < b);
-			}
-		);
-
-		// apply permutation to all boundary SoA arrays
-		ApplyPermutation(permB, be_.xPosB_);
-		ApplyPermutation(permB, be_.yPosB_);
-		ApplyPermutation(permB, be_.zPosB_);
-
-		ApplyPermutation(permB, be_.idB_);
-	}
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BoundVolHier_Linear_LBVH_CPU01::GetMemUsage(
@@ -3923,28 +4014,13 @@ inline bool NS_BoundVolHier_Linear_LBVH_CPU01::OverlapsAABB(
 // expand lower 10 bits into every-third-bit positions: 0b...xyz -> 0b...00x00y00z
 inline uint32_t NS_BoundVolHier_Linear_LBVH_CPU01::ExpandBits10(uint32_t v) noexcept
 {
-	v = (v | (v << 16)) & 0x030000FFu;
-	v = (v | (v <<  8)) & 0x0300F00Fu;
-	v = (v | (v <<  4)) & 0x030C30C3u;
-	v = (v | (v <<  2)) & 0x09249249u;
-	return v;
+	return ExpandBits10_30bit(v);
 }
 
 // compute a 30-bit Morton code for a point in the unit cube [0, 1]^3
 inline uint32_t NS_BoundVolHier_Linear_LBVH_CPU01::Morton3D_30bit(float nx, float ny, float nz) noexcept
 {
-	// clamp to [0, 1] and quantize to 10-bit integer (0..1023)
-	const auto Quantize = [](float v) -> uint32_t
-		{
-			return std::min(1023u, static_cast<uint32_t>(
-				std::max(0.0f, std::min(1.0f, v)) * 1023.0f));
-		};
-
-	const uint32_t ix = Quantize(nx);
-	const uint32_t iy = Quantize(ny);
-	const uint32_t iz = Quantize(nz);
-
-	return (ExpandBits10(ix) << 2) | (ExpandBits10(iy) << 1) | ExpandBits10(iz);
+	return Morton3D_30bit_Normalized(nx, ny, nz);
 }
 
 inline int NS_BoundVolHier_Linear_LBVH_CPU01::CountLeadingZeros(uint32_t v) noexcept
