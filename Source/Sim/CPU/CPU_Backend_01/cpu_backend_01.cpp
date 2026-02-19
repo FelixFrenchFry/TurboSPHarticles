@@ -40,6 +40,11 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
 	}
 	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::SpatialHashing_Explicit)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Explicit_CPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::CellLinkedList_Basic)
 	{
 		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
@@ -49,6 +54,23 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 	{
 		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
 	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_BoundVolHier_Linear_LBVH_CPU01>(*this);
+	}
+	/*
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::BoundVolHier_Hybrid_HLBVH)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_BoundVolHier_Hybrid_HLBVH_CPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::BoundVolHier_Binned_SAH_BVH)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_BoundVolHier_Binned_SAH_BVH_CPU01>(*this);
+	}
+	*/
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");

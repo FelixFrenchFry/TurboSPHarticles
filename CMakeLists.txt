@@ -166,7 +166,7 @@ if(ENABLE_NATIVE_OPT)
         >
         # GCC/Clang C++ only
         $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
-            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:--march=native>
+            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-march=native>
         >
     )
 endif()

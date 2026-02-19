@@ -1,7 +1,7 @@
 {
   "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
-  "neighborSearchMethod": 3,
+  "neighborSearchMethod": 4,
   "neighborListStorage": 2,
 
   "maxSteps": -1,
@@ -20,7 +20,7 @@
   "fixedIters": 5,
   "minSolverIters": 3,
   "maxSolverIters": 50,
-  "solverTerminationCond": 2,
+  "solverTerminationCond": 0,
 
   "dataReOrderInterval": 50,
   "jitterFracF": 0.0,

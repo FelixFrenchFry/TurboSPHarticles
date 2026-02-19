@@ -107,10 +107,18 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
 				if (s == "SpatialHashing_Basic")
 					{ out = Base::NeighborSearchMethod::SpatialHashing_Basic; return true; }
+				if (s == "SpatialHashing_Explicit")
+					{ out = Base::NeighborSearchMethod::SpatialHashing_Explicit; return true; }
 				if (s == "CellLinkedList_Basic")
 					{ out = Base::NeighborSearchMethod::CellLinkedList_Basic; return true; }
 				if (s == "CellLinkedList_Compact")
 					{ out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
+				if (s == "BoundVolHier_Linear_LBVH")
+					{ out = Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH; return true; }
+				if (s == "BoundVolHier_Hybrid_HLBVH")
+					{ out = Base::NeighborSearchMethod::BoundVolHier_Hybrid_HLBVH; return true; }
+				if (s == "BoundVolHier_Binned_SAH_BVH")
+					{ out = Base::NeighborSearchMethod::BoundVolHier_Binned_SAH_BVH; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())

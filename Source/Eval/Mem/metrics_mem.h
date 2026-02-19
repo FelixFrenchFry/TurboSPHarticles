@@ -242,62 +242,69 @@ namespace Mem
 		return total;
 	}
 
-	// TODO: implement this using a custom allocator to track the memory usage and avoid non-compiling templates
-	/*
+	// helpers for unordered_dense map memory usage
 	template<class MapT>
 	inline MemUsage MemUsageOf_UnorderedDenseMap_TableOnly(const MapT& src)
+		requires requires(const MapT& m)
+		{
+			typename MapT::bucket_type;
+			m.values().size();
+			m.values().capacity();
+			m.bucket_count();
+		}
 	{
-		using BucketT = typename MapT::bucket_type;
-
 		MemUsage total{};
 
 		// values storage (dense array of value_type, typically std::pair<K, V>)
 		auto const& values = src.values();
-		using ValueT = typename std::decay_t<decltype(values)>::value_type;
+		using ValuesT = std::decay_t<decltype(values)>;
+		using ValueT = typename ValuesT::value_type;
 
+		// account only heap memory for the values array
 		const uint64_t valuesUsed = static_cast<uint64_t>(values.size()) * sizeof(ValueT);
 		const uint64_t valuesAlloc = static_cast<uint64_t>(values.capacity()) * sizeof(ValueT);
-
-		// heap-only for the values array
 		Add(total, MemUsage{ valuesUsed, valuesAlloc, valuesAlloc });
 
-		// buckets storage
-		const size_t bucketCount = src.bucket_count();
-		const uint64_t bucketsAlloc = static_cast<uint64_t>(bucketCount) * sizeof(BucketT);
-
-		// bucket array is fully present -> used == alloc (simple and consistent)
+		// bucket storage (unordered_dense keeps an always-allocated bucket table)
+		using BucketT = typename MapT::bucket_type;
+		const uint64_t bucketsAlloc = static_cast<uint64_t>(src.bucket_count()) * sizeof(BucketT);
 		Add(total, MemUsage{ bucketsAlloc, bucketsAlloc, bucketsAlloc });
 
-		// root object storage
-		total.occupiedBytes += sizeof(src);
+		// root object storage on stack/member (avoid reference-size pitfalls)
+		total.occupiedBytes += sizeof(MapT);
 
 		return total;
 	}
 
-	template<class K, class V, class... Rest>
-	inline MemUsage MemUsageOf_UnorderedDenseMap(
-		const ankerl::unordered_dense::map<K, V, Rest...>& src)
-	{
-		using MapT = ankerl::unordered_dense::map<K, V, Rest...>;
-		return MemUsageOf_UnorderedDenseMap_TableOnly<MapT>(src);
-	}
+	template<class T>
+	struct IsStdVector : std::false_type {};
+	template<class T, class Alloc>
+	struct IsStdVector<std::vector<T, Alloc>> : std::true_type {};
 
-	template<class K, class T, class AllocV, class... Rest>
-	inline MemUsage MemUsageOf_UnorderedDenseMap(
-		const ankerl::unordered_dense::map<K, std::vector<T, AllocV>, Rest...>& src)
-	{
-		// generic table cost (entries + buckets + sizeof(map))
-		using MapT = ankerl::unordered_dense::map<K, std::vector<T, AllocV>, Rest...>;
-		MemUsage total = MemUsageOf_UnorderedDenseMap_TableOnly<MapT>(src);
-
-		// add only the heap blocks of inner vectors (prevents double-counting sizeof(vector))
-		for (auto const& kv : src.values())
+	template<class MapT>
+	inline MemUsage MemUsageOf_UnorderedDenseMap(const MapT& src)
+		requires requires(const MapT& m)
 		{
-			Add(total, MemUsageOf_Vector_HeapOnly(kv.second));
+			typename MapT::bucket_type;
+			m.values().size();
+			m.values().capacity();
+			m.bucket_count();
+		}
+	{
+		MemUsage total = MemUsageOf_UnorderedDenseMap_TableOnly(src);
+
+		// if mapped value type is std::vector, also include the payload heap of each mapped vector.
+		if constexpr (requires { typename MapT::mapped_type; } &&
+			IsStdVector<typename MapT::mapped_type>::value)
+		{
+			// add only the heap blocks of inner vectors (prevents double-counting sizeof(vector))
+			for (auto const& kv : src.values())
+			{
+				Add(total, MemUsageOf_Vector_HeapOnly(kv.second));
+			}
 		}
 
 		return total;
 	}
-	*/
 
 } // namespace Mem

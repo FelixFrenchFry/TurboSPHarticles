@@ -58,7 +58,7 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
 	const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 	glm::ivec2 monitorSize{ mode->width, mode->height };
-	glfwSetWindowPos(window_, monitorSize.x / 2 - visParams_.window.size.x / 2 + std::max(0, monitorSize.x - 2784),
+	glfwSetWindowPos(window_, monitorSize.x / 2 - visParams_.window.size.x / 2 + std::max(0, monitorSize.x - 2800),
 							  monitorSize.y / 2 - visParams_.window.size.y / 2);
 
 	if (!window_)

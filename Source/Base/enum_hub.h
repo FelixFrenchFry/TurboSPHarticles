@@ -59,10 +59,14 @@ namespace Base
 
 	enum class NeighborSearchMethod : uint8_t
 	{
-		BruteForce,				// 0
-		SpatialHashing_Basic,	// 1
-		CellLinkedList_Basic,	// 2 (derived from paper: "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013))
-		CellLinkedList_Compact	// 3 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
+		BruteForce,					// 0
+		SpatialHashing_Basic,		// 1 (using hash table)
+		SpatialHashing_Explicit,	// 2 (using explicit grid)
+		CellLinkedList_Basic,		// 3 (derived from paper: "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013))
+		CellLinkedList_Compact,		// 4 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
+		BoundVolHier_Linear_LBVH,	// 5 (derived from blog: "Using HIP RT ray tracing library to accelerate fluid simulation" (2023))
+		BoundVolHier_Hybrid_HLBVH,	// 6
+		BoundVolHier_Binned_SAH_BVH	// 7
 	};
 	constexpr const char* ToCString(NeighborSearchMethod v) noexcept
 	{
@@ -72,10 +76,18 @@ namespace Base
 			"BruteForce";
 		case NeighborSearchMethod::SpatialHashing_Basic: return
 			"SpatialHashing_Basic";
+		case NeighborSearchMethod::SpatialHashing_Explicit: return
+			"SpatialHashing_Explicit";
 		case NeighborSearchMethod::CellLinkedList_Basic: return
 			"CellLinkedList_Basic";
 		case NeighborSearchMethod::CellLinkedList_Compact: return
 			"CellLinkedList_Compact";
+		case NeighborSearchMethod::BoundVolHier_Linear_LBVH: return
+			"BoundVolHier_Linear_LBVH";
+		case NeighborSearchMethod::BoundVolHier_Hybrid_HLBVH: return
+			"BoundVolHier_Hybrid_HLBVH";
+		case NeighborSearchMethod::BoundVolHier_Binned_SAH_BVH: return
+			"BoundVolHier_Binned_SAH_BVH";
 		}
 		return "NeighborSearchMethod::<unknown>";
 	}

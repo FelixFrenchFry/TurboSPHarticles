@@ -3,15 +3,21 @@
 // external
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <execution>
 #include <numeric>
 #include <ranges>
 #include <spdlog/spdlog.h>
+#include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
 #include <vector>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 // internal
 #include "cpu_backend_01.h"
@@ -20,11 +26,11 @@
 #include "Source/Base/helpers.h"
 
 #if defined(_MSC_VER)
-	#define RESTRICT __restrict
+#define RESTRICT __restrict
 #elif defined(__GNUC__) || defined(__clang__)
-	#define RESTRICT __restrict__
+#define RESTRICT __restrict__
 #else
-	#define RESTRICT
+#define RESTRICT
 #endif
 
 
@@ -35,7 +41,7 @@ namespace
 {
 	template <typename T>
 	void ApplyPermutation(const std::vector<uint32_t>& perm,
-						  std::vector<T>& data)
+		std::vector<T>& data)
 	{
 		// (capped at uint32_t to correspond to max particle count)
 		const uint32_t N = static_cast<uint32_t>(perm.size());
@@ -61,9 +67,9 @@ namespace
 	}
 } // unnamed
 
-// -----------------------------------------------------------------------------
-// --- [ brute force implementation ] ------------------------------------------
-// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+// --- [ brute force implementation ] --------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 void NS_BruteForce_CPU01::Init(const SimParams& params)
 {
@@ -245,9 +251,9 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_CPU01::GetMemUsage(
 	return { usageF, usageB };
 }
 
-// -----------------------------------------------------------------------------
-// --- [ spatial hashing basic implementation ] --------------------------------
-// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+// --- [ spatial hashing basic implementation ] ----------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 void NS_SpatialHashing_Basic_CPU01::Init(const SimParams& params)
 {
@@ -261,7 +267,7 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 {
 	cellSize_ = params.kernelRadius;
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-				 ? 0.0f : (1.0f / params.kernelRadius);
+		? 0.0f : (1.0f / params.kernelRadius);
 
 	// clear hash tables completely, including per-cell vectors
 	cellGridF_.clear();
@@ -382,8 +388,8 @@ void NS_SpatialHashing_Basic_CPU01::Query_Count(const SimParams& params)
 						{
 							// current cell key
 							const uint64_t key = PackKey(cxi + rx,
-														 cyi + ry,
-														 czi + rz);
+								cyi + ry,
+								czi + rz);
 
 							// fluid particles
 							if (auto bucket = cellGridF_.find(key);
@@ -398,8 +404,8 @@ void NS_SpatialHashing_Basic_CPU01::Query_Count(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -421,8 +427,8 @@ void NS_SpatialHashing_Basic_CPU01::Query_Count(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -496,8 +502,8 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 						{
 							// current cell key
 							const uint64_t key = PackKey(cxi + rx,
-														 cyi + ry,
-														 czi + rz);
+								cyi + ry,
+								czi + rz);
 
 							// fluid particles
 							if (auto bucket = cellGridF_.find(key);
@@ -512,8 +518,8 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -536,8 +542,8 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -573,8 +579,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Basic_CPU01::GetMemUsa
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 
-	//Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
-	//Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
+	Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
+	Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
 
 	return { usageF, usageB };
 }
@@ -612,9 +618,521 @@ inline int NS_SpatialHashing_Basic_CPU01::FloorToInt(float v) noexcept
 	return (v < static_cast<float>(i)) ? (i - 1) : i;
 }
 
-// -----------------------------------------------------------------------------
-// --- [ cell linked list basic implementation ] -------------------------------
-// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+// --- [ spatial hashing explicit implementation ] -------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+void NS_SpatialHashing_Explicit_CPU01::Init(const SimParams& params)
+{
+	cellSize_ = 0.0f;
+	cellSizeInv_ = 0.0f;
+
+	xBoxOrig_ = 0.0f;
+	yBoxOrig_ = 0.0f;
+	zBoxOrig_ = 0.0f;
+
+	xBoxMax_ = 0.0f;
+	yBoxMax_ = 0.0f;
+	zBoxMax_ = 0.0f;
+
+	N_DimX_ = 0;
+	N_DimY_ = 0;
+	N_DimZ_ = 0;
+	N_Cells_ = 0;
+
+	cellGridF_.clear();
+	cellGridB_.clear();
+}
+
+void NS_SpatialHashing_Explicit_CPU01::Construct(const SimParams& params)
+{
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+
+	if (N_F == 0 && N_B == 0)
+	{
+		SPDLOG_WARN("No construction possible (empty simulation)");
+
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+		N_Cells_ = 0;
+
+		cellGridF_.clear();
+		cellGridB_.clear();
+
+		return;
+	}
+
+	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, params.kernelRadius);
+	cellSize_ = params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+		? 0.0f : (1.0f / params.kernelRadius);
+
+	// --- [ combined AABB over fluid and boundary particles ] ----------------------------------------
+
+	// accumulators
+	float initMin = std::numeric_limits<float>::max();
+	float initMax = std::numeric_limits<float>::lowest();
+	float xMin = initMin, yMin = initMin, zMin = initMin;
+	float xMax = initMax, yMax = initMax, zMax = initMax;
+
+	// fluid
+	for (uint32_t i = 0; i < N_F; i++)
+	{
+		const float x = be_.xPosF_[i];
+		const float y = be_.yPosF_[i];
+		const float z = be_.zPosF_[i];
+
+		xMin = x < xMin ? x : xMin;
+		yMin = y < yMin ? y : yMin;
+		zMin = z < zMin ? z : zMin;
+		xMax = x > xMax ? x : xMax;
+		yMax = y > yMax ? y : yMax;
+		zMax = z > zMax ? z : zMax;
+	}
+
+	// boundary
+	for (uint32_t i = 0; i < N_B; i++)
+	{
+		const float x = be_.xPosB_[i];
+		const float y = be_.yPosB_[i];
+		const float z = be_.zPosB_[i];
+
+		xMin = x < xMin ? x : xMin;
+		yMin = y < yMin ? y : yMin;
+		zMin = z < zMin ? z : zMin;
+		xMax = x > xMax ? x : xMax;
+		yMax = y > yMax ? y : yMax;
+		zMax = z > zMax ? z : zMax;
+	}
+
+	// padding to avoid edge clamp issues
+	xMin -= AABB_pad_;
+	yMin -= AABB_pad_;
+	zMin -= AABB_pad_;
+	xMax += AABB_pad_;
+	yMax += AABB_pad_;
+	zMax += AABB_pad_;
+
+	// determine whether to rebuild the grid dimensions
+	bool rebuildGrid = cellSizeChanged
+		|| N_Cells_ == 0
+		|| cellGridF_.size() != static_cast<size_t>(N_Cells_)
+		|| cellGridB_.size() != static_cast<size_t>(N_Cells_);
+
+	if (!rebuildGrid)
+	{
+		const bool outsidePrevAABB =
+			(xMin < xBoxOrig_) || (yMin < yBoxOrig_) || (zMin < zBoxOrig_) ||
+			(xMax > xBoxMax_) || (yMax > yBoxMax_) || (zMax > zBoxMax_);
+		rebuildGrid = outsidePrevAABB;
+	}
+
+	// --- [ initialize / refresh explicit grid ] -------------------------------------------------
+
+	if (rebuildGrid)
+	{
+		// expand AABB by a margin (in cells) to avoid rebuilding every step
+		const float margin = static_cast<float>(N_gridMarginCells_) * cellSize_;
+
+		xBoxOrig_ = xMin - margin;
+		yBoxOrig_ = yMin - margin;
+		zBoxOrig_ = zMin - margin;
+
+		xBoxMax_ = xMax + margin;
+		yBoxMax_ = yMax + margin;
+		zBoxMax_ = zMax + margin;
+
+		const float xLen = fmaxf(0.0f, xBoxMax_ - xBoxOrig_);
+		const float yLen = fmaxf(0.0f, yBoxMax_ - yBoxOrig_);
+		const float zLen = fmaxf(0.0f, zBoxMax_ - zBoxOrig_);
+
+		// compute grid dimensions
+		N_DimX_ = std::max<uint32_t>(1,
+			static_cast<uint32_t>(std::ceil(xLen * cellSizeInv_)));
+		N_DimY_ = std::max<uint32_t>(1,
+			static_cast<uint32_t>(std::ceil(yLen * cellSizeInv_)));
+		N_DimZ_ = std::max<uint32_t>(1,
+			static_cast<uint32_t>(std::ceil(zLen * cellSizeInv_)));
+
+		// overflow protection
+		const uint64_t N_DimX = static_cast<uint64_t>(N_DimX_);
+		const uint64_t N_DimY = static_cast<uint64_t>(N_DimY_);
+		const uint64_t N_DimZ = static_cast<uint64_t>(N_DimZ_);
+		const uint64_t N_Cells = N_DimX * N_DimY * N_DimZ;
+		if (N_Cells > static_cast<uint64_t>(std::numeric_limits<size_t>::max()))
+		{
+			SPDLOG_ERROR("Too many grid cells for explicit vector storage ({})", N_Cells);
+
+			N_DimX_ = 0;
+			N_DimY_ = 0;
+			N_DimZ_ = 0;
+			N_Cells_ = 0;
+
+			cellGridF_.clear();
+			cellGridB_.clear();
+
+			return;
+		}
+		N_Cells_ = N_Cells;
+
+		cellGridF_.clear();
+		cellGridB_.clear();
+		cellGridF_.resize(static_cast<size_t>(N_Cells_));
+		cellGridB_.resize(static_cast<size_t>(N_Cells_));
+	}
+	else
+	{
+		// clear all per-cell buckets, but keep capacity
+		tbb::parallel_for(
+			tbb::blocked_range<uint64_t>(0, N_Cells_),
+			[&](const tbb::blocked_range<uint64_t>& r)
+			{
+				for (uint64_t c = r.begin(); c != r.end(); c++)
+				{
+					cellGridF_[static_cast<size_t>(c)].clear();
+					cellGridB_[static_cast<size_t>(c)].clear();
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
+	// fill in fluid cell grid
+	{
+		// compute keys in parallel
+		std::vector<Key> cellKeysF(N_F);
+
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell coordinates
+					int cx = FloorToInt((be_.xPosF_[i] - xBoxOrig_) * cellSizeInv_);
+					int cy = FloorToInt((be_.yPosF_[i] - yBoxOrig_) * cellSizeInv_);
+					int cz = FloorToInt((be_.zPosF_[i] - zBoxOrig_) * cellSizeInv_);
+
+					// clamp to grid dimensions
+					uint32_t ux = ClampInt(cx, 0, static_cast<int>(N_DimX_ - 1));
+					uint32_t uy = ClampInt(cy, 0, static_cast<int>(N_DimY_ - 1));
+					uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
+
+					cellKeysF[i] = PackKey(ux, uy, uz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the cell grid single-threaded
+		for (uint32_t i = 0; i < N_F; i++)
+		{
+			const Key key = cellKeysF[i];
+			cellGridF_[static_cast<size_t>(key)].push_back(i);
+		}
+	}
+
+	// fill in boundary cell grid
+	{
+		// compute keys in parallel
+		std::vector<Key> cellKeysB(N_B);
+
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_B),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell coordinates
+					int cx = FloorToInt((be_.xPosB_[i] - xBoxOrig_) * cellSizeInv_);
+					int cy = FloorToInt((be_.yPosB_[i] - yBoxOrig_) * cellSizeInv_);
+					int cz = FloorToInt((be_.zPosB_[i] - zBoxOrig_) * cellSizeInv_);
+
+					// clamp to grid dimensions
+					uint32_t ux = ClampInt(cx, 0, static_cast<int>(N_DimX_ - 1));
+					uint32_t uy = ClampInt(cy, 0, static_cast<int>(N_DimY_ - 1));
+					uint32_t uz = ClampInt(cz, 0, static_cast<int>(N_DimZ_ - 1));
+
+					cellKeysB[i] = PackKey(ux, uy, uz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the cell grid single-threaded
+		for (uint32_t i = 0; i < N_B; i++)
+		{
+			const Key key = cellKeysB[i];
+			cellGridB_[static_cast<size_t>(key)].push_back(i);
+		}
+	}
+}
+
+void NS_SpatialHashing_Explicit_CPU01::Query_Count(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t cntFF = 0;
+				uint32_t cntFB = 0;
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// cell coordinates of particle i
+				const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+				const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+				const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					int cz = czi + rz; // target cell coordinate in z-direction
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						int cy = cyi + ry; // target cell coordinate in y-direction
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							int cx = cxi + rx; // target cell coordinate in x-direction
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+							// current cell key
+							const Key key = PackKey(static_cast<uint32_t>(cx),
+													static_cast<uint32_t>(cy),
+													static_cast<uint32_t>(cz));
+
+							// fluid particles
+							const Bucket& bucketF = cellGridF_[static_cast<size_t>(key)];
+							for (const uint32_t j : bucketF)
+							{
+								const float dx = xi - xPosF[j];
+								const float dy = yi - yPosF[j];
+								const float dz = zi - zPosF[j];
+
+								// squared distance between particles i and j
+								const float distSqu = dx * dx
+													+ dy * dy
+													+ dz * dz;
+
+								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								{
+									cntFF++;
+								}
+							}
+
+							// boundary particles
+							const Bucket& bucketB = cellGridB_[static_cast<size_t>(key)];
+							for (const uint32_t j : bucketB)
+							{
+								const float dx = xi - xPosB[j];
+								const float dy = yi - yPosB[j];
+								const float dz = zi - zPosB[j];
+
+								// squared distance between particles i and j
+								const float distSqu = dx * dx
+													+ dy * dy
+													+ dz * dz;
+
+								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								{
+									cntFB++;
+								}
+							}
+						}
+					}
+				}
+
+				// commit final neighbor counts to backend storage
+				be_.neighborLists_->SetNbrCountFF(i, cntFF);
+				be_.neighborLists_->SetNbrCountFB(i, cntFB);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_SpatialHashing_Explicit_CPU01::Query_Fill(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
+
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				scratchFF.clear();
+				scratchFB.clear();
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// cell coordinates of particle i
+				const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+				const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+				const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					int cz = czi + rz; // target cell coordinate in z-direction
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						int cy = cyi + ry; // target cell coordinate in y-direction
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							int cx = cxi + rx; // target cell coordinate in x-direction
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+							// current cell key
+							const Key key = PackKey(static_cast<uint32_t>(cx),
+													static_cast<uint32_t>(cy),
+													static_cast<uint32_t>(cz));
+
+							// fluid particles
+							const Bucket& bucketF = cellGridF_[static_cast<size_t>(key)];
+							for (const uint32_t j : bucketF)
+							{
+								const float dx = xi - xPosF[j];
+								const float dy = yi - yPosF[j];
+								const float dz = zi - zPosF[j];
+
+								// squared distance between particles i and j
+								const float distSqu = dx * dx
+													+ dy * dy
+													+ dz * dz;
+
+								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								{
+									// accumulate actual neighbors in scratch list
+									scratchFF.push_back(j);
+								}
+							}
+
+							// boundary particles
+							const Bucket& bucketB = cellGridB_[static_cast<size_t>(key)];
+							for (const uint32_t j : bucketB)
+							{
+								const float dx = xi - xPosB[j];
+								const float dy = yi - yPosB[j];
+								const float dz = zi - zPosB[j];
+
+								// squared distance between particles i and j
+								const float distSqu = dx * dx
+													+ dy * dy
+													+ dz * dz;
+
+								if (distSqu <= kernelRadiusSqu) [[unlikely]]
+								{
+									// accumulate actual neighbors in scratch list
+									scratchFB.push_back(j);
+								}
+							}
+						}
+					}
+				}
+
+				// commit final neighbor lists from scratch to backend storage
+				be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+					static_cast<uint32_t>(scratchFF.size()));
+				be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+					static_cast<uint32_t>(scratchFB.size()));
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
+	const SimParams& params)
+{
+	// TODO: implement
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Explicit_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, Mem::MemUsageOf_VectorOfVector(cellGridF_));
+	Mem::Add(usageB, Mem::MemUsageOf_VectorOfVector(cellGridB_));
+
+	return { usageF, usageB };
+}
+
+inline NS_SpatialHashing_Explicit_CPU01::Key NS_SpatialHashing_Explicit_CPU01::PackKey(
+	uint32_t cx, uint32_t cy, uint32_t cz) const noexcept
+{
+	return static_cast<Key>(cx) + static_cast<Key>(N_DimX_) * (static_cast<Key>(cy)
+								+ static_cast<Key>(N_DimY_) * static_cast<Key>(cz));
+}
+
+inline int NS_SpatialHashing_Explicit_CPU01::FloorToInt(float v) noexcept
+{
+	int i = static_cast<int>(v);
+
+	return (v < static_cast<float>(i)) ? (i - 1) : i;
+}
+
+inline uint32_t NS_SpatialHashing_Explicit_CPU01::ClampInt(
+	int v, int low, int high) noexcept
+{
+	const int t = (v < low) ? low : v;
+	return static_cast<uint32_t>((t > high) ? high : t);
+}
+
+// -------------------------------------------------------------------------------------------------
+// --- [ cell linked list basic implementation ] ---------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 void NS_CellLinkedList_Basic_CPU01::Init(const SimParams& params)
 {
@@ -657,9 +1175,9 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 
 	cellSize_ = params.kernelRadius;
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-				 ? 0.0f : (1.0f / params.kernelRadius);
+		? 0.0f : (1.0f / params.kernelRadius);
 
-	// --- [ combined AABB over fluid and boundary particles ] -----------------
+	// --- [ combined AABB over fluid and boundary particles ] ----------------------------------------
 
 	// accumulators
 	float initMin = std::numeric_limits<float>::max();
@@ -711,13 +1229,13 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	const float zLen = fmaxf(0.0f, zMax - zMin);
 
 	// compute grid dimensions
-	N_DimX_ = std::max<uint32_t>(1, 
+	N_DimX_ = std::max<uint32_t>(1,
 		static_cast<uint32_t>(std::ceil(xLen * cellSizeInv_)));
-	N_DimY_ = std::max<uint32_t>(1, 
+	N_DimY_ = std::max<uint32_t>(1,
 		static_cast<uint32_t>(std::ceil(yLen * cellSizeInv_)));
-	N_DimZ_ = std::max<uint32_t>(1, 
+	N_DimZ_ = std::max<uint32_t>(1,
 		static_cast<uint32_t>(std::ceil(zLen * cellSizeInv_)));
-	
+
 	// overflow protection
 	const uint64_t N_DimX = static_cast<uint64_t>(N_DimX_);
 	const uint64_t N_DimY = static_cast<uint64_t>(N_DimY_);
@@ -732,7 +1250,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 		N_Cells_ = static_cast<uint32_t>(N_Cells);
 	}
 
-	// --- [ preparation data structures ] -------------------------------------
+	// --- [ preparation data structures ] ------------------------------------------------------------
 
 	// fluid
 	cellStartIdxF_.assign(N_Cells_, EMPTY);
@@ -794,23 +1312,23 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 		tbb::auto_partitioner{}
 	);
 
-	// --- [ sort particle indices by cell IDs ] -------------------------------
+	// --- [ sort particle indices by cell IDs ] ------------------------------------------------------
 
 	// single-threaded basic sorting version
 	/*
-	std::ranges::sort(sortedParticleIdxF_, 
+	std::ranges::sort(sortedParticleIdxF_,
 		[&](uint32_t a, uint32_t b) { return cellIdF_[a] < cellIdF_[b]; });
 
-	std::ranges::sort(sortedParticleIdxB_, 
+	std::ranges::sort(sortedParticleIdxB_,
 		[&](uint32_t a, uint32_t b) { return cellIdB_[a] < cellIdB_[b]; });
 	*/
 
 	// multi-threaded parallel sorting version using C++ standard library
 	/*
-	std::sort(std::execution::par, sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(), 
+	std::sort(std::execution::par, sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
 		[&](uint32_t a, uint32_t b) { return cellIdF_[a] < cellIdF_[b]; });
 
-	std::sort(std::execution::par, sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(), 
+	std::sort(std::execution::par, sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
 		[&](uint32_t a, uint32_t b) { return cellIdB_[a] < cellIdB_[b]; });
 	*/
 
@@ -821,7 +1339,7 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 	tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
 		[&](uint32_t a, uint32_t b) { return cellIdB_[a] < cellIdB_[b]; });
 
-	// --- [ fill in cell start/end indices ] ----------------------------------
+	// --- [ fill in cell start/end indices ] ---------------------------------------------------------
 
 	// fluid
 	{
@@ -943,8 +1461,8 @@ void NS_CellLinkedList_Basic_CPU01::Query_Count(const SimParams& params)
 
 							// cell ID
 							const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
-																   static_cast<uint32_t>(cy),
-																   static_cast<uint32_t>(cz));
+								static_cast<uint32_t>(cy),
+								static_cast<uint32_t>(cz));
 
 							// check fluid candidates
 							const uint32_t sF = cellStartIdxF_[cid];
@@ -964,8 +1482,8 @@ void NS_CellLinkedList_Basic_CPU01::Query_Count(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -992,8 +1510,8 @@ void NS_CellLinkedList_Basic_CPU01::Query_Count(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -1080,8 +1598,8 @@ void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 
 							// cell ID
 							const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
-																   static_cast<uint32_t>(cy),
-																   static_cast<uint32_t>(cz));
+								static_cast<uint32_t>(cy),
+								static_cast<uint32_t>(cz));
 
 							// check fluid candidates
 							const uint32_t sF = cellStartIdxF_[cid];
@@ -1101,8 +1619,8 @@ void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -1130,8 +1648,8 @@ void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 
 									// squared distance between particles i and j
 									const float distSqu = dx * dx
-														+ dy * dy
-														+ dz * dz;
+										+ dy * dy
+										+ dz * dz;
 
 									if (distSqu <= kernelRadiusSqu) [[unlikely]]
 									{
@@ -1200,14 +1718,21 @@ inline uint32_t NS_CellLinkedList_Basic_CPU01::ClampInt(
 	return static_cast<uint32_t>((t > high) ? high : t);
 }
 
-// -----------------------------------------------------------------------------
-// --- [ cell linked list compact implementation ] -----------------------------
-// -----------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+// --- [ cell linked list compact implementation ] -------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
+	cellOrigX_ = 0;
+	cellOrigY_ = 0;
+	cellOrigZ_ = 0;
+	N_DimX_ = 0;
+	N_DimY_ = 0;
+	N_DimZ_ = 0;
+	cellFrameValid_ = false;
 
 	uniqueCellIdF_.clear();
 	cellStartIdxF_.clear();
@@ -1228,6 +1753,13 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	if (N_F == 0 && N_B == 0)
 	{
 		SPDLOG_WARN("No construction possible (empty simulation)");
+		cellOrigX_ = 0;
+		cellOrigY_ = 0;
+		cellOrigZ_ = 0;
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+		cellFrameValid_ = false;
 
 		uniqueCellIdF_.clear();
 		cellStartIdxF_.clear();
@@ -1242,11 +1774,14 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		return;
 	}
 
+	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, params.kernelRadius);
 	cellSize_ = params.kernelRadius;
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-				 ? 0.0f : (1.0f / params.kernelRadius);
+		? 0.0f : (1.0f / params.kernelRadius);
+	if (cellSizeChanged) { cellFrameValid_ = false; }
+	UpdateCellFrame();
 
-	// --- [ cell coordinates and indices for fluid and boundary particles ] ---
+	// --- [ cell coordinates and indices for fluid and boundary particles ] --------------------------
 
 	// fluid
 	cellIdF_.resize(N_F);
@@ -1298,7 +1833,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		);
 	}
 
-	// --- [ sort particle indices by cell IDs ] -------------------------------
+	// --- [ sort particle indices by cell IDs ] ------------------------------------------------------
 
 	if (N_F > 0)
 	{
@@ -1318,7 +1853,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 			});
 	}
 
-	// --- [ build compact cell list and fill in cell start indices ] ----------
+	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
 
 	uniqueCellIdF_.clear();
 	cellStartIdxF_.clear();
@@ -1403,6 +1938,71 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 		tbb::blocked_range<uint64_t>(0, N_Cells),
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
+			static constexpr uint32_t LookupCacheSize = 256;
+			static_assert((LookupCacheSize & (LookupCacheSize - 1)) == 0);
+
+			std::array<uint64_t, LookupCacheSize> lookupCacheKeyF{};
+			std::array<uint32_t, LookupCacheSize> lookupCacheValF{};
+			std::array<uint64_t, LookupCacheSize> lookupCacheKeyB{};
+			std::array<uint32_t, LookupCacheSize> lookupCacheValB{};
+			lookupCacheKeyF.fill(EMPTY_64);
+			lookupCacheKeyB.fill(EMPTY_64);
+			lookupCacheValF.fill(EMPTY_32);
+			lookupCacheValB.fill(EMPTY_32);
+
+			const auto findCellIdxTernary = [](const std::vector<uint64_t>& sortedCellIds,
+				uint64_t key,
+				uint32_t lo,
+				uint32_t hi) noexcept
+				{
+					while (hi > lo + 24u)
+					{
+						const uint32_t span = hi - lo;
+						const uint32_t third = span / 3u;
+						const uint32_t m1 = lo + third;
+						const uint32_t m2 = hi - third - 1u;
+
+						const uint64_t v1 = sortedCellIds[m1];
+						const uint64_t v2 = sortedCellIds[m2];
+
+						if (key < v1)
+						{
+							hi = m1;
+							continue;
+						}
+						if (key > v2)
+						{
+							lo = m2 + 1u;
+							continue;
+						}
+						if (key == v1) { return m1; }
+						if (key == v2) { return m2; }
+
+						lo = m1 + 1u;
+						hi = m2;
+					}
+
+					while (lo < hi)
+					{
+						const uint32_t mid = lo + ((hi - lo) >> 1u);
+						if (sortedCellIds[mid] < key)
+						{
+							lo = mid + 1u;
+						}
+						else
+						{
+							hi = mid;
+						}
+					}
+
+					if (lo < sortedCellIds.size() && sortedCellIds[lo] == key)
+					{
+						return lo;
+					}
+
+					return EMPTY_32;
+				};
+
 			for (uint64_t c = range.begin(); c != range.end(); c++)
 			{
 				// range of all fluid particles in this cell
@@ -1431,7 +2031,11 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 				std::array<uint32_t, N_NbrCells_> sNbrB{};
 				std::array<uint32_t, N_NbrCells_> eNbrB{};
 
-				// check existence and location of all 27 (3x3x3) neighboring grid cells
+				// BigMin/LitMax range of the 3x3x3 neighborhood in Morton space.
+				std::array<uint64_t, N_NbrCells_> nbrCellId{};
+				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
+				uint64_t bigMinCellId = 0;
+
 				for (int rz = -1; rz <= 1; rz++)
 				{
 					const int oz = cz + rz; // target cell coordinate in z-direction
@@ -1449,48 +2053,105 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 
 							// cell ID of this neighbor cell
 							const uint64_t cid_nbr = MapToCellId_Morton(ox, oy, oz);
+							nbrCellId[idx_nbr] = cid_nbr;
+							litMaxCellId = std::min(litMaxCellId, cid_nbr);
+							bigMinCellId = std::max(bigMinCellId, cid_nbr);
+						}
+					}
+				}
 
-							// fluid scope
+				// fluid lower/upper bounds over the full neighborhood range
+				uint32_t loF = 0;
+				uint32_t hiF = 0;
+				if (!uniqueCellIdF_.empty())
+				{
+					loF = static_cast<uint32_t>(
+						std::ranges::lower_bound(uniqueCellIdF_, litMaxCellId) - uniqueCellIdF_.begin());
+					hiF = static_cast<uint32_t>(
+						std::ranges::upper_bound(uniqueCellIdF_, bigMinCellId) - uniqueCellIdF_.begin());
+					if (hiF < loF) { hiF = loF; }
+				}
+
+				// boundary lower/upper bounds over the full neighborhood range
+				uint32_t loB = 0;
+				uint32_t hiB = 0;
+				if (!uniqueCellIdB_.empty())
+				{
+					loB = static_cast<uint32_t>(
+						std::ranges::lower_bound(uniqueCellIdB_, litMaxCellId) - uniqueCellIdB_.begin());
+					hiB = static_cast<uint32_t>(
+						std::ranges::upper_bound(uniqueCellIdB_, bigMinCellId) - uniqueCellIdB_.begin());
+					if (hiB < loB) { hiB = loB; }
+				}
+
+				// check existence and location of all 27 neighboring grid cells
+				for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells_; idx_nbr++)
+				{
+					const uint64_t cid_nbr = nbrCellId[idx_nbr];
+
+					// fluid scope
+					{
+						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
+						uint32_t cF_nbr = EMPTY_32;
+
+						if (lookupCacheKeyF[slot] == cid_nbr)
+						{
+							cF_nbr = lookupCacheValF[slot];
+						}
+						else
+						{
+							if (loF < hiF)
 							{
-								// find out if neighbor cell exists in compact cell list
-								auto iterF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
-								if (iterF != uniqueCellIdF_.end() && *iterF == cid_nbr)
-								{
-									// get range of all fluid particles in the neighbor cell
-									const uint32_t cF_nbr = static_cast<uint32_t>(iterF - uniqueCellIdF_.begin());
-									const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
-									const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
-
-									hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
-									sNbrF[idx_nbr] = sF_nbr;
-									eNbrF[idx_nbr] = eF_nbr;
-								}
-								else
-								{
-									hasFluidCell[idx_nbr] = false;
-								}
+								cF_nbr = findCellIdxTernary(uniqueCellIdF_, cid_nbr, loF, hiF);
 							}
+							lookupCacheKeyF[slot] = cid_nbr;
+							lookupCacheValF[slot] = cF_nbr;
+						}
 
-							// boundary scope
+						if (cF_nbr != EMPTY_32)
+						{
+							const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
+							const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
+							hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
+							sNbrF[idx_nbr] = sF_nbr;
+							eNbrF[idx_nbr] = eF_nbr;
+						}
+						else
+						{
+							hasFluidCell[idx_nbr] = false;
+						}
+					}
+
+					// boundary scope
+					{
+						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
+						uint32_t cB_nbr = EMPTY_32;
+
+						if (lookupCacheKeyB[slot] == cid_nbr)
+						{
+							cB_nbr = lookupCacheValB[slot];
+						}
+						else
+						{
+							if (loB < hiB)
 							{
-								// find out if neighbor cell exists in compact cell list
-								auto iterB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
-								if (iterB != uniqueCellIdB_.end() && *iterB == cid_nbr)
-								{
-									// get range of all boundary particles in the neighbor cell
-									const uint32_t cB_nbr = static_cast<uint32_t>(iterB - uniqueCellIdB_.begin());
-									const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
-									const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
-
-									hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
-									sNbrB[idx_nbr] = sB_nbr;
-									eNbrB[idx_nbr] = eB_nbr;
-								}
-								else
-								{
-									hasBoundaryCell[idx_nbr] = false;
-								}
+								cB_nbr = findCellIdxTernary(uniqueCellIdB_, cid_nbr, loB, hiB);
 							}
+							lookupCacheKeyB[slot] = cid_nbr;
+							lookupCacheValB[slot] = cB_nbr;
+						}
+
+						if (cB_nbr != EMPTY_32)
+						{
+							const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
+							const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
+							hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
+							sNbrB[idx_nbr] = sB_nbr;
+							eNbrB[idx_nbr] = eB_nbr;
+						}
+						else
+						{
+							hasBoundaryCell[idx_nbr] = false;
 						}
 					}
 				}
@@ -1765,6 +2426,71 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 		tbb::blocked_range<uint64_t>(0, N_Cells),
 		[&](const tbb::blocked_range<uint64_t>& range)
 		{
+			static constexpr uint32_t LookupCacheSize = 256;
+			static_assert((LookupCacheSize & (LookupCacheSize - 1)) == 0);
+
+			std::array<uint64_t, LookupCacheSize> lookupCacheKeyF{};
+			std::array<uint32_t, LookupCacheSize> lookupCacheValF{};
+			std::array<uint64_t, LookupCacheSize> lookupCacheKeyB{};
+			std::array<uint32_t, LookupCacheSize> lookupCacheValB{};
+			lookupCacheKeyF.fill(EMPTY_64);
+			lookupCacheKeyB.fill(EMPTY_64);
+			lookupCacheValF.fill(EMPTY_32);
+			lookupCacheValB.fill(EMPTY_32);
+
+			const auto findCellIdxTernary = [](const std::vector<uint64_t>& sortedCellIds,
+				uint64_t key,
+				uint32_t lo,
+				uint32_t hi) noexcept
+				{
+					while (hi > lo + 24u)
+					{
+						const uint32_t span = hi - lo;
+						const uint32_t third = span / 3u;
+						const uint32_t m1 = lo + third;
+						const uint32_t m2 = hi - third - 1u;
+
+						const uint64_t v1 = sortedCellIds[m1];
+						const uint64_t v2 = sortedCellIds[m2];
+
+						if (key < v1)
+						{
+							hi = m1;
+							continue;
+						}
+						if (key > v2)
+						{
+							lo = m2 + 1u;
+							continue;
+						}
+						if (key == v1) { return m1; }
+						if (key == v2) { return m2; }
+
+						lo = m1 + 1u;
+						hi = m2;
+					}
+
+					while (lo < hi)
+					{
+						const uint32_t mid = lo + ((hi - lo) >> 1u);
+						if (sortedCellIds[mid] < key)
+						{
+							lo = mid + 1u;
+						}
+						else
+						{
+							hi = mid;
+						}
+					}
+
+					if (lo < sortedCellIds.size() && sortedCellIds[lo] == key)
+					{
+						return lo;
+					}
+
+					return EMPTY_32;
+				};
+
 			// per-thread neighbor vectors for local accumulation and then bulk add
 			// (reserve preparation in case of inline capacity not being enough)
 			auto& scratchFF = scratchFF_.local();
@@ -1806,7 +2532,11 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 				std::array<uint32_t, N_NbrCells_> sNbrB{};
 				std::array<uint32_t, N_NbrCells_> eNbrB{};
 
-				// check existence and location of all 27 (3x3x3) neighboring grid cells
+				// BigMin/LitMax range of the 3x3x3 neighborhood in Morton space.
+				std::array<uint64_t, N_NbrCells_> nbrCellId{};
+				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
+				uint64_t bigMinCellId = 0;
+
 				for (int rz = -1; rz <= 1; rz++)
 				{
 					const int oz = cz + rz; // target cell coordinate in z-direction
@@ -1824,48 +2554,105 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 
 							// cell ID of this neighbor cell
 							const uint64_t cid_nbr = MapToCellId_Morton(ox, oy, oz);
+							nbrCellId[idx_nbr] = cid_nbr;
+							litMaxCellId = std::min(litMaxCellId, cid_nbr);
+							bigMinCellId = std::max(bigMinCellId, cid_nbr);
+						}
+					}
+				}
 
-							// fluid scope
+				// fluid lower/upper bounds over the full neighborhood range
+				uint32_t loF = 0;
+				uint32_t hiF = 0;
+				if (!uniqueCellIdF_.empty())
+				{
+					loF = static_cast<uint32_t>(
+						std::ranges::lower_bound(uniqueCellIdF_, litMaxCellId) - uniqueCellIdF_.begin());
+					hiF = static_cast<uint32_t>(
+						std::ranges::upper_bound(uniqueCellIdF_, bigMinCellId) - uniqueCellIdF_.begin());
+					if (hiF < loF) { hiF = loF; }
+				}
+
+				// boundary lower/upper bounds over the full neighborhood range
+				uint32_t loB = 0;
+				uint32_t hiB = 0;
+				if (!uniqueCellIdB_.empty())
+				{
+					loB = static_cast<uint32_t>(
+						std::ranges::lower_bound(uniqueCellIdB_, litMaxCellId) - uniqueCellIdB_.begin());
+					hiB = static_cast<uint32_t>(
+						std::ranges::upper_bound(uniqueCellIdB_, bigMinCellId) - uniqueCellIdB_.begin());
+					if (hiB < loB) { hiB = loB; }
+				}
+
+				// check existence and location of all 27 neighboring grid cells
+				for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells_; idx_nbr++)
+				{
+					const uint64_t cid_nbr = nbrCellId[idx_nbr];
+
+					// fluid scope
+					{
+						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
+						uint32_t cF_nbr = EMPTY_32;
+
+						if (lookupCacheKeyF[slot] == cid_nbr)
+						{
+							cF_nbr = lookupCacheValF[slot];
+						}
+						else
+						{
+							if (loF < hiF)
 							{
-								// find out if neighbor cell exists in compact cell list
-								auto iterF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
-								if (iterF != uniqueCellIdF_.end() && *iterF == cid_nbr)
-								{
-									// get range of all fluid particles in the neighbor cell
-									const uint32_t cF_nbr = static_cast<uint32_t>(iterF - uniqueCellIdF_.begin());
-									const uint32_t sF_nbr = cellStartIdxF_[cF_nbr]; // start
-									const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1]; // end
-
-									hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
-									sNbrF[idx_nbr] = sF_nbr;
-									eNbrF[idx_nbr] = eF_nbr;
-								}
-								else
-								{
-									hasFluidCell[idx_nbr] = false;
-								}
+								cF_nbr = findCellIdxTernary(uniqueCellIdF_, cid_nbr, loF, hiF);
 							}
+							lookupCacheKeyF[slot] = cid_nbr;
+							lookupCacheValF[slot] = cF_nbr;
+						}
 
-							// boundary scope
+						if (cF_nbr != EMPTY_32)
+						{
+							const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
+							const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
+							hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
+							sNbrF[idx_nbr] = sF_nbr;
+							eNbrF[idx_nbr] = eF_nbr;
+						}
+						else
+						{
+							hasFluidCell[idx_nbr] = false;
+						}
+					}
+
+					// boundary scope
+					{
+						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
+						uint32_t cB_nbr = EMPTY_32;
+
+						if (lookupCacheKeyB[slot] == cid_nbr)
+						{
+							cB_nbr = lookupCacheValB[slot];
+						}
+						else
+						{
+							if (loB < hiB)
 							{
-								// find out if neighbor cell exists in compact cell list
-								auto iterB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
-								if (iterB != uniqueCellIdB_.end() && *iterB == cid_nbr)
-								{
-									// get range of all boundary particles in the neighbor cell
-									const uint32_t cB_nbr = static_cast<uint32_t>(iterB - uniqueCellIdB_.begin());
-									const uint32_t sB_nbr = cellStartIdxB_[cB_nbr]; // start
-									const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1]; // end
-
-									hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
-									sNbrB[idx_nbr] = sB_nbr;
-									eNbrB[idx_nbr] = eB_nbr;
-								}
-								else
-								{
-									hasBoundaryCell[idx_nbr] = false;
-								}
+								cB_nbr = findCellIdxTernary(uniqueCellIdB_, cid_nbr, loB, hiB);
 							}
+							lookupCacheKeyB[slot] = cid_nbr;
+							lookupCacheValB[slot] = cB_nbr;
+						}
+
+						if (cB_nbr != EMPTY_32)
+						{
+							const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
+							const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
+							hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
+							sNbrB[idx_nbr] = sB_nbr;
+							eNbrB[idx_nbr] = eB_nbr;
+						}
+						else
+						{
+							hasBoundaryCell[idx_nbr] = false;
 						}
 					}
 				}
@@ -1944,7 +2731,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 					}
 
 					// commit final neighbor lists from scratch to backend storage
-					be_.neighborLists_->SetNbrListFF(i, scratchFF.data(), 
+					be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
 						static_cast<uint32_t>(scratchFF.size()));
 					be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
 						static_cast<uint32_t>(scratchFB.size()));
@@ -1961,9 +2748,12 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
+	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, params.kernelRadius);
 	cellSize_ = params.kernelRadius;
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-				 ? 0.0f : (1.0f / params.kernelRadius);
+		? 0.0f : (1.0f / params.kernelRadius);
+	if (cellSizeChanged) { cellFrameValid_ = false; }
+	UpdateCellFrame();
 
 	if (N_F > 0)
 	{
@@ -2088,13 +2878,189 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemU
 	return { usageF, usageB };
 }
 
-inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(
-	int cx, int cy, int cz) noexcept
+void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 {
-	// zig-zag encoding of coordinates to handle negative values
-	const uint64_t ux = static_cast<uint64_t>(ZigZag(cx));
-	const uint64_t uy = static_cast<uint64_t>(ZigZag(cy));
-	const uint64_t uz = static_cast<uint64_t>(ZigZag(cz));
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0)
+	{
+		cellOrigX_ = 0;
+		cellOrigY_ = 0;
+		cellOrigZ_ = 0;
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+		cellFrameValid_ = false;
+
+		return;
+	}
+
+	bool rebuildFrame = !cellFrameValid_;
+
+	// check whether the current occupied cell box still fits into the
+	// reusable frame with a one-cell query pad on all sides
+	if (!rebuildFrame)
+	{
+		const int margin = static_cast<int>(N_CellFrameMargin_);
+		const int xMaxFrame = cellOrigX_ + static_cast<int>(N_DimX_) - 1;
+		const int yMaxFrame = cellOrigY_ + static_cast<int>(N_DimY_) - 1;
+		const int zMaxFrame = cellOrigZ_ + static_cast<int>(N_DimZ_) - 1;
+
+		const int xMinInner = cellOrigX_ + margin;
+		const int yMinInner = cellOrigY_ + margin;
+		const int zMinInner = cellOrigZ_ + margin;
+		const int xMaxInner = xMaxFrame - margin;
+		const int yMaxInner = yMaxFrame - margin;
+		const int zMaxInner = zMaxFrame - margin;
+
+		if (xMinInner > xMaxInner || yMinInner > yMaxInner || zMinInner > zMaxInner)
+		{
+			rebuildFrame = true;
+		}
+		else
+		{
+			const bool fluidExceeded = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, N_F),
+				false,
+				[&](const tbb::blocked_range<uint32_t>& r, bool localExceeded) -> bool
+				{
+					if (localExceeded) { return true; }
+
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+						const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+						const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+						if (cx < xMinInner || cx > xMaxInner ||
+							cy < yMinInner || cy > yMaxInner ||
+							cz < zMinInner || cz > zMaxInner)
+						{
+							localExceeded = true;
+							break;
+						}
+					}
+
+					return localExceeded;
+				},
+				[](bool a, bool b) -> bool { return a || b; },
+				tbb::auto_partitioner{}
+			);
+
+			if (fluidExceeded)
+			{
+				rebuildFrame = true;
+			}
+			else
+			{
+				const bool boundaryExceeded = tbb::parallel_reduce(
+					tbb::blocked_range<uint32_t>(0, N_B),
+					false,
+					[&](const tbb::blocked_range<uint32_t>& r, bool localExceeded) -> bool
+					{
+						if (localExceeded) { return true; }
+
+						for (uint32_t i = r.begin(); i != r.end(); i++)
+						{
+							const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+							const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+							const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+							if (cx < xMinInner || cx > xMaxInner ||
+								cy < yMinInner || cy > yMaxInner ||
+								cz < zMinInner || cz > zMaxInner)
+							{
+								localExceeded = true;
+								break;
+							}
+						}
+
+						return localExceeded;
+					},
+					[](bool a, bool b) -> bool { return a || b; },
+					tbb::auto_partitioner{}
+				);
+
+				rebuildFrame = boundaryExceeded;
+			}
+		}
+	}
+
+	if (!rebuildFrame) { return; }
+
+	// rebuild cell frame from current occupied cell AABB
+	int initMin = std::numeric_limits<int>::max();
+	int initMax = std::numeric_limits<int>::lowest();
+	int cxMin = initMin, cyMin = initMin, czMin = initMin;
+	int cxMax = initMax, cyMax = initMax, czMax = initMax;
+
+	// fluid
+	for (uint32_t i = 0; i < N_F; i++)
+	{
+		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+		cxMin = std::min(cxMin, cx);
+		cyMin = std::min(cyMin, cy);
+		czMin = std::min(czMin, cz);
+		cxMax = std::max(cxMax, cx);
+		cyMax = std::max(cyMax, cy);
+		czMax = std::max(czMax, cz);
+	}
+
+	// boundary
+	for (uint32_t i = 0; i < N_B; i++)
+	{
+		const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+		const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+		const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+		cxMin = std::min(cxMin, cx);
+		cyMin = std::min(cyMin, cy);
+		czMin = std::min(czMin, cz);
+		cxMax = std::max(cxMax, cx);
+		cyMax = std::max(cyMax, cy);
+		czMax = std::max(czMax, cz);
+	}
+
+	const int margin = static_cast<int>(N_CellFrameMargin_ + N_CellFrameRebuildMargin_);
+	cellOrigX_ = cxMin - margin;
+	cellOrigY_ = cyMin - margin;
+	cellOrigZ_ = czMin - margin;
+
+	N_DimX_ = static_cast<uint32_t>((cxMax - cxMin + 1) + 2 * margin);
+	N_DimY_ = static_cast<uint32_t>((cyMax - cyMin + 1) + 2 * margin);
+	N_DimZ_ = static_cast<uint32_t>((czMax - czMin + 1) + 2 * margin);
+
+	static constexpr uint32_t MaxAxisCells = (1u << 21);
+	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)
+	{
+		SPDLOG_ERROR("Compact CLL cell frame exceeds Morton 21-bit axis limit [{}, {}, {}]",
+			N_DimX_, N_DimY_, N_DimZ_);
+		assert(false);
+		cellFrameValid_ = false;
+
+		return;
+	}
+
+	cellFrameValid_ = true;
+}
+
+inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(
+	int cx, int cy, int cz) const noexcept
+{
+	// shift to local cell frame to avoid zig-zag preprocessing
+	const int lx = cx - cellOrigX_;
+	const int ly = cy - cellOrigY_;
+	const int lz = cz - cellOrigZ_;
+	assert(lx >= 0 && lx < static_cast<int>(N_DimX_));
+	assert(ly >= 0 && ly < static_cast<int>(N_DimY_));
+	assert(lz >= 0 && lz < static_cast<int>(N_DimZ_));
+
+	const uint64_t ux = static_cast<uint64_t>(static_cast<uint32_t>(lx));
+	const uint64_t uy = static_cast<uint64_t>(static_cast<uint32_t>(ly));
+	const uint64_t uz = static_cast<uint64_t>(static_cast<uint32_t>(lz));
 
 	// each axis must fit into 21 bits
 	assert(ux < (1u << 21));
@@ -2106,13 +3072,22 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
-	int cx, int cy, int cz) noexcept
+	int cx, int cy, int cz) const noexcept
 {
-	// zig-zag encoding of coordinates to handle negative values
-	// TODO: shift so all of them are positive instead of zig-zag?
-	const uint32_t ux = ZigZag(cx);
-	const uint32_t uy = ZigZag(cy);
-	const uint32_t uz = ZigZag(cz);
+	// shift to local cell frame to avoid zig-zag preprocessing
+	const int lx = cx - cellOrigX_;
+	const int ly = cy - cellOrigY_;
+	const int lz = cz - cellOrigZ_;
+	assert(lx >= 0 && lx < static_cast<int>(N_DimX_));
+	assert(ly >= 0 && ly < static_cast<int>(N_DimY_));
+	assert(lz >= 0 && lz < static_cast<int>(N_DimZ_));
+
+	const uint32_t ux = static_cast<uint32_t>(lx);
+	const uint32_t uy = static_cast<uint32_t>(ly);
+	const uint32_t uz = static_cast<uint32_t>(lz);
+	assert(ux < (1u << 21));
+	assert(uy < (1u << 21));
+	assert(uz < (1u << 21));
 
 	const uint64_t xx = SpreadBitsWithGaps_21to63(ux); // bits at pos 0,3,6,...
 	const uint64_t yy = SpreadBitsWithGaps_21to63(uy) << 1; // bits at pos 1,4,7,...
@@ -2135,19 +3110,6 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 	return x;
 }
 
-// bijective mapping of signed to unsigned integers
-// before: [0  -1   1  -2   2  -3   3 ...]
-// after:  [0   1   2   3   4   5   6 ...]
-inline uint32_t NS_CellLinkedList_Compact_CPU01::ZigZag(int v) noexcept
-{
-	// shift left by 1 and XOR with sign bit
-	uint32_t uv = static_cast<uint32_t>(v);
-	uint32_t even = uv << 1;
-	uint32_t sign = static_cast<uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
-
-	return even ^ sign;
-}
-
 inline int NS_CellLinkedList_Compact_CPU01::NeighborOffset(int rx, int ry, int rz) noexcept
 {
 	return (rz + 1) * 9 + (ry + 1) * 3 + (rx + 1);
@@ -2158,4 +3120,903 @@ inline int NS_CellLinkedList_Compact_CPU01::FloorToInt(float v) noexcept
 	int i = static_cast<int>(v);
 
 	return (v < static_cast<float>(i)) ? (i - 1) : i;
+}
+
+// -------------------------------------------------------------------------------------------------
+// --- [ bounding volume hierarchy linear (LBVH) implementation ] ----------------------------------
+// -------------------------------------------------------------------------------------------------
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::Init(const SimParams& params)
+{
+	mortonF_.clear();
+	sortedIdxF_.clear();
+	nodesF_.clear();
+
+	mortonB_.clear();
+	sortedIdxB_.clear();
+	nodesB_.clear();
+
+	boundaryBVHValid_ = false;
+	cachedBoundaryCount_ = 0;
+	cachedBoundaryXPosPtr_ = nullptr;
+	cachedBoundaryYPosPtr_ = nullptr;
+	cachedBoundaryZPosPtr_ = nullptr;
+}
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::Construct(const SimParams& params)
+{
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+
+	if (N_F == 0 && N_B == 0)
+	{
+		SPDLOG_WARN("No construction possible (empty simulation)");
+
+		mortonF_.clear();
+		sortedIdxF_.clear();
+		nodesF_.clear();
+
+		mortonB_.clear();
+		sortedIdxB_.clear();
+		nodesB_.clear();
+
+		boundaryBVHValid_ = false;
+		cachedBoundaryCount_ = 0;
+		cachedBoundaryXPosPtr_ = nullptr;
+		cachedBoundaryYPosPtr_ = nullptr;
+		cachedBoundaryZPosPtr_ = nullptr;
+
+		return;
+	}
+
+	// build fluid BVH
+	if (N_F > 0)
+	{
+		BuildBVH(be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(),
+			N_F, mortonF_, sortedIdxF_, nodesF_);
+	}
+	else
+	{
+		mortonF_.clear();
+		sortedIdxF_.clear();
+		nodesF_.clear();
+	}
+
+	// build boundary BVH
+	if (N_B > 0)
+	{
+		const float* xPosB = be_.xPosB_.data();
+		const float* yPosB = be_.yPosB_.data();
+		const float* zPosB = be_.zPosB_.data();
+
+		// only rebuild boundary BVH if storage/layout changed
+		const bool boundaryLayoutChanged =
+			(cachedBoundaryCount_ != N_B) ||
+			(cachedBoundaryXPosPtr_ != xPosB) ||
+			(cachedBoundaryYPosPtr_ != yPosB) ||
+			(cachedBoundaryZPosPtr_ != zPosB);
+
+		if (!boundaryBVHValid_ || boundaryLayoutChanged)
+		{
+			BuildBVH(xPosB, yPosB, zPosB, N_B,
+				mortonB_, sortedIdxB_, nodesB_);
+
+			boundaryBVHValid_ = true;
+			cachedBoundaryCount_ = N_B;
+			cachedBoundaryXPosPtr_ = xPosB;
+			cachedBoundaryYPosPtr_ = yPosB;
+			cachedBoundaryZPosPtr_ = zPosB;
+		}
+	}
+	else
+	{
+		mortonB_.clear();
+		sortedIdxB_.clear();
+		nodesB_.clear();
+
+		boundaryBVHValid_ = false;
+		cachedBoundaryCount_ = 0;
+		cachedBoundaryXPosPtr_ = nullptr;
+		cachedBoundaryYPosPtr_ = nullptr;
+		cachedBoundaryZPosPtr_ = nullptr;
+	}
+}
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::BuildBVH(
+	const float* RESTRICT xPos, const float* RESTRICT yPos, const float* RESTRICT zPos,
+	uint32_t N,
+	std::vector<uint32_t>& morton, std::vector<uint32_t>& sortedIdx,
+	std::vector<InternalNode>& nodes)
+{
+	// --- [ compute scene AABB for Morton code normalization ] ------------------------------------
+
+	struct SceneExtents
+	{
+		float minX = std::numeric_limits<float>::max();
+		float minY = std::numeric_limits<float>::max();
+		float minZ = std::numeric_limits<float>::max();
+		float maxX = std::numeric_limits<float>::lowest();
+		float maxY = std::numeric_limits<float>::lowest();
+		float maxZ = std::numeric_limits<float>::lowest();
+	};
+
+	SceneExtents sceneAABB = tbb::parallel_reduce(
+		tbb::blocked_range<uint32_t>(0, N),
+		SceneExtents{},
+		[xPos, yPos, zPos](const tbb::blocked_range<uint32_t>& r, SceneExtents val) -> SceneExtents
+		{
+			float lMinX = val.minX, lMinY = val.minY, lMinZ = val.minZ;
+			float lMaxX = val.maxX, lMaxY = val.maxY, lMaxZ = val.maxZ;
+
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				lMinX = std::min(lMinX, xPos[i]);
+				lMinY = std::min(lMinY, yPos[i]);
+				lMinZ = std::min(lMinZ, zPos[i]);
+				lMaxX = std::max(lMaxX, xPos[i]);
+				lMaxY = std::max(lMaxY, yPos[i]);
+				lMaxZ = std::max(lMaxZ, zPos[i]);
+			}
+
+			val.minX = lMinX; val.minY = lMinY; val.minZ = lMinZ;
+			val.maxX = lMaxX; val.maxY = lMaxY; val.maxZ = lMaxZ;
+			return val;
+		},
+		[](SceneExtents a, const SceneExtents& b) -> SceneExtents
+		{
+			a.minX = std::min(a.minX, b.minX);
+			a.minY = std::min(a.minY, b.minY);
+			a.minZ = std::min(a.minZ, b.minZ);
+			a.maxX = std::max(a.maxX, b.maxX);
+			a.maxY = std::max(a.maxY, b.maxY);
+			a.maxZ = std::max(a.maxZ, b.maxZ);
+			return a;
+		}
+	);
+
+	// add small epsilon to avoid division by zero on degenerate axes
+	constexpr float eps = 1e-6f;
+	const float extX = std::max(eps, sceneAABB.maxX - sceneAABB.minX);
+	const float extY = std::max(eps, sceneAABB.maxY - sceneAABB.minY);
+	const float extZ = std::max(eps, sceneAABB.maxZ - sceneAABB.minZ);
+	const float invExtX = 1.0f / extX;
+	const float invExtY = 1.0f / extY;
+	const float invExtZ = 1.0f / extZ;
+
+	// --- [ compute Morton codes and build leaf AABBs ] -------------------------------------------
+
+	morton.resize(N);
+	sortedIdx.resize(N);
+	leafBoxScratch_.resize(N);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// normalize position to [0, 1] within the scene AABB
+				const float nx = (xPos[i] - sceneAABB.minX) * invExtX;
+				const float ny = (yPos[i] - sceneAABB.minY) * invExtY;
+				const float nz = (zPos[i] - sceneAABB.minZ) * invExtZ;
+
+				morton[i] = Morton3D_30bit(nx, ny, nz);
+				sortedIdx[i] = i;
+
+				// tighter leaves improve query pruning, exact radius check is done at leaf hits
+				leafBoxScratch_[i] = MakeParticleAABB(xPos[i], yPos[i], zPos[i], 0.0f);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// --- [ sort particles by Morton code ] -------------------------------------------------------
+
+	tbb::parallel_sort(sortedIdx.begin(), sortedIdx.end(),
+		[&](uint32_t a, uint32_t b)
+		{
+			// tie-break on original index for deterministic ordering of duplicate codes
+			const uint32_t ma = morton[a];
+			const uint32_t mb = morton[b];
+			return (ma != mb) ? (ma < mb) : (a < b);
+		}
+	);
+
+	// build sorted Morton code array (reorder Morton codes to sorted order)
+	sortedMortonScratch_.resize(N);
+	std::vector<uint32_t>& sortedMorton = sortedMortonScratch_;
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				sortedMorton[i] = morton[sortedIdx[i]];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// reorder leaf boxes to sorted order
+	sortedLeafBoxScratch_.resize(N);
+	std::vector<AABB>& sortedLeafBox = sortedLeafBoxScratch_;
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				sortedLeafBox[i] = leafBoxScratch_[sortedIdx[i]];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+	const std::vector<AABB>& leafBox = sortedLeafBox;
+
+	// handle trivial case: single particle
+	if (N == 1)
+	{
+		nodes.resize(1);
+		nodes[0].box = leafBox[0];
+		nodes[0].leftChild = 0;
+		nodes[0].rightChild = 0;
+		nodes[0].leftIsLeaf = true;
+		nodes[0].rightIsLeaf = true;
+		return;
+	}
+
+	// --- [ build radix tree (Karras 2012) ] ------------------------------------------------------
+
+	const uint32_t N_internal = N - 1;
+	nodes.resize(N_internal);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_internal),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// determine direction of the range (d = +1 or -1)
+				const int deltaRight = Delta(sortedMorton, N, static_cast<int>(i),
+					static_cast<int>(i) + 1);
+				const int deltaLeft = Delta(sortedMorton, N, static_cast<int>(i),
+					static_cast<int>(i) - 1);
+				const int d = (deltaRight >= deltaLeft) ? 1 : -1;
+
+				// compute upper bound for the length of the range
+				const int deltaMin = Delta(sortedMorton, N, static_cast<int>(i),
+					static_cast<int>(i) - d);
+				uint32_t lMax = 2;
+				while (Delta(sortedMorton, N, static_cast<int>(i),
+					static_cast<int>(i) + static_cast<int>(lMax) * d) > deltaMin)
+				{
+					lMax *= 2;
+				}
+
+				// find the other end using binary search
+				uint32_t l = 0;
+				for (uint32_t t = lMax >> 1; t >= 1; t >>= 1)
+				{
+					if (Delta(sortedMorton, N, static_cast<int>(i),
+						static_cast<int>(i) + (static_cast<int>(l + t)) * d) > deltaMin)
+					{
+						l += t;
+					}
+				}
+				const int j = static_cast<int>(i) + static_cast<int>(l) * d;
+
+				// find the split position using binary search
+				const int deltaNode = Delta(sortedMorton, N, static_cast<int>(i), j);
+				uint32_t s = 0;
+				// start t at the next power of two >= l (ceiling)
+				uint32_t t = 1;
+				while (t < l) { t *= 2; }
+				for (; t >= 1; t = (t > 1) ? (t >> 1) : 0)
+				{
+					if (Delta(sortedMorton, N, static_cast<int>(i),
+						static_cast<int>(i) + (static_cast<int>(s + t)) * d) > deltaNode)
+					{
+						s += t;
+					}
+					if (t == 1) { break; }
+				}
+				const int gamma = static_cast<int>(i) + static_cast<int>(s) * d
+					+ std::min(d, 0);
+
+				// determine children
+				const int iMin = std::min(static_cast<int>(i), j);
+				const int iMax = std::max(static_cast<int>(i), j);
+
+				// left child
+				if (iMin == gamma)
+				{
+					// left child is a leaf
+					nodes[i].leftChild = static_cast<uint32_t>(gamma);
+					nodes[i].leftIsLeaf = true;
+				}
+				else
+				{
+					// left child is an internal node
+					nodes[i].leftChild = static_cast<uint32_t>(gamma);
+					nodes[i].leftIsLeaf = false;
+				}
+
+				// right child
+				if (iMax == gamma + 1)
+				{
+					// right child is a leaf
+					nodes[i].rightChild = static_cast<uint32_t>(gamma + 1);
+					nodes[i].rightIsLeaf = true;
+				}
+				else
+				{
+					// right child is an internal node
+					nodes[i].rightChild = static_cast<uint32_t>(gamma + 1);
+					nodes[i].rightIsLeaf = false;
+				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// --- [ bottom-up AABB propagation ] ----------------------------------------------------------
+
+	// parent lookup: for each node/leaf, which internal node is its parent?
+	parentOfScratch_.assign(N_internal + N, std::numeric_limits<uint32_t>::max());
+	std::vector<uint32_t>& parentOf = parentOfScratch_;
+	for (uint32_t i = 0; i < N_internal; i++)
+	{
+		if (nodes[i].leftIsLeaf)
+		{
+			parentOf[N_internal + nodes[i].leftChild] = i;
+		}
+		else
+		{
+			parentOf[nodes[i].leftChild] = i;
+		}
+
+		if (nodes[i].rightIsLeaf)
+		{
+			parentOf[N_internal + nodes[i].rightChild] = i;
+		}
+		else
+		{
+			parentOf[nodes[i].rightChild] = i;
+		}
+	}
+
+	// atomic visit counters for internal nodes
+	std::vector<std::atomic<uint32_t>> visitCount(N_internal);
+	for (auto& v : visitCount) { v.store(0, std::memory_order_relaxed); }
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t leafIdx = r.begin(); leafIdx != r.end(); leafIdx++)
+			{
+				uint32_t current = parentOf[N_internal + leafIdx];
+
+				while (current != std::numeric_limits<uint32_t>::max())
+				{
+					// atomically increment the visit counter
+					const uint32_t prev = visitCount[current].fetch_add(
+						1, std::memory_order_acq_rel);
+
+					if (prev == 0)
+					{
+						// first thread to arrive: the other child is not ready yet
+						break;
+					}
+
+					// second thread: both children are ready, merge AABBs
+					const auto& node = nodes[current];
+
+					const AABB leftBox = node.leftIsLeaf
+						? leafBox[node.leftChild]
+						: nodes[node.leftChild].box;
+
+					const AABB rightBox = node.rightIsLeaf
+						? leafBox[node.rightChild]
+						: nodes[node.rightChild].box;
+
+					nodes[current].box = MergeAABB(leftBox, rightBox);
+
+					// walk upward
+					current = parentOf[current];
+				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Count(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadiusSqu;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t cntFF = 0;
+				uint32_t cntFB = 0;
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// query fluid BVH
+				if (N_F > 0 && !nodesF_.empty())
+				{
+					QueryBVH_Count(xi, yi, zi, kernelRadiusSqu,
+						xPosF, yPosF, zPosF, sortedIdxF_,
+						nodesF_, N_F, cntFF);
+				}
+
+				// query boundary BVH
+				if (N_B > 0 && !nodesB_.empty())
+				{
+					QueryBVH_Count(xi, yi, zi, kernelRadiusSqu,
+						xPosB, yPosB, zPosB, sortedIdxB_,
+						nodesB_, N_B, cntFB);
+				}
+
+				// commit final neighbor counts to backend storage
+				be_.neighborLists_->SetNbrCountFF(i, cntFF);
+				be_.neighborLists_->SetNbrCountFB(i, cntFB);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadiusSqu;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
+
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// reset neighbor list for particle i
+				// (delete contents, but keep capacity)
+				scratchFF.clear();
+				scratchFB.clear();
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// query fluid BVH
+				if (N_F > 0 && !nodesF_.empty())
+				{
+					QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu,
+						xPosF, yPosF, zPosF, sortedIdxF_,
+						nodesF_, N_F, scratchFF);
+				}
+
+				// query boundary BVH
+				if (N_B > 0 && !nodesB_.empty())
+				{
+					QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu,
+						xPosB, yPosB, zPosB, sortedIdxB_,
+						nodesB_, N_B, scratchFB);
+				}
+
+				// commit final neighbor lists from scratch to backend storage
+				be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+					static_cast<uint32_t>(scratchFF.size()));
+				be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+					static_cast<uint32_t>(scratchFB.size()));
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::QueryBVH_Count(
+	float xi, float yi, float zi,
+	float kernelRadiusSqu,
+	const float* RESTRICT xPos, const float* RESTRICT yPos, const float* RESTRICT zPos,
+	const std::vector<uint32_t>& sortedIdx,
+	const std::vector<InternalNode>& nodes, uint32_t N, uint32_t& count) const
+{
+	// single leaf BVH: test once and return
+	if (N == 1)
+	{
+		const uint32_t j = sortedIdx[0];
+		const float dx = xi - xPos[j];
+		const float dy = yi - yPos[j];
+		const float dz = zi - zPos[j];
+		const float distSqu = dx * dx + dy * dy + dz * dz;
+
+		if (distSqu <= kernelRadiusSqu) [[unlikely]]
+		{
+			count++;
+		}
+		return;
+	}
+
+	// explicit traversal stack (avoids recursion overhead)
+	std::array<uint32_t, MAX_STACK_DEPTH> stack{};
+	// high bit encodes whether entry is a leaf (1) or internal node (0)
+	constexpr uint32_t LEAF_FLAG = 0x80000000u;
+	uint32_t stackTop = 0;
+
+	// push root (internal node 0)
+	stack[stackTop++] = 0;
+
+	while (stackTop > 0)
+	{
+		const uint32_t entry = stack[--stackTop];
+
+		if (entry & LEAF_FLAG)
+		{
+			// leaf node: check the actual particle
+			const uint32_t leafIdx = entry & ~LEAF_FLAG;
+			const uint32_t j = sortedIdx[leafIdx];
+
+			const float dx = xi - xPos[j];
+			const float dy = yi - yPos[j];
+			const float dz = zi - zPos[j];
+			const float distSqu = dx * dx + dy * dy + dz * dz;
+
+			if (distSqu <= kernelRadiusSqu) [[unlikely]]
+			{
+				count++;
+			}
+		}
+		else
+		{
+			// internal node: check AABB overlap with query sphere
+			const auto& node = nodes[entry];
+
+			if (!OverlapsAABB(node.box, xi, yi, zi, kernelRadiusSqu))
+			{
+				continue;
+			}
+
+			// push children (right first so left is processed first = depth-first)
+			if (node.rightIsLeaf)
+			{
+				stack[stackTop++] = node.rightChild | LEAF_FLAG;
+			}
+			else
+			{
+				stack[stackTop++] = node.rightChild;
+			}
+
+			if (node.leftIsLeaf)
+			{
+				stack[stackTop++] = node.leftChild | LEAF_FLAG;
+			}
+			else
+			{
+				stack[stackTop++] = node.leftChild;
+			}
+		}
+	}
+}
+
+void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
+{
+	// particle arrays are permuted; cached boundary tree/index mapping is no longer valid
+	boundaryBVHValid_ = false;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	// reuse the scene AABB and Morton code computation from BuildBVH for reordering
+
+	if (N_F > 0)
+	{
+		std::vector<uint32_t> mortonTmp(N_F);
+		std::vector<uint32_t> permF(N_F);
+		std::iota(permF.begin(), permF.end(), 0u);
+
+		// compute scene AABB
+		float sMinX = std::numeric_limits<float>::max();
+		float sMinY = std::numeric_limits<float>::max();
+		float sMinZ = std::numeric_limits<float>::max();
+		float sMaxX = std::numeric_limits<float>::lowest();
+		float sMaxY = std::numeric_limits<float>::lowest();
+		float sMaxZ = std::numeric_limits<float>::lowest();
+
+		for (uint32_t i = 0; i < N_F; i++)
+		{
+			sMinX = std::min(sMinX, be_.xPosF_[i]);
+			sMinY = std::min(sMinY, be_.yPosF_[i]);
+			sMinZ = std::min(sMinZ, be_.zPosF_[i]);
+			sMaxX = std::max(sMaxX, be_.xPosF_[i]);
+			sMaxY = std::max(sMaxY, be_.yPosF_[i]);
+			sMaxZ = std::max(sMaxZ, be_.zPosF_[i]);
+		}
+
+		constexpr float eps = 1e-6f;
+		const float invExtX = 1.0f / std::max(eps, sMaxX - sMinX);
+		const float invExtY = 1.0f / std::max(eps, sMaxY - sMinY);
+		const float invExtZ = 1.0f / std::max(eps, sMaxZ - sMinZ);
+
+		// compute Morton codes
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float nx = (be_.xPosF_[i] - sMinX) * invExtX;
+					const float ny = (be_.yPosF_[i] - sMinY) * invExtY;
+					const float nz = (be_.zPosF_[i] - sMinZ) * invExtZ;
+					mortonTmp[i] = Morton3D_30bit(nx, ny, nz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// sort indices according to Morton codes
+		tbb::parallel_sort(permF.begin(), permF.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				const uint32_t ma = mortonTmp[a];
+				const uint32_t mb = mortonTmp[b];
+				return (ma != mb) ? (ma < mb) : (a < b);
+			}
+		);
+
+		// apply permutation to all fluid SoA arrays
+		ApplyPermutation(permF, be_.xPosF_);
+		ApplyPermutation(permF, be_.yPosF_);
+		ApplyPermutation(permF, be_.zPosF_);
+
+		ApplyPermutation(permF, be_.xVelF_);
+		ApplyPermutation(permF, be_.yVelF_);
+		ApplyPermutation(permF, be_.zVelF_);
+
+		ApplyPermutation(permF, be_.xVelPredF_);
+		ApplyPermutation(permF, be_.yVelPredF_);
+		ApplyPermutation(permF, be_.zVelPredF_);
+
+		ApplyPermutation(permF, be_.xAccPressF_);
+		ApplyPermutation(permF, be_.yAccPressF_);
+		ApplyPermutation(permF, be_.zAccPressF_);
+
+		ApplyPermutation(permF, be_.xAccNonPressF_);
+		ApplyPermutation(permF, be_.yAccNonPressF_);
+		ApplyPermutation(permF, be_.zAccNonPressF_);
+
+		ApplyPermutation(permF, be_.sourceTermF_);
+		ApplyPermutation(permF, be_.diagElemF_);
+		ApplyPermutation(permF, be_.pressureF_);
+		ApplyPermutation(permF, be_.densityF_);
+
+		ApplyPermutation(permF, be_.idF_);
+	}
+
+	if (N_B > 0)
+	{
+		std::vector<uint32_t> mortonTmp(N_B);
+		std::vector<uint32_t> permB(N_B);
+		std::iota(permB.begin(), permB.end(), 0u);
+
+		// compute scene AABB
+		float sMinX = std::numeric_limits<float>::max();
+		float sMinY = std::numeric_limits<float>::max();
+		float sMinZ = std::numeric_limits<float>::max();
+		float sMaxX = std::numeric_limits<float>::lowest();
+		float sMaxY = std::numeric_limits<float>::lowest();
+		float sMaxZ = std::numeric_limits<float>::lowest();
+
+		for (uint32_t i = 0; i < N_B; i++)
+		{
+			sMinX = std::min(sMinX, be_.xPosB_[i]);
+			sMinY = std::min(sMinY, be_.yPosB_[i]);
+			sMinZ = std::min(sMinZ, be_.zPosB_[i]);
+			sMaxX = std::max(sMaxX, be_.xPosB_[i]);
+			sMaxY = std::max(sMaxY, be_.yPosB_[i]);
+			sMaxZ = std::max(sMaxZ, be_.zPosB_[i]);
+		}
+
+		constexpr float eps = 1e-6f;
+		const float invExtX = 1.0f / std::max(eps, sMaxX - sMinX);
+		const float invExtY = 1.0f / std::max(eps, sMaxY - sMinY);
+		const float invExtZ = 1.0f / std::max(eps, sMaxZ - sMinZ);
+
+		// compute Morton codes
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_B),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float nx = (be_.xPosB_[i] - sMinX) * invExtX;
+					const float ny = (be_.yPosB_[i] - sMinY) * invExtY;
+					const float nz = (be_.zPosB_[i] - sMinZ) * invExtZ;
+					mortonTmp[i] = Morton3D_30bit(nx, ny, nz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// sort indices according to Morton codes
+		tbb::parallel_sort(permB.begin(), permB.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				const uint32_t ma = mortonTmp[a];
+				const uint32_t mb = mortonTmp[b];
+				return (ma != mb) ? (ma < mb) : (a < b);
+			}
+		);
+
+		// apply permutation to all boundary SoA arrays
+		ApplyPermutation(permB, be_.xPosB_);
+		ApplyPermutation(permB, be_.yPosB_);
+		ApplyPermutation(permB, be_.zPosB_);
+
+		ApplyPermutation(permB, be_.idB_);
+	}
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_BoundVolHier_Linear_LBVH_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(mortonF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(sortedIdxF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(nodesF_));
+
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(mortonB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(sortedIdxB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(nodesB_));
+
+	return { usageF, usageB };
+}
+
+// --- [ BVH helper functions ] --------------------------------------------------------------------
+
+inline NS_BoundVolHier_Linear_LBVH_CPU01::AABB NS_BoundVolHier_Linear_LBVH_CPU01::MakeParticleAABB(
+	float x, float y, float z, float r) noexcept
+{
+	return { x - r, y - r, z - r, x + r, y + r, z + r };
+}
+
+inline NS_BoundVolHier_Linear_LBVH_CPU01::AABB NS_BoundVolHier_Linear_LBVH_CPU01::MergeAABB(
+	const AABB& a, const AABB& b) noexcept
+{
+	return {
+		std::min(a.minX, b.minX), std::min(a.minY, b.minY), std::min(a.minZ, b.minZ),
+		std::max(a.maxX, b.maxX), std::max(a.maxY, b.maxY), std::max(a.maxZ, b.maxZ)
+	};
+}
+
+inline bool NS_BoundVolHier_Linear_LBVH_CPU01::OverlapsAABB(
+	const AABB& box, float x, float y, float z, float radiusSqu) noexcept
+{
+	// compute squared distance from query point to the closest point on the AABB
+	float dSqu = 0.0f;
+
+	if (x < box.minX) { const float d = box.minX - x; dSqu += d * d; }
+	else if (x > box.maxX) { const float d = x - box.maxX; dSqu += d * d; }
+
+	if (y < box.minY) { const float d = box.minY - y; dSqu += d * d; }
+	else if (y > box.maxY) { const float d = y - box.maxY; dSqu += d * d; }
+
+	if (z < box.minZ) { const float d = box.minZ - z; dSqu += d * d; }
+	else if (z > box.maxZ) { const float d = z - box.maxZ; dSqu += d * d; }
+
+	return dSqu <= radiusSqu;
+}
+
+// expand lower 10 bits into every-third-bit positions: 0b...xyz -> 0b...00x00y00z
+inline uint32_t NS_BoundVolHier_Linear_LBVH_CPU01::ExpandBits10(uint32_t v) noexcept
+{
+	v = (v | (v << 16)) & 0x030000FFu;
+	v = (v | (v <<  8)) & 0x0300F00Fu;
+	v = (v | (v <<  4)) & 0x030C30C3u;
+	v = (v | (v <<  2)) & 0x09249249u;
+	return v;
+}
+
+// compute a 30-bit Morton code for a point in the unit cube [0, 1]^3
+inline uint32_t NS_BoundVolHier_Linear_LBVH_CPU01::Morton3D_30bit(float nx, float ny, float nz) noexcept
+{
+	// clamp to [0, 1] and quantize to 10-bit integer (0..1023)
+	const auto Quantize = [](float v) -> uint32_t
+		{
+			return std::min(1023u, static_cast<uint32_t>(
+				std::max(0.0f, std::min(1.0f, v)) * 1023.0f));
+		};
+
+	const uint32_t ix = Quantize(nx);
+	const uint32_t iy = Quantize(ny);
+	const uint32_t iz = Quantize(nz);
+
+	return (ExpandBits10(ix) << 2) | (ExpandBits10(iy) << 1) | ExpandBits10(iz);
+}
+
+inline int NS_BoundVolHier_Linear_LBVH_CPU01::CountLeadingZeros(uint32_t v) noexcept
+{
+	if (v == 0) { return 32; }
+
+#if defined(_MSC_VER)
+	unsigned long idx = 0;
+	_BitScanReverse(&idx, v);
+	return 31 - static_cast<int>(idx);
+#elif defined(__GNUC__) || defined(__clang__)
+	return __builtin_clz(v);
+#else
+	// portable fallback
+	int n = 0;
+	if (v <= 0x0000FFFFu) { n += 16; v <<= 16; }
+	if (v <= 0x00FFFFFFu) { n +=  8; v <<=  8; }
+	if (v <= 0x0FFFFFFFu) { n +=  4; v <<=  4; }
+	if (v <= 0x3FFFFFFFu) { n +=  2; v <<=  2; }
+	if (v <= 0x7FFFFFFFu) { n +=  1; }
+	return n;
+#endif
+}
+
+// delta function for the Karras (2012) radix tree construction algorithm
+// returns the length of the longest common prefix between sorted Morton codes at
+// positions i and j, or -1 if j is out of range
+inline int NS_BoundVolHier_Linear_LBVH_CPU01::Delta(
+	const std::vector<uint32_t>& sortedMorton, uint32_t N, int i, int j) noexcept
+{
+	if (j < 0 || j >= static_cast<int>(N))
+	{
+		return -1;
+	}
+
+	const uint32_t mi = sortedMorton[i];
+	const uint32_t mj = sortedMorton[j];
+
+	if (mi != mj)
+	{
+		return CountLeadingZeros(mi ^ mj);
+	}
+
+	// Morton codes are identical: use index as tie-breaker (32 + clz of index XOR)
+	return 32 + CountLeadingZeros(static_cast<uint32_t>(i) ^ static_cast<uint32_t>(j));
 }
