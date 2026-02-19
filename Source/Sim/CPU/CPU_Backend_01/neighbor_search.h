@@ -115,7 +115,6 @@ namespace Sim
 		// helpers
 		static inline uint32_t ZigZag(int v) noexcept;
 		static inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
-		static inline int FloorToInt(float v) noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -186,8 +185,6 @@ namespace Sim
 
 		// helpers
 		inline Key PackKey(uint32_t cx, uint32_t cy, uint32_t cz) const noexcept;
-		static inline int FloorToInt(float v) noexcept;
-		static inline uint32_t ClampInt(int v, int low, int high) noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -255,8 +252,6 @@ namespace Sim
 
 		// helpers
 		inline uint32_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz) const noexcept;
-		static inline int FloorToInt(float v) noexcept;
-		static inline uint32_t ClampInt(int v, int low, int high) noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -337,7 +332,6 @@ namespace Sim
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
 		static inline int NeighborOffset(int rx, int ry, int rz) noexcept;
-		static inline int FloorToInt(float v) noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------

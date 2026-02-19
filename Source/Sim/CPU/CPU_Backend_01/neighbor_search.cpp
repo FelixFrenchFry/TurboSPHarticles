@@ -65,6 +65,19 @@ namespace
 
 		data.swap(tmp);
 	}
+
+	inline int FloorToInt(float v) noexcept
+	{
+		int i = static_cast<int>(v);
+
+		return (v < static_cast<float>(i)) ? (i - 1) : i;
+	}
+
+	inline uint32_t ClampInt(int v, int low, int high) noexcept
+	{
+		const int t = (v < low) ? low : v;
+		return static_cast<uint32_t>((t > high) ? high : t);
+	}
 } // unnamed
 
 // -------------------------------------------------------------------------------------------------
@@ -611,13 +624,6 @@ inline uint64_t NS_SpatialHashing_Basic_CPU01::PackKey(int cx, int cy, int cz) n
 	return (x) | (y << 21) | (z << 42);
 }
 
-inline int NS_SpatialHashing_Basic_CPU01::FloorToInt(float v) noexcept
-{
-	int i = static_cast<int>(v);
-
-	return (v < static_cast<float>(i)) ? (i - 1) : i;
-}
-
 // -------------------------------------------------------------------------------------------------
 // --- [ spatial hashing explicit implementation ] -------------------------------------------------
 // -------------------------------------------------------------------------------------------------
@@ -1114,20 +1120,6 @@ inline NS_SpatialHashing_Explicit_CPU01::Key NS_SpatialHashing_Explicit_CPU01::P
 {
 	return static_cast<Key>(cx) + static_cast<Key>(N_DimX_) * (static_cast<Key>(cy)
 								+ static_cast<Key>(N_DimY_) * static_cast<Key>(cz));
-}
-
-inline int NS_SpatialHashing_Explicit_CPU01::FloorToInt(float v) noexcept
-{
-	int i = static_cast<int>(v);
-
-	return (v < static_cast<float>(i)) ? (i - 1) : i;
-}
-
-inline uint32_t NS_SpatialHashing_Explicit_CPU01::ClampInt(
-	int v, int low, int high) noexcept
-{
-	const int t = (v < low) ? low : v;
-	return static_cast<uint32_t>((t > high) ? high : t);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1702,20 +1694,6 @@ inline uint32_t NS_CellLinkedList_Basic_CPU01::MapToCellId_Basic(
 	uint32_t cx, uint32_t cy, uint32_t cz) const noexcept
 {
 	return cx + N_DimX_ * (cy + N_DimY_ * cz);
-}
-
-inline int NS_CellLinkedList_Basic_CPU01::FloorToInt(float v) noexcept
-{
-	int i = static_cast<int>(v);
-
-	return (v < static_cast<float>(i)) ? (i - 1) : i;
-}
-
-inline uint32_t NS_CellLinkedList_Basic_CPU01::ClampInt(
-	int v, int low, int high) noexcept
-{
-	const int t = (v < low) ? low : v;
-	return static_cast<uint32_t>((t > high) ? high : t);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -3113,13 +3091,6 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 inline int NS_CellLinkedList_Compact_CPU01::NeighborOffset(int rx, int ry, int rz) noexcept
 {
 	return (rz + 1) * 9 + (ry + 1) * 3 + (rx + 1);
-}
-
-inline int NS_CellLinkedList_Compact_CPU01::FloorToInt(float v) noexcept
-{
-	int i = static_cast<int>(v);
-
-	return (v < static_cast<float>(i)) ? (i - 1) : i;
 }
 
 // -------------------------------------------------------------------------------------------------
