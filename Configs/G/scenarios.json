@@ -1,0 +1,56 @@
+{
+  "scenarios": {
+    "BreakingDam": {
+      "type": "BreakingDam",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 0.5,
+        "vLen": 0.5,
+        "wLen": 0.5
+      }
+    },
+    "ConvergingDam": {
+      "type": "ConvergingDam",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
+      },
+      "fluidHeight": 0.25,
+      "holeSize": 0.75
+    },
+    "BigDroplet": {
+      "type": "BigDroplet",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 8.0,
+        "vLen": 8.0,
+        "wLen": 8.0
+      },
+      "poolDepth": 0.4,
+      "dropletRadius": 1.5,
+      "dropletGap": 0.0,
+      "dropletOffset": [ 5.0, 5.0 ],
+      "dropletInitVel": [ -3.0, 0.0, -3.0 ]
+    }
+  }
+}

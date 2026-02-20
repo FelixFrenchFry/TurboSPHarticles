@@ -1,0 +1,45 @@
+{
+  "backendVersion": "GPU01",
+  "scenarioType": "BigDroplet",
+  "neighborSearchMethod": 4,
+  "neighborListStorage": 2,
+
+  "maxSteps": -1,
+  "timeStep": 0.001,
+  "particleSize": 0.01,
+  "kernelSuppRatio": 2.0,
+  "restDensityF": 1000.0,
+  "restDensityB": 1000.0,
+  "viscosityF": 0.00012,
+  "viscosityB": 0.00012,
+  "gravity": [ 0.0, -9.81, 0.0 ],
+
+  "pressGamma": 0.5,
+  "jacobiOmega": 0.5,
+  "densityDevTarget": 0.01,
+  "fixedIters": 5,
+  "minSolverIters": 3,
+  "maxSolverIters": 50,
+  "solverTerminationCond": 0,
+
+  "dataReOrderInterval": 20,
+  "jitterFracF": 0.0,
+  "jitterSeedF": 67,
+  "jitterFracB": 0.0,
+  "jitterSeedB": 67,
+  "boundaryLayers": 2,
+
+  "maxBenchRecs": 1000000,
+  "maxStatRecs": 1000000,
+  "timeUnit": "ms",
+  "byteUnit": "MiB",
+  "statGroupsEnabled": {
+    "particles": true,
+    "density": true,
+    "velocity": true
+  },
+
+  "exportEnabled": true,
+  "exportDir": "G",
+  "exportInterval": 10
+}
