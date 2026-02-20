@@ -713,23 +713,29 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 
 	if (N_F > 0)
 	{
-		d_uniqueCellIdF_.Resize(N_F);
-		d_cellStartIdxF_.Resize(N_F + 1);
-		d_cellIdF_.Resize(N_F);
-		d_sortedParticleIdxF_.Resize(N_F + 1);
+		// keep capacity once allocated and only grow when needed
+		// (to avoid repeated device alloc/free between steps)
+		if (d_uniqueCellIdF_.Size() < N_F) { d_uniqueCellIdF_.Resize(N_F); }
+		if (d_cellStartIdxF_.Size() < N_F + 1) { d_cellStartIdxF_.Resize(N_F + 1); }
+		if (d_cellIdF_.Size() < N_F) { d_cellIdF_.Resize(N_F); }
+		if (d_sortedParticleIdxF_.Size() < N_F + 1) { d_sortedParticleIdxF_.Resize(N_F + 1); }
 	}
 
 	if (N_B > 0)
 	{
-		d_uniqueCellIdB_.Resize(N_B);
-		d_cellStartIdxB_.Resize(N_B + 1);
-		d_cellIdB_.Resize(N_B);
-		d_sortedParticleIdxB_.Resize(N_B + 1);
+		// keep capacity once allocated and only grow when needed
+		// (to avoid repeated device alloc/free between steps)
+		if (d_uniqueCellIdB_.Size() < N_B) { d_uniqueCellIdB_.Resize(N_B); }
+		if (d_cellStartIdxB_.Size() < N_B + 1) { d_cellStartIdxB_.Resize(N_B + 1); }
+		if (d_cellIdB_.Size() < N_B) { d_cellIdB_.Resize(N_B); }
+		if (d_sortedParticleIdxB_.Size() < N_B + 1) { d_sortedParticleIdxB_.Resize(N_B + 1); }
 	}
 
 	if (N_MAX > 0)
 	{
-		d_cellStartMarkerScan_.Resize(N_MAX);
+		// keep capacity once allocated and only grow when needed
+		// (to avoid repeated device alloc/free between steps)
+		if (d_cellStartMarkerScan_.Size() < N_MAX) { d_cellStartMarkerScan_.Resize(N_MAX); }
 	}
 }
 
@@ -768,11 +774,9 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	GPU::StreamSync(be_.stream_);
 	N_NonEmptyCells = lastScan;
 
-	// resize cell-related buffers
-	d_uniqueCellId.Resize(N_NonEmptyCells);
-	d_cellStartIdx.Resize(N_NonEmptyCells + 1);
-
 	// fill in cell-related data
+	// (write only first N_NonEmptyCells entries and one sentinel entry)
+	// NOTE: keep previously allocated capacity to avoid per-step reallocations.
 	GPU01::Launch_FillUniqueCellIdAndCellStartIdx(
 		d_cellIdSorted, d_cellStartMarkerScan_.Data(),
 		N, N_NonEmptyCells, be_.stream_,
