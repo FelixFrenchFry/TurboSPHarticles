@@ -2,8 +2,10 @@
 
 // external
 #include <cmath>
+#include <thrust/copy.h>
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
+#include <thrust/gather.h>
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -40,6 +42,28 @@ namespace
 		const uint64_t bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
 
 		return Mem::MemUsage{ bytes, bytes, bytes };
+	}
+
+	template <typename T>
+	inline void ApplyPermutation_DeviceBuffer(
+		const uint32_t* d_perm, const uint32_t N,
+		DeviceBuffer<T>& d_src, DeviceBuffer<T>& d_tmp,
+		cudaStream_t stream)
+	{
+		if (N == 0) { return; }
+
+		thrust::gather(
+			thrust::cuda::par.on(stream),
+			thrust::device_pointer_cast(d_perm),
+			thrust::device_pointer_cast(d_perm + N),
+			thrust::device_pointer_cast(d_src.Data()),
+			thrust::device_pointer_cast(d_tmp.Data()));
+
+		thrust::copy(
+			thrust::cuda::par.on(stream),
+			thrust::device_pointer_cast(d_tmp.Data()),
+			thrust::device_pointer_cast(d_tmp.Data() + N),
+			thrust::device_pointer_cast(d_src.Data()));
 	}
 }
 
@@ -487,7 +511,80 @@ void NS_CellLinkedList_Basic_GPU01::Query_Fill(const SimParams& params)
 
 void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const uint32_t N_MAX = std::max(N_F, N_B);
+
+	if (N_MAX == 0) { return; }
+
+	// shared scratch buffers for permutation gather
+	if (be_.d_workBuffer_.Size() < N_MAX) { be_.d_workBuffer_.Resize(N_MAX); }
+
+	DeviceBuffer<uint32_t> d_workBufferU32{};
+	d_workBufferU32.Resize(N_MAX);
+
+	// re-order fluid SoA arrays according to sorted fluid indices
+	if (N_F > 0)
+	{
+		const uint32_t* d_permF = d_sortedParticleIdxF_.Data();
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xPosF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yPosF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zPosF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelPredF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelPredF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelPredF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccNonPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccNonPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccNonPressF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, d_workBufferU32, be_.stream_);
+
+		// fluid arrays are now in sorted order, so sorted particle index becomes identity
+		thrust::sequence(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_sortedParticleIdxF_.Data()),
+			thrust::device_pointer_cast(d_sortedParticleIdxF_.Data() + N_F),
+			0u);
+	}
+
+	// re-order boundary SoA arrays according to sorted boundary indices
+	if (N_B > 0)
+	{
+		const uint32_t* d_permB = d_sortedParticleIdxB_.Data();
+
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, d_workBufferU32, be_.stream_);
+
+		// boundary arrays are now in sorted order, so sorted particle index becomes identity
+		thrust::sequence(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data()),
+			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data() + N_B),
+			0u);
+	}
+
+	GPU::StreamSync(be_.stream_);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Basic_GPU01::GetMemUsage(
@@ -677,7 +774,80 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	const uint32_t N_MAX = std::max(N_F, N_B);
+
+	if (N_MAX == 0) { return; }
+
+	// shared scratch buffers for permutation gather
+	if (be_.d_workBuffer_.Size() < N_MAX) { be_.d_workBuffer_.Resize(N_MAX); }
+
+	DeviceBuffer<uint32_t> d_workBufferU32{};
+	d_workBufferU32.Resize(N_MAX);
+
+	// re-order fluid SoA arrays according to sorted fluid indices
+	if (N_F > 0)
+	{
+		const uint32_t* d_permF = d_sortedParticleIdxF_.Data();
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xPosF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yPosF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zPosF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelPredF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelPredF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelPredF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccNonPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccNonPressF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccNonPressF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, d_workBufferU32, be_.stream_);
+
+		// fluid arrays are now in sorted order, so sorted particle index becomes identity
+		thrust::sequence(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_sortedParticleIdxF_.Data()),
+			thrust::device_pointer_cast(d_sortedParticleIdxF_.Data() + N_F),
+			0u);
+	}
+
+	// re-order boundary SoA arrays according to sorted boundary indices
+	if (N_B > 0)
+	{
+		const uint32_t* d_permB = d_sortedParticleIdxB_.Data();
+
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, be_.d_workBuffer_, be_.stream_);
+
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, d_workBufferU32, be_.stream_);
+
+		// boundary arrays are now in sorted order, so sorted particle index becomes identity
+		thrust::sequence(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data()),
+			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data() + N_B),
+			0u);
+	}
+
+	GPU::StreamSync(be_.stream_);
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemUsage(

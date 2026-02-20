@@ -22,7 +22,7 @@
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
 
-  "dataReOrderInterval": 50,
+  "dataReOrderInterval": 20,
   "jitterFracF": 0.0,
   "jitterSeedF": 67,
   "jitterFracB": 0.0,
@@ -39,7 +39,7 @@
     "velocity": true
   },
 
-  "exportEnabled": false,
-  "exportDir": "I",
+  "exportEnabled": true,
+  "exportDir": "A",
   "exportInterval": 10
 }

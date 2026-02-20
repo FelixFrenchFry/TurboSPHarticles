@@ -197,6 +197,9 @@ namespace Sim
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
 		{
 			{
+				.ops = { Bench::BenchOp::Data_Ordering }
+			},
+			{
 				.ops = { Bench::BenchOp::Neighbors_Construction }
 			},
 			{
