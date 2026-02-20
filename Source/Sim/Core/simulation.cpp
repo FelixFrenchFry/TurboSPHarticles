@@ -528,11 +528,11 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 	// fill export snapshot
 	Sync::ExportSnapshot expSnap{};
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
-	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Snapshot_Export });
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Serialization });
-	// write export snapshot to file
+	// write export snapshot to files
+	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Serialization });
 }
