@@ -178,15 +178,17 @@ namespace Sim
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 		DeviceBuffer<uint32_t> d_idB_;
 
-		// max neighbor counts
-		static constexpr uint32_t N_MAX_FF_ = 64;
-		static constexpr uint32_t N_MAX_FB_ = 48;
-
-		DeviceBuffer<uint8_t> d_neighCountFF_;
-		DeviceBuffer<uint8_t> d_neighCountFB_;
-		DeviceBuffer<uint32_t> d_neighListFF_; // N_F_ * N_MAX_FF_
-		DeviceBuffer<uint32_t> d_neighListFB_; // N_F_ * N_MAX_FB_
-		DeviceBuffer<uint32_t> d_neighOverflowFlag_; // TODO: use smaller data type?
+		// neighbor list storage (CSRVector_DoubleQuery style)
+		DeviceBuffer<uint32_t> d_nbrCountFF_; // temporary counts written by count-query
+		DeviceBuffer<uint32_t> d_nbrCountFB_; // temporary counts written by count-query
+		DeviceBuffer<uint64_t> d_nbrOffsetsFF_; // CSR offsets built after count-query (N_F_ + 1)
+		DeviceBuffer<uint64_t> d_nbrOffsetsFB_; // CSR offsets built after count-query (N_F_ + 1)
+		DeviceBuffer<uint32_t> d_nbrListFF_; // packed CSR neighbor list
+		DeviceBuffer<uint32_t> d_nbrListFB_; // packed CSR neighbor list
+		DeviceBuffer<uint32_t> d_nbrOverflowFlag_; // TODO: use smaller data type?
+		uint64_t N_totalFF_ = 0;
+		uint64_t N_totalFB_ = 0;
+		const uint32_t extraAllocCapacityPct_ = 5;
 
 		// re-usable work (scratch) buffer for temp storage
 		DeviceBuffer<float> d_workBuffer_;
@@ -241,7 +243,7 @@ namespace Sim
 		// (does not preserve data)
 		void EnsureCapacity(uint32_t N_F_new, uint32_t N_B_new, bool force = false)
 		{
-			const bool needOverflow = (d_neighOverflowFlag_.Size() != 1);
+			const bool needOverflow = (d_nbrOverflowFlag_.Size() != 1);
 
 			const bool needFluid =
 				force ||
@@ -253,9 +255,9 @@ namespace Sim
 				d_xAccNonPressF_.Size() != N_F_new || d_yAccNonPressF_.Size() != N_F_new || d_zAccNonPressF_.Size() != N_F_new ||
 				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
 				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new || d_idF_.Size() != N_F_new ||
-				d_neighCountFF_.Size() != N_F_new || d_neighCountFB_.Size() != N_F_new ||
-				d_neighListFF_.Size() != static_cast<size_t>(N_F_new) * N_MAX_FF_ ||
-				d_neighListFB_.Size() != static_cast<size_t>(N_F_new) * N_MAX_FB_;
+				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
+				d_nbrOffsetsFF_.Size() != static_cast<size_t>(N_F_new) + 1 ||
+				d_nbrOffsetsFB_.Size() != static_cast<size_t>(N_F_new) + 1;
 
 			const bool needBoundary =
 				force ||
@@ -287,12 +289,18 @@ namespace Sim
 			d_idB_.Resize(N_B_);
 
 			// neighbors
-			d_neighCountFF_.Resize(N_F_);
-			d_neighCountFB_.Resize(N_F_);
-			d_neighListFF_.Resize(static_cast<uint64_t>(N_F_) * N_MAX_FF_);
-			d_neighListFB_.Resize(static_cast<uint64_t>(N_F_) * N_MAX_FB_);
-			d_neighOverflowFlag_.Resize(1);
+			d_nbrCountFF_.Resize(N_F_);
+			d_nbrCountFB_.Resize(N_F_);
+			d_nbrOffsetsFF_.Resize(static_cast<uint64_t>(N_F_) + 1);
+			d_nbrOffsetsFB_.Resize(static_cast<uint64_t>(N_F_) + 1);
+			d_nbrOverflowFlag_.Resize(1);
+			N_totalFF_ = 0;
+			N_totalFB_ = 0;
 		}
+
+		// turns temporary count-query output into CSR offsets and ensures
+		// capacity of packed CSR neighbor list storage for the fill-query.
+		void FinalizeNeighborLists_Count();
 	};
 
 } // namespace Sim

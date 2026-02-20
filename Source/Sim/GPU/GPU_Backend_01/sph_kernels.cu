@@ -132,11 +132,10 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const uint8_t* __restrict__ neighCountFF,
-		const uint8_t* __restrict__ neighCountFB,
-		const uint32_t* __restrict__ neighListFF,
-		const uint32_t* __restrict__ neighListFB,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		const uint64_t* __restrict__ nbrOffsetsFF,
+		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrListFF,
+		const uint32_t* __restrict__ nbrListFB,
 		// destinations
 		float* __restrict__ densityF)
 	{
@@ -152,14 +151,14 @@ namespace GPU01
 		// temp accumulation variable
 		float tmp_density = 0.0f;
 
-		const uint32_t baseFF = i * N_MAX_FF;
-		const uint32_t cntFF = neighCountFF[i];
+		const uint64_t sFF = nbrOffsetsFF[i];
+		const uint64_t eFF = nbrOffsetsFF[i + 1];
 
 		// FF
-		for (uint32_t k = 0; k < cntFF; k++)
+		for (uint64_t k = sFF; k < eFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFF[baseFF + k];
+			const uint32_t j = nbrListFF[k];
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -174,14 +173,14 @@ namespace GPU01
 			tmp_density = fmaf(c_massF,kw, tmp_density);
 		}
 
-		const uint32_t baseFB = i * N_MAX_FB;
-		const uint32_t cntFB = neighCountFB[i];
+		const uint64_t sFB = nbrOffsetsFB[i];
+		const uint64_t eFB = nbrOffsetsFB[i + 1];
 
 		// FB
-		for (uint32_t k = 0; k < cntFB; k++)
+		for (uint64_t k = sFB; k < eFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFB[baseFB + k];
+			const uint32_t j = nbrListFB[k];
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -211,11 +210,10 @@ namespace GPU01
 		const float* __restrict__ yVelF,
 		const float* __restrict__ zVelF,
 		const float* __restrict__ densityF,
-		const uint8_t* __restrict__ neighCountFF,
-		const uint8_t* __restrict__ neighCountFB,
-		const uint32_t* __restrict__ neighListFF,
-		const uint32_t* __restrict__ neighListFB,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		const uint64_t* __restrict__ nbrOffsetsFF,
+		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrListFF,
+		const uint32_t* __restrict__ nbrListFB,
 		// destinations
 		float* __restrict__ xVelPredF,
 		float* __restrict__ yVelPredF,
@@ -241,14 +239,14 @@ namespace GPU01
 		float tmp_yAccViscF = 0.0f;
 		float tmp_zAccViscF = 0.0f;
 
-		const uint32_t baseFF = i * N_MAX_FF;
-		const uint32_t cntFF = neighCountFF[i];
+		const uint64_t sFF = nbrOffsetsFF[i];
+		const uint64_t eFF = nbrOffsetsFF[i + 1];
 
 		// FF
-		for (uint32_t k = 0; k < cntFF; k++)
+		for (uint64_t k = sFF; k < eFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFF[baseFF + k];
+			const uint32_t j = nbrListFF[k];
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -282,14 +280,14 @@ namespace GPU01
 		float tmp_yAccViscB = 0.0f;
 		float tmp_zAccViscB = 0.0f;
 
-		const uint32_t baseFB = i * N_MAX_FB;
-		const uint32_t cntFB = neighCountFB[i];
+		const uint64_t sFB = nbrOffsetsFB[i];
+		const uint64_t eFB = nbrOffsetsFB[i + 1];
 
 		// FB
-		for (uint32_t k = 0; k < cntFB; k++)
+		for (uint64_t k = sFB; k < eFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFB[baseFB + k];
+			const uint32_t j = nbrListFB[k];
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -345,11 +343,10 @@ namespace GPU01
 		const float* __restrict__ yVelPredF,
 		const float* __restrict__ zVelPredF,
 		const float* __restrict__ densityF,
-		const uint8_t* __restrict__ neighCountFF,
-		const uint8_t* __restrict__ neighCountFB,
-		const uint32_t* __restrict__ neighListFF,
-		const uint32_t* __restrict__ neighListFB,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		const uint64_t* __restrict__ nbrOffsetsFF,
+		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrListFF,
+		const uint32_t* __restrict__ nbrListFB,
 		// destinations
 		float* __restrict__ sourceTermF,
 		float* __restrict__ diagElemF,
@@ -373,14 +370,14 @@ namespace GPU01
 		float yCTermF = 0.0f;
 		float zCTermF = 0.0f;
 
-		const uint32_t baseFF = i * N_MAX_FF;
-		const uint32_t cntFF = neighCountFF[i];
+		const uint64_t sFF = nbrOffsetsFF[i];
+		const uint64_t eFF = nbrOffsetsFF[i + 1];
 
 		// FF
-		for (uint32_t k = 0; k < cntFF; k++)
+		for (uint64_t k = sFF; k < eFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFF[baseFF + k];
+			const uint32_t j = nbrListFF[k];
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -413,14 +410,14 @@ namespace GPU01
 		float yCTermB = 0.0f;
 		float zCTermB = 0.0f;
 
-		const uint32_t baseFB = i * N_MAX_FB;
-		const uint32_t cntFB = neighCountFB[i];
+		const uint64_t sFB = nbrOffsetsFB[i];
+		const uint64_t eFB = nbrOffsetsFB[i + 1];
 
 		// FB
-		for (uint32_t k = 0; k < cntFB; k++)
+		for (uint64_t k = sFB; k < eFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFB[baseFB + k];
+			const uint32_t j = nbrListFB[k];
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -460,10 +457,10 @@ namespace GPU01
 		float tmp_diagElemC = 0.0f;
 
 		// part A and B
-		for (uint32_t k = 0; k < cntFF; k++)
+		for (uint64_t k = sFF; k < eFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFF[baseFF + k];
+			const uint32_t j = nbrListFF[k];
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -488,10 +485,10 @@ namespace GPU01
 		tmp_diagElemB *= c_massF;
 
 		// part C
-		for (uint32_t k = 0; k < cntFB; k++)
+		for (uint64_t k = sFB; k < eFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFB[baseFB + k];
+			const uint32_t j = nbrListFB[k];
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -536,11 +533,10 @@ namespace GPU01
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
 		const float* __restrict__ pressureF,
-		const uint8_t* __restrict__ neighCountFF,
-		const uint8_t* __restrict__ neighCountFB,
-		const uint32_t* __restrict__ neighListFF,
-		const uint32_t* __restrict__ neighListFB,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		const uint64_t* __restrict__ nbrOffsetsFF,
+		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrListFF,
+		const uint32_t* __restrict__ nbrListFB,
 		// destinations
 		float* __restrict__ xAccPressF,
 		float* __restrict__ yAccPressF,
@@ -564,14 +560,14 @@ namespace GPU01
 		float tmp_yAccPressF = 0.0f;
 		float tmp_zAccPressF = 0.0f;
 
-		const uint32_t baseFF = i * N_MAX_FF;
-		const uint32_t cntFF = neighCountFF[i];
+		const uint64_t sFF = nbrOffsetsFF[i];
+		const uint64_t eFF = nbrOffsetsFF[i + 1];
 
 		// FF
-		for (uint32_t k = 0; k < cntFF; k++)
+		for (uint64_t k = sFF; k < eFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFF[baseFF + k];
+			const uint32_t j = nbrListFF[k];
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -593,17 +589,17 @@ namespace GPU01
 			tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
 		}
 
-		const uint32_t baseFB = i * N_MAX_FB;
-		const uint32_t cntFB = neighCountFB[i];
+		const uint64_t sFB = nbrOffsetsFB[i];
+		const uint64_t eFB = nbrOffsetsFB[i + 1];
 
 		const float accCoeffB = c_pressGamma * c_massB
 							  * 2.0f * presi * densiInvSqu;
 
 		// FB
-		for (uint32_t k = 0; k < cntFB; k++)
+		for (uint64_t k = sFB; k < eFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFB[baseFB + k];
+			const uint32_t j = nbrListFB[k];
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -645,11 +641,10 @@ namespace GPU01
 		const float* __restrict__ zAccPressF,
 		const float* __restrict__ sourceTermF,
 		const float* __restrict__ diagElemF,
-		const uint8_t* __restrict__ neighCountFF,
-		const uint8_t* __restrict__ neighCountFB,
-		const uint32_t* __restrict__ neighListFF,
-		const uint32_t* __restrict__ neighListFB,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
+		const uint64_t* __restrict__ nbrOffsetsFF,
+		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrListFF,
+		const uint32_t* __restrict__ nbrListFB,
 		// destinations
 		float* __restrict__ pressureF)
 	{
@@ -670,14 +665,14 @@ namespace GPU01
 		float tmp_ySysVecElem = 0.0f;
 		float tmp_zSysVecElem = 0.0f;
 
-		const uint32_t baseFF = i * N_MAX_FF;
-		const uint32_t cntFF = neighCountFF[i];
+		const uint64_t sFF = nbrOffsetsFF[i];
+		const uint64_t eFF = nbrOffsetsFF[i + 1];
 
 		// FF
-		for (uint32_t k = 0; k < cntFF; k++)
+		for (uint64_t k = sFF; k < eFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFF[baseFF + k];
+			const uint32_t j = nbrListFF[k];
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -696,14 +691,14 @@ namespace GPU01
 			tmp_zSysVecElem = fmaf(c_massF * (azi - zAccPressF[j]), zkg, tmp_zSysVecElem);
 		}
 
-		const uint32_t baseFB = i * N_MAX_FB;
-		const uint32_t cntFB = neighCountFB[i];
+		const uint64_t sFB = nbrOffsetsFB[i];
+		const uint64_t eFB = nbrOffsetsFB[i + 1];
 
 		// FB
-		for (uint32_t k = 0; k < cntFB; k++)
+		for (uint64_t k = sFB; k < eFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = neighListFB[baseFB + k];
+			const uint32_t j = nbrListFB[k];
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -780,12 +775,11 @@ namespace GPU01
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
+		const uint64_t* nbrOffsetsFF,
+		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrListFF,
+		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* densityF)
@@ -794,8 +788,8 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_Density<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, neighCountFF, neighCountFB,
-			neighListFF, neighListFB, N_MAX_FF, N_MAX_FB, densityF);
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, nbrOffsetsFF, nbrOffsetsFB,
+			nbrListFF, nbrListFB, densityF);
 
 		GPU::CheckLastKernel("K_Density()");
 	}
@@ -805,12 +799,11 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* densityF,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
+		const uint64_t* nbrOffsetsFF,
+		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrListFF,
+		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* xVelPredF, float* yVelPredF, float* zVelPredF,
@@ -823,7 +816,7 @@ namespace GPU01
 
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, densityF,
-			neighCountFF, neighCountFB, neighListFF, neighListFB, N_MAX_FF, N_MAX_FB,
+			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
 			xVelPredF, yVelPredF, zVelPredF, xAccNonPressF, yAccNonPressF, zAccNonPressF);
 
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
@@ -834,12 +827,11 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* densityF,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
+		const uint64_t* nbrOffsetsFF,
+		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrListFF,
+		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* sourceTermF,
@@ -853,7 +845,7 @@ namespace GPU01
 
 		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelPredF, yVelPredF, zVelPredF, densityF,
-			neighCountFF, neighCountFB, neighListFF, neighListFB, N_MAX_FF, N_MAX_FB,
+			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
 			sourceTermF, diagElemF, pressureF);
 
 		GPU::CheckLastKernel("K_SourceTermAndDiagonalElementAndPressureJacobiInit()");
@@ -863,12 +855,11 @@ namespace GPU01
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* pressureF,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
+		const uint64_t* nbrOffsetsFF,
+		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrListFF,
+		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* xAccPressF,
@@ -882,7 +873,7 @@ namespace GPU01
 
 		K_PressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, pressureF,
-			neighCountFF, neighCountFB, neighListFF, neighListFB, N_MAX_FF, N_MAX_FB,
+			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		GPU::CheckLastKernel("K_PressureAcceleration()");
@@ -894,12 +885,11 @@ namespace GPU01
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,
-		const uint8_t* neighCountFF,
-		const uint8_t* neighCountFB,
-		const uint32_t* neighListFF,
-		const uint32_t* neighListFB,
+		const uint64_t* nbrOffsetsFF,
+		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrListFF,
+		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
-		const uint32_t N_MAX_FF, const uint32_t N_MAX_FB,
 		cudaStream_t stream,
 		// destinations
 		float* pressureF)
@@ -911,8 +901,8 @@ namespace GPU01
 
 		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xAccPressF, yAccPressF, zAccPressF,
-			sourceTermF, diagElemF, neighCountFF, neighCountFB, neighListFF, neighListFB,
-			N_MAX_FF, N_MAX_FB, pressureF);
+			sourceTermF, diagElemF, nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
+			pressureF);
 
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
 	}

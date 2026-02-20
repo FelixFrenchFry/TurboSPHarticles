@@ -126,9 +126,11 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	}
 
 	// reset neighbor counts for the next construction step
-	GPU::MemsetZero(d_neighCountFF_.Data(), N_F_, stream_);
-	GPU::MemsetZero(d_neighCountFB_.Data(), N_F_, stream_);
-	GPU::MemsetZero(d_neighOverflowFlag_.Data(), 1, stream_);
+	GPU::MemsetZero(d_nbrCountFF_.Data(), N_F_, stream_);
+	GPU::MemsetZero(d_nbrCountFB_.Data(), N_F_, stream_);
+	GPU::MemsetZero(d_nbrOverflowFlag_.Data(), 1, stream_);
+	N_totalFF_ = 0;
+	N_totalFB_ = 0;
 
 	GPU::StreamSync(stream_);
 }
@@ -396,15 +398,29 @@ void SimBackend_GPU01::FillMemoryRecord(
 		MemUsage usageF{};
 		MemUsage usageB{};
 
-		Add(usageF, MemUsageOf_DeviceBuffer(d_neighCountFF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_neighListFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrCountFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrOffsetsFF_));
 
-		Add(usageB, MemUsageOf_DeviceBuffer(d_neighCountFB_));
-		Add(usageB, MemUsageOf_DeviceBuffer(d_neighListFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrCountFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrOffsetsFB_));
+
+		// packed CSR list storage uses explicit "used" and "allocated" amounts
+		// (used follows current total neighbor count, allocated follows device capacity).
+		MemUsage listFF{};
+		listFF.usedBytes = static_cast<uint64_t>(N_totalFF_) * sizeof(uint32_t);
+		listFF.allocBytes = static_cast<uint64_t>(d_nbrListFF_.Size()) * sizeof(uint32_t);
+		listFF.occupiedBytes = listFF.allocBytes;
+		Add(usageF, listFF);
+
+		MemUsage listFB{};
+		listFB.usedBytes = static_cast<uint64_t>(N_totalFB_) * sizeof(uint32_t);
+		listFB.allocBytes = static_cast<uint64_t>(d_nbrListFB_.Size()) * sizeof(uint32_t);
+		listFB.occupiedBytes = listFB.allocBytes;
+		Add(usageB, listFB);
 
 		// shared overflow flag is accounted in the fluid-side bucket
 		// to avoid double-counting.
-		Add(usageF, MemUsageOf_DeviceBuffer(d_neighOverflowFlag_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrOverflowFlag_));
 
 		// finalize
 		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
@@ -626,7 +642,36 @@ void SimBackend_GPU01::FillStatisticsRecord(
 
 void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench)
 {
-	// TODO: implement
+	if (N_F_ == 0)
+	{
+		N_totalFF_ = 0;
+		N_totalFB_ = 0;
+		return;
+	}
+
+	GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
+
+	if (bench)
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	}
+	neighborSearchStrat_->Construct(params);
+	if (bench)
+	{
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	}
+
+	if (bench)
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+	}
+	neighborSearchStrat_->Query_Count(params);
+	FinalizeNeighborLists_Count();
+	neighborSearchStrat_->Query_Fill(params);
+	if (bench)
+	{
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+	}
 }
 
 void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)
@@ -650,6 +695,8 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Count(params);
+		FinalizeNeighborLists_Count();
 		neighborSearchStrat_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
@@ -659,9 +706,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU01::Launch_Density(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_, 
+			d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
+			d_nbrListFF_.Data(), d_nbrListFB_.Data(),
+			N_F_, N_B_, stream_,
 			d_densityF_.Data());
 
 		GPU::StreamSync(stream_);
@@ -675,9 +722,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 			d_densityF_.Data(),
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
+			d_nbrListFF_.Data(), d_nbrListFB_.Data(),
+			N_F_, N_B_, stream_,
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_xAccNonPressF_.Data(), d_yAccNonPressF_.Data(), d_zAccNonPressF_.Data());
 
@@ -692,9 +739,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_densityF_.Data(),
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
+			d_nbrListFF_.Data(), d_nbrListFB_.Data(),
+			N_F_, N_B_, stream_,
 			d_sourceTermF_.Data(), d_diagElemF_.Data(), d_pressureF_.Data());
 
 		GPU::StreamSync(stream_);
@@ -711,9 +758,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_pressureF_.Data(),
-				d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-				d_neighListFF_.Data(), d_neighListFB_.Data(),
-				N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+				d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
+				d_nbrListFF_.Data(), d_nbrListFB_.Data(),
+				N_F_, N_B_, stream_,
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
 			GPU::StreamSync(stream_);
@@ -724,9 +771,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
 				d_sourceTermF_.Data(), d_diagElemF_.Data(),
-				d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-				d_neighListFF_.Data(), d_neighListFB_.Data(),
-				N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+				d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
+				d_nbrListFF_.Data(), d_nbrListFB_.Data(),
+				N_F_, N_B_, stream_,
 				d_pressureF_.Data());
 
 			GPU::StreamSync(stream_);
@@ -742,9 +789,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_pressureF_.Data(),
-			d_neighCountFF_.Data(), d_neighCountFB_.Data(),
-			d_neighListFF_.Data(), d_neighListFB_.Data(),
-			N_F_, N_B_, N_MAX_FF_, N_MAX_FB_, stream_,
+			d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
+			d_nbrListFF_.Data(), d_nbrListFB_.Data(),
+			N_F_, N_B_, stream_,
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
 		GPU::StreamSync(stream_);

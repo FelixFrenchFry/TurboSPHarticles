@@ -3,9 +3,12 @@
 // external
 #include <cmath>
 #include <thrust/device_ptr.h>
+#include <thrust/execution_policy.h>
 #include <thrust/iterator/zip_iterator.h>
+#include <thrust/scan.h>
 #include <thrust/sequence.h>
 #include <thrust/sort.h>
+#include <thrust/transform_scan.h>
 #include <thrust/transform_reduce.h>
 
 // internal
@@ -22,6 +25,14 @@ using namespace Sim;
 
 namespace
 {
+	struct ToU64
+	{
+		__host__ __device__ uint64_t operator()(const uint32_t v) const
+		{
+			return static_cast<uint64_t>(v);
+		}
+	};
+
 	template <typename T>
 	inline Mem::MemUsage MemUsageOf_DeviceBuffer(
 		const DeviceBuffer<T>& src) noexcept
@@ -30,6 +41,95 @@ namespace
 
 		return Mem::MemUsage{ bytes, bytes, bytes };
 	}
+}
+
+void SimBackend_GPU01::FinalizeNeighborLists_Count()
+{
+	if (N_F_ == 0) // nothing to do for empty sim
+	{
+		N_totalFF_ = 0;
+		N_totalFB_ = 0;
+
+		if (d_nbrOffsetsFF_.Size() != 1) { d_nbrOffsetsFF_.Resize(1); }
+		if (d_nbrOffsetsFB_.Size() != 1) { d_nbrOffsetsFB_.Resize(1); }
+
+		const uint64_t zero = 0;
+		GPU::Copy_HostToDevice(d_nbrOffsetsFF_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrOffsetsFB_.Data(), &zero, 1, stream_);
+		GPU::StreamSync(stream_);
+
+		return;
+	}
+
+	const uint64_t N_offsets = static_cast<uint64_t>(N_F_) + 1;
+	if (d_nbrOffsetsFF_.Size() != N_offsets) { d_nbrOffsetsFF_.Resize(N_offsets); }
+	if (d_nbrOffsetsFB_.Size() != N_offsets) { d_nbrOffsetsFB_.Resize(N_offsets); }
+
+	// turn temporary counts into actual offsets for FF
+	thrust::transform_exclusive_scan(
+		thrust::cuda::par.on(stream_),
+		thrust::device_pointer_cast(d_nbrCountFF_.Data()),
+		thrust::device_pointer_cast(d_nbrCountFF_.Data() + N_F_),
+		thrust::device_pointer_cast(d_nbrOffsetsFF_.Data()),
+		ToU64{},
+		uint64_t{ 0 },
+		thrust::plus<uint64_t>{}
+	);
+
+	// turn temporary counts into actual offsets for FB
+	thrust::transform_exclusive_scan(
+		thrust::cuda::par.on(stream_),
+		thrust::device_pointer_cast(d_nbrCountFB_.Data()),
+		thrust::device_pointer_cast(d_nbrCountFB_.Data() + N_F_),
+		thrust::device_pointer_cast(d_nbrOffsetsFB_.Data()),
+		ToU64{},
+		uint64_t{ 0 },
+		thrust::plus<uint64_t>{}
+	);
+
+	uint64_t h_lastOffsetFF = 0;
+	uint64_t h_lastOffsetFB = 0;
+	uint32_t h_lastCountFF = 0;
+	uint32_t h_lastCountFB = 0;
+
+	GPU::Copy_DeviceToHost(&h_lastOffsetFF,
+		d_nbrOffsetsFF_.Data() + (N_F_ - 1), 1, stream_);
+	GPU::Copy_DeviceToHost(&h_lastOffsetFB,
+		d_nbrOffsetsFB_.Data() + (N_F_ - 1), 1, stream_);
+	GPU::Copy_DeviceToHost(&h_lastCountFF,
+		d_nbrCountFF_.Data() + (N_F_ - 1), 1, stream_);
+	GPU::Copy_DeviceToHost(&h_lastCountFB,
+		d_nbrCountFB_.Data() + (N_F_ - 1), 1, stream_);
+
+	GPU::StreamSync(stream_);
+
+	// finalize total fluid and boundary neighbor counts
+	N_totalFF_ = h_lastOffsetFF + static_cast<uint64_t>(h_lastCountFF);
+	N_totalFB_ = h_lastOffsetFB + static_cast<uint64_t>(h_lastCountFB);
+
+	// store sentinel offsets at i = N_F_
+	GPU::Copy_HostToDevice(
+		d_nbrOffsetsFF_.Data() + N_F_, &N_totalFF_, 1, stream_);
+	GPU::Copy_HostToDevice(
+		d_nbrOffsetsFB_.Data() + N_F_, &N_totalFB_, 1, stream_);
+
+	// ensure capacity of packed CSR storage for FF
+	if (N_totalFF_ > d_nbrListFF_.Size())
+	{
+		const uint64_t capTarget = N_totalFF_
+								 + Base::ExtraPercent(N_totalFF_, extraAllocCapacityPct_);
+		d_nbrListFF_.Resize(capTarget);
+	}
+
+	// ensure capacity of packed CSR storage for FB
+	if (N_totalFB_ > d_nbrListFB_.Size())
+	{
+		const uint64_t capTarget = N_totalFB_
+								 + Base::ExtraPercent(N_totalFB_, extraAllocCapacityPct_);
+		d_nbrListFB_.Resize(capTarget);
+	}
+
+	GPU::StreamSync(stream_);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -43,11 +143,6 @@ void NS_BruteForce_GPU01::Init(const SimParams& params)
 
 void NS_BruteForce_GPU01::Construct(const SimParams& params)
 {
-	// reset neighbor counters and overflow
-	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
-
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
@@ -55,15 +150,33 @@ void NS_BruteForce_GPU01::Construct(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
+void NS_BruteForce_GPU01::Query_Count(const SimParams& params)
 {
-	GPU01::Launch_BruteForce_Query(
+	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
+
+	GPU01::Launch_BruteForce_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		be_.N_F_, be_.N_B_, be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
-		be_.d_neighCountFF_.Data(), be_.d_neighCountFB_.Data(),
-		be_.d_neighListFF_.Data(), be_.d_neighListFB_.Data(),
-		be_.d_neighOverflowFlag_.Data());
+		be_.N_F_, be_.N_B_, be_.stream_,
+		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data());
+
+	GPU::StreamSync(be_.stream_);
+}
+
+void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
+{
+	// (count-query and fill-query MUST find the same number of neighbors)
+	// reset overflow before filling packed CSR lists
+	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
+
+	GPU01::Launch_BruteForce_Query_Fill(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		be_.N_F_, be_.N_B_, be_.stream_,
+		be_.d_nbrOffsetsFF_.Data(), be_.d_nbrOffsetsFB_.Data(),
+		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
+		be_.d_nbrOverflowFlag_.Data());
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -334,23 +447,40 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Basic_GPU01::Query_Fill(const SimParams& params)
+void NS_CellLinkedList_Basic_GPU01::Query_Count(const SimParams& params)
 {
-	// reset per-particle counts/overflow before filling
-	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
+	// reset per-particle counts before count-query
+	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
 
-	GPU01::Launch_CellLinkedList_Basic_Query(
+	GPU01::Launch_CellLinkedList_Basic_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		d_cellStartIdxF_.Data(), d_cellEndIdxF_.Data(),
 		d_cellStartIdxB_.Data(), d_cellEndIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
-		be_.N_F_, be_.N_B_, be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
-		be_.d_neighCountFF_.Data(), be_.d_neighCountFB_.Data(),
-		be_.d_neighListFF_.Data(), be_.d_neighListFB_.Data(),
-		be_.d_neighOverflowFlag_.Data());
+		be_.N_F_, be_.N_B_, be_.stream_,
+		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data());
+
+	GPU::StreamSync(be_.stream_);
+}
+
+void NS_CellLinkedList_Basic_GPU01::Query_Fill(const SimParams& params)
+{
+	// (count-query and fill-query MUST find the same number of neighbors)
+	// reset overflow before filling packed CSR lists
+	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
+
+	GPU01::Launch_CellLinkedList_Basic_Query_Fill(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		d_cellStartIdxF_.Data(), d_cellEndIdxF_.Data(),
+		d_cellStartIdxB_.Data(), d_cellEndIdxB_.Data(),
+		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
+		be_.N_F_, be_.N_B_, be_.stream_,
+		be_.d_nbrOffsetsFF_.Data(), be_.d_nbrOffsetsFB_.Data(),
+		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
+		be_.d_nbrOverflowFlag_.Data());
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -505,24 +635,40 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
+void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 {
-	// reset per-particle counts/overflow before filling
-	GPU::MemsetZero(be_.d_neighCountFF_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_neighCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_neighOverflowFlag_.Data(), 1, be_.stream_);
+	// reset per-particle counts before count-query
+	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
 
-	GPU01::Launch_CellLinkedList_Compact_Query_Basic(
+	GPU01::Launch_CellLinkedList_Compact_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
-		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_,
-		be_.N_MAX_FF_, be_.N_MAX_FB_, be_.stream_,
-		be_.d_neighCountFF_.Data(), be_.d_neighCountFB_.Data(),
-		be_.d_neighListFF_.Data(), be_.d_neighListFB_.Data(),
-		be_.d_neighOverflowFlag_.Data());
+		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
+		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data());
+
+	GPU::StreamSync(be_.stream_);
+}
+
+void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
+{
+	// (count-query and fill-query MUST find the same number of neighbors)
+	// reset overflow before filling packed CSR lists
+	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
+
+	GPU01::Launch_CellLinkedList_Compact_Query_Fill(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
+		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
+		be_.d_nbrOffsetsFF_.Data(), be_.d_nbrOffsetsFB_.Data(),
+		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
+		be_.d_nbrOverflowFlag_.Data());
 
 	// TODO: implement smart version of this, iterating over cells instead of particles
 
