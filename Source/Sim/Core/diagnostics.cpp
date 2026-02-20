@@ -413,6 +413,7 @@ namespace Sim
         const Mem::MemoryTracker& memTracker,
         Mem::ByteUnit unit,
         Mem::MemUsageType type,
+        Base::BackendVersion backendVersion,
         const uint32_t N_F, 
         const uint32_t N_B)
     {
@@ -502,8 +503,21 @@ namespace Sim
 
         const double tMax = Mem::ConvertFromBytes(unit, totalMaxBytes);
 
+		const char* totalLabel = "total";
+		switch (backendVersion)
+		{
+		case Base::BackendVersion::CPU01:
+			totalLabel = "total (RAM)";
+			break;
+		case Base::BackendVersion::GPU01:
+			totalLabel = "total (VRAM)";
+			break;
+		default:
+			break;
+		}
+
         std::printf("%-30.30s | %18s | %12.2f %6s\n",
-            "total", "---", tMax, "---");
+            totalLabel, "---", tMax, "---");
 
         std::fflush(stdout);
     }

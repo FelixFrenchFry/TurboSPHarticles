@@ -586,13 +586,16 @@ void SimulationMgr::DisplayMemoryUsageStats(
 	const uint32_t N_B = simBackend_->GetNumBoundaryParticles();
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, Mem::MemUsageType::Used, N_F, N_B);
+		memoryTracker_, params.byteUnit, Mem::MemUsageType::Used,
+		params.backendVersion, N_F, N_B);
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, Mem::MemUsageType::Alloc, N_F, N_B);
+		memoryTracker_, params.byteUnit, Mem::MemUsageType::Alloc,
+		params.backendVersion, N_F, N_B);
 
 	/*
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, Mem::MemUsageType::Occupied, N_F, N_B);
+		memoryTracker_, params.byteUnit, Mem::MemUsageType::Occupied,
+		params.backendVersion, N_F, N_B);
 	*/
 }
