@@ -5,6 +5,7 @@
 #include <cmath>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -193,7 +194,141 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 void SimBackend_GPU01::PackExportSnapshot(
 	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
-	// TODO: implement
+	(void)simParams;
+
+	// TODO: only export surface particles?
+
+	if (N_F_ == 0)
+	{
+		snap.simStep = simStep_;
+		snap.simTime = simTime_;
+		snap.N_F = 0;
+		snap.xPosF.clear();
+		snap.yPosF.clear();
+		snap.zPosF.clear();
+		snap.velMagF.clear();
+
+		return;
+	}
+
+	// host staging for fluid neighbor list data
+	std::vector<uint32_t> h_nbrCountFF(N_F_);
+	std::vector<uint32_t> h_nbrCountFB(N_F_);
+	std::vector<uint64_t> h_nbrOffsetsFF(N_F_);
+	std::vector<uint32_t> h_nbrListFF(static_cast<size_t>(N_totalFF_));
+
+	// host staging for fluid positions and velocities
+	std::vector<float> h_xPosF(N_F_);
+	std::vector<float> h_yPosF(N_F_);
+	std::vector<float> h_zPosF(N_F_);
+	std::vector<float> h_xVelF(N_F_);
+	std::vector<float> h_yVelF(N_F_);
+	std::vector<float> h_zVelF(N_F_);
+
+	// launch async device to host copies
+	GPU::Copy_DeviceToHost(h_nbrCountFF.data(), d_nbrCountFF_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_nbrCountFB.data(), d_nbrCountFB_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_nbrOffsetsFF.data(), d_nbrOffsetsFF_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_nbrListFF.data(), d_nbrListFF_.Data(),
+						   static_cast<size_t>(N_totalFF_), stream_);
+
+	GPU::Copy_DeviceToHost(h_xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_zPosF.data(), d_zPosF_.Data(), N_F_, stream_);
+
+	GPU::Copy_DeviceToHost(h_xVelF.data(), d_xVelF_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_yVelF.data(), d_yVelF_.Data(), N_F_, stream_);
+	GPU::Copy_DeviceToHost(h_zVelF.data(), d_zVelF_.Data(), N_F_, stream_);
+
+	// wait for all copies to finish
+	GPU::StreamSync(stream_);
+
+	// classify surface particles
+	std::vector<uint8_t> surfaceFlags(N_F_);
+
+	const uint32_t N_surface = tbb::parallel_reduce(
+		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
+		[&](const tbb::blocked_range<uint32_t>& r, uint32_t localCount)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// particle considered part of the surface
+				// if touching boundary OR low fluid neighbor count
+				bool surface = h_nbrCountFB[i] > 0 ||
+							   h_nbrCountFF[i] < 28;
+
+				// if not surface itself, check its fluid neighbors
+				if (!surface)
+				{
+					const uint64_t startFF = h_nbrOffsetsFF[i];
+					const uint32_t N_FF = h_nbrCountFF[i];
+
+					for (uint32_t k = 0; k < N_FF; k++)
+					{
+						const uint32_t j = h_nbrListFF[static_cast<size_t>(startFF) + k];
+
+						if (h_nbrCountFB[j] > 0 ||
+							h_nbrCountFF[j] < 24)
+						{
+							surface = true;
+							break;
+						}
+					}
+				}
+
+				surfaceFlags[i] = static_cast<uint8_t>(surface);
+				if (surface) { localCount++; }
+			}
+
+			return localCount;
+		},
+		[](uint32_t a, uint32_t b) -> uint32_t
+		{
+			return a + b;
+		}
+	);
+
+	if (N_surface == 0) // no particles to export
+	{
+		snap.simStep = simStep_;
+		snap.simTime = simTime_;
+		snap.N_F = 0;
+		snap.xPosF.clear();
+		snap.yPosF.clear();
+		snap.zPosF.clear();
+		snap.velMagF.clear();
+
+		return;
+	}
+
+	// prepare snapshot buffers
+	snap.simStep = simStep_;
+	snap.simTime = simTime_;
+	snap.N_F = N_surface;
+
+	snap.xPosF.resize(N_surface);
+	snap.yPosF.resize(N_surface);
+	snap.zPosF.resize(N_surface);
+	snap.velMagF.resize(N_surface);
+
+	// copy only surface particles
+	uint32_t dst = 0;
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		if (!surfaceFlags[i]) { continue; }
+
+		snap.xPosF[dst] = h_xPosF[i];
+		snap.yPosF[dst] = h_yPosF[i];
+		snap.zPosF[dst] = h_zPosF[i];
+
+		const float vx = h_xVelF[i];
+		const float vy = h_yVelF[i];
+		const float vz = h_zVelF[i];
+
+		snap.velMagF[dst] = std::sqrt(vx * vx + vy * vy + vz * vz);
+
+		dst++;
+	}
 }
 
 void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
