@@ -193,6 +193,20 @@ namespace Sim
 		// re-usable work (scratch) buffer for temp storage
 		DeviceBuffer<float> d_workBuffer_;
 
+		// re-usable host staging buffers for export snapshot packing
+		// (reduces per-export allocations and allocator overhead)
+		mutable std::vector<uint32_t> h_expNbrCountFF_;
+		mutable std::vector<uint32_t> h_expNbrCountFB_;
+		mutable std::vector<uint64_t> h_expNbrOffsetsFF_;
+		mutable std::vector<uint32_t> h_expNbrListFF_;
+		mutable std::vector<float> h_expXPosF_;
+		mutable std::vector<float> h_expYPosF_;
+		mutable std::vector<float> h_expZPosF_;
+		mutable std::vector<float> h_expXVelF_;
+		mutable std::vector<float> h_expYVelF_;
+		mutable std::vector<float> h_expZVelF_;
+		mutable std::vector<uint8_t> h_expSurfaceFlags_;
+
 		// operation benchmarking groups
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
 		{

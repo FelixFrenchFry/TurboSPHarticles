@@ -212,18 +212,30 @@ void SimBackend_GPU01::PackExportSnapshot(
 	}
 
 	// host staging for fluid neighbor list data
-	std::vector<uint32_t> h_nbrCountFF(N_F_);
-	std::vector<uint32_t> h_nbrCountFB(N_F_);
-	std::vector<uint64_t> h_nbrOffsetsFF(N_F_);
-	std::vector<uint32_t> h_nbrListFF(static_cast<size_t>(N_totalFF_));
+	auto& h_nbrCountFF = h_expNbrCountFF_;
+	auto& h_nbrCountFB = h_expNbrCountFB_;
+	auto& h_nbrOffsetsFF = h_expNbrOffsetsFF_;
+	auto& h_nbrListFF = h_expNbrListFF_;
+
+	h_nbrCountFF.resize(N_F_);
+	h_nbrCountFB.resize(N_F_);
+	h_nbrOffsetsFF.resize(N_F_);
+	h_nbrListFF.resize(static_cast<size_t>(N_totalFF_));
 
 	// host staging for fluid positions and velocities
-	std::vector<float> h_xPosF(N_F_);
-	std::vector<float> h_yPosF(N_F_);
-	std::vector<float> h_zPosF(N_F_);
-	std::vector<float> h_xVelF(N_F_);
-	std::vector<float> h_yVelF(N_F_);
-	std::vector<float> h_zVelF(N_F_);
+	auto& h_xPosF = h_expXPosF_;
+	auto& h_yPosF = h_expYPosF_;
+	auto& h_zPosF = h_expZPosF_;
+	auto& h_xVelF = h_expXVelF_;
+	auto& h_yVelF = h_expYVelF_;
+	auto& h_zVelF = h_expZVelF_;
+
+	h_xPosF.resize(N_F_);
+	h_yPosF.resize(N_F_);
+	h_zPosF.resize(N_F_);
+	h_xVelF.resize(N_F_);
+	h_yVelF.resize(N_F_);
+	h_zVelF.resize(N_F_);
 
 	// launch async device to host copies
 	GPU::Copy_DeviceToHost(h_nbrCountFF.data(), d_nbrCountFF_.Data(), N_F_, stream_);
@@ -244,7 +256,8 @@ void SimBackend_GPU01::PackExportSnapshot(
 	GPU::StreamSync(stream_);
 
 	// classify surface particles
-	std::vector<uint8_t> surfaceFlags(N_F_);
+	auto& surfaceFlags = h_expSurfaceFlags_;
+	surfaceFlags.resize(N_F_);
 
 	const uint32_t N_surface = tbb::parallel_reduce(
 		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
