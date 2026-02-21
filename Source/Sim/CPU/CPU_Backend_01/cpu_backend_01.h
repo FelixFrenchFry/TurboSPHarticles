@@ -82,6 +82,7 @@ namespace Sim
 		std::unique_ptr<I_NeighborSearchStrat> neighborSearchStrat_;
 		friend class NS_BruteForce_CPU01;
 		friend class NS_SpatialHashing_Basic_CPU01;
+		friend class NS_SpatialHashing_Compact_CPU01;
 		friend class NS_SpatialHashing_Explicit_CPU01;
 		friend class NS_CellLinkedList_Basic_CPU01;
 		friend class NS_CellLinkedList_Compact_CPU01;

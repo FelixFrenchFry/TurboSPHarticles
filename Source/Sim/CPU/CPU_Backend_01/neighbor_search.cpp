@@ -866,8 +866,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Basic_CPU01::GetMemUsa
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 
-	Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
-	Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
+	//Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
+	//Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
 
 	return { usageF, usageB };
 }
@@ -885,6 +885,386 @@ inline uint32_t NS_SpatialHashing_Basic_CPU01::ZigZag(int v) noexcept
 }
 
 inline uint64_t NS_SpatialHashing_Basic_CPU01::PackKey(int cx, int cy, int cz) noexcept
+{
+	// apply zig-zag encoding
+	const uint64_t x = ZigZag(cx);
+	const uint64_t y = ZigZag(cy);
+	const uint64_t z = ZigZag(cz);
+
+	// guard against overflow
+	assert(x < (1u << 21) && y < (1u << 21) && z < (1u << 21));
+
+	// pack into 64-bit key
+	return (x) | (y << 21) | (z << 42);
+}
+
+// -------------------------------------------------------------------------------------------------
+// --- [ spatial hashing basic implementation ] ----------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+void NS_SpatialHashing_Compact_CPU01::Init(const SimParams& params)
+{
+	cellGridF_.clear();
+	cellGridB_.clear();
+	cellSize_ = 0.0f;
+	cellSizeInv_ = 0.0f;
+}
+
+void NS_SpatialHashing_Compact_CPU01::Construct(const SimParams& params)
+{
+	cellSize_ = params.kernelRadius;
+	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
+		? 0.0f : (1.0f / params.kernelRadius);
+
+	// clear hash tables completely, including per-cell vectors
+	cellGridF_.clear();
+	cellGridB_.clear();
+
+	// reserve memory for cells, assuming average of ~4 particles per cell
+	if (be_.N_F_)
+	{
+		// TODO: fine-tune heuristic?
+		cellGridF_.reserve(std::max<uint32_t>(1024, be_.N_F_ / 4));
+	}
+	if (be_.N_B_)
+	{
+		// TODO: fine-tune heuristic?
+		cellGridB_.reserve(std::max<uint32_t>(1024, be_.N_B_ / 4));
+	}
+
+	// fill in fluid cell grid
+	{
+		// compute keys in parallel
+		std::vector<Key> cellKeysF(be_.N_F_);
+
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, be_.N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell index
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+					// convert cell index into key
+					cellKeysF[i] = PackKey(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the hash table single-threaded
+		for (uint32_t i = 0; i < be_.N_F_; i++)
+		{
+			const Key key = cellKeysF[i];
+			cellGridF_[key].push_back(i);
+		}
+	}
+
+	// fill in boundary cell grid
+	{
+		// compute keys in parallel
+		std::vector<Key> cellKeysB(be_.N_B_);
+
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, be_.N_B_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					// compute cell index
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+					// convert cell index into key
+					cellKeysB[i] = PackKey(cx, cy, cz);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// then insert into the hash table single-threaded
+		for (uint32_t i = 0; i < be_.N_B_; i++)
+		{
+			const Key key = cellKeysB[i];
+			cellGridB_[key].push_back(i);
+		}
+	}
+}
+
+void NS_SpatialHashing_Compact_CPU01::Query_Count(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t cntFF = 0;
+				uint32_t cntFB = 0;
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// cell ID of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_);
+				const int cyi = FloorToInt(yi * cellSizeInv_);
+				const int czi = FloorToInt(zi * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							// current cell key
+							const uint64_t key = PackKey(cxi + rx,
+														 cyi + ry,
+														 czi + rz);
+
+							// fluid particles
+							if (auto bucket = cellGridF_.find(key);
+								bucket != cellGridF_.end())
+							{
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const float dx = xi - xPosF[j];
+									const float dy = yi - yPosF[j];
+									const float dz = zi - zPosF[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										cntFF++;
+									}
+								}
+							}
+
+							// boundary particles
+							if (auto bucket = cellGridB_.find(key);
+								bucket != cellGridB_.end())
+							{
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const float dx = xi - xPosB[j];
+									const float dy = yi - yPosB[j];
+									const float dz = zi - zPosB[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										cntFB++;
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// commit final neighbor counts to backend storage
+				be_.neighborLists_->SetNbrCountFF(i, cntFF);
+				be_.neighborLists_->SetNbrCountFB(i, cntFB);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_SpatialHashing_Compact_CPU01::Query_Fill(const SimParams& params)
+{
+	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+
+	// local references for fewer pointer indirections
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			// per-thread neighbor vectors for local accumulation and then bulk add
+			// (reserve preparation in case of inline capacity not being enough)
+			auto& scratchFF = scratchFF_.local();
+			auto& scratchFB = scratchFB_.local();
+			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			{
+				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
+			}
+			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
+			{
+				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
+			}
+
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				scratchFF.clear();
+				scratchFB.clear();
+
+				const float xi = xPosF[i];
+				const float yi = yPosF[i];
+				const float zi = zPosF[i];
+
+				// cell ID of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_);
+				const int cyi = FloorToInt(yi * cellSizeInv_);
+				const int czi = FloorToInt(zi * cellSizeInv_);
+
+				// check all particles j in 27 neighboring grid cells
+				for (int rz = -1; rz <= 1; rz++)
+				{
+					for (int ry = -1; ry <= 1; ry++)
+					{
+						for (int rx = -1; rx <= 1; rx++)
+						{
+							// current cell key
+							const uint64_t key = PackKey(cxi + rx,
+														 cyi + ry,
+														 czi + rz);
+
+							// fluid particles
+							if (auto bucket = cellGridF_.find(key);
+								bucket != cellGridF_.end())
+							{
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const float dx = xi - xPosF[j];
+									const float dy = yi - yPosF[j];
+									const float dz = zi - zPosF[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										// accumulate actual neighbors in scratch list
+										scratchFF.push_back(j);
+									}
+								}
+							}
+
+							// boundary particles
+							if (auto bucket = cellGridB_.find(key);
+								bucket != cellGridB_.end())
+							{
+								// check all neighbor candidates in the cell bucket
+								for (const uint32_t j : bucket->second)
+								{
+									const float dx = xi - xPosB[j];
+									const float dy = yi - yPosB[j];
+									const float dz = zi - zPosB[j];
+
+									// squared distance between particles i and j
+									const float distSqu = dx * dx
+														+ dy * dy
+														+ dz * dz;
+
+									if (distSqu <= kernelRadiusSqu) [[unlikely]]
+									{
+										// accumulate actual neighbors in scratch list
+										scratchFB.push_back(j);
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// commit final neighbor lists from scratch to backend storage
+				be_.neighborLists_->SetNbrListFF(i, scratchFF.data(),
+					static_cast<uint32_t>(scratchFF.size()));
+				be_.neighborLists_->SetNbrListFB(i, scratchFB.data(),
+					static_cast<uint32_t>(scratchFB.size()));
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NS_SpatialHashing_Compact_CPU01::DataReOrder(
+	const SimParams& params)
+{
+	(void)params;
+
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0) { return; }
+
+	DataReOrderParticles_Morton_30bitNormalized(
+		FluidParticleSoARefs{
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
+			be_.idF_
+		},
+		BoundaryParticleSoARefs{
+			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+		},
+		N_F, N_B
+	);
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Compact_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	Mem::MemUsage usageF{};
+	Mem::MemUsage usageB{};
+
+	Mem::Add(usageF, Mem::MemUsageOf_UnorderedDenseMap(cellGridF_));
+	Mem::Add(usageB, Mem::MemUsageOf_UnorderedDenseMap(cellGridB_));
+
+	return { usageF, usageB };
+}
+
+// bijective mapping of signed to unsigned integers
+// (-1 -> 1, 1 -> 2, -2 -> 3, 2 -> 4, ...)
+inline uint32_t NS_SpatialHashing_Compact_CPU01::ZigZag(int v) noexcept
+{
+	// shift left by 1 and XOR with sign bit
+	std::uint32_t uv = static_cast<std::uint32_t>(v);
+	std::uint32_t even = uv << 1;
+	std::uint32_t sign = static_cast<std::uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
+
+	return even ^ sign;
+}
+
+inline uint64_t NS_SpatialHashing_Compact_CPU01::PackKey(int cx, int cy, int cz) noexcept
 {
 	// apply zig-zag encoding
 	const uint64_t x = ZigZag(cx);

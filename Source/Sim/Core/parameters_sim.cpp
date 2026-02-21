@@ -107,6 +107,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
 				if (s == "SpatialHashing_Basic")
 					{ out = Base::NeighborSearchMethod::SpatialHashing_Basic; return true; }
+				if (s == "SpatialHashing_Compact")
+					{ out = Base::NeighborSearchMethod::SpatialHashing_Compact; return true; }
 				if (s == "SpatialHashing_Explicit")
 					{ out = Base::NeighborSearchMethod::SpatialHashing_Explicit; return true; }
 				if (s == "CellLinkedList_Basic")

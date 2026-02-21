@@ -10,6 +10,7 @@
 #include <boost/container/small_vector.hpp>
 #include <cstdint>
 #include <limits>
+#include <unordered_map>
 #include <tbb/enumerable_thread_specific.h>
 #include <vector>
 
@@ -107,10 +108,60 @@ namespace Sim
 			uint32_t, N_perScratchInlineFB>> scratchFB_;
 
 		// data structures
+		std::unordered_map<Key, Bucket> cellGridF_{};
+		std::unordered_map<Key, Bucket> cellGridB_{};
+
+		// helpers
+		static inline uint32_t ZigZag(int v) noexcept;
+		static inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
+	};
+
+	// ---------------------------------------------------------------------------------------------
+	// --- [ spatial hashing compact implementation ] ------------------------------------------------
+	// ---------------------------------------------------------------------------------------------
+
+	class NS_SpatialHashing_Compact_CPU01 : public I_NeighborSearchStrat
+	{
+	public: // -------------------------------------------------------------------------------------
+
+		explicit NS_SpatialHashing_Compact_CPU01(SimBackend_CPU01& backend)
+			: be_{ backend } {}
+
+		const char* Name() const override { return "SpatialHashing_Compact_CPU01"; }
+
+		void Init(const SimParams& params) override;
+
+		void Construct(const SimParams& params) override;
+
+		void Query_Count(const SimParams& params) override;
+
+		void Query_Fill(const SimParams& params) override;
+
+		void DataReOrder(const SimParams& params) override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+
+	private: // ------------------------------------------------------------------------------------
+
+		SimBackend_CPU01& be_;
+
+		// grid metadata
+		float cellSize_ = 0.0f;
+		float cellSizeInv_ = 0.0f;
+
+		// grid of cells, each made up of a key and a bucket
+		using Key = uint64_t;
+		using Bucket = std::vector<uint32_t>;
+
+		// query scratch
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFF>> scratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFB>> scratchFB_;
+
+		// data structures
 		ankerl::unordered_dense::map<Key, Bucket> cellGridF_{};
 		ankerl::unordered_dense::map<Key, Bucket> cellGridB_{};
-		//std::unordered_map<Key, Bucket> cellGridF_{};
-		//std::unordered_map<Key, Bucket> cellGridB_{};
 
 		// helpers
 		static inline uint32_t ZigZag(int v) noexcept;

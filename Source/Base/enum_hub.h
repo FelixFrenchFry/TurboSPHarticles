@@ -60,13 +60,14 @@ namespace Base
 	enum class NeighborSearchMethod : uint8_t
 	{
 		BruteForce,					// 0
-		SpatialHashing_Basic,		// 1 (using hash table)
-		SpatialHashing_Explicit,	// 2 (using explicit grid)
-		CellLinkedList_Basic,		// 3 (derived from paper: "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013))
-		CellLinkedList_Compact,		// 4 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
-		BoundVolHier_Linear_LBVH,	// 5 (derived from blog: "Using HIP RT ray tracing library to accelerate fluid simulation" (2023))
-		BoundVolHier_Hybrid_HLBVH,	// 6
-		BoundVolHier_Binned_SAH_BVH	// 7
+		SpatialHashing_Basic,		// 1 (using std::unordered_map)
+		SpatialHashing_Compact,		// 2 (using ankerl::unordered_dense)
+		SpatialHashing_Explicit,	// 3 (using std::vector<std::vector<...>>)
+		CellLinkedList_Basic,		// 4 (derived from paper: "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013))
+		CellLinkedList_Compact,		// 5 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
+		BoundVolHier_Linear_LBVH,	// 6 (derived from blog: "Using HIP RT ray tracing library to accelerate fluid simulation" (2023))
+		BoundVolHier_Hybrid_HLBVH,	// 7
+		BoundVolHier_Binned_SAH_BVH	// 8
 	};
 	constexpr const char* ToCString(NeighborSearchMethod v) noexcept
 	{

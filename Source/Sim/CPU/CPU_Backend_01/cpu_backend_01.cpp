@@ -40,6 +40,11 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
 	}
 	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::SpatialHashing_Compact)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Compact_CPU01>(*this);
+	}
+	else if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::SpatialHashing_Explicit)
 	{
 		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Explicit_CPU01>(*this);
