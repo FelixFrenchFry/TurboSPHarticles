@@ -8,6 +8,7 @@
 #include <ankerl/unordered_dense.h>
 #include <array>
 #include <boost/container/small_vector.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
@@ -101,6 +102,36 @@ namespace Sim
 		using Key = uint64_t;
 		using Bucket = std::vector<uint32_t>;
 
+		// custom hash for packed cell keys and final avalanche mix for better bit diffusion
+		struct CellKeyHash
+		{
+			std::size_t operator()(Key key) const noexcept
+			{
+				// packed key layout [z:21][y:21][x:21]
+				constexpr uint64_t mask21 = (1ull << 21) - 1ull;
+
+				// prime-based component mix
+				constexpr uint64_t p1 = 73856093ull;
+				constexpr uint64_t p2 = 19349663ull;
+				constexpr uint64_t p3 = 83492791ull;
+
+				const uint64_t x = key & mask21;
+				const uint64_t y = (key >> 21) & mask21;
+				const uint64_t z = (key >> 42) & mask21;
+
+				uint64_t h = (p1 * x) ^ (p2 * y) ^ (p3 * z);
+
+				// avalanche finalizer (splitmix64-style)
+				h ^= (h >> 30);
+				h *= 0xbf58476d1ce4e5b9ull;
+				h ^= (h >> 27);
+				h *= 0x94d049bb133111ebull;
+				h ^= (h >> 31);
+
+				return static_cast<std::size_t>(h);
+			}
+		};
+
 		// query scratch
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_perScratchInlineFF>> scratchFF_;
@@ -108,8 +139,10 @@ namespace Sim
 			uint32_t, N_perScratchInlineFB>> scratchFB_;
 
 		// data structures
-		std::unordered_map<Key, Bucket> cellGridF_{};
-		std::unordered_map<Key, Bucket> cellGridB_{};
+		std::unordered_map<Key, Bucket, CellKeyHash> cellGridF_{};
+		std::unordered_map<Key, Bucket, CellKeyHash> cellGridB_{};
+
+		static constexpr float hashTableMaxLoadFactor_ = 0.67f;
 
 		// helpers
 		static inline uint32_t ZigZag(int v) noexcept;

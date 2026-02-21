@@ -526,6 +526,8 @@ void NS_SpatialHashing_Basic_CPU01::Init(const SimParams& params)
 {
 	cellGridF_.clear();
 	cellGridB_.clear();
+	cellGridF_.max_load_factor(hashTableMaxLoadFactor_);
+	cellGridB_.max_load_factor(hashTableMaxLoadFactor_);
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
 }
