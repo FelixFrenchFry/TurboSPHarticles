@@ -77,6 +77,8 @@ namespace Base
 			"BruteForce";
 		case NeighborSearchMethod::SpatialHashing_Basic: return
 			"SpatialHashing_Basic";
+		case NeighborSearchMethod::SpatialHashing_Compact: return
+			"SpatialHashing_Compact";
 		case NeighborSearchMethod::SpatialHashing_Explicit: return
 			"SpatialHashing_Explicit";
 		case NeighborSearchMethod::CellLinkedList_Basic: return

@@ -121,6 +121,88 @@ namespace
 		float maxZ = std::numeric_limits<float>::lowest();
 	};
 
+	struct CellCoordFrame
+	{
+		int cellOrigX = 0;
+		int cellOrigY = 0;
+		int cellOrigZ = 0;
+		uint32_t N_DimX = 0;
+		uint32_t N_DimY = 0;
+		uint32_t N_DimZ = 0;
+	};
+
+	inline SceneAABB ComputeSceneAABB_Combined(
+		const float* xPosF, const float* yPosF, const float* zPosF, uint32_t N_F,
+		const float* xPosB, const float* yPosB, const float* zPosB, uint32_t N_B)
+	{
+		SceneAABB aabb{};
+
+		for (uint32_t i = 0; i < N_F; i++)
+		{
+			const float x = xPosF[i];
+			const float y = yPosF[i];
+			const float z = zPosF[i];
+
+			aabb.minX = std::min(aabb.minX, x);
+			aabb.minY = std::min(aabb.minY, y);
+			aabb.minZ = std::min(aabb.minZ, z);
+			aabb.maxX = std::max(aabb.maxX, x);
+			aabb.maxY = std::max(aabb.maxY, y);
+			aabb.maxZ = std::max(aabb.maxZ, z);
+		}
+
+		for (uint32_t i = 0; i < N_B; i++)
+		{
+			const float x = xPosB[i];
+			const float y = yPosB[i];
+			const float z = zPosB[i];
+
+			aabb.minX = std::min(aabb.minX, x);
+			aabb.minY = std::min(aabb.minY, y);
+			aabb.minZ = std::min(aabb.minZ, z);
+			aabb.maxX = std::max(aabb.maxX, x);
+			aabb.maxY = std::max(aabb.maxY, y);
+			aabb.maxZ = std::max(aabb.maxZ, z);
+		}
+
+		return aabb;
+	}
+
+	inline void ExpandSceneAABB(
+		SceneAABB& aabb,
+		float pad) noexcept
+	{
+		aabb.minX -= pad;
+		aabb.minY -= pad;
+		aabb.minZ -= pad;
+		aabb.maxX += pad;
+		aabb.maxY += pad;
+		aabb.maxZ += pad;
+	}
+
+	inline CellCoordFrame ComputeCellCoordFrame_FromAABB(
+		const SceneAABB& aabb,
+		float cellSizeInv)
+	{
+		CellCoordFrame frame{};
+
+		const int cxMin = FloorToInt(aabb.minX * cellSizeInv);
+		const int cyMin = FloorToInt(aabb.minY * cellSizeInv);
+		const int czMin = FloorToInt(aabb.minZ * cellSizeInv);
+		const int cxMax = FloorToInt(aabb.maxX * cellSizeInv);
+		const int cyMax = FloorToInt(aabb.maxY * cellSizeInv);
+		const int czMax = FloorToInt(aabb.maxZ * cellSizeInv);
+
+		frame.cellOrigX = cxMin;
+		frame.cellOrigY = cyMin;
+		frame.cellOrigZ = czMin;
+		frame.N_DimX = static_cast<uint32_t>(cxMax - cxMin + 1);
+		frame.N_DimY = static_cast<uint32_t>(cyMax - cyMin + 1);
+		frame.N_DimZ = static_cast<uint32_t>(czMax - czMin + 1);
+
+		return frame;
+	}
+
 	// expand lower 10 bits into every-third-bit positions: 0b...xyz -> 0b...00x00y00z
 	inline uint32_t ExpandBits10_30bit(uint32_t v) noexcept
 	{
@@ -530,6 +612,12 @@ void NS_SpatialHashing_Basic_CPU01::Init(const SimParams& params)
 	cellGridB_.max_load_factor(hashTableMaxLoadFactor_);
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
+	cellOrigX_ = 0;
+	cellOrigY_ = 0;
+	cellOrigZ_ = 0;
+	N_DimX_ = 0;
+	N_DimY_ = 0;
+	N_DimZ_ = 0;
 }
 
 void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
@@ -538,47 +626,100 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
 		? 0.0f : (1.0f / params.kernelRadius);
 
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0)
+	{
+		SPDLOG_WARN("No construction possible (empty simulation)");
+		cellGridF_.clear();
+		cellGridB_.clear();
+		cellOrigX_ = 0;
+		cellOrigY_ = 0;
+		cellOrigZ_ = 0;
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+
+		return;
+	}
+
+	// compute local cell frame for mapping signed -> positive cell coordinates
+	const SceneAABB sceneAABB = ComputeSceneAABB_Combined(
+		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), N_F,
+		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B);
+	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
+
+	cellOrigX_ = cellFrame.cellOrigX;
+	cellOrigY_ = cellFrame.cellOrigY;
+	cellOrigZ_ = cellFrame.cellOrigZ;
+	N_DimX_ = cellFrame.N_DimX;
+	N_DimY_ = cellFrame.N_DimY;
+	N_DimZ_ = cellFrame.N_DimZ;
+
+	static constexpr uint32_t MaxAxisCells = (1u << 21);
+	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)
+	{
+		SPDLOG_ERROR("Spatial hashing basic frame exceeds 21-bit axis limit [{}, {}, {}]",
+			N_DimX_, N_DimY_, N_DimZ_);
+		assert(false);
+		cellGridF_.clear();
+		cellGridB_.clear();
+		cellOrigX_ = 0;
+		cellOrigY_ = 0;
+		cellOrigZ_ = 0;
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+
+		return;
+	}
+
 	// clear hash tables completely, including per-cell vectors
 	cellGridF_.clear();
 	cellGridB_.clear();
 
 	// reserve memory for cells, assuming average of ~4 particles per cell
-	if (be_.N_F_)
+	if (N_F)
 	{
 		// TODO: fine-tune heuristic?
-		cellGridF_.reserve(std::max<uint32_t>(1024, be_.N_F_ / 4));
+		cellGridF_.reserve(std::max<uint32_t>(1024, N_F / 4));
 	}
-	if (be_.N_B_)
+	if (N_B)
 	{
 		// TODO: fine-tune heuristic?
-		cellGridB_.reserve(std::max<uint32_t>(1024, be_.N_B_ / 4));
+		cellGridB_.reserve(std::max<uint32_t>(1024, N_B / 4));
 	}
 
 	// fill in fluid cell grid
 	{
 		// compute keys in parallel
-		std::vector<Key> cellKeysF(be_.N_F_);
+		std::vector<Key> cellKeysF(N_F);
 
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, be_.N_F_),
+			tbb::blocked_range<uint32_t>(0, N_F),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					// compute cell index
-					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+					// compute local cell coordinates
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_) - cellOrigX_;
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_) - cellOrigY_;
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_) - cellOrigZ_;
+					assert(cx >= 0 && cx < static_cast<int>(N_DimX_));
+					assert(cy >= 0 && cy < static_cast<int>(N_DimY_));
+					assert(cz >= 0 && cz < static_cast<int>(N_DimZ_));
 
 					// convert cell index into key
-					cellKeysF[i] = PackKey(cx, cy, cz);
+					cellKeysF[i] = PackKey(static_cast<uint32_t>(cx),
+										   static_cast<uint32_t>(cy),
+										   static_cast<uint32_t>(cz));
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
 		// then insert into the hash table single-threaded
-		for (uint32_t i = 0; i < be_.N_F_; i++)
+		for (uint32_t i = 0; i < N_F; i++)
 		{
 			const Key key = cellKeysF[i];
 			cellGridF_[key].push_back(i);
@@ -588,28 +729,33 @@ void NS_SpatialHashing_Basic_CPU01::Construct(const SimParams& params)
 	// fill in boundary cell grid
 	{
 		// compute keys in parallel
-		std::vector<Key> cellKeysB(be_.N_B_);
+		std::vector<Key> cellKeysB(N_B);
 
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, be_.N_B_),
+			tbb::blocked_range<uint32_t>(0, N_B),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					// compute cell index
-					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+					// compute local cell coordinates
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_) - cellOrigX_;
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_) - cellOrigY_;
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_) - cellOrigZ_;
+					assert(cx >= 0 && cx < static_cast<int>(N_DimX_));
+					assert(cy >= 0 && cy < static_cast<int>(N_DimY_));
+					assert(cz >= 0 && cz < static_cast<int>(N_DimZ_));
 
 					// convert cell index into key
-					cellKeysB[i] = PackKey(cx, cy, cz);
+					cellKeysB[i] = PackKey(static_cast<uint32_t>(cx),
+										   static_cast<uint32_t>(cy),
+										   static_cast<uint32_t>(cz));
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
 		// then insert into the hash table single-threaded
-		for (uint32_t i = 0; i < be_.N_B_; i++)
+		for (uint32_t i = 0; i < N_B; i++)
 		{
 			const Key key = cellKeysB[i];
 			cellGridB_[key].push_back(i);
@@ -643,22 +789,31 @@ void NS_SpatialHashing_Basic_CPU01::Query_Count(const SimParams& params)
 				const float yi = yPosF[i];
 				const float zi = zPosF[i];
 
-				// cell ID of particle i
-				const int cxi = FloorToInt(xi * cellSizeInv_);
-				const int cyi = FloorToInt(yi * cellSizeInv_);
-				const int czi = FloorToInt(zi * cellSizeInv_);
+				// local cell coordinates of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+				const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+				const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
 
 				// check all particles j in 27 neighboring grid cells
 				for (int rz = -1; rz <= 1; rz++)
 				{
+					const int cz = czi + rz;
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
 					for (int ry = -1; ry <= 1; ry++)
 					{
+						const int cy = cyi + ry;
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
 						for (int rx = -1; rx <= 1; rx++)
 						{
+							const int cx = cxi + rx;
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
 							// current cell key
-							const uint64_t key = PackKey(cxi + rx,
-								cyi + ry,
-								czi + rz);
+							const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+								static_cast<uint32_t>(cy),
+								static_cast<uint32_t>(cz));
 
 							// fluid particles
 							if (auto bucket = cellGridF_.find(key);
@@ -757,22 +912,31 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 				const float yi = yPosF[i];
 				const float zi = zPosF[i];
 
-				// cell ID of particle i
-				const int cxi = FloorToInt(xi * cellSizeInv_);
-				const int cyi = FloorToInt(yi * cellSizeInv_);
-				const int czi = FloorToInt(zi * cellSizeInv_);
+				// local cell coordinates of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+				const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+				const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
 
 				// check all particles j in 27 neighboring grid cells
 				for (int rz = -1; rz <= 1; rz++)
 				{
+					const int cz = czi + rz;
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
 					for (int ry = -1; ry <= 1; ry++)
 					{
+						const int cy = cyi + ry;
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
 						for (int rx = -1; rx <= 1; rx++)
 						{
+							const int cx = cxi + rx;
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
 							// current cell key
-							const uint64_t key = PackKey(cxi + rx,
-								cyi + ry,
-								czi + rz);
+							const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+								static_cast<uint32_t>(cy),
+								static_cast<uint32_t>(cz));
 
 							// fluid particles
 							if (auto bucket = cellGridF_.find(key);
@@ -874,34 +1038,20 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Basic_CPU01::GetMemUsa
 	return { usageF, usageB };
 }
 
-// bijective mapping of signed to unsigned integers
-// (-1 -> 1, 1 -> 2, -2 -> 3, 2 -> 4, ...)
-inline uint32_t NS_SpatialHashing_Basic_CPU01::ZigZag(int v) noexcept
+inline uint64_t NS_SpatialHashing_Basic_CPU01::PackKey(
+	uint32_t cx, uint32_t cy, uint32_t cz) noexcept
 {
-	// shift left by 1 and XOR with sign bit
-	std::uint32_t uv = static_cast<std::uint32_t>(v);
-	std::uint32_t even = uv << 1;
-	std::uint32_t sign = static_cast<std::uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
-
-	return even ^ sign;
-}
-
-inline uint64_t NS_SpatialHashing_Basic_CPU01::PackKey(int cx, int cy, int cz) noexcept
-{
-	// apply zig-zag encoding
-	const uint64_t x = ZigZag(cx);
-	const uint64_t y = ZigZag(cy);
-	const uint64_t z = ZigZag(cz);
-
 	// guard against overflow
-	assert(x < (1u << 21) && y < (1u << 21) && z < (1u << 21));
+	assert(cx < (1u << 21) && cy < (1u << 21) && cz < (1u << 21));
 
 	// pack into 64-bit key
-	return (x) | (y << 21) | (z << 42);
+	return static_cast<uint64_t>(cx)
+		| (static_cast<uint64_t>(cy) << 21)
+		| (static_cast<uint64_t>(cz) << 42);
 }
 
 // -------------------------------------------------------------------------------------------------
-// --- [ spatial hashing basic implementation ] ----------------------------------------------------
+// --- [ spatial hashing compact implementation ] --------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
 void NS_SpatialHashing_Compact_CPU01::Init(const SimParams& params)
@@ -910,6 +1060,12 @@ void NS_SpatialHashing_Compact_CPU01::Init(const SimParams& params)
 	cellGridB_.clear();
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
+	cellOrigX_ = 0;
+	cellOrigY_ = 0;
+	cellOrigZ_ = 0;
+	N_DimX_ = 0;
+	N_DimY_ = 0;
+	N_DimZ_ = 0;
 }
 
 void NS_SpatialHashing_Compact_CPU01::Construct(const SimParams& params)
@@ -918,47 +1074,100 @@ void NS_SpatialHashing_Compact_CPU01::Construct(const SimParams& params)
 	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
 		? 0.0f : (1.0f / params.kernelRadius);
 
+	const uint32_t N_F = be_.N_F_;
+	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0 && N_B == 0)
+	{
+		SPDLOG_WARN("No construction possible (empty simulation)");
+		cellGridF_.clear();
+		cellGridB_.clear();
+		cellOrigX_ = 0;
+		cellOrigY_ = 0;
+		cellOrigZ_ = 0;
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+
+		return;
+	}
+
+	// compute local cell frame for mapping signed -> positive cell coordinates
+	const SceneAABB sceneAABB = ComputeSceneAABB_Combined(
+		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), N_F,
+		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B);
+	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
+
+	cellOrigX_ = cellFrame.cellOrigX;
+	cellOrigY_ = cellFrame.cellOrigY;
+	cellOrigZ_ = cellFrame.cellOrigZ;
+	N_DimX_ = cellFrame.N_DimX;
+	N_DimY_ = cellFrame.N_DimY;
+	N_DimZ_ = cellFrame.N_DimZ;
+
+	static constexpr uint32_t MaxAxisCells = (1u << 21);
+	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)
+	{
+		SPDLOG_ERROR("Spatial hashing compact frame exceeds 21-bit axis limit [{}, {}, {}]",
+			N_DimX_, N_DimY_, N_DimZ_);
+		assert(false);
+		cellGridF_.clear();
+		cellGridB_.clear();
+		cellOrigX_ = 0;
+		cellOrigY_ = 0;
+		cellOrigZ_ = 0;
+		N_DimX_ = 0;
+		N_DimY_ = 0;
+		N_DimZ_ = 0;
+
+		return;
+	}
+
 	// clear hash tables completely, including per-cell vectors
 	cellGridF_.clear();
 	cellGridB_.clear();
 
 	// reserve memory for cells, assuming average of ~4 particles per cell
-	if (be_.N_F_)
+	if (N_F)
 	{
 		// TODO: fine-tune heuristic?
-		cellGridF_.reserve(std::max<uint32_t>(1024, be_.N_F_ / 4));
+		cellGridF_.reserve(std::max<uint32_t>(1024, N_F / 4));
 	}
-	if (be_.N_B_)
+	if (N_B)
 	{
 		// TODO: fine-tune heuristic?
-		cellGridB_.reserve(std::max<uint32_t>(1024, be_.N_B_ / 4));
+		cellGridB_.reserve(std::max<uint32_t>(1024, N_B / 4));
 	}
 
 	// fill in fluid cell grid
 	{
 		// compute keys in parallel
-		std::vector<Key> cellKeysF(be_.N_F_);
+		std::vector<Key> cellKeysF(N_F);
 
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, be_.N_F_),
+			tbb::blocked_range<uint32_t>(0, N_F),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					// compute cell index
-					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+					// compute local cell coordinates
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_) - cellOrigX_;
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_) - cellOrigY_;
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_) - cellOrigZ_;
+					assert(cx >= 0 && cx < static_cast<int>(N_DimX_));
+					assert(cy >= 0 && cy < static_cast<int>(N_DimY_));
+					assert(cz >= 0 && cz < static_cast<int>(N_DimZ_));
 
 					// convert cell index into key
-					cellKeysF[i] = PackKey(cx, cy, cz);
+					cellKeysF[i] = PackKey(static_cast<uint32_t>(cx),
+										   static_cast<uint32_t>(cy),
+										   static_cast<uint32_t>(cz));
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
 		// then insert into the hash table single-threaded
-		for (uint32_t i = 0; i < be_.N_F_; i++)
+		for (uint32_t i = 0; i < N_F; i++)
 		{
 			const Key key = cellKeysF[i];
 			cellGridF_[key].push_back(i);
@@ -968,28 +1177,33 @@ void NS_SpatialHashing_Compact_CPU01::Construct(const SimParams& params)
 	// fill in boundary cell grid
 	{
 		// compute keys in parallel
-		std::vector<Key> cellKeysB(be_.N_B_);
+		std::vector<Key> cellKeysB(N_B);
 
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, be_.N_B_),
+			tbb::blocked_range<uint32_t>(0, N_B),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					// compute cell index
-					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+					// compute local cell coordinates
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_) - cellOrigX_;
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_) - cellOrigY_;
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_) - cellOrigZ_;
+					assert(cx >= 0 && cx < static_cast<int>(N_DimX_));
+					assert(cy >= 0 && cy < static_cast<int>(N_DimY_));
+					assert(cz >= 0 && cz < static_cast<int>(N_DimZ_));
 
 					// convert cell index into key
-					cellKeysB[i] = PackKey(cx, cy, cz);
+					cellKeysB[i] = PackKey(static_cast<uint32_t>(cx),
+										   static_cast<uint32_t>(cy),
+										   static_cast<uint32_t>(cz));
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
 		// then insert into the hash table single-threaded
-		for (uint32_t i = 0; i < be_.N_B_; i++)
+		for (uint32_t i = 0; i < N_B; i++)
 		{
 			const Key key = cellKeysB[i];
 			cellGridB_[key].push_back(i);
@@ -1023,22 +1237,31 @@ void NS_SpatialHashing_Compact_CPU01::Query_Count(const SimParams& params)
 				const float yi = yPosF[i];
 				const float zi = zPosF[i];
 
-				// cell ID of particle i
-				const int cxi = FloorToInt(xi * cellSizeInv_);
-				const int cyi = FloorToInt(yi * cellSizeInv_);
-				const int czi = FloorToInt(zi * cellSizeInv_);
+				// local cell coordinates of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+				const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+				const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
 
 				// check all particles j in 27 neighboring grid cells
 				for (int rz = -1; rz <= 1; rz++)
 				{
+					const int cz = czi + rz;
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
 					for (int ry = -1; ry <= 1; ry++)
 					{
+						const int cy = cyi + ry;
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
 						for (int rx = -1; rx <= 1; rx++)
 						{
+							const int cx = cxi + rx;
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
 							// current cell key
-							const uint64_t key = PackKey(cxi + rx,
-														 cyi + ry,
-														 czi + rz);
+							const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+														 static_cast<uint32_t>(cy),
+														 static_cast<uint32_t>(cz));
 
 							// fluid particles
 							if (auto bucket = cellGridF_.find(key);
@@ -1137,22 +1360,31 @@ void NS_SpatialHashing_Compact_CPU01::Query_Fill(const SimParams& params)
 				const float yi = yPosF[i];
 				const float zi = zPosF[i];
 
-				// cell ID of particle i
-				const int cxi = FloorToInt(xi * cellSizeInv_);
-				const int cyi = FloorToInt(yi * cellSizeInv_);
-				const int czi = FloorToInt(zi * cellSizeInv_);
+				// local cell coordinates of particle i
+				const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+				const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+				const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
 
 				// check all particles j in 27 neighboring grid cells
 				for (int rz = -1; rz <= 1; rz++)
 				{
+					const int cz = czi + rz;
+					if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
 					for (int ry = -1; ry <= 1; ry++)
 					{
+						const int cy = cyi + ry;
+						if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
 						for (int rx = -1; rx <= 1; rx++)
 						{
+							const int cx = cxi + rx;
+							if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
 							// current cell key
-							const uint64_t key = PackKey(cxi + rx,
-														 cyi + ry,
-														 czi + rz);
+							const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+														 static_cast<uint32_t>(cy),
+														 static_cast<uint32_t>(cz));
 
 							// fluid particles
 							if (auto bucket = cellGridF_.find(key);
@@ -1254,30 +1486,16 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_SpatialHashing_Compact_CPU01::GetMemU
 	return { usageF, usageB };
 }
 
-// bijective mapping of signed to unsigned integers
-// (-1 -> 1, 1 -> 2, -2 -> 3, 2 -> 4, ...)
-inline uint32_t NS_SpatialHashing_Compact_CPU01::ZigZag(int v) noexcept
+inline uint64_t NS_SpatialHashing_Compact_CPU01::PackKey(
+	uint32_t cx, uint32_t cy, uint32_t cz) noexcept
 {
-	// shift left by 1 and XOR with sign bit
-	std::uint32_t uv = static_cast<std::uint32_t>(v);
-	std::uint32_t even = uv << 1;
-	std::uint32_t sign = static_cast<std::uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
-
-	return even ^ sign;
-}
-
-inline uint64_t NS_SpatialHashing_Compact_CPU01::PackKey(int cx, int cy, int cz) noexcept
-{
-	// apply zig-zag encoding
-	const uint64_t x = ZigZag(cx);
-	const uint64_t y = ZigZag(cy);
-	const uint64_t z = ZigZag(cz);
-
 	// guard against overflow
-	assert(x < (1u << 21) && y < (1u << 21) && z < (1u << 21));
+	assert(cx < (1u << 21) && cy < (1u << 21) && cz < (1u << 21));
 
 	// pack into 64-bit key
-	return (x) | (y << 21) | (z << 42);
+	return static_cast<uint64_t>(cx)
+		| (static_cast<uint64_t>(cy) << 21)
+		| (static_cast<uint64_t>(cz) << 42);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1332,50 +1550,17 @@ void NS_SpatialHashing_Explicit_CPU01::Construct(const SimParams& params)
 		? 0.0f : (1.0f / params.kernelRadius);
 
 	// --- [ combined AABB over fluid and boundary particles ] ----------------------------------------
+	SceneAABB sceneAABB = ComputeSceneAABB_Combined(
+		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), N_F,
+		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B);
+	ExpandSceneAABB(sceneAABB, AABB_pad_);
 
-	// accumulators
-	float initMin = std::numeric_limits<float>::max();
-	float initMax = std::numeric_limits<float>::lowest();
-	float xMin = initMin, yMin = initMin, zMin = initMin;
-	float xMax = initMax, yMax = initMax, zMax = initMax;
-
-	// fluid
-	for (uint32_t i = 0; i < N_F; i++)
-	{
-		const float x = be_.xPosF_[i];
-		const float y = be_.yPosF_[i];
-		const float z = be_.zPosF_[i];
-
-		xMin = x < xMin ? x : xMin;
-		yMin = y < yMin ? y : yMin;
-		zMin = z < zMin ? z : zMin;
-		xMax = x > xMax ? x : xMax;
-		yMax = y > yMax ? y : yMax;
-		zMax = z > zMax ? z : zMax;
-	}
-
-	// boundary
-	for (uint32_t i = 0; i < N_B; i++)
-	{
-		const float x = be_.xPosB_[i];
-		const float y = be_.yPosB_[i];
-		const float z = be_.zPosB_[i];
-
-		xMin = x < xMin ? x : xMin;
-		yMin = y < yMin ? y : yMin;
-		zMin = z < zMin ? z : zMin;
-		xMax = x > xMax ? x : xMax;
-		yMax = y > yMax ? y : yMax;
-		zMax = z > zMax ? z : zMax;
-	}
-
-	// padding to avoid edge clamp issues
-	xMin -= AABB_pad_;
-	yMin -= AABB_pad_;
-	zMin -= AABB_pad_;
-	xMax += AABB_pad_;
-	yMax += AABB_pad_;
-	zMax += AABB_pad_;
+	const float xMin = sceneAABB.minX;
+	const float yMin = sceneAABB.minY;
+	const float zMin = sceneAABB.minZ;
+	const float xMax = sceneAABB.maxX;
+	const float yMax = sceneAABB.maxY;
+	const float zMax = sceneAABB.maxZ;
 
 	// determine whether to rebuild the grid dimensions
 	bool rebuildGrid = cellSizeChanged
@@ -1846,47 +2031,20 @@ void NS_CellLinkedList_Basic_CPU01::Construct(const SimParams& params)
 		? 0.0f : (1.0f / params.kernelRadius);
 
 	// --- [ combined AABB over fluid and boundary particles ] ----------------------------------------
-
-	// accumulators
-	float initMin = std::numeric_limits<float>::max();
-	float initMax = std::numeric_limits<float>::lowest();
-	float xMin = initMin, yMin = initMin, zMin = initMin;
-	float xMax = initMax, yMax = initMax, zMax = initMax;
-
-	// fluid
-	for (uint32_t i = 0; i < be_.N_F_; i++)
-	{
-		const float x = be_.xPosF_[i];
-		const float y = be_.yPosF_[i];
-		const float z = be_.zPosF_[i];
-
-		xMin = x < xMin ? x : xMin;
-		yMin = y < yMin ? y : yMin;
-		zMin = z < zMin ? z : zMin;
-		xMax = x > xMax ? x : xMax;
-		yMax = y > yMax ? y : yMax;
-		zMax = z > zMax ? z : zMax;
-	}
-
-	// boundary
-	for (uint32_t i = 0; i < be_.N_B_; i++)
-	{
-		const float x = be_.xPosB_[i];
-		const float y = be_.yPosB_[i];
-		const float z = be_.zPosB_[i];
-
-		xMin = x < xMin ? x : xMin;
-		yMin = y < yMin ? y : yMin;
-		zMin = z < zMin ? z : zMin;
-		xMax = x > xMax ? x : xMax;
-		yMax = y > yMax ? y : yMax;
-		zMax = z > zMax ? z : zMax;
-	}
+	SceneAABB sceneAABB = ComputeSceneAABB_Combined(
+		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), be_.N_F_,
+		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), be_.N_B_);
 
 	// padding to avoid edge clamp issues
 	constexpr float pad = 1e-7f;
-	xMin -= pad; yMin -= pad; zMin -= pad;
-	xMax += pad; yMax += pad; zMax += pad;
+	ExpandSceneAABB(sceneAABB, pad);
+
+	const float xMin = sceneAABB.minX;
+	const float yMin = sceneAABB.minY;
+	const float zMin = sceneAABB.minZ;
+	const float xMax = sceneAABB.maxX;
+	const float yMax = sceneAABB.maxY;
+	const float zMax = sceneAABB.maxZ;
 
 	xBoxOrig_ = xMin;
 	yBoxOrig_ = yMin;
@@ -3571,49 +3729,19 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	if (!rebuildFrame) { return; }
 
 	// rebuild cell frame from current occupied cell AABB
-	int initMin = std::numeric_limits<int>::max();
-	int initMax = std::numeric_limits<int>::lowest();
-	int cxMin = initMin, cyMin = initMin, czMin = initMin;
-	int cxMax = initMax, cyMax = initMax, czMax = initMax;
-
-	// fluid
-	for (uint32_t i = 0; i < N_F; i++)
-	{
-		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
-
-		cxMin = std::min(cxMin, cx);
-		cyMin = std::min(cyMin, cy);
-		czMin = std::min(czMin, cz);
-		cxMax = std::max(cxMax, cx);
-		cyMax = std::max(cyMax, cy);
-		czMax = std::max(czMax, cz);
-	}
-
-	// boundary
-	for (uint32_t i = 0; i < N_B; i++)
-	{
-		const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
-
-		cxMin = std::min(cxMin, cx);
-		cyMin = std::min(cyMin, cy);
-		czMin = std::min(czMin, cz);
-		cxMax = std::max(cxMax, cx);
-		cyMax = std::max(cyMax, cy);
-		czMax = std::max(czMax, cz);
-	}
+	const SceneAABB sceneAABB = ComputeSceneAABB_Combined(
+		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), N_F,
+		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B);
+	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
 
 	const int margin = static_cast<int>(N_CellFrameMargin_ + N_CellFrameRebuildMargin_);
-	cellOrigX_ = cxMin - margin;
-	cellOrigY_ = cyMin - margin;
-	cellOrigZ_ = czMin - margin;
+	cellOrigX_ = cellFrame.cellOrigX - margin;
+	cellOrigY_ = cellFrame.cellOrigY - margin;
+	cellOrigZ_ = cellFrame.cellOrigZ - margin;
 
-	N_DimX_ = static_cast<uint32_t>((cxMax - cxMin + 1) + 2 * margin);
-	N_DimY_ = static_cast<uint32_t>((cyMax - cyMin + 1) + 2 * margin);
-	N_DimZ_ = static_cast<uint32_t>((czMax - czMin + 1) + 2 * margin);
+	N_DimX_ = cellFrame.N_DimX + static_cast<uint32_t>(2 * margin);
+	N_DimY_ = cellFrame.N_DimY + static_cast<uint32_t>(2 * margin);
+	N_DimZ_ = cellFrame.N_DimZ + static_cast<uint32_t>(2 * margin);
 
 	static constexpr uint32_t MaxAxisCells = (1u << 21);
 	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)

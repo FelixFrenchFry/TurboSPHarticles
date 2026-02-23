@@ -98,6 +98,14 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 
+		// local grid frame in cell coordinates
+		int cellOrigX_ = 0;
+		int cellOrigY_ = 0;
+		int cellOrigZ_ = 0;
+		uint32_t N_DimX_ = 0;
+		uint32_t N_DimY_ = 0;
+		uint32_t N_DimZ_ = 0;
+
 		// grid of cells, each made up of a key and a bucket
 		using Key = uint64_t;
 		using Bucket = std::vector<uint32_t>;
@@ -111,24 +119,15 @@ namespace Sim
 				constexpr uint64_t mask21 = (1ull << 21) - 1ull;
 
 				// prime-based component mix
-				constexpr uint64_t p1 = 73856093ull;
-				constexpr uint64_t p2 = 19349663ull;
-				constexpr uint64_t p3 = 83492791ull;
+				constexpr uint64_t p1 = 11400714785074694791ull; // PRIME64_1 (xxHash)
+				constexpr uint64_t p2 = 14029467366897019727ull; // PRIME64_2 (xxHash)
+				constexpr uint64_t p3 = 1609587929392839161ull;  // PRIME64_3 (xxHash)
 
 				const uint64_t x = key & mask21;
 				const uint64_t y = (key >> 21) & mask21;
 				const uint64_t z = (key >> 42) & mask21;
 
-				uint64_t h = (p1 * x) ^ (p2 * y) ^ (p3 * z);
-
-				// avalanche finalizer (splitmix64-style)
-				h ^= (h >> 30);
-				h *= 0xbf58476d1ce4e5b9ull;
-				h ^= (h >> 27);
-				h *= 0x94d049bb133111ebull;
-				h ^= (h >> 31);
-
-				return static_cast<std::size_t>(h);
+				return (p1 * x) ^ (p2 * y) ^ (p3 * z);
 			}
 		};
 
@@ -145,12 +144,11 @@ namespace Sim
 		static constexpr float hashTableMaxLoadFactor_ = 0.67f;
 
 		// helpers
-		static inline uint32_t ZigZag(int v) noexcept;
-		static inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
+		static inline uint64_t PackKey(uint32_t cx, uint32_t cy, uint32_t cz) noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------
-	// --- [ spatial hashing compact implementation ] ------------------------------------------------
+	// --- [ spatial hashing compact implementation ] ----------------------------------------------
 	// ---------------------------------------------------------------------------------------------
 
 	class NS_SpatialHashing_Compact_CPU01 : public I_NeighborSearchStrat
@@ -182,6 +180,14 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 
+		// local grid frame in cell coordinates
+		int cellOrigX_ = 0;
+		int cellOrigY_ = 0;
+		int cellOrigZ_ = 0;
+		uint32_t N_DimX_ = 0;
+		uint32_t N_DimY_ = 0;
+		uint32_t N_DimZ_ = 0;
+
 		// grid of cells, each made up of a key and a bucket
 		using Key = uint64_t;
 		using Bucket = std::vector<uint32_t>;
@@ -197,8 +203,7 @@ namespace Sim
 		ankerl::unordered_dense::map<Key, Bucket> cellGridB_{};
 
 		// helpers
-		static inline uint32_t ZigZag(int v) noexcept;
-		static inline uint64_t PackKey(int cx, int cy, int cz) noexcept;
+		static inline uint64_t PackKey(uint32_t cx, uint32_t cy, uint32_t cz) noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------

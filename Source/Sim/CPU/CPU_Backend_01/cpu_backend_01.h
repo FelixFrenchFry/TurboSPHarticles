@@ -102,7 +102,7 @@ namespace Sim
 		// fluid particles
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
-		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_;
+		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_; // TODO: unify with vel?
 		std::vector<float> xAccPressF_, yAccPressF_, zAccPressF_;
 		std::vector<float> xAccNonPressF_, yAccNonPressF_, zAccNonPressF_;
 		std::vector<float> sourceTermF_;
