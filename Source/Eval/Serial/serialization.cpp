@@ -159,8 +159,6 @@ namespace Export
 	{
 		const auto N = static_cast<size_t>(F.N_);
 
-		assert(F.id.size() == N);
-
 		assert(F.xPos.size() == N && F.yPos.size() == N && F.zPos.size() == N);
 
 		assert(F.xVel.size() == N && F.yVel.size() == N && F.zVel.size() == N);
@@ -179,8 +177,6 @@ namespace Export
 	static void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
 	{
 		const auto N = static_cast<size_t>(B.N_);
-
-		assert(B.id.size() == N);
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
 	}
@@ -254,8 +250,6 @@ namespace Export
 				WriteVec(ofs, F.diagElem);
 				WriteVec(ofs, F.pressure);
 				WriteVec(ofs, F.density);
-
-				WriteVec(ofs, F.id);
 			}
 
 			// boundary data (fixed order)
@@ -265,8 +259,6 @@ namespace Export
 				WriteVec(ofs, B.xPos);
 				WriteVec(ofs, B.yPos);
 				WriteVec(ofs, B.zPos);
-
-				WriteVec(ofs, B.id);
 			}
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
@@ -384,8 +376,6 @@ namespace Export
 			ReadVec(ifs, F.pressure);
 			ReadVec(ifs, F.density);
 
-			ReadVec(ifs, F.id);
-
 			// sanity check
 			F.N_ = NF;
 		}
@@ -397,8 +387,6 @@ namespace Export
 			ReadVec(ifs, B.xPos);
 			ReadVec(ifs, B.yPos);
 			ReadVec(ifs, B.zPos);
-
-			ReadVec(ifs, B.id);
 
 			// sanity check
 			B.N_ = NB;

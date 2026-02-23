@@ -113,7 +113,6 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 		GPU::Copy_HostToDevice(d_sourceTermF_.Data(), F.sourceTerm.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_pressureF_.Data(), F.pressure.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_densityF_.Data(), F.density.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_idF_.Data(), F.id.data(), N_F_, stream_);
 	}
 
 	// copy boundary particle data to device
@@ -122,8 +121,6 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 		GPU::Copy_HostToDevice(d_xPosB_.Data(), B.xPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_yPosB_.Data(), B.yPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_zPosB_.Data(), B.zPos.data(), N_B_, stream_);
-
-		GPU::Copy_HostToDevice(d_idB_.Data(), B.id.data(), N_B_, stream_);
 	}
 
 	// reset neighbor counts for the next construction step
@@ -172,7 +169,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(F.diagElem.data(), d_diagElemF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.pressure.data(), d_pressureF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.density.data(), d_densityF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.id.data(), d_idF_.Data(), N_F_, stream_);
 	}
 
 	// copy boundary particle data into the host's universal state
@@ -181,8 +177,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(B.xPos.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.yPos.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.zPos.data(), d_zPosB_.Data(), N_B_, stream_);
-
-		GPU::Copy_DeviceToHost(B.id.data(), d_idB_.Data(), N_B_, stream_);
 	}
 
 	GPU::StreamSync(stream_);
@@ -505,7 +499,6 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_diagElemF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_pressureF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_densityF_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_idF_));
 
 		// finalize
 		Set(record, MemBucket::ParticlePropertiesF, usage);
@@ -518,8 +511,6 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_xPosB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yPosB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zPosB_));
-
-		Add(usage, MemUsageOf_DeviceBuffer(d_idB_));
 
 		// finalize
 		Set(record, MemBucket::ParticlePropertiesB, usage);

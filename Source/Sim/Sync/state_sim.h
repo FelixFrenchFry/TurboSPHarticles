@@ -19,7 +19,6 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::span<uint32_t> id; // unique particle IDs
 
 		// fields
 		std::span<float> xPos, yPos, zPos;
@@ -39,7 +38,6 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::span<uint32_t> id; // unique particle IDs
 
 		// fields
 		std::span<float> xPos, yPos, zPos;
@@ -51,7 +49,6 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::vector<uint32_t> id; // unique particle IDs
 
 		// positions
 		std::vector<float> xPos;
@@ -88,8 +85,6 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
-			id.reserve(N);
-
 			xPos.reserve(N);
 			yPos.reserve(N);
 			zPos.reserve(N);
@@ -120,7 +115,6 @@ namespace Sync
 		void resizeAll(uint32_t N)
 		{
 			N_ = N;
-			id.resize(N_);
 
 			xPos.resize(N_);
 			yPos.resize(N_);
@@ -154,7 +148,6 @@ namespace Sync
 			return FluidView
 			{
 				.N_ = N_,
-				.id = std::span<std::uint32_t>(id),
 
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
@@ -198,7 +191,6 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::vector<uint32_t> id; // unique particle IDs
 
 		// positions
 		std::vector<float> xPos;
@@ -208,8 +200,6 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
-			id.reserve(N);
-
 			xPos.reserve(N);
 			yPos.reserve(N);
 			zPos.reserve(N);
@@ -219,7 +209,6 @@ namespace Sync
 		void resizeAll(uint32_t N)
 		{
 			N_ = N;
-			id.resize(N_);
 
 			xPos.resize(N_);
 			yPos.resize(N_);
@@ -232,7 +221,6 @@ namespace Sync
 			return BoundaryView
 			{
 				.N_ = N_,
-				.id = std::span<std::uint32_t>(id),
 
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
@@ -272,13 +260,13 @@ namespace Sync
 
 		void ReserveFluidAdditional(uint32_t add)
 		{
-			auto current = static_cast<uint32_t>(boundaryParticles.id.size());
-			boundaryParticles.reserveAll(current + add);
+			const auto current = static_cast<uint32_t>(fluidParticles.xPos.size());
+			fluidParticles.reserveAll(current + add);
 		}
 
 		void ReserveBoundaryAdditional(uint32_t add)
 		{
-			auto current = static_cast<uint32_t>(boundaryParticles.id.size());
+			const auto current = static_cast<uint32_t>(boundaryParticles.xPos.size());
 			boundaryParticles.reserveAll(current + add);
 		}
 

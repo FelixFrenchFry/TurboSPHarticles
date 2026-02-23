@@ -172,11 +172,9 @@ namespace Sim
 		DeviceBuffer<float> d_diagElemF_;
 		DeviceBuffer<float> d_pressureF_;
 		DeviceBuffer<float> d_densityF_;
-		DeviceBuffer<uint32_t> d_idF_;
 
 		// boundary particles
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
-		DeviceBuffer<uint32_t> d_idB_;
 
 		// neighbor list storage (CSRVector_DoubleQuery style)
 		DeviceBuffer<uint32_t> d_nbrCountFF_; // temporary counts written by count-query
@@ -277,7 +275,7 @@ namespace Sim
 				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
 				d_xAccNonPressF_.Size() != N_F_new || d_yAccNonPressF_.Size() != N_F_new || d_zAccNonPressF_.Size() != N_F_new ||
 				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
-				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new || d_idF_.Size() != N_F_new ||
+				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new ||
 				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
 				d_nbrOffsetsFF_.Size() != static_cast<size_t>(N_F_new) + 1 ||
 				d_nbrOffsetsFB_.Size() != static_cast<size_t>(N_F_new) + 1;
@@ -285,8 +283,7 @@ namespace Sim
 			const bool needBoundary =
 				force ||
 				(N_B_new != N_B_) ||
-				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
-				d_idB_.Size() != N_B_new;
+				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new;
 
 			// detect if (re)allocation of buffers is needed
 			// (might be due to change in particle counts or lack of initialization)
@@ -305,11 +302,9 @@ namespace Sim
 			d_diagElemF_.Resize(N_F_);
 			d_pressureF_.Resize(N_F_);
 			d_densityF_.Resize(N_F_);
-			d_idF_.Resize(N_F_);
 
 			// boundary
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
-			d_idB_.Resize(N_B_);
 
 			// neighbors
 			d_nbrCountFF_.Resize(N_F_);

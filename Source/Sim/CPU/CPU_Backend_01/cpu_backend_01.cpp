@@ -167,14 +167,11 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	diagElemF_ = std::move(F.diagElem);
 	pressureF_ = std::move(F.pressure);
 	densityF_ = std::move(F.density);
-	idF_ = std::move(F.id);
 
 	// transfer to boundary data structures
 	xPosB_ = std::move(B.xPos);
 	yPosB_ = std::move(B.yPos);
 	zPosB_ = std::move(B.zPos);
-
-	idB_ = std::move(B.id);
 
 	// init neighbor list sizes
 	neighborLists_->Resize(N_F_, N_B_, params);
@@ -222,7 +219,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				F.diagElem[i] = diagElemF_[i];
 				F.pressure[i] = pressureF_[i];
 				F.density[i] = densityF_[i];
-				F.id[i] = idF_[i];
 			}
 		},
 		tbb::auto_partitioner{}
@@ -238,8 +234,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				B.xPos[i] = xPosB_[i];
 				B.yPos[i] = yPosB_[i];
 				B.zPos[i] = zPosB_[i];
-
-				B.id[i] = idB_[i];
 			}
 		},
 		tbb::auto_partitioner{}
@@ -516,7 +510,6 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(diagElemF_));
 		Add(usage, MemUsageOf_Vector(pressureF_));
 		Add(usage, MemUsageOf_Vector(densityF_));
-		Add(usage, MemUsageOf_Vector(idF_));
 
 		// finalize
 		Set(record, MemBucket::ParticlePropertiesF, usage);
@@ -529,8 +522,6 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(xPosB_));
 		Add(usage, MemUsageOf_Vector(yPosB_));
 		Add(usage, MemUsageOf_Vector(zPosB_));
-
-		Add(usage, MemUsageOf_Vector(idB_));
 
 		// finalize
 		Set(record, MemBucket::ParticlePropertiesB, usage);

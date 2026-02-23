@@ -100,7 +100,6 @@ namespace
 		std::vector<float>& diagElem;
 		std::vector<float>& pressure;
 		std::vector<float>& density;
-		std::vector<uint32_t>& id;
 	};
 
 	struct BoundaryParticleSoARefs
@@ -108,7 +107,6 @@ namespace
 		std::vector<float>& xPos;
 		std::vector<float>& yPos;
 		std::vector<float>& zPos;
-		std::vector<uint32_t>& id;
 	};
 
 	struct SceneAABB
@@ -352,8 +350,6 @@ namespace
 		ApplyPermutation(perm, fluid.diagElem);
 		ApplyPermutation(perm, fluid.pressure);
 		ApplyPermutation(perm, fluid.density);
-
-		ApplyPermutation(perm, fluid.id);
 	}
 
 	void ApplyPermutationBoundarySoA(
@@ -363,8 +359,6 @@ namespace
 		ApplyPermutation(perm, boundary.xPos);
 		ApplyPermutation(perm, boundary.yPos);
 		ApplyPermutation(perm, boundary.zPos);
-
-		ApplyPermutation(perm, boundary.id);
 	}
 
 	void DataReOrderParticles_Morton_30bitNormalized(
@@ -581,11 +575,10 @@ void NS_BruteForce_CPU01::DataReOrder(
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);
@@ -1016,11 +1009,10 @@ void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);
@@ -1464,11 +1456,10 @@ void NS_SpatialHashing_Compact_CPU01::DataReOrder(
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);
@@ -1954,11 +1945,10 @@ void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);
@@ -2515,11 +2505,10 @@ void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);
@@ -3589,11 +3578,10 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);
@@ -4459,11 +4447,10 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
 			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_,
-			be_.idF_
+			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_, be_.idB_
+			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B
 	);

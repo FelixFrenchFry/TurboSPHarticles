@@ -522,9 +522,6 @@ void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 	// shared scratch buffers for permutation gather
 	if (be_.d_workBuffer_.Size() < N_MAX) { be_.d_workBuffer_.Resize(N_MAX); }
 
-	DeviceBuffer<uint32_t> d_workBufferU32{};
-	d_workBufferU32.Resize(N_MAX);
-
 	// re-order fluid SoA arrays according to sorted fluid indices
 	if (N_F > 0)
 	{
@@ -555,8 +552,6 @@ void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, be_.d_workBuffer_, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, d_workBufferU32, be_.stream_);
-
 		// fluid arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
 			thrust::cuda::par.on(be_.stream_),
@@ -573,8 +568,6 @@ void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, be_.d_workBuffer_, be_.stream_);
-
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, d_workBufferU32, be_.stream_);
 
 		// boundary arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
@@ -785,9 +778,6 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	// shared scratch buffers for permutation gather
 	if (be_.d_workBuffer_.Size() < N_MAX) { be_.d_workBuffer_.Resize(N_MAX); }
 
-	DeviceBuffer<uint32_t> d_workBufferU32{};
-	d_workBufferU32.Resize(N_MAX);
-
 	// re-order fluid SoA arrays according to sorted fluid indices
 	if (N_F > 0)
 	{
@@ -818,8 +808,6 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, be_.d_workBuffer_, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, d_workBufferU32, be_.stream_);
-
 		// fluid arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
 			thrust::cuda::par.on(be_.stream_),
@@ -836,8 +824,6 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, be_.d_workBuffer_, be_.stream_);
-
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, d_workBufferU32, be_.stream_);
 
 		// boundary arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(

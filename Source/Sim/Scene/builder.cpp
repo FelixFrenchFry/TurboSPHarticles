@@ -168,8 +168,6 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 							F.pressure[idx] = 0.0f;
 							F.density[idx] = params.restDensityF;
 
-							// use global idx as ID
-							F.id[idx] = idx;
 						}
 					}
 				}
@@ -301,8 +299,6 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				F.pressure[outIdx] = 0.0f;
 				F.density[outIdx] = params.restDensityF;
 
-				F.id[outIdx] = outIdx;
-
 				outIdx++;
 			}
 		}
@@ -395,9 +391,6 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 				B.xPos[idx] = pos.x;
 				B.yPos[idx] = pos.y;
 				B.zPos[idx] = pos.z;
-
-				// use global idx as ID
-				B.id[idx] = static_cast<std::uint32_t>(idx);
 
 				idx++;
 			}
@@ -530,14 +523,12 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				B.yPos.push_back(pos.y);
 				B.zPos.push_back(pos.z);
 
-				// simple running ID
-				B.id.push_back(static_cast<uint32_t>(B.id.size()));
 			}
 		}
 	}
 
 	// update boundary particle count
-	dst.boundaryParticles.N_ = static_cast<uint32_t>(dst.boundaryParticles.id.size());
+	dst.boundaryParticles.N_ = static_cast<uint32_t>(dst.boundaryParticles.xPos.size());
 }
 
 // deterministic hash-based jitter, safe for parallel use

@@ -102,19 +102,17 @@ namespace Sim
 		// fluid particles
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
-		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_; // TODO: unify with vel?
+		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_;
 		std::vector<float> xAccPressF_, yAccPressF_, zAccPressF_;
 		std::vector<float> xAccNonPressF_, yAccNonPressF_, zAccNonPressF_;
 		std::vector<float> sourceTermF_;
 		std::vector<float> diagElemF_;
 		std::vector<float> pressureF_;
 		std::vector<float> densityF_;
-		std::vector<uint32_t> idF_; // TODO: unused?
 
 		// boundary particles
 		// TODO: add boundary particle velocities?
 		std::vector<float> xPosB_, yPosB_, zPosB_;
-		std::vector<uint32_t> idB_; // TODO: unused?
 
 		// misc data
 		uint32_t N_solverIterCount_;
