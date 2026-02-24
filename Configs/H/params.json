@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "BigDroplet",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 5,
   "neighborListStorage": 2,
 
@@ -40,7 +40,7 @@
     "velocity": false
   },
 
-  "exportEnabled": true,
-  "exportDir": "G",
+  "exportEnabled": false,
+  "exportDir": "H",
   "exportInterval": 20
 }
