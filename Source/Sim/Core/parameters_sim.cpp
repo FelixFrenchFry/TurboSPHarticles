@@ -221,6 +221,30 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			params_.maxSteps = it->get<int64_t>();
 		}
 
+		if (auto it = j.find("maxThreadsSim"); it != j.end())
+		{
+			if (!it->is_number_integer())
+			{
+				SPDLOG_WARN("Invalid 'maxThreadsSim' in JSON (must be -1 or > 0)");
+			}
+			else
+			{
+				const int64_t maxThreadsSim = it->get<int64_t>();
+				if (maxThreadsSim == -1 || maxThreadsSim > 0)
+				{
+					params_.maxThreadsSim = maxThreadsSim;
+				}
+				else if (maxThreadsSim == 0)
+				{
+					SPDLOG_WARN("Invalid 'maxThreadsSim' in JSON (0 is not allowed)");
+				}
+				else
+				{
+					SPDLOG_WARN("Invalid 'maxThreadsSim' in JSON (must be -1 or > 0)");
+				}
+			}
+		}
+
 		EndWrite();
 	}
 

@@ -97,6 +97,9 @@ namespace Sim
 		int64_t jitterSeedB		= 42; // RNG seed for jitter
 		uint32_t boundaryLayers	= 2;
 
+		// threading
+		int64_t maxThreadsSim	= -1; // -1 = use default budget
+
 		// benchmarks
 		uint32_t maxBenchRecs = 1'000'000;
 		Bench::TimeUnit timeUnit = Bench::TimeUnit::ms;

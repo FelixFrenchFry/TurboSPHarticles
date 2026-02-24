@@ -129,6 +129,7 @@ namespace
 		uint32_t N_DimZ = 0;
 	};
 
+	// TODO: parallelize?
 	inline SceneAABB ComputeSceneAABB_Combined(
 		const float* xPosF, const float* yPosF, const float* zPosF, uint32_t N_F,
 		const float* xPosB, const float* yPosB, const float* zPosB, uint32_t N_B)

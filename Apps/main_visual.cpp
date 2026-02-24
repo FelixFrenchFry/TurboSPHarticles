@@ -2,6 +2,7 @@
 
 // external
 #include <CLI/CLI.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -73,18 +74,6 @@ int main(int argc, char** argv)
 			return EXIT_FAILURE;
 		}
 
-		// --- [ hardware budgets ] ---------------------------------------------------------------------
-
-		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
-		const std::uint32_t N_visThreads = 1;
-		const std::uint32_t N_simThreads = N_totalThreads > N_visThreads
-										 ? N_totalThreads - N_visThreads : 1;
-
-		Sim::DiagnosticsMgr::PrintHardwareSpecs(N_totalThreads, N_simThreads, N_visThreads);
-
-		// limit TBB to N_simThreads worker threads
-		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_simThreads);
-
 		// --- [ initialization of manager systems ] ----------------------------------------------------
 
 		// config profile and simulation parameters
@@ -110,6 +99,52 @@ int main(int argc, char** argv)
 		}
 		printf("\n");
 		SPDLOG_INFO("Using config profile '{}'", profile);
+
+		// --- [ hardware budgets ] ---------------------------------------------------------------------
+
+		auto ResolveSimThreadBudget = [](const std::uint32_t defaultSimThreads,
+										 const std::int64_t maxThreadsSim) -> std::uint32_t
+			{
+				if (maxThreadsSim == -1)
+				{
+					return defaultSimThreads;
+				}
+				if (maxThreadsSim == 0)
+				{
+					SPDLOG_WARN("Invalid 'maxThreadsSim' value 0 (must be -1 or > 0). "
+						"Falling back to default simulation thread budget {}",
+						defaultSimThreads);
+					return defaultSimThreads;
+				}
+				if (maxThreadsSim < -1)
+				{
+					SPDLOG_WARN("Invalid 'maxThreadsSim' value {} (must be -1 or > 0). "
+						"Falling back to default simulation thread budget {}",
+						maxThreadsSim, defaultSimThreads);
+					return defaultSimThreads;
+				}
+
+				const std::uint64_t requested = static_cast<std::uint64_t>(maxThreadsSim);
+				if (requested > static_cast<std::uint64_t>(defaultSimThreads))
+				{
+					return defaultSimThreads;
+				}
+
+				return static_cast<std::uint32_t>(requested);
+			};
+
+		const std::uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
+		const std::uint32_t N_visThreads = 1;
+		const std::uint32_t N_simThreadsDefault = N_totalThreads > N_visThreads
+												? N_totalThreads - N_visThreads : 1;
+		const std::int64_t maxThreadsSim = simParamsMgr.SnapshotParams().first.maxThreadsSim;
+		const std::uint32_t N_simThreads = ResolveSimThreadBudget(
+			N_simThreadsDefault, maxThreadsSim);
+
+		Sim::DiagnosticsMgr::PrintHardwareSpecs(N_totalThreads, N_simThreads, N_visThreads);
+
+		// limit TBB to the simulation thread budget
+		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, N_simThreads);
 
 		// sub-systems
 		Vis::VisParamsMgr visParamsMgr{};
@@ -170,7 +205,7 @@ int main(int argc, char** argv)
 		// --- [ main loop ] ----------------------------------------------------------------------------
 
 		// simulation runs on background controller thread
-		// (spawn N-1 worker threads within)
+		// (spawning up to the configured simulation thread budget within)
 		simulationMgr.Launch_Async();
 
 		// visualization runs on main thread
