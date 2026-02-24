@@ -1,11 +1,11 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BigDroplet",
-  "neighborSearchMethod": 4,
+  "neighborSearchMethod": 5,
   "neighborListStorage": 2,
 
   "maxSteps": -1,
-  "timeStep": 0.001,
+  "timeStep": 0.0005,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensityF": 1000.0,
@@ -29,17 +29,18 @@
   "jitterSeedB": 67,
   "boundaryLayers": 2,
 
+  "maxThreadsSim": -1,
   "maxBenchRecs": 1000000,
   "maxStatRecs": 1000000,
   "timeUnit": "ms",
   "byteUnit": "MiB",
   "statGroupsEnabled": {
-    "particles": true,
-    "density": true,
-    "velocity": true
+    "particles": false,
+    "density": false,
+    "velocity": false
   },
 
   "exportEnabled": true,
   "exportDir": "G",
-  "exportInterval": 10
+  "exportInterval": 20
 }
