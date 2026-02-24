@@ -1,6 +1,7 @@
 // parameters_sim.cpp
 
 // external
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -576,6 +577,110 @@ bool SimParamsMgr::LoadSimParamsFromProfile(const std::string& profile, bool ver
 	if (!Base::LoadJsonObjectFromFile(profile + "/params.json", j))
 	{
 		return false;
+	}
+
+	return LoadSimParamsFromJson(j, verbose);
+}
+
+bool SimParamsMgr::LoadSimParamsFromCliOverrides(
+	const std::vector<std::string>& overrides, bool verbose)
+{
+	if (overrides.empty()) { return true; }
+
+	auto Trim = [](std::string s) -> std::string
+		{
+			const auto IsSpace = [](unsigned char c) -> bool
+				{
+					return std::isspace(c) != 0;
+				};
+
+			size_t left = 0;
+			while (left < s.size() && IsSpace(static_cast<unsigned char>(s[left])))
+			{
+				left++;
+			}
+
+			size_t right = s.size();
+			while (right > left && IsSpace(static_cast<unsigned char>(s[right - 1])))
+			{
+				right--;
+			}
+
+			return s.substr(left, right - left);
+		};
+
+	nlohmann::json j = nlohmann::json::object();
+
+	for (const std::string& rawOverride : overrides)
+	{
+		const size_t iEq = rawOverride.find('=');
+		if (iEq == std::string::npos)
+		{
+			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': expected key=value",
+				rawOverride);
+			return false;
+		}
+
+		const std::string path = Trim(rawOverride.substr(0, iEq));
+		const std::string valueText = Trim(rawOverride.substr(iEq + 1));
+
+		if (path.empty())
+		{
+			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': missing key", rawOverride);
+			return false;
+		}
+
+		nlohmann::json value{};
+		try
+		{
+			// supports numbers, booleans, arrays/objects and quoted strings
+			value = nlohmann::json::parse(valueText);
+		}
+		catch (...)
+		{
+			// fallback for unquoted strings like CellLinkedList_Compact
+			value = valueText;
+		}
+
+		nlohmann::json* cursor = &j;
+		size_t begin = 0;
+
+		while (true)
+		{
+			const size_t iDot = path.find('.', begin);
+			const bool isLast = (iDot == std::string::npos);
+
+			const size_t end = isLast ? path.size() : iDot;
+			const std::string key = path.substr(begin, end - begin);
+			if (key.empty())
+			{
+				SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': malformed key path",
+					rawOverride);
+				return false;
+			}
+
+			if (isLast)
+			{
+				(*cursor)[key] = value;
+				break;
+			}
+
+			nlohmann::json& next = (*cursor)[key];
+			if (!next.is_object() && !next.is_null())
+			{
+				SPDLOG_ERROR(
+					"Invalid '-sim/--sim' override '{}': key path collides with non-object",
+					rawOverride);
+				return false;
+			}
+			if (next.is_null())
+			{
+				next = nlohmann::json::object();
+			}
+
+			cursor = &next;
+			begin = iDot + 1;
+		}
 	}
 
 	return LoadSimParamsFromJson(j, verbose);

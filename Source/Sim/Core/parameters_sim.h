@@ -10,6 +10,7 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <vector>
 
 // internal
 #include "Source/Base/enum_hub.h"
@@ -137,6 +138,8 @@ namespace Sim
 
 		bool LoadSimParamsFromJson(const nlohmann::json& j, bool verbose = false);
 		bool LoadSimParamsFromProfile(const std::string& profile, bool verbose = false);
+		bool LoadSimParamsFromCliOverrides(
+			const std::vector<std::string>& overrides, bool verbose = false);
 
 		// setters for individual parameters and their dependent values
 		void Set_RunCountQuery(bool runCountQuery, bool verbose = false);

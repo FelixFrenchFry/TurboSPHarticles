@@ -8,6 +8,7 @@
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <tbb/global_control.h>
+#include <vector>
 
 // internal
 #include "Source/Eval/Serial/serialization.h"
@@ -43,10 +44,50 @@ int main(int argc, char** argv)
 
 		CLI::App application{ "TSP Visual" };
 		std::string profile = "Default"; // fallback config profile
+		std::vector<std::string> simOverrides{};
 		application.add_option("-p,--profile", profile,
 			"Name of configuration profile /Configs/<...> with 'A-Z'");
+		application.add_option("--sim", simOverrides,
+			"Master override simulation parameter via key=value "
+			"(repeatable, CLI wins over config file)");
 
-		CLI11_PARSE(application, argc, argv);
+		// allow one-dash alias "-sim" by normalizing to "--sim" before CLI11 parsing
+		std::vector<std::string> cliArgs{};
+		cliArgs.reserve((argc > 0) ? static_cast<size_t>(argc) : 0);
+		if (argc > 0)
+		{
+			cliArgs.push_back(argv[0]);
+		}
+		for (int i = 1; i < argc; i++)
+		{
+			std::string arg = argv[i];
+			if (arg == "-sim")
+			{
+				arg = "--sim";
+			}
+			else if (arg.rfind("-sim=", 0) == 0)
+			{
+				arg.replace(0, 4, "--sim");
+			}
+
+			cliArgs.push_back(arg);
+		}
+
+		std::vector<char*> cliArgv{};
+		cliArgv.reserve(cliArgs.size());
+		for (auto& arg : cliArgs)
+		{
+			cliArgv.push_back(arg.data());
+		}
+
+		try
+		{
+			application.parse(static_cast<int>(cliArgv.size()), cliArgv.data());
+		}
+		catch (const CLI::ParseError& e)
+		{
+			return application.exit(e);
+		}
 
 		// normalize config profile names (e.g. "a" -> "A", "" -> "Default")
 		auto NormalizeProfile= [](std::string& p) -> void
@@ -99,6 +140,18 @@ int main(int argc, char** argv)
 		}
 		printf("\n");
 		SPDLOG_INFO("Using config profile '{}'", profile);
+
+		if (!simOverrides.empty())
+		{
+			if (!simParamsMgr.LoadSimParamsFromCliOverrides(simOverrides, true))
+			{
+				SPDLOG_ERROR("Failed to apply one or more '-sim/--sim' overrides.");
+				return EXIT_FAILURE;
+			}
+
+			SPDLOG_INFO("Applied {} simulation override(s) from command line",
+				simOverrides.size());
+		}
 
 		// --- [ hardware budgets ] ---------------------------------------------------------------------
 
