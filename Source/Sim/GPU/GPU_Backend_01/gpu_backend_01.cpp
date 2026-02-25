@@ -57,6 +57,11 @@ SimBackend_GPU01::SimBackend_GPU01(
 	{
 		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_GPU01>(*this);
 	}
+	else if (params.neighborSearchMethod ==
+		Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH)
+	{
+		neighborSearchStrat_ = std::make_unique<NS_BoundVolHier_Linear_LBVH_GPU01>(*this);
+	}
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");

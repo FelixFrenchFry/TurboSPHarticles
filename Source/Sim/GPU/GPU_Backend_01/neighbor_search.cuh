@@ -10,6 +10,7 @@
 // internal
 #include "common.cuh"
 #include "gpu_backend_01.h"
+#include "neighbor_search_kernels.cuh"
 #include "Source/Sim/Core/backend_sim.h"
 
 
@@ -172,6 +173,64 @@ namespace Sim
 			DeviceBuffer<uint32_t>& d_cellStartIdx,
 			const uint64_t* d_cellIdSorted,
 			uint32_t N, uint32_t& N_NonEmptyCells);
+	};
+
+	class NS_BoundVolHier_Linear_LBVH_GPU01 : public I_NeighborSearchStrat
+	{
+	public: // ---------------------------------------------------------------------------------------
+
+		explicit NS_BoundVolHier_Linear_LBVH_GPU01(SimBackend_GPU01& backend)
+			: be_{ backend } {}
+
+		const char* Name() const override { return "BoundVolHier_Linear_LBVH_GPU01"; }
+
+		void Init(const SimParams& params) override;
+
+		void Construct(const SimParams& params) override;
+
+		void Query_Count(const SimParams& params) override;
+
+		void Query_Fill(const SimParams& params) override;
+
+		void DataReOrder(const SimParams& params) override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+
+	private: // --------------------------------------------------------------------------------------
+
+		SimBackend_GPU01& be_;
+
+		// fluid BVH data structures
+		DeviceBuffer<uint32_t> d_mortonF_;
+		DeviceBuffer<uint32_t> d_sortedParticleIdxF_;
+		DeviceBuffer<GPU01::LBVH_InternalNode> d_nodesF_;
+
+		// boundary BVH data structures
+		DeviceBuffer<uint32_t> d_mortonB_;
+		DeviceBuffer<uint32_t> d_sortedParticleIdxB_;
+		DeviceBuffer<GPU01::LBVH_InternalNode> d_nodesB_;
+
+		// reusable construction scratch
+		DeviceBuffer<GPU01::LBVH_AABB> d_leafBoxScratch_;
+		DeviceBuffer<GPU01::LBVH_AABB> d_sortedLeafBoxScratch_;
+		DeviceBuffer<uint32_t> d_parentOfScratch_;
+		DeviceBuffer<uint32_t> d_visitCountScratch_;
+
+		// boundary BVH cache
+		bool boundaryBVHValid_ = false;
+		uint32_t cachedBoundaryCount_ = 0;
+		const float* cachedBoundaryXPosPtr_ = nullptr;
+		const float* cachedBoundaryYPosPtr_ = nullptr;
+		const float* cachedBoundaryZPosPtr_ = nullptr;
+
+		using MinMax3 = GPU01::MinMax3HD;
+
+		void BuildBVH(
+			const float* xPos, const float* yPos, const float* zPos,
+			uint32_t N,
+			DeviceBuffer<uint32_t>& d_morton,
+			DeviceBuffer<uint32_t>& d_sortedParticleIdx,
+			DeviceBuffer<GPU01::LBVH_InternalNode>& d_nodes);
 	};
 
 } // namespace Sim
