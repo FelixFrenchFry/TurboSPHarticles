@@ -84,6 +84,13 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 
 	// select neighbor list storage
 	if (params.neighborListStorage ==
+		Base::NeighborListStorage::OnDemand)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_OnDemand_CPU01>(*neighborSearchStrat_);
+		simParamsMgr_.Set_RunCountQuery(false);
+		simParamsMgr_.Set_RunFillQuery(false);
+	}
+	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::IndividualVectors)
 	{
 		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_CPU01>();
@@ -129,6 +136,12 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
 {
 	neighborSearchStrat_ = std::move(strat);
+
+	// on-demand neighbor lists keep a pointer to the active search strategy
+	if (auto* onDemand = dynamic_cast<NeighborLists_OnDemand_CPU01*>(neighborLists_.get()))
+	{
+		onDemand->SetNeighborSearchStrat(*neighborSearchStrat_);
+	}
 }
 
 void SimBackend_CPU01::PullFromUniversalSimState(

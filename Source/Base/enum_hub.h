@@ -97,18 +97,21 @@ namespace Base
 
 	enum class NeighborListStorage : uint8_t
 	{
-		IndividualVectors,							// 0
-		CSRVector_FinalConcat,						// 1
-		CSRVector_DoubleQuery,						// 2
-		IndividualVectors_AdaptCompress,			// 3
-		IndividualVectors_VByteDerivedCompress,		// 4
-		CSRVector_FinalConcat_ULEB128Compress,		// 5
-		CSRVector_FinalConcat_VByteDerivedCompress	// 6 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
+		OnDemand,									// 0
+		IndividualVectors,							// 1
+		CSRVector_FinalConcat,						// 2
+		CSRVector_DoubleQuery,						// 3
+		IndividualVectors_AdaptCompress,			// 4
+		IndividualVectors_VByteDerivedCompress,		// 5
+		CSRVector_FinalConcat_ULEB128Compress,		// 6
+		CSRVector_FinalConcat_VByteDerivedCompress	// 7 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
 	};
 	constexpr const char* ToCString(NeighborListStorage v) noexcept
 	{
 		switch (v)
 		{
+		case NeighborListStorage::OnDemand:
+			return "OnDemand";
 		case NeighborListStorage::IndividualVectors:
 			return "IndividualVectors";
 		case NeighborListStorage::CSRVector_FinalConcat:

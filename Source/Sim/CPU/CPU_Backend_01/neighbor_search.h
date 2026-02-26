@@ -50,6 +50,9 @@ namespace Sim
 
 		void Query_Fill(const SimParams& params) override;
 
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
+
 		void DataReOrder(const SimParams& params) override;
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
@@ -63,6 +66,8 @@ namespace Sim
 			uint32_t, N_perScratchInlineFF>> scratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_perScratchInlineFB>> scratchFB_;
+
+		float kernelRadiusSqu_ = 0.0f;
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -85,6 +90,9 @@ namespace Sim
 		void Query_Count(const SimParams& params) override;
 
 		void Query_Fill(const SimParams& params) override;
+
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -168,6 +176,9 @@ namespace Sim
 
 		void Query_Fill(const SimParams& params) override;
 
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
+
 		void DataReOrder(const SimParams& params) override;
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
@@ -226,6 +237,9 @@ namespace Sim
 		void Query_Count(const SimParams& params) override;
 
 		void Query_Fill(const SimParams& params) override;
+
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -297,6 +311,9 @@ namespace Sim
 
 		void Query_Fill(const SimParams& params) override;
 
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
+
 		void DataReOrder(const SimParams& params) override;
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
@@ -363,6 +380,9 @@ namespace Sim
 		void Query_Count(const SimParams& params) override;
 
 		void Query_Fill(const SimParams& params) override;
+
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
 
 		void Query_Fill_Basic(const SimParams& params);
 
@@ -444,6 +464,9 @@ namespace Sim
 
 		void Query_Fill(const SimParams& params) override;
 
+		NeighborSpan QueryParticleFF(uint32_t i) const override;
+		NeighborSpan QueryParticleFB(uint32_t i) const override;
+
 		void DataReOrder(const SimParams& params) override;
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
@@ -502,6 +525,7 @@ namespace Sim
 		const float* cachedBoundaryXPosPtr_ = nullptr;
 		const float* cachedBoundaryYPosPtr_ = nullptr;
 		const float* cachedBoundaryZPosPtr_ = nullptr;
+		float kernelRadiusSqu_ = 0.0f;
 
 		// helpers
 		void BuildBVH(const float* xPos, const float* yPos,

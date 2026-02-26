@@ -18,6 +18,59 @@
 using namespace Sim;
 
 // -------------------------------------------------------------------------------------------------
+// --- [ on-demand neighbor lists ] ----------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+void NeighborLists_OnDemand_CPU01::Resize(
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
+{
+	(void)params;
+
+	N_F_ = N_F;
+	N_B_ = N_B;
+}
+
+NeighborSpan NeighborLists_OnDemand_CPU01::FF(
+	const uint32_t i) const
+{
+	assert(neighborSearchStrat_ != nullptr);
+	assert(i < N_F_);
+	return neighborSearchStrat_->QueryParticleFF(i);
+}
+
+NeighborSpan NeighborLists_OnDemand_CPU01::FB(
+	const uint32_t i) const
+{
+	assert(neighborSearchStrat_ != nullptr);
+	assert(i < N_F_);
+	return neighborSearchStrat_->QueryParticleFB(i);
+}
+
+uint32_t NeighborLists_OnDemand_CPU01::CountFF(
+	const uint32_t i) const
+{
+	return FF(i).count;
+}
+
+uint32_t NeighborLists_OnDemand_CPU01::CountFB(
+	const uint32_t i) const
+{
+	return FB(i).count;
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_OnDemand_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	(void)params;
+
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
+
+	return { usageFF, usageFB };
+}
+
+// -------------------------------------------------------------------------------------------------
 // --- [ individual vectors neighbor lists ] -------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 

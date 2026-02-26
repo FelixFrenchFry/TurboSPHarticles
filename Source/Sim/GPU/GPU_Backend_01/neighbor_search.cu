@@ -205,6 +205,18 @@ void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
+NeighborSpan NS_BruteForce_GPU01::QueryParticleFF(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
+}
+
+NeighborSpan NS_BruteForce_GPU01::QueryParticleFB(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
+}
+
 void NS_BruteForce_GPU01::DataReOrder(const SimParams& params)
 {
 	// TODO: implement
@@ -509,6 +521,18 @@ void NS_CellLinkedList_Basic_GPU01::Query_Fill(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
+NeighborSpan NS_CellLinkedList_Basic_GPU01::QueryParticleFF(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
+}
+
+NeighborSpan NS_CellLinkedList_Basic_GPU01::QueryParticleFB(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
+}
+
 void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 {
 	(void)params;
@@ -763,6 +787,18 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 	// TODO: implement smart version of this, iterating over cells instead of particles
 
 	GPU::StreamSync(be_.stream_);
+}
+
+NeighborSpan NS_CellLinkedList_Compact_GPU01::QueryParticleFF(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
+}
+
+NeighborSpan NS_CellLinkedList_Compact_GPU01::QueryParticleFB(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
 }
 
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
@@ -1209,6 +1245,18 @@ void NS_BoundVolHier_Linear_LBVH_GPU01::Query_Fill(const SimParams& params)
 		be_.d_nbrOverflowFlag_.Data());
 
 	GPU::StreamSync(be_.stream_);
+}
+
+NeighborSpan NS_BoundVolHier_Linear_LBVH_GPU01::QueryParticleFF(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
+}
+
+NeighborSpan NS_BoundVolHier_Linear_LBVH_GPU01::QueryParticleFB(const uint32_t i) const
+{
+	(void)i;
+	return NeighborSpan{};
 }
 
 void NS_BoundVolHier_Linear_LBVH_GPU01::DataReOrder(const SimParams& params)

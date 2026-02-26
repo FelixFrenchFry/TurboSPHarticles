@@ -137,6 +137,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
+				if (s == "OnDemand")
+					{ out = Base::NeighborListStorage::OnDemand; return true; }
 				if (s == "IndividualVectors")
 					{ out = Base::NeighborListStorage::IndividualVectors; return true; }
 				if (s == "CSRVector_FinalConcat")

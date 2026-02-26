@@ -23,6 +23,7 @@ namespace Sim
 {
 	// forward declarations
 	class I_NeighborSearchStrat;
+	struct NeighborSpan;
 
 	// -----------------------------------------------------------------------------------------------
 	// --- [ simulation backend interface ] ----------------------------------------------------------
@@ -104,6 +105,13 @@ namespace Sim
 		virtual void Query_Count(const SimParams& params) = 0;
 
 		virtual void Query_Fill(const SimParams& params) = 0;
+
+		// queries the neighbors of one fluid particle directly from the strategy's
+		// current search data structures (without writing to neighbor-list storage)
+		// (returned span may point to per-thread scratch memory and is overwritten
+		// on the next call on the same thread)
+		virtual NeighborSpan QueryParticleFF(uint32_t i) const = 0;
+		virtual NeighborSpan QueryParticleFB(uint32_t i) const = 0;
 
 		virtual void DataReOrder(const SimParams& params) = 0;
 

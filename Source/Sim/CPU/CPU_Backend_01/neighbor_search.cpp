@@ -397,12 +397,12 @@ namespace
 
 void NS_BruteForce_CPU01::Init(const SimParams& params)
 {
-	// nothing to do
+	kernelRadiusSqu_ = params.kernelRadiusSqu;
 }
 
 void NS_BruteForce_CPU01::Construct(const SimParams& params)
 {
-	// nothing to do
+	kernelRadiusSqu_ = params.kernelRadiusSqu;
 }
 
 void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
@@ -558,6 +558,71 @@ void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+NeighborSpan NS_BruteForce_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	for (uint32_t j = 0; j < N_F; j++)
+	{
+		const float dx = xi - xPosF[j];
+		const float dy = yi - yPosF[j];
+		const float dz = zi - zPosF[j];
+		const float distSqu = dx * dx + dy * dy + dz * dz;
+
+		if (distSqu <= kernelRadiusSqu_) [[unlikely]]
+		{
+			scratchFF.push_back(j);
+		}
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_BruteForce_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const uint32_t N_B = be_.N_B_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	for (uint32_t j = 0; j < N_B; j++)
+	{
+		const float dx = xi - xPosB[j];
+		const float dy = yi - yPosB[j];
+		const float dz = zi - zPosB[j];
+		const float distSqu = dx * dx + dy * dy + dz * dz;
+
+		if (distSqu <= kernelRadiusSqu_) [[unlikely]]
+		{
+			scratchFB.push_back(j);
+		}
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
 }
 
 void NS_BruteForce_CPU01::DataReOrder(
@@ -992,6 +1057,131 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+NeighborSpan NS_SpatialHashing_Basic_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+	const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+	const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+
+				if (auto bucket = cellGridF_.find(key);
+					bucket != cellGridF_.end())
+				{
+					for (const uint32_t j : bucket->second)
+					{
+						const float dx = xi - xPosF[j];
+						const float dy = yi - yPosF[j];
+						const float dz = zi - zPosF[j];
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							scratchFF.push_back(j);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_SpatialHashing_Basic_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+	const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+	const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+
+				if (auto bucket = cellGridB_.find(key);
+					bucket != cellGridB_.end())
+				{
+					for (const uint32_t j : bucket->second)
+					{
+						const float dx = xi - xPosB[j];
+						const float dy = yi - yPosB[j];
+						const float dz = zi - zPosB[j];
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							scratchFB.push_back(j);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
 }
 
 void NS_SpatialHashing_Basic_CPU01::DataReOrder(
@@ -1439,6 +1629,131 @@ void NS_SpatialHashing_Compact_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+NeighborSpan NS_SpatialHashing_Compact_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+	const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+	const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+
+				if (auto bucket = cellGridF_.find(key);
+					bucket != cellGridF_.end())
+				{
+					for (const uint32_t j : bucket->second)
+					{
+						const float dx = xi - xPosF[j];
+						const float dy = yi - yPosF[j];
+						const float dz = zi - zPosF[j];
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							scratchFF.push_back(j);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_SpatialHashing_Compact_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt(xi * cellSizeInv_) - cellOrigX_;
+	const int cyi = FloorToInt(yi * cellSizeInv_) - cellOrigY_;
+	const int czi = FloorToInt(zi * cellSizeInv_) - cellOrigZ_;
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const uint64_t key = PackKey(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+
+				if (auto bucket = cellGridB_.find(key);
+					bucket != cellGridB_.end())
+				{
+					for (const uint32_t j : bucket->second)
+					{
+						const float dx = xi - xPosB[j];
+						const float dy = yi - yPosB[j];
+						const float dz = zi - zPosB[j];
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							scratchFB.push_back(j);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
 }
 
 void NS_SpatialHashing_Compact_CPU01::DataReOrder(
@@ -1928,6 +2243,125 @@ void NS_SpatialHashing_Explicit_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+NeighborSpan NS_SpatialHashing_Explicit_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+	const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+	const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const Key key = PackKey(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+				const Bucket& bucketF = cellGridF_[static_cast<size_t>(key)];
+
+				for (const uint32_t j : bucketF)
+				{
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						scratchFF.push_back(j);
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_SpatialHashing_Explicit_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+	const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+	const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const Key key = PackKey(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+				const Bucket& bucketB = cellGridB_[static_cast<size_t>(key)];
+
+				for (const uint32_t j : bucketB)
+				{
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						scratchFB.push_back(j);
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
 }
 
 void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
@@ -2488,6 +2922,133 @@ void NS_CellLinkedList_Basic_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+NeighborSpan NS_CellLinkedList_Basic_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+	const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+	const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+
+				const uint32_t sF = cellStartIdxF_[cid];
+				const uint32_t eF = cellEndIdxF_[cid];
+				if (sF == EMPTY || eF == EMPTY) { continue; }
+
+				for (uint32_t k = sF; k < eF; k++)
+				{
+					const uint32_t j = sortedParticleIdxF_[k];
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						scratchFF.push_back(j);
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_CellLinkedList_Basic_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cxi = FloorToInt((xi - xBoxOrig_) * cellSizeInv_);
+	const int cyi = FloorToInt((yi - yBoxOrig_) * cellSizeInv_);
+	const int czi = FloorToInt((zi - zBoxOrig_) * cellSizeInv_);
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		const int cz = czi + rz;
+		if (cz < 0 || cz >= static_cast<int>(N_DimZ_)) { continue; }
+
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			const int cy = cyi + ry;
+			if (cy < 0 || cy >= static_cast<int>(N_DimY_)) { continue; }
+
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const int cx = cxi + rx;
+				if (cx < 0 || cx >= static_cast<int>(N_DimX_)) { continue; }
+
+				const uint32_t cid = MapToCellId_Basic(static_cast<uint32_t>(cx),
+					static_cast<uint32_t>(cy),
+					static_cast<uint32_t>(cz));
+
+				const uint32_t sB = cellStartIdxB_[cid];
+				const uint32_t eB = cellEndIdxB_[cid];
+				if (sB == EMPTY || eB == EMPTY) { continue; }
+
+				for (uint32_t k = sB; k < eB; k++)
+				{
+					const uint32_t j = sortedParticleIdxB_[k];
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						scratchFB.push_back(j);
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
 }
 
 void NS_CellLinkedList_Basic_CPU01::DataReOrder(
@@ -3564,6 +4125,117 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 	);
 }
 
+NeighborSpan NS_CellLinkedList_Compact_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cx = FloorToInt(xi * cellSizeInv_);
+	const int cy = FloorToInt(yi * cellSizeInv_);
+	const int cz = FloorToInt(zi * cellSizeInv_);
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const uint64_t cid_nbr = MapToCellId_Morton(cx + rx, cy + ry, cz + rz);
+				auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
+
+				if (itF == uniqueCellIdF_.end() || *itF != cid_nbr) { continue; }
+
+				const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
+				const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
+				const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
+
+				for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+				{
+					const uint32_t j = sortedParticleIdxF_[l];
+					const float dx = xi - xPosF[j];
+					const float dy = yi - yPosF[j];
+					const float dz = zi - zPosF[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						scratchFF.push_back(j);
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_CellLinkedList_Compact_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const float kernelRadiusSqu = cellSize_ * cellSize_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	const int cx = FloorToInt(xi * cellSizeInv_);
+	const int cy = FloorToInt(yi * cellSizeInv_);
+	const int cz = FloorToInt(zi * cellSizeInv_);
+
+	for (int rz = -1; rz <= 1; rz++)
+	{
+		for (int ry = -1; ry <= 1; ry++)
+		{
+			for (int rx = -1; rx <= 1; rx++)
+			{
+				const uint64_t cid_nbr = MapToCellId_Morton(cx + rx, cy + ry, cz + rz);
+				auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
+
+				if (itB == uniqueCellIdB_.end() || *itB != cid_nbr) { continue; }
+
+				const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
+				const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
+				const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
+
+				for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+				{
+					const uint32_t j = sortedParticleIdxB_[l];
+					const float dx = xi - xPosB[j];
+					const float dy = yi - yPosB[j];
+					const float dz = zi - zPosB[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						scratchFB.push_back(j);
+					}
+				}
+			}
+		}
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
+}
+
 void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 {
 	(void)params;
@@ -3833,11 +4505,12 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Init(const SimParams& params)
 	cachedBoundaryXPosPtr_ = nullptr;
 	cachedBoundaryYPosPtr_ = nullptr;
 	cachedBoundaryZPosPtr_ = nullptr;
+	kernelRadiusSqu_ = params.kernelRadiusSqu;
 }
 
 void NS_BoundVolHier_Linear_LBVH_CPU01::Construct(const SimParams& params)
 {
-	(void)params;
+	kernelRadiusSqu_ = params.kernelRadiusSqu;
 
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
@@ -4253,7 +4926,7 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Count(const SimParams& params)
 				const float zi = zPosF[i];
 
 				// query fluid BVH
-				if (N_F > 0 && !nodesF_.empty())
+				if (N_F > 0)
 				{
 					QueryBVH_Count(xi, yi, zi, kernelRadiusSqu,
 						xPosF, yPosF, zPosF, sortedIdxF_,
@@ -4261,7 +4934,7 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Count(const SimParams& params)
 				}
 
 				// query boundary BVH
-				if (N_B > 0 && !nodesB_.empty())
+				if (N_B > 0)
 				{
 					QueryBVH_Count(xi, yi, zi, kernelRadiusSqu,
 						xPosB, yPosB, zPosB, sortedIdxB_,
@@ -4320,7 +4993,7 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 				const float zi = zPosF[i];
 
 				// query fluid BVH
-				if (N_F > 0 && !nodesF_.empty())
+				if (N_F > 0)
 				{
 					QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu,
 						xPosF, yPosF, zPosF, sortedIdxF_,
@@ -4328,7 +5001,7 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 				}
 
 				// query boundary BVH
-				if (N_B > 0 && !nodesB_.empty())
+				if (N_B > 0)
 				{
 					QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu,
 						xPosB, yPosB, zPosB, sortedIdxB_,
@@ -4344,6 +5017,59 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+}
+
+NeighborSpan NS_BoundVolHier_Linear_LBVH_CPU01::QueryParticleFF(
+	const uint32_t i) const
+{
+	auto& scratchFF = scratchFF_.local();
+	scratchFF.clear();
+
+	const uint32_t N_F = be_.N_F_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	if (N_F > 0)
+	{
+		QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu_,
+			xPosF, yPosF, zPosF, sortedIdxF_,
+			nodesF_, N_F, scratchFF);
+	}
+
+	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
+}
+
+NeighborSpan NS_BoundVolHier_Linear_LBVH_CPU01::QueryParticleFB(
+	const uint32_t i) const
+{
+	auto& scratchFB = scratchFB_.local();
+	scratchFB.clear();
+
+	const uint32_t N_B = be_.N_B_;
+	const float* RESTRICT xPosF = be_.xPosF_.data();
+	const float* RESTRICT yPosF = be_.yPosF_.data();
+	const float* RESTRICT zPosF = be_.zPosF_.data();
+	const float* RESTRICT xPosB = be_.xPosB_.data();
+	const float* RESTRICT yPosB = be_.yPosB_.data();
+	const float* RESTRICT zPosB = be_.zPosB_.data();
+
+	const float xi = xPosF[i];
+	const float yi = yPosF[i];
+	const float zi = zPosF[i];
+
+	if (N_B > 0)
+	{
+		QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu_,
+			xPosB, yPosB, zPosB, sortedIdxB_,
+			nodesB_, N_B, scratchFB);
+	}
+
+	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
 }
 
 void NS_BoundVolHier_Linear_LBVH_CPU01::QueryBVH_Count(

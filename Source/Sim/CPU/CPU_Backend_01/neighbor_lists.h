@@ -21,6 +21,53 @@ using uint32_tbb_alloc = tbb::scalable_allocator<uint32_t>;
 namespace Sim
 {
 	// -----------------------------------------------------------------------------------------------
+	// --- [ on-demand neighbor lists ] --------------------------------------------------------------
+	// -----------------------------------------------------------------------------------------------
+
+	class NeighborLists_OnDemand_CPU01 final
+		: public I_NeighborLists
+	{
+	public: // ---------------------------------------------------------------------------------------
+
+		explicit NeighborLists_OnDemand_CPU01(const I_NeighborSearchStrat& neighborSearchStrat)
+			: neighborSearchStrat_{ &neighborSearchStrat } {}
+
+		void SetNeighborSearchStrat(const I_NeighborSearchStrat& neighborSearchStrat)
+		{
+			neighborSearchStrat_ = &neighborSearchStrat;
+		}
+
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
+
+		void ClearAll() override {}
+
+		void Finalize_Count() override {}
+
+		void Finalize_Fill() override {}
+
+		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
+
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override {}
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override {}
+
+		NeighborSpan FF(uint32_t i) const override;
+		NeighborSpan FB(uint32_t i) const override;
+
+		uint32_t CountFF(uint32_t i) const override;
+		uint32_t CountFB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+			const SimParams& params) const override;
+
+	private: // --------------------------------------------------------------------------------------
+
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+		const I_NeighborSearchStrat* neighborSearchStrat_ = nullptr;
+	};
+
+	// -----------------------------------------------------------------------------------------------
 	// --- [ individual vectors neighbor lists ] -----------------------------------------------------
 	// -----------------------------------------------------------------------------------------------
 
