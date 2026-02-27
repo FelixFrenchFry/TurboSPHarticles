@@ -968,7 +968,6 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 
 	// fill in cell-related data
 	// (write only first N_NonEmptyCells entries and one sentinel entry)
-	// NOTE: keep previously allocated capacity to avoid per-step reallocations.
 	GPU01::Launch_FillUniqueCellIdAndCellStartIdx(
 		d_cellIdSorted, d_cellStartMarkerScan_.Data(),
 		N, N_NonEmptyCells, be_.stream_,

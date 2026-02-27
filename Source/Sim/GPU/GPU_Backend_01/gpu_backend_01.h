@@ -130,6 +130,8 @@ namespace Sim
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;
 
+		bool TerminationConditionSatisfied(const SimParams& params) const;
+
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
 		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
@@ -160,6 +162,7 @@ namespace Sim
 		double simTime_ = 0.0;
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
+		uint32_t N_solverIterCount_ = 0;
 
 		// --- [ backend-specific data structures for operating the simulation ]
 

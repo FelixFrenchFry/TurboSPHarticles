@@ -905,8 +905,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		// --- [ relaxed jacobi solver for pressure ] ---------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
-		int cnt = 0;
-		while (cnt < 3)
+
+		// rest solver-related variables
+		N_solverIterCount_ = 1;
+
+		do
 		{
 			// [ loop 1: pressure acceleration ] --------------------------------------------------------
 			GPU01::Launch_PressureAcceleration(
@@ -933,8 +936,8 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 			GPU::StreamSync(stream_);
 
-			cnt++;
-		}
+			N_solverIterCount_++;
+		} while (!TerminationConditionSatisfied(params));
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
 
 		// --- [ finalize pressure acceleration for integration ] ---------------------------------------
@@ -968,4 +971,53 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 	simStep_ += N_steps;
 	simTime_ += N_steps * params.timeStep;
+}
+
+bool SimBackend_GPU01::TerminationConditionSatisfied(const SimParams& params) const
+{
+	// check min/max iteration condition for potential early-out
+	if (N_solverIterCount_ < params.minSolverIters) { return false; }
+	if (N_solverIterCount_ >= params.maxSolverIters) { return true; }
+
+	bool satisfied = false;
+
+	// check actual termination condition
+	switch (params.solverTerminationCond)
+	{
+	case Base::SolverTerminationCond::FixedIters:
+		if (N_solverIterCount_ >= params.fixedIters)
+		{
+			satisfied = true;
+		}
+		break;
+
+	case Base::SolverTerminationCond::RelDensityError_Raw:
+	case Base::SolverTerminationCond::RelDensityError_Pos:
+	case Base::SolverTerminationCond::RelDensityError_Abs:
+	{
+		// TODO: implement
+		static bool warnedNotImplemented = false;
+		if (!warnedNotImplemented)
+		{
+			SPDLOG_WARN("GPU01 solver termination condition '{}' is currently not implemented. "
+				"Falling back to maxSolverIters.",
+				Base::ToCString(params.solverTerminationCond));
+			warnedNotImplemented = true;
+		}
+	}
+		break;
+
+	default:
+		// unknown enum value
+		static bool warnedUnknown = false;
+		if (!warnedUnknown)
+		{
+			SPDLOG_WARN("GPU01 solver termination condition '<unknown>' is currently not implemented. "
+				"Falling back to maxSolverIters.");
+			warnedUnknown = true;
+		}
+		break;
+	}
+
+	return satisfied;
 }
