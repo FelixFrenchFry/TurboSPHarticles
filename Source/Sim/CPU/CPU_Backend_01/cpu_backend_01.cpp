@@ -569,6 +569,18 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
 		Set(record, MemBucket::Neighbors_ListStorageB, usageB);
 	}
+
+	// --- [ misc ] ----------------------------------------------------------------------------------
+
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(workBuffer_));
+		Add(usage, MemUsageOf_Vector(sortKeyBuffer_));
+
+		// finalize
+		Set(record, MemBucket::Misc, usage);
+	}
 }
 
 void SimBackend_CPU01::FillStatisticsRecord(

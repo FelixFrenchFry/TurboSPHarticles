@@ -5221,6 +5221,8 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BoundVolHier_Linear_LBVH_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
+	(void)params;
+
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 
@@ -5231,6 +5233,12 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_BoundVolHier_Linear_LBVH_CPU01::GetMe
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(mortonB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(sortedIdxB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(nodesB_));
+
+	// shared construction scratches
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(sortedMortonScratch_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(leafBoxScratch_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(sortedLeafBoxScratch_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(parentOfScratch_));
 
 	return { usageF, usageB };
 }
