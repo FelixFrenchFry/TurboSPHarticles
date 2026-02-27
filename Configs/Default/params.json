@@ -1,8 +1,8 @@
 {
-  "backendVersion": "CPU01",
+  "backendVersion": "GPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 5,
-  "neighborListStorage": 0,
+  "neighborListStorage": 3,
 
   "maxSteps": -1,
   "timeStep": 0.001,
