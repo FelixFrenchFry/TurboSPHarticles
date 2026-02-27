@@ -39,17 +39,18 @@ using namespace Sim;
 
 namespace
 {
-	template <typename T>
-	void ApplyPermutation(const std::vector<uint32_t>& perm,
-		std::vector<T>& data)
+	void ApplyPermutation(
+		const std::vector<uint64_t>& sortedKeys,
+		std::vector<float>& data,
+		std::vector<float>& scratch,
+		bool preserveDataCapacity = false)
 	{
 		// (capped at uint32_t to correspond to max particle count)
-		const uint32_t N = static_cast<uint32_t>(perm.size());
+		const uint32_t N = static_cast<uint32_t>(sortedKeys.size());
 		if (N == 0) { return; }
 
 		assert(data.size() == N && "Permutation and data vector size mismatch");
-
-		std::vector<T> tmp(N);
+		scratch.resize(N);
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N),
@@ -57,13 +58,31 @@ namespace
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					tmp[i] = data[perm[i]];
+					const uint32_t srcIdx = static_cast<uint32_t>(sortedKeys[i]);
+					scratch[i] = data[srcIdx];
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
-		data.swap(tmp);
+		if (preserveDataCapacity)
+		{
+			tbb::parallel_for(
+				tbb::blocked_range<uint32_t>(0, N),
+				[&](const tbb::blocked_range<uint32_t>& r)
+				{
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						data[i] = scratch[i];
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+		}
+		else
+		{
+			data.swap(scratch);
+		}
 	}
 
 	inline int FloorToInt(float v) noexcept
@@ -277,18 +296,17 @@ namespace
 		);
 	}
 
-	void BuildMortonPermutation_30bitNormalized(
+	void BuildMortonOrderKeys_30bitNormalized(
 		const std::vector<float>& xPos,
 		const std::vector<float>& yPos,
 		const std::vector<float>& zPos,
-		std::vector<uint32_t>& outPerm)
+		std::vector<uint64_t>& outSortedKeys)
 	{
 		const uint32_t N = static_cast<uint32_t>(xPos.size());
 		assert(yPos.size() == N && zPos.size() == N && "Position vector size mismatch");
 
-		outPerm.resize(N);
-		std::iota(outPerm.begin(), outPerm.end(), 0u);
-		if (N <= 1) { return; }
+		outSortedKeys.resize(N);
+		if (N == 0) { return; }
 
 		const SceneAABB sceneAABB = ComputeSceneAABB(xPos, yPos, zPos);
 
@@ -297,7 +315,6 @@ namespace
 		const float invExtY = 1.0f / std::max(eps, sceneAABB.maxY - sceneAABB.minY);
 		const float invExtZ = 1.0f / std::max(eps, sceneAABB.maxZ - sceneAABB.minZ);
 
-		std::vector<uint32_t> morton(N);
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N),
 			[&](const tbb::blocked_range<uint32_t>& r)
@@ -307,74 +324,78 @@ namespace
 					const float nx = (xPos[i] - sceneAABB.minX) * invExtX;
 					const float ny = (yPos[i] - sceneAABB.minY) * invExtY;
 					const float nz = (zPos[i] - sceneAABB.minZ) * invExtZ;
-					morton[i] = Morton3D_30bit_Normalized(nx, ny, nz);
+
+					const uint64_t morton = static_cast<uint64_t>(
+						Morton3D_30bit_Normalized(nx, ny, nz));
+
+					// key layout [morton:30][padding:2][index:32]
+					// tie-break by index to keep deterministic ordering
+					outSortedKeys[i] = (morton << 32) | static_cast<uint64_t>(i);
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
-		tbb::parallel_sort(outPerm.begin(), outPerm.end(),
-			[&](uint32_t a, uint32_t b)
-			{
-				const uint32_t ma = morton[a];
-				const uint32_t mb = morton[b];
-				return (ma != mb) ? (ma < mb) : (a < b);
-			}
-		);
+		tbb::parallel_sort(outSortedKeys.begin(), outSortedKeys.end());
 	}
 
 	void ApplyPermutationFluidSoA(
-		const std::vector<uint32_t>& perm,
-		FluidParticleSoARefs fluid)
+		const std::vector<uint64_t>& sortedKeys,
+		FluidParticleSoARefs fluid,
+		std::vector<float>& scratch)
 	{
-		ApplyPermutation(perm, fluid.xPos);
-		ApplyPermutation(perm, fluid.yPos);
-		ApplyPermutation(perm, fluid.zPos);
+		ApplyPermutation(sortedKeys, fluid.xPos, scratch);
+		ApplyPermutation(sortedKeys, fluid.yPos, scratch);
+		ApplyPermutation(sortedKeys, fluid.zPos, scratch);
 
-		ApplyPermutation(perm, fluid.xVel);
-		ApplyPermutation(perm, fluid.yVel);
-		ApplyPermutation(perm, fluid.zVel);
+		ApplyPermutation(sortedKeys, fluid.xVel, scratch);
+		ApplyPermutation(sortedKeys, fluid.yVel, scratch);
+		ApplyPermutation(sortedKeys, fluid.zVel, scratch);
 
-		ApplyPermutation(perm, fluid.xVelPred);
-		ApplyPermutation(perm, fluid.yVelPred);
-		ApplyPermutation(perm, fluid.zVelPred);
+		ApplyPermutation(sortedKeys, fluid.xVelPred, scratch);
+		ApplyPermutation(sortedKeys, fluid.yVelPred, scratch);
+		ApplyPermutation(sortedKeys, fluid.zVelPred, scratch);
 
-		ApplyPermutation(perm, fluid.xAccPress);
-		ApplyPermutation(perm, fluid.yAccPress);
-		ApplyPermutation(perm, fluid.zAccPress);
+		ApplyPermutation(sortedKeys, fluid.xAccPress, scratch);
+		ApplyPermutation(sortedKeys, fluid.yAccPress, scratch);
+		ApplyPermutation(sortedKeys, fluid.zAccPress, scratch);
 
-		ApplyPermutation(perm, fluid.xAccNonPress);
-		ApplyPermutation(perm, fluid.yAccNonPress);
-		ApplyPermutation(perm, fluid.zAccNonPress);
+		ApplyPermutation(sortedKeys, fluid.xAccNonPress, scratch);
+		ApplyPermutation(sortedKeys, fluid.yAccNonPress, scratch);
+		ApplyPermutation(sortedKeys, fluid.zAccNonPress, scratch);
 
-		ApplyPermutation(perm, fluid.sourceTerm);
-		ApplyPermutation(perm, fluid.diagElem);
-		ApplyPermutation(perm, fluid.pressure);
-		ApplyPermutation(perm, fluid.density);
+		ApplyPermutation(sortedKeys, fluid.sourceTerm, scratch);
+		ApplyPermutation(sortedKeys, fluid.diagElem, scratch);
+		ApplyPermutation(sortedKeys, fluid.pressure, scratch);
+		ApplyPermutation(sortedKeys, fluid.density, scratch);
 	}
 
 	void ApplyPermutationBoundarySoA(
-		const std::vector<uint32_t>& perm,
-		BoundaryParticleSoARefs boundary)
+		const std::vector<uint64_t>& sortedKeys,
+		BoundaryParticleSoARefs boundary,
+		std::vector<float>& scratch)
 	{
-		ApplyPermutation(perm, boundary.xPos);
-		ApplyPermutation(perm, boundary.yPos);
-		ApplyPermutation(perm, boundary.zPos);
+		ApplyPermutation(sortedKeys, boundary.xPos, scratch, true);
+		ApplyPermutation(sortedKeys, boundary.yPos, scratch, true);
+		ApplyPermutation(sortedKeys, boundary.zPos, scratch, true);
 	}
 
 	void DataReOrderParticles_Morton_30bitNormalized(
 		FluidParticleSoARefs fluid,
 		BoundaryParticleSoARefs boundary,
-		uint32_t N_F, uint32_t N_B)
+		uint32_t N_F, uint32_t N_B,
+		std::vector<uint64_t>& sortKeyBuffer,
+		std::vector<float>& scratch)
 	{
 		if (N_F > 0)
 		{
 			assert(fluid.xPos.size() == N_F && fluid.yPos.size() == N_F
 				&& fluid.zPos.size() == N_F && "Fluid position vector size mismatch");
 
-			std::vector<uint32_t> permF{};
-			BuildMortonPermutation_30bitNormalized(fluid.xPos, fluid.yPos, fluid.zPos, permF);
-			ApplyPermutationFluidSoA(permF, fluid);
+			BuildMortonOrderKeys_30bitNormalized(
+				fluid.xPos, fluid.yPos, fluid.zPos, sortKeyBuffer);
+
+			ApplyPermutationFluidSoA(sortKeyBuffer, fluid, scratch);
 		}
 
 		if (N_B > 0)
@@ -382,10 +403,10 @@ namespace
 			assert(boundary.xPos.size() == N_B && boundary.yPos.size() == N_B
 				&& boundary.zPos.size() == N_B && "Boundary position vector size mismatch");
 
-			std::vector<uint32_t> permB{};
-			BuildMortonPermutation_30bitNormalized(boundary.xPos, boundary.yPos, boundary.zPos,
-				permB);
-			ApplyPermutationBoundarySoA(permB, boundary);
+			BuildMortonOrderKeys_30bitNormalized(
+				boundary.xPos, boundary.yPos, boundary.zPos, sortKeyBuffer);
+
+			ApplyPermutationBoundarySoA(sortKeyBuffer, boundary, scratch);
 		}
 	}
 
@@ -646,7 +667,9 @@ void NS_BruteForce_CPU01::DataReOrder(
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 
@@ -1205,7 +1228,9 @@ void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 
@@ -1777,7 +1802,9 @@ void NS_SpatialHashing_Compact_CPU01::DataReOrder(
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 
@@ -2385,7 +2412,9 @@ void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 
@@ -3072,7 +3101,9 @@ void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 
@@ -4256,7 +4287,9 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 
@@ -5179,7 +5212,9 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 		BoundaryParticleSoARefs{
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
-		N_F, N_B
+		N_F, N_B,
+		be_.sortKeyBuffer_,
+		be_.workBuffer_
 	);
 }
 

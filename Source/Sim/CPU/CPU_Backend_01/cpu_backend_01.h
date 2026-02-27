@@ -125,6 +125,7 @@ namespace Sim
 
 		// re-usable work (scratch) buffer for temp storage
 		mutable std::vector<float> workBuffer_;
+		mutable std::vector<uint64_t> sortKeyBuffer_;
 
 		// operation benchmarking groups
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
