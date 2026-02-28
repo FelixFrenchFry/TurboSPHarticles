@@ -28,12 +28,12 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 2.8,
-        "vLen": 2.8,
-        "wLen": 2.8
+        "uLen": 16.8,
+        "vLen": 16.8,
+        "wLen": 16.8
       },
-      "fluidHeight": 0.45,
-      "holeSize": 2.1
+      "fluidHeight": 2.7,
+      "holeSize": 12.6
     },
     "BigDroplet": {
       "type": "BigDroplet",
@@ -42,12 +42,12 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 2.5,
-        "vLen": 2.5,
-        "wLen": 2.5
+        "uLen": 15.0,
+        "vLen": 15.0,
+        "wLen": 15.0
       },
-      "poolDepth": 0.2,
-      "dropletRadius": 0.4,
+      "poolDepth": 1.2,
+      "dropletRadius": 2.4,
       "dropletGap": 0.0,
       "dropletOffset": [ 0.0, 0.0 ],
       "dropletInitVel": [ 0.0, -0.1, 0.0 ]
