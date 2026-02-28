@@ -28,12 +28,12 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 16.8,
-        "vLen": 16.8,
-        "wLen": 16.8
+        "uLen": 14.0,
+        "vLen": 14.0,
+        "wLen": 14.0
       },
-      "fluidHeight": 2.7,
-      "holeSize": 12.6
+      "fluidHeight": 2.25,
+      "holeSize": 10.5
     },
     "BigDroplet": {
       "type": "BigDroplet",

@@ -1,11 +1,11 @@
 #!/bin/bash -x
 #SBATCH --job-name=Test_O
-#SBATCH --partition=gpu_h100_il
+#SBATCH --partition=gpu_a100_il
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=16
-#SBATCH --time=12:00:00
+#SBATCH --time=8:00:00
 #SBATCH --mem=80000mb
 #SBATCH --output=job_%j.out
 #SBATCH --error=job_%j.err
