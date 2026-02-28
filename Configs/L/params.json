@@ -42,5 +42,5 @@
 
   "exportEnabled": true,
   "exportDir": "L",
-  "exportInterval": 20
+  "exportInterval": 40
 }
