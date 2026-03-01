@@ -189,7 +189,7 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_nbrOverflowFlag_; // TODO: use smaller data type?
 		uint64_t N_totalFF_ = 0;
 		uint64_t N_totalFB_ = 0;
-		const uint32_t extraAllocCapacityPct_ = 1;
+		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
 
 		// re-usable work (scratch) buffer for temp storage
 		DeviceBuffer<float> d_workBuffer_;
