@@ -172,10 +172,6 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	yAccPressF_ = std::move(F.yAccPress);
 	zAccPressF_ = std::move(F.zAccPress);
 
-	xAccNonPressF_ = std::move(F.xAccNonPress);
-	yAccNonPressF_ = std::move(F.yAccNonPress);
-	zAccNonPressF_ = std::move(F.zAccNonPress);
-
 	sourceTermF_ = std::move(F.sourceTerm);
 	diagElemF_ = std::move(F.diagElem);
 	pressureF_ = std::move(F.pressure);
@@ -223,10 +219,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				F.xAccPress[i] = xAccPressF_[i];
 				F.yAccPress[i] = yAccPressF_[i];
 				F.zAccPress[i] = zAccPressF_[i];
-
-				F.xAccNonPress[i] = xAccNonPressF_[i];
-				F.yAccNonPress[i] = yAccNonPressF_[i];
-				F.zAccNonPress[i] = zAccNonPressF_[i];
 
 				F.sourceTerm[i] = sourceTermF_[i];
 				F.diagElem[i] = diagElemF_[i];
@@ -514,10 +506,6 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(xAccPressF_));
 		Add(usage, MemUsageOf_Vector(yAccPressF_));
 		Add(usage, MemUsageOf_Vector(zAccPressF_));
-
-		Add(usage, MemUsageOf_Vector(xAccNonPressF_));
-		Add(usage, MemUsageOf_Vector(yAccNonPressF_));
-		Add(usage, MemUsageOf_Vector(zAccNonPressF_));
 
 		Add(usage, MemUsageOf_Vector(sourceTermF_));
 		Add(usage, MemUsageOf_Vector(diagElemF_));

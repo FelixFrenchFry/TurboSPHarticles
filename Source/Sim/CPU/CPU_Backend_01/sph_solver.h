@@ -75,10 +75,7 @@ namespace CPU01
 		// destinations
 		float* RESTRICT xVelPredF,
 		float* RESTRICT yVelPredF,
-		float* RESTRICT zVelPredF,
-		float* RESTRICT xAccNonPressF,
-		float* RESTRICT yAccNonPressF,
-		float* RESTRICT zAccNonPressF);
+		float* RESTRICT zVelPredF);
 
 	void SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* RESTRICT xPosF,

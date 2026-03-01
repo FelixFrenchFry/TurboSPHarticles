@@ -111,10 +111,6 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 		GPU::Copy_HostToDevice(d_yAccPressF_.Data(), F.yAccPress.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zAccPressF_.Data(), F.zAccPress.data(), N_F_, stream_);
 
-		GPU::Copy_HostToDevice(d_xAccNonPressF_.Data(), F.xAccNonPress.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_yAccNonPressF_.Data(), F.yAccNonPress.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_zAccNonPressF_.Data(), F.zAccNonPress.data(), N_F_, stream_);
-
 		GPU::Copy_HostToDevice(d_sourceTermF_.Data(), F.sourceTerm.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_pressureF_.Data(), F.pressure.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_densityF_.Data(), F.density.data(), N_F_, stream_);
@@ -165,10 +161,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(F.xAccPress.data(), d_xAccPressF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.yAccPress.data(), d_yAccPressF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zAccPress.data(), d_zAccPressF_.Data(), N_F_, stream_);
-
-		GPU::Copy_DeviceToHost(F.xAccNonPress.data(), d_xAccNonPressF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.yAccNonPress.data(), d_yAccNonPressF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.zAccNonPress.data(), d_zAccNonPressF_.Data(), N_F_, stream_);
 
 		GPU::Copy_DeviceToHost(F.sourceTerm.data(), d_sourceTermF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.diagElem.data(), d_diagElemF_.Data(), N_F_, stream_);
@@ -495,10 +487,6 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_xAccPressF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yAccPressF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zAccPressF_));
-
-		Add(usage, MemUsageOf_DeviceBuffer(d_xAccNonPressF_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_yAccNonPressF_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_zAccNonPressF_));
 
 		Add(usage, MemUsageOf_DeviceBuffer(d_sourceTermF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_diagElemF_));
@@ -880,8 +868,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_nbrOffsetsFF_.Data(), d_nbrOffsetsFB_.Data(),
 			d_nbrListFF_.Data(), d_nbrListFB_.Data(),
 			N_F_, N_B_, stream_,
-			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
-			d_xAccNonPressF_.Data(), d_yAccNonPressF_.Data(), d_zAccNonPressF_.Data());
+			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data());
 
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });

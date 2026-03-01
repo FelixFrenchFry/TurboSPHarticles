@@ -171,7 +171,6 @@ namespace Sim
 		DeviceBuffer<float> d_xVelF_, d_yVelF_, d_zVelF_;
 		DeviceBuffer<float> d_xVelPredF_, d_yVelPredF_, d_zVelPredF_;
 		DeviceBuffer<float> d_xAccPressF_, d_yAccPressF_, d_zAccPressF_;
-		DeviceBuffer<float> d_xAccNonPressF_, d_yAccNonPressF_, d_zAccNonPressF_;
 		DeviceBuffer<float> d_sourceTermF_;
 		DeviceBuffer<float> d_diagElemF_;
 		DeviceBuffer<float> d_pressureF_;
@@ -190,7 +189,7 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_nbrOverflowFlag_; // TODO: use smaller data type?
 		uint64_t N_totalFF_ = 0;
 		uint64_t N_totalFB_ = 0;
-		const uint32_t extraAllocCapacityPct_ = 5;
+		const uint32_t extraAllocCapacityPct_ = 1;
 
 		// re-usable work (scratch) buffer for temp storage
 		DeviceBuffer<float> d_workBuffer_;
@@ -277,7 +276,6 @@ namespace Sim
 				d_xVelF_.Size() != N_F_new || d_yVelF_.Size() != N_F_new || d_zVelF_.Size() != N_F_new ||
 				d_xVelPredF_.Size() != N_F_new || d_yVelPredF_.Size() != N_F_new || d_zVelPredF_.Size() != N_F_new ||
 				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
-				d_xAccNonPressF_.Size() != N_F_new || d_yAccNonPressF_.Size() != N_F_new || d_zAccNonPressF_.Size() != N_F_new ||
 				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
 				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new ||
 				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
@@ -301,7 +299,6 @@ namespace Sim
 			d_xVelF_.Resize(N_F_); d_yVelF_.Resize(N_F_); d_zVelF_.Resize(N_F_);
 			d_xVelPredF_.Resize(N_F_); d_yVelPredF_.Resize(N_F_); d_zVelPredF_.Resize(N_F_);
 			d_xAccPressF_.Resize(N_F_); d_yAccPressF_.Resize(N_F_); d_zAccPressF_.Resize(N_F_);
-			d_xAccNonPressF_.Resize(N_F_); d_yAccNonPressF_.Resize(N_F_); d_zAccNonPressF_.Resize(N_F_);
 			d_sourceTermF_.Resize(N_F_);
 			d_diagElemF_.Resize(N_F_);
 			d_pressureF_.Resize(N_F_);

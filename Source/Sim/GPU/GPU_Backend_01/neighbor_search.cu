@@ -567,10 +567,6 @@ void NS_CellLinkedList_Basic_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, be_.d_workBuffer_, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, be_.d_workBuffer_, be_.stream_);
@@ -834,10 +830,6 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, be_.d_workBuffer_, be_.stream_);
-
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccNonPressF_, be_.d_workBuffer_, be_.stream_);
 
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, be_.d_workBuffer_, be_.stream_);
@@ -1291,10 +1283,6 @@ void NS_BoundVolHier_Linear_LBVH_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, be_.d_workBuffer_, be_.stream_);
-
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccNonPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccNonPressF_, be_.d_workBuffer_, be_.stream_);
 
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, be_.d_workBuffer_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, be_.d_workBuffer_, be_.stream_);

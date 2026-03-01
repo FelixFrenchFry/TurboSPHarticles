@@ -104,7 +104,6 @@ namespace Sim
 		std::vector<float> xVelF_, yVelF_, zVelF_;
 		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_; // TODO: unify with velF?
 		std::vector<float> xAccPressF_, yAccPressF_, zAccPressF_;
-		std::vector<float> xAccNonPressF_, yAccNonPressF_, zAccNonPressF_; // TODO: unify with accPressF?
 		std::vector<float> sourceTermF_;
 		std::vector<float> diagElemF_;
 		std::vector<float> pressureF_;

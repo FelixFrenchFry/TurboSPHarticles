@@ -158,9 +158,6 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 							F.xAccPress[idx] = 0.0f;
 							F.yAccPress[idx] = 0.0f;
 							F.zAccPress[idx] = 0.0f;
-							F.xAccNonPress[idx] = 0.0f;
-							F.yAccNonPress[idx] = 0.0f;
-							F.zAccNonPress[idx] = 0.0f;
 
 							// default pressure, density, etc...
 							F.sourceTerm[idx] = 0.0f;
@@ -289,9 +286,6 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				F.xAccPress[outIdx] = 0.0f;
 				F.yAccPress[outIdx] = 0.0f;
 				F.zAccPress[outIdx] = 0.0f;
-				F.xAccNonPress[outIdx] = 0.0f;
-				F.yAccNonPress[outIdx] = 0.0f;
-				F.zAccNonPress[outIdx] = 0.0f;
 
 				// default pressure, density, etc...
 				F.sourceTerm[outIdx] = 0.0f;

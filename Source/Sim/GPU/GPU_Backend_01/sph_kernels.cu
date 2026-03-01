@@ -217,10 +217,7 @@ namespace GPU01
 		// destinations
 		float* __restrict__ xVelPredF,
 		float* __restrict__ yVelPredF,
-		float* __restrict__ zVelPredF,
-		float* __restrict__ xAccNonPressF,
-		float* __restrict__ yAccNonPressF,
-		float* __restrict__ zAccNonPressF)
+		float* __restrict__ zVelPredF)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_N_F) { return; }
@@ -321,14 +318,14 @@ namespace GPU01
 		tmp_zAccViscB *= 2.0f * (3 + 2) * c_viscosityB;
 
 		// TODO: add surface tension acc contribution
-		xAccNonPressF[i] = tmp_xAccViscF + tmp_xAccViscB + c_xGravity;
-		yAccNonPressF[i] = tmp_yAccViscF + tmp_yAccViscB + c_yGravity;
-		zAccNonPressF[i] = tmp_zAccViscF + tmp_zAccViscB + c_zGravity;
+		const float xAccNonPressF = tmp_xAccViscF + tmp_xAccViscB + c_xGravity;
+		const float yAccNonPressF = tmp_yAccViscF + tmp_yAccViscB + c_yGravity;
+		const float zAccNonPressF = tmp_zAccViscF + tmp_zAccViscB + c_zGravity;
 
 		// compute predicted velocity from non-pressure accelerations
-		xVelPredF[i] = fmaf(c_timeStep, xAccNonPressF[i], xVelF[i]);
-		yVelPredF[i] = fmaf(c_timeStep, yAccNonPressF[i], yVelF[i]);
-		zVelPredF[i] = fmaf(c_timeStep, zAccNonPressF[i], zVelF[i]);
+		xVelPredF[i] = fmaf(c_timeStep, xAccNonPressF, xVelF[i]);
+		yVelPredF[i] = fmaf(c_timeStep, yAccNonPressF, yVelF[i]);
+		zVelPredF[i] = fmaf(c_timeStep, zAccNonPressF, zVelF[i]);
 	}
 
 	__global__
@@ -806,8 +803,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		float* xVelPredF, float* yVelPredF, float* zVelPredF,
-		float* xAccNonPressF, float* yAccNonPressF, float* zAccNonPressF)
+		float* xVelPredF, float* yVelPredF, float* zVelPredF)
 	{
 		// TODO: initialize constants if needed
 
@@ -817,7 +813,7 @@ namespace GPU01
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, densityF,
 			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
-			xVelPredF, yVelPredF, zVelPredF, xAccNonPressF, yAccNonPressF, zAccNonPressF);
+			xVelPredF, yVelPredF, zVelPredF);
 
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
 	}

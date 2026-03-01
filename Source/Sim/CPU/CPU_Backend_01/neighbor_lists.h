@@ -202,7 +202,7 @@ namespace Sim
 		std::vector<uint32_t> nbrListFB_;
 
 		// misc
-		const uint32_t extraAllocCapacityPct_ = 5;
+		const uint32_t extraAllocCapacityPct_ = 1;
 	};
 
 	// -----------------------------------------------------------------------------------------------

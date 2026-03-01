@@ -157,7 +157,7 @@ namespace Export
 
 	static void CheckFluidConsistent(const Sync::FluidParticles& F)
 	{
-		const auto N = static_cast<size_t>(F.N_);
+		[[maybe_unused]] const auto N = static_cast<size_t>(F.N_);
 
 		assert(F.xPos.size() == N && F.yPos.size() == N && F.zPos.size() == N);
 
@@ -165,7 +165,6 @@ namespace Export
 		assert(F.xVelPred.size() == N && F.yVelPred.size() == N && F.zVelPred.size() == N);
 
 		assert(F.xAccPress.size() == N && F.yAccPress.size() == N && F.zAccPress.size() == N);
-		assert(F.xAccNonPress.size() == N && F.yAccNonPress.size() == N && F.zAccNonPress.size() == N);
 
 		assert(F.sourceTerm.size() == N);
 		assert(F.diagElem.size() == N);
@@ -176,7 +175,7 @@ namespace Export
 
 	static void CheckBoundaryConsistent(const Sync::BoundaryParticles& B)
 	{
-		const auto N = static_cast<size_t>(B.N_);
+		[[maybe_unused]] const auto N = static_cast<size_t>(B.N_);
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
 	}
@@ -241,10 +240,6 @@ namespace Export
 				WriteVec(ofs, F.xAccPress);
 				WriteVec(ofs, F.yAccPress);
 				WriteVec(ofs, F.zAccPress);
-
-				WriteVec(ofs, F.xAccNonPress);
-				WriteVec(ofs, F.yAccNonPress);
-				WriteVec(ofs, F.zAccNonPress);
 
 				WriteVec(ofs, F.sourceTerm);
 				WriteVec(ofs, F.diagElem);
@@ -366,10 +361,6 @@ namespace Export
 			ReadVec(ifs, F.xAccPress);
 			ReadVec(ifs, F.yAccPress);
 			ReadVec(ifs, F.zAccPress);
-
-			ReadVec(ifs, F.xAccNonPress);
-			ReadVec(ifs, F.yAccNonPress);
-			ReadVec(ifs, F.zAccNonPress);
 
 			ReadVec(ifs, F.sourceTerm);
 			ReadVec(ifs, F.diagElem);

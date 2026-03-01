@@ -71,9 +71,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT xAccPressF = xAccPressF_.data();
 	float* RESTRICT yAccPressF = yAccPressF_.data();
 	float* RESTRICT zAccPressF = zAccPressF_.data();
-	float* RESTRICT xAccNonPressF = xAccNonPressF_.data();
-	float* RESTRICT yAccNonPressF = yAccNonPressF_.data();
-	float* RESTRICT zAccNonPressF = zAccNonPressF_.data();
 	float* RESTRICT sourceTermF = sourceTermF_.data();
 	float* RESTRICT diagElemF = diagElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
@@ -135,8 +132,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		cubicSplineAlpha, params.restDensityF, params.restDensityB, massF, massB,
 		params.viscosityF, params.viscosityB,
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
-		xVelPredF, yVelPredF, zVelPredF,
-		xAccNonPressF, yAccNonPressF, zAccNonPressF);
+		xVelPredF, yVelPredF, zVelPredF);
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
@@ -467,10 +463,7 @@ void CPU01::NonPressureAcceleration(
 	// destinations
 	float* RESTRICT xVelPredF,
 	float* RESTRICT yVelPredF,
-	float* RESTRICT zVelPredF,
-	float* RESTRICT xAccNonPressF,
-	float* RESTRICT yAccNonPressF,
-	float* RESTRICT zAccNonPressF)
+	float* RESTRICT zVelPredF)
 {
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
@@ -577,14 +570,14 @@ void CPU01::NonPressureAcceleration(
 				tmp_zAccViscB *= 10.0f * viscosityB;
 
 				// TODO: add surface tension acc contribution
-				xAccNonPressF[i] = tmp_xAccViscF + tmp_xAccViscB + xGravity;
-				yAccNonPressF[i] = tmp_yAccViscF + tmp_yAccViscB + yGravity;
-				zAccNonPressF[i] = tmp_zAccViscF + tmp_zAccViscB + zGravity;
+				const float xAccNonPressF = tmp_xAccViscF + tmp_xAccViscB + xGravity;
+				const float yAccNonPressF = tmp_yAccViscF + tmp_yAccViscB + yGravity;
+				const float zAccNonPressF = tmp_zAccViscF + tmp_zAccViscB + zGravity;
 
 				// compute predicted velocity from non-pressure accelerations
-				xVelPredF[i] = std::fmaf(xAccNonPressF[i], timeStep, xVelF[i]);
-				yVelPredF[i] = std::fmaf(yAccNonPressF[i], timeStep, yVelF[i]);
-				zVelPredF[i] = std::fmaf(zAccNonPressF[i], timeStep, zVelF[i]);
+				xVelPredF[i] = std::fmaf(xAccNonPressF, timeStep, xVelF[i]);
+				yVelPredF[i] = std::fmaf(yAccNonPressF, timeStep, yVelF[i]);
+				zVelPredF[i] = std::fmaf(zAccNonPressF, timeStep, zVelF[i]);
 			}
 		},
 		tbb::auto_partitioner{}

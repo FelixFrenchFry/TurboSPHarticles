@@ -41,8 +41,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		float* xVelPredF, float* yVelPredF, float* zVelPredF,
-		float* xAccNonPressF, float* yAccNonPressF, float* zAccNonPressF);
+		float* xVelPredF, float* yVelPredF, float* zVelPredF);
 
 	void Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* xPosF, const float* yPosF, const float* zPosF,

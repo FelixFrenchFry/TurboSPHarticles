@@ -25,7 +25,6 @@ namespace Sync
 		std::span<float> xVel, yVel, zVel;
 		std::span<float> xVelPred, yVelPred, zVelPred;
 		std::span<float> xAccPress, yAccPress, zAccPress;
-		std::span<float> xAccNonPress, yAccNonPress, zAccNonPress;
 		std::span<float> sourceTerm;
 		std::span<float> diagElem;
 		std::span<float> pressure;
@@ -70,12 +69,6 @@ namespace Sync
 		std::vector<float> yAccPress;
 		std::vector<float> zAccPress;
 
-		// non-pressure accelerations
-		// (viscosity, surface tension, gravity, etc...)
-		std::vector<float> xAccNonPress;
-		std::vector<float> yAccNonPress;
-		std::vector<float> zAccNonPress;
-
 		// pressures, densities, and related solver data
 		std::vector<float> sourceTerm;
 		std::vector<float> diagElem;
@@ -100,10 +93,6 @@ namespace Sync
 			xAccPress.reserve(N);
 			yAccPress.reserve(N);
 			zAccPress.reserve(N);
-
-			xAccNonPress.reserve(N);
-			yAccNonPress.reserve(N);
-			zAccNonPress.reserve(N);
 
 			sourceTerm.reserve(N);
 			diagElem.reserve(N);
@@ -131,10 +120,6 @@ namespace Sync
 			xAccPress.resize(N_);
 			yAccPress.resize(N_);
 			zAccPress.resize(N_);
-
-			xAccNonPress.resize(N_);
-			yAccNonPress.resize(N_);
-			zAccNonPress.resize(N_);
 
 			sourceTerm.resize(N_);
 			diagElem.resize(N_);
@@ -164,10 +149,6 @@ namespace Sync
 				.xAccPress = std::span<float>(xAccPress),
 				.yAccPress = std::span<float>(yAccPress),
 				.zAccPress = std::span<float>(zAccPress),
-
-				.xAccNonPress = std::span<float>(xAccNonPress),
-				.yAccNonPress = std::span<float>(yAccNonPress),
-				.zAccNonPress = std::span<float>(zAccNonPress),
 
 				.sourceTerm = std::span<float>(sourceTerm),
 				.diagElem = std::span<float>(diagElem),

@@ -112,9 +112,6 @@ namespace
 		std::vector<float>& xAccPress;
 		std::vector<float>& yAccPress;
 		std::vector<float>& zAccPress;
-		std::vector<float>& xAccNonPress;
-		std::vector<float>& yAccNonPress;
-		std::vector<float>& zAccNonPress;
 		std::vector<float>& sourceTerm;
 		std::vector<float>& diagElem;
 		std::vector<float>& pressure;
@@ -359,10 +356,6 @@ namespace
 		ApplyPermutation(sortedKeys, fluid.xAccPress, scratch);
 		ApplyPermutation(sortedKeys, fluid.yAccPress, scratch);
 		ApplyPermutation(sortedKeys, fluid.zAccPress, scratch);
-
-		ApplyPermutation(sortedKeys, fluid.xAccNonPress, scratch);
-		ApplyPermutation(sortedKeys, fluid.yAccNonPress, scratch);
-		ApplyPermutation(sortedKeys, fluid.zAccNonPress, scratch);
 
 		ApplyPermutation(sortedKeys, fluid.sourceTerm, scratch);
 		ApplyPermutation(sortedKeys, fluid.diagElem, scratch);
@@ -661,7 +654,6 @@ void NS_BruteForce_CPU01::DataReOrder(
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
@@ -1222,7 +1214,6 @@ void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
@@ -1796,7 +1787,6 @@ void NS_SpatialHashing_Compact_CPU01::DataReOrder(
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
@@ -2406,7 +2396,6 @@ void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
@@ -3095,7 +3084,6 @@ void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
@@ -4281,7 +4269,6 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
@@ -5206,7 +5193,6 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
 			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.xAccNonPressF_, be_.yAccNonPressF_, be_.zAccNonPressF_,
 			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
 		},
 		BoundaryParticleSoARefs{
