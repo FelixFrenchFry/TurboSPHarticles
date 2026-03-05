@@ -127,6 +127,32 @@ namespace Sync
 			density.resize(N_);
 		}
 
+		// compacts all vectors so capacity matches size
+		// (useful after staged scenario construction with repeated growth)
+		void shrinkToFitAll()
+		{
+			xPos.shrink_to_fit();
+			yPos.shrink_to_fit();
+			zPos.shrink_to_fit();
+
+			xVel.shrink_to_fit();
+			yVel.shrink_to_fit();
+			zVel.shrink_to_fit();
+
+			xVelPred.shrink_to_fit();
+			yVelPred.shrink_to_fit();
+			zVelPred.shrink_to_fit();
+
+			xAccPress.shrink_to_fit();
+			yAccPress.shrink_to_fit();
+			zAccPress.shrink_to_fit();
+
+			sourceTerm.shrink_to_fit();
+			diagElem.shrink_to_fit();
+			pressure.shrink_to_fit();
+			density.shrink_to_fit();
+		}
+
 		// builds and returns a mutable view into the data
 		FluidView view()
 		{
@@ -196,6 +222,15 @@ namespace Sync
 			zPos.resize(N_);
 		}
 
+		// compacts all vectors so capacity matches size
+		// (useful after staged scenario construction with repeated growth)
+		void shrinkToFitAll()
+		{
+			xPos.shrink_to_fit();
+			yPos.shrink_to_fit();
+			zPos.shrink_to_fit();
+		}
+
 		// builds and returns a mutable view into the data
 		BoundaryView view()
 		{
@@ -238,6 +273,11 @@ namespace Sync
 		void ReserveBoundary(uint32_t N) { boundaryParticles.reserveAll(N); }
 		void ResizeFluid(uint32_t N) { fluidParticles.resizeAll(N); }
 		void ResizeBoundary(uint32_t N) { boundaryParticles.resizeAll(N); }
+		void ShrinkToFitAll()
+		{
+			fluidParticles.shrinkToFitAll();
+			boundaryParticles.shrinkToFitAll();
+		}
 
 		void ReserveFluidAdditional(uint32_t add)
 		{

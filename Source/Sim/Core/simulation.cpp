@@ -188,6 +188,9 @@ void SimulationMgr::ReBuildInitialSimState()
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);
 
+	// compact staged particle vectors once after scenario construction
+	universalSimState_.ShrinkToFitAll();
+
 	// transfer universal state into backend-specific data structures
 	simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
 }
@@ -272,12 +275,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
-		// create export snapshot and save to file
-		Sync::ExportSnapshot expSnap{};
-		simBackend_->PackExportSnapshot(expSnap, simParams_);
-
-		serializationMgr_.SaveExportSnapshot(expSnap, paramsInit.exportDir);
-		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, paramsInit.exportDir);
+		HandleExportSnapshot(paramsInit);
 	}
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
@@ -407,12 +405,7 @@ void SimulationMgr::RunSim_Blocking()
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
-		// create export snapshot and save to file
-		Sync::ExportSnapshot expSnap{};
-		simBackend_->PackExportSnapshot(expSnap, simParams_);
-
-		serializationMgr_.SaveExportSnapshot(expSnap, paramsInit.exportDir);
-		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, paramsInit.exportDir);
+		HandleExportSnapshot(paramsInit);
 	}
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
@@ -526,7 +519,7 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 {
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Snapshot_Export });
 	// fill export snapshot
-	Sync::ExportSnapshot expSnap{};
+	auto& expSnap = exportSnapScratch_;
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Snapshot_Export });
 

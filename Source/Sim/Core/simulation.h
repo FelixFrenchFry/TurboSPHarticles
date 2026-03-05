@@ -132,6 +132,7 @@ namespace Sim
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_;
+		mutable Sync::ExportSnapshot exportSnapScratch_;
 
 		// visualization management
 		std::chrono::steady_clock::time_point lastVisWall_{};

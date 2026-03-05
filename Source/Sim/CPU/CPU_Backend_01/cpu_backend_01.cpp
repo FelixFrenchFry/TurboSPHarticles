@@ -267,7 +267,8 @@ void SimBackend_CPU01::PackExportSnapshot(
 	}
 
 	// classify surface particles
-	std::vector<uint8_t> surfaceFlags(N_F_);
+	auto& surfaceFlags = expSurfaceFlagsScratch_;
+	surfaceFlags.resize(N_F_);
 
 	const uint32_t N_surface = tbb::parallel_reduce(
 		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
@@ -565,6 +566,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 
 		Add(usage, MemUsageOf_Vector(workBuffer_));
 		Add(usage, MemUsageOf_Vector(sortKeyBuffer_));
+		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
 
 		// finalize
 		Set(record, MemBucket::Misc, usage);
