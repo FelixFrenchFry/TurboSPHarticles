@@ -564,7 +564,8 @@ void SimBackend_CPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
-		Add(usage, MemUsageOf_Vector(workBuffer_));
+		Add(usage, MemUsageOf_Vector(workBufferF_));
+		Add(usage, MemUsageOf_Vector(workBufferB_));
 		Add(usage, MemUsageOf_Vector(sortKeyBuffer_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
 
@@ -679,13 +680,13 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 		if (NF > 0) // determine percentiles
 		{
-			// reuse workBuffer_ for neighbor counts
-			workBuffer_.resize(NF);
+			// reuse workBufferF_ for neighbor counts
+			workBufferF_.resize(NF);
 
 			// FF
 			for (uint32_t i = 0; i < NF; i++)
 			{
-				workBuffer_[i] = static_cast<float>(neighborLists_->CountFF(i));
+				workBufferF_[i] = static_cast<float>(neighborLists_->CountFF(i));
 			}
 
 			{
@@ -693,8 +694,8 @@ void SimBackend_CPU01::FillStatisticsRecord(
 				const size_t i95 = (95ull * (NF - 1)) / 100ull;
 				const size_t i99 = (99ull * (NF - 1)) / 100ull;
 
-				auto begin = workBuffer_.begin();
-				auto end = workBuffer_.end();
+				auto begin = workBufferF_.begin();
+				auto end = workBufferF_.end();
 				auto nth95 = begin + i95;
 				auto nth99 = begin + i99;
 
@@ -717,7 +718,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 			// FB
 			for (uint32_t i = 0; i < NF; ++i)
 			{
-				workBuffer_[i] = static_cast<float>(neighborLists_->CountFB(i));
+				workBufferF_[i] = static_cast<float>(neighborLists_->CountFB(i));
 			}
 
 			{
@@ -725,8 +726,8 @@ void SimBackend_CPU01::FillStatisticsRecord(
 				const size_t i95 = (95ull * (NF - 1)) / 100ull;
 				const size_t i99 = (99ull * (NF - 1)) / 100ull;
 
-				auto begin = workBuffer_.begin();
-				auto end = workBuffer_.end();
+				auto begin = workBufferF_.begin();
+				auto end = workBufferF_.end();
 				auto nth95 = begin + i95;
 				auto nth99 = begin + i99;
 

@@ -14,6 +14,7 @@
 
 // internal
 #include "Source/Eval/Bench/benchmarks.h"
+#include "Source/Eval/Serial/metrics_logger.h"
 #include "Source/Eval/Serial/serialization.h"
 #include "Source/Eval/Stats/statistics.h"
 #include "Source/Sim/Scene/builder.h"
@@ -74,6 +75,10 @@ namespace Sim
 		void HandleExportSnapshot(const SimParams& params) const;
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;
+		void BeginRunLogging(const SimParams& params);
+		void EndRunLogging();
+		void AppendInitialMemoryMetricsLog(const SimParams& params) const;
+		void AppendLatestMemoryMetricsLog() const;
 		void DisplayPerformanceStats(const SimParams& params) const;
 		void DisplayMemoryUsageStats(const SimParams& params, bool force = false) const;
 
@@ -132,6 +137,7 @@ namespace Sim
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_;
+		mutable Export::LoggingMgr loggingMgr_;
 		mutable Sync::ExportSnapshot exportSnapScratch_;
 
 		// visualization management

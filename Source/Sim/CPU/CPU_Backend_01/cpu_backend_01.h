@@ -122,8 +122,9 @@ namespace Sim
 		// neighbor storage
 		std::unique_ptr<I_NeighborLists> neighborLists_;
 
-		// re-usable work (scratch) buffer for temp storage
-		mutable std::vector<float> workBuffer_;
+		// re-usable work (scratch) buffers for temp storage
+		mutable std::vector<float> workBufferF_;
+		mutable std::vector<float> workBufferB_;
 		mutable std::vector<uint64_t> sortKeyBuffer_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;
 

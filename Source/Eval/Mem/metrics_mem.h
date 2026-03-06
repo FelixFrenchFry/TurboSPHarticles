@@ -15,6 +15,9 @@
 #include <utility>
 #include <vector>
 
+// internal
+#include "Source/Base/enum_hub.h"
+
 
 
 namespace Mem

@@ -251,6 +251,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
+	BeginRunLogging(paramsInit);
 
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
@@ -277,6 +278,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	{
 		HandleExportSnapshot(paramsInit);
 	}
+
+	AppendInitialMemoryMetricsLog(paramsInit);
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
@@ -360,6 +363,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
+		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
 
 		// pack and send benchmark and statistics snapshots
 		if (doSimStep) { HandleBenchMemStatSnapshots(); }
@@ -385,6 +389,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		simBackend_->PushToUniversalSimState(universalSimState_);
 	}
 
+	EndRunLogging();
+
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running");
 }
@@ -398,6 +404,7 @@ void SimulationMgr::RunSim_Blocking()
 
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
+	BeginRunLogging(paramsInit);
 
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
@@ -407,6 +414,8 @@ void SimulationMgr::RunSim_Blocking()
 	{
 		HandleExportSnapshot(paramsInit);
 	}
+
+	AppendInitialMemoryMetricsLog(paramsInit);
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
@@ -457,6 +466,7 @@ void SimulationMgr::RunSim_Blocking()
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
+		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
 
 		// pack and send benchmark and statistics snapshots
 		if (doSimStep) { HandleBenchMemStatSnapshots(); }
@@ -483,6 +493,7 @@ void SimulationMgr::RunSim_Blocking()
 	}
 
 	running_.store(false, std::memory_order_release);
+	EndRunLogging();
 
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running");
@@ -515,6 +526,16 @@ void SimulationMgr::SetConfigProfile(std::string profile)
 	scenariosFile_ = configProfile_ + "/scenarios.json";
 }
 
+void SimulationMgr::BeginRunLogging(const SimParams& params)
+{
+	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params);
+}
+
+void SimulationMgr::EndRunLogging()
+{
+	loggingMgr_.EndRun();
+}
+
 void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 {
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Snapshot_Export });
@@ -528,6 +549,25 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Serialization });
+}
+
+void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
+{
+	if (!loggingMgr_.IsActive()) { return; }
+
+	Mem::MemRecordStep record{};
+	record.simStep = simStep_;
+	record.simTime = simTime_;
+
+	simBackend_->FillMemoryRecord(record, params);
+	loggingMgr_.AppendMemoryRecord(record);
+}
+
+void SimulationMgr::AppendLatestMemoryMetricsLog() const
+{
+	if (!loggingMgr_.IsActive()) { return; }
+
+	loggingMgr_.AppendMemoryRecord(memoryTracker_.GetCurrentRecord());
 }
 
 void SimulationMgr::HandleBenchMemStatSnapshots() const

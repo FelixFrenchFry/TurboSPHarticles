@@ -368,9 +368,9 @@ namespace
 		BoundaryParticleSoARefs boundary,
 		std::vector<float>& scratch)
 	{
-		ApplyPermutation(sortedKeys, boundary.xPos, scratch, true);
-		ApplyPermutation(sortedKeys, boundary.yPos, scratch, true);
-		ApplyPermutation(sortedKeys, boundary.zPos, scratch, true);
+		ApplyPermutation(sortedKeys, boundary.xPos, scratch);
+		ApplyPermutation(sortedKeys, boundary.yPos, scratch);
+		ApplyPermutation(sortedKeys, boundary.zPos, scratch);
 	}
 
 	void DataReOrderParticles_Morton_30bitNormalized(
@@ -378,7 +378,8 @@ namespace
 		BoundaryParticleSoARefs boundary,
 		uint32_t N_F, uint32_t N_B,
 		std::vector<uint64_t>& sortKeyBuffer,
-		std::vector<float>& scratch)
+		std::vector<float>& scratchF,
+		std::vector<float>& scratchB)
 	{
 		if (N_F > 0)
 		{
@@ -388,7 +389,7 @@ namespace
 			BuildMortonOrderKeys_30bitNormalized(
 				fluid.xPos, fluid.yPos, fluid.zPos, sortKeyBuffer);
 
-			ApplyPermutationFluidSoA(sortKeyBuffer, fluid, scratch);
+			ApplyPermutationFluidSoA(sortKeyBuffer, fluid, scratchF);
 		}
 
 		if (N_B > 0)
@@ -399,7 +400,7 @@ namespace
 			BuildMortonOrderKeys_30bitNormalized(
 				boundary.xPos, boundary.yPos, boundary.zPos, sortKeyBuffer);
 
-			ApplyPermutationBoundarySoA(sortKeyBuffer, boundary, scratch);
+			ApplyPermutationBoundarySoA(sortKeyBuffer, boundary, scratchB);
 		}
 	}
 
@@ -661,7 +662,8 @@ void NS_BruteForce_CPU01::DataReOrder(
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
@@ -1221,7 +1223,8 @@ void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
@@ -1794,7 +1797,8 @@ void NS_SpatialHashing_Compact_CPU01::DataReOrder(
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
@@ -2403,7 +2407,8 @@ void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
@@ -3091,7 +3096,8 @@ void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
@@ -4276,7 +4282,8 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
@@ -5200,7 +5207,8 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 		},
 		N_F, N_B,
 		be_.sortKeyBuffer_,
-		be_.workBuffer_
+		be_.workBufferF_,
+		be_.workBufferB_
 	);
 }
 
