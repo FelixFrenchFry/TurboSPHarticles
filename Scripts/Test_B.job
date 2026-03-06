@@ -20,7 +20,7 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export TBB_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # build location
-cd /pfs/work9/workspace/scratch/fr_fl184-particleStorage/TurboSPHarticles
+cd /pfs/work9/workspace/scratch/fr_fl184-particleBench/TurboSPHarticles
 
 # run
 ./out/build/Linux-x64-RelWithDeb/bin/TSP_Headless -p B
