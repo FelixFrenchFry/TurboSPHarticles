@@ -564,18 +564,8 @@ void SimBackend_GPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		// (only includes VRAM buffers, not accounting for RAM)
 		Add(usage, MemUsageOf_DeviceBuffer(d_workBuffer_));
-		Add(usage, MemUsageOf_Vector(h_expNbrCountFF_));
-		Add(usage, MemUsageOf_Vector(h_expNbrCountFB_));
-		Add(usage, MemUsageOf_Vector(h_expNbrOffsetsFF_));
-		Add(usage, MemUsageOf_Vector(h_expNbrListFF_));
-		Add(usage, MemUsageOf_Vector(h_expXPosF_));
-		Add(usage, MemUsageOf_Vector(h_expYPosF_));
-		Add(usage, MemUsageOf_Vector(h_expZPosF_));
-		Add(usage, MemUsageOf_Vector(h_expXVelF_));
-		Add(usage, MemUsageOf_Vector(h_expYVelF_));
-		Add(usage, MemUsageOf_Vector(h_expZVelF_));
-		Add(usage, MemUsageOf_Vector(h_expSurfaceFlagsScratch_));
 
 		// finalize
 		Set(record, MemBucket::Misc, usage);

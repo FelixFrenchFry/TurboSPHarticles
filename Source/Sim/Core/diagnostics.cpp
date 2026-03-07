@@ -516,8 +516,10 @@ namespace Sim
 			break;
 		}
 
-        std::printf("%-30.30s | %18s | %12.2f %6s\n",
-            totalLabel, "---", tMax, "---");
+        char totalValueLabel[32];
+        std::snprintf(totalValueLabel, sizeof(totalValueLabel), "> %.2f", tMax);
+        std::printf("%-30.30s | %18s | %12s %6s\n",
+            totalLabel, "---", totalValueLabel, "---");
 
         std::fflush(stdout);
     }
