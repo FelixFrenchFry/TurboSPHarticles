@@ -4,8 +4,8 @@
   "neighborSearchMethod": 5,
   "neighborListStorage": 3,
 
-  "maxSteps": 10,
-  "timeStep": 0.0001,
+  "maxSteps": -1,
+  "timeStep": 0.0005,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensityF": 1000.0,
@@ -40,7 +40,7 @@
     "velocity": false
   },
 
-  "exportEnabled": false,
+  "exportEnabled": true,
   "exportDir": "H",
-  "exportInterval": 20
+  "exportInterval": 10
 }
