@@ -64,6 +64,9 @@ namespace Sim
 		uint32_t expctdNbrCountSoftMax_FB = 20;
 		uint32_t expctdNbrCountHardMax_FF = 64;
 		uint32_t expctdNbrCountHardMax_FB = 32;
+		// (used for the initial reserve of large packed CSR neighbor list buffers)
+		uint32_t expctdAvgNbrCountHardMax_FF = 35;
+		uint32_t expctdAvgNbrCountHardMax_FB = 1;
 
 		// density and mass
 		float restDensityF		= 1'000.0f;
@@ -168,12 +171,15 @@ namespace Sim
 			float kernelSuppRatio, Base::ParticleType type) const;
 		uint32_t HeuristicExpectedNeighborCount_HardMax(
 			float kernelSuppRatio, Base::ParticleType type) const;
+		uint32_t HeuristicExpectedAvgNeighborCount_HardMax(
+			float kernelSuppRatio, Base::ParticleType type) const;
 
 	private: // --------------------------------------------------------------------------------------
 
 		alignas(64) SimParams params_{}; // current active copy of visualization parameters
 		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
 
+		void UpdateNeighborCountHeuristics_();
 		inline void BeginWrite(); // mark beginning of write operation
 		inline void EndWrite(); // mark end of write operation
 	};

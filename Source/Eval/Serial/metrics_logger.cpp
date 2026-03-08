@@ -273,6 +273,8 @@ namespace Export
 			{ "exportEnabled", simParams.exportEnabled },
 			{ "exportDir", simParams.exportDir },
 			{ "exportInterval", simParams.exportInterval },
+			{ "expctdAvgNbrCountHardMax_FF", simParams.expctdAvgNbrCountHardMax_FF },
+			{ "expctdAvgNbrCountHardMax_FB", simParams.expctdAvgNbrCountHardMax_FB },
 			{ "maxThreadsSim", simParams.maxThreadsSim }
 		};
 

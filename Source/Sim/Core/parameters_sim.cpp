@@ -282,14 +282,9 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	// --- [ neighbor count heuristics ] -------------------------------------------------------------
 
-	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
-		params_.kernelSuppRatio, Base::ParticleType::Fluid);
-	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
-		params_.kernelSuppRatio, Base::ParticleType::Boundary);
-	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
-		params_.kernelSuppRatio, Base::ParticleType::Fluid);
-	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
-		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+	BeginWrite();
+	UpdateNeighborCountHeuristics_();
+	EndWrite();
 
 	// --- [ rest density ] --------------------------------------------------------------------------
 
@@ -890,14 +885,7 @@ void SimParamsMgr::Set_KernelSuppRatio(
 	params_.kernelSuppRatio = kernelSuppRatio;
 	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
 	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
-	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
-		kernelSuppRatio, Base::ParticleType::Fluid);
-	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
-		kernelSuppRatio, Base::ParticleType::Boundary);
-	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
-		kernelSuppRatio, Base::ParticleType::Fluid);
-	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
-		kernelSuppRatio, Base::ParticleType::Boundary);
+	UpdateNeighborCountHeuristics_();
 	EndWrite();
 }
 
@@ -926,14 +914,7 @@ void SimParamsMgr::Set_KernelRadius(
 	params_.kernelRadius = kernelRadius;
 	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
 	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
-	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
-		params_.kernelSuppRatio, Base::ParticleType::Fluid);
-	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
-		params_.kernelSuppRatio, Base::ParticleType::Boundary);
-	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
-		params_.kernelSuppRatio, Base::ParticleType::Fluid);
-	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
-		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+	UpdateNeighborCountHeuristics_();
 	EndWrite();
 }
 
@@ -1285,6 +1266,22 @@ void SimParamsMgr::Set_BoundaryLayers(
 	EndWrite();
 }
 
+void SimParamsMgr::UpdateNeighborCountHeuristics_()
+{
+	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountSoftMax_FB = HeuristicExpectedNeighborCount_SoftMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+	params_.expctdNbrCountHardMax_FF = HeuristicExpectedNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdNbrCountHardMax_FB = HeuristicExpectedNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+	params_.expctdAvgNbrCountHardMax_FF = HeuristicExpectedAvgNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Fluid);
+	params_.expctdAvgNbrCountHardMax_FB = HeuristicExpectedAvgNeighborCount_HardMax(
+		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+}
+
 bool SimParamsMgr::AssertParamDerivationCorrectness() const
 {
 	SimParams par = SnapshotParams().first;
@@ -1408,6 +1405,52 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 		float expect = par.kernelRadius * par.kernelRadius;
 		return Base::ApproxEqu(par.kernelRadiusSqu, expect);
 	});
+	ok &= Check("expctdNbrCountSoftMax_FF heuristic mismatch", true, [&]()
+	{
+		return par.expctdNbrCountSoftMax_FF == HeuristicExpectedNeighborCount_SoftMax(
+			par.kernelSuppRatio, Base::ParticleType::Fluid);
+	});
+	ok &= Check("expctdNbrCountSoftMax_FB heuristic mismatch", true, [&]()
+	{
+		return par.expctdNbrCountSoftMax_FB == HeuristicExpectedNeighborCount_SoftMax(
+			par.kernelSuppRatio, Base::ParticleType::Boundary);
+	});
+	ok &= Check("expctdNbrCountHardMax_FF heuristic mismatch", true, [&]()
+	{
+		return par.expctdNbrCountHardMax_FF == HeuristicExpectedNeighborCount_HardMax(
+			par.kernelSuppRatio, Base::ParticleType::Fluid);
+	});
+	ok &= Check("expctdNbrCountHardMax_FB heuristic mismatch", true, [&]()
+	{
+		return par.expctdNbrCountHardMax_FB == HeuristicExpectedNeighborCount_HardMax(
+			par.kernelSuppRatio, Base::ParticleType::Boundary);
+	});
+	ok &= Check("expctdAvgNbrCountHardMax_FF heuristic mismatch", true, [&]()
+	{
+		return par.expctdAvgNbrCountHardMax_FF == HeuristicExpectedAvgNeighborCount_HardMax(
+			par.kernelSuppRatio, Base::ParticleType::Fluid);
+	});
+	ok &= Check("expctdAvgNbrCountHardMax_FB heuristic mismatch", true, [&]()
+	{
+		return par.expctdAvgNbrCountHardMax_FB == HeuristicExpectedAvgNeighborCount_HardMax(
+			par.kernelSuppRatio, Base::ParticleType::Boundary);
+	});
+	ok &= Check("expctdNbrCountSoftMax_FF > expctdNbrCountHardMax_FF", true, [&]()
+	{
+		return par.expctdNbrCountSoftMax_FF <= par.expctdNbrCountHardMax_FF;
+	});
+	ok &= Check("expctdNbrCountSoftMax_FB > expctdNbrCountHardMax_FB", true, [&]()
+	{
+		return par.expctdNbrCountSoftMax_FB <= par.expctdNbrCountHardMax_FB;
+	});
+	ok &= Check("expctdAvgNbrCountHardMax_FF > expctdNbrCountHardMax_FF", true, [&]()
+	{
+		return par.expctdAvgNbrCountHardMax_FF <= par.expctdNbrCountHardMax_FF;
+	});
+	ok &= Check("expctdAvgNbrCountHardMax_FB > expctdNbrCountHardMax_FB", true, [&]()
+	{
+		return par.expctdAvgNbrCountHardMax_FB <= par.expctdNbrCountHardMax_FB;
+	});
 
 	return ok;
 }
@@ -1429,6 +1472,23 @@ uint32_t SimParamsMgr::HeuristicExpectedNeighborCount_HardMax(
 	float volume = (4.0f / 3.0f) * PI * std::pow(kernelSuppRatio, 3.0f);
 	float occupancy = type == Base::ParticleType::Fluid ? 1.0f : 0.75f;
 	float margin = 0.8f;
+
+	float heuristic = std::ceil(volume * occupancy * (1.0f + margin));
+	return static_cast<uint32_t>(heuristic);
+}
+
+uint32_t SimParamsMgr::HeuristicExpectedAvgNeighborCount_HardMax(
+	float kernelSuppRatio, Base::ParticleType type) const
+{
+	constexpr float refKernelSuppRatio = 2.0f;
+	const SimParams refParams{};
+
+	float volume = (4.0f / 3.0f) * PI * std::pow(kernelSuppRatio, 3.0f);
+	float refVolume = (4.0f / 3.0f) * PI * std::pow(refKernelSuppRatio, 3.0f);
+	float occupancy = type == Base::ParticleType::Fluid
+		? static_cast<float>(refParams.expctdAvgNbrCountHardMax_FF) / refVolume
+		: static_cast<float>(refParams.expctdAvgNbrCountHardMax_FB) / refVolume;
+	float margin = 0.0f;
 
 	float heuristic = std::ceil(volume * occupancy * (1.0f + margin));
 	return static_cast<uint32_t>(heuristic);

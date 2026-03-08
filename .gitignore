@@ -104,3 +104,4 @@ Folder.DotSettings.user
 *.out
 *.app
 Export/
+Logs/

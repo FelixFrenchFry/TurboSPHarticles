@@ -70,6 +70,8 @@ namespace Sim
         printf("%-24s = %u\n", "expctdNbrCountSoftMax_FB", params.expctdNbrCountSoftMax_FB);
         printf("%-24s = %u\n", "expctdNbrCountHardMax_FF", params.expctdNbrCountHardMax_FF);
         printf("%-24s = %u\n", "expctdNbrCountHardMax_FB", params.expctdNbrCountHardMax_FB);
+        printf("%-24s = %u\n", "expctdAvgNbrCountHardMax_FF", params.expctdAvgNbrCountHardMax_FF);
+        printf("%-24s = %u\n", "expctdAvgNbrCountHardMax_FB", params.expctdAvgNbrCountHardMax_FB);
         printf("%-24s = %.6f\n", "restDensityF", params.restDensityF);
         printf("%-24s = %.6f\n", "restDensityB", params.restDensityB);
         printf("%-24s = %.6f\n", "massF", params.massF);

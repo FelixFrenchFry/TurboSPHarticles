@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstring>
 #include <cassert>
+#include <limits>
+#include <stdexcept>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_scan.h>
 #include <tbb/partitioner.h>
@@ -16,6 +18,51 @@
 
 
 using namespace Sim;
+
+namespace
+{
+	size_t ToSizeT_Checked(const uint64_t value)
+	{
+		if (value > static_cast<uint64_t>(std::numeric_limits<size_t>::max()))
+		{
+			throw std::runtime_error(
+				"Neighbor list size exceeds addressable range on this platform.");
+		}
+
+		return static_cast<size_t>(value);
+	}
+
+	uint64_t ExpectedPackedCSRCapacity(
+		const uint32_t N_F,
+		const uint32_t expctdAvgNbrCountHardMax)
+	{
+		return static_cast<uint64_t>(N_F)
+			* static_cast<uint64_t>(expctdAvgNbrCountHardMax);
+	}
+
+	void EnsurePackedCSRStorageCapacity(
+		std::vector<uint32_t>& nbrList,
+		const uint64_t count)
+	{
+		if (nbrList.capacity() < count)
+		{
+			nbrList.reserve(ToSizeT_Checked(count));
+		}
+	}
+
+	void EnsurePackedCSRStorageCapacity(
+		std::vector<uint32_t>& nbrList,
+		const uint64_t count,
+		const uint32_t extraAllocCapacityPct)
+	{
+		if (nbrList.capacity() < count)
+		{
+			const uint64_t capTarget = count
+				+ Base::ExtraPercent(count, extraAllocCapacityPct);
+			nbrList.reserve(ToSizeT_Checked(capTarget));
+		}
+	}
+}
 
 // -------------------------------------------------------------------------------------------------
 // --- [ on-demand neighbor lists ] ----------------------------------------------------------------
@@ -188,6 +235,13 @@ void NeighborLists_CSRVector_FinalConcat_CPU01::Resize(
 	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1, 0);
 	nbrListFF_.clear();
 	nbrListFB_.clear();
+
+	// reserve the packed CSR storage up front to avoid a late full re-allocation
+	// of the large final neighbor buffers during long or near-capacity runs
+	EnsurePackedCSRStorageCapacity(nbrListFF_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF));
+	EnsurePackedCSRStorageCapacity(nbrListFB_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB));
 }
 
 void NeighborLists_CSRVector_FinalConcat_CPU01::ClearAll()
@@ -247,13 +301,8 @@ void NeighborLists_CSRVector_FinalConcat_CPU01::Finalize_Fill()
 
 	// finalize total fluid neighbor count
 	nbrOffsetsFF_[N_F_] = N_totalFF;
-	if (nbrListFF_.capacity() < N_totalFF)
-	{
-		const uint64_t capTarget = N_totalFF
-			+ Base::ExtraPercent(N_totalFF, extraAllocCapacityPct_);
-		nbrListFF_.reserve(capTarget);
-	}
-	nbrListFF_.resize(N_totalFF);
+	EnsurePackedCSRStorageCapacity(nbrListFF_, N_totalFF, extraAllocCapacityPct_);
+	nbrListFF_.resize(ToSizeT_Checked(N_totalFF));
 
 	// concatenate individual lists into final CSR neighbor storage
 	tbb::parallel_for(
@@ -300,13 +349,8 @@ void NeighborLists_CSRVector_FinalConcat_CPU01::Finalize_Fill()
 
 	// finalize total boundary neighbor count
 	nbrOffsetsFB_[N_F_] = N_totalFB;
-	if (nbrListFB_.capacity() < N_totalFB)
-	{
-		const uint64_t capTarget = N_totalFB
-			+ Base::ExtraPercent(N_totalFB, extraAllocCapacityPct_);
-		nbrListFB_.reserve(capTarget);
-	}
-	nbrListFB_.resize(N_totalFB);
+	EnsurePackedCSRStorageCapacity(nbrListFB_, N_totalFB, extraAllocCapacityPct_);
+	nbrListFB_.resize(ToSizeT_Checked(N_totalFB));
 
 	// concatenate individual lists into final CSR neighbor storage
 	tbb::parallel_for(
@@ -402,6 +446,13 @@ void NeighborLists_CSRVector_DoubleQuery_CPU01::Resize(
 	nbrOffsetsFB_.assign(static_cast<uint64_t>(N_F_) + 1, 0);
 	nbrListFF_.clear();
 	nbrListFB_.clear();
+
+	// reserve packed CSR storage up front to avoid a late full re-allocation
+	// of large final neighbor buffers during long or near-capacity runs
+	EnsurePackedCSRStorageCapacity(nbrListFF_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF));
+	EnsurePackedCSRStorageCapacity(nbrListFB_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB));
 }
 
 void NeighborLists_CSRVector_DoubleQuery_CPU01::ClearAll()
@@ -446,13 +497,8 @@ void NeighborLists_CSRVector_DoubleQuery_CPU01::Finalize_Count()
 
 	// finalize total fluid neighbor count
 	nbrOffsetsFF_[N_F_] = N_totalFF;
-	if (nbrListFF_.capacity() < N_totalFF)
-	{
-		const uint64_t capTarget = N_totalFF
-			+ Base::ExtraPercent(N_totalFF, extraAllocCapacityPct_);
-		nbrListFF_.reserve(capTarget);
-	}
-	nbrListFF_.resize(N_totalFF);
+	EnsurePackedCSRStorageCapacity(nbrListFF_, N_totalFF, extraAllocCapacityPct_);
+	nbrListFF_.resize(ToSizeT_Checked(N_totalFF));
 
 	// turn temporary counts into actual offsets for FB
 	const uint64_t N_totalFB = tbb::parallel_scan(
@@ -476,13 +522,8 @@ void NeighborLists_CSRVector_DoubleQuery_CPU01::Finalize_Count()
 
 	// finalize total boundary neighbor count
 	nbrOffsetsFB_[N_F_] = N_totalFB;
-	if (nbrListFB_.capacity() < N_totalFB)
-	{
-		const uint64_t capTarget = N_totalFB
-			+ Base::ExtraPercent(N_totalFB, extraAllocCapacityPct_);
-		nbrListFB_.reserve(capTarget);
-	}
-	nbrListFB_.resize(N_totalFB);
+	EnsurePackedCSRStorageCapacity(nbrListFB_, N_totalFB, extraAllocCapacityPct_);
+	nbrListFB_.resize(ToSizeT_Checked(N_totalFB));
 }
 
 void NeighborLists_CSRVector_DoubleQuery_CPU01::SetNbrCountFF(
