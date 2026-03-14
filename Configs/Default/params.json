@@ -4,7 +4,7 @@
   "neighborSearchMethod": 5,
   "neighborListStorage": 3,
 
-  "maxSteps": -1,
+  "maxSteps": 1000,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -41,6 +41,6 @@
   },
 
   "exportEnabled": false,
-  "exportDir": "G",
-  "exportInterval": 20
+  "exportDir": "I",
+  "exportInterval": 10
 }
