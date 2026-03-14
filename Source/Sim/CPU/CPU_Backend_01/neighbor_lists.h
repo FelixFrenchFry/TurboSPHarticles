@@ -333,4 +333,83 @@ namespace Sim
 			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
 	};
 
+	// -----------------------------------------------------------------------------------------------
+	// --- [ CSR vector neighbor lists, double query, VByteDerived compression ] ---------------------
+	// -----------------------------------------------------------------------------------------------
+
+	class NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01 final
+		: public I_NeighborLists
+	{
+	public: // ---------------------------------------------------------------------------------------
+
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
+
+		void ClearAll() override;
+
+		void Finalize_Count() override;
+
+		void Finalize_Fill() override;
+
+		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
+
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+
+		NeighborSpan FF(uint32_t i) const override;
+		NeighborSpan FB(uint32_t i) const override;
+
+		uint32_t CountFF(uint32_t i) const override;
+		uint32_t CountFB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+			const SimParams& params) const override;
+
+	private: // --------------------------------------------------------------------------------------
+
+		enum class FillPhase : uint8_t
+		{
+			Measure,
+			Encode,
+			Ready
+		};
+
+		// metadata
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+
+		// compressed CSR neighbor storage
+		// (offset vectors act as byte-count vectors during the first fill-query)
+		std::vector<uint32_t> nbrCountFF_;
+		std::vector<uint32_t> nbrCountFB_;
+		std::vector<uint64_t> nbrOffsetsFF_;
+		std::vector<uint64_t> nbrOffsetsFB_;
+		std::vector<uint8_t> nbrListCompressedFF_;
+		std::vector<uint8_t> nbrListCompressedFB_;
+
+		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFB_;
+
+		// thread-local sorting scratch for measuring and encoding to only have positive deltas
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
+
+		// misc
+		FillPhase fillPhase_ = FillPhase::Measure;
+		const uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+
+		// helpers
+		static uint32_t ControlBytesFor(uint32_t count) noexcept;
+		static uint8_t DeltaMask(uint32_t delta) noexcept;
+		static uint64_t MeasureEncodedBytes(const uint32_t* js,
+			uint32_t count, std::vector<uint32_t>& scratch);
+		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
+		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
+		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
+			uint32_t count, std::vector<uint32_t>& out);
+		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
+			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
+	};
+
 } // namespace Sim

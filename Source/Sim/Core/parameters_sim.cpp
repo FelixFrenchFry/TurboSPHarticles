@@ -149,10 +149,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborListStorage::IndividualVectors_AdaptCompress; return true; }
 				if (s == "IndividualVectors_VByteDerivedCompress")
 					{ out = Base::NeighborListStorage::IndividualVectors_VByteDerivedCompress; return true; }
-				if (s == "CSRVector_FinalConcat_ULEB128Compress")
-					{ out = Base::NeighborListStorage::CSRVector_FinalConcat_ULEB128Compress; return true; }
-				if (s == "CSRVector_FinalConcat_VByteDerivedCompress")
-					{ out = Base::NeighborListStorage::CSRVector_FinalConcat_VByteDerivedCompress; return true; }
+				if (s == "CSRVector_DoubleQuery_VByteDerivedCompress")
+					{ out = Base::NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -162,7 +160,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			return false;
 		};
-
 	// TODO: implement actual setters for backend version and scenario type?
 	{
 		BeginWrite();
@@ -720,6 +717,26 @@ void SimParamsMgr::Set_RunFillQuery(
 	// apply changes
 	BeginWrite();
 	params_.runFillQuery = runFillQuery;
+	EndWrite();
+}
+
+void SimParamsMgr::Set_RunSecondFillQuery(
+	bool runSecondFillQuery, bool verbose)
+{
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(runSecondFillQuery, params_.runSecondFillQuery, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'runSecondFillQuery' from {} to {}",
+			params_.runSecondFillQuery, runSecondFillQuery);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.runSecondFillQuery = runSecondFillQuery;
 	EndWrite();
 }
 

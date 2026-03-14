@@ -105,6 +105,17 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	neighborLists_->Finalize_Fill();
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
+	if (params.runFillQuery && params.runSecondFillQuery)
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Fill(params);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+		neighborLists_->Finalize_Fill();
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	}
+
 	// --- [ density computations ] ------------------------------------------------------------------
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });

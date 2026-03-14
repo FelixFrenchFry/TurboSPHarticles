@@ -89,6 +89,7 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborLists_ = std::make_unique<NeighborLists_OnDemand_CPU01>(*neighborSearchStrat_);
 		simParamsMgr_.Set_RunCountQuery(false);
 		simParamsMgr_.Set_RunFillQuery(false);
+		simParamsMgr_.Set_RunSecondFillQuery(false);
 	}
 	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::IndividualVectors)
@@ -96,6 +97,7 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_CPU01>();
 		simParamsMgr_.Set_RunCountQuery(false);
 		simParamsMgr_.Set_RunFillQuery(true);
+		simParamsMgr_.Set_RunSecondFillQuery(false);
 	}
 	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::CSRVector_FinalConcat)
@@ -103,6 +105,7 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborLists_ = std::make_unique<NeighborLists_CSRVector_FinalConcat_CPU01>();
 		simParamsMgr_.Set_RunCountQuery(false);
 		simParamsMgr_.Set_RunFillQuery(true);
+		simParamsMgr_.Set_RunSecondFillQuery(false);
 	}
 	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::CSRVector_DoubleQuery)
@@ -110,6 +113,7 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborLists_ = std::make_unique<NeighborLists_CSRVector_DoubleQuery_CPU01>();
 		simParamsMgr_.Set_RunCountQuery(true);
 		simParamsMgr_.Set_RunFillQuery(true);
+		simParamsMgr_.Set_RunSecondFillQuery(false);
 	}
 	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::IndividualVectors_AdaptCompress)
@@ -117,6 +121,7 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_AdaptCompress_CPU01>();
 		simParamsMgr_.Set_RunCountQuery(false);
 		simParamsMgr_.Set_RunFillQuery(true);
+		simParamsMgr_.Set_RunSecondFillQuery(false);
 	}
 	else if (params.neighborListStorage ==
 		Base::NeighborListStorage::IndividualVectors_VByteDerivedCompress)
@@ -124,12 +129,20 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01>();
 		simParamsMgr_.Set_RunCountQuery(false);
 		simParamsMgr_.Set_RunFillQuery(true);
+		simParamsMgr_.Set_RunSecondFillQuery(false);
+	}
+	else if (params.neighborListStorage ==
+		Base::NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress)
+	{
+		neighborLists_ = std::make_unique<NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01>();
+		simParamsMgr_.Set_RunCountQuery(false);
+		simParamsMgr_.Set_RunFillQuery(true);
+		simParamsMgr_.Set_RunSecondFillQuery(true);
 	}
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborListStorage' requested.");
 	}
-
 	// TODO: compressed neighbor lists using pos in index sorted array for computing deltas?
 }
 
@@ -939,6 +952,17 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborLists_->Finalize_Fill();
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+
+	if (params.runFillQuery && params.runSecondFillQuery)
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		neighborSearchStrat_->Query_Fill(params);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+		neighborLists_->Finalize_Fill();
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	}
 }
 
 void SimBackend_CPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)

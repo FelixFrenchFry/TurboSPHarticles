@@ -103,8 +103,7 @@ namespace Base
 		CSRVector_DoubleQuery,						// 3
 		IndividualVectors_AdaptCompress,			// 4
 		IndividualVectors_VByteDerivedCompress,		// 5
-		CSRVector_FinalConcat_ULEB128Compress,		// 6
-		CSRVector_FinalConcat_VByteDerivedCompress	// 7 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
+		CSRVector_DoubleQuery_VByteDerivedCompress	// 6
 	};
 	constexpr const char* ToCString(NeighborListStorage v) noexcept
 	{
@@ -122,14 +121,11 @@ namespace Base
 			return "IndividualVectors_AdaptCompress";
 		case NeighborListStorage::IndividualVectors_VByteDerivedCompress:
 			return "IndividualVectors_VByteDerivedCompress";
-		case NeighborListStorage::CSRVector_FinalConcat_ULEB128Compress:
-			return "CSRVector_FinalConcat_ULEB128Compress";
-		case NeighborListStorage::CSRVector_FinalConcat_VByteDerivedCompress:
-			return "CSRVector_FinalConcat_VByteDerivedCompress";
+		case NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress:
+			return "CSRVector_DoubleQuery_VByteDerivedCompress";
 		}
 		return "NeighborListStorage::<unknown>";
 	}
-
 	enum class SolverTerminationCond : uint8_t
 	{
 		FixedIters,				// 0
