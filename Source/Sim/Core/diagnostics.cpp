@@ -414,96 +414,48 @@ namespace Sim
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(
         const Mem::MemoryTracker& memTracker,
         Mem::ByteUnit unit,
-        Mem::MemUsageType type,
-        Base::BackendVersion backendVersion,
-        const uint32_t N_F, 
-        const uint32_t N_B)
+        Base::BackendVersion backendVersion)
     {
         // pack snapshot
         Sync::MemSnapshot snap{};
         memTracker.PackMemSnapshot(snap);
 
-        // select field + title
-        const char* title = "USED";
-        uint64_t Mem::MemUsage::* field = &Mem::MemUsage::usedBytes;
-
-        switch (type)
-        {
-        case Mem::MemUsageType::Used:
-            title = "memory usage (max used)";
-            field = &Mem::MemUsage::usedBytes;
-            break;
-        case Mem::MemUsageType::Alloc:
-            title = "memory usage (max allocated)";
-            field = &Mem::MemUsage::allocBytes;
-            break;
-        case Mem::MemUsageType::Occupied:
-            title = "memory usage (max occupied)";
-            field = &Mem::MemUsage::occupiedBytes;
-            break;
-        default:
-            break;
-        }
-
         constexpr uint8_t BUCKET_COUNT = Mem::GetIdx(Mem::MemBucket::Count);
 
-        // totals for percentages
-        uint64_t totalMaxBytes = 0;
+        uint64_t totalMaxUsedBytes = 0;
+        uint64_t totalMaxAllocBytes = 0;
         for (uint8_t i = 0; i < BUCKET_COUNT; i++)
         {
-            totalMaxBytes += (snap.max[i].*field);
+            totalMaxUsedBytes += snap.max[i].usedBytes;
+            totalMaxAllocBytes += snap.max[i].allocBytes;
         }
 
         const char* unitStr = Mem::UnitLabel(unit);
 
-        char perParticleLabel[32];
-        char maxLabel[32];
-        std::snprintf(perParticleLabel, sizeof(perParticleLabel), "bytes/particle");
-        std::snprintf(maxLabel, sizeof(maxLabel), "max [%s]", unitStr);
+        char maxUsedLabel[32];
+        char maxAllocLabel[32];
+        std::snprintf(maxUsedLabel, sizeof(maxUsedLabel), "max used [%s]", unitStr);
+        std::snprintf(maxAllocLabel, sizeof(maxAllocLabel), "max allocated [%s]", unitStr);
 
         std::printf("\n");
-        // header
-        std::printf("%-30.30s | %18s | %12s %6s\n",
-            title, perParticleLabel, maxLabel, "%");
+        std::printf("%-30.30s | %19s | %19s\n",
+            "memory usage", maxUsedLabel, maxAllocLabel);
         std::printf("--------------------------------------------------------------------------\n");
-
-		// helper to pick divisor based on particle domain
-        auto PerParticleDivisor = [&](const Mem::MemBucketDef& def) -> uint32_t
-            {
-                switch (def.type)
-                {
-                case Base::ParticleType::Fluid:
-                	return N_F;
-                case Base::ParticleType::Boundary:
-                	return N_B;
-                default:
-                    return 0;
-                }
-            };
 
         for (uint8_t i = 0; i < BUCKET_COUNT; i++)
         {
             const auto& def = Mem::Definitions[i];
-            const uint64_t bMax = (snap.max[i].*field);
-            const double vMax = Mem::ConvertFromBytes(unit, bMax);
+            const double vMaxUsed = Mem::ConvertFromBytes(unit, snap.max[i].usedBytes);
+            const double vMaxAlloc = Mem::ConvertFromBytes(unit, snap.max[i].allocBytes);
 
-            const uint64_t denom = static_cast<uint64_t>(PerParticleDivisor(def));
-            const uint64_t bytesPerParticle = (denom > 0)
-                ? ((bMax + denom - 1) / denom) // ceil(bMax/denom)
-                : 0;
-
-            const double pctMax = (totalMaxBytes > 0)
-                ? (100.0 * static_cast<double>(bMax) / static_cast<double>(totalMaxBytes))
-                : 0.0;
-
-            std::printf("%-30.30s | %18llu | %12.2f %6.1f\n",
-                def.name.data(), static_cast<uint64_t>(bytesPerParticle),
-                vMax, pctMax);
+            std::printf("%-30.30s | %19.2f | %19.2f\n",
+                def.name.data(), vMaxUsed, vMaxAlloc);
         }
 
         std::printf("--------------------------------------------------------------------------\n");
 
-        const double tMax = Mem::ConvertFromBytes(unit, totalMaxBytes);
+        const double tMaxUsed = Mem::ConvertFromBytes(unit, totalMaxUsedBytes);
+        const double tMaxAlloc = Mem::ConvertFromBytes(unit, totalMaxAllocBytes);
 
 		const char* totalLabel = "total";
 		switch (backendVersion)
@@ -518,10 +470,12 @@ namespace Sim
 			break;
 		}
 
-        char totalValueLabel[32];
-        std::snprintf(totalValueLabel, sizeof(totalValueLabel), "> %.2f", tMax);
-        std::printf("%-30.30s | %18s | %12s %6s\n",
-            totalLabel, "---", totalValueLabel, "---");
+        char totalUsedValueLabel[32];
+        char totalAllocValueLabel[32];
+        std::snprintf(totalUsedValueLabel, sizeof(totalUsedValueLabel), "> %.2f", tMaxUsed);
+        std::snprintf(totalAllocValueLabel, sizeof(totalAllocValueLabel), "> %.2f", tMaxAlloc);
+        std::printf("%-30.30s | %19s | %19s\n",
+            totalLabel, totalUsedValueLabel, totalAllocValueLabel);
 
         std::fflush(stdout);
     }

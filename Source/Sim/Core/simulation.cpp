@@ -615,20 +615,6 @@ void SimulationMgr::DisplayMemoryUsageStats(
 {
 	if (!force && simStep_ != 1) { return; }
 
-	const uint32_t N_F = simBackend_->GetNumFluidParticles();
-	const uint32_t N_B = simBackend_->GetNumBoundaryParticles();
-
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, Mem::MemUsageType::Used,
-		params.backendVersion, N_F, N_B);
-
-	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, Mem::MemUsageType::Alloc,
-		params.backendVersion, N_F, N_B);
-
-	/*
-	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, Mem::MemUsageType::Occupied,
-		params.backendVersion, N_F, N_B);
-	*/
+		memoryTracker_, params.byteUnit, params.backendVersion);
 }
