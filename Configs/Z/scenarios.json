@@ -50,7 +50,7 @@
       "dropletRadius": 6.7,
       "dropletGap": 0.0,
       "dropletOffset": [ 0.0, 0.0 ],
-      "dropletInitVel": [ 0.0, -1.0, 0.0 ]
+      "dropletInitVel": [ 0.0, -0.1, 0.0 ]
     }
   }
 }
