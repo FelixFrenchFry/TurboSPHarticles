@@ -231,7 +231,7 @@ SERIES_STYLES = {
         "marker": "o",
         "line_style": "-",
     },
-    "Negative candidate checks": {
+    "Negative Candidates": {
         "color": RGB(0, 0, 0),
         "marker": "v",
         "line_style": "-",
@@ -426,7 +426,7 @@ def plot_scaling() -> None:
 
     spatial_hashing_style = SERIES_STYLES["Spatial Hashing"]
     cll_style = SERIES_STYLES["Cell-Linked List"]
-    negative_checks_style = SERIES_STYLES["Negative candidate checks"]
+    negative_checks_style = SERIES_STYLES["Negative Candidates"]
 
     spatial_hashing_handle, = ax_left.plot(
         spatial_hashing_ratios,
@@ -480,7 +480,7 @@ def plot_scaling() -> None:
         markersize=MARKER_SIZE,
         markeredgecolor=TIMING_MARKER_EDGE_COLOR,
         markeredgewidth=TIMING_MARKER_EDGE_WIDTH,
-        label="Negative candidate checks",
+        label="Negative Candidates",
         zorder=3,
     )
     negative_checks_handle.set_path_effects([
@@ -511,7 +511,7 @@ def plot_scaling() -> None:
     if SHOW_LEGEND:
         ax_left.legend(
             [spatial_hashing_handle, cll_handle, negative_checks_handle],
-            ["Spatial Hashing", "Cell-Linked List", "Negative candidate checks"],
+            ["Spatial Hashing", "Cell-Linked List", "Negative Candidates"],
             fontsize=AXES_FONT_SIZE,
             loc=LEGEND_LOC,
             bbox_to_anchor=LEGEND_BBOX_TO_ANCHOR,

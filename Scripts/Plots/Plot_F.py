@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -11,7 +12,7 @@ from matplotlib.patches import Patch
 # --- [ plot data ] --------------------------------------------------------------------
 # --------------------------------------------------------------------------------------
 
-ACTIVE_SCENARIO = 1
+ACTIVE_SCENARIO = 3
 
 SCENARIO_DATA = {
     1: {
@@ -41,12 +42,12 @@ SCENARIO_DATA = {
         ],
         "method_component_times_ms": {
             "XYZ-order": {
-                "Construction": [0],
-                "Query":        [0],
+                "Construction": [128],
+                "Query":        [660],
             },
             "Z-order": {
-                "Construction": [0],
-                "Query":        [0],
+                "Construction": [91],
+                "Query":        [583],
             },
         },
     },
@@ -59,12 +60,12 @@ SCENARIO_DATA = {
         ],
         "method_component_times_ms": {
             "XYZ-order": {
-                "Construction": [0],
-                "Query":        [0],
+                "Construction": [115],
+                "Query":        [606],
             },
             "Z-order": {
-                "Construction": [0],
-                "Query":        [0],
+                "Construction": [98],
+                "Query":        [537],
             },
         },
     },
@@ -80,20 +81,21 @@ METHOD_COMPONENT_TIMES_MS = SELECTED_SCENARIO.get("method_component_times_ms", {
 # --------------------------------------------------------------------------------------
 
 PLOT_TITLE = "TODO"
-X_LABEL = "Fluid particle count [millions]"
+X_LABEL = "Fluid particles [millions]"
 Y_LABEL = "Neighbor search time [ms]"
 SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 
-FIG_SIZE = (8.0, 10.0)
+FIG_SIZE = (7.0, 8.0)
 BAR_WIDTH = 0.25
 
 GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
+Y_AXIS_TICK_INTERVAL = 100.0
 
 SHOW_LEGEND = True
 LEGEND_LOC = "center"
@@ -246,7 +248,13 @@ def plot_scaling() -> None:
             x_tick_labels.append(str(particle_count))
     ax.set_xticks(x_positions)
     ax.set_xticklabels(x_tick_labels)
-    ax.set_ylim(0.0, max_total_time_ms * 1.05)
+
+    y_max = math.ceil((max_total_time_ms * 1.05) / Y_AXIS_TICK_INTERVAL) * Y_AXIS_TICK_INTERVAL
+    ax.set_ylim(0.0, y_max)
+    ax.set_yticks([
+        i * Y_AXIS_TICK_INTERVAL
+        for i in range(int(y_max / Y_AXIS_TICK_INTERVAL) + 1)
+    ])
 
     if GRID_ENABLED:
         ax.grid(
