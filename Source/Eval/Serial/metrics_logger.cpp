@@ -275,6 +275,7 @@ namespace Export
 			{ "exportInterval", simParams.exportInterval },
 			{ "expctdAvgNbrCountHardMax_FF", simParams.expctdAvgNbrCountHardMax_FF },
 			{ "expctdAvgNbrCountHardMax_FB", simParams.expctdAvgNbrCountHardMax_FB },
+			{ "gridCellSizeRatio", simParams.gridCellSizeRatio },
 			{ "maxThreadsSim", simParams.maxThreadsSim }
 		};
 

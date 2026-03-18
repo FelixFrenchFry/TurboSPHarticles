@@ -89,6 +89,7 @@ namespace Sim
         printf("%-24s = %s\n", "solverTerminationCond",
             Base::ToCString(params.solverTerminationCond));
         printf("%-24s = %u\n", "dataReOrderInterval", params.dataReOrderInterval);
+        printf("%-24s = %.6f\n", "gridCellSizeRatio", params.gridCellSizeRatio);
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
         printf("%-24s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);
         printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);
@@ -479,5 +480,25 @@ namespace Sim
 
         std::fflush(stdout);
     }
+
+	void DiagnosticsMgr::PrintStatisticsSummary_Standalone(
+		const Stats::StatisticsTracker& statisticsTracker,
+		const SimParams& params)
+	{
+		if (!params.statGroupsEnabled[Stats::GetIdx(Stats::StatGroup::Particles)]) { return; }
+		if (statisticsTracker.GetHistory().empty()) { return; }
+
+		const float negNbrCandFF_avg = statisticsTracker.GetStat_Avg(
+			Stats::StatMetric::NegNbrCandFF_Pct);
+
+		std::printf("\n");
+		std::printf("%-30.30s | %19s\n",
+			"statistics summary", "avg [%]");
+		std::printf("----------------------------------------------------\n");
+		std::printf("%-30.30s | %19.2f\n",
+			"neg fluid candidates", negNbrCandFF_avg * 100.0f);
+
+		std::fflush(stdout);
+	}
 	
 } // namespace Sim

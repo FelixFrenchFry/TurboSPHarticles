@@ -403,6 +403,23 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		Set_DataReOrderInterval(it->get<uint32_t>(), verbose);
 	}
 
+	if (auto it = j.find("gridCellSizeRatio"); it != j.end())
+	{
+		BeginWrite();
+
+		const float gridCellSizeRatio = it->get<float>();
+		if (gridCellSizeRatio > 0.0f)
+		{
+			params_.gridCellSizeRatio = gridCellSizeRatio;
+		}
+		else
+		{
+			SPDLOG_WARN("Invalid 'gridCellSizeRatio' in JSON (must be > 0)");
+		}
+
+		EndWrite();
+	}
+
 	// --- [ jitter ] --------------------------------------------------------------------------------
 
 	// TODO: implement setters for jitterFrac/jitterSeed stuff?
@@ -1411,6 +1428,10 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	ok &= Check("kernelSuppRatio < 1", true, [&]()
 	{
 		return par.kernelSuppRatio >= 1.0f;
+	});
+	ok &= Check("gridCellSizeRatio <= 0", true, [&]()
+	{
+		return par.gridCellSizeRatio > 0.0f;
 	});
 	ok &= Check("kernelRadius != kernelSuppRatio * particleSizeF", true, [&]()
 	{

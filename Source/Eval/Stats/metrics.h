@@ -38,6 +38,8 @@ namespace Stats
 		NumNbrFB_P99,		// top 1% of boundary neighbors
 		NumNbrFB_Min,		// min number of boundary neighbors
 		NumNbrFB_Max,		// max number of boundary neighbors
+		NegNbrCandFF_Pct,	// percentage of negative fluid neighbor candidates
+		NegNbrCandFB_Pct,	// percentage of negative boundary neighbor candidates
 
 		// density deviation
 		// (relative error in %, aka deviation)
@@ -176,6 +178,22 @@ namespace Stats
 				.var = "int",
 				.tip =
 				"Maximum number of boundary particles neighboring a fluid particle"
+			},
+			{
+				.metric = StatMetric::NegNbrCandFF_Pct,
+				.name = "neg fluid candidates",
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Percentage of tested fluid neighbor candidates that are not actual neighbors"
+			},
+			{
+				.metric = StatMetric::NegNbrCandFB_Pct,
+				.name = "neg bound candidates",
+				.unit = "%",
+				.var = "float",
+				.tip =
+				"Percentage of tested boundary neighbor candidates that are not actual neighbors"
 			},
 			{
 				.metric = StatMetric::DensRelError_Raw_Avg,

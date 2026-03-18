@@ -35,7 +35,7 @@ namespace GPU01
 
 	void NS_ReloadConstants(
 		uint32_t N_F, uint32_t N_B,
-		float kernelRadius, float cellSize,
+		float kernelRadius, float cellSize, uint32_t cellQueryReach,
 		float xBoxOrig, float yBoxOrig, float zBoxOrig,
 		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
 		uint32_t N_Cells, uint32_t EMPTY,

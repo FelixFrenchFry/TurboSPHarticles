@@ -42,6 +42,10 @@ namespace Sim
 			const Mem::MemoryTracker& memTracker,
 			Mem::ByteUnit unit,
 			Base::BackendVersion backendVersion);
+
+		static void PrintStatisticsSummary_Standalone(
+			const Stats::StatisticsTracker& statisticsTracker,
+			const SimParams& params);
 	};
 
 } // namespace Sim

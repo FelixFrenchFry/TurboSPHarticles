@@ -105,6 +105,8 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
+		float kernelRadiusSqu_ = 0.0f;
+		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 
 		// local grid frame in cell coordinates
 		int cellOrigX_ = 0;
@@ -325,6 +327,8 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
+		float kernelRadiusSqu_ = 0.0f;
+		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 
 		// grid AABB origin
 		float xBoxOrig_ = 0.0f;
@@ -401,9 +405,8 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
-		static constexpr uint32_t N_NbrDim_ = 3;
-		static constexpr uint32_t N_NbrCells_ = N_NbrDim_ * N_NbrDim_ * N_NbrDim_;
-		static constexpr uint32_t N_CellFrameMargin_ = 1; // one-cell query pad
+		float kernelRadiusSqu_ = 0.0f;
+		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CellFrameRebuildMargin_ = 8; // hysteresis buffer
 
 		// local grid frame in cell coordinates
@@ -437,10 +440,11 @@ namespace Sim
 
 		// helpers
 		void UpdateCellFrame();
+		inline uint32_t NeighborCellCount() const noexcept;
 		inline uint64_t MapToCellId_XYZ(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
-		static inline int NeighborOffset(int rx, int ry, int rz) noexcept;
+		inline int NeighborOffset(int rx, int ry, int rz) const noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------

@@ -472,7 +472,9 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 			Stats::StatMetric::NumNbrFB_P95,
 			Stats::StatMetric::NumNbrFB_P99,
 			Stats::StatMetric::NumNbrFB_Min,
-			Stats::StatMetric::NumNbrFB_Max
+			Stats::StatMetric::NumNbrFB_Max,
+			Stats::StatMetric::NegNbrCandFF_Pct,
+			Stats::StatMetric::NegNbrCandFB_Pct
 		});
 
 		ImGui::TreePop();

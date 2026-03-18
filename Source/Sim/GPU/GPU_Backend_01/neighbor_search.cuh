@@ -77,6 +77,7 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
+		uint32_t cellQueryReach_ = 1;
 
 		// grid AABB origin
 		float xBoxOrig_ = 0.0f;
@@ -155,6 +156,7 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
+		uint32_t cellQueryReach_ = 1;
 		uint32_t N_NonEmptyCellsF_ = 0;
 		uint32_t N_NonEmptyCellsB_ = 0;
 

@@ -17,6 +17,7 @@ namespace GPU01
 	__constant__ float c_ns_kernelRadiusSqu;
 	__constant__ float c_ns_cellSize;
 	__constant__ float c_ns_cellSizeInv;
+	__constant__ uint32_t c_ns_cellQueryReach;
 	__constant__ float c_ns_xBoxOrig;
 	__constant__ float c_ns_yBoxOrig;
 	__constant__ float c_ns_zBoxOrig;
@@ -28,7 +29,7 @@ namespace GPU01
 
 	void NS_ReloadConstants(
 		uint32_t N_F, uint32_t N_B,
-		float kernelRadius, float cellSize,
+		float kernelRadius, float cellSize, uint32_t cellQueryReach,
 		float xBoxOrig, float yBoxOrig, float zBoxOrig,
 		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
 		uint32_t N_Cells, uint32_t EMPTY,
@@ -44,6 +45,7 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_ns_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSize, &cellSize, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSizeInv, &cellSizeInv, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_cellQueryReach, &cellQueryReach, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_xBoxOrig, &xBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_yBoxOrig, &yBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_zBoxOrig, &zBoxOrig, sizeof(float)));
@@ -379,18 +381,19 @@ namespace GPU01
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
 
-		// check all particles j in 27 neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
+		// check all particles j in neighboring grid cells
+		const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
+		for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
 		{
 			int cz = czi + rz; // target cell coordinate in z-direction
 			if (cz < 0 || cz >= static_cast<int>(c_ns_N_DimZ)) { continue; }
 
-			for (int ry = -1; ry <= 1; ry++)
+			for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
 			{
 				int cy = cyi + ry; // target cell coordinate in y-direction
 				if (cy < 0 || cy >= static_cast<int>(c_ns_N_DimY)) { continue; }
 
-				for (int rx = -1; rx <= 1; rx++)
+				for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 				{
 					int cx = cxi + rx; // target cell coordinate in x-direction
 					if (cx < 0 || cx >= static_cast<int>(c_ns_N_DimX)) { continue; }
@@ -509,18 +512,19 @@ namespace GPU01
 		uint64_t wrFF = sFF;
 		uint64_t wrFB = sFB;
 
-		// check all particles j in 27 neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
+		// check all particles j in neighboring grid cells
+		const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
+		for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
 		{
 			int cz = czi + rz; // target cell coordinate in z-direction
 			if (cz < 0 || cz >= static_cast<int>(c_ns_N_DimZ)) { continue; }
 
-			for (int ry = -1; ry <= 1; ry++)
+			for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
 			{
 				int cy = cyi + ry; // target cell coordinate in y-direction
 				if (cy < 0 || cy >= static_cast<int>(c_ns_N_DimY)) { continue; }
 
-				for (int rx = -1; rx <= 1; rx++)
+				for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 				{
 					int cx = cxi + rx; // target cell coordinate in x-direction
 					if (cx < 0 || cx >= static_cast<int>(c_ns_N_DimX)) { continue; }
@@ -807,16 +811,17 @@ namespace GPU01
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
 
-		// check all particles j in 27 neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
+		// check all particles j in the queried neighboring grid cells
+		const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
+		for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
 		{
 			int cz_nbr = cz + rz; // target cell coordinate in z-direction
 
-			for (int ry = -1; ry <= 1; ry++)
+			for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
 			{
 				int cy_nbr = cy + ry; // target cell coordinate in y-direction
 
-				for (int rx = -1; rx <= 1; rx++)
+				for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 				{
 					int cx_nbr = cx + rx; // target cell coordinate in x-direction
 
@@ -938,16 +943,17 @@ namespace GPU01
 		uint64_t wrFF = sFF;
 		uint64_t wrFB = sFB;
 
-		// check all particles j in 27 neighboring grid cells
-		for (int rz = -1; rz <= 1; rz++)
+		// check all particles j in the queried neighboring grid cells
+		const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
+		for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
 		{
 			int cz_nbr = cz + rz; // target cell coordinate in z-direction
 
-			for (int ry = -1; ry <= 1; ry++)
+			for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
 			{
 				int cy_nbr = cy + ry; // target cell coordinate in y-direction
 
-				for (int rx = -1; rx <= 1; rx++)
+				for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 				{
 					int cx_nbr = cx + rx; // target cell coordinate in x-direction
 

@@ -168,7 +168,7 @@ void NS_BruteForce_GPU01::Init(const SimParams& params)
 void NS_BruteForce_GPU01::Construct(const SimParams& params)
 {
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 0.0f, 0.0f, 0.0f,
+		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 1u, 0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
 	GPU::StreamSync(be_.stream_);
@@ -241,6 +241,7 @@ void NS_CellLinkedList_Basic_GPU01::Init(const SimParams& params)
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
+	cellQueryReach_ = 1;
 
 	xBoxOrig_ = 0.0f;
 	yBoxOrig_ = 0.0f;
@@ -277,9 +278,14 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 		return;
 	}
 
-	cellSize_ = params.kernelRadius;
-	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-				 ? 0.0f : (1.0f / params.kernelRadius);
+	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
+	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
+				 ? 0.0f : (1.0f / cellSize_);
+	const float querySpanCells = Base::ApproxEqu(cellSize_, 0.0f)
+		? 0.0f : (params.kernelRadius / cellSize_);
+	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
+		? 1u : std::max<uint32_t>(1u,
+			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	// --- [ combined AABB over fluid and boundary particles ] ---------------------------------------
 
@@ -394,7 +400,7 @@ void NS_CellLinkedList_Basic_GPU01::Construct(const SimParams& params)
 	EnsureCapacity(be_.N_F_, be_.N_B_, N_Cells_);
 
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, xBoxOrig_, yBoxOrig_, zBoxOrig_,
+		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_, xBoxOrig_, yBoxOrig_, zBoxOrig_,
 		N_DimX_, N_DimY_, N_DimZ_, N_Cells_, EMPTY, be_.stream_);
 
 	// --- [ compute cell IDs and init sorted indices ] ----------------------------------------------
@@ -629,6 +635,7 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
+	cellQueryReach_ = 1;
 	N_NonEmptyCellsF_ = 0;
 	N_NonEmptyCellsB_ = 0;
 
@@ -672,14 +679,19 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		return;
 	}
 
-	cellSize_ = params.kernelRadius;
-	cellSizeInv_ = Base::ApproxEqu(params.kernelRadius, 0.0f)
-				 ? 0.0f : (1.0f / params.kernelRadius);
+	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
+	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
+				 ? 0.0f : (1.0f / cellSize_);
+	const float querySpanCells = Base::ApproxEqu(cellSize_, 0.0f)
+		? 0.0f : (params.kernelRadius / cellSize_);
+	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
+		? 1u : std::max<uint32_t>(1u,
+			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	EnsureStorageAllocation();
 
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, 0.0f, 0.0f, 0.0f,
+		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_, 0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
 	// --- [ cell coordinates and indices for fluid and boundary particles ] -------------------------
@@ -1026,7 +1038,7 @@ void NS_BoundVolHier_Linear_LBVH_GPU01::Construct(const SimParams& params)
 	}
 
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 0.0f, 0.0f, 0.0f,
+		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 1u, 0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
 	// build fluid BVH

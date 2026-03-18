@@ -777,6 +777,8 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
 		Set(record, StatMetric::NumNbrFB_Min, minFB);
 		Set(record, StatMetric::NumNbrFB_Max, maxFB);
+		Set(record, StatMetric::NegNbrCandFF_Pct, negNbrCandPctFF_);
+		Set(record, StatMetric::NegNbrCandFB_Pct, negNbrCandPctFB_);
 	}
 
 	// --- [ density stats ] -------------------------------------------------------------------------

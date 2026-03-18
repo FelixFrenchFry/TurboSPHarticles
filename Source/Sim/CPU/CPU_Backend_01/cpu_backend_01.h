@@ -118,6 +118,8 @@ namespace Sim
 		float avgRelDensityErrorF_raw_;
 		float avgRelDensityErrorF_pos_;
 		float avgRelDensityErrorF_abs_;
+		float negNbrCandPctFF_ = 0.0f;
+		float negNbrCandPctFB_ = 0.0f;
 
 		// neighbor storage
 		std::unique_ptr<I_NeighborLists> neighborLists_;
