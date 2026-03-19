@@ -1,0 +1,79 @@
++ module purge
+++ /opt/bwhpc/common/admin/modules/module-wrapper/modulecmd bash purge
++ eval unset 'GNU_BIN_DIR;' unset 'GNU_HOME;' unset 'GNU_INC_DIR;' unset 'GNU_LIB_DIR;' unset 'GNU_MAN_DIR;' unset 'GNU_VERSION;' unset '__LMOD_REF_COUNT_LD_LIBRARY_PATH;' unset 'LD_LIBRARY_PATH;' unset 'LOADEDMODULES;' '__LMOD_REF_COUNT_MANPATH=/usr/share/lmod/lmod/share/man:1\;/usr/share/man:1\;:1;' export '__LMOD_REF_COUNT_MANPATH;' 'MANPATH=/usr/share/lmod/lmod/share/man:/usr/share/man::;' export 'MANPATH;' 'MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles;' export 'MODULEPATH;' '__LMOD_REF_COUNT_PATH=/home/fr/fr_fr/fr_fl184/.local/bin:1\;/home/fr/fr_fr/fr_fl184/bin:1\;/software/all/bin:1\;/usr/share/Modules/bin:1\;/usr/local/bin:1\;/usr/bin:1\;/usr/local/sbin:1\;/usr/sbin:1;' export '__LMOD_REF_COUNT_PATH;' 'PATH=/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/software/all/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin;' export 'PATH;' unset '_LMFILES_;' '_ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0ge30sCm1UID0ge30sCm1wYXRoQSA9IHsKIi9vcHQvYndocGMvZnIvbW9kdWxlZmlsZXMiLCAiL29wdC9id2hwYy9jb21tb24vbW9kdWxlZmlsZXMiLAp9LApzeXN0ZW1CYXNlTVBBVEggPSAiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlczovb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0K;' export '_ModuleTable001_;' '_ModuleTable_Sz_=1;' export '_ModuleTable_Sz_;'
+++ unset GNU_BIN_DIR
+++ unset GNU_HOME
+++ unset GNU_INC_DIR
+++ unset GNU_LIB_DIR
+++ unset GNU_MAN_DIR
+++ unset GNU_VERSION
+++ unset __LMOD_REF_COUNT_LD_LIBRARY_PATH
+++ unset LD_LIBRARY_PATH
+++ unset LOADEDMODULES
+++ __LMOD_REF_COUNT_MANPATH='/usr/share/lmod/lmod/share/man:1;/usr/share/man:1;:1'
+++ export __LMOD_REF_COUNT_MANPATH
+++ MANPATH=/usr/share/lmod/lmod/share/man:/usr/share/man::
+++ export MANPATH
+++ MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles
+++ export MODULEPATH
+++ __LMOD_REF_COUNT_PATH='/home/fr/fr_fr/fr_fl184/.local/bin:1;/home/fr/fr_fr/fr_fl184/bin:1;/software/all/bin:1;/usr/share/Modules/bin:1;/usr/local/bin:1;/usr/bin:1;/usr/local/sbin:1;/usr/sbin:1'
+++ export __LMOD_REF_COUNT_PATH
+++ PATH=/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/software/all/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+++ export PATH
+++ unset _LMFILES_
+++ _ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0ge30sCm1UID0ge30sCm1wYXRoQSA9IHsKIi9vcHQvYndocGMvZnIvbW9kdWxlZmlsZXMiLCAiL29wdC9id2hwYy9jb21tb24vbW9kdWxlZmlsZXMiLAp9LApzeXN0ZW1CYXNlTVBBVEggPSAiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlczovb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0K
+++ export _ModuleTable001_
+++ _ModuleTable_Sz_=1
+++ export _ModuleTable_Sz_
++ module load compiler/gnu/14.2
+++ /opt/bwhpc/common/admin/modules/module-wrapper/modulecmd bash load compiler/gnu/14.2
++ eval 'GNU_BIN_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/bin;' export 'GNU_BIN_DIR;' 'GNU_HOME=/opt/bwhpc/common/compiler/gnu/14.2.0;' export 'GNU_HOME;' 'GNU_INC_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/include;' export 'GNU_INC_DIR;' 'GNU_LIB_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/lib64;' export 'GNU_LIB_DIR;' 'GNU_MAN_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/share/man;' export 'GNU_MAN_DIR;' 'GNU_VERSION=14.2.0;' export 'GNU_VERSION;' '__LMOD_REF_COUNT_LD_LIBRARY_PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/lib64:1;' export '__LMOD_REF_COUNT_LD_LIBRARY_PATH;' 'LD_LIBRARY_PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/lib64;' export 'LD_LIBRARY_PATH;' 'LOADEDMODULES=compiler/gnu/14.2;' export 'LOADEDMODULES;' '__LMOD_REF_COUNT_MANPATH=/opt/bwhpc/common/compiler/gnu/14.2.0/share/man:1\;/usr/share/lmod/lmod/share/man:1\;/usr/share/man:1\;:1;' export '__LMOD_REF_COUNT_MANPATH;' 'MANPATH=/opt/bwhpc/common/compiler/gnu/14.2.0/share/man:/usr/share/lmod/lmod/share/man:/usr/share/man::;' export 'MANPATH;' 'MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles;' export 'MODULEPATH;' '__LMOD_REF_COUNT_PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/bin:1\;/home/fr/fr_fr/fr_fl184/.local/bin:1\;/home/fr/fr_fr/fr_fl184/bin:1\;/software/all/bin:1\;/usr/share/Modules/bin:1\;/usr/local/bin:1\;/usr/bin:1\;/usr/local/sbin:1\;/usr/sbin:1;' export '__LMOD_REF_COUNT_PATH;' 'PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/bin:/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/software/all/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin;' export 'PATH;' '_LMFILES_=/opt/bwhpc/common/modulefiles/compiler/gnu/14.2.lua;' export '_LMFILES_;' '_ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0ge30sCm1UID0gewpbImNvbXBpbGVyL2dudSJdID0gewpmbiA9ICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcy9jb21waWxlci9nbnUvMTQuMi5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9nbnUvMTQuMiIsCmxvYWRPcmRlciA9IDEsCnByb3BUID0ge30sCnN0YWNrRGVwdGggPSAwLApzdGF0dXMgPSAiYWN0aXZlIiwKdXNlck5hbWUgPSAiY29tcGlsZXIvZ251LzE0LjIiLAp3ViA9ICIwMDAwMDAwMTQuMDAwMDAwMDAyLip6ZmluYWwiLAp9LAp9LAptcGF0aEEgPSB7CiIvb3B0L2J3aHBjL2Zy;' export '_ModuleTable001_;' '_ModuleTable002_=L21vZHVsZWZpbGVzIiwgIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfSwKc3lzdGVtQmFzZU1QQVRIID0gIi9vcHQvYndocGMvZnIvbW9kdWxlZmlsZXM6L29wdC9id2hwYy9jb21tb24vbW9kdWxlZmlsZXMiLAp9Cg==;' export '_ModuleTable002_;' '_ModuleTable_Sz_=2;' export '_ModuleTable_Sz_;'
+++ GNU_BIN_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/bin
+++ export GNU_BIN_DIR
+++ GNU_HOME=/opt/bwhpc/common/compiler/gnu/14.2.0
+++ export GNU_HOME
+++ GNU_INC_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/include
+++ export GNU_INC_DIR
+++ GNU_LIB_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/lib64
+++ export GNU_LIB_DIR
+++ GNU_MAN_DIR=/opt/bwhpc/common/compiler/gnu/14.2.0/share/man
+++ export GNU_MAN_DIR
+++ GNU_VERSION=14.2.0
+++ export GNU_VERSION
+++ __LMOD_REF_COUNT_LD_LIBRARY_PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/lib64:1
+++ export __LMOD_REF_COUNT_LD_LIBRARY_PATH
+++ LD_LIBRARY_PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/lib64
+++ export LD_LIBRARY_PATH
+++ LOADEDMODULES=compiler/gnu/14.2
+++ export LOADEDMODULES
+++ __LMOD_REF_COUNT_MANPATH='/opt/bwhpc/common/compiler/gnu/14.2.0/share/man:1;/usr/share/lmod/lmod/share/man:1;/usr/share/man:1;:1'
+++ export __LMOD_REF_COUNT_MANPATH
+++ MANPATH=/opt/bwhpc/common/compiler/gnu/14.2.0/share/man:/usr/share/lmod/lmod/share/man:/usr/share/man::
+++ export MANPATH
+++ MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles
+++ export MODULEPATH
+++ __LMOD_REF_COUNT_PATH='/opt/bwhpc/common/compiler/gnu/14.2.0/bin:1;/home/fr/fr_fr/fr_fl184/.local/bin:1;/home/fr/fr_fr/fr_fl184/bin:1;/software/all/bin:1;/usr/share/Modules/bin:1;/usr/local/bin:1;/usr/bin:1;/usr/local/sbin:1;/usr/sbin:1'
+++ export __LMOD_REF_COUNT_PATH
+++ PATH=/opt/bwhpc/common/compiler/gnu/14.2.0/bin:/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/software/all/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+++ export PATH
+++ _LMFILES_=/opt/bwhpc/common/modulefiles/compiler/gnu/14.2.lua
+++ export _LMFILES_
+++ _ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0ge30sCm1UID0gewpbImNvbXBpbGVyL2dudSJdID0gewpmbiA9ICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcy9jb21waWxlci9nbnUvMTQuMi5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9nbnUvMTQuMiIsCmxvYWRPcmRlciA9IDEsCnByb3BUID0ge30sCnN0YWNrRGVwdGggPSAwLApzdGF0dXMgPSAiYWN0aXZlIiwKdXNlck5hbWUgPSAiY29tcGlsZXIvZ251LzE0LjIiLAp3ViA9ICIwMDAwMDAwMTQuMDAwMDAwMDAyLip6ZmluYWwiLAp9LAp9LAptcGF0aEEgPSB7CiIvb3B0L2J3aHBjL2Zy
+++ export _ModuleTable001_
+++ _ModuleTable002_=L21vZHVsZWZpbGVzIiwgIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfSwKc3lzdGVtQmFzZU1QQVRIID0gIi9vcHQvYndocGMvZnIvbW9kdWxlZmlsZXM6L29wdC9id2hwYy9jb21tb24vbW9kdWxlZmlsZXMiLAp9Cg==
+++ export _ModuleTable002_
+++ _ModuleTable_Sz_=2
+++ export _ModuleTable_Sz_
++ export CC=gcc
++ CC=gcc
++ export CXX=g++
++ CXX=g++
++ export OMP_NUM_THREADS=96
++ OMP_NUM_THREADS=96
++ export TBB_NUM_THREADS=96
++ TBB_NUM_THREADS=96
++ cd /pfs/work9/workspace/scratch/fr_fl184-particleStorage/TurboSPHarticles
+/var/spool/slurmd/job3428672/slurm_script: line 23: cd: /pfs/work9/workspace/scratch/fr_fl184-particleStorage/TurboSPHarticles: No such file or directory
++ ./out/build/Linux-x64-RelWithDeb/bin/TSP_Headless -p A
+/var/spool/slurmd/job3428672/slurm_script: line 26: 4064676 Killed                  ./out/build/Linux-x64-RelWithDeb/bin/TSP_Headless -p A
+[2026-03-06T13:46:37.420] error: Detected 1 oom_kill event in StepId=3428672.batch. Some of the step tasks have been OOM Killed.

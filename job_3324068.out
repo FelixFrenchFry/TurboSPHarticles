@@ -1,0 +1,325 @@
+(Running on Linux)
+[2026-03-04 19:27:10.786] [info] Launching TSP (headless application)...
+
+[2026-03-04 19:27:10.795] [info] Using config profile 'H'
+
+--- [ hardware specifications ] ------------------------------------------
+--------------------------------------------------------------------------
+host                     = uc3n085.localdomain
+threads total avail      = 192
+threads used for sim     = 192
+threads used for vis     = 0
+[2026-03-04 19:27:10.795] [info] Initializing simulation state...
+[2026-03-04 19:27:10.797] [info] Initializing backend data structures...
+
+--- [ simulation parameters ] --------------------------------------------
+--------------------------------------------------------------------------
+timeStep                 = 0.000100
+particleSizeF            = 0.010000
+particleSizeB            = 0.010000
+particleSizeInvF         = 100.000000
+particleSizeInvB         = 100.000000
+kernelSuppRatio          = 2.000000
+kernelRadius             = 0.020000
+kernelRadiusSqu          = 0.000400
+expctdNbrCountSoftMax_FF = 41
+expctdNbrCountSoftMax_FB = 21
+expctdNbrCountHardMax_FF = 61
+expctdNbrCountHardMax_FB = 46
+restDensityF             = 1000.000000
+restDensityB             = 1000.000000
+massF                    = 0.001000
+massB                    = 0.001000
+viscosityF               = 0.000120
+viscosityB               = 0.000120
+gravity                  = (0.000, -9.810, 0.000)
+pressGamma               = 0.500000
+jacobiOmega              = 0.500000
+densityDevTarget         = 0.010000
+fixedIters               = 5
+minSolverIters           = 3
+maxSolverIters           = 50
+solverTerminationCond    = FixedIters
+dataReOrderInterval      = 20
+jitterFracF              = 0.000000
+jitterSeedF              = 67
+jitterFracB              = 0.000000
+jitterSeedB              = 67
+boundaryLayers           = 2
+exportEnabled            = false
+exportDir                = H
+exportInterval           = 20
+
+--- [ simulation setup ] -------------------------------------------------
+--------------------------------------------------------------------------
+sim backend              = CPU01
+sim scenario             = BreakingDam
+neighbor search method   = CellLinkedList_Compact
+neighbor list storage    = CSRVector_DoubleQuery
+fluid particles          = 4221000000
+boundary particles       = 48130084
+
+[2026-03-04 19:28:22.256] [info] Simulation started running...
+
+memory usage (max used)        |     bytes/particle |    max [MiB]      %
+--------------------------------------------------------------------------
+fluid particle properties      |                 76 |    305934.91   33.3
+bound particle properties      |                 12 |       550.81    0.1
+fluid neighbor search data str |                 14 |     54356.58    5.9
+bound neighbor search data str |                 14 |       619.62    0.1
+fluid neighbor list storage    |                131 |    524051.58   57.0
+bound neighbor list storage    |                710 |     32581.41    3.5
+misc                           |                  1 |       550.81    0.1
+--------------------------------------------------------------------------
+total (RAM)                    |                --- |    918645.70    ---
+
+memory usage (max allocated)   |     bytes/particle |    max [MiB]      %
+--------------------------------------------------------------------------
+fluid particle properties      |                 76 |    305934.91   30.1
+bound particle properties      |                 12 |       550.81    0.1
+fluid neighbor search data str |                 21 |     80509.19    7.9
+bound neighbor search data str |                 21 |       918.01    0.1
+fluid neighbor list storage    |                137 |    548643.98   53.9
+bound neighbor list storage    |                711 |     32600.30    3.2
+misc                           |                 12 |     48305.51    4.7
+--------------------------------------------------------------------------
+total (RAM)                    |                --- |   1017462.69    ---
+
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |     49091.15   13.6 |     49091.15   13.6
+neighCon                       |     23457.20    6.5 |     23457.20    6.5
+neighQue                       |     79346.19   22.0 |     79346.19   22.0
+dens                           |     10160.75    2.8 |     10160.75    2.8
+viscAcc + extAcc               |     28891.68    8.0 |     28891.68    8.0
+srcTerm + diagElem             |     32752.96    9.1 |     32752.96    9.1
+jacSolv                        |    120954.97   33.5 |    120954.97   33.5
+presAcc                        |     14530.53    4.0 |     14530.53    4.0
+velUpd + posUpd                |      2030.06    0.6 |      2030.06    0.6
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    361218.42    --- |    361218.42    ---
+
+00:00:00 elapsed | 1/10 steps (10.0 %) | 100000000000000.000 steps/s (recently)
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |     24545.58    7.3
+neighCon                       |     23704.60    7.6 |     23580.90    7.0
+neighQue                       |     78477.80   25.2 |     78911.99   23.5
+dens                           |      9977.91    3.2 |     10069.33    3.0
+viscAcc + extAcc               |     28833.00    9.3 |     28862.34    8.6
+srcTerm + diagElem             |     32887.33   10.6 |     32820.14    9.8
+jacSolv                        |    120834.51   38.8 |    120894.74   36.0
+presAcc                        |     14513.00    4.7 |     14521.77    4.3
+velUpd + posUpd                |      2023.90    0.7 |      2026.98    0.6
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    311252.10    --- |    336235.26    ---
+
+00:05:11 elapsed | 2/10 steps (20.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |     16363.72    5.0
+neighCon                       |     23368.11    7.5 |     23509.97    7.2
+neighQue                       |     78284.93   25.2 |     78702.97   24.0
+dens                           |     10258.73    3.3 |     10132.46    3.1
+viscAcc + extAcc               |     28861.98    9.3 |     28862.22    8.8
+srcTerm + diagElem             |     33254.38   10.7 |     32964.89   10.1
+jacSolv                        |    120306.10   38.7 |    120698.53   36.8
+presAcc                        |     14571.53    4.7 |     14538.36    4.4
+velUpd + posUpd                |      2025.37    0.7 |      2026.44    0.6
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    310931.13    --- |    327800.55    ---
+
+00:10:22 elapsed | 3/10 steps (30.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |     12272.79    3.8
+neighCon                       |     20489.94    6.7 |     22754.97    7.1
+neighQue                       |     77714.96   25.3 |     78455.97   24.3
+dens                           |     10239.25    3.3 |     10159.16    3.2
+viscAcc + extAcc               |     28807.23    9.4 |     28848.47    8.9
+srcTerm + diagElem             |     32894.54   10.7 |     32947.30   10.2
+jacSolv                        |    119962.47   39.1 |    120514.51   37.4
+presAcc                        |     14476.28    4.7 |     14522.84    4.5
+velUpd + posUpd                |      2026.44    0.7 |      2026.44    0.6
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    306611.17    --- |    322503.21    ---
+
+00:15:29 elapsed | 4/10 steps (40.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |      9818.23    3.1
+neighCon                       |     20677.36    6.8 |     22339.44    7.0
+neighQue                       |     77394.32   25.3 |     78243.64   24.5
+dens                           |     10037.25    3.3 |     10134.78    3.2
+viscAcc + extAcc               |     28861.42    9.4 |     28851.06    9.0
+srcTerm + diagElem             |     32645.17   10.7 |     32886.88   10.3
+jacSolv                        |    120069.77   39.2 |    120425.56   37.7
+presAcc                        |     14506.87    4.7 |     14519.64    4.5
+velUpd + posUpd                |      2051.50    0.7 |      2031.46    0.6
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    306243.67    --- |    319251.30    ---
+
+00:20:35 elapsed | 5/10 steps (50.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |      8181.86    2.6
+neighCon                       |     20760.20    6.8 |     22076.24    7.0
+neighQue                       |     77350.49   25.2 |     78094.78   24.6
+dens                           |     10003.23    3.3 |     10112.85    3.2
+viscAcc + extAcc               |     28901.48    9.4 |     28859.46    9.1
+srcTerm + diagElem             |     32718.06   10.7 |     32858.74   10.4
+jacSolv                        |    120272.53   39.2 |    120400.06   38.0
+presAcc                        |     14531.15    4.7 |     14521.56    4.6
+velUpd + posUpd                |      2027.86    0.7 |      2030.86    0.6
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    306565.05    --- |    317136.92    ---
+
+00:25:42 elapsed | 6/10 steps (60.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |      7013.02    2.2
+neighCon                       |     20868.17    6.8 |     21903.66    6.9
+neighQue                       |     78516.64   25.5 |     78155.05   24.7
+dens                           |     10126.36    3.3 |     10114.78    3.2
+viscAcc + extAcc               |     28832.36    9.4 |     28855.59    9.1
+srcTerm + diagElem             |     32688.28   10.6 |     32834.39   10.4
+jacSolv                        |    120072.37   39.0 |    120353.25   38.1
+presAcc                        |     14536.67    4.7 |     14523.72    4.6
+velUpd + posUpd                |      2192.16    0.7 |      2053.90    0.7
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    307833.04    --- |    315807.80    ---
+
+00:30:49 elapsed | 7/10 steps (70.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |      6136.39    2.0
+neighCon                       |     20864.08    6.8 |     21773.71    6.9
+neighQue                       |     77632.92   25.3 |     78089.78   24.8
+dens                           |     10015.29    3.3 |     10102.35    3.2
+viscAcc + extAcc               |     28760.48    9.4 |     28843.70    9.2
+srcTerm + diagElem             |     32649.28   10.6 |     32811.25   10.4
+jacSolv                        |    119929.40   39.1 |    120300.27   38.2
+presAcc                        |     14574.77    4.8 |     14530.10    4.6
+velUpd + posUpd                |      2217.23    0.7 |      2074.31    0.7
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    306643.51    --- |    314662.26    ---
+
+00:35:56 elapsed | 8/10 steps (80.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |      5454.57    1.7
+neighCon                       |     20757.13    6.7 |     21660.76    6.9
+neighQue                       |     77718.66   25.3 |     78048.54   24.9
+dens                           |     10004.26    3.3 |     10091.45    3.2
+viscAcc + extAcc               |     29051.89    9.4 |     28866.84    9.2
+srcTerm + diagElem             |     32614.99   10.6 |     32789.44   10.4
+jacSolv                        |    120754.95   39.3 |    120350.79   38.3
+presAcc                        |     14538.71    4.7 |     14531.06    4.6
+velUpd + posUpd                |      2202.05    0.7 |      2088.51    0.7
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    307642.65    --- |    313882.30    ---
+
+00:41:04 elapsed | 9/10 steps (90.0 %) | 0.003 steps/s (recently)              
+[20A
+benchmark summary              |  latest [ms]      % |     avg [ms]      %
+--------------------------------------------------------------------------
+dataOrder                      |         0.00    0.0 |      4909.12    1.6
+neighCon                       |     20588.95    6.7 |     21553.58    6.9
+neighQue                       |     77989.81   25.4 |     78042.67   24.9
+dens                           |     10111.01    3.3 |     10093.40    3.2
+viscAcc + extAcc               |     29044.79    9.5 |     28884.63    9.2
+srcTerm + diagElem             |     32634.86   10.6 |     32773.98   10.5
+jacSolv                        |    120027.58   39.1 |    120318.47   38.4
+presAcc                        |     14476.52    4.7 |     14525.60    4.6
+velUpd + posUpd                |      2191.45    0.7 |      2098.80    0.7
+statPart + statDens + statVel  |         0.00    0.0 |         0.00    0.0
+snapExp                        |         0.00    0.0 |         0.00    0.0
+snapVis                        |         0.00    0.0 |         0.00    0.0
+serial                         |         0.00    0.0 |         0.00    0.0
+--------------------------------------------------------------------------
+total                          |    307066.20    --- |    313200.69    ---
+
+00:46:11 elapsed | 10/10 steps (100.0 %) | 0.003 steps/s (recently)            
+
+memory usage (max used)        |     bytes/particle |    max [MiB]      %
+--------------------------------------------------------------------------
+fluid particle properties      |                 76 |    305934.91   33.3
+bound particle properties      |                 12 |       550.81    0.1
+fluid neighbor search data str |                 14 |     54356.58    5.9
+bound neighbor search data str |                 14 |       619.62    0.1
+fluid neighbor list storage    |                131 |    524051.58   57.0
+bound neighbor list storage    |                710 |     32581.41    3.5
+misc                           |                  1 |       550.81    0.1
+--------------------------------------------------------------------------
+total (RAM)                    |                --- |    918645.70    ---
+
+memory usage (max allocated)   |     bytes/particle |    max [MiB]      %
+--------------------------------------------------------------------------
+fluid particle properties      |                 76 |    305934.91   30.1
+bound particle properties      |                 12 |       550.81    0.1
+fluid neighbor search data str |                 21 |     80509.19    7.9
+bound neighbor search data str |                 21 |       918.01    0.1
+fluid neighbor list storage    |                137 |    548643.98   53.9
+bound neighbor list storage    |                711 |     32600.30    3.2
+misc                           |                 12 |     48305.51    4.7
+--------------------------------------------------------------------------
+total (RAM)                    |                --- |   1017462.69    ---
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc3n085
+Job ID: 3324068
+Cluster: uc3
+User/Group: fr_fl184/fr_fr
+State: TIMEOUT (exit code 0)
+Nodes: 1
+Cores per node: 96
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 4-00:09:36 core-walltime
+Job Wall-clock time: 01:00:06
+Memory Utilized: 943.72 GB
+Memory Efficiency: 42.02% of 2.19 TB (2.19 TB/node)
