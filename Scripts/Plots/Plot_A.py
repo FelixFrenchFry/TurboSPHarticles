@@ -53,7 +53,7 @@ METHOD_STEP_TIMES_MS = {
 
 PLOT_TITLE = "TODO"
 X_LABEL = "Fluid particle count [thousands]"
-Y_LABEL = "Total simulation time per step [ms]"
+Y_LABEL = "Total time per simulation step [ms]"
 SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30

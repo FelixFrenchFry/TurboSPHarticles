@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+from matplotlib.legend_handler import HandlerTuple
+from matplotlib.patches import Patch
+
+
+# --------------------------------------------------------------------------------------
+# --- [ plot data ] --------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
+
+PARTICLE_COUNTS = [
+    100_000_000,
+    150_000_000,
+    200_000_000,
+    250_000_000
+]
+
+# H100, averaged over the first 500 steps, in milliseconds
+# (breaking dam with 1000 x <adjustable> x 1000)
+METHOD_COMPONENT_TIMES_MS = {
+    "Cell-Linked List": {
+        "Construction": [17,    27,     32,     40],
+        "Query":        [286,   428,    579,    729],
+        "Fluid Data":   [2670,  4005,   5340,   6675], # MiB
+        "Boundary Data":[404,   423,    441,    459] # MiB
+    },
+    "Linear BVH": {
+        "Construction": [31,    39,      51,     63],
+        "Query":        [1004,  1409,   1776,   2118],
+        "Fluid Data":   [10299, 15449,  20599,  25749], # MiB
+        "Boundary Data":[809,   846,    882,    919] # MiB
+    },
+}
+
+
+# --------------------------------------------------------------------------------------
+# --- [ plot styling ] -----------------------------------------------------------------
+# --------------------------------------------------------------------------------------
+
+PLOT_TITLE = "TODO"
+X_LABEL = "Fluid particle count [millions]"
+Y_LABEL = "Neighbor search time [ms]"
+SHOW_PLOT_TITLE = False
+
+AXES_FONT_SIZE = 30
+FIGURE_TITLE_FONT_SIZE = 30
+
+FIG_SIZE = (10.0, 10.0)
+BAR_WIDTH = 0.35
+
+GRID_ENABLED = True
+GRID_LINE_STYLE = "--"
+GRID_LINE_WIDTH = 1.0
+GRID_ALPHA = 1.0
+Y_AXIS_TICK_INTERVAL = 250.0
+
+SHOW_LEGEND = True
+FORMAT_X_AXIS_IN_MILLIONS = True
+SHOW_COMPONENT_SEPARATOR = True
+COMPONENT_SEPARATOR_COLOR = (1.0, 1.0, 1.0)
+COMPONENT_SEPARATOR_LINE_WIDTH = 2.0
+COMPONENT_SEPARATOR_LINE_STYLE = "-"
+
+OUTPUT_PATH = None
+OUTPUT_DPI = 300
+
+
+def RGB(r: int, g: int, b: int) -> tuple[float, float, float]:
+    return (r / 255.0, g / 255.0, b / 255.0)
+
+
+METHOD_STYLES = {
+    "Cell-Linked List": {
+        "label": "Cell-Linked List",
+        "construction_color": RGB(150, 0, 30),
+        "query_color": RGB(250, 0, 50),
+    },
+    "Linear BVH": {
+        "label": "Linear BVH",
+        "construction_color": RGB(25, 100, 50),
+        "query_color": RGB(40, 180, 80),
+    },
+}
+
+
+def validate_plot_data() -> None:
+    if not PARTICLE_COUNTS:
+        raise ValueError("PARTICLE_COUNTS must not be empty.")
+
+    if len(METHOD_COMPONENT_TIMES_MS) != 2:
+        raise ValueError(
+            f"Expected exactly 2 methods, got {len(METHOD_COMPONENT_TIMES_MS)}."
+        )
+
+    num_points = len(PARTICLE_COUNTS)
+
+    for method_name, component_times_ms in METHOD_COMPONENT_TIMES_MS.items():
+        if method_name not in METHOD_STYLES:
+            raise ValueError(
+                f"Missing style entry for method '{method_name}'."
+            )
+
+        if "Construction" not in component_times_ms:
+            raise ValueError(
+                f"Method '{method_name}' is missing 'Construction' values."
+            )
+
+        if "Query" not in component_times_ms:
+            raise ValueError(
+                f"Method '{method_name}' is missing 'Query' values."
+            )
+
+        construction_times_ms = component_times_ms["Construction"]
+        query_times_ms = component_times_ms["Query"]
+
+        if len(construction_times_ms) != num_points:
+            raise ValueError(
+                f"Method '{method_name}' has {len(construction_times_ms)} "
+                f"construction measurements, but PARTICLE_COUNTS has {num_points} entries."
+            )
+
+        if len(query_times_ms) != num_points:
+            raise ValueError(
+                f"Method '{method_name}' has {len(query_times_ms)} "
+                f"query measurements, but PARTICLE_COUNTS has {num_points} entries."
+            )
+
+
+def plot_scaling() -> None:
+    fig, ax = plt.subplots(figsize=FIG_SIZE)
+
+    method_names = list(METHOD_COMPONENT_TIMES_MS.keys())
+    num_methods = len(method_names)
+    x_positions = list(range(len(PARTICLE_COUNTS)))
+    legend_handles = []
+    legend_labels = []
+    max_total_time_ms = 0.0
+
+    for method_idx, method_name in enumerate(method_names):
+        style = METHOD_STYLES[method_name]
+        construction_times_ms = METHOD_COMPONENT_TIMES_MS[method_name]["Construction"]
+        query_times_ms = METHOD_COMPONENT_TIMES_MS[method_name]["Query"]
+        total_times_ms = [
+            construction_time_ms + query_time_ms
+            for construction_time_ms, query_time_ms
+            in zip(construction_times_ms, query_times_ms)
+        ]
+        max_total_time_ms = max(max_total_time_ms, max(total_times_ms))
+
+        x_offset = (method_idx - (num_methods - 1) / 2.0) * BAR_WIDTH
+        bar_positions = [x + x_offset for x in x_positions]
+
+        ax.bar(
+            bar_positions,
+            construction_times_ms,
+            width=BAR_WIDTH,
+            color=style["construction_color"],
+        )
+        ax.bar(
+            bar_positions,
+            query_times_ms,
+            width=BAR_WIDTH,
+            bottom=construction_times_ms,
+            color=style["query_color"],
+        )
+
+        if SHOW_COMPONENT_SEPARATOR:
+            for bar_x, construction_time_ms in zip(bar_positions, construction_times_ms):
+                ax.hlines(
+                    construction_time_ms,
+                    bar_x - 0.5 * BAR_WIDTH,
+                    bar_x + 0.5 * BAR_WIDTH,
+                    colors=COMPONENT_SEPARATOR_COLOR,
+                    linewidth=COMPONENT_SEPARATOR_LINE_WIDTH,
+                    linestyles=COMPONENT_SEPARATOR_LINE_STYLE,
+                )
+        legend_handles.append(
+            (
+                Patch(facecolor=style["construction_color"]),
+                Patch(facecolor=style["query_color"]),
+            )
+        )
+        legend_labels.append(f"{style['label']}")
+
+    if SHOW_PLOT_TITLE:
+        ax.set_title(PLOT_TITLE, fontsize=FIGURE_TITLE_FONT_SIZE)
+
+    ax.set_xlabel(X_LABEL, fontsize=AXES_FONT_SIZE)
+    ax.set_ylabel(Y_LABEL, fontsize=AXES_FONT_SIZE)
+    ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
+
+    x_tick_labels = []
+    for particle_count in PARTICLE_COUNTS:
+        if FORMAT_X_AXIS_IN_MILLIONS:
+            x_tick_labels.append(str(int(particle_count / 1_000_000)))
+        else:
+            x_tick_labels.append(str(particle_count))
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_tick_labels)
+    ax.set_ylim(0.0, max_total_time_ms * 1.05)
+    ax.set_yticks([
+        i * Y_AXIS_TICK_INTERVAL
+        for i in range(int((max_total_time_ms * 1.05) / Y_AXIS_TICK_INTERVAL) + 1)
+    ])
+
+    if GRID_ENABLED:
+        ax.grid(
+            True,
+            axis="y",
+            linestyle=GRID_LINE_STYLE,
+            linewidth=GRID_LINE_WIDTH,
+            alpha=GRID_ALPHA,
+        )
+
+    if SHOW_LEGEND:
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            handler_map={tuple: HandlerTuple(ndivide=None)},
+            fontsize=AXES_FONT_SIZE,
+        )
+
+    fig.tight_layout()
+
+    if OUTPUT_PATH is not None:
+        output_path = Path(OUTPUT_PATH)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=OUTPUT_DPI)
+        print(f"Saved plot to '{output_path}'.")
+    else:
+        plt.show()
+
+
+def main() -> None:
+    validate_plot_data()
+    plot_scaling()
+
+
+if __name__ == "__main__":
+    main()

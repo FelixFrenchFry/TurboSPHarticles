@@ -12,7 +12,7 @@ from matplotlib.patches import Patch
 # --- [ plot data ] --------------------------------------------------------------------
 # --------------------------------------------------------------------------------------
 
-ACTIVE_SCENARIO = 3
+ACTIVE_SCENARIO = 1
 
 SCENARIO_DATA = {
     1: {
@@ -24,12 +24,12 @@ SCENARIO_DATA = {
         ],
         "method_component_times_ms": {
             "XYZ-order": {
-                "Construction": [0],
-                "Query":        [0],
+                "Construction": [104],
+                "Query":        [616],
             },
             "Z-order": {
-                "Construction": [0],
-                "Query":        [0],
+                "Construction": [91],
+                "Query":        [553],
             },
         },
     },
@@ -42,12 +42,12 @@ SCENARIO_DATA = {
         ],
         "method_component_times_ms": {
             "XYZ-order": {
-                "Construction": [128],
-                "Query":        [660],
+                "Construction": [116],
+                "Query":        [627],
             },
             "Z-order": {
-                "Construction": [91],
-                "Query":        [583],
+                "Construction": [97],
+                "Query":        [558],
             },
         },
     },

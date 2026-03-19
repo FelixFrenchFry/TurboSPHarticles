@@ -16,29 +16,29 @@ PARTICLE_COUNTS = [
     200_000_000,
     300_000_000,
     400_000_000,
-    500_000_000,
+    500_000_000
 ]
 
 # 192 threads, averaged over the first 25 steps, in milliseconds
 # (breaking dam with 1000 x <adjustable> x 1000)
 METHOD_COMPONENT_TIMES_MS = {
     "Spatial Hashing": {
-        "Construction": [6468,  12198,  19115,  ],
-        "Query":        [2077,  4020,   6109,   ],
-        "Fluid Data":   [0,     0,      0,      0], # MiB
-        "Boundary Data":[0,     0,      0,      0] # MiB
+        "Construction": [6468,  12198,  19115,  26349,  32753],
+        "Query":        [2077,  4020,   6109,   8235,   9954],
+        "Fluid Data":   [0,     0,      0,      0,      0], # MiB
+        "Boundary Data":[0,     0,      0,      0,      0] # MiB
     },
     "Cell-Linked List": {
-        "Construction": [516,   1065,   1460,   1960],
-        "Query":        [1451,  2850,   4245,   5659],
-        "Fluid Data":   [0,     2574,   3862,   5149], # MiB
-        "Boundary Data":[0,     248,    268,    289] # MiB
+        "Construction": [516,   1065,   1460,   1960,   2217],
+        "Query":        [1451,  2850,   4245,   5659,   7053],
+        "Fluid Data":   [0,     2574,   3862,   5149,   6437], # MiB
+        "Boundary Data":[0,     248,    268,    289,    310] # MiB
     },
     "Linear BVH": {
-        "Construction": [844,   1818,   2890,   4079],
-        "Query":        [2185,  3958,   5781,   7386],
-        "Fluid Data":   [9918,  19836,  29754,  39672], # MiB
-        "Boundary Data":[741,   809,    876,    943] # MiB
+        "Construction": [844,   1818,   2890,   4079,   5936],
+        "Query":        [2185,  3958,   5781,   7386,   8900],
+        "Fluid Data":   [9918,  19836,  29754,  39672,  49591], # MiB
+        "Boundary Data":[741,   809,    876,    943,    1010] # MiB
     },
 }
 
