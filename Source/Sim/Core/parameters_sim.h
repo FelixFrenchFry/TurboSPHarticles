@@ -93,6 +93,8 @@ namespace Sim
 		// data structuring
 		uint32_t dataReOrderInterval = 50;
 		float gridCellSizeRatio = 1.0f;
+		Base::GridCellIndexing gridCellIndexing =
+			Base::GridCellIndexing::Morton;
 
 		// fluid conditions
 		float jitterFracF		= 0.0f; // % of particle size

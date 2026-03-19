@@ -126,6 +126,23 @@ namespace Base
 		}
 		return "NeighborListStorage::<unknown>";
 	}
+
+	enum class GridCellIndexing : uint8_t
+	{
+		Morton,				// 0
+		XYZ					// 1
+	};
+	constexpr const char* ToCString(GridCellIndexing v) noexcept
+	{
+		switch (v)
+		{
+		case GridCellIndexing::Morton:
+			return "Morton";
+		case GridCellIndexing::XYZ:
+			return "XYZ";
+		}
+		return "GridCellIndexing::<unknown>";
+	}
 	enum class SolverTerminationCond : uint8_t
 	{
 		FixedIters,				// 0

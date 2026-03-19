@@ -77,6 +77,7 @@ namespace Sim
 		void FinalizeBenchMemStatMeasurements() const;
 		void BeginRunLogging(const SimParams& params);
 		void EndRunLogging();
+		void AppendLatestBenchmarkMetricsLog() const;
 		void AppendInitialMemoryMetricsLog(const SimParams& params) const;
 		void AppendLatestMemoryMetricsLog() const;
 		void DisplayPerformanceStats(const SimParams& params) const;

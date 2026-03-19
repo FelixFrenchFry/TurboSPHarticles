@@ -364,6 +364,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
 		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
+		if (doSimStep) { AppendLatestBenchmarkMetricsLog(); }
 
 		// pack and send benchmark and statistics snapshots
 		if (doSimStep) { HandleBenchMemStatSnapshots(); }
@@ -468,6 +469,7 @@ void SimulationMgr::RunSim_Blocking()
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
 		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
+		if (doSimStep) { AppendLatestBenchmarkMetricsLog(); }
 
 		// pack and send benchmark and statistics snapshots
 		if (doSimStep) { HandleBenchMemStatSnapshots(); }
@@ -570,6 +572,13 @@ void SimulationMgr::AppendLatestMemoryMetricsLog() const
 	if (!loggingMgr_.IsActive()) { return; }
 
 	loggingMgr_.AppendMemoryRecord(memoryTracker_.GetCurrentRecord());
+}
+
+void SimulationMgr::AppendLatestBenchmarkMetricsLog() const
+{
+	if (!loggingMgr_.IsActive()) { return; }
+
+	loggingMgr_.AppendBenchmarkRecord(benchmarksTracker_.GetCurrentRecord());
 }
 
 void SimulationMgr::HandleBenchMemStatSnapshots() const

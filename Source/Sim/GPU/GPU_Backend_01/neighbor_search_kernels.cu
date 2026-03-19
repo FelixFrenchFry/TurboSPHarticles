@@ -18,6 +18,7 @@ namespace GPU01
 	__constant__ float c_ns_cellSize;
 	__constant__ float c_ns_cellSizeInv;
 	__constant__ uint32_t c_ns_cellQueryReach;
+	__constant__ uint32_t c_ns_gridCellIndexing;
 	__constant__ float c_ns_xBoxOrig;
 	__constant__ float c_ns_yBoxOrig;
 	__constant__ float c_ns_zBoxOrig;
@@ -29,7 +30,7 @@ namespace GPU01
 
 	void NS_ReloadConstants(
 		uint32_t N_F, uint32_t N_B,
-		float kernelRadius, float cellSize, uint32_t cellQueryReach,
+		float kernelRadius, float cellSize, uint32_t cellQueryReach, uint32_t gridCellIndexing,
 		float xBoxOrig, float yBoxOrig, float zBoxOrig,
 		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
 		uint32_t N_Cells, uint32_t EMPTY,
@@ -46,6 +47,7 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSize, &cellSize, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_cellSizeInv, &cellSizeInv, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_cellQueryReach, &cellQueryReach, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_gridCellIndexing, &gridCellIndexing, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_xBoxOrig, &xBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_yBoxOrig, &yBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_zBoxOrig, &zBoxOrig, sizeof(float)));
@@ -661,6 +663,29 @@ namespace GPU01
 		return xx | yy | zz; // interleaved 3D Morton/Z-order code
 	}
 
+	__device__ __forceinline__
+	uint64_t MapToCellId_XYZ(
+		int cx, int cy, int cz)
+	{
+		const uint64_t ux = static_cast<uint64_t>(ZigZag(cx) & 0x1fffffU);
+		const uint64_t uy = static_cast<uint64_t>(ZigZag(cy) & 0x1fffffU);
+		const uint64_t uz = static_cast<uint64_t>(ZigZag(cz) & 0x1fffffU);
+
+		return ux | (uy << 21) | (uz << 42);
+	}
+
+	__device__ __forceinline__
+	uint64_t MapToCellId(
+		int cx, int cy, int cz)
+	{
+		if (c_ns_gridCellIndexing == 1u)
+		{
+			return MapToCellId_XYZ(cx, cy, cz);
+		}
+
+		return MapToCellId_Morton(cx, cy, cz);
+	}
+
 	__device__
 	int BinarySearchUniqueCellId(
 		const uint64_t* uniqueCellId,
@@ -770,7 +795,7 @@ namespace GPU01
 		const int cy = FloorToInt(y * c_ns_cellSizeInv);
 		const int cz = FloorToInt(z * c_ns_cellSizeInv);
 
-		cellId[i] = MapToCellId_Morton(cx, cy, cz);
+		cellId[i] = MapToCellId(cx, cy, cz);
 		sortedParticleIdx[i] = i;
 	}
 
@@ -825,7 +850,7 @@ namespace GPU01
 				{
 					int cx_nbr = cx + rx; // target cell coordinate in x-direction
 
-					const uint64_t cid_nbr = MapToCellId_Morton(cx_nbr, cy_nbr, cz_nbr);
+					const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
 
 					// fluid neighbor cell
 					int cF_nbr = BinarySearchUniqueCellId(uniqueCellIdF, N_NonEmptyCellsF, cid_nbr);
@@ -957,7 +982,7 @@ namespace GPU01
 				{
 					int cx_nbr = cx + rx; // target cell coordinate in x-direction
 
-					const uint64_t cid_nbr = MapToCellId_Morton(cx_nbr, cy_nbr, cz_nbr);
+					const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
 
 					// fluid neighbor cell
 					int cF_nbr = BinarySearchUniqueCellId(uniqueCellIdF, N_NonEmptyCellsF, cid_nbr);

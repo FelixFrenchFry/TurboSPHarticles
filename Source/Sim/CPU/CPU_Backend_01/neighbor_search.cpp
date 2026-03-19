@@ -3217,6 +3217,7 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	gridCellIndexing_ = params.gridCellIndexing;
 	cellQueryReach_ = 1;
 	cellOrigX_ = 0;
 	cellOrigY_ = 0;
@@ -3277,6 +3278,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	const bool cellQueryReachChanged = (cellQueryReach_ != cellQueryReach);
 
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	gridCellIndexing_ = params.gridCellIndexing;
 	cellSize_ = cellSize;
 	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f)
 		? 0.0f : (1.0f / cellSize);
@@ -3304,7 +3306,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
 					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
-					cellIdF_[i] = MapToCellId_Morton(cx, cy, cz);
+					cellIdF_[i] = MapToCellId(cx, cy, cz);
 					sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
 				}
 			},
@@ -3329,7 +3331,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
 					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
-					cellIdB_[i] = MapToCellId_Morton(cx, cy, cz);
+					cellIdB_[i] = MapToCellId(cx, cy, cz);
 					sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
 				}
 			},
@@ -3542,7 +3544,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 				std::fill(hasFluidCell.begin(), hasFluidCell.end(), 0);
 				std::fill(hasBoundaryCell.begin(), hasBoundaryCell.end(), 0);
 
-				// BigMin/LitMax range of the queried neighborhood in Morton space
+				// BigMin/LitMax range of the queried neighborhood in cell ID space
 				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
 				uint64_t bigMinCellId = 0;
 
@@ -3562,7 +3564,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 							const int idx_nbr = NeighborOffset(rx, ry, rz);
 
 							// cell ID of this neighbor cell
-							const uint64_t cid_nbr = MapToCellId_Morton(ox, oy, oz);
+							const uint64_t cid_nbr = MapToCellId(ox, oy, oz);
 							nbrCellId[idx_nbr] = cid_nbr;
 							litMaxCellId = std::min(litMaxCellId, cid_nbr);
 							bigMinCellId = std::max(bigMinCellId, cid_nbr);
@@ -3841,7 +3843,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Basic(const SimParams& params)
 								int nx = cx + rx; // target cell coordinate in x-direction
 
 								// cell ID of the neighbor cell
-								const uint64_t cid_nbr = MapToCellId_Morton(nx, ny, nz);
+								const uint64_t cid_nbr = MapToCellId(nx, ny, nz);
 
 								// find neighbor fluid cell in compact list (binary search)
 								// TODO: use ternary search and BigMin-LitMax instead?
@@ -4089,7 +4091,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 				std::fill(hasFluidCell.begin(), hasFluidCell.end(), 0);
 				std::fill(hasBoundaryCell.begin(), hasBoundaryCell.end(), 0);
 
-				// BigMin/LitMax range of the queried neighborhood in Morton space
+				// BigMin/LitMax range of the queried neighborhood in cell ID space
 				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
 				uint64_t bigMinCellId = 0;
 
@@ -4109,7 +4111,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 							const int idx_nbr = NeighborOffset(rx, ry, rz);
 
 							// cell ID of this neighbor cell
-							const uint64_t cid_nbr = MapToCellId_Morton(ox, oy, oz);
+							const uint64_t cid_nbr = MapToCellId(ox, oy, oz);
 							nbrCellId[idx_nbr] = cid_nbr;
 							litMaxCellId = std::min(litMaxCellId, cid_nbr);
 							bigMinCellId = std::max(bigMinCellId, cid_nbr);
@@ -4341,7 +4343,7 @@ NeighborSpan NS_CellLinkedList_Compact_CPU01::QueryParticleFF(
 		{
 			for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 			{
-				const uint64_t cid_nbr = MapToCellId_Morton(cx + rx, cy + ry, cz + rz);
+				const uint64_t cid_nbr = MapToCellId(cx + rx, cy + ry, cz + rz);
 				auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
 
 				if (itF == uniqueCellIdF_.end() || *itF != cid_nbr) { continue; }
@@ -4398,7 +4400,7 @@ NeighborSpan NS_CellLinkedList_Compact_CPU01::QueryParticleFB(
 		{
 			for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 			{
-				const uint64_t cid_nbr = MapToCellId_Morton(cx + rx, cy + ry, cz + rz);
+				const uint64_t cid_nbr = MapToCellId(cx + rx, cy + ry, cz + rz);
 				auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
 
 				if (itB == uniqueCellIdB_.end() || *itB != cid_nbr) { continue; }
@@ -4600,7 +4602,7 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	static constexpr uint32_t MaxAxisCells = (1u << 21);
 	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)
 	{
-		SPDLOG_ERROR("Compact CLL cell frame exceeds Morton 21-bit axis limit [{}, {}, {}]",
+		SPDLOG_ERROR("Compact CLL cell frame exceeds 21-bit axis limit [{}, {}, {}]",
 			N_DimX_, N_DimY_, N_DimZ_);
 		assert(false);
 		cellFrameValid_ = false;
@@ -4615,6 +4617,17 @@ inline uint32_t NS_CellLinkedList_Compact_CPU01::NeighborCellCount() const noexc
 {
 	const uint32_t N_NbrDim = 2u * cellQueryReach_ + 1u;
 	return N_NbrDim * N_NbrDim * N_NbrDim;
+}
+
+inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId(
+	int cx, int cy, int cz) const noexcept
+{
+	if (gridCellIndexing_ == Base::GridCellIndexing::XYZ)
+	{
+		return MapToCellId_XYZ(cx, cy, cz);
+	}
+
+	return MapToCellId_Morton(cx, cy, cz);
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(

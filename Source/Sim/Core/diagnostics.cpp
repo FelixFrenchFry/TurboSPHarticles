@@ -90,6 +90,8 @@ namespace Sim
             Base::ToCString(params.solverTerminationCond));
         printf("%-24s = %u\n", "dataReOrderInterval", params.dataReOrderInterval);
         printf("%-24s = %.6f\n", "gridCellSizeRatio", params.gridCellSizeRatio);
+        printf("%-24s = %s\n", "gridCellIndexing",
+            Base::ToCString(params.gridCellIndexing));
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
         printf("%-24s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);
         printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);

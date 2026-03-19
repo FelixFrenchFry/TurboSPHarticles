@@ -78,10 +78,27 @@ namespace Export
 			return false;
 		}
 
+		if (!OpenBenchmarkMetricsCsv())
+		{
+			SPDLOG_ERROR("Failed to open benchmark metrics CSV for '{}'",
+				runDir_.string());
+			Disable();
+			return false;
+		}
+
 		WriteMemoryMetricsHeader();
 		if (!memoryMetricsCsv_.good())
 		{
 			SPDLOG_ERROR("Failed to write memory metrics CSV header for '{}'",
+				runDir_.string());
+			Disable();
+			return false;
+		}
+
+		WriteBenchmarkMetricsHeader();
+		if (!benchmarkMetricsCsv_.good())
+		{
+			SPDLOG_ERROR("Failed to write benchmark metrics CSV header for '{}'",
 				runDir_.string());
 			Disable();
 			return false;
@@ -101,9 +118,43 @@ namespace Export
 			memoryMetricsCsv_.flush();
 			memoryMetricsCsv_.close();
 		}
+		if (benchmarkMetricsCsv_.is_open())
+		{
+			benchmarkMetricsCsv_.flush();
+			benchmarkMetricsCsv_.close();
+		}
 
 		active_ = false;
 		runDir_.clear();
+	}
+
+	void LoggingMgr::AppendBenchmarkRecord(
+		const Bench::BenchRecordStep& record)
+	{
+		if (!active_ || !benchmarkMetricsCsv_.is_open()) { return; }
+
+		const double constructionMs =
+			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Neighbors_Construction)]) * 1e-6;
+		const double queryMs =
+			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Neighbors_Query)]) * 1e-6;
+		const double totalSimMs =
+			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Total_Sim)]) * 1e-6;
+
+		benchmarkMetricsCsv_ << record.simStep << ','
+							 << std::setprecision(17) << record.simTime << ','
+							 << std::setprecision(17) << constructionMs << ','
+							 << std::setprecision(17) << queryMs << ','
+							 << std::setprecision(17) << totalSimMs;
+
+		benchmarkMetricsCsv_ << '\n';
+		benchmarkMetricsCsv_.flush();
+
+		if (!benchmarkMetricsCsv_.good())
+		{
+			SPDLOG_ERROR("Failed while appending benchmark metrics to '{}'",
+				(runDir_ / "benchmark_metrics.csv").string());
+			Disable();
+		}
 	}
 
 	void LoggingMgr::AppendMemoryRecord(
@@ -227,6 +278,21 @@ namespace Export
 		return true;
 	}
 
+	bool LoggingMgr::OpenBenchmarkMetricsCsv()
+	{
+		const std::filesystem::path csvPath = runDir_ / "benchmark_metrics.csv";
+
+		benchmarkMetricsCsv_.open(csvPath, std::ios::out | std::ios::trunc);
+		if (!benchmarkMetricsCsv_.is_open())
+		{
+			return false;
+		}
+
+		benchmarkMetricsCsv_.imbue(std::locale::classic());
+
+		return true;
+	}
+
 	bool LoggingMgr::WriteRunMeta(
 		const std::string& configProfile,
 		const std::string& paramsFile,
@@ -276,6 +342,7 @@ namespace Export
 			{ "expctdAvgNbrCountHardMax_FF", simParams.expctdAvgNbrCountHardMax_FF },
 			{ "expctdAvgNbrCountHardMax_FB", simParams.expctdAvgNbrCountHardMax_FB },
 			{ "gridCellSizeRatio", simParams.gridCellSizeRatio },
+			{ "gridCellIndexing", static_cast<int>(simParams.gridCellIndexing) },
 			{ "maxThreadsSim", simParams.maxThreadsSim }
 		};
 
@@ -319,11 +386,22 @@ namespace Export
 						  << '\n';
 	}
 
+	void LoggingMgr::WriteBenchmarkMetricsHeader()
+	{
+		if (!benchmarkMetricsCsv_.is_open()) { return; }
+
+		benchmarkMetricsCsv_ << "simStep,simTime,construction_ms,query_ms,total_sim_ms\n";
+	}
+
 	void LoggingMgr::Disable()
 	{
 		if (memoryMetricsCsv_.is_open())
 		{
 			memoryMetricsCsv_.close();
+		}
+		if (benchmarkMetricsCsv_.is_open())
+		{
+			benchmarkMetricsCsv_.close();
 		}
 
 		active_ = false;

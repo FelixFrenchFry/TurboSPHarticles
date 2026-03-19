@@ -13,6 +13,7 @@
 #include <utility>
 
 // internal
+#include "Source/Eval/Bench/operations.h"
 #include "Source/Eval/Mem/metrics_mem.h"
 #include "Source/Sim/Core/parameters_sim.h"
 
@@ -43,6 +44,8 @@ namespace Export
 
 		void EndRun();
 
+		void AppendBenchmarkRecord(const Bench::BenchRecordStep& record);
+
 		void AppendMemoryRecord(const Mem::MemRecordStep& record);
 
 		bool IsActive() const { return active_; }
@@ -56,15 +59,18 @@ namespace Export
 		std::filesystem::path runDir_{};
 
 		std::ofstream memoryMetricsCsv_{};
+		std::ofstream benchmarkMetricsCsv_{};
 
 		bool active_ = false;
 
 		bool CreateNextRunDirectory();
+		bool OpenBenchmarkMetricsCsv();
 		bool OpenMemoryMetricsCsv();
 		bool WriteRunMeta(const std::string& configProfile,
 						  const std::string& paramsFile,
 						  const std::string& scenariosFile,
 						  const Sim::SimParams& simParams) const;
+		void WriteBenchmarkMetricsHeader();
 		void WriteMemoryMetricsHeader();
 		void Disable();
 

@@ -160,6 +160,23 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			return false;
 		};
+
+	auto ParseGridCellIndexing = [](const nlohmann::json& v, Base::GridCellIndexing& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "Morton") { out = Base::GridCellIndexing::Morton; return true; }
+				if (s == "XYZ") { out = Base::GridCellIndexing::XYZ; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				out = static_cast<Base::GridCellIndexing>(v.get<int>());
+				return true;
+			}
+			return false;
+		};
 	// TODO: implement actual setters for backend version and scenario type?
 	{
 		BeginWrite();
@@ -418,6 +435,21 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		}
 
 		EndWrite();
+	}
+
+	if (auto it = j.find("gridCellIndexing"); it != j.end())
+	{
+		Base::GridCellIndexing gridCellIndexing;
+		if (ParseGridCellIndexing(*it, gridCellIndexing))
+		{
+			BeginWrite();
+			params_.gridCellIndexing = gridCellIndexing;
+			EndWrite();
+		}
+		else
+		{
+			SPDLOG_WARN("Invalid 'gridCellIndexing' in JSON");
+		}
 	}
 
 	// --- [ jitter ] --------------------------------------------------------------------------------
@@ -1432,6 +1464,11 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	ok &= Check("gridCellSizeRatio <= 0", true, [&]()
 	{
 		return par.gridCellSizeRatio > 0.0f;
+	});
+	ok &= Check("invalid gridCellIndexing", true, [&]()
+	{
+		return par.gridCellIndexing == Base::GridCellIndexing::Morton
+			|| par.gridCellIndexing == Base::GridCellIndexing::XYZ;
 	});
 	ok &= Check("kernelRadius != kernelSuppRatio * particleSizeF", true, [&]()
 	{

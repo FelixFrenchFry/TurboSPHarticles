@@ -1,10 +1,10 @@
 {
-  "backendVersion": "CPU01",
+  "backendVersion": "GPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 5,
   "neighborListStorage": 3,
 
-  "maxSteps": 1000,
+  "maxSteps": -1,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -23,6 +23,8 @@
   "solverTerminationCond": 0,
 
   "dataReOrderInterval": 25,
+  "gridCellSizeRatio": 1.0,
+  "gridCellIndexing": "Morton",
   "jitterFracF": 0.0,
   "jitterSeedF": 67,
   "jitterFracB": 0.0,

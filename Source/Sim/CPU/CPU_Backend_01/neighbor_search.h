@@ -406,6 +406,7 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 		float kernelRadiusSqu_ = 0.0f;
+		Base::GridCellIndexing gridCellIndexing_ = Base::GridCellIndexing::Morton;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CellFrameRebuildMargin_ = 8; // hysteresis buffer
 
@@ -441,6 +442,7 @@ namespace Sim
 		// helpers
 		void UpdateCellFrame();
 		inline uint32_t NeighborCellCount() const noexcept;
+		inline uint64_t MapToCellId(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_XYZ(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
