@@ -12,7 +12,7 @@ from matplotlib.patches import Patch
 # --- [ plot data ] --------------------------------------------------------------------
 # --------------------------------------------------------------------------------------
 
-ACTIVE_SCENARIO = 1
+ACTIVE_SCENARIO = 3
 
 SCENARIO_DATA = {
     1: {
@@ -81,14 +81,14 @@ METHOD_COMPONENT_TIMES_MS = SELECTED_SCENARIO.get("method_component_times_ms", {
 # --------------------------------------------------------------------------------------
 
 PLOT_TITLE = "TODO"
-X_LABEL = "Fluid particles [millions]"
+X_LABEL = "Fluid particles\n[millions]"
 Y_LABEL = "Neighbor search time [ms]"
 SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 
-FIG_SIZE = (7.0, 8.0)
+FIG_SIZE = (6.0, 8.0)
 BAR_WIDTH = 0.25
 
 GRID_ENABLED = True
@@ -117,13 +117,13 @@ def RGB(r: int, g: int, b: int) -> tuple[float, float, float]:
 METHOD_STYLES = {
     "XYZ-order": {
         "label": "XYZ-order",
-        "construction_color": RGB(25, 50, 80),
-        "query_color": RGB(40, 80, 180),
+        "construction_color": RGB(110, 100, 70),
+        "query_color": RGB(220, 200, 140),
     },
     "Z-order": {
         "label": "Z-order",
-        "construction_color": RGB(150, 0, 30),
-        "query_color": RGB(250, 0, 50),
+        "construction_color": RGB(40, 80, 120),
+        "query_color": RGB(120, 180, 230),
     },
 }
 
