@@ -26,37 +26,37 @@ BENCHMARK_COMPONENT_NAMES = [
 # (breaking dam with 200 x 300 x 200)
 NEIGHBOR_LIST_BENCHMARK_TIMES_MS = {
     "Explicit": {
-        "dataOrder":            0.0,
-        "neighCon":             0.0,
-        "neighQue":             0.0,
-        "dens":                 0.0,
-        "viscAcc + extAcc":     0.0,
-        "srcTerm + diagElem":   0.0,
-        "jacSolv":              0.0,
-        "presAcc":              0.0,
-        "velUpd + posUpd":      0.0,
+        "dataOrder":            3.29,
+        "neighCon":             89.55,
+        "neighQue":             270.43,
+        "dens":                 30.14,
+        "viscAcc + extAcc":     81.89,
+        "srcTerm + diagElem":   94.95,
+        "jacSolv":              347.01,
+        "presAcc":              42.06,
+        "velUpd + posUpd":      4.01,
     },
     "Compressed": {
-        "dataOrder":            0.0,
-        "neighCon":             0.0,
-        "neighQue":             0.0,
-        "dens":                 0.0,
-        "viscAcc + extAcc":     0.0,
-        "srcTerm + diagElem":   0.0,
-        "jacSolv":              0.0,
-        "presAcc":              0.0,
-        "velUpd + posUpd":      0.0,
+        "dataOrder":            3.51,
+        "neighCon":             91.53,
+        "neighQue":             557.29,
+        "dens":                 49.62,
+        "viscAcc + extAcc":     101.52,
+        "srcTerm + diagElem":   112.77,
+        "jacSolv":              507.61,
+        "presAcc":              61.97,
+        "velUpd + posUpd":      4.80,
     },
     "On-Demand": {
-        "dataOrder":            0.0,
-        "neighCon":             0.0,
+        "dataOrder":            3.44,
+        "neighCon":             86.74,
         "neighQue":             0.0,
-        "dens":                 0.0,
-        "viscAcc + extAcc":     0.0,
-        "srcTerm + diagElem":   0.0,
-        "jacSolv":              0.0,
-        "presAcc":              0.0,
-        "velUpd + posUpd":      0.0,
+        "dens":                 385.11,
+        "viscAcc + extAcc":     435.89,
+        "srcTerm + diagElem":   441.51,
+        "jacSolv":              3217.48,
+        "presAcc":              401.65,
+        "velUpd + posUpd":      3.87,
     },
 }
 
@@ -66,21 +66,21 @@ NEIGHBOR_LIST_BENCHMARK_TIMES_MS = {
 # --------------------------------------------------------------------------------------
 
 PLOT_TITLE = "TODO"
-X_LABEL = "Simulation operation"
+X_LABEL = ""
 Y_LABEL = "Time per simulation step [ms]"
 SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 
-FIG_SIZE = (24.0, 10.0)
+FIG_SIZE = (16.0, 7.0)
 BAR_WIDTH = 0.25
 
 GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
-Y_AXIS_TICK_INTERVAL = 2.0
+Y_AXIS_TICK_INTERVAL = 500.0
 
 SHOW_LEGEND = True
 LEGEND_LOC = "upper left"
@@ -125,10 +125,6 @@ OPERATION_GROUPS = {
         "srcTerm + diagElem",
         "jacSolv",
         "presAcc",
-    ],
-    "Misc": [
-        "dataOrder",
-        "velUpd + posUpd",
     ],
 }
 

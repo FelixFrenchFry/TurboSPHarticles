@@ -18,9 +18,11 @@ DELTA_BUCKET_LABELS = [
     r"$[2^8, 2^{32})$",
 ]
 
+# 20 threads, averaged over the first 1000 steps, in milliseconds
+# (breaking dam with 100 x 100 x 100)
 METHOD_BUCKET_PERCENTAGES = {
-    "XYZ":    [3.2, 42.6, 15.1, 26.4, 12.7],
-    "Morton": [3.2, 47.8, 16.4, 29.1, 3.5],
+    "XYZ":    [3.29, 47.18, 13.26, 32.09, 4.17],
+    "Morton": [3.29, 47.18, 13.26, 32.09, 4.17],
 }
 
 
