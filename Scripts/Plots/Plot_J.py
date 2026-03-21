@@ -11,7 +11,7 @@ from matplotlib.ticker import FuncFormatter
 # --------------------------------------------------------------------------------------
 
 DELTA_BUCKET_LABELS = [
-    "Uncompressed",
+    "Explicit",
     "0",
     "1",
     r"$[2, 2^8)$",
@@ -21,8 +21,8 @@ DELTA_BUCKET_LABELS = [
 # 20 threads, averaged over the first 1000 steps, in milliseconds
 # (breaking dam with 100 x 100 x 100)
 INTERVAL_BUCKET_PERCENTAGES = {
-    "None": [],
-    "100":  [],
+    "None": [3.29, 25.87, 11.93, 45.27, 13.64],
+    "100":  [3.29, 42.19, 13.84, 35.04, 4.85],
     "10":   [3.29, 46.96, 13.33, 32.23, 4.19],
     "1":    [3.29, 47.18, 13.26, 32.09, 4.17],
 }
@@ -41,7 +41,7 @@ AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 BAR_LABEL_FONT_SIZE = 24
 
-FIG_SIZE = (16.0, 10.0)
+FIG_SIZE = (16.0, 11.0)
 BAR_HEIGHT = 0.2
 BAR_EDGE_WIDTH = 1.5
 BAR_LABEL_OFFSET = 0.8
