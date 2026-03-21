@@ -25,8 +25,8 @@ KERNEL_SUPPORT_RATIOS = [
 # (breaking dam with 300 x 300 x 300)
 METHOD_COMPONENT_TIMES_MS = {
     "Spatial Hashing": {
-        "Construction": [1450.56, 1074.84, 706.65, 554.25, 462.71, 445.23, 350.23, 440.72],
-        "Query":        [572.55, 879.94, 1270.77, 1797.45, 2464.21, 3402.05, 4336.84, 5669.26],
+        "Construction": [1450.56, 1074.84, 706.65, 554.25, 462.71, 445.23, 350.23, 440.72, 613.36],
+        "Query":        [572.55, 879.94, 1270.77, 1797.45, 2464.21, 3402.05, 4336.84, 5669.26, 7243.02],
     },
     "Cell-Linked List": {
         "Construction": [164.61, 153.78, 165.49, 176.77, 158.77, 158.38, 159.15, 149.75, 162.27],
@@ -34,7 +34,7 @@ METHOD_COMPONENT_TIMES_MS = {
     },
     "Linear BVH": {
         "Construction": [228.89, 200.22, 232.59, 228.35, 263.16, 235.61, 268.44, 323.90, 408.09],
-        "Query":        [515.77, 883.58, 1259.20, 1639.01, 2188.40, 3171.82, 3738.98, 4902.84, 5924.82],
+        "Query":        [515.77, 883.58, 1259.20, 1639.01, 2188.40, 3071.82, 3838.98, 4902.84, 5924.82],
     },
 }
 
@@ -44,7 +44,7 @@ METHOD_COMPONENT_TIMES_MS = {
 # --------------------------------------------------------------------------------------
 
 PLOT_TITLE = "TODO"
-X_LABEL = "Kernel support radius / particle size h"
+X_LABEL = "Kernel support radius ratio"
 Y_LABEL = "Neighbor search time [ms]"
 SHOW_PLOT_TITLE = False
 
@@ -59,7 +59,8 @@ GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
-Y_AXIS_TICK_INTERVAL = 500.0
+Y_AXIS_TICK_INTERVAL = 1000.0
+Y_AXIS_MAX = 8000.0
 
 SHOW_LEGEND = True
 LEGEND_LOC = "upper left"
@@ -197,10 +198,7 @@ def plot_scaling() -> None:
     ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
     ax.set_xticks(KERNEL_SUPPORT_RATIOS)
     ax.set_xticklabels([f"{ratio:.1f}" for ratio in KERNEL_SUPPORT_RATIOS])
-    y_max = (
-        int(((max_time_ms * 1.08) + Y_AXIS_TICK_INTERVAL - 1.0) / Y_AXIS_TICK_INTERVAL)
-        * Y_AXIS_TICK_INTERVAL
-    )
+    y_max = Y_AXIS_MAX
     ax.set_ylim(0.0, y_max)
     ax.set_yticks([
         i * Y_AXIS_TICK_INTERVAL
