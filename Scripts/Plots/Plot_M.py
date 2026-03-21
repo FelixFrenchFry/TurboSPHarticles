@@ -3,6 +3,8 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.legend_handler import HandlerTuple
+from matplotlib.patches import Patch
 
 
 # --------------------------------------------------------------------------------------
@@ -10,30 +12,30 @@ import matplotlib.pyplot as plt
 # --------------------------------------------------------------------------------------
 
 IISPH_ITERATION_COUNTS = [
-    1,
-    2,
-    4,
-    8,
-    12,
-    16,
-    24,
-    32,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
 ]
 
 # 32 threads, averaged over the first 500 steps, in milliseconds
 # (breaking dam with fixed IISPH iteration counts)
 METHOD_COMPONENT_TIMES_MS = {
-    "IndividualVectors": {
-        "Neighbor Build": [70.0, 70.1, 70.0, 70.4, 70.2, 70.3, 70.5, 70.6],
-        "Pre-Solver SPH": [165.0, 166.2, 168.0, 170.4, 172.8, 175.1, 179.8, 184.4],
-        "Jacobi Solver":  [75.0, 145.0, 285.0, 565.0, 845.0, 1125.0, 1685.0, 2245.0],
-        "Post-Solver":    [26.0, 26.1, 26.3, 26.6, 26.9, 27.2, 27.8, 28.4],
+    "Mulitple Individual Lists": {
+        "Construction": [16, 16, 16, 17, 17, 17, 18, 18, 18, 19],
+        "Query":        [72, 72, 73, 73, 74, 74, 75, 75, 76, 76],
+        "IISPH":        [255, 435, 615, 795, 975, 1155, 1335, 1515, 1695, 1875],
     },
-    "CSRVector_DoubleQuery": {
-        "Neighbor Build": [118.0, 118.3, 118.1, 118.5, 118.7, 118.9, 119.4, 120.0],
-        "Pre-Solver SPH": [148.0, 149.0, 150.4, 152.6, 154.8, 156.7, 160.9, 164.7],
-        "Jacobi Solver":  [68.0, 131.0, 257.0, 509.0, 761.0, 1013.0, 1517.0, 2021.0],
-        "Post-Solver":    [24.0, 24.1, 24.2, 24.5, 24.7, 25.0, 25.5, 26.1],
+    "Single Contiguous List": {
+        "Construction": [21, 21, 22, 22, 22, 23, 23, 23, 24, 24],
+        "Query":        [118, 118, 119, 119, 120, 120, 121, 121, 122, 122],
+        "IISPH":        [232, 397, 562, 727, 892, 1057, 1222, 1387, 1552, 1717],
     },
 }
 
@@ -43,18 +45,15 @@ METHOD_COMPONENT_TIMES_MS = {
 # --------------------------------------------------------------------------------------
 
 PLOT_TITLE = "TODO"
-X_LABEL = "Fixed IISPH iterations [-]"
-TOTAL_Y_LABEL = "Total step time [ms]"
-BUILD_Y_LABEL = "Neighbor build [ms]"
-JACOBI_Y_LABEL = "Jacobi solver [ms]"
+X_LABEL = "Number of IISPH iterations"
+Y_LABEL = "Time per simulation step [ms]"
 SHOW_PLOT_TITLE = False
 
-AXES_FONT_SIZE = 24
+AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 
-FIG_SIZE = (16.0, 13.0)
-LINE_WIDTH = 4.0
-MARKER_SIZE = 14.0
+FIG_SIZE = (24.0, 10.0)
+BAR_WIDTH = 0.35
 
 GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
@@ -73,17 +72,17 @@ def RGB(r: int, g: int, b: int) -> tuple[float, float, float]:
 
 
 METHOD_STYLES = {
-    "IndividualVectors": {
-        "label": "Individual Vectors",
-        "color": RGB(40, 80, 180),
-        "marker": "o",
-        "line_style": "-",
+    "Mulitple Individual Lists": {
+        "label": "Mulitple Individual Lists",
+        "construction_color": RGB(170, 60, 10),
+        "query_color": RGB(240, 110, 40),
+        "iisph_color": RGB(250, 170, 130),
     },
-    "CSRVector_DoubleQuery": {
-        "label": "CSR Vector (Double Query)",
-        "color": RGB(250, 0, 50),
-        "marker": "o",
-        "line_style": "-",
+    "Single Contiguous List": {
+        "label": "Single Contiguous List",
+        "construction_color": RGB(15, 25, 40),
+        "query_color": RGB(60, 70, 100),
+        "iisph_color": RGB(130, 140, 160),
     },
 }
 
@@ -99,10 +98,9 @@ def validate_plot_data() -> None:
 
     num_points = len(IISPH_ITERATION_COUNTS)
     required_components = [
-        "Neighbor Build",
-        "Pre-Solver SPH",
-        "Jacobi Solver",
-        "Post-Solver",
+        "Construction",
+        "Query",
+        "IISPH",
     ]
 
     for method_name, component_times_ms in METHOD_COMPONENT_TIMES_MS.items():
@@ -125,93 +123,92 @@ def validate_plot_data() -> None:
                 )
 
 
-def compute_total_step_times_ms() -> dict[str, list[float]]:
-    total_step_times_ms: dict[str, list[float]] = {}
+def plot_scaling() -> None:
+    fig, ax = plt.subplots(figsize=FIG_SIZE)
 
-    for method_name, component_times_ms in METHOD_COMPONENT_TIMES_MS.items():
-        total_step_times_ms[method_name] = [
-            component_times_ms["Neighbor Build"][i]
-            + component_times_ms["Pre-Solver SPH"][i]
-            + component_times_ms["Jacobi Solver"][i]
-            + component_times_ms["Post-Solver"][i]
-            for i in range(len(IISPH_ITERATION_COUNTS))
+    method_names = list(METHOD_COMPONENT_TIMES_MS.keys())
+    num_methods = len(method_names)
+    x_positions = list(range(len(IISPH_ITERATION_COUNTS)))
+    legend_handles = []
+    legend_labels = []
+    max_total_time_ms = 0.0
+
+    for method_idx, method_name in enumerate(method_names):
+        style = METHOD_STYLES[method_name]
+        construction_times_ms = METHOD_COMPONENT_TIMES_MS[method_name]["Construction"]
+        query_times_ms = METHOD_COMPONENT_TIMES_MS[method_name]["Query"]
+        iisph_times_ms = METHOD_COMPONENT_TIMES_MS[method_name]["IISPH"]
+        total_times_ms = [
+            construction_time_ms + query_time_ms + iisph_time_ms
+            for construction_time_ms, query_time_ms, iisph_time_ms
+            in zip(construction_times_ms, query_times_ms, iisph_times_ms)
         ]
+        max_total_time_ms = max(max_total_time_ms, max(total_times_ms))
 
-    return total_step_times_ms
+        x_offset = (method_idx - (num_methods - 1) / 2.0) * BAR_WIDTH
+        bar_positions = [x + x_offset for x in x_positions]
 
+        ax.bar(
+            bar_positions,
+            construction_times_ms,
+            width=BAR_WIDTH,
+            color=style["construction_color"],
+        )
+        ax.bar(
+            bar_positions,
+            query_times_ms,
+            width=BAR_WIDTH,
+            bottom=construction_times_ms,
+            color=style["query_color"],
+        )
+        ax.bar(
+            bar_positions,
+            iisph_times_ms,
+            width=BAR_WIDTH,
+            bottom=[
+                construction_time_ms + query_time_ms
+                for construction_time_ms, query_time_ms
+                in zip(construction_times_ms, query_times_ms)
+            ],
+            color=style["iisph_color"],
+        )
 
-def apply_axis_styling(ax: plt.Axes, y_label: str) -> None:
-    ax.set_ylabel(y_label, fontsize=AXES_FONT_SIZE)
+        legend_handles.append(
+            (
+                Patch(facecolor=style["construction_color"]),
+                Patch(facecolor=style["query_color"]),
+                Patch(facecolor=style["iisph_color"]),
+            )
+        )
+        legend_labels.append(style["label"])
+
+    if SHOW_PLOT_TITLE:
+        ax.set_title(PLOT_TITLE, fontsize=FIGURE_TITLE_FONT_SIZE)
+
+    ax.set_xlabel(X_LABEL, fontsize=AXES_FONT_SIZE)
+    ax.set_ylabel(Y_LABEL, fontsize=AXES_FONT_SIZE)
     ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([str(count) for count in IISPH_ITERATION_COUNTS])
+    ax.set_ylim(0.0, max_total_time_ms * 1.05)
 
     if GRID_ENABLED:
         ax.grid(
             True,
+            axis="y",
             linestyle=GRID_LINE_STYLE,
             linewidth=GRID_LINE_WIDTH,
             alpha=GRID_ALPHA,
         )
 
-
-def plot_scaling() -> None:
-    fig, axes = plt.subplots(
-        3,
-        1,
-        figsize=FIG_SIZE,
-        sharex=True,
-        gridspec_kw={"height_ratios": [1.35, 1.0, 1.0]},
-    )
-
-    ax_total, ax_build, ax_jacobi = axes
-    total_step_times_ms = compute_total_step_times_ms()
-
-    for method_name, style in METHOD_STYLES.items():
-        ax_total.plot(
-            IISPH_ITERATION_COUNTS,
-            total_step_times_ms[method_name],
-            color=style["color"],
-            marker=style["marker"],
-            linestyle=style["line_style"],
-            linewidth=LINE_WIDTH,
-            markersize=MARKER_SIZE,
-            label=style["label"],
-        )
-
-        ax_build.plot(
-            IISPH_ITERATION_COUNTS,
-            METHOD_COMPONENT_TIMES_MS[method_name]["Neighbor Build"],
-            color=style["color"],
-            marker=style["marker"],
-            linestyle=style["line_style"],
-            linewidth=LINE_WIDTH,
-            markersize=MARKER_SIZE,
-        )
-
-        ax_jacobi.plot(
-            IISPH_ITERATION_COUNTS,
-            METHOD_COMPONENT_TIMES_MS[method_name]["Jacobi Solver"],
-            color=style["color"],
-            marker=style["marker"],
-            linestyle=style["line_style"],
-            linewidth=LINE_WIDTH,
-            markersize=MARKER_SIZE,
-        )
-
-    if SHOW_PLOT_TITLE:
-        ax_total.set_title(PLOT_TITLE, fontsize=FIGURE_TITLE_FONT_SIZE)
-
-    apply_axis_styling(ax_total, TOTAL_Y_LABEL)
-    apply_axis_styling(ax_build, BUILD_Y_LABEL)
-    apply_axis_styling(ax_jacobi, JACOBI_Y_LABEL)
-
     if SHOW_LEGEND:
-        ax_total.legend(
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            handler_map={tuple: HandlerTuple(ndivide=None)},
             fontsize=AXES_FONT_SIZE,
             loc=LEGEND_LOC,
         )
-
-    ax_jacobi.set_xlabel(X_LABEL, fontsize=AXES_FONT_SIZE)
-    ax_jacobi.set_xticks(IISPH_ITERATION_COUNTS)
 
     fig.tight_layout()
 

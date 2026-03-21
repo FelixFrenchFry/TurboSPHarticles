@@ -72,6 +72,7 @@ SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
+BAR_VALUE_FONT_SIZE = 26
 
 FIG_SIZE = (16.0, 7.0)
 BAR_WIDTH = 0.25
@@ -80,7 +81,7 @@ GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
-Y_AXIS_TICK_INTERVAL = 500.0
+Y_AXIS_TICK_INTERVAL = 1000.0
 
 SHOW_LEGEND = True
 LEGEND_LOC = "upper left"
@@ -117,14 +118,14 @@ OPERATION_GROUPS = {
     "Query": [
         "neighQue",
     ],
-    "Non-Pressure\nAcceleration": [
+    "IISPH": [
+        "dataOrder",
         "dens",
         "viscAcc + extAcc",
-    ],
-    "Pressure\nSolving": [
         "srcTerm + diagElem",
         "jacSolv",
         "presAcc",
+        "velUpd + posUpd",
     ],
 }
 
@@ -190,6 +191,18 @@ def plot_scaling() -> None:
             color=style["color"],
             label=style["label"],
         )
+
+        for bar_x, group_time_ms in zip(bar_positions, category_group_times_ms):
+            ax.annotate(
+                f"{group_time_ms:.0f}",
+                xy=(bar_x, group_time_ms),
+                xytext=(0, 8),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=BAR_VALUE_FONT_SIZE,
+                color=style["color"],
+            )
 
     if SHOW_PLOT_TITLE:
         ax.set_title(PLOT_TITLE, fontsize=FIGURE_TITLE_FONT_SIZE)

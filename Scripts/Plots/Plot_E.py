@@ -168,6 +168,7 @@ GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
+RIGHT_Y_TICK_INTERVAL = 10.0
 
 SHOW_LEGEND = True
 LEGEND_LOC = "lower left"
@@ -176,7 +177,7 @@ SHOW_GUIDE_RATIO_TICKS = True
 FORMAT_X_AXIS_AS_RATIO = True
 SHOW_QUERY_CELL_BACKGROUND = True
 SHOW_QUERY_CELL_LABELS = True
-QUERY_CELL_LABEL_Y_POS_AXES = 0.84
+QUERY_CELL_LABEL_Y_POS_AXES = 1.05
 QUERY_CELL_LABEL_MIN_SPAN_WIDTH = 0.05
 QUERY_CELL_LAST_LABEL_X = 1.6
 PLOT_X_MIN = 0.01
@@ -525,7 +526,12 @@ def plot_scaling() -> None:
 
     ax_left.set_xlim(PLOT_X_MIN, PLOT_X_MAX)
     configure_left_y_axis(ax_left, spatial_hashing_times, cll_times)
-    ax_right.set_ylim(0.0, max(negative_check_pcts) * 1.05)
+    right_y_max = math.ceil((max(negative_check_pcts) * 1.05) / RIGHT_Y_TICK_INTERVAL) * RIGHT_Y_TICK_INTERVAL
+    ax_right.set_ylim(0.0, right_y_max)
+    ax_right.set_yticks([
+        i * RIGHT_Y_TICK_INTERVAL
+        for i in range(int(right_y_max / RIGHT_Y_TICK_INTERVAL) + 1)
+    ])
 
     fig.tight_layout()
 

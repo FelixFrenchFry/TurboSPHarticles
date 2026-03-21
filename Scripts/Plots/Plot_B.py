@@ -15,22 +15,22 @@ METHOD_RUNTIME_BREAKDOWN_PCT = {
     "Brute Force": {
         "Construction": 0.0,
         "Query": 95.7,
-        "Other": 4.3,
+        "IISPH": 4.3,
     },
     "Spatial Hashing": {
         "Construction": 3.5,
         "Query": 33.2,
-        "Other": 63.3,
+        "IISPH": 63.3,
     },
     "Cell-Linked List": {
         "Construction": 3.0,
         "Query": 30.9,
-        "Other": 66.1,
+        "IISPH": 66.1,
     },
     "Linear BVH": {
         "Construction": 2.1,
         "Query": 59.6,
-        "Other": 38.3,
+        "IISPH": 38.3,
     },
 }
 
@@ -44,7 +44,7 @@ METHOD_ORDER = [
 COMPONENT_ORDER = [
     "Construction",
     "Query",
-    "Other",
+    "IISPH",
 ]
 
 
@@ -93,8 +93,8 @@ COMPONENT_STYLES = {
         "label": "Query",
         "color": RGB(40, 80, 180)
     },
-    "Other": {
-        "label": "Other",
+    "IISPH": {
+        "label": "IISPH",
         "color": RGB(90, 180, 250),
     },
 }

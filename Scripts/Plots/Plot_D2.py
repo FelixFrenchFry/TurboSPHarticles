@@ -17,22 +17,24 @@ KERNEL_SUPPORT_RATIOS = [
     4.0,
     4.5,
     5.0,
+    5.5,
+    6.0
 ]
 
 # 192 threads, averaged over the first 50 steps, in milliseconds
 # (breaking dam with 300 x 300 x 300)
 METHOD_COMPONENT_TIMES_MS = {
     "Spatial Hashing": {
-        "Construction": [1450.56, 1074.84, 706.65, 554.25, 462.71, 445.23],
-        "Query":        [572.55, 879.94, 1270.77, 1797.45, 2464.21, 3402.05],
+        "Construction": [1450.56, 1074.84, 706.65, 554.25, 462.71, 445.23, 350.23, 440.72],
+        "Query":        [572.55, 879.94, 1270.77, 1797.45, 2464.21, 3402.05, 4336.84, 5669.26],
     },
     "Cell-Linked List": {
-        "Construction": [164.61, 153.78, 165.49, 176.77, 158.77, 158.38, 159.15],
-        "Query":        [403.94, 756.40, 1182.18, 1769.29, 2523.96, 3598.47, 4670.36],
+        "Construction": [164.61, 153.78, 165.49, 176.77, 158.77, 158.38, 159.15, 149.75, 162.27],
+        "Query":        [403.94, 756.40, 1182.18, 1769.29, 2523.96, 3598.47, 4670.36, 6220.07, 7882.24],
     },
     "Linear BVH": {
-        "Construction": [],
-        "Query":        [],
+        "Construction": [228.89, 200.22, 232.59, 228.35, 263.16, 235.61, 268.44, 323.90, 408.09],
+        "Query":        [515.77, 883.58, 1259.20, 1639.01, 2188.40, 3171.82, 3738.98, 4902.84, 5924.82],
     },
 }
 
@@ -48,11 +50,6 @@ SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
-VALUE_LABEL_FONT_SIZE = 24
-CONSTRUCTION_VALUE_LABEL_OFFSET_X_PTS = -6
-CONSTRUCTION_VALUE_LABEL_OFFSET_Y_PTS = 8
-QUERY_VALUE_LABEL_OFFSET_X_PTS = 6
-QUERY_VALUE_LABEL_OFFSET_Y_PTS = 8
 
 FIG_SIZE = (24.0, 10.0)
 LINE_WIDTH = 4.0
@@ -62,6 +59,7 @@ GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
+Y_AXIS_TICK_INTERVAL = 500.0
 
 SHOW_LEGEND = True
 LEGEND_LOC = "upper left"
@@ -153,28 +151,6 @@ def validate_plot_data() -> None:
                 f"but KERNEL_SUPPORT_RATIOS has {num_points} entries."
             )
 
-
-def annotate_series(
-    ax: plt.Axes,
-    x_values: list[float],
-    y_values: list[float],
-    color: tuple[float, float, float],
-    offset_x_pts: int,
-    offset_y_pts: int,
-) -> None:
-    for x_value, y_value in zip(x_values, y_values):
-        ax.annotate(
-            f"{y_value:.0f}",
-            xy=(x_value, y_value),
-            xytext=(offset_x_pts, offset_y_pts),
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=VALUE_LABEL_FONT_SIZE,
-            color=color,
-        )
-
-
 def plot_scaling() -> None:
     fig, ax = plt.subplots(figsize=FIG_SIZE)
 
@@ -210,23 +186,6 @@ def plot_scaling() -> None:
             markersize=MARKER_SIZE,
         )
 
-        annotate_series(
-            ax,
-            KERNEL_SUPPORT_RATIOS,
-            construction_times_ms,
-            style["construction_color"],
-            CONSTRUCTION_VALUE_LABEL_OFFSET_X_PTS,
-            CONSTRUCTION_VALUE_LABEL_OFFSET_Y_PTS,
-        )
-        annotate_series(
-            ax,
-            KERNEL_SUPPORT_RATIOS,
-            query_times_ms,
-            style["query_color"],
-            QUERY_VALUE_LABEL_OFFSET_X_PTS,
-            QUERY_VALUE_LABEL_OFFSET_Y_PTS,
-        )
-
         legend_entries[f"{style['label']} Construction"] = construction_handle
         legend_entries[f"{style['label']} Query"] = query_handle
 
@@ -238,7 +197,15 @@ def plot_scaling() -> None:
     ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
     ax.set_xticks(KERNEL_SUPPORT_RATIOS)
     ax.set_xticklabels([f"{ratio:.1f}" for ratio in KERNEL_SUPPORT_RATIOS])
-    ax.set_ylim(0.0, max_time_ms * 1.08)
+    y_max = (
+        int(((max_time_ms * 1.08) + Y_AXIS_TICK_INTERVAL - 1.0) / Y_AXIS_TICK_INTERVAL)
+        * Y_AXIS_TICK_INTERVAL
+    )
+    ax.set_ylim(0.0, y_max)
+    ax.set_yticks([
+        i * Y_AXIS_TICK_INTERVAL
+        for i in range(int(y_max / Y_AXIS_TICK_INTERVAL) + 1)
+    ])
 
     if GRID_ENABLED:
         ax.grid(
