@@ -44,5 +44,5 @@
 
   "exportEnabled": true,
   "exportDir": "S2",
-  "exportInterval": 20
+  "exportInterval": 30
 }

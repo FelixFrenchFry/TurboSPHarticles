@@ -44,5 +44,5 @@
 
   "exportEnabled": true,
   "exportDir": "U2",
-  "exportInterval": 20
+  "exportInterval": 30
 }
