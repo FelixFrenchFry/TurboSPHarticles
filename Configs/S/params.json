@@ -17,12 +17,12 @@
   "pressGamma": 0.5,
   "jacobiOmega": 0.5,
   "densityDevTarget": 0.01,
-  "fixedIters": 5,
+  "fixedIters": 3,
   "minSolverIters": 3,
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
 
-  "dataReOrderInterval": 10,
+  "dataReOrderInterval": 5,
   "gridCellSizeRatio": 1.0,
   "gridCellIndexing": "Morton",
   "jitterFracF": 0.0,
@@ -44,5 +44,5 @@
 
   "exportEnabled": true,
   "exportDir": "S",
-  "exportInterval": 20
+  "exportInterval": 30
 }
