@@ -5,7 +5,7 @@
   "neighborListStorage": 3,
 
   "maxSteps": -1,
-  "timeStep": 0.0005,
+  "timeStep": 0.0006,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensityF": 1000.0,
