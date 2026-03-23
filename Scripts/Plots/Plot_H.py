@@ -48,13 +48,13 @@ NEGATIVE_CANDIDATE_CHECKS_PCT = [
 
 PLOT_TITLE = "TODO"
 X_LABEL = "BVH leaf radius ratio"
-LEFT_Y_LABEL = "Increase relative to radius 0.0 [%]"
+LEFT_Y_LABEL = "Time relative to radius 0.0"
 RIGHT_Y_LABEL = "Negative candidate checks [%]"
 SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
-QUERY_TIME_LABEL_FONT_SIZE = 26
+QUERY_TIME_LABEL_FONT_SIZE = 24
 QUERY_TIME_LABEL_OFFSET_X_PTS = 8
 QUERY_TIME_LABEL_OFFSET_Y_PTS = -8
 QUERY_TIME_LABEL_DECIMALS = 0
@@ -150,14 +150,14 @@ def validate_plot_data() -> None:
             )
 
 
-def compute_relative_increase_percentages(query_times_ms: list[float]) -> list[float]:
+def compute_relative_time_factors(query_times_ms: list[float]) -> list[float]:
     baseline_time_ms = query_times_ms[0]
 
     if baseline_time_ms <= 0.0:
         raise ValueError("The baseline total time must be positive.")
 
     return [
-        100.0 * (query_time_ms / baseline_time_ms - 1.0)
+        query_time_ms / baseline_time_ms
         for query_time_ms in query_times_ms
     ]
 
@@ -171,11 +171,11 @@ def plot_scaling() -> None:
     for method_name, component_times_ms in METHOD_COMPONENT_TIMES_MS.items():
         style = METHOD_STYLES[method_name]
         query_times_ms = component_times_ms["Query"]
-        relative_increase_pct = compute_relative_increase_percentages(query_times_ms)
+        relative_time_factor = compute_relative_time_factors(query_times_ms)
 
         handle, = ax_left.plot(
             BVH_LEAF_RADIUS_RATIOS,
-            relative_increase_pct,
+            relative_time_factor,
             color=style["color"],
             marker=style["marker"],
             linestyle=style["line_style"],
@@ -187,7 +187,7 @@ def plot_scaling() -> None:
 
         for leaf_radius_ratio, relative_increase, query_time_ms in zip(
             BVH_LEAF_RADIUS_RATIOS,
-            relative_increase_pct,
+            relative_time_factor,
             query_times_ms,
         ):
             label_offset_x_pts = QUERY_TIME_LABEL_OFFSET_X_PTS

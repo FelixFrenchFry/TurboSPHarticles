@@ -34,7 +34,7 @@ PARTICLE_COUNTS = [
 ]
 
 # 1 thread, averaged over the first 1000 steps, in milliseconds
-# (fluid pillar with 100 x <adjustable> x 100)
+# (fluid pillar with 10 x <adjustable> x 10)
 METHOD_STEP_TIMES_MS = {
     "Brute Force":      [4.75, 13.20, 24.93, 40.26, 59.69, 82.37, 108.39, 139.39, 173.03, 210.51,
                          256.34, 301.46, 351.31, 398.69, 464.63, 517.80, 567.04, 642.13, 706.25, 789.44],

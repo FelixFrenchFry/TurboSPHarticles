@@ -44,15 +44,19 @@ METHOD_COMPONENT_TIMES_MS = {
                          11855.59-147.23-414.92],
     },
     "Single Contiguous List": {
-        "Construction": [161.38, 160.88, 167.00, 159.33, 164.30, 164.72, 162.32],
-        "Query":        [535.09, 537.14, 535.11, 533.70, 535.88, 533.26, 533.51],
+        "Construction": [161.38, 160.88, 167.00, 159.33, 164.30, 164.72, 162.32, 158.71, 159.88, 159.60, 158.48],
+        "Query":        [535.09, 537.14, 535.11, 533.70, 535.88, 533.26, 533.51, 533.90, 532.39, 531.49, 531.33],
         "IISPH":        [1466.50-161.38-535.09,
                          2030.50-160.88-537.14,
                          2963.06-167.00-535.11,
                          3872.68-159.33-533.70,
                          4824.24-164.30-535.88,
                          5729.37-164.72-533.26,
-                         6644.69-162.32-533.51,],
+                         6644.69-162.32-533.51,
+                         7573.68-158.71-533.90,
+                         8482.97-159.88-532.39,
+                         9440.23-159.60-531.49,
+                         10383.15-158.48-531.33],
     },
 }
 
@@ -62,12 +66,13 @@ METHOD_COMPONENT_TIMES_MS = {
 # --------------------------------------------------------------------------------------
 
 PLOT_TITLE = "TODO"
-X_LABEL = "Number of IISPH iterations"
+X_LABEL = "IISPH solver iterations per simulation step"
 Y_LABEL = "Time per simulation step [ms]"
 SHOW_PLOT_TITLE = False
 
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
+DECREASE_LABEL_FONT_SIZE = 22
 
 FIG_SIZE = (24.0, 10.0)
 BAR_WIDTH = 0.35
@@ -149,6 +154,8 @@ def plot_scaling() -> None:
     legend_handles = []
     legend_labels = []
     max_total_time_ms = 0.0
+    total_times_by_method = {}
+    bar_positions_by_method = {}
 
     for method_idx, method_name in enumerate(method_names):
         style = METHOD_STYLES[method_name]
@@ -161,9 +168,11 @@ def plot_scaling() -> None:
             in zip(construction_times_ms, query_times_ms, iisph_times_ms)
         ]
         max_total_time_ms = max(max_total_time_ms, max(total_times_ms))
+        total_times_by_method[method_name] = total_times_ms
 
         x_offset = (method_idx - (num_methods - 1) / 2.0) * BAR_WIDTH
         bar_positions = [x + x_offset for x in x_positions]
+        bar_positions_by_method[method_name] = bar_positions
 
         ax.bar(
             bar_positions,
@@ -199,6 +208,30 @@ def plot_scaling() -> None:
         )
         legend_labels.append(style["label"])
 
+    multiple_individual_totals = total_times_by_method["Mulitple Individual Lists"]
+    single_contiguous_totals = total_times_by_method["Single Contiguous List"]
+    single_contiguous_positions = bar_positions_by_method["Single Contiguous List"]
+
+    for x_pos, contiguous_total_time_ms, individual_total_time_ms in zip(
+        single_contiguous_positions,
+        single_contiguous_totals,
+        multiple_individual_totals,
+    ):
+        decrease_pct = 100.0 * (
+            (individual_total_time_ms - contiguous_total_time_ms)
+            / individual_total_time_ms
+        )
+        ax.annotate(
+            f"-{decrease_pct:.1f}%",
+            xy=(x_pos, contiguous_total_time_ms),
+            xytext=(0, 6),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=DECREASE_LABEL_FONT_SIZE,
+            color=METHOD_STYLES["Single Contiguous List"]["construction_color"],
+        )
+
     if SHOW_PLOT_TITLE:
         ax.set_title(PLOT_TITLE, fontsize=FIGURE_TITLE_FONT_SIZE)
 
@@ -207,7 +240,7 @@ def plot_scaling() -> None:
     ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
     ax.set_xticks(x_positions)
     ax.set_xticklabels([str(count) for count in IISPH_ITERATION_COUNTS])
-    ax.set_ylim(0.0, max_total_time_ms * 1.05)
+    ax.set_ylim(0.0, max_total_time_ms * 1.08)
 
     if GRID_ENABLED:
         ax.grid(
