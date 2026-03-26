@@ -45,11 +45,11 @@ SHOW_PLOT_TITLE = False
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 
-FIG_SIZE = (17.0, 9.0)
+FIG_SIZE = (24.0, 8.0)
 RAW_LINE_WIDTH = 1.5
 RAW_LINE_ALPHA = 0.0
 MEAN_LINE_WIDTH = 4.5
-BAND_ALPHA = 0.25
+BAND_ALPHA = 0.0
 SHOW_RAW_SERIES = True
 USE_ROLLING_MEAN_BAND = True
 ROLLING_WINDOW_SIZE = 30
@@ -60,8 +60,10 @@ GRID_ENABLED = True
 GRID_LINE_STYLE = "--"
 GRID_LINE_WIDTH = 1.0
 GRID_ALPHA = 1.0
+X_AXIS_TICK_INTERVAL = 500
 Y_AXIS_MIN = 100.0
 Y_AXIS_MAX = 500.0
+Y_AXIS_TICK_INTERVAL = 50.0
 
 SHOW_LEGEND = True
 
@@ -262,6 +264,16 @@ def plot_scaling() -> None:
     ax.set_ylabel(Y_LABEL, fontsize=AXES_FONT_SIZE)
     ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
     ax.set_ylim(Y_AXIS_MIN, Y_AXIS_MAX)
+    ax.set_yticks([
+        Y_AXIS_MIN + i * Y_AXIS_TICK_INTERVAL
+        for i in range(int((Y_AXIS_MAX - Y_AXIS_MIN) / Y_AXIS_TICK_INTERVAL) + 1)
+    ])
+    max_step_number = max(
+        max(step for step, _ in step_time_samples)
+        for step_time_samples in interval_series.values()
+    )
+    x_axis_tick_max = math.ceil(max_step_number / X_AXIS_TICK_INTERVAL) * X_AXIS_TICK_INTERVAL
+    ax.set_xticks(list(range(0, x_axis_tick_max + X_AXIS_TICK_INTERVAL, X_AXIS_TICK_INTERVAL)))
 
     if GRID_ENABLED:
         ax.grid(

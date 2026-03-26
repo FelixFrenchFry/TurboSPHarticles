@@ -74,7 +74,7 @@ AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 BAR_VALUE_FONT_SIZE = 24
 
-FIG_SIZE = (16.0, 7.0)
+FIG_SIZE = (24.0, 7.0)
 BAR_WIDTH = 0.25
 
 GRID_ENABLED = True
@@ -128,6 +128,7 @@ OPERATION_GROUPS = {
         "velUpd + posUpd",
     ],
 }
+TOTAL_GROUP_NAME = "Total"
 
 
 def validate_plot_data() -> None:
@@ -161,15 +162,21 @@ def compute_operation_group_times_ms() -> dict[str, dict[str, float]]:
                 for component_name in component_names
             )
 
+        grouped_times_ms[category_name][TOTAL_GROUP_NAME] = sum(
+            grouped_times_ms[category_name][group_name]
+            for group_name in OPERATION_GROUPS.keys()
+        )
+
     return grouped_times_ms
 
 
-def plot_scaling() -> None:
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
-
-    grouped_times_ms = compute_operation_group_times_ms()
-    category_names = list(grouped_times_ms.keys())
-    operation_group_names = list(OPERATION_GROUPS.keys())
+def draw_bars(
+    ax: plt.Axes,
+    grouped_times_ms: dict[str, dict[str, float]],
+    category_names: list[str],
+    operation_group_names: list[str],
+    show_legend: bool,
+) -> float:
     x_positions = list(range(len(operation_group_names)))
     max_group_time_ms = 0.0
 
@@ -204,14 +211,39 @@ def plot_scaling() -> None:
                 color=style["color"],
             )
 
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(operation_group_names)
+
+    if show_legend and SHOW_LEGEND:
+        ax.legend(
+            fontsize=AXES_FONT_SIZE,
+            loc=LEGEND_LOC,
+        )
+
+    return max_group_time_ms
+
+
+def plot_scaling() -> None:
+    fig, ax = plt.subplots(figsize=FIG_SIZE)
+
+    grouped_times_ms = compute_operation_group_times_ms()
+    category_names = list(grouped_times_ms.keys())
+    operation_group_names = list(OPERATION_GROUPS.keys()) + [TOTAL_GROUP_NAME]
+
+    max_group_time_ms = draw_bars(
+        ax,
+        grouped_times_ms,
+        category_names,
+        operation_group_names,
+        show_legend=True,
+    )
+
     if SHOW_PLOT_TITLE:
         ax.set_title(PLOT_TITLE, fontsize=FIGURE_TITLE_FONT_SIZE)
 
     ax.set_xlabel(X_LABEL, fontsize=AXES_FONT_SIZE)
     ax.set_ylabel(Y_LABEL, fontsize=AXES_FONT_SIZE)
     ax.tick_params(axis="both", labelsize=AXES_FONT_SIZE)
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(operation_group_names)
 
     if ROTATE_X_TICK_LABELS:
         plt.setp(
@@ -222,11 +254,12 @@ def plot_scaling() -> None:
         )
 
     y_max = math.ceil((max_group_time_ms * 1.08) / Y_AXIS_TICK_INTERVAL) * Y_AXIS_TICK_INTERVAL
-    ax.set_ylim(0.0, y_max)
-    ax.set_yticks([
+    y_ticks = [
         i * Y_AXIS_TICK_INTERVAL
         for i in range(int(y_max / Y_AXIS_TICK_INTERVAL) + 1)
-    ])
+    ]
+    ax.set_ylim(0.0, y_max)
+    ax.set_yticks(y_ticks)
 
     if GRID_ENABLED:
         ax.grid(
@@ -235,12 +268,6 @@ def plot_scaling() -> None:
             linestyle=GRID_LINE_STYLE,
             linewidth=GRID_LINE_WIDTH,
             alpha=GRID_ALPHA,
-        )
-
-    if SHOW_LEGEND:
-        ax.legend(
-            fontsize=AXES_FONT_SIZE,
-            loc=LEGEND_LOC,
         )
 
     fig.tight_layout()

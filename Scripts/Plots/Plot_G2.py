@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 USE_BENCHMARK_CSV_INPUT = True
 BENCHMARK_CSV_TIME_COLUMN = "total_sim_ms"
 
-# 20 threads, total simulation time per step, in milliseconds
+# 5070 Ti, total simulation time per step, in milliseconds
 # (breaking dam with 100 x 100 x 100)
 INTERVAL_BENCHMARK_CSV_PATHS = {
     "None": Path("Logs/602/benchmark_metrics.csv"),
@@ -45,11 +45,11 @@ SHOW_PLOT_TITLE = False
 AXES_FONT_SIZE = 30
 FIGURE_TITLE_FONT_SIZE = 30
 
-FIG_SIZE = (17.0, 9.0)
+FIG_SIZE = (24.0, 8.0)
 RAW_LINE_WIDTH = 1.5
 RAW_LINE_ALPHA = 0.0
 MEAN_LINE_WIDTH = 4.5
-BAND_ALPHA = 0.25
+BAND_ALPHA = 0.0
 SHOW_RAW_SERIES = True
 USE_ROLLING_MEAN_BAND = True
 ROLLING_WINDOW_SIZE = 30
@@ -63,6 +63,7 @@ GRID_ALPHA = 1.0
 Y_AXIS_MIN = 10.0
 Y_AXIS_MAX = 110.0
 Y_AXIS_TICK_INTERVAL = 10.0
+X_AXIS_TICK_INTERVAL = 500
 
 SHOW_LEGEND = True
 
@@ -267,6 +268,12 @@ def plot_scaling() -> None:
         Y_AXIS_MIN + i * Y_AXIS_TICK_INTERVAL
         for i in range(int((Y_AXIS_MAX - Y_AXIS_MIN) / Y_AXIS_TICK_INTERVAL) + 1)
     ])
+    max_step_number = max(
+        max(step for step, _ in step_time_samples)
+        for step_time_samples in interval_series.values()
+    )
+    x_axis_tick_max = math.ceil(max_step_number / X_AXIS_TICK_INTERVAL) * X_AXIS_TICK_INTERVAL
+    ax.set_xticks(list(range(0, x_axis_tick_max + X_AXIS_TICK_INTERVAL, X_AXIS_TICK_INTERVAL)))
 
     if GRID_ENABLED:
         ax.grid(
