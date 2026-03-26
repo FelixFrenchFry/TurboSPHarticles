@@ -532,6 +532,7 @@ namespace Sim
 		const float* cachedBoundaryYPosPtr_ = nullptr;
 		const float* cachedBoundaryZPosPtr_ = nullptr;
 		float kernelRadiusSqu_ = 0.0f;
+		float leafAabbRadius_ = 0.0f;
 
 		// helpers
 		void BuildBVH(const float* xPos, const float* yPos,
@@ -548,7 +549,10 @@ namespace Sim
 		void QueryBVH_Fill(float xi, float yi, float zi,
 			float kernelRadiusSqu, const float* xPos, const float* yPos,
 			const float* zPos, const std::vector<uint32_t>& sortedIdx,
-			const std::vector<InternalNode>& nodes, uint32_t N, ScratchVec& scratch) const
+			const std::vector<InternalNode>& nodes, uint32_t N, ScratchVec& scratch,
+			uint32_t* traversedNodeCount = nullptr,
+			uint32_t* candCount = nullptr,
+			uint32_t* posCount = nullptr) const
 		{
 			// single leaf BVH: test once and return
 			if (N == 1)
@@ -559,8 +563,18 @@ namespace Sim
 				const float dz = zi - zPos[j];
 				const float distSqu = dx * dx + dy * dy + dz * dz;
 
+				if (candCount != nullptr)
+				{
+					(*candCount)++;
+				}
+
 				if (distSqu <= kernelRadiusSqu) [[unlikely]]
 				{
+					if (posCount != nullptr)
+					{
+						(*posCount)++;
+					}
+
 					scratch.push_back(j);
 				}
 				return;
@@ -586,13 +600,28 @@ namespace Sim
 					const float dz = zi - zPos[j];
 					const float distSqu = dx * dx + dy * dy + dz * dz;
 
+					if (candCount != nullptr)
+					{
+						(*candCount)++;
+					}
+
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
+						if (posCount != nullptr)
+						{
+							(*posCount)++;
+						}
+
 						scratch.push_back(j);
 					}
 				}
 				else
 				{
+					if (traversedNodeCount != nullptr)
+					{
+						(*traversedNodeCount)++;
+					}
+
 					const auto& node = nodes[entry];
 
 					if (!OverlapsAABB(node.box, xi, yi, zi, kernelRadiusSqu))

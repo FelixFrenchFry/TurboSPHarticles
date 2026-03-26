@@ -71,6 +71,13 @@ namespace Sim
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
+		bool GetNeighborListByteBreakdown(
+			NeighborListByteBreakdown& out,
+			const SimParams& params) const override;
+
+		bool GetNeighborListDeltaDistribution(
+			NeighborListDeltaDistribution& out,
+			const SimParams& params) const override;
 
 	private: // --------------------------------------------------------------------------------------
 
@@ -120,6 +127,8 @@ namespace Sim
 		float avgRelDensityErrorF_abs_;
 		float negNbrCandPctFF_ = 0.0f;
 		float negNbrCandPctFB_ = 0.0f;
+		float avgBVHNodesFF_ = 0.0f;
+		float avgBVHNodesFB_ = 0.0f;
 
 		// neighbor storage
 		std::unique_ptr<I_NeighborLists> neighborLists_;

@@ -236,6 +236,7 @@ namespace Sim
 		const float* cachedBoundaryXPosPtr_ = nullptr;
 		const float* cachedBoundaryYPosPtr_ = nullptr;
 		const float* cachedBoundaryZPosPtr_ = nullptr;
+		float leafAabbRadius_ = 0.0f;
 
 		using MinMax3 = GPU01::MinMax3HD;
 

@@ -188,6 +188,11 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
+		uint64_t GetUsedBytes_MetadataFF() const noexcept;
+		uint64_t GetUsedBytes_MetadataFB() const noexcept;
+		uint64_t GetUsedBytes_StorageFF() const noexcept;
+		uint64_t GetUsedBytes_StorageFB() const noexcept;
+
 	private: // --------------------------------------------------------------------------------------
 
 		// metadata
@@ -365,6 +370,12 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
 
+		uint64_t GetUsedBytes_MetadataFF() const;
+		uint64_t GetUsedBytes_MetadataFB() const;
+		uint64_t GetUsedBytes_StorageFF() const;
+		uint64_t GetUsedBytes_StorageFB() const;
+		NeighborListDeltaDistribution GetAccumulatedDeltaDistribution() const;
+
 	private: // --------------------------------------------------------------------------------------
 
 		enum class FillPhase : uint8_t
@@ -395,13 +406,20 @@ namespace Sim
 		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
 		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
 
+		// thread-local bucket counts accumulated during the encode pass
+		tbb::enumerable_thread_specific<NeighborListDeltaDistribution> deltaDistScratch_;
+
 		// misc
+		NeighborListDeltaDistribution deltaDistRun_{};
 		FillPhase fillPhase_ = FillPhase::Measure;
 		const uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
 
 		// helpers
+		static void AddDeltaDistribution(NeighborListDeltaDistribution& dst,
+			const NeighborListDeltaDistribution& src) noexcept;
 		static uint32_t ControlBytesFor(uint32_t count) noexcept;
 		static uint8_t DeltaMask(uint32_t delta) noexcept;
+		static uint64_t MetadataBytesFor(uint32_t N_F) noexcept;
 		static uint64_t MeasureEncodedBytes(const uint32_t* js,
 			uint32_t count, std::vector<uint32_t>& scratch);
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
@@ -409,7 +427,8 @@ namespace Sim
 		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
 			uint32_t count, std::vector<uint32_t>& out);
 		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
-			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
+			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch,
+			NeighborListDeltaDistribution* deltaDist);
 	};
 
 } // namespace Sim

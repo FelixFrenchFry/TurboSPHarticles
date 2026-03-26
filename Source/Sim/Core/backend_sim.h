@@ -24,6 +24,8 @@ namespace Sim
 	// forward declarations
 	class I_NeighborSearchStrat;
 	struct NeighborSpan;
+	struct NeighborListByteBreakdown;
+	struct NeighborListDeltaDistribution;
 
 	// -----------------------------------------------------------------------------------------------
 	// --- [ simulation backend interface ] ----------------------------------------------------------
@@ -78,6 +80,51 @@ namespace Sim
 		// info
 		virtual uint32_t GetNumFluidParticles() const = 0;
 		virtual uint32_t GetNumBoundaryParticles() const = 0;
+
+		virtual bool GetNeighborListByteBreakdown(
+			NeighborListByteBreakdown& out,
+			const SimParams& params) const
+		{
+			(void)out;
+			(void)params;
+			return false;
+		}
+
+		virtual bool GetNeighborListDeltaDistribution(
+			NeighborListDeltaDistribution& out,
+			const SimParams& params) const
+		{
+			(void)out;
+			(void)params;
+			return false;
+		}
+	};
+
+	struct NeighborListByteBreakdown
+	{
+		uint64_t metadataBytesFF = 0;
+		uint64_t metadataBytesFB = 0;
+		uint64_t storageBytesFF = 0;
+		uint64_t storageBytesFB = 0;
+	};
+
+	struct NeighborListByteBreakdownAverages
+	{
+		uint64_t sampleCount = 0;
+		uint64_t metadataBytesFF_sum = 0;
+		uint64_t metadataBytesFB_sum = 0;
+		uint64_t storageBytesFF_sum = 0;
+		uint64_t storageBytesFB_sum = 0;
+	};
+
+	struct NeighborListDeltaDistribution
+	{
+		uint64_t totalSymbols = 0;
+		uint64_t countUncompressed = 0;
+		uint64_t countDelta0 = 0;
+		uint64_t countDelta1 = 0;
+		uint64_t countDelta2to255 = 0;
+		uint64_t countDelta256plus = 0;
 	};
 
 	// backend factory

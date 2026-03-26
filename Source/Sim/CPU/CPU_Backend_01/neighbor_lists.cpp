@@ -604,6 +604,26 @@ NeighborLists_CSRVector_DoubleQuery_CPU01::GetMemUsage(
 	return { usageFF, usageFB };
 }
 
+uint64_t NeighborLists_CSRVector_DoubleQuery_CPU01::GetUsedBytes_MetadataFF() const noexcept
+{
+	return static_cast<uint64_t>(nbrOffsetsFF_.size()) * sizeof(uint64_t);
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_CPU01::GetUsedBytes_MetadataFB() const noexcept
+{
+	return static_cast<uint64_t>(nbrOffsetsFB_.size()) * sizeof(uint64_t);
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_CPU01::GetUsedBytes_StorageFF() const noexcept
+{
+	return static_cast<uint64_t>(nbrListFF_.size()) * sizeof(uint32_t);
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_CPU01::GetUsedBytes_StorageFB() const noexcept
+{
+	return static_cast<uint64_t>(nbrListFB_.size()) * sizeof(uint32_t);
+}
+
 // -------------------------------------------------------------------------------------------------
 // --- [ individual vectors neighbor lists, adaptive compression ] ---------------------------------
 // -------------------------------------------------------------------------------------------------
@@ -1247,6 +1267,8 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::Resize(
 	nbrOffsetsFB_.assign(static_cast<uint64_t>(N_F_) + 1, 0);
 	nbrListCompressedFF_.clear();
 	nbrListCompressedFB_.clear();
+	deltaDistScratch_.clear();
+	deltaDistRun_ = {};
 	fillPhase_ = FillPhase::Measure;
 }
 
@@ -1258,6 +1280,7 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::ClearAll()
 	nbrOffsetsFB_.resize(static_cast<uint64_t>(N_F_) + 1);
 	nbrListCompressedFF_.clear();
 	nbrListCompressedFB_.clear();
+	deltaDistScratch_.clear();
 	fillPhase_ = FillPhase::Measure;
 }
 
@@ -1338,6 +1361,11 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::Finalize_Fi
 
 	if (fillPhase_ == FillPhase::Encode)
 	{
+		for (const auto& deltaDistLocal : deltaDistScratch_)
+		{
+			AddDeltaDistribution(deltaDistRun_, deltaDistLocal);
+		}
+		deltaDistScratch_.clear();
 		fillPhase_ = FillPhase::Ready;
 		return;
 	}
@@ -1371,8 +1399,9 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::SetNbrListF
 		uint8_t* dst = nbrListCompressedFF_.empty()
 			? nullptr
 			: nbrListCompressedFF_.data() + s;
+		auto& deltaDist = deltaDistScratch_.local();
 
-		EncodeNeighborList(dst, e - s, js, count, scratch);
+		EncodeNeighborList(dst, e - s, js, count, scratch, &deltaDist);
 		return;
 	}
 
@@ -1406,7 +1435,7 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::SetNbrListF
 			? nullptr
 			: nbrListCompressedFB_.data() + s;
 
-		EncodeNeighborList(dst, e - s, js, count, scratch);
+		EncodeNeighborList(dst, e - s, js, count, scratch, nullptr);
 		return;
 	}
 
@@ -1482,6 +1511,51 @@ NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::GetMemUsage(
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListCompressedFB_));
 
 	return { usageFF, usageFB };
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::GetUsedBytes_MetadataFF() const
+{
+	return MetadataBytesFor(N_F_);
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::GetUsedBytes_MetadataFB() const
+{
+	return MetadataBytesFor(N_F_);
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::GetUsedBytes_StorageFF() const
+{
+	return static_cast<uint64_t>(nbrListCompressedFF_.size()) * sizeof(uint8_t);
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::GetUsedBytes_StorageFB() const
+{
+	return static_cast<uint64_t>(nbrListCompressedFB_.size()) * sizeof(uint8_t);
+}
+
+NeighborListDeltaDistribution
+NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::GetAccumulatedDeltaDistribution() const
+{
+	return deltaDistRun_;
+}
+
+void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::AddDeltaDistribution(
+	NeighborListDeltaDistribution& dst,
+	const NeighborListDeltaDistribution& src) noexcept
+{
+	dst.totalSymbols += src.totalSymbols;
+	dst.countUncompressed += src.countUncompressed;
+	dst.countDelta0 += src.countDelta0;
+	dst.countDelta1 += src.countDelta1;
+	dst.countDelta2to255 += src.countDelta2to255;
+	dst.countDelta256plus += src.countDelta256plus;
+}
+
+uint64_t NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::MetadataBytesFor(
+	const uint32_t N_F) noexcept
+{
+	return static_cast<uint64_t>(N_F) * sizeof(uint32_t)
+		+ (static_cast<uint64_t>(N_F) + 1ull) * sizeof(uint64_t);
 }
 
 uint32_t NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::ControlBytesFor(
@@ -1640,7 +1714,8 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::DecodeNeigh
 // TODO: implement with SIMD optimizations?
 void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::EncodeNeighborList(
 	uint8_t* dst, const uint64_t dstBytes, const uint32_t* js,
-	const uint32_t count, std::vector<uint32_t>& scratch)
+	const uint32_t count, std::vector<uint32_t>& scratch,
+	NeighborListDeltaDistribution* deltaDist)
 {
 	if (count == 0)
 	{
@@ -1658,6 +1733,11 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::EncodeNeigh
 	// determine size of encoded data
 	const uint32_t ctrlBytes = ControlBytesFor(count);
 	uint64_t dataBytes = 0;
+	if (deltaDist != nullptr)
+	{
+		deltaDist->countUncompressed += 1ull;
+		deltaDist->totalSymbols += 1ull;
+	}
 	for (uint32_t k = 1; k < count; k++)
 	{
 		const uint32_t gap = scratch[k] - scratch[k - 1];
@@ -1672,6 +1752,16 @@ void NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01::EncodeNeigh
 		// map to size after encoding (0/1 => 0B, [2,256) => 1B, else 4B)
 		if (delta >= 2u && delta < 256u) { dataBytes += 1ull; }
 		else if (delta >= 256u) { dataBytes += 4ull; }
+
+		if (deltaDist != nullptr)
+		{
+			deltaDist->totalSymbols += 1ull;
+
+			if (delta == 0u) { deltaDist->countDelta0 += 1ull; }
+			else if (delta == 1u) { deltaDist->countDelta1 += 1ull; }
+			else if (delta < 256u) { deltaDist->countDelta2to255 += 1ull; }
+			else { deltaDist->countDelta256plus += 1ull; }
+		}
 	}
 	const uint64_t requiredBytes = 4ull + static_cast<uint64_t>(ctrlBytes) + dataBytes;
 	if (requiredBytes != dstBytes)

@@ -265,6 +265,22 @@ namespace
 			| ExpandBits10_30bit(iz);
 	}
 
+	// compute a packed 30-bit XYZ code for a point in the unit cube [0, 1]^3
+	inline uint32_t XYZ3D_30bit_Normalized(float nx, float ny, float nz) noexcept
+	{
+		const auto Quantize = [](float v) -> uint32_t
+			{
+				return std::min(1023u, static_cast<uint32_t>(
+					std::max(0.0f, std::min(1.0f, v)) * 1023.0f));
+			};
+
+		const uint32_t ix = Quantize(nx);
+		const uint32_t iy = Quantize(ny);
+		const uint32_t iz = Quantize(nz);
+
+		return ix | (iy << 10) | (iz << 20);
+	}
+
 	inline SceneAABB ComputeSceneAABB(
 		const std::vector<float>& xPos,
 		const std::vector<float>& yPos,
@@ -312,10 +328,11 @@ namespace
 		);
 	}
 
-	void BuildMortonOrderKeys_30bitNormalized(
+	void BuildSpatialOrderKeys_30bitNormalized(
 		const std::vector<float>& xPos,
 		const std::vector<float>& yPos,
 		const std::vector<float>& zPos,
+		Base::GridCellIndexing gridCellIndexing,
 		std::vector<uint64_t>& outSortedKeys)
 	{
 		const uint32_t N = static_cast<uint32_t>(xPos.size());
@@ -341,12 +358,21 @@ namespace
 					const float ny = (yPos[i] - sceneAABB.minY) * invExtY;
 					const float nz = (zPos[i] - sceneAABB.minZ) * invExtZ;
 
-					const uint64_t morton = static_cast<uint64_t>(
-						Morton3D_30bit_Normalized(nx, ny, nz));
+					uint64_t orderKey = 0;
+					if (gridCellIndexing == Base::GridCellIndexing::XYZ)
+					{
+						orderKey = static_cast<uint64_t>(
+							XYZ3D_30bit_Normalized(nx, ny, nz));
+					}
+					else
+					{
+						orderKey = static_cast<uint64_t>(
+							Morton3D_30bit_Normalized(nx, ny, nz));
+					}
 
-					// key layout [morton:30][padding:2][index:32]
+					// key layout [order:30][padding:2][index:32]
 					// tie-break by index to keep deterministic ordering
-					outSortedKeys[i] = (morton << 32) | static_cast<uint64_t>(i);
+					outSortedKeys[i] = (orderKey << 32) | static_cast<uint64_t>(i);
 				}
 			},
 			tbb::auto_partitioner{}
@@ -392,10 +418,11 @@ namespace
 		ApplyPermutation(sortedKeys, boundary.zPos, scratch);
 	}
 
-	void DataReOrderParticles_Morton_30bitNormalized(
+	void DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs fluid,
 		BoundaryParticleSoARefs boundary,
 		uint32_t N_F, uint32_t N_B,
+		Base::GridCellIndexing gridCellIndexing,
 		std::vector<uint64_t>& sortKeyBuffer,
 		std::vector<float>& scratchF,
 		std::vector<float>& scratchB)
@@ -405,8 +432,8 @@ namespace
 			assert(fluid.xPos.size() == N_F && fluid.yPos.size() == N_F
 				&& fluid.zPos.size() == N_F && "Fluid position vector size mismatch");
 
-			BuildMortonOrderKeys_30bitNormalized(
-				fluid.xPos, fluid.yPos, fluid.zPos, sortKeyBuffer);
+			BuildSpatialOrderKeys_30bitNormalized(
+				fluid.xPos, fluid.yPos, fluid.zPos, gridCellIndexing, sortKeyBuffer);
 
 			ApplyPermutationFluidSoA(sortKeyBuffer, fluid, scratchF);
 		}
@@ -416,8 +443,8 @@ namespace
 			assert(boundary.xPos.size() == N_B && boundary.yPos.size() == N_B
 				&& boundary.zPos.size() == N_B && "Boundary position vector size mismatch");
 
-			BuildMortonOrderKeys_30bitNormalized(
-				boundary.xPos, boundary.yPos, boundary.zPos, sortKeyBuffer);
+			BuildSpatialOrderKeys_30bitNormalized(
+				boundary.xPos, boundary.yPos, boundary.zPos, gridCellIndexing, sortKeyBuffer);
 
 			ApplyPermutationBoundarySoA(sortKeyBuffer, boundary, scratchB);
 		}
@@ -668,7 +695,7 @@ void NS_BruteForce_CPU01::DataReOrder(
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -680,6 +707,7 @@ void NS_BruteForce_CPU01::DataReOrder(
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_
@@ -1277,7 +1305,7 @@ void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -1289,6 +1317,7 @@ void NS_SpatialHashing_Basic_CPU01::DataReOrder(
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_
@@ -1851,7 +1880,7 @@ void NS_SpatialHashing_Compact_CPU01::DataReOrder(
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -1863,6 +1892,7 @@ void NS_SpatialHashing_Compact_CPU01::DataReOrder(
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_
@@ -2461,7 +2491,7 @@ void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -2473,6 +2503,7 @@ void NS_SpatialHashing_Explicit_CPU01::DataReOrder(
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_
@@ -3165,7 +3196,7 @@ void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -3177,6 +3208,7 @@ void NS_CellLinkedList_Basic_CPU01::DataReOrder(
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_
@@ -4437,7 +4469,7 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -4449,6 +4481,7 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_
@@ -4722,11 +4755,13 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Init(const SimParams& params)
 	cachedBoundaryYPosPtr_ = nullptr;
 	cachedBoundaryZPosPtr_ = nullptr;
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	leafAabbRadius_ = params.bvhLeafRadiusRatio * params.kernelRadius;
 }
 
 void NS_BoundVolHier_Linear_LBVH_CPU01::Construct(const SimParams& params)
 {
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	leafAabbRadius_ = params.bvhLeafRadiusRatio * params.kernelRadius;
 
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
@@ -4886,8 +4921,8 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::BuildBVH(
 				morton[i] = Morton3D_30bit(nx, ny, nz);
 				sortedIdx[i] = i;
 
-				// tighter leaves improve query pruning, exact radius check is done at leaf hits
-				leafBoxScratch_[i] = MakeParticleAABB(xPos[i], yPos[i], zPos[i], 0.0f);
+				// non-zero leaves make the hierarchy more conservative
+				leafBoxScratch_[i] = MakeParticleAABB(xPos[i], yPos[i], zPos[i], leafAabbRadius_);
 			}
 		},
 		tbb::auto_partitioner{}
@@ -5117,6 +5152,10 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::BuildBVH(
 void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Count(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
+	be_.avgBVHNodesFF_ = 0.0f;
+	be_.avgBVHNodesFB_ = 0.0f;
+	be_.negNbrCandPctFF_ = 0.0f;
+	be_.negNbrCandPctFB_ = 0.0f;
 
 	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
@@ -5169,6 +5208,8 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Count(const SimParams& params)
 void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
+	const bool measureParticlesStats =
+		params.statGroupsEnabled[Stats::GetIdx(Stats::StatGroup::Particles)];
 
 	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
@@ -5179,6 +5220,12 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 	const float* RESTRICT xPosB = be_.xPosB_.data();
 	const float* RESTRICT yPosB = be_.yPosB_.data();
 	const float* RESTRICT zPosB = be_.zPosB_.data();
+	std::atomic<uint64_t> traversedNodeCountFF{ 0 };
+	std::atomic<uint64_t> traversedNodeCountFB{ 0 };
+	std::atomic<uint64_t> candCountFF{ 0 };
+	std::atomic<uint64_t> posCountFF{ 0 };
+	std::atomic<uint64_t> candCountFB{ 0 };
+	std::atomic<uint64_t> posCountFB{ 0 };
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F),
@@ -5199,6 +5246,13 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				uint32_t traversedNodesFF = 0;
+				uint32_t traversedNodesFB = 0;
+				uint32_t candCountFF_local = 0;
+				uint32_t posCountFF_local = 0;
+				uint32_t candCountFB_local = 0;
+				uint32_t posCountFB_local = 0;
+
 				// reset neighbor list for particle i
 				// (delete contents, but keep capacity)
 				scratchFF.clear();
@@ -5213,7 +5267,10 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 				{
 					QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu,
 						xPosF, yPosF, zPosF, sortedIdxF_,
-						nodesF_, N_F, scratchFF);
+						nodesF_, N_F, scratchFF,
+						measureParticlesStats ? &traversedNodesFF : nullptr,
+						measureParticlesStats ? &candCountFF_local : nullptr,
+						measureParticlesStats ? &posCountFF_local : nullptr);
 				}
 
 				// query boundary BVH
@@ -5221,7 +5278,26 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 				{
 					QueryBVH_Fill(xi, yi, zi, kernelRadiusSqu,
 						xPosB, yPosB, zPosB, sortedIdxB_,
-						nodesB_, N_B, scratchFB);
+						nodesB_, N_B, scratchFB,
+						measureParticlesStats ? &traversedNodesFB : nullptr,
+						measureParticlesStats ? &candCountFB_local : nullptr,
+						measureParticlesStats ? &posCountFB_local : nullptr);
+				}
+
+				if (measureParticlesStats)
+				{
+					traversedNodeCountFF.fetch_add(
+						traversedNodesFF, std::memory_order_relaxed);
+					traversedNodeCountFB.fetch_add(
+						traversedNodesFB, std::memory_order_relaxed);
+					candCountFF.fetch_add(
+						candCountFF_local, std::memory_order_relaxed);
+					posCountFF.fetch_add(
+						posCountFF_local, std::memory_order_relaxed);
+					candCountFB.fetch_add(
+						candCountFB_local, std::memory_order_relaxed);
+					posCountFB.fetch_add(
+						posCountFB_local, std::memory_order_relaxed);
 				}
 
 				// commit final neighbor lists from scratch to backend storage
@@ -5233,6 +5309,31 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
+
+	if (measureParticlesStats && N_F > 0)
+	{
+		const float invNF = 1.0f / static_cast<float>(N_F);
+		be_.avgBVHNodesFF_ =
+			static_cast<float>(traversedNodeCountFF.load(std::memory_order_relaxed)) * invNF;
+		be_.avgBVHNodesFB_ =
+			static_cast<float>(traversedNodeCountFB.load(std::memory_order_relaxed)) * invNF;
+
+		ComputeNegativeNeighborCandidatePercentages(
+			candCountFF.load(std::memory_order_relaxed),
+			posCountFF.load(std::memory_order_relaxed),
+			candCountFB.load(std::memory_order_relaxed),
+			posCountFB.load(std::memory_order_relaxed),
+			be_.negNbrCandPctFF_,
+			be_.negNbrCandPctFB_
+		);
+	}
+	else
+	{
+		be_.avgBVHNodesFF_ = 0.0f;
+		be_.avgBVHNodesFB_ = 0.0f;
+		be_.negNbrCandPctFF_ = 0.0f;
+		be_.negNbrCandPctFB_ = 0.0f;
+	}
 }
 
 NeighborSpan NS_BoundVolHier_Linear_LBVH_CPU01::QueryParticleFF(
@@ -5383,7 +5484,7 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_Morton_30bitNormalized(
+	DataReOrderParticles_30bitNormalized(
 		FluidParticleSoARefs{
 			be_.xPosF_, be_.yPosF_, be_.zPosF_,
 			be_.xVelF_, be_.yVelF_, be_.zVelF_,
@@ -5395,6 +5496,7 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::DataReOrder(const SimParams& params)
 			be_.xPosB_, be_.yPosB_, be_.zPosB_
 		},
 		N_F, N_B,
+		params.gridCellIndexing,
 		be_.sortKeyBuffer_,
 		be_.workBufferF_,
 		be_.workBufferB_

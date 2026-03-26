@@ -1007,12 +1007,14 @@ void NS_BoundVolHier_Linear_LBVH_GPU01::Init(const SimParams& params)
 	cachedBoundaryXPosPtr_ = nullptr;
 	cachedBoundaryYPosPtr_ = nullptr;
 	cachedBoundaryZPosPtr_ = nullptr;
+	leafAabbRadius_ = params.bvhLeafRadiusRatio * params.kernelRadius;
 }
 
 void NS_BoundVolHier_Linear_LBVH_GPU01::Construct(const SimParams& params)
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
+	leafAabbRadius_ = params.bvhLeafRadiusRatio * params.kernelRadius;
 
 	if (N_F == 0 && N_B == 0)
 	{
@@ -1157,7 +1159,7 @@ void NS_BoundVolHier_Linear_LBVH_GPU01::BuildBVH(
 	GPU01::Launch_LBVH_FillMortonAndAABB(
 		xPos, yPos, zPos, N,
 		sceneAABB.xMin, sceneAABB.yMin, sceneAABB.zMin,
-		invExtX, invExtY, invExtZ,
+		invExtX, invExtY, invExtZ, leafAabbRadius_,
 		be_.stream_,
 		d_morton.Data(), d_sortedParticleIdx.Data(), d_leafBoxScratch_.Data());
 

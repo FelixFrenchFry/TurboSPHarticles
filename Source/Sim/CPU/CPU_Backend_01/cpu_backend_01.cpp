@@ -157,6 +157,71 @@ void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearc
 	}
 }
 
+bool SimBackend_CPU01::GetNeighborListByteBreakdown(
+	NeighborListByteBreakdown& out,
+	const SimParams& params) const
+{
+	if (params.neighborListStorage ==
+		Base::NeighborListStorage::CSRVector_DoubleQuery)
+	{
+		const auto* csr = dynamic_cast<
+			const NeighborLists_CSRVector_DoubleQuery_CPU01*>(
+				neighborLists_.get());
+		if (csr == nullptr)
+		{
+			return false;
+		}
+
+		out.metadataBytesFF = csr->GetUsedBytes_MetadataFF();
+		out.metadataBytesFB = csr->GetUsedBytes_MetadataFB();
+		out.storageBytesFF = csr->GetUsedBytes_StorageFF();
+		out.storageBytesFB = csr->GetUsedBytes_StorageFB();
+		return true;
+	}
+
+	if (params.neighborListStorage !=
+		Base::NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress)
+	{
+		return false;
+	}
+
+	const auto* compressed = dynamic_cast<
+		const NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01*>(
+			neighborLists_.get());
+	if (compressed == nullptr)
+	{
+		return false;
+	}
+
+	out.metadataBytesFF = compressed->GetUsedBytes_MetadataFF();
+	out.metadataBytesFB = compressed->GetUsedBytes_MetadataFB();
+	out.storageBytesFF = compressed->GetUsedBytes_StorageFF();
+	out.storageBytesFB = compressed->GetUsedBytes_StorageFB();
+	return true;
+}
+
+bool SimBackend_CPU01::GetNeighborListDeltaDistribution(
+	NeighborListDeltaDistribution& out,
+	const SimParams& params) const
+{
+	if (params.neighborListStorage !=
+		Base::NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress)
+	{
+		return false;
+	}
+
+	const auto* compressed = dynamic_cast<
+		const NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01*>(
+			neighborLists_.get());
+	if (compressed == nullptr)
+	{
+		return false;
+	}
+
+	out = compressed->GetAccumulatedDeltaDistribution();
+	return true;
+}
+
 void SimBackend_CPU01::PullFromUniversalSimState(
 	Sync::UniversalSimState& src, const SimParams& params)
 {
@@ -779,6 +844,12 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::NumNbrFB_Max, maxFB);
 		Set(record, StatMetric::NegNbrCandFF_Pct, negNbrCandPctFF_);
 		Set(record, StatMetric::NegNbrCandFB_Pct, negNbrCandPctFB_);
+		Set(record, StatMetric::NumBVHNodesFF_Avg,
+			simParams.neighborSearchMethod == Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH
+				? avgBVHNodesFF_ : 0.0f);
+		Set(record, StatMetric::NumBVHNodesFB_Avg,
+			simParams.neighborSearchMethod == Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH
+				? avgBVHNodesFB_ : 0.0f);
 	}
 
 	// --- [ density stats ] -------------------------------------------------------------------------

@@ -452,6 +452,23 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		}
 	}
 
+	if (auto it = j.find("bvhLeafRadiusRatio"); it != j.end())
+	{
+		BeginWrite();
+
+		const float bvhLeafRadiusRatio = it->get<float>();
+		if (bvhLeafRadiusRatio >= 0.0f)
+		{
+			params_.bvhLeafRadiusRatio = bvhLeafRadiusRatio;
+		}
+		else
+		{
+			SPDLOG_WARN("Invalid 'bvhLeafRadiusRatio' in JSON (must be >= 0)");
+		}
+
+		EndWrite();
+	}
+
 	// --- [ jitter ] --------------------------------------------------------------------------------
 
 	// TODO: implement setters for jitterFrac/jitterSeed stuff?
@@ -1469,6 +1486,10 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		return par.gridCellIndexing == Base::GridCellIndexing::Morton
 			|| par.gridCellIndexing == Base::GridCellIndexing::XYZ;
+	});
+	ok &= Check("bvhLeafRadiusRatio < 0", true, [&]()
+	{
+		return par.bvhLeafRadiusRatio >= 0.0f;
 	});
 	ok &= Check("kernelRadius != kernelSuppRatio * particleSizeF", true, [&]()
 	{

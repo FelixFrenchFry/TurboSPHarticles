@@ -170,6 +170,7 @@ namespace GPU01
 		const uint32_t N,
 		const float sceneMinX, const float sceneMinY, const float sceneMinZ,
 		const float invExtX, const float invExtY, const float invExtZ,
+		const float leafAabbRadius,
 		cudaStream_t stream,
 		// destinations
 		uint32_t* morton,

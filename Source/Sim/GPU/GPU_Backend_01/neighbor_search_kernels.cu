@@ -1190,6 +1190,7 @@ namespace GPU01
 		const uint32_t N,
 		const float sceneMinX, const float sceneMinY, const float sceneMinZ,
 		const float invExtX, const float invExtY, const float invExtZ,
+		const float leafAabbRadius,
 		// destinations
 		uint32_t* __restrict__ morton,
 		uint32_t* __restrict__ sortedParticleIdx,
@@ -1208,7 +1209,7 @@ namespace GPU01
 
 		morton[i] = Morton3D_30bit_Normalized(nx, ny, nz);
 		sortedParticleIdx[i] = i;
-		leafBox[i] = MakeParticleAABB(x, y, z, 0.0f);
+		leafBox[i] = MakeParticleAABB(x, y, z, leafAabbRadius);
 	}
 
 	__global__
@@ -1918,6 +1919,7 @@ namespace GPU01
 		const uint32_t N,
 		const float sceneMinX, const float sceneMinY, const float sceneMinZ,
 		const float invExtX, const float invExtY, const float invExtZ,
+		const float leafAabbRadius,
 		cudaStream_t stream,
 		// destinations
 		uint32_t* morton,
@@ -1930,7 +1932,7 @@ namespace GPU01
 		K_LBVH_FillMortonAndAABB<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPos, yPos, zPos, N,
 			sceneMinX, sceneMinY, sceneMinZ,
-			invExtX, invExtY, invExtZ,
+			invExtX, invExtY, invExtZ, leafAabbRadius,
 			morton, sortedParticleIdx, leafBox);
 
 		GPU::CheckLastKernel("K_LBVH_FillMortonAndAABB()");
