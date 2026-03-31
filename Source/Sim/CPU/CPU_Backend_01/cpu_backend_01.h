@@ -71,13 +71,6 @@ namespace Sim
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
-		bool GetNeighborListByteBreakdown(
-			NeighborListByteBreakdown& out,
-			const SimParams& params) const override;
-
-		bool GetNeighborListDeltaDistribution(
-			NeighborListDeltaDistribution& out,
-			const SimParams& params) const override;
 
 	private: // --------------------------------------------------------------------------------------
 
@@ -125,15 +118,12 @@ namespace Sim
 		float avgRelDensityErrorF_raw_;
 		float avgRelDensityErrorF_pos_;
 		float avgRelDensityErrorF_abs_;
-		float negNbrCandPctFF_ = 0.0f;
-		float negNbrCandPctFB_ = 0.0f;
-		float avgBVHNodesFF_ = 0.0f;
-		float avgBVHNodesFB_ = 0.0f;
 
 		// neighbor storage
 		std::unique_ptr<I_NeighborLists> neighborLists_;
 
 		// re-usable work (scratch) buffers for temp storage
+		// TODO: rework this?
 		mutable std::vector<float> workBufferF_;
 		mutable std::vector<float> workBufferB_;
 		mutable std::vector<uint64_t> sortKeyBuffer_;

@@ -1,12 +1,9 @@
 // statistics.h
-//
-// TODO: comment
 
 #pragma once
 
 // external
 #include <array>
-#include <cstdint>
 #include <deque>
 
 // internal

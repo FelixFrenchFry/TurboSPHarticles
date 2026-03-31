@@ -385,7 +385,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	const auto paramsFinal = simParams_;
 
 	DisplayMemoryUsageStats(paramsFinal, true);
-	DisplayStatisticsSummary(paramsFinal);
 
 	{
 		// transfer last sim state into the universal state to save it
@@ -492,7 +491,6 @@ void SimulationMgr::RunSim_Blocking()
 	const auto paramsFinal = simParams_;
 
 	DisplayMemoryUsageStats(paramsFinal, true);
-	DisplayStatisticsSummary(paramsFinal);
 
 	{
 		// transfer last sim state into the universal state to save it
@@ -657,20 +655,4 @@ void SimulationMgr::DisplayMemoryUsageStats(
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
 		memoryTracker_, params.byteUnit, params.backendVersion);
-}
-
-void SimulationMgr::DisplayStatisticsSummary(
-	const SimParams& params) const
-{
-	DiagnosticsMgr::PrintStatisticsSummary_Standalone(
-		statisticsTracker_, params);
-	if (simBackend_ != nullptr)
-	{
-		DiagnosticsMgr::PrintNeighborListByteBreakdown_Standalone(
-			*simBackend_, params, params.byteUnit);
-		DiagnosticsMgr::PrintNeighborListByteBreakdownAverages_Standalone(
-			nbrListByteBreakdownAvgs_, params, params.byteUnit);
-		DiagnosticsMgr::PrintNeighborListDeltaDistribution_Standalone(
-			*simBackend_, params);
-	}
 }

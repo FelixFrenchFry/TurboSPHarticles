@@ -82,7 +82,6 @@ namespace Sim
 		void AppendLatestMemoryMetricsLog() const;
 		void DisplayPerformanceStats(const SimParams& params) const;
 		void DisplayMemoryUsageStats(const SimParams& params, bool force = false) const;
-		void DisplayStatisticsSummary(const SimParams& params) const;
 		void ResetNeighborListByteBreakdownAverages();
 		void AccumulateNeighborListByteBreakdownAverages(const SimParams& params);
 

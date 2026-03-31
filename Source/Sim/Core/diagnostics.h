@@ -42,24 +42,6 @@ namespace Sim
 			const Mem::MemoryTracker& memTracker,
 			Mem::ByteUnit unit,
 			Base::BackendVersion backendVersion);
-
-		static void PrintStatisticsSummary_Standalone(
-			const Stats::StatisticsTracker& statisticsTracker,
-			const SimParams& params);
-
-		static void PrintNeighborListByteBreakdown_Standalone(
-			const I_SimBackend& simBackend,
-			const SimParams& params,
-			Mem::ByteUnit unit);
-
-		static void PrintNeighborListByteBreakdownAverages_Standalone(
-			const NeighborListByteBreakdownAverages& avgs,
-			const SimParams& params,
-			Mem::ByteUnit unit);
-
-		static void PrintNeighborListDeltaDistribution_Standalone(
-			const I_SimBackend& simBackend,
-			const SimParams& params);
 	};
 
 } // namespace Sim

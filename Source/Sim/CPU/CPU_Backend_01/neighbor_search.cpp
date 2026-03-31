@@ -39,25 +39,7 @@ using namespace Sim;
 
 namespace
 {
-	void ComputeNegativeNeighborCandidatePercentages(
-		const uint64_t candCountFF,
-		const uint64_t posCountFF,
-		const uint64_t candCountFB,
-		const uint64_t posCountFB,
-		float& negNbrCandPctFF,
-		float& negNbrCandPctFB)
-	{
-		negNbrCandPctFF = candCountFF > 0
-			? static_cast<float>(candCountFF - posCountFF)
-			/ static_cast<float>(candCountFF)
-			: 0.0f;
-
-		negNbrCandPctFB = candCountFB > 0
-			? static_cast<float>(candCountFB - posCountFB)
-			/ static_cast<float>(candCountFB)
-			: 0.0f;
-	}
-
+	// TODO: rework this?
 	void ApplyPermutation(
 		const std::vector<uint64_t>& sortedKeys,
 		std::vector<float>& data,
@@ -1006,10 +988,6 @@ void NS_SpatialHashing_Basic_CPU01::Query_Count(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
-
-	// candidate negativity statistics are only determined during fill queries
-	be_.negNbrCandPctFF_ = 0.0f;
-	be_.negNbrCandPctFB_ = 0.0f;
 }
 
 void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
@@ -1157,15 +1135,6 @@ void NS_SpatialHashing_Basic_CPU01::Query_Fill(const SimParams& params)
 			posCountFB.fetch_add(posCountFB_local, std::memory_order_relaxed);
 		},
 		tbb::auto_partitioner{}
-	);
-
-	ComputeNegativeNeighborCandidatePercentages(
-		candCountFF.load(std::memory_order_relaxed),
-		posCountFF.load(std::memory_order_relaxed),
-		candCountFB.load(std::memory_order_relaxed),
-		posCountFB.load(std::memory_order_relaxed),
-		be_.negNbrCandPctFF_,
-		be_.negNbrCandPctFB_
 	);
 }
 
@@ -3778,10 +3747,6 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
-
-	// candidate negativity statistics are only determined during fill queries
-	be_.negNbrCandPctFF_ = 0.0f;
-	be_.negNbrCandPctFB_ = 0.0f;
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
@@ -3972,15 +3937,6 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Basic(const SimParams& params)
 			posCountFB.fetch_add(posCountFB_local, std::memory_order_relaxed);
 		},
 		tbb::auto_partitioner{}
-	);
-
-	ComputeNegativeNeighborCandidatePercentages(
-		candCountFF.load(std::memory_order_relaxed),
-		posCountFF.load(std::memory_order_relaxed),
-		candCountFB.load(std::memory_order_relaxed),
-		posCountFB.load(std::memory_order_relaxed),
-		be_.negNbrCandPctFF_,
-		be_.negNbrCandPctFB_
 	);
 }
 
@@ -4338,15 +4294,6 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill_Smart(const SimParams& params)
 			posCountFB.fetch_add(posCountFB_local, std::memory_order_relaxed);
 		},
 		tbb::auto_partitioner{}
-	);
-
-	ComputeNegativeNeighborCandidatePercentages(
-		candCountFF.load(std::memory_order_relaxed),
-		posCountFF.load(std::memory_order_relaxed),
-		candCountFB.load(std::memory_order_relaxed),
-		posCountFB.load(std::memory_order_relaxed),
-		be_.negNbrCandPctFF_,
-		be_.negNbrCandPctFB_
 	);
 }
 
@@ -5152,10 +5099,6 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::BuildBVH(
 void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Count(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	be_.avgBVHNodesFF_ = 0.0f;
-	be_.avgBVHNodesFB_ = 0.0f;
-	be_.negNbrCandPctFF_ = 0.0f;
-	be_.negNbrCandPctFB_ = 0.0f;
 
 	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
@@ -5309,31 +5252,6 @@ void NS_BoundVolHier_Linear_LBVH_CPU01::Query_Fill(const SimParams& params)
 		},
 		tbb::auto_partitioner{}
 	);
-
-	if (measureParticlesStats && N_F > 0)
-	{
-		const float invNF = 1.0f / static_cast<float>(N_F);
-		be_.avgBVHNodesFF_ =
-			static_cast<float>(traversedNodeCountFF.load(std::memory_order_relaxed)) * invNF;
-		be_.avgBVHNodesFB_ =
-			static_cast<float>(traversedNodeCountFB.load(std::memory_order_relaxed)) * invNF;
-
-		ComputeNegativeNeighborCandidatePercentages(
-			candCountFF.load(std::memory_order_relaxed),
-			posCountFF.load(std::memory_order_relaxed),
-			candCountFB.load(std::memory_order_relaxed),
-			posCountFB.load(std::memory_order_relaxed),
-			be_.negNbrCandPctFF_,
-			be_.negNbrCandPctFB_
-		);
-	}
-	else
-	{
-		be_.avgBVHNodesFF_ = 0.0f;
-		be_.avgBVHNodesFB_ = 0.0f;
-		be_.negNbrCandPctFF_ = 0.0f;
-		be_.negNbrCandPctFB_ = 0.0f;
-	}
 }
 
 NeighborSpan NS_BoundVolHier_Linear_LBVH_CPU01::QueryParticleFF(

@@ -38,10 +38,6 @@ namespace Stats
 		NumNbrFB_P99,		// top 1% of boundary neighbors
 		NumNbrFB_Min,		// min number of boundary neighbors
 		NumNbrFB_Max,		// max number of boundary neighbors
-		NegNbrCandFF_Pct,	// percentage of negative fluid neighbor candidates
-		NegNbrCandFB_Pct,	// percentage of negative boundary neighbor candidates
-		NumBVHNodesFF_Avg,	// average number of traversed fluid BVH nodes
-		NumBVHNodesFB_Avg,	// average number of traversed boundary BVH nodes
 
 		// density deviation
 		// (relative error in %, aka deviation)
@@ -180,38 +176,6 @@ namespace Stats
 				.var = "int",
 				.tip =
 				"Maximum number of boundary particles neighboring a fluid particle"
-			},
-			{
-				.metric = StatMetric::NegNbrCandFF_Pct,
-				.name = "neg fluid candidates",
-				.unit = "%",
-				.var = "float",
-				.tip =
-				"Percentage of tested fluid neighbor candidates that are not actual neighbors"
-			},
-			{
-				.metric = StatMetric::NegNbrCandFB_Pct,
-				.name = "neg bound candidates",
-				.unit = "%",
-				.var = "float",
-				.tip =
-				"Percentage of tested boundary neighbor candidates that are not actual neighbors"
-			},
-			{
-				.metric = StatMetric::NumBVHNodesFF_Avg,
-				.name = "num fluid bvh nodes (avg)",
-				.unit = "",
-				.var = "float",
-				.tip =
-				"Average number of internal BVH nodes traversed for a fluid-fluid query"
-			},
-			{
-				.metric = StatMetric::NumBVHNodesFB_Avg,
-				.name = "num bound bvh nodes (avg)",
-				.unit = "",
-				.var = "float",
-				.tip =
-				"Average number of internal BVH nodes traversed for a fluid-boundary query"
 			},
 			{
 				.metric = StatMetric::DensRelError_Raw_Avg,
