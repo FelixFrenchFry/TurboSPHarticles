@@ -61,8 +61,8 @@ namespace Sim
 		uint32_t expctdNbrCountHardMax_FF = 64;
 		uint32_t expctdNbrCountHardMax_FB = 32;
 		// (used for the initial reserve of large packed CSR neighbor list buffers)
-		uint32_t expctdAvgNbrCountHardMax_FF = 35;
-		uint32_t expctdAvgNbrCountHardMax_FB = 1;
+		uint32_t expctdAvgNbrCountHardMax_FF = 36;
+		uint32_t expctdAvgNbrCountHardMax_FB = 3;
 
 		// density and mass
 		float restDensityF		= 1'000.0f;

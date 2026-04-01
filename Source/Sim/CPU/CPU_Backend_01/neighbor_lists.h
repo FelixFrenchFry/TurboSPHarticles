@@ -136,16 +136,19 @@ namespace Sim
 
 		void Finalize_Count() override;
 
-		void Finalize_Fill() override {}
+		void Finalize_Fill() override;
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override;
-		void SetNbrCountFB(uint32_t i, uint32_t count) override;
+		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
+
+		uint32_t CountFF(uint32_t i) const override;
+		uint32_t CountFB(uint32_t i) const override;
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const override;
@@ -156,7 +159,75 @@ namespace Sim
 
 	private: // ------------------------------------------------------------------------------------
 
-		// TODO: implement
+		enum class FillPhase : uint8_t
+		{
+			Measure,
+			Encode,
+			Ready
+		};
+
+		// metadata
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+
+		// compressed CSR neighbor storage using CSR blocks
+		// (32-bit local offset per-particle and 64-bit global block offset per-block)
+		// (local offset vectors temporarily store encoded neighbor list byte counts during
+		// first fill-query, then become block-local byte offsets after finalization)
+		std::vector<uint32_t> nbrCountFF_; // TODO: make this uint16_t?
+		std::vector<uint32_t> nbrCountFB_; // TODO: make this uint16_t?
+		std::vector<uint32_t> nbrLocalOffsetsFF_; // size: N_F
+		std::vector<uint32_t> nbrLocalOffsetsFB_; // size: N_F
+		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / offsetBlockParticleCount_ + 1
+		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / offsetBlockParticleCount_ + 1
+		std::vector<uint8_t> nbrListCompressedFF_; // size: N_F * avg FF neighbor count * avg bytes per neighbor
+		std::vector<uint8_t> nbrListCompressedFB_; // size: N_F * avg FB neighbor count * avg bytes per neighbor
+
+		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFB_;
+
+		// thread-local sorting scratch for measuring and encoding
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
+		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
+
+		// misc
+		FillPhase fillPhase_ = FillPhase::Measure;
+		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
+		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+		static constexpr uint32_t overheadBytesPerNeighborList = 5;
+		static constexpr double expctdBytePerCompressedNeighbor = 1.6; // TODO: fine-tune
+
+		// helpers
+		static uint32_t OffsetBlockNumTotal(uint32_t N_F) noexcept;
+		static uint32_t OffsetBlockOfParticle(uint32_t i) noexcept;
+		static uint32_t OffsetBlockBegin(uint32_t block) noexcept;
+		static uint32_t OffsetBlockEnd(uint32_t block, uint32_t N_F) noexcept;
+		static uint64_t ParticleStorageBegin(
+			uint32_t i,
+			const std::vector<uint32_t>& nbrLocalOffsets,
+			const std::vector<uint64_t>& nbrBlockBases) noexcept;
+		static uint64_t ParticleStorageEnd(
+			uint32_t i,
+			uint32_t N_F,
+			const std::vector<uint32_t>& nbrLocalOffsets,
+			const std::vector<uint64_t>& nbrBlockBases) noexcept;
+		void FinalizeBlockCSR(
+			std::vector<uint32_t>& nbrLocalOffsets,
+			std::vector<uint64_t>& nbrBlockBases,
+			std::vector<uint8_t>& nbrList) const;
+		static uint8_t ChooseWidthCode(uint32_t maxGap) noexcept;
+		static uint32_t GetNumWidthBytes(uint8_t widthCode) noexcept;
+		static uint64_t MeasureEncodedBytes(const uint32_t* js,
+			uint32_t count, std::vector<uint32_t>& scratch);
+		static inline uint16_t ReadU16LE(const uint8_t* src) noexcept;
+		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
+		static inline void WriteU16LE(uint8_t* dst, uint16_t v) noexcept;
+		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
+		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
+			uint32_t count, std::vector<uint32_t>& out);
+		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
+			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -231,6 +302,8 @@ namespace Sim
 		FillPhase fillPhase_ = FillPhase::Measure;
 		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
 		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+		static constexpr uint32_t overheadBytesPerNeighborList = 4;
+		static constexpr double expctdBytePerCompressedNeighbor = 0.8; // TODO: fine-tune
 
 		// helpers
 		static uint32_t OffsetBlockNumTotal(uint32_t N_F) noexcept;

@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <cassert>
@@ -149,8 +150,7 @@ void NeighborLists_SingleCSRVector_Explicit_CPU01::Resize(
 	nbrListFF_.clear();
 	nbrListFB_.clear();
 
-	// reserve packed CSR storage up front to avoid a late full re-allocation
-	// of large final neighbor buffers during long or near-capacity runs
+	// reserve packed CSR storage up front based on the expected bytes per neighbor list
 	EnsurePackedCSRStorageCapacity(nbrListFF_,
 		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF));
 	EnsurePackedCSRStorageCapacity(nbrListFB_,
@@ -356,52 +356,200 @@ void NeighborLists_SingleCSRVector_Explicit_CPU01::FinalizeBlockCSR(
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::Resize(
 	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
 {
-	// TODO: implement
+	N_F_ = N_F;
+	N_B_ = N_B;
+
+	const uint32_t numBlocks = OffsetBlockNumTotal(N_F_);
+	nbrCountFF_.assign(N_F_, 0);
+	nbrCountFB_.assign(N_F_, 0);
+	nbrLocalOffsetsFF_.assign(N_F_, 0);
+	nbrLocalOffsetsFB_.assign(N_F_, 0);
+	nbrBlockBasesFF_.assign(static_cast<uint64_t>(numBlocks) + 1ull, 0);
+	nbrBlockBasesFB_.assign(static_cast<uint64_t>(numBlocks) + 1ull, 0);
+	nbrListCompressedFF_.clear();
+	nbrListCompressedFB_.clear();
+	fillPhase_ = FillPhase::Measure;
+
+	// reserve packed CSR storage up front based on the expected bytes per compressed list
+	const uint64_t expctdBytesFF = static_cast<uint64_t>(std::ceil(
+		static_cast<double>(N_F_) *
+		(static_cast<double>(overheadBytesPerNeighborList)
+		 + expctdBytePerCompressedNeighbor
+		 * static_cast<double>(params.expctdAvgNbrCountHardMax_FF))));
+	const uint64_t expctdBytesFB = static_cast<uint64_t>(std::ceil(
+		static_cast<double>(N_F_) *
+		(static_cast<double>(overheadBytesPerNeighborList)
+		 + expctdBytePerCompressedNeighbor
+		 * static_cast<double>(params.expctdAvgNbrCountHardMax_FB))));
+	EnsurePackedCSRStorageCapacity(nbrListCompressedFF_, expctdBytesFF);
+	EnsurePackedCSRStorageCapacity(nbrListCompressedFB_, expctdBytesFB);
 }
 
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::Finalize_Count()
 {
-	// TODO: implement
+	// reset to prepare for first fill-query (measure phase)
+	const uint32_t numBlocks = OffsetBlockNumTotal(N_F_);
+	nbrCountFF_.assign(N_F_, 0);
+	nbrCountFB_.assign(N_F_, 0);
+	nbrLocalOffsetsFF_.assign(N_F_, 0);
+	nbrLocalOffsetsFB_.assign(N_F_, 0);
+	nbrBlockBasesFF_.assign(static_cast<uint64_t>(numBlocks) + 1ull, 0);
+	nbrBlockBasesFB_.assign(static_cast<uint64_t>(numBlocks) + 1ull, 0);
+	nbrListCompressedFF_.clear();
+	nbrListCompressedFB_.clear();
+	fillPhase_ = FillPhase::Measure;
 }
 
-void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrCountFF(
-	const uint32_t i, const uint32_t count)
+void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::Finalize_Fill()
 {
-	// TODO: implement
-}
+	if (fillPhase_ == FillPhase::Measure)
+	{
+		if (N_F_ == 0) // nothing to do for empty sim
+		{
+			nbrBlockBasesFF_.assign(1, 0);
+			nbrBlockBasesFB_.assign(1, 0);
+			nbrListCompressedFF_.clear();
+			nbrListCompressedFB_.clear();
+			fillPhase_ = FillPhase::Encode;
+			return;
+		}
 
-void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrCountFB(
-	const uint32_t i, const uint32_t count)
-{
-	// TODO: implement
+		FinalizeBlockCSR(nbrLocalOffsetsFF_, nbrBlockBasesFF_, nbrListCompressedFF_);
+		FinalizeBlockCSR(nbrLocalOffsetsFB_, nbrBlockBasesFB_, nbrListCompressedFB_);
+		fillPhase_ = FillPhase::Encode;
+		return;
+	}
+
+	if (fillPhase_ == FillPhase::Encode)
+	{
+		fillPhase_ = FillPhase::Ready;
+		return;
+	}
+
+	throw std::runtime_error(
+		"Unexpected fill-phase transition in adapt-compressed single-CSR neighbor lists.");
 }
 
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFF(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	// TODO: implement
+	auto& scratch = sortScratchFF_.local();
+
+	if (fillPhase_ == FillPhase::Measure)
+	{
+		nbrCountFF_[i] = count;
+		const uint64_t encodedBytes = MeasureEncodedBytes(js, count, scratch);
+	#if defined(_DEBUG)
+		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
+			&& "Per-particle adapt-compressed neighbor list exceeds uint32_t byte count");
+	#endif
+		nbrLocalOffsetsFF_[i] = static_cast<uint32_t>(encodedBytes);
+		return;
+	}
+
+	if (fillPhase_ == FillPhase::Encode)
+	{
+		if (nbrCountFF_[i] != count) [[unlikely]]
+		{
+			throw std::runtime_error(
+				"Measured and encoded FF neighbor counts do not match in adapt-compressed single-CSR storage.");
+		}
+
+		const uint64_t start = ParticleStorageBegin(i, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
+		const uint64_t end = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
+		uint8_t* dst = nbrListCompressedFF_.empty()
+					 ? nullptr
+					 : nbrListCompressedFF_.data() + start;
+
+		EncodeNeighborList(dst, end - start, js, count, scratch);
+		return;
+	}
+
+	throw std::runtime_error(
+		"Adapt-compressed single-CSR neighbor lists received FF fill data in an invalid state.");
 }
 
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFB(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
-	// TODO: implement
+	auto& scratch = sortScratchFB_.local();
+
+	if (fillPhase_ == FillPhase::Measure)
+	{
+		nbrCountFB_[i] = count;
+		const uint64_t encodedBytes = MeasureEncodedBytes(js, count, scratch);
+	#if defined(_DEBUG)
+		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
+			&& "Per-particle adapt-compressed neighbor list exceeds uint32_t byte count");
+	#endif
+		nbrLocalOffsetsFB_[i] = static_cast<uint32_t>(encodedBytes);
+		return;
+	}
+
+	if (fillPhase_ == FillPhase::Encode)
+	{
+		if (nbrCountFB_[i] != count) [[unlikely]]
+		{
+			throw std::runtime_error(
+				"Measured and encoded FB neighbor counts do not match in adapt-compressed single-CSR storage.");
+		}
+
+		const uint64_t start = ParticleStorageBegin(i, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
+		const uint64_t end = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
+		uint8_t* dst = nbrListCompressedFB_.empty()
+					 ? nullptr
+					 : nbrListCompressedFB_.data() + start;
+
+		EncodeNeighborList(dst, end - start, js, count, scratch);
+		return;
+	}
+
+	throw std::runtime_error(
+		"Adapt-compressed single-CSR neighbor lists received FB fill data in an invalid state.");
 }
 
 NeighborSpan NeighborLists_SingleCSRVector_AdaptCompress_CPU01::FF(
 	const uint32_t i) const
 {
-	// TODO: implement
+	const uint32_t count = nbrCountFF_[i];
+	if (count == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nullptr, 0 };
+	const uint64_t start = ParticleStorageBegin(i, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
+	const uint64_t end = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
+	const uint8_t* src = nbrListCompressedFF_.data() + start;
+
+	auto& out = nbrScratchFF_.local();
+	DecodeNeighborList(src, end - start, count, out);
+
+	return NeighborSpan{ out.data(), count };
 }
 
 NeighborSpan NeighborLists_SingleCSRVector_AdaptCompress_CPU01::FB(
 	const uint32_t i) const
 {
-	// TODO: implement
+	const uint32_t count = nbrCountFB_[i];
+	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nullptr, 0 };
+	const uint64_t start = ParticleStorageBegin(i, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
+	const uint64_t end = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
+	const uint8_t* src = nbrListCompressedFB_.data() + start;
+
+	auto& out = nbrScratchFB_.local();
+	DecodeNeighborList(src, end - start, count, out);
+
+	return NeighborSpan{ out.data(), count };
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::CountFF(
+	const uint32_t i) const
+{
+	return nbrCountFF_[i];
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::CountFB(
+	const uint32_t i) const
+{
+	return nbrCountFB_[i];
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage>
@@ -414,12 +562,307 @@ NeighborLists_SingleCSRVector_AdaptCompress_CPU01::GetMemUsage(
 	Mem::MemUsage usageFB{};
 
 	// FF
-	// TODO: implement
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrLocalOffsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrBlockBasesFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListCompressedFF_));
 
 	// FB
-	// TODO: implement
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrLocalOffsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrBlockBasesFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListCompressedFB_));
 
 	return { usageFF, usageFB };
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::OffsetBlockNumTotal(
+	const uint32_t N_F) noexcept
+{
+	return (N_F == 0u) ? 0u : ((N_F - 1u) / offsetBlockParticleCount_) + 1u;
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::OffsetBlockOfParticle(
+	const uint32_t i) noexcept
+{
+	return i / offsetBlockParticleCount_;
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::OffsetBlockBegin(
+	const uint32_t block) noexcept
+{
+	return block * offsetBlockParticleCount_;
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::OffsetBlockEnd(
+	const uint32_t block, const uint32_t N_F) noexcept
+{
+	return std::min(OffsetBlockBegin(block) + offsetBlockParticleCount_, N_F);
+}
+
+uint64_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::ParticleStorageBegin(
+	const uint32_t i,
+	const std::vector<uint32_t>& nbrLocalOffsets,
+	const std::vector<uint64_t>& nbrBlockBases) noexcept
+{
+	const uint32_t block = OffsetBlockOfParticle(i);
+	return nbrBlockBases[block] + static_cast<uint64_t>(nbrLocalOffsets[i]);
+}
+
+uint64_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::ParticleStorageEnd(
+	const uint32_t i,
+	const uint32_t N_F,
+	const std::vector<uint32_t>& nbrLocalOffsets,
+	const std::vector<uint64_t>& nbrBlockBases) noexcept
+{
+	const uint32_t block = OffsetBlockOfParticle(i);
+	const uint32_t blockEnd = OffsetBlockEnd(block, N_F);
+
+	if (i + 1u < blockEnd)
+	{
+		return nbrBlockBases[block] + static_cast<uint64_t>(nbrLocalOffsets[i + 1u]);
+	}
+
+	return nbrBlockBases[static_cast<uint64_t>(block) + 1ull];
+}
+
+void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::FinalizeBlockCSR(
+	std::vector<uint32_t>& nbrLocalOffsets,
+	std::vector<uint64_t>& nbrBlockBases,
+	std::vector<uint8_t>& nbrList) const
+{
+	if (N_F_ == 0) // nothing to do for empty sim
+	{
+		nbrBlockBases.assign(1, 0);
+		nbrList.clear();
+		return;
+	}
+
+	const uint32_t numBlocks = OffsetBlockNumTotal(N_F_);
+	std::vector<uint64_t> blockTotals(static_cast<uint64_t>(numBlocks), 0ull);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, numBlocks),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t block = r.begin(); block != r.end(); block++)
+			{
+				const uint32_t begin = OffsetBlockBegin(block);
+				const uint32_t end = OffsetBlockEnd(block, N_F_);
+				uint64_t sum = 0;
+
+				for (uint32_t i = begin; i < end; i++)
+				{
+					const uint32_t countBytes = nbrLocalOffsets[i];
+					nbrLocalOffsets[i] = static_cast<uint32_t>(sum);
+					sum += countBytes;
+				}
+
+				blockTotals[block] = sum;
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// compute global block base indices from block totals
+	nbrBlockBases.resize(static_cast<uint64_t>(numBlocks) + 1ull);
+	nbrBlockBases[0] = 0;
+	for (uint32_t block = 0; block < numBlocks; block++)
+	{
+		nbrBlockBases[static_cast<uint64_t>(block) + 1ull]
+			= nbrBlockBases[block] + blockTotals[block];
+	}
+
+	const uint64_t N_total = nbrBlockBases[numBlocks];
+	EnsurePackedCSRStorageCapacity(nbrList, N_total, extraAllocCapacityPct_);
+	nbrList.resize(N_total);
+}
+
+uint8_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::ChooseWidthCode(
+	const uint32_t maxGap) noexcept
+{
+	if (maxGap <= 0xFFu) { return 0u; }
+	if (maxGap <= 0xFFFFu) { return 1u; }
+	return 2u;
+}
+
+uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::GetNumWidthBytes(
+	const uint8_t widthCode) noexcept
+{
+	if (widthCode == 0u) { return 1u; }
+	if (widthCode == 1u) { return 2u; }
+	return 4u;
+}
+
+uint64_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::MeasureEncodedBytes(
+	const uint32_t* js, const uint32_t count, std::vector<uint32_t>& scratch)
+{
+	if (count == 0)
+	{
+		return 0;
+	}
+
+	scratch.assign(js, js + count);
+	std::sort(scratch.begin(), scratch.end());
+
+	uint32_t maxGap = 0u;
+	for (uint32_t k = 1; k < count; k++)
+	{
+		maxGap = std::max(maxGap, scratch[k] - scratch[k - 1]);
+	}
+
+	return 1ull + 4ull + static_cast<uint64_t>(count - 1u) * GetNumWidthBytes(ChooseWidthCode(maxGap));
+}
+
+inline uint16_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::ReadU16LE(
+	const uint8_t* src) noexcept
+{
+	return static_cast<uint16_t>(src[0])
+		| (static_cast<uint16_t>(src[1]) << 8);
+}
+
+inline uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::ReadU32LE(
+	const uint8_t* src) noexcept
+{
+	return static_cast<uint32_t>(src[0])
+		| (static_cast<uint32_t>(src[1]) << 8)
+		| (static_cast<uint32_t>(src[2]) << 16)
+		| (static_cast<uint32_t>(src[3]) << 24);
+}
+
+inline void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::WriteU16LE(
+	uint8_t* dst, const uint16_t v) noexcept
+{
+	dst[0] = static_cast<uint8_t>(v);
+	dst[1] = static_cast<uint8_t>(v >> 8);
+}
+
+inline void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::WriteU32LE(
+	uint8_t* dst, const uint32_t v) noexcept
+{
+	dst[0] = static_cast<uint8_t>(v);
+	dst[1] = static_cast<uint8_t>(v >> 8);
+	dst[2] = static_cast<uint8_t>(v >> 16);
+	dst[3] = static_cast<uint8_t>(v >> 24);
+}
+
+void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::DecodeNeighborList(
+	const uint8_t* src, const uint64_t srcBytes, const uint32_t count,
+	std::vector<uint32_t>& out)
+{
+	if (count == 0)
+	{
+		out.clear();
+		return;
+	}
+
+	const uint8_t widthCode = src[0];
+
+	#if defined(_DEBUG)
+	const uint64_t expectedBytes =
+		1ull + 4ull + static_cast<uint64_t>(count - 1u) * GetNumWidthBytes(widthCode);
+	assert(srcBytes == expectedBytes && "Compressed list size mismatch");
+	#endif
+
+	out.resize(count);
+	uint32_t v = ReadU32LE(src + 1);
+	out[0] = v;
+
+	const uint8_t* p = src + 1 + 4;
+	if (widthCode == 0u)
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			v += static_cast<uint32_t>(*p++);
+			out[k] = v;
+		}
+	}
+	else if (widthCode == 1u)
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			v += static_cast<uint32_t>(ReadU16LE(p));
+			p += 2;
+			out[k] = v;
+		}
+	}
+	else
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			v += ReadU32LE(p);
+			p += 4;
+			out[k] = v;
+		}
+	}
+
+	#if defined(_DEBUG)
+	assert(p == src + srcBytes && "Decoded byte count mismatch");
+	#endif
+}
+
+void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
+	uint8_t* dst, const uint64_t dstBytes, const uint32_t* js,
+	const uint32_t count, std::vector<uint32_t>& scratch)
+{
+	if (count == 0)
+	{
+	#if defined(_DEBUG)
+		assert(dstBytes == 0 && "Compressed list byte count mismatch for empty list");
+	#endif
+		return;
+	}
+
+	scratch.assign(js, js + count);
+	std::sort(scratch.begin(), scratch.end());
+
+	uint32_t maxGap = 0u;
+	for (uint32_t k = 1; k < count; k++)
+	{
+		maxGap = std::max(maxGap, scratch[k] - scratch[k - 1]);
+	}
+
+	const uint8_t widthCode = ChooseWidthCode(maxGap);
+	const uint32_t widthBytes = GetNumWidthBytes(widthCode);
+	const uint64_t requiredBytes =
+		1ull + 4ull + static_cast<uint64_t>(count - 1u) * widthBytes;
+	if (requiredBytes != dstBytes)
+	{
+		throw std::runtime_error(
+			"Measured and encoded adapt-compressed neighbor list sizes do not match.");
+	}
+
+	dst[0] = widthCode;
+	WriteU32LE(dst + 1, scratch[0]);
+
+	uint8_t* p = dst + 1 + 4;
+	if (widthCode == 0u)
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			*p++ = static_cast<uint8_t>(scratch[k] - scratch[k - 1]);
+		}
+	}
+	else if (widthCode == 1u)
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			WriteU16LE(p, static_cast<uint16_t>(scratch[k] - scratch[k - 1]));
+			p += 2;
+		}
+	}
+	else
+	{
+		for (uint32_t k = 1; k < count; k++)
+		{
+			WriteU32LE(p, scratch[k] - scratch[k - 1]);
+			p += 4;
+		}
+	}
+
+	#if defined(_DEBUG)
+	assert(p == dst + dstBytes && "Encoded byte count mismatch");
+	#endif
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -442,15 +885,19 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::Resize(
 	nbrListCompressedFB_.clear();
 	fillPhase_ = FillPhase::Measure;
 
-	// reserve packed CSR storage up front to avoid a late full re-allocation
-	// of large final neighbor buffers during long or near-capacity runs
-	// (using 1 expected byte per neighbor)
-	EnsurePackedCSRStorageCapacity(
-		nbrListCompressedFF_,
-		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF) * 1);
-	EnsurePackedCSRStorageCapacity(
-		nbrListCompressedFB_,
-		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB) * 1);
+	// reserve packed CSR storage up front based on the expected bytes per compressed list
+	const uint64_t expctdBytesFF = static_cast<uint64_t>(std::ceil(
+		static_cast<double>(N_F_) *
+		(static_cast<double>(overheadBytesPerNeighborList)
+		 + expctdBytePerCompressedNeighbor
+		 * static_cast<double>(params.expctdAvgNbrCountHardMax_FF))));
+	const uint64_t expctdBytesFB = static_cast<uint64_t>(std::ceil(
+		static_cast<double>(N_F_) *
+		(static_cast<double>(overheadBytesPerNeighborList)
+		 + expctdBytePerCompressedNeighbor
+		 * static_cast<double>(params.expctdAvgNbrCountHardMax_FB))));
+	EnsurePackedCSRStorageCapacity(nbrListCompressedFF_, expctdBytesFF);
+	EnsurePackedCSRStorageCapacity(nbrListCompressedFB_, expctdBytesFB);
 }
 
 void NeighborLists_SingleCSRVector_VByteCompress_CPU01::Finalize_Count()

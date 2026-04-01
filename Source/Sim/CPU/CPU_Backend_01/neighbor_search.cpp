@@ -1443,8 +1443,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		// worst case, all particles are in unique cells (highly unlikely)
 		// best case (realistically), each cell has 8 particles
 		// TODO: find a better heuristic
-		uniqueCellIdF_.reserve(N_F / 2);
-		cellStartIdxF_.reserve(N_F + 1); // +1 for sentinel
+		uniqueCellIdF_.reserve(N_F / 4);
+		cellStartIdxF_.reserve(N_F / 4 + 1); // +1 for sentinel
 
 		uint64_t cid_prev = EMPTY_64;
 		for (uint32_t i = 0; i < N_F; i++)
@@ -1475,8 +1475,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		// worst case, all particles are in unique cells (highly unlikely)
 		// best case (realistically), each cell has 8 particles
 		// TODO: find a better heuristic
-		uniqueCellIdB_.reserve(N_B / 2);
-		cellStartIdxB_.reserve(N_B + 1); // +1 for sentinel
+		uniqueCellIdB_.reserve(N_B / 4);
+		cellStartIdxB_.reserve(N_B / 4 + 1); // +1 for sentinel
 
 		uint64_t cid_prev = EMPTY_64;
 		for (uint32_t i = 0; i < N_B; i++)

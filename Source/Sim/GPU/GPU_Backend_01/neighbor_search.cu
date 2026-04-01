@@ -519,6 +519,7 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 	{
 		// keep capacity once allocated and only grow when needed
 		// (to avoid repeated device alloc/free between steps)
+		// TODO: use heuristic instead of allocating worst-case size?
 		if (d_uniqueCellIdF_.Size() < N_F) { d_uniqueCellIdF_.Resize(N_F); }
 		if (d_cellStartIdxF_.Size() < N_F + 1) { d_cellStartIdxF_.Resize(N_F + 1); }
 		if (d_cellIdF_.Size() < N_F) { d_cellIdF_.Resize(N_F); }
@@ -529,6 +530,7 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 	{
 		// keep capacity once allocated and only grow when needed
 		// (to avoid repeated device alloc/free between steps)
+		// TODO: use heuristic instead of allocating worst-case size?
 		if (d_uniqueCellIdB_.Size() < N_B) { d_uniqueCellIdB_.Resize(N_B); }
 		if (d_cellStartIdxB_.Size() < N_B + 1) { d_cellStartIdxB_.Resize(N_B + 1); }
 		if (d_cellIdB_.Size() < N_B) { d_cellIdB_.Resize(N_B); }
