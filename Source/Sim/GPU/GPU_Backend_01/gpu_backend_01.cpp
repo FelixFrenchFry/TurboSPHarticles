@@ -28,7 +28,8 @@ namespace
 
 		return Mem::MemUsage{ bytes, bytes, bytes };
 	}
-}
+
+} // anonymous
 
 SimBackend_GPU01::SimBackend_GPU01(
 	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
@@ -40,32 +41,19 @@ SimBackend_GPU01::SimBackend_GPU01(
 	if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::BruteForce)
 	{
-		neighborSearchStrat_ = std::make_unique<NS_BruteForce_GPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::SpatialHashing_Basic)
-	{
-		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::CellLinkedList_Basic)
-	{
-		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_GPU01>(*this);
+		neighborSearch_ = std::make_unique<NS_BruteForce_GPU01>(*this);
 	}
 	else if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::CellLinkedList_Compact)
 	{
-		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_GPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH)
-	{
-		neighborSearchStrat_ = std::make_unique<NS_BoundVolHier_Linear_LBVH_GPU01>(*this);
+		neighborSearch_ = std::make_unique<NS_CellLinkedList_Compact_GPU01>(*this);
 	}
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
+
+	// TODO: select neighbor list method once implemented
 }
 
 SimBackend_GPU01::~SimBackend_GPU01()
@@ -74,11 +62,6 @@ SimBackend_GPU01::~SimBackend_GPU01()
 	{
 		GPU::Check(cudaStreamDestroy(stream_), "cudaStreamDestroy()");
 	}
-}
-
-void SimBackend_GPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
-{
-	neighborSearchStrat_ = std::move(strat);
 }
 
 // TODO: re-implement this to free up memory as soon as copied in!
@@ -514,7 +497,7 @@ void SimBackend_GPU01::FillMemoryRecord(
 	{
 		MemUsage usageF{};
 		MemUsage usageB{};
-		std::pair<MemUsage, MemUsage> usageFB = neighborSearchStrat_->GetMemUsage(params);
+		std::pair<MemUsage, MemUsage> usageFB = neighborSearch_->GetMemUsage(params);
 
 		Add(usageF, usageFB.first);
 		Add(usageB, usageFB.second);
@@ -788,7 +771,7 @@ void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	}
-	neighborSearchStrat_->Construct(params);
+	neighborSearch_->Construct(params);
 	if (bench)
 	{
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
@@ -798,9 +781,9 @@ void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 	}
-	neighborSearchStrat_->Query_Count(params);
+	neighborSearch_->Query_Count(params);
 	FinalizeNeighborLists_Count();
-	neighborSearchStrat_->Query_Fill(params);
+	neighborSearch_->Query_Fill(params);
 	if (bench)
 	{
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
@@ -824,7 +807,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		// --- [ neighbor search ] ----------------------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-		neighborSearchStrat_->Construct(params);
+		neighborSearch_->Construct(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 		// --- [ particle data re-ordering ] -----------------------------------------------------------
@@ -834,14 +817,14 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			simStep % static_cast<int64_t>(params.dataReOrderInterval) == 0)
 		{
 			benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
-			neighborSearchStrat_->DataReOrder(params);
+			neighborSearch_->DataReOrder(params);
 			benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
 		}
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		neighborSearchStrat_->Query_Count(params);
+		neighborSearch_->Query_Count(params);
 		FinalizeNeighborLists_Count();
-		neighborSearchStrat_->Query_Fill(params);
+		neighborSearch_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 		// --- [ density computations ] -----------------------------------------------------------------

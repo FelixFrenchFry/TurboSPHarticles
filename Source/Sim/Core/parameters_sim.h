@@ -31,13 +31,8 @@ namespace Sim
 			Base::ScenarioType::BreakingDam;
 		Base::NeighborSearchMethod neighborSearchMethod =
 			Base::NeighborSearchMethod::CellLinkedList_Compact;
-		Base::NeighborListStorage neighborListStorage =
-			Base::NeighborListStorage::CSRVector_FinalConcat;
-
-		// mode flags
-		bool runCountQuery		= false; // depends on the neighbor list storage
-		bool runFillQuery		= true; // always true for now
-		bool runSecondFillQuery	= false; // depends on the neighbor list storage
+		Base::NeighborListMethod neighborListMethod =
+			Base::NeighborListMethod::SingleCSRVector_Explicit;
 
 		// simulation state
 		bool simRunning			= false;
@@ -150,9 +145,6 @@ namespace Sim
 			const std::vector<std::string>& overrides, bool verbose = false);
 
 		// setters for individual parameters and their dependent values
-		void Set_RunCountQuery(bool runCountQuery, bool verbose = false);
-		void Set_RunFillQuery(bool runFillQuery, bool verbose = false);
-		void Set_RunSecondFillQuery(bool runSecondFillQuery, bool verbose = false);
 		void Set_SimRunning(bool simRunning, bool verbose = false);
 		void Set_SimRunNextStep(bool simRunNextStep, bool verbose = false);
 		void Set_TimeStep(float timeStep, bool verbose = false);

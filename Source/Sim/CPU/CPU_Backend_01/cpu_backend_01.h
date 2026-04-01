@@ -1,11 +1,8 @@
 // cpu_backend_01.h
-//
-// TODO: comment
 
 #pragma once
 
 // external
-#include <boost/container/small_vector.hpp>
 #include <vector>
 #include <tbb/partitioner.h>
 
@@ -26,9 +23,11 @@ namespace Sim
 						 Bench::BenchmarksTracker& benchmarksTracker,
 						 const SimParams& params);
 
-		const char* Name() const override { return "CPU01"; }
+		const char* Name() const override
+			{ return "CPU01"; }
 
-		void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) override;
+		void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) override
+			{ neighborSearch_ = std::move(ns); }
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) override;
@@ -66,7 +65,8 @@ namespace Sim
 
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
-		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
+		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override
+			{ out = benchOpGroups_; }
 
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
@@ -79,14 +79,12 @@ namespace Sim
 		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search
-		std::unique_ptr<I_NeighborSearchStrat> neighborSearchStrat_;
+		std::unique_ptr<I_NeighborSearch> neighborSearch_;
+		std::unique_ptr<I_NeighborList> neighborList_;
 		friend class NS_BruteForce_CPU01;
-		friend class NS_SpatialHashing_Basic_CPU01;
 		friend class NS_SpatialHashing_Compact_CPU01;
-		friend class NS_SpatialHashing_Explicit_CPU01;
-		friend class NS_CellLinkedList_Basic_CPU01;
 		friend class NS_CellLinkedList_Compact_CPU01;
-		friend class NS_BoundVolHier_Linear_LBVH_CPU01;
+		friend class NS_BoundVolHier_Linear_CPU01;
 
 		// metadata
 		uint32_t simStep_ = 0;
@@ -97,7 +95,7 @@ namespace Sim
 		// persistent parallelization partitioner for TBB
 		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;
 
-		// --- [ backend-specific data structures for operating the simulation ]
+		// --- [ backend-specific data structures for operating the simulation ] -------------------------
 
 		// fluid particles
 		std::vector<float> xPosF_, yPosF_, zPosF_;
@@ -118,9 +116,6 @@ namespace Sim
 		float avgRelDensityErrorF_raw_;
 		float avgRelDensityErrorF_pos_;
 		float avgRelDensityErrorF_abs_;
-
-		// neighbor storage
-		std::unique_ptr<I_NeighborLists> neighborLists_;
 
 		// re-usable work (scratch) buffers for temp storage
 		// TODO: rework this?

@@ -39,7 +39,6 @@ namespace Base
 		BreakingDam,		// 0
 		ConvergingDam,		// 1
 		BigDroplet,			// 2
-		SmallDroplets		// 3
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
@@ -51,8 +50,6 @@ namespace Base
 			return "ConvergingDam";
 		case ScenarioType::BigDroplet:
 			return "BigDroplet";
-		case ScenarioType::SmallDroplets:
-			return "SmallDroplets";
 		}
 		return "ScenarioType::<unknown>";
 	}
@@ -60,69 +57,45 @@ namespace Base
 	enum class NeighborSearchMethod : uint8_t
 	{
 		BruteForce,					// 0
-		SpatialHashing_Basic,		// 1 (using std::unordered_map)
-		SpatialHashing_Compact,		// 2 (using ankerl::unordered_dense)
-		SpatialHashing_Explicit,	// 3 (using std::vector<std::vector<...>>)
-		CellLinkedList_Basic,		// 4 (derived from paper: "Optimization strategies for CPU and GPU implementations of a smoothed particle hydrodynamics method" (2013))
-		CellLinkedList_Compact,		// 5 (derived from paper: "Compressed Neighbor Lists for SPH" (2019))
-		BoundVolHier_Linear_LBVH,	// 6 (derived from blog: "Using HIP RT ray tracing library to accelerate fluid simulation" (2023))
-		BoundVolHier_Hybrid_HLBVH,	// 7
-		BoundVolHier_Binned_SAH_BVH	// 8
+		SpatialHashing_Compact,		// 1 (using ankerl::unordered_dense)
+		CellLinkedList_Compact,		// 2 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
+		BoundVolHier_Linear,		// 3 TODO: implement ("Maximizing parallelism in the construction of BVHs, octrees, and k-d trees" Karras, 2012)
 	};
-	constexpr const char* ToCString(NeighborSearchMethod v) noexcept
+	constexpr const char* ToCString(const NeighborSearchMethod v) noexcept
 	{
 		switch (v)
 		{
 		case NeighborSearchMethod::BruteForce: return
 			"BruteForce";
-		case NeighborSearchMethod::SpatialHashing_Basic: return
-			"SpatialHashing_Basic";
 		case NeighborSearchMethod::SpatialHashing_Compact: return
 			"SpatialHashing_Compact";
-		case NeighborSearchMethod::SpatialHashing_Explicit: return
-			"SpatialHashing_Explicit";
-		case NeighborSearchMethod::CellLinkedList_Basic: return
-			"CellLinkedList_Basic";
 		case NeighborSearchMethod::CellLinkedList_Compact: return
 			"CellLinkedList_Compact";
-		case NeighborSearchMethod::BoundVolHier_Linear_LBVH: return
-			"BoundVolHier_Linear_LBVH";
-		case NeighborSearchMethod::BoundVolHier_Hybrid_HLBVH: return
-			"BoundVolHier_Hybrid_HLBVH";
-		case NeighborSearchMethod::BoundVolHier_Binned_SAH_BVH: return
-			"BoundVolHier_Binned_SAH_BVH";
+		case NeighborSearchMethod::BoundVolHier_Linear: return
+			"BoundVolHier_Linear";
 		}
 		return "NeighborSearchMethod::<unknown>";
 	}
 
-	enum class NeighborListStorage : uint8_t
+	enum class NeighborListMethod : uint8_t
 	{
-		OnDemand,									// 0
-		IndividualVectors,							// 1
-		CSRVector_FinalConcat,						// 2
-		CSRVector_DoubleQuery,						// 3
-		IndividualVectors_AdaptCompress,			// 4
-		IndividualVectors_VByteDerivedCompress,		// 5
-		CSRVector_DoubleQuery_VByteDerivedCompress	// 6
+		IndividualVectors_Explicit,		// 0
+		SingleCSRVector_Explicit,		// 1
+		SingleCSRVector_AdaptCompress,	// 2 TODO: implement
+		SingleCSRVector_VByteCompress	// 3 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
 	};
-	constexpr const char* ToCString(NeighborListStorage v) noexcept
+	constexpr const char* ToCString(const NeighborListMethod v) noexcept
 	{
 		switch (v)
 		{
-		case NeighborListStorage::OnDemand:
-			return "OnDemand";
-		case NeighborListStorage::IndividualVectors:
-			return "IndividualVectors";
-		case NeighborListStorage::CSRVector_FinalConcat:
-			return "CSRVector_FinalConcat";
-		case NeighborListStorage::CSRVector_DoubleQuery:
-			return "CSRVector_DoubleQuery";
-		case NeighborListStorage::IndividualVectors_AdaptCompress:
-			return "IndividualVectors_AdaptCompress";
-		case NeighborListStorage::IndividualVectors_VByteDerivedCompress:
-			return "IndividualVectors_VByteDerivedCompress";
-		case NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress:
-			return "CSRVector_DoubleQuery_VByteDerivedCompress";
+		case NeighborListMethod::IndividualVectors_Explicit:
+			return "IndividualVectors_Explicit";
+		case NeighborListMethod::SingleCSRVector_Explicit:
+			return "SingleCSRVector_Explicit";
+		case NeighborListMethod::SingleCSRVector_AdaptCompress:
+			return "SingleCSRVector_AdaptCompress";
+		case NeighborListMethod::SingleCSRVector_VByteCompress:
+			return "SingleCSRVector_VByteCompress";
 		}
 		return "NeighborListStorage::<unknown>";
 	}
@@ -143,6 +116,7 @@ namespace Base
 		}
 		return "GridCellIndexing::<unknown>";
 	}
+
 	enum class SolverTerminationCond : uint8_t
 	{
 		FixedIters,				// 0

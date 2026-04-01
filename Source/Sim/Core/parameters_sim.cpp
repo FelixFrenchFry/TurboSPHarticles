@@ -106,22 +106,12 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				const std::string s = v.get<std::string>();
 				if (s == "BruteForce")
 					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
-				if (s == "SpatialHashing_Basic")
-					{ out = Base::NeighborSearchMethod::SpatialHashing_Basic; return true; }
 				if (s == "SpatialHashing_Compact")
 					{ out = Base::NeighborSearchMethod::SpatialHashing_Compact; return true; }
-				if (s == "SpatialHashing_Explicit")
-					{ out = Base::NeighborSearchMethod::SpatialHashing_Explicit; return true; }
-				if (s == "CellLinkedList_Basic")
-					{ out = Base::NeighborSearchMethod::CellLinkedList_Basic; return true; }
 				if (s == "CellLinkedList_Compact")
 					{ out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
-				if (s == "BoundVolHier_Linear_LBVH")
-					{ out = Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH; return true; }
-				if (s == "BoundVolHier_Hybrid_HLBVH")
-					{ out = Base::NeighborSearchMethod::BoundVolHier_Hybrid_HLBVH; return true; }
-				if (s == "BoundVolHier_Binned_SAH_BVH")
-					{ out = Base::NeighborSearchMethod::BoundVolHier_Binned_SAH_BVH; return true; }
+				if (s == "BoundVolHier_Linear")
+					{ out = Base::NeighborSearchMethod::BoundVolHier_Linear; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -132,30 +122,24 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		};
 
-	auto ParseNeighborListStorage = [](const nlohmann::json& v, Base::NeighborListStorage& out) -> bool
+	auto ParseNeighborListMethod = [](const nlohmann::json& v, Base::NeighborListMethod& out) -> bool
 		{
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
-				if (s == "OnDemand")
-					{ out = Base::NeighborListStorage::OnDemand; return true; }
-				if (s == "IndividualVectors")
-					{ out = Base::NeighborListStorage::IndividualVectors; return true; }
-				if (s == "CSRVector_FinalConcat")
-					{ out = Base::NeighborListStorage::CSRVector_FinalConcat; return true; }
-				if (s == "CSRVector_DoubleQuery")
-					{ out = Base::NeighborListStorage::CSRVector_DoubleQuery; return true; }
-				if (s == "IndividualVectors_AdaptCompress")
-					{ out = Base::NeighborListStorage::IndividualVectors_AdaptCompress; return true; }
-				if (s == "IndividualVectors_VByteDerivedCompress")
-					{ out = Base::NeighborListStorage::IndividualVectors_VByteDerivedCompress; return true; }
-				if (s == "CSRVector_DoubleQuery_VByteDerivedCompress")
-					{ out = Base::NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress; return true; }
+				if (s == "IndividualVectors_Explicit")
+					{ out = Base::NeighborListMethod::IndividualVectors_Explicit; return true; }
+				if (s == "SingleCSRVector_Explicit")
+					{ out = Base::NeighborListMethod::SingleCSRVector_Explicit; return true; }
+				if (s == "SingleCSRVector_AdaptCompress")
+					{ out = Base::NeighborListMethod::SingleCSRVector_AdaptCompress; return true; }
+				if (s == "SingleCSRVector_VByteCompress")
+					{ out = Base::NeighborListMethod::SingleCSRVector_VByteCompress; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
 			{
-				out = static_cast<Base::NeighborListStorage>(v.get<int>());
+				out = static_cast<Base::NeighborListMethod>(v.get<int>());
 				return true;
 			}
 			return false;
@@ -222,10 +206,10 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 		if (auto it = j.find("neighborListStorage"); it != j.end())
 		{
-			Base::NeighborListStorage nls;
-			if (ParseNeighborListStorage(*it, nls))
+			Base::NeighborListMethod nls;
+			if (ParseNeighborListMethod(*it, nls))
 			{
-				params_.neighborListStorage = nls;
+				params_.neighborListMethod = nls;
 			}
 			else
 			{
@@ -744,66 +728,6 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 	}
 
 	return LoadSimParamsFromJson(j, verbose);
-}
-
-void SimParamsMgr::Set_RunCountQuery(
-	bool runCountQuery, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-	Base::MarkIfChanged(runCountQuery, params_.runCountQuery, changed);
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'runCountQuery' from {} to {}",
-			params_.runCountQuery, runCountQuery);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.runCountQuery = runCountQuery;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_RunFillQuery(
-	bool runFillQuery, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-	Base::MarkIfChanged(runFillQuery, params_.runFillQuery, changed);
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'runFillQuery' from {} to {}",
-			params_.runFillQuery, runFillQuery);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.runFillQuery = runFillQuery;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_RunSecondFillQuery(
-	bool runSecondFillQuery, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-	Base::MarkIfChanged(runSecondFillQuery, params_.runSecondFillQuery, changed);
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'runSecondFillQuery' from {} to {}",
-			params_.runSecondFillQuery, runSecondFillQuery);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.runSecondFillQuery = runSecondFillQuery;
-	EndWrite();
 }
 
 void SimParamsMgr::Set_SimRunning(

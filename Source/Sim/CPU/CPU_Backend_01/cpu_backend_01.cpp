@@ -21,9 +21,12 @@
 
 using namespace Sim;
 
-SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
-								   Bench::BenchmarksTracker& benchmarksTracker,
-								   const SimParams& params)
+// ---------------------------------------------------------------------------------------------------
+
+SimBackend_CPU01::SimBackend_CPU01(
+	Sim::SimParamsMgr& simParamsMgr,
+	Bench::BenchmarksTracker& benchmarksTracker,
+	const SimParams& params)
 	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_{ benchmarksTracker }
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>();
@@ -32,116 +35,48 @@ SimBackend_CPU01::SimBackend_CPU01(Sim::SimParamsMgr& simParamsMgr,
 	if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::BruteForce)
 	{
-		neighborSearchStrat_ = std::make_unique<NS_BruteForce_CPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::SpatialHashing_Basic)
-	{
-		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Basic_CPU01>(*this);
+		neighborSearch_ = std::make_unique<NS_BruteForce_CPU01>(*this);
 	}
 	else if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::SpatialHashing_Compact)
 	{
-		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Compact_CPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::SpatialHashing_Explicit)
-	{
-		neighborSearchStrat_ = std::make_unique<NS_SpatialHashing_Explicit_CPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::CellLinkedList_Basic)
-	{
-		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Basic_CPU01>(*this);
+		neighborSearch_ = std::make_unique<NS_SpatialHashing_Compact_CPU01>(*this);
 	}
 	else if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::CellLinkedList_Compact)
 	{
-		neighborSearchStrat_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::BoundVolHier_Linear_LBVH)
-	{
-		neighborSearchStrat_ = std::make_unique<NS_BoundVolHier_Linear_LBVH_CPU01>(*this);
+		neighborSearch_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
 	}
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
-	neighborSearchStrat_->Init(params);
+	neighborSearch_->Init(params);
 
-	// select neighbor list storage
-	if (params.neighborListStorage ==
-		Base::NeighborListStorage::OnDemand)
+	// select neighbor list method
+	if (params.neighborListMethod ==
+		Base::NeighborListMethod::IndividualVectors_Explicit)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_OnDemand_CPU01>(*neighborSearchStrat_);
-		simParamsMgr_.Set_RunCountQuery(false);
-		simParamsMgr_.Set_RunFillQuery(false);
-		simParamsMgr_.Set_RunSecondFillQuery(false);
+		neighborList_ = std::make_unique<NeighborLists_IndividualVectors_Explicit_CPU01>();
 	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::IndividualVectors)
+	else if (params.neighborListMethod ==
+		Base::NeighborListMethod::SingleCSRVector_Explicit)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_CPU01>();
-		simParamsMgr_.Set_RunCountQuery(false);
-		simParamsMgr_.Set_RunFillQuery(true);
-		simParamsMgr_.Set_RunSecondFillQuery(false);
+		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_Explicit_CPU01>();
 	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::CSRVector_FinalConcat)
+	else if (params.neighborListMethod ==
+		Base::NeighborListMethod::SingleCSRVector_AdaptCompress)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_CSRVector_FinalConcat_CPU01>();
-		simParamsMgr_.Set_RunCountQuery(false);
-		simParamsMgr_.Set_RunFillQuery(true);
-		simParamsMgr_.Set_RunSecondFillQuery(false);
+		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_AdaptCompress_CPU01>();
 	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::CSRVector_DoubleQuery)
+	else if (params.neighborListMethod ==
+		Base::NeighborListMethod::SingleCSRVector_VByteCompress)
 	{
-		neighborLists_ = std::make_unique<NeighborLists_CSRVector_DoubleQuery_CPU01>();
-		simParamsMgr_.Set_RunCountQuery(true);
-		simParamsMgr_.Set_RunFillQuery(true);
-		simParamsMgr_.Set_RunSecondFillQuery(false);
-	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::IndividualVectors_AdaptCompress)
-	{
-		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_AdaptCompress_CPU01>();
-		simParamsMgr_.Set_RunCountQuery(false);
-		simParamsMgr_.Set_RunFillQuery(true);
-		simParamsMgr_.Set_RunSecondFillQuery(false);
-	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::IndividualVectors_VByteDerivedCompress)
-	{
-		neighborLists_ = std::make_unique<NeighborLists_IndividualVectors_VByteDerivedCompress_CPU01>();
-		simParamsMgr_.Set_RunCountQuery(false);
-		simParamsMgr_.Set_RunFillQuery(true);
-		simParamsMgr_.Set_RunSecondFillQuery(false);
-	}
-	else if (params.neighborListStorage ==
-		Base::NeighborListStorage::CSRVector_DoubleQuery_VByteDerivedCompress)
-	{
-		neighborLists_ = std::make_unique<NeighborLists_CSRVector_DoubleQuery_VByteDerivedCompress_CPU01>();
-		simParamsMgr_.Set_RunCountQuery(false);
-		simParamsMgr_.Set_RunFillQuery(true);
-		simParamsMgr_.Set_RunSecondFillQuery(true);
+		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_VByteCompress_CPU01>();
 	}
 	else
 	{
-		throw std::runtime_error("Unsupported 'NeighborListStorage' requested.");
-	}
-	// TODO: compressed neighbor lists using pos in index sorted array for computing deltas?
-}
-
-void SimBackend_CPU01::SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat)
-{
-	neighborSearchStrat_ = std::move(strat);
-
-	// on-demand neighbor lists keep a pointer to the active search strategy
-	if (auto* onDemand = dynamic_cast<NeighborLists_OnDemand_CPU01*>(neighborLists_.get()))
-	{
-		onDemand->SetNeighborSearchStrat(*neighborSearchStrat_);
+		throw std::runtime_error("Unsupported 'NeighborListMethod' requested.");
 	}
 }
 
@@ -184,7 +119,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	zPosB_ = std::move(B.zPos);
 
 	// init neighbor list sizes
-	neighborLists_->Resize(N_F_, N_B_, params);
+	neighborList_->Resize(N_F_, N_B_, params);
 }
 
 // TODO: re-implement this to free up memory as soon as copied out!
@@ -252,8 +187,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 void SimBackend_CPU01::PackExportSnapshot(
 	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
-	// TODO: only export surface particles?
-
 	if (N_F_ == 0)
 	{
 		snap.simStep = simStep_;
@@ -279,13 +212,13 @@ void SimBackend_CPU01::PackExportSnapshot(
 			{
 				// particle considered part of the surface
 				// if touching boundary OR low fluid neighbor count
-				bool surface = neighborLists_->CountFB(i) > 0 ||
-							   neighborLists_->CountFF(i) < 28;
+				bool surface = neighborList_->CountFB(i) > 0 ||
+							   neighborList_->CountFF(i) < 28;
 
 				// if not surface itself, check its fluid neighbors
 				if (!surface)
 				{
-					NeighborSpan nbrListFF = neighborLists_->FF(i);
+					NeighborSpan nbrListFF = neighborList_->FF(i);
 					const uint32_t* nbrFF = nbrListFF.data;
 					const uint32_t N_FF = nbrListFF.count;
 
@@ -293,8 +226,8 @@ void SimBackend_CPU01::PackExportSnapshot(
 					{
 						const uint32_t j = nbrFF[k];
 
-						if (neighborLists_->CountFB(j) > 0 ||
-							neighborLists_->CountFF(j) < 24)
+						if (neighborList_->CountFB(j) > 0 ||
+							neighborList_->CountFF(j) < 24)
 						{
 							surface = true;
 							break;
@@ -355,49 +288,6 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 		dst++;
 	}
-
-	/*
-	if (N_F_ == 0) { return; }
-
-	snap.simStep = simStep_;
-	snap.simTime = simTime_;
-	snap.N_F = N_F_;
-
-	snap.xPosF.resize(N_F_);
-	snap.yPosF.resize(N_F_);
-	snap.zPosF.resize(N_F_);
-	snap.velMagF.resize(N_F_);
-
-	// pack into the export snapshot's data structures
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				snap.xPosF[i] = xPosF_[i];
-				snap.yPosF[i] = yPosF_[i];
-				snap.zPosF[i] = zPosF_[i];
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				// magnitude of velocity vector
-				snap.velMagF[i] = glm::sqrt(xVelF_[i] * xVelF_[i]
-											 + yVelF_[i] * yVelF_[i]
-											 + zVelF_[i] * zVelF_[i]);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-	*/
 }
 
 void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
@@ -535,7 +425,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 	{
 		MemUsage usageF{};
 		MemUsage usageB{};
-		std::pair<MemUsage, MemUsage> usageFB = neighborSearchStrat_->GetMemUsage(params);
+		std::pair<MemUsage, MemUsage> usageFB = neighborSearch_->GetMemUsage(params);
 
 		Add(usageF, usageFB.first);
 		Add(usageB, usageFB.second);
@@ -550,7 +440,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 	{
 		MemUsage usageF{};
 		MemUsage usageB{};
-		std::pair<MemUsage, MemUsage> usageFB = neighborLists_->GetMemUsage(params);
+		std::pair<MemUsage, MemUsage> usageFB = neighborList_->GetMemUsage(params);
 
 		Add(usageF, usageFB.first);
 		Add(usageB, usageFB.second);
@@ -637,8 +527,8 @@ void SimBackend_CPU01::FillStatisticsRecord(
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const float N_FF = static_cast<float>(neighborLists_->CountFF(i));
-						const float N_FB = static_cast<float>(neighborLists_->CountFB(i));
+						const float N_FF = static_cast<float>(neighborList_->CountFF(i));
+						const float N_FB = static_cast<float>(neighborList_->CountFB(i));
 
 						local.sumFF += N_FF;
 						if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
@@ -687,7 +577,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 			// FF
 			for (uint32_t i = 0; i < NF; i++)
 			{
-				workBufferF_[i] = static_cast<float>(neighborLists_->CountFF(i));
+				workBufferF_[i] = static_cast<float>(neighborList_->CountFF(i));
 			}
 
 			{
@@ -719,7 +609,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 			// FB
 			for (uint32_t i = 0; i < NF; ++i)
 			{
-				workBufferF_[i] = static_cast<float>(neighborLists_->CountFB(i));
+				workBufferF_[i] = static_cast<float>(neighborList_->CountFB(i));
 			}
 
 			{
@@ -915,40 +805,44 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)
 {
+	const bool runCountQuery = neighborList_->RunCountQuery();
+	const bool runFillQuery = neighborList_->RunFillQuery();
+	const bool runSecondFillQuery = neighborList_->RunSecondFillQuery();
+
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-	neighborSearchStrat_->Construct(params);
+	neighborSearch_->Construct(params);
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	if (params.runCountQuery)
+	if (runCountQuery)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		neighborSearchStrat_->Query_Count(params);
+		neighborSearch_->Query_Count(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 	}
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-	neighborLists_->Finalize_Count();
+	neighborList_->Finalize_Count();
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	if (params.runFillQuery)
+	if (runFillQuery)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		neighborSearchStrat_->Query_Fill(params);
+		neighborSearch_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 	}
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-	neighborLists_->Finalize_Fill();
+	neighborList_->Finalize_Fill();
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
-	if (params.runFillQuery && params.runSecondFillQuery)
+	if (runFillQuery && runSecondFillQuery)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		neighborSearchStrat_->Query_Fill(params);
+		neighborSearch_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-		neighborLists_->Finalize_Fill();
+		neighborList_->Finalize_Fill();
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 	}
 }

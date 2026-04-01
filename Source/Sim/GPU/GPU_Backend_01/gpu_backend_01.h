@@ -94,9 +94,11 @@ namespace Sim
 						 const SimParams& params);
 		~SimBackend_GPU01() override;
 
-		const char* Name() const override { return "GPU01"; }
+		const char* Name() const override
+			{ return "GPU01"; }
 
-		void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) override;
+		void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) override
+			{ neighborSearch_ = std::move(ns); }
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) override;
@@ -134,7 +136,8 @@ namespace Sim
 
 		// provides the list defining how computation operations are benchmarked in groups and/or individually
 		// (backend-specific so that important cache-efficiency optimization can be applied)
-		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override { out = benchOpGroups_; }
+		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override
+			{ out = benchOpGroups_; }
 
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
@@ -147,12 +150,13 @@ namespace Sim
 		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search
-		std::unique_ptr<I_NeighborSearchStrat> neighborSearchStrat_;
+		std::unique_ptr<I_NeighborSearch> neighborSearch_;
+		std::unique_ptr<I_NeighborList> neighborList_; // TODO: implement different neighbor list methods?
 		friend class NS_BruteForce_GPU01;
 		friend class NS_SpatialHashingBasic_GPU01;
 		friend class NS_CellLinkedList_Basic_GPU01;
 		friend class NS_CellLinkedList_Compact_GPU01;
-		friend class NS_BoundVolHier_Linear_LBVH_GPU01;
+		friend class NS_BoundVolHier_Linear_GPU01;
 
 		// CUDA stream
 		cudaStream_t stream_ = nullptr;

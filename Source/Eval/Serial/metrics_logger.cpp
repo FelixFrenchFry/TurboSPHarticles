@@ -335,7 +335,7 @@ namespace Export
 			{ "backendVersion", static_cast<int>(simParams.backendVersion) },
 			{ "scenarioType", static_cast<int>(simParams.scenarioType) },
 			{ "neighborSearchMethod", static_cast<int>(simParams.neighborSearchMethod) },
-			{ "neighborListStorage", static_cast<int>(simParams.neighborListStorage) },
+			{ "neighborListStorage", static_cast<int>(simParams.neighborListMethod) },
 			{ "exportEnabled", simParams.exportEnabled },
 			{ "exportDir", simParams.exportDir },
 			{ "exportInterval", simParams.exportInterval },

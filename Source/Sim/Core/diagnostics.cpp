@@ -118,7 +118,7 @@ namespace Sim
         printf("%-24s = %s\n", "neighbor search method",
 			Base::ToCString(params.neighborSearchMethod));
         printf("%-24s = %s\n", "neighbor list storage",
-            Base::ToCString(params.neighborListStorage));
+            Base::ToCString(params.neighborListMethod));
 
         // particle counts
         printf("%-24s = %u\n", "fluid particles", 

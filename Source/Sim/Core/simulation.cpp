@@ -252,7 +252,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 	BeginRunLogging(paramsInit);
-	ResetNeighborListByteBreakdownAverages();
 
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
@@ -364,7 +363,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
-		if (doSimStep) { AccumulateNeighborListByteBreakdownAverages(params); }
 		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
 		if (doSimStep) { AppendLatestBenchmarkMetricsLog(); }
 
@@ -408,7 +406,6 @@ void SimulationMgr::RunSim_Blocking()
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 	BeginRunLogging(paramsInit);
-	ResetNeighborListByteBreakdownAverages();
 
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
@@ -470,7 +467,6 @@ void SimulationMgr::RunSim_Blocking()
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
-		if (doSimStep) { AccumulateNeighborListByteBreakdownAverages(params); }
 		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
 		if (doSimStep) { AppendLatestBenchmarkMetricsLog(); }
 
@@ -540,31 +536,6 @@ void SimulationMgr::BeginRunLogging(const SimParams& params)
 void SimulationMgr::EndRunLogging()
 {
 	loggingMgr_.EndRun();
-}
-
-void SimulationMgr::ResetNeighborListByteBreakdownAverages()
-{
-	nbrListByteBreakdownAvgs_ = {};
-}
-
-void SimulationMgr::AccumulateNeighborListByteBreakdownAverages(const SimParams& params)
-{
-	if (simBackend_ == nullptr)
-	{
-		return;
-	}
-
-	NeighborListByteBreakdown breakdown{};
-	if (!simBackend_->GetNeighborListByteBreakdown(breakdown, params))
-	{
-		return;
-	}
-
-	nbrListByteBreakdownAvgs_.sampleCount += 1;
-	nbrListByteBreakdownAvgs_.metadataBytesFF_sum += breakdown.metadataBytesFF;
-	nbrListByteBreakdownAvgs_.metadataBytesFB_sum += breakdown.metadataBytesFB;
-	nbrListByteBreakdownAvgs_.storageBytesFF_sum += breakdown.storageBytesFF;
-	nbrListByteBreakdownAvgs_.storageBytesFB_sum += breakdown.storageBytesFB;
 }
 
 void SimulationMgr::HandleExportSnapshot(const SimParams& params) const

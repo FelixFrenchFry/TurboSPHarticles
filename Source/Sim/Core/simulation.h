@@ -82,8 +82,6 @@ namespace Sim
 		void AppendLatestMemoryMetricsLog() const;
 		void DisplayPerformanceStats(const SimParams& params) const;
 		void DisplayMemoryUsageStats(const SimParams& params, bool force = false) const;
-		void ResetNeighborListByteBreakdownAverages();
-		void AccumulateNeighborListByteBreakdownAverages(const SimParams& params);
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
@@ -142,7 +140,6 @@ namespace Sim
 		Export::SerializationMgr serializationMgr_;
 		mutable Export::LoggingMgr loggingMgr_;
 		mutable Sync::ExportSnapshot exportSnapScratch_;
-		NeighborListByteBreakdownAverages nbrListByteBreakdownAvgs_{};
 
 		// visualization management
 		std::chrono::steady_clock::time_point lastVisWall_{};

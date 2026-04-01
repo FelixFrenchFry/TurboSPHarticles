@@ -1,6 +1,4 @@
 // backend_sim.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -22,10 +20,8 @@
 namespace Sim
 {
 	// forward declarations
-	class I_NeighborSearchStrat;
+	class I_NeighborSearch;
 	struct NeighborSpan;
-	struct NeighborListByteBreakdown;
-	struct NeighborListDeltaDistribution;
 
 	// -----------------------------------------------------------------------------------------------
 	// --- [ simulation backend interface ] ----------------------------------------------------------
@@ -39,7 +35,7 @@ namespace Sim
 
 		virtual const char* Name() const = 0;
 
-		virtual void SetNeighborSearchStrategy(std::unique_ptr<I_NeighborSearchStrat> strat) = 0;
+		virtual void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) = 0;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) = 0;
@@ -80,51 +76,6 @@ namespace Sim
 		// info
 		virtual uint32_t GetNumFluidParticles() const = 0;
 		virtual uint32_t GetNumBoundaryParticles() const = 0;
-
-		virtual bool GetNeighborListByteBreakdown(
-			NeighborListByteBreakdown& out,
-			const SimParams& params) const
-		{
-			(void)out;
-			(void)params;
-			return false;
-		}
-
-		virtual bool GetNeighborListDeltaDistribution(
-			NeighborListDeltaDistribution& out,
-			const SimParams& params) const
-		{
-			(void)out;
-			(void)params;
-			return false;
-		}
-	};
-
-	struct NeighborListByteBreakdown
-	{
-		uint64_t metadataBytesFF = 0;
-		uint64_t metadataBytesFB = 0;
-		uint64_t storageBytesFF = 0;
-		uint64_t storageBytesFB = 0;
-	};
-
-	struct NeighborListByteBreakdownAverages
-	{
-		uint64_t sampleCount = 0;
-		uint64_t metadataBytesFF_sum = 0;
-		uint64_t metadataBytesFB_sum = 0;
-		uint64_t storageBytesFF_sum = 0;
-		uint64_t storageBytesFB_sum = 0;
-	};
-
-	struct NeighborListDeltaDistribution
-	{
-		uint64_t totalSymbols = 0;
-		uint64_t countUncompressed = 0;
-		uint64_t countDelta0 = 0;
-		uint64_t countDelta1 = 0;
-		uint64_t countDelta2to255 = 0;
-		uint64_t countDelta256plus = 0;
 	};
 
 	// backend factory
@@ -134,14 +85,14 @@ namespace Sim
 												 const SimParams& params);
 
 	// -----------------------------------------------------------------------------------------------
-	// --- [ neighbor search and list interface ] ----------------------------------------------------
+	// --- [ neighbor search and neighbor list interfaces ] ------------------------------------------
 	// -----------------------------------------------------------------------------------------------
 
-	class I_NeighborSearchStrat
+	class I_NeighborSearch
 	{
 	public: // ---------------------------------------------------------------------------------------
 
-		virtual ~I_NeighborSearchStrat() = default;
+		virtual ~I_NeighborSearch() = default;
 
 		virtual const char* Name() const = 0;
 
@@ -153,10 +104,7 @@ namespace Sim
 
 		virtual void Query_Fill(const SimParams& params) = 0;
 
-		// queries the neighbors of one fluid particle directly from the strategy's
-		// current search data structures (without writing to neighbor-list storage)
-		// (returned span may point to per-thread scratch memory and is overwritten
-		// on the next call on the same thread)
+		// queries the neighbors of one fluid particle directly
 		virtual NeighborSpan QueryParticleFF(uint32_t i) const = 0;
 		virtual NeighborSpan QueryParticleFB(uint32_t i) const = 0;
 
@@ -172,32 +120,27 @@ namespace Sim
 		uint32_t count = 0;
 	};
 
-	class I_NeighborLists
+	class I_NeighborList
 	{
 	public: // ---------------------------------------------------------------------------------------
 
-		virtual ~I_NeighborLists() = default;
+		virtual ~I_NeighborList() = default;
 
 		virtual void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) = 0;
 
-		// clears the individual and/or shared neighbor lists of all fluid particles
-		virtual void ClearAll() = 0;
-
-		// applies potential post-processing on the data structures after the count-query
+		// applies optional post-processing on the data structures after the count-query
 		// (e.g. construction of the CSR neighbor storage)
 		virtual void Finalize_Count() = 0;
 
-		// applies potential post-processing on the data structures after the fill-query
+		// applies optional post-processing on the data structures after the fill-query
 		// (e.g. concatenation of individual neighbor lists into CSR neighbor storage)
 		virtual void Finalize_Fill() = 0;
 
-		// sets the neighbor count of fluid particle i
-		// (computed in a count-query)
+		// sets the neighbor count of fluid particle i, computed by the count-query
 		virtual void SetNbrCountFF(uint32_t i, uint32_t count) = 0;
 		virtual void SetNbrCountFB(uint32_t i, uint32_t count) = 0;
 
-		// sets the full neighbor list js of fluid particle i
-		// (accumulated in a scratch array in a fill-query)
+		// sets the full neighbor list js of fluid particle i, accumulated in a scratch array by the fill-query
 		// (optionally applying compression and other post-processing if the implementation uses it)
 		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
@@ -212,8 +155,14 @@ namespace Sim
 		virtual uint32_t CountFF(uint32_t i) const { return FF(i).count; }
 		virtual uint32_t CountFB(uint32_t i) const { return FB(i).count; }
 
-		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+		// stats
+		virtual std::pair<Mem::MemUsage, Mem::MemUsage>GetMemUsage(
 			const SimParams& params) const = 0;
+
+		// flags
+		virtual bool RunCountQuery() const = 0;
+		virtual bool RunFillQuery() const = 0;
+		virtual bool RunSecondFillQuery() const = 0;
 	};
 
 } // namespace Sim

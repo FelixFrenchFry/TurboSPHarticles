@@ -1,7 +1,7 @@
 {
   "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
-  "neighborSearchMethod": 3,
+  "neighborSearchMethod": 2,
   "neighborListStorage": 3,
 
   "maxSteps": 1000,
