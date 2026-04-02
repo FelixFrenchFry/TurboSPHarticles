@@ -8,7 +8,6 @@
     "nlohmann-json",
     "cli11",
     "boost-container",
-    "unordered-dense",
     "glm",
     "glfw3",
     "glad",

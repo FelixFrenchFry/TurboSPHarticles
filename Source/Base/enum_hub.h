@@ -57,9 +57,8 @@ namespace Base
 	enum class NeighborSearchMethod : uint8_t
 	{
 		BruteForce,					// 0
-		SpatialHashing_Compact,		// 1 (using ankerl::unordered_dense)
-		CellLinkedList_Compact,		// 2 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
-		BoundVolHier_Linear,		// 3 TODO: implement ("Maximizing parallelism in the construction of BVHs, octrees, and k-d trees" Karras, 2012)
+		CellLinkedList_Compact,		// 1 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
+		BoundVolHier_Linear,		// 2 TODO: implement ("Maximizing parallelism in the construction of BVHs, octrees, and k-d trees" Karras, 2012)
 	};
 	constexpr const char* ToCString(const NeighborSearchMethod v) noexcept
 	{
@@ -67,8 +66,6 @@ namespace Base
 		{
 		case NeighborSearchMethod::BruteForce: return
 			"BruteForce";
-		case NeighborSearchMethod::SpatialHashing_Compact: return
-			"SpatialHashing_Compact";
 		case NeighborSearchMethod::CellLinkedList_Compact: return
 			"CellLinkedList_Compact";
 		case NeighborSearchMethod::BoundVolHier_Linear: return

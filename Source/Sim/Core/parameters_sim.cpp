@@ -106,8 +106,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				const std::string s = v.get<std::string>();
 				if (s == "BruteForce")
 					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
-				if (s == "SpatialHashing_Compact")
-					{ out = Base::NeighborSearchMethod::SpatialHashing_Compact; return true; }
 				if (s == "CellLinkedList_Compact")
 					{ out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
 				if (s == "BoundVolHier_Linear")

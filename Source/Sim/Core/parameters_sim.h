@@ -1,11 +1,8 @@
 // parameters_sim.h
-//
-// TODO: comment
 
 #pragma once
 
 // external
-#include <ankerl/unordered_dense.h>
 #include <atomic>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>

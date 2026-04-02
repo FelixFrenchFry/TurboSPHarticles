@@ -153,10 +153,7 @@ namespace Sim
 		std::unique_ptr<I_NeighborSearch> neighborSearch_;
 		std::unique_ptr<I_NeighborList> neighborList_; // TODO: implement different neighbor list methods?
 		friend class NS_BruteForce_GPU01;
-		friend class NS_SpatialHashingBasic_GPU01;
-		friend class NS_CellLinkedList_Basic_GPU01;
 		friend class NS_CellLinkedList_Compact_GPU01;
-		friend class NS_BoundVolHier_Linear_GPU01;
 
 		// CUDA stream
 		cudaStream_t stream_ = nullptr;

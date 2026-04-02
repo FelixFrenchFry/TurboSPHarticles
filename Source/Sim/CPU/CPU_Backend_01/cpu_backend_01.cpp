@@ -38,11 +38,6 @@ SimBackend_CPU01::SimBackend_CPU01(
 		neighborSearch_ = std::make_unique<NS_BruteForce_CPU01>(*this);
 	}
 	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::SpatialHashing_Compact)
-	{
-		neighborSearch_ = std::make_unique<NS_SpatialHashing_Compact_CPU01>(*this);
-	}
-	else if (params.neighborSearchMethod ==
 		Base::NeighborSearchMethod::CellLinkedList_Compact)
 	{
 		neighborSearch_ = std::make_unique<NS_CellLinkedList_Compact_CPU01>(*this);
