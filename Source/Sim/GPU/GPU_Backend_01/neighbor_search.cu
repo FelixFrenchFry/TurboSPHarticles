@@ -169,7 +169,7 @@ void NS_BruteForce_GPU01::Construct(const SimParams& params)
 {
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 1u,
-		static_cast<uint32_t>(Base::GridCellIndexing::Morton), 0.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
 	GPU::StreamSync(be_.stream_);
@@ -204,18 +204,6 @@ void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
 		be_.d_nbrOverflowFlag_.Data());
 
 	GPU::StreamSync(be_.stream_);
-}
-
-NeighborSpan NS_BruteForce_GPU01::QueryParticleFF(const uint32_t i) const
-{
-	(void)i;
-	return NeighborSpan{};
-}
-
-NeighborSpan NS_BruteForce_GPU01::QueryParticleFB(const uint32_t i) const
-{
-	(void)i;
-	return NeighborSpan{};
 }
 
 void NS_BruteForce_GPU01::DataReOrder(const SimParams& params)
@@ -299,7 +287,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_,
-		static_cast<uint32_t>(params.gridCellIndexing), 0.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
 	// --- [ cell coordinates and indices for fluid and boundary particles ] -------------------------
@@ -403,18 +391,6 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 	// TODO: implement smart version of this, iterating over cells instead of particles
 
 	GPU::StreamSync(be_.stream_);
-}
-
-NeighborSpan NS_CellLinkedList_Compact_GPU01::QueryParticleFF(const uint32_t i) const
-{
-	(void)i;
-	return NeighborSpan{};
-}
-
-NeighborSpan NS_CellLinkedList_Compact_GPU01::QueryParticleFB(const uint32_t i) const
-{
-	(void)i;
-	return NeighborSpan{};
 }
 
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)

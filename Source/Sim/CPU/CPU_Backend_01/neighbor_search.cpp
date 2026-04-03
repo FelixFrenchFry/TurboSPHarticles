@@ -39,8 +39,9 @@ using namespace Sim;
 namespace
 {
 	// TODO: rework this?
+	template<typename TIdx>
 	void ApplyPermutation(
-		const std::vector<uint64_t>& sortedKeys,
+		const std::vector<TIdx>& sortedKeys,
 		std::vector<float>& data,
 		std::vector<float>& scratch,
 		bool preserveDataCapacity = false)
@@ -91,39 +92,6 @@ namespace
 
 		return (v < static_cast<float>(i)) ? (i - 1) : i;
 	}
-
-	inline uint32_t ClampInt(int v, int low, int high) noexcept
-	{
-		const int t = (v < low) ? low : v;
-		return static_cast<uint32_t>((t > high) ? high : t);
-	}
-
-	struct FluidParticleSoARefs
-	{
-		std::vector<float>& xPos;
-		std::vector<float>& yPos;
-		std::vector<float>& zPos;
-		std::vector<float>& xVel;
-		std::vector<float>& yVel;
-		std::vector<float>& zVel;
-		std::vector<float>& xVelPred;
-		std::vector<float>& yVelPred;
-		std::vector<float>& zVelPred;
-		std::vector<float>& xAccPress;
-		std::vector<float>& yAccPress;
-		std::vector<float>& zAccPress;
-		std::vector<float>& sourceTerm;
-		std::vector<float>& diagElem;
-		std::vector<float>& pressure;
-		std::vector<float>& density;
-	};
-
-	struct BoundaryParticleSoARefs
-	{
-		std::vector<float>& xPos;
-		std::vector<float>& yPos;
-		std::vector<float>& zPos;
-	};
 
 	struct SceneAABB
 	{
@@ -216,219 +184,6 @@ namespace
 		frame.N_DimZ = static_cast<uint32_t>(czMax - czMin + 1);
 
 		return frame;
-	}
-
-	// expand lower 10 bits into every-third-bit positions: 0b...xyz -> 0b...00x00y00z
-	inline uint32_t ExpandBits10_30bit(uint32_t v) noexcept
-	{
-		v = (v | (v << 16)) & 0x030000FFu;
-		v = (v | (v <<  8)) & 0x0300F00Fu;
-		v = (v | (v <<  4)) & 0x030C30C3u;
-		v = (v | (v <<  2)) & 0x09249249u;
-		return v;
-	}
-
-	// compute a 30-bit Morton code for a point in the unit cube [0, 1]^3
-	inline uint32_t Morton3D_30bit_Normalized(float nx, float ny, float nz) noexcept
-	{
-		// clamp to [0, 1] and quantize to 10-bit integer (0..1023)
-		const auto Quantize = [](float v) -> uint32_t
-			{
-				return std::min(1023u, static_cast<uint32_t>(
-					std::max(0.0f, std::min(1.0f, v)) * 1023.0f));
-			};
-
-		const uint32_t ix = Quantize(nx);
-		const uint32_t iy = Quantize(ny);
-		const uint32_t iz = Quantize(nz);
-
-		return (ExpandBits10_30bit(ix) << 2) | (ExpandBits10_30bit(iy) << 1)
-			| ExpandBits10_30bit(iz);
-	}
-
-	// compute a packed 30-bit XYZ code for a point in the unit cube [0, 1]^3
-	inline uint32_t XYZ3D_30bit_Normalized(float nx, float ny, float nz) noexcept
-	{
-		const auto Quantize = [](float v) -> uint32_t
-			{
-				return std::min(1023u, static_cast<uint32_t>(
-					std::max(0.0f, std::min(1.0f, v)) * 1023.0f));
-			};
-
-		const uint32_t ix = Quantize(nx);
-		const uint32_t iy = Quantize(ny);
-		const uint32_t iz = Quantize(nz);
-
-		return ix | (iy << 10) | (iz << 20);
-	}
-
-	inline SceneAABB ComputeSceneAABB(
-		const std::vector<float>& xPos,
-		const std::vector<float>& yPos,
-		const std::vector<float>& zPos)
-	{
-		const uint32_t N = static_cast<uint32_t>(xPos.size());
-		assert(yPos.size() == N && zPos.size() == N && "Position vector size mismatch");
-
-		SceneAABB init{};
-		if (N == 0) { return init; }
-
-		return tbb::parallel_reduce(
-			tbb::blocked_range<uint32_t>(0, N),
-			init,
-			[&](const tbb::blocked_range<uint32_t>& r, SceneAABB val) -> SceneAABB
-			{
-				float lMinX = val.minX, lMinY = val.minY, lMinZ = val.minZ;
-				float lMaxX = val.maxX, lMaxY = val.maxY, lMaxZ = val.maxZ;
-
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					lMinX = std::min(lMinX, xPos[i]);
-					lMinY = std::min(lMinY, yPos[i]);
-					lMinZ = std::min(lMinZ, zPos[i]);
-					lMaxX = std::max(lMaxX, xPos[i]);
-					lMaxY = std::max(lMaxY, yPos[i]);
-					lMaxZ = std::max(lMaxZ, zPos[i]);
-				}
-
-				val.minX = lMinX; val.minY = lMinY; val.minZ = lMinZ;
-				val.maxX = lMaxX; val.maxY = lMaxY; val.maxZ = lMaxZ;
-				return val;
-			},
-			[](SceneAABB a, const SceneAABB& b) -> SceneAABB
-			{
-				a.minX = std::min(a.minX, b.minX);
-				a.minY = std::min(a.minY, b.minY);
-				a.minZ = std::min(a.minZ, b.minZ);
-				a.maxX = std::max(a.maxX, b.maxX);
-				a.maxY = std::max(a.maxY, b.maxY);
-				a.maxZ = std::max(a.maxZ, b.maxZ);
-				return a;
-			},
-			tbb::auto_partitioner{}
-		);
-	}
-
-	void BuildSpatialOrderKeys_30bitNormalized(
-		const std::vector<float>& xPos,
-		const std::vector<float>& yPos,
-		const std::vector<float>& zPos,
-		Base::GridCellIndexing gridCellIndexing,
-		std::vector<uint64_t>& outSortedKeys)
-	{
-		const uint32_t N = static_cast<uint32_t>(xPos.size());
-		assert(yPos.size() == N && zPos.size() == N && "Position vector size mismatch");
-
-		outSortedKeys.resize(N);
-		if (N == 0) { return; }
-
-		const SceneAABB sceneAABB = ComputeSceneAABB(xPos, yPos, zPos);
-
-		constexpr float eps = 1e-6f;
-		const float invExtX = 1.0f / std::max(eps, sceneAABB.maxX - sceneAABB.minX);
-		const float invExtY = 1.0f / std::max(eps, sceneAABB.maxY - sceneAABB.minY);
-		const float invExtZ = 1.0f / std::max(eps, sceneAABB.maxZ - sceneAABB.minZ);
-
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
-				{
-					const float nx = (xPos[i] - sceneAABB.minX) * invExtX;
-					const float ny = (yPos[i] - sceneAABB.minY) * invExtY;
-					const float nz = (zPos[i] - sceneAABB.minZ) * invExtZ;
-
-					uint64_t orderKey = 0;
-					if (gridCellIndexing == Base::GridCellIndexing::XYZ)
-					{
-						orderKey = static_cast<uint64_t>(
-							XYZ3D_30bit_Normalized(nx, ny, nz));
-					}
-					else
-					{
-						orderKey = static_cast<uint64_t>(
-							Morton3D_30bit_Normalized(nx, ny, nz));
-					}
-
-					// key layout [order:30][padding:2][index:32]
-					// tie-break by index to keep deterministic ordering
-					outSortedKeys[i] = (orderKey << 32) | static_cast<uint64_t>(i);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
-		tbb::parallel_sort(outSortedKeys.begin(), outSortedKeys.end());
-	}
-
-	void ApplyPermutationFluidSoA(
-		const std::vector<uint64_t>& sortedKeys,
-		FluidParticleSoARefs fluid,
-		std::vector<float>& scratch)
-	{
-		ApplyPermutation(sortedKeys, fluid.xPos, scratch);
-		ApplyPermutation(sortedKeys, fluid.yPos, scratch);
-		ApplyPermutation(sortedKeys, fluid.zPos, scratch);
-
-		ApplyPermutation(sortedKeys, fluid.xVel, scratch);
-		ApplyPermutation(sortedKeys, fluid.yVel, scratch);
-		ApplyPermutation(sortedKeys, fluid.zVel, scratch);
-
-		ApplyPermutation(sortedKeys, fluid.xVelPred, scratch);
-		ApplyPermutation(sortedKeys, fluid.yVelPred, scratch);
-		ApplyPermutation(sortedKeys, fluid.zVelPred, scratch);
-
-		ApplyPermutation(sortedKeys, fluid.xAccPress, scratch);
-		ApplyPermutation(sortedKeys, fluid.yAccPress, scratch);
-		ApplyPermutation(sortedKeys, fluid.zAccPress, scratch);
-
-		ApplyPermutation(sortedKeys, fluid.sourceTerm, scratch);
-		ApplyPermutation(sortedKeys, fluid.diagElem, scratch);
-		ApplyPermutation(sortedKeys, fluid.pressure, scratch);
-		ApplyPermutation(sortedKeys, fluid.density, scratch);
-	}
-
-	void ApplyPermutationBoundarySoA(
-		const std::vector<uint64_t>& sortedKeys,
-		BoundaryParticleSoARefs boundary,
-		std::vector<float>& scratch)
-	{
-		ApplyPermutation(sortedKeys, boundary.xPos, scratch);
-		ApplyPermutation(sortedKeys, boundary.yPos, scratch);
-		ApplyPermutation(sortedKeys, boundary.zPos, scratch);
-	}
-
-	void DataReOrderParticles_30bitNormalized(
-		FluidParticleSoARefs fluid,
-		BoundaryParticleSoARefs boundary,
-		uint32_t N_F, uint32_t N_B,
-		Base::GridCellIndexing gridCellIndexing,
-		std::vector<uint64_t>& sortKeyBuffer,
-		std::vector<float>& scratchF,
-		std::vector<float>& scratchB)
-	{
-		if (N_F > 0)
-		{
-			assert(fluid.xPos.size() == N_F && fluid.yPos.size() == N_F
-				&& fluid.zPos.size() == N_F && "Fluid position vector size mismatch");
-
-			BuildSpatialOrderKeys_30bitNormalized(
-				fluid.xPos, fluid.yPos, fluid.zPos, gridCellIndexing, sortKeyBuffer);
-
-			ApplyPermutationFluidSoA(sortKeyBuffer, fluid, scratchF);
-		}
-
-		if (N_B > 0)
-		{
-			assert(boundary.xPos.size() == N_B && boundary.yPos.size() == N_B
-				&& boundary.zPos.size() == N_B && "Boundary position vector size mismatch");
-
-			BuildSpatialOrderKeys_30bitNormalized(
-				boundary.xPos, boundary.yPos, boundary.zPos, gridCellIndexing, sortKeyBuffer);
-
-			ApplyPermutationBoundarySoA(sortKeyBuffer, boundary, scratchB);
-		}
 	}
 
 } // unnamed
@@ -602,97 +357,12 @@ void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 	);
 }
 
-NeighborSpan NS_BruteForce_CPU01::QueryParticleFF(
-	const uint32_t i) const
-{
-	auto& scratchFF = scratchFF_.local();
-	scratchFF.clear();
-
-	const uint32_t N_F = be_.N_F_;
-	const float* RESTRICT xPosF = be_.xPosF_.data();
-	const float* RESTRICT yPosF = be_.yPosF_.data();
-	const float* RESTRICT zPosF = be_.zPosF_.data();
-
-	const float xi = xPosF[i];
-	const float yi = yPosF[i];
-	const float zi = zPosF[i];
-
-	for (uint32_t j = 0; j < N_F; j++)
-	{
-		const float dx = xi - xPosF[j];
-		const float dy = yi - yPosF[j];
-		const float dz = zi - zPosF[j];
-		const float distSqu = dx * dx + dy * dy + dz * dz;
-
-		if (distSqu <= kernelRadiusSqu_) [[unlikely]]
-		{
-			scratchFF.push_back(j);
-		}
-	}
-
-	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
-}
-
-NeighborSpan NS_BruteForce_CPU01::QueryParticleFB(
-	const uint32_t i) const
-{
-	auto& scratchFB = scratchFB_.local();
-	scratchFB.clear();
-
-	const uint32_t N_B = be_.N_B_;
-	const float* RESTRICT xPosF = be_.xPosF_.data();
-	const float* RESTRICT yPosF = be_.yPosF_.data();
-	const float* RESTRICT zPosF = be_.zPosF_.data();
-	const float* RESTRICT xPosB = be_.xPosB_.data();
-	const float* RESTRICT yPosB = be_.yPosB_.data();
-	const float* RESTRICT zPosB = be_.zPosB_.data();
-
-	const float xi = xPosF[i];
-	const float yi = yPosF[i];
-	const float zi = zPosF[i];
-
-	for (uint32_t j = 0; j < N_B; j++)
-	{
-		const float dx = xi - xPosB[j];
-		const float dy = yi - yPosB[j];
-		const float dz = zi - zPosB[j];
-		const float distSqu = dx * dx + dy * dy + dz * dz;
-
-		if (distSqu <= kernelRadiusSqu_) [[unlikely]]
-		{
-			scratchFB.push_back(j);
-		}
-	}
-
-	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
-}
-
 void NS_BruteForce_CPU01::DataReOrder(
 	const SimParams& params)
 {
 	(void)params;
 
-	const uint32_t N_F = be_.N_F_;
-	const uint32_t N_B = be_.N_B_;
-	if (N_F == 0 && N_B == 0) { return; }
-
-	DataReOrderParticles_30bitNormalized(
-		FluidParticleSoARefs{
-			be_.xPosF_, be_.yPosF_, be_.zPosF_,
-			be_.xVelF_, be_.yVelF_, be_.zVelF_,
-			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
-			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
-		},
-		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_
-		},
-		N_F, N_B,
-		params.gridCellIndexing,
-		be_.sortKeyBuffer_,
-		be_.workBufferF_,
-		be_.workBufferB_
-	);
+	// no re-ordering in brute force implementation
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_CPU01::GetMemUsage(
@@ -713,7 +383,6 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
-	gridCellIndexing_ = params.gridCellIndexing;
 	cellQueryReach_ = 1;
 	cellOrigX_ = 0;
 	cellOrigY_ = 0;
@@ -774,7 +443,6 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	const bool cellQueryReachChanged = (cellQueryReach_ != cellQueryReach);
 
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
-	gridCellIndexing_ = params.gridCellIndexing;
 	cellSize_ = cellSize;
 	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f)
 		? 0.0f : (1.0f / cellSize);
@@ -839,19 +507,24 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	if (N_F > 0)
 	{
+		// first sort by cell ID, secondly by particle index for deterministic order within the cells
 		tbb::parallel_sort(sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
-			[&](uint32_t a, uint32_t b)
+			[&](const uint32_t a, const uint32_t b)
 			{
-				return cellIdF_[a] < cellIdF_[b];
+
+				if (cellIdF_[a] != cellIdF_[b]) { return cellIdF_[a] < cellIdF_[b]; }
+				return a < b;
 			});
 	}
 
 	if (N_B > 0)
 	{
+		// first sort by cell ID, secondly by particle index for deterministic order within the cells
 		tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
-			[&](uint32_t a, uint32_t b)
+			[&](const uint32_t a, const uint32_t b)
 			{
-				return cellIdB_[a] < cellIdB_[b];
+				if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
+				return a < b;
 			});
 	}
 
@@ -954,15 +627,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 			lookupCacheValF.fill(EMPTY_32);
 			lookupCacheValB.fill(EMPTY_32);
 
-			std::vector<uint8_t> hasFluidCell(N_NbrCells, 0);
 			std::vector<uint32_t> sNbrF(N_NbrCells, 0);
 			std::vector<uint32_t> eNbrF(N_NbrCells, 0);
 
-			std::vector<uint8_t> hasBoundaryCell(N_NbrCells, 0);
 			std::vector<uint32_t> sNbrB(N_NbrCells, 0);
 			std::vector<uint32_t> eNbrB(N_NbrCells, 0);
 
 			std::vector<uint64_t> nbrCellId(N_NbrCells, 0);
+			std::vector<uint32_t> cellOrder(N_NbrCells, 0);
+			std::vector<uint32_t> fluidCellOrder(N_NbrCells, 0);
+			std::vector<uint32_t> boundaryCellOrder(N_NbrCells, 0);
 
 			const auto findCellIdxTernary = [](const std::vector<uint64_t>& sortedCellIds,
 				uint64_t key,
@@ -1036,10 +710,6 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 				const int cy = FloorToInt(yi0 * cellSizeInv_);
 				const int cz = FloorToInt(zi0 * cellSizeInv_);
 
-				// pre-compute neighbor cell IDs
-				std::fill(hasFluidCell.begin(), hasFluidCell.end(), 0);
-				std::fill(hasBoundaryCell.begin(), hasBoundaryCell.end(), 0);
-
 				// BigMin/LitMax range of the queried neighborhood in cell ID space
 				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
 				uint64_t bigMinCellId = 0;
@@ -1092,9 +762,21 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					if (hiB < loB) { hiB = loB; }
 				}
 
+				// sort queried cells by cell ID so that queried cells can be traversed in Z-order
+				std::iota(cellOrder.begin(), cellOrder.end(), 0u);
+				std::sort(cellOrder.begin(), cellOrder.end(),
+					[&](const uint32_t a, const uint32_t b)
+					{
+						return nbrCellId[a] < nbrCellId[b];
+					});
+
+				uint32_t N_FluidCellsActive = 0;
+				uint32_t N_BoundaryCellsActive = 0;
+
 				// check existence and location of all queried grid cells
-				for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells; idx_nbr++)
+				for (uint32_t q = 0; q < N_NbrCells; q++)
 				{
+					const uint32_t idx_nbr = cellOrder[q];
 					const uint64_t cid_nbr = nbrCellId[idx_nbr];
 
 					// fluid scope
@@ -1120,13 +802,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						{
 							const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
 							const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
-							hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
-							sNbrF[idx_nbr] = sF_nbr;
-							eNbrF[idx_nbr] = eF_nbr;
-						}
-						else
-						{
-							hasFluidCell[idx_nbr] = false;
+
+							if (sF_nbr < eF_nbr)
+							{
+								sNbrF[idx_nbr] = sF_nbr;
+								eNbrF[idx_nbr] = eF_nbr;
+								fluidCellOrder[N_FluidCellsActive++] = idx_nbr;
+							}
 						}
 					}
 
@@ -1153,13 +835,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						{
 							const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
 							const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
-							hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
-							sNbrB[idx_nbr] = sB_nbr;
-							eNbrB[idx_nbr] = eB_nbr;
-						}
-						else
-						{
-							hasBoundaryCell[idx_nbr] = false;
+
+							if (sB_nbr < eB_nbr)
+							{
+								sNbrB[idx_nbr] = sB_nbr;
+								eNbrB[idx_nbr] = eB_nbr;
+								boundaryCellOrder[N_BoundaryCellsActive++] = idx_nbr;
+							}
 						}
 					}
 				}
@@ -1177,9 +859,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					const float zi = zPosF[i];
 
 					// fluid neighbors
-					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells; idx_nbr++)
+					for (uint32_t q = 0; q < N_FluidCellsActive; q++)
 					{
-						if (!hasFluidCell[idx_nbr]) { continue; }
+						const uint32_t idx_nbr = fluidCellOrder[q];
 
 						const uint32_t sF_nbr = sNbrF[idx_nbr];
 						const uint32_t eF_nbr = eNbrF[idx_nbr];
@@ -1206,9 +888,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					}
 
 					// boundary neighbors
-					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells; idx_nbr++)
+					for (uint32_t q = 0; q < N_BoundaryCellsActive; q++)
 					{
-						if (!hasBoundaryCell[idx_nbr]) { continue; }
+						const uint32_t idx_nbr = boundaryCellOrder[q];
 
 						const uint32_t sB_nbr = sNbrB[idx_nbr];
 						const uint32_t eB_nbr = eNbrB[idx_nbr];
@@ -1280,15 +962,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 			lookupCacheValF.fill(EMPTY_32);
 			lookupCacheValB.fill(EMPTY_32);
 
-			std::vector<uint8_t> hasFluidCell(N_NbrCells, 0);
 			std::vector<uint32_t> sNbrF(N_NbrCells, 0);
 			std::vector<uint32_t> eNbrF(N_NbrCells, 0);
 
-			std::vector<uint8_t> hasBoundaryCell(N_NbrCells, 0);
 			std::vector<uint32_t> sNbrB(N_NbrCells, 0);
 			std::vector<uint32_t> eNbrB(N_NbrCells, 0);
 
 			std::vector<uint64_t> nbrCellId(N_NbrCells, 0);
+			std::vector<uint32_t> cellOrder(N_NbrCells, 0);
+			std::vector<uint32_t> fluidCellOrder(N_NbrCells, 0);
+			std::vector<uint32_t> boundaryCellOrder(N_NbrCells, 0);
 			uint64_t candCountFF_local = 0;
 			uint64_t posCountFF_local = 0;
 			uint64_t candCountFB_local = 0;
@@ -1379,10 +1062,6 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 				const int cy = FloorToInt(yi0 * cellSizeInv_);
 				const int cz = FloorToInt(zi0 * cellSizeInv_);
 
-				// pre-compute neighbor cell IDs
-				std::fill(hasFluidCell.begin(), hasFluidCell.end(), 0);
-				std::fill(hasBoundaryCell.begin(), hasBoundaryCell.end(), 0);
-
 				// BigMin/LitMax range of the queried neighborhood in cell ID space
 				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
 				uint64_t bigMinCellId = 0;
@@ -1435,9 +1114,21 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					if (hiB < loB) { hiB = loB; }
 				}
 
+				// sort queried cells by cell ID so that queried cells can be traversed in Z-order
+				std::iota(cellOrder.begin(), cellOrder.end(), 0u);
+				std::sort(cellOrder.begin(), cellOrder.end(),
+					[&](const uint32_t a, const uint32_t b)
+					{
+						return nbrCellId[a] < nbrCellId[b];
+					});
+
+				uint32_t N_FluidCellsActive = 0;
+				uint32_t N_BoundaryCellsActive = 0;
+
 				// check existence and location of all queried grid cells
-				for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells; idx_nbr++)
+				for (uint32_t q = 0; q < N_NbrCells; q++)
 				{
+					const uint32_t idx_nbr = cellOrder[q];
 					const uint64_t cid_nbr = nbrCellId[idx_nbr];
 
 					// fluid scope
@@ -1463,13 +1154,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						{
 							const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
 							const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
-							hasFluidCell[idx_nbr] = (sF_nbr < eF_nbr);
-							sNbrF[idx_nbr] = sF_nbr;
-							eNbrF[idx_nbr] = eF_nbr;
-						}
-						else
-						{
-							hasFluidCell[idx_nbr] = false;
+
+							if (sF_nbr < eF_nbr)
+							{
+								sNbrF[idx_nbr] = sF_nbr;
+								eNbrF[idx_nbr] = eF_nbr;
+								fluidCellOrder[N_FluidCellsActive++] = idx_nbr;
+							}
 						}
 					}
 
@@ -1496,13 +1187,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						{
 							const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
 							const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
-							hasBoundaryCell[idx_nbr] = (sB_nbr < eB_nbr);
-							sNbrB[idx_nbr] = sB_nbr;
-							eNbrB[idx_nbr] = eB_nbr;
-						}
-						else
-						{
-							hasBoundaryCell[idx_nbr] = false;
+
+							if (sB_nbr < eB_nbr)
+							{
+								sNbrB[idx_nbr] = sB_nbr;
+								eNbrB[idx_nbr] = eB_nbr;
+								boundaryCellOrder[N_BoundaryCellsActive++] = idx_nbr;
+							}
 						}
 					}
 				}
@@ -1521,9 +1212,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					const float zi = zPosF[i];
 
 					// fluid neighbors
-					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells; idx_nbr++)
+					for (uint32_t q = 0; q < N_FluidCellsActive; q++)
 					{
-						if (!hasFluidCell[idx_nbr]) { continue; }
+						const uint32_t idx_nbr = fluidCellOrder[q];
 
 						const uint32_t sF_nbr = sNbrF[idx_nbr];
 						const uint32_t eF_nbr = eNbrF[idx_nbr];
@@ -1553,9 +1244,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					}
 
 					// boundary neighbors
-					for (uint32_t idx_nbr = 0; idx_nbr < N_NbrCells; idx_nbr++)
+					for (uint32_t q = 0; q < N_BoundaryCellsActive; q++)
 					{
-						if (!hasBoundaryCell[idx_nbr]) { continue; }
+						const uint32_t idx_nbr = boundaryCellOrder[q];
 
 						const uint32_t sB_nbr = sNbrB[idx_nbr];
 						const uint32_t eB_nbr = eNbrB[idx_nbr];
@@ -1601,142 +1292,109 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 	);
 }
 
-NeighborSpan NS_CellLinkedList_Compact_CPU01::QueryParticleFF(
-	const uint32_t i) const
-{
-	auto& scratchFF = scratchFF_.local();
-	scratchFF.clear();
-
-	const float* RESTRICT xPosF = be_.xPosF_.data();
-	const float* RESTRICT yPosF = be_.yPosF_.data();
-	const float* RESTRICT zPosF = be_.zPosF_.data();
-
-	const float xi = xPosF[i];
-	const float yi = yPosF[i];
-	const float zi = zPosF[i];
-
-	const int cx = FloorToInt(xi * cellSizeInv_);
-	const int cy = FloorToInt(yi * cellSizeInv_);
-	const int cz = FloorToInt(zi * cellSizeInv_);
-	const int cellQueryReach = static_cast<int>(cellQueryReach_);
-
-	for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
-	{
-		for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
-		{
-			for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
-			{
-				const uint64_t cid_nbr = MapToCellId(cx + rx, cy + ry, cz + rz);
-				auto itF = std::ranges::lower_bound(uniqueCellIdF_, cid_nbr);
-
-				if (itF == uniqueCellIdF_.end() || *itF != cid_nbr) { continue; }
-
-				const uint32_t cF_nbr = static_cast<uint32_t>(itF - uniqueCellIdF_.begin());
-				const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
-				const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
-
-				for (uint32_t l = sF_nbr; l < eF_nbr; l++)
-				{
-					const uint32_t j = sortedParticleIdxF_[l];
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu_) [[unlikely]]
-					{
-						scratchFF.push_back(j);
-					}
-				}
-			}
-		}
-	}
-
-	return NeighborSpan{ scratchFF.data(), static_cast<uint32_t>(scratchFF.size()) };
-}
-
-NeighborSpan NS_CellLinkedList_Compact_CPU01::QueryParticleFB(
-	const uint32_t i) const
-{
-	auto& scratchFB = scratchFB_.local();
-	scratchFB.clear();
-
-	const float* RESTRICT xPosF = be_.xPosF_.data();
-	const float* RESTRICT yPosF = be_.yPosF_.data();
-	const float* RESTRICT zPosF = be_.zPosF_.data();
-	const float* RESTRICT xPosB = be_.xPosB_.data();
-	const float* RESTRICT yPosB = be_.yPosB_.data();
-	const float* RESTRICT zPosB = be_.zPosB_.data();
-
-	const float xi = xPosF[i];
-	const float yi = yPosF[i];
-	const float zi = zPosF[i];
-
-	const int cx = FloorToInt(xi * cellSizeInv_);
-	const int cy = FloorToInt(yi * cellSizeInv_);
-	const int cz = FloorToInt(zi * cellSizeInv_);
-	const int cellQueryReach = static_cast<int>(cellQueryReach_);
-
-	for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
-	{
-		for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
-		{
-			for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
-			{
-				const uint64_t cid_nbr = MapToCellId(cx + rx, cy + ry, cz + rz);
-				auto itB = std::ranges::lower_bound(uniqueCellIdB_, cid_nbr);
-
-				if (itB == uniqueCellIdB_.end() || *itB != cid_nbr) { continue; }
-
-				const uint32_t cB_nbr = static_cast<uint32_t>(itB - uniqueCellIdB_.begin());
-				const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
-				const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
-
-				for (uint32_t l = sB_nbr; l < eB_nbr; l++)
-				{
-					const uint32_t j = sortedParticleIdxB_[l];
-					const float dx = xi - xPosB[j];
-					const float dy = yi - yPosB[j];
-					const float dz = zi - zPosB[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu_) [[unlikely]]
-					{
-						scratchFB.push_back(j);
-					}
-				}
-			}
-		}
-	}
-
-	return NeighborSpan{ scratchFB.data(), static_cast<uint32_t>(scratchFB.size()) };
-}
-
 void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 {
-	(void)params;
-
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0) { return; }
 
-	DataReOrderParticles_30bitNormalized(
-		FluidParticleSoARefs{
-			be_.xPosF_, be_.yPosF_, be_.zPosF_,
-			be_.xVelF_, be_.yVelF_, be_.zVelF_,
-			be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
-			be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
-			be_.sourceTermF_, be_.diagElemF_, be_.pressureF_, be_.densityF_
-		},
-		BoundaryParticleSoARefs{
-			be_.xPosB_, be_.yPosB_, be_.zPosB_
-		},
-		N_F, N_B,
-		params.gridCellIndexing,
-		be_.sortKeyBuffer_,
-		be_.workBufferF_,
-		be_.workBufferB_
-	);
+	const float cellSize = params.kernelRadius * params.gridCellSizeRatio;
+	const float querySpanCells = Base::ApproxEqu(cellSize, 0.0f)
+		? 0.0f : (params.kernelRadius / cellSize);
+	const uint32_t cellQueryReach = Base::ApproxEqu(cellSize, 0.0f)
+		? 1u : std::max<uint32_t>(1u,
+			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
+
+	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, cellSize);
+	const bool cellQueryReachChanged = (cellQueryReach_ != cellQueryReach);
+
+	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	cellSize_ = cellSize;
+	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f)
+		? 0.0f : (1.0f / cellSize);
+	cellQueryReach_ = cellQueryReach;
+
+	if (cellSizeChanged || cellQueryReachChanged) { cellFrameValid_ = false; }
+	UpdateCellFrame();
+
+	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
+	cellIdF_.resize(N_F);
+	sortedParticleIdxF_.resize(N_F);
+	if (N_F > 0)
+	{
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+					cellIdF_[i] = MapToCellId(cx, cy, cz);
+					sortedParticleIdxF_[i] = i;
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		tbb::parallel_sort(sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				if (cellIdF_[a] != cellIdF_[b]) { return cellIdF_[a] < cellIdF_[b]; }
+				return a < b; // deterministic tie-break within the same cell
+			});
+
+		ApplyPermutation(sortedParticleIdxF_, be_.xPosF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.yPosF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.zPosF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.xVelF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.yVelF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.zVelF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.xVelPredF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.yVelPredF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.zVelPredF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.xAccPressF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.yAccPressF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.zAccPressF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.sourceTermF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.diagElemF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.pressureF_, be_.workBufferF_);
+		ApplyPermutation(sortedParticleIdxF_, be_.densityF_, be_.workBufferF_);
+	}
+
+	// build the exact compact-CLL cell IDs and particle permutation for boundary particles
+	cellIdB_.resize(N_B);
+	sortedParticleIdxB_.resize(N_B);
+	if (N_B > 0)
+	{
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+
+					cellIdB_[i] = MapToCellId(cx, cy, cz);
+					sortedParticleIdxB_[i] = i;
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
+			[&](uint32_t a, uint32_t b)
+			{
+				if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
+				return a < b; // deterministic tie-break within the same cell
+			});
+
+		ApplyPermutation(sortedParticleIdxB_, be_.xPosB_, be_.workBufferB_);
+		ApplyPermutation(sortedParticleIdxB_, be_.yPosB_, be_.workBufferB_);
+		ApplyPermutation(sortedParticleIdxB_, be_.zPosB_, be_.workBufferB_);
+	}
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemUsage(
@@ -1906,36 +1564,7 @@ inline uint32_t NS_CellLinkedList_Compact_CPU01::NeighborCellCount() const noexc
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId(
 	int cx, int cy, int cz) const noexcept
 {
-	if (gridCellIndexing_ == Base::GridCellIndexing::XYZ)
-	{
-		return MapToCellId_XYZ(cx, cy, cz);
-	}
-
 	return MapToCellId_Morton(cx, cy, cz);
-}
-
-inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_XYZ(
-	int cx, int cy, int cz) const noexcept
-{
-	// shift to local cell frame to avoid zig-zag preprocessing
-	const int lx = cx - cellOrigX_;
-	const int ly = cy - cellOrigY_;
-	const int lz = cz - cellOrigZ_;
-	assert(lx >= 0 && lx < static_cast<int>(N_DimX_));
-	assert(ly >= 0 && ly < static_cast<int>(N_DimY_));
-	assert(lz >= 0 && lz < static_cast<int>(N_DimZ_));
-
-	const uint64_t ux = static_cast<uint64_t>(static_cast<uint32_t>(lx));
-	const uint64_t uy = static_cast<uint64_t>(static_cast<uint32_t>(ly));
-	const uint64_t uz = static_cast<uint64_t>(static_cast<uint32_t>(lz));
-
-	// each axis must fit into 21 bits
-	assert(ux < (1u << 21));
-	assert(uy < (1u << 21));
-	assert(uz < (1u << 21));
-
-	// packed XYZ encoding
-	return (ux) | (uy << 21) | (uz << 42);
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(

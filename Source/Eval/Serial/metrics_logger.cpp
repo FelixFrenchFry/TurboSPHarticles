@@ -342,8 +342,6 @@ namespace Export
 			{ "expctdAvgNbrCountHardMax_FF", simParams.expctdAvgNbrCountHardMax_FF },
 			{ "expctdAvgNbrCountHardMax_FB", simParams.expctdAvgNbrCountHardMax_FB },
 			{ "gridCellSizeRatio", simParams.gridCellSizeRatio },
-			{ "gridCellIndexing", static_cast<int>(simParams.gridCellIndexing) },
-			{ "bvhLeafRadiusRatio", simParams.bvhLeafRadiusRatio },
 			{ "maxThreadsSim", simParams.maxThreadsSim }
 		};
 

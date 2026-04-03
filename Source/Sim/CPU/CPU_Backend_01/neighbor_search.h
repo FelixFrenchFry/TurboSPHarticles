@@ -14,8 +14,8 @@
 
 
 // TODO: make these used the params based on heuristic expected values?
-static constexpr uint32_t N_perScratchInlineFF = 64;
-static constexpr uint32_t N_perScratchInlineFB = 48;
+//static constexpr uint32_t N_perScratchInlineFF = 64;
+//static constexpr uint32_t N_perScratchInlineFB = 48;
 
 namespace Sim
 {
@@ -43,9 +43,6 @@ namespace Sim
 		void Query_Count(const SimParams& params) override;
 
 		void Query_Fill(const SimParams& params) override;
-
-		NeighborSpan QueryParticleFF(uint32_t i) const override;
-		NeighborSpan QueryParticleFB(uint32_t i) const override;
 
 		void DataReOrder(const SimParams& params) override;
 
@@ -86,9 +83,6 @@ namespace Sim
 
 		void Query_Fill(const SimParams& params) override;
 
-		NeighborSpan QueryParticleFF(uint32_t i) const override;
-		NeighborSpan QueryParticleFB(uint32_t i) const override;
-
 		void DataReOrder(const SimParams& params) override;
 
 		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
@@ -103,7 +97,6 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 		float kernelRadiusSqu_ = 0.0f;
-		Base::GridCellIndexing gridCellIndexing_ = Base::GridCellIndexing::Morton;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CellFrameRebuildMargin_ = 8; // hysteresis buffer
 
@@ -140,7 +133,6 @@ namespace Sim
 		void UpdateCellFrame();
 		inline uint32_t NeighborCellCount() const noexcept;
 		inline uint64_t MapToCellId(int cx, int cy, int cz) const noexcept;
-		inline uint64_t MapToCellId_XYZ(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
 		inline int NeighborOffset(int rx, int ry, int rz) const noexcept;

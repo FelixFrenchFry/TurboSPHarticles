@@ -120,7 +120,6 @@ namespace Sim
 		// TODO: rework this?
 		mutable std::vector<float> workBufferF_;
 		mutable std::vector<float> workBufferB_;
-		mutable std::vector<uint64_t> sortKeyBuffer_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;
 
 		// operation benchmarking groups

@@ -1,10 +1,10 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
-  "neighborListStorage": 1,
+  "neighborListStorage": 3,
 
-  "maxSteps": 1000,
+  "maxSteps": 500,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -22,10 +22,8 @@
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
 
-  "dataReOrderInterval": 10,
+  "dataReOrderInterval": 1,
   "gridCellSizeRatio": 1.0,
-  "gridCellIndexing": "Morton",
-  "bvhLeafRadiusRatio": 0.0,
   "jitterFracF": 0.0,
   "jitterSeedF": 67,
   "jitterFracB": 0.0,

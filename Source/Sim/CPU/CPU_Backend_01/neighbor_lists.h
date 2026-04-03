@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <boost/container/small_vector.hpp>
 #include <vector>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/scalable_allocator.h>
@@ -13,6 +14,9 @@
 
 
 using uint32_tbb_alloc = tbb::scalable_allocator<uint32_t>;
+// TODO: make these used the params based on heuristic expected values?
+static constexpr uint32_t N_perScratchInlineFF = 64;
+static constexpr uint32_t N_perScratchInlineFB = 48;
 
 namespace Sim
 {
@@ -141,6 +145,11 @@ namespace Sim
 		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
 		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
 
+		void SetInputOrder(NeighborListInputOrder inputOrder) override
+		{
+			inputOrder_ = inputOrder;
+		}
+
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
 
@@ -184,14 +193,19 @@ namespace Sim
 		std::vector<uint8_t> nbrListCompressedFB_; // size: N_F * avg FB neighbor count * avg bytes per neighbor
 
 		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFF_;
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFB_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
 
-		// thread-local sorting scratch for measuring and encoding
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
+		// thread-local sorting scratch used if incoming list is not guaranteed to be sorted
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFF>> sortScratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFB>> sortScratchFB_;
 
 		// misc
+		NeighborListInputOrder inputOrder_ = NeighborListInputOrder::Unknown;
 		FillPhase fillPhase_ = FillPhase::Measure;
 		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
 		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
@@ -203,13 +217,10 @@ namespace Sim
 		static uint32_t OffsetBlockOfParticle(uint32_t i) noexcept;
 		static uint32_t OffsetBlockBegin(uint32_t block) noexcept;
 		static uint32_t OffsetBlockEnd(uint32_t block, uint32_t N_F) noexcept;
-		static uint64_t ParticleStorageBegin(
-			uint32_t i,
+		static uint64_t ParticleStorageBegin(uint32_t i,
 			const std::vector<uint32_t>& nbrLocalOffsets,
 			const std::vector<uint64_t>& nbrBlockBases) noexcept;
-		static uint64_t ParticleStorageEnd(
-			uint32_t i,
-			uint32_t N_F,
+		static uint64_t ParticleStorageEnd(uint32_t i, uint32_t N_F,
 			const std::vector<uint32_t>& nbrLocalOffsets,
 			const std::vector<uint64_t>& nbrBlockBases) noexcept;
 		void FinalizeBlockCSR(
@@ -218,16 +229,16 @@ namespace Sim
 			std::vector<uint8_t>& nbrList) const;
 		static uint8_t ChooseWidthCode(uint32_t maxGap) noexcept;
 		static uint32_t GetNumWidthBytes(uint8_t widthCode) noexcept;
-		static uint64_t MeasureEncodedBytes(const uint32_t* js,
-			uint32_t count, std::vector<uint32_t>& scratch);
+		static uint64_t MeasureEncodedBytes(const uint32_t* js, uint32_t count);
 		static inline uint16_t ReadU16LE(const uint8_t* src) noexcept;
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
 		static inline void WriteU16LE(uint8_t* dst, uint16_t v) noexcept;
 		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
+		template<typename T_Out>
 		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
-			uint32_t count, std::vector<uint32_t>& out);
+			uint32_t count, T_Out& out);
 		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
-			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
+			const uint32_t* js, uint32_t count);
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -248,6 +259,11 @@ namespace Sim
 		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
 		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
 
+		void SetInputOrder(NeighborListInputOrder inputOrder) override
+		{
+			inputOrder_ = inputOrder;
+		}
+
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
 
@@ -291,14 +307,19 @@ namespace Sim
 		std::vector<uint8_t> nbrListCompressedFB_; // size: N_F * avg FB neighbor count * avg bytes per neighbor
 
 		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFF_;
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> nbrScratchFB_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
 
-		// thread-local sorting scratch for measuring and encoding to only have positive deltas
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFF_;
-		mutable tbb::enumerable_thread_specific<std::vector<uint32_t>> sortScratchFB_;
+		// thread-local sorting scratch used if incoming list is not guaranteed to be sorted
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFF>> sortScratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFB>> sortScratchFB_;
 
 		// misc
+		NeighborListInputOrder inputOrder_ = NeighborListInputOrder::Unknown;
 		FillPhase fillPhase_ = FillPhase::Measure;
 		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
 		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
@@ -310,13 +331,10 @@ namespace Sim
 		static uint32_t OffsetBlockOfParticle(uint32_t i) noexcept;
 		static uint32_t OffsetBlockBegin(uint32_t block) noexcept;
 		static uint32_t OffsetBlockEnd(uint32_t block, uint32_t N_F) noexcept;
-		static uint64_t ParticleStorageBegin(
-			uint32_t i,
+		static uint64_t ParticleStorageBegin(uint32_t i,
 			const std::vector<uint32_t>& nbrLocalOffsets,
 			const std::vector<uint64_t>& nbrBlockBases) noexcept;
-		static uint64_t ParticleStorageEnd(
-			uint32_t i,
-			uint32_t N_F,
+		static uint64_t ParticleStorageEnd(uint32_t i, uint32_t N_F,
 			const std::vector<uint32_t>& nbrLocalOffsets,
 			const std::vector<uint64_t>& nbrBlockBases) noexcept;
 		void FinalizeBlockCSR(
@@ -325,14 +343,14 @@ namespace Sim
 			std::vector<uint8_t>& nbrList) const;
 		static uint32_t ControlBytesFor(uint32_t count) noexcept;
 		static uint8_t DeltaMask(uint32_t delta) noexcept;
-		static uint64_t MeasureEncodedBytes(const uint32_t* js,
-			uint32_t count, std::vector<uint32_t>& scratch);
+		static uint64_t MeasureEncodedBytes(const uint32_t* js, uint32_t count);
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
 		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
+		template<typename T_Out>
 		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
-			uint32_t count, std::vector<uint32_t>& out);
+			uint32_t count, T_Out& out);
 		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
-			const uint32_t* js, uint32_t count, std::vector<uint32_t>& scratch);
+			const uint32_t* js, uint32_t count);
 	};
 
 } // namespace Sim

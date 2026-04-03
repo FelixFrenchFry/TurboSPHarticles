@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -104,10 +105,6 @@ namespace Sim
 
 		virtual void Query_Fill(const SimParams& params) = 0;
 
-		// queries the neighbors of one fluid particle directly
-		virtual NeighborSpan QueryParticleFF(uint32_t i) const = 0;
-		virtual NeighborSpan QueryParticleFB(uint32_t i) const = 0;
-
 		virtual void DataReOrder(const SimParams& params) = 0;
 
 		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
@@ -120,9 +117,15 @@ namespace Sim
 		uint32_t count = 0;
 	};
 
+	enum class NeighborListInputOrder : uint8_t
+	{
+		Unknown,
+		GuaranteedSorted
+	};
+
 	class I_NeighborList
 	{
-	public: // ---------------------------------------------------------------------------------------
+public: // ---------------------------------------------------------------------------------------
 
 		virtual ~I_NeighborList() = default;
 
@@ -144,6 +147,13 @@ namespace Sim
 		// (optionally applying compression and other post-processing if the implementation uses it)
 		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+
+		// tells the neighbor list implementation whether the incoming fill-query lists
+		// are guaranteed to already be sorted by particle index in this step
+		virtual void SetInputOrder(NeighborListInputOrder inputOrder)
+		{
+			(void)inputOrder;
+		}
 
 		// gets a "span" of the fluid/boundary neighbor list of fluid particle i
 		// (for compressed neighbor lists, the span points to per-thread scratch space, which

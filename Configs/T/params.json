@@ -24,7 +24,6 @@
 
   "dataReOrderInterval": 5,
   "gridCellSizeRatio": 1.0,
-  "gridCellIndexing": "Morton",
   "jitterFracF": 0.0,
   "jitterSeedF": 67,
   "jitterFracB": 0.0,

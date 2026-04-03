@@ -52,6 +52,74 @@ namespace
 		}
 	}
 
+	inline void AssertStrictlyIncreasing(
+		const uint32_t* js,
+		const uint32_t count) noexcept
+	{
+	#if defined(_DEBUG)
+		for (uint32_t k = 1; k < count; k++)
+		{
+			assert(js[k - 1] < js[k] && "Neighbor list input must be strictly increasing");
+		}
+	#else
+		(void)js;
+		(void)count;
+	#endif
+	}
+
+	template<typename T_Scratch>
+	inline const uint32_t* PrepareSortedNeighborList(
+		const uint32_t* js,
+		const uint32_t count,
+		const NeighborListInputOrder inputOrder,
+		T_Scratch& scratch)
+	{
+		if (count <= 1u) { return js; }
+
+		if (inputOrder == NeighborListInputOrder::GuaranteedSorted)
+		{
+			AssertStrictlyIncreasing(js, count);
+			return js;
+		}
+
+		uint32_t firstInversion = count;
+		for (uint32_t k = 1; k < count; k++)
+		{
+			if (!(js[k - 1u] < js[k]))
+			{
+				firstInversion = k;
+				break;
+			}
+		}
+
+		// input is already sorted, no need for copying and sorting
+		if (firstInversion == count) { return js; }
+
+		if (scratch.capacity() < count)
+		{
+			scratch.reserve(count);
+		}
+		scratch.assign(js, js + firstInversion);
+
+		for (uint32_t k = firstInversion; k < count; k++)
+		{
+			const uint32_t v = js[k];
+			scratch.push_back(v);
+
+			uint32_t pos = static_cast<uint32_t>(scratch.size()) - 1u;
+			while (pos > 0u && v < scratch[pos - 1u])
+			{
+				scratch[pos] = scratch[pos - 1u];
+				pos--;
+			}
+
+			scratch[pos] = v;
+		}
+
+		AssertStrictlyIncreasing(scratch.data(), static_cast<uint32_t>(scratch.size()));
+		return scratch.data();
+	}
+
 } // anonymous
 
 // -------------------------------------------------------------------------------------------------
@@ -434,11 +502,12 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFF(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
 	auto& scratch = sortScratchFF_.local();
+	const uint32_t* jsSorted = PrepareSortedNeighborList(js, count, inputOrder_, scratch);
 
 	if (fillPhase_ == FillPhase::Measure)
 	{
 		nbrCountFF_[i] = count;
-		const uint64_t encodedBytes = MeasureEncodedBytes(js, count, scratch);
+		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count);
 	#if defined(_DEBUG)
 		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
 			&& "Per-particle adapt-compressed neighbor list exceeds uint32_t byte count");
@@ -461,7 +530,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFF(
 					 ? nullptr
 					 : nbrListCompressedFF_.data() + start;
 
-		EncodeNeighborList(dst, end - start, js, count, scratch);
+		EncodeNeighborList(dst, end - start, jsSorted, count);
 		return;
 	}
 
@@ -473,11 +542,12 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFB(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
 	auto& scratch = sortScratchFB_.local();
+	const uint32_t* jsSorted = PrepareSortedNeighborList(js, count, inputOrder_, scratch);
 
 	if (fillPhase_ == FillPhase::Measure)
 	{
 		nbrCountFB_[i] = count;
-		const uint64_t encodedBytes = MeasureEncodedBytes(js, count, scratch);
+		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count);
 	#if defined(_DEBUG)
 		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
 			&& "Per-particle adapt-compressed neighbor list exceeds uint32_t byte count");
@@ -500,7 +570,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFB(
 					 ? nullptr
 					 : nbrListCompressedFB_.data() + start;
 
-		EncodeNeighborList(dst, end - start, js, count, scratch);
+		EncodeNeighborList(dst, end - start, jsSorted, count);
 		return;
 	}
 
@@ -695,20 +765,17 @@ uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::GetNumWidthBytes(
 }
 
 uint64_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::MeasureEncodedBytes(
-	const uint32_t* js, const uint32_t count, std::vector<uint32_t>& scratch)
+	const uint32_t* js, const uint32_t count)
 {
 	if (count == 0)
 	{
 		return 0;
 	}
 
-	scratch.assign(js, js + count);
-	std::sort(scratch.begin(), scratch.end());
-
 	uint32_t maxGap = 0u;
 	for (uint32_t k = 1; k < count; k++)
 	{
-		maxGap = std::max(maxGap, scratch[k] - scratch[k - 1]);
+		maxGap = std::max(maxGap, js[k] - js[k - 1]);
 	}
 
 	return 1ull + 4ull + static_cast<uint64_t>(count - 1u) * GetNumWidthBytes(ChooseWidthCode(maxGap));
@@ -746,9 +813,10 @@ inline void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::WriteU32LE(
 	dst[3] = static_cast<uint8_t>(v >> 24);
 }
 
+template<typename T_Out>
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::DecodeNeighborList(
 	const uint8_t* src, const uint64_t srcBytes, const uint32_t count,
-	std::vector<uint32_t>& out)
+	T_Out& out)
 {
 	if (count == 0)
 	{
@@ -803,7 +871,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::DecodeNeighborList(
 
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
 	uint8_t* dst, const uint64_t dstBytes, const uint32_t* js,
-	const uint32_t count, std::vector<uint32_t>& scratch)
+	const uint32_t count)
 {
 	if (count == 0)
 	{
@@ -813,13 +881,10 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
 		return;
 	}
 
-	scratch.assign(js, js + count);
-	std::sort(scratch.begin(), scratch.end());
-
 	uint32_t maxGap = 0u;
 	for (uint32_t k = 1; k < count; k++)
 	{
-		maxGap = std::max(maxGap, scratch[k] - scratch[k - 1]);
+		maxGap = std::max(maxGap, js[k] - js[k - 1]);
 	}
 
 	const uint8_t widthCode = ChooseWidthCode(maxGap);
@@ -833,21 +898,21 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
 	}
 
 	dst[0] = widthCode;
-	WriteU32LE(dst + 1, scratch[0]);
+	WriteU32LE(dst + 1, js[0]);
 
 	uint8_t* p = dst + 1 + 4;
 	if (widthCode == 0u)
 	{
 		for (uint32_t k = 1; k < count; k++)
 		{
-			*p++ = static_cast<uint8_t>(scratch[k] - scratch[k - 1]);
+			*p++ = static_cast<uint8_t>(js[k] - js[k - 1]);
 		}
 	}
 	else if (widthCode == 1u)
 	{
 		for (uint32_t k = 1; k < count; k++)
 		{
-			WriteU16LE(p, static_cast<uint16_t>(scratch[k] - scratch[k - 1]));
+			WriteU16LE(p, static_cast<uint16_t>(js[k] - js[k - 1]));
 			p += 2;
 		}
 	}
@@ -855,7 +920,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
 	{
 		for (uint32_t k = 1; k < count; k++)
 		{
-			WriteU32LE(p, scratch[k] - scratch[k - 1]);
+			WriteU32LE(p, js[k] - js[k - 1]);
 			p += 4;
 		}
 	}
@@ -949,11 +1014,12 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::SetNbrListFF(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
 	auto& scratch = sortScratchFF_.local();
+	const uint32_t* jsSorted = PrepareSortedNeighborList(js, count, inputOrder_, scratch);
 
 	if (fillPhase_ == FillPhase::Measure)
 	{
 		nbrCountFF_[i] = count;
-		const uint64_t encodedBytes = MeasureEncodedBytes(js, count, scratch);
+		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count);
 	#if defined(_DEBUG)
 		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
 			&& "Per-particle compressed neighbor list exceeds uint32_t byte count");
@@ -976,7 +1042,7 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::SetNbrListFF(
 					 ? nullptr
 					 : nbrListCompressedFF_.data() + s;
 
-		EncodeNeighborList(dst, e - s, js, count, scratch);
+		EncodeNeighborList(dst, e - s, jsSorted, count);
 		return;
 	}
 
@@ -988,11 +1054,12 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::SetNbrListFB(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
 	auto& scratch = sortScratchFB_.local();
+	const uint32_t* jsSorted = PrepareSortedNeighborList(js, count, inputOrder_, scratch);
 
 	if (fillPhase_ == FillPhase::Measure)
 	{
 		nbrCountFB_[i] = count;
-		const uint64_t encodedBytes = MeasureEncodedBytes(js, count, scratch);
+		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count);
 	#if defined(_DEBUG)
 		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
 			&& "Per-particle compressed neighbor list exceeds uint32_t byte count");
@@ -1015,7 +1082,7 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::SetNbrListFB(
 					 ? nullptr
 					 : nbrListCompressedFB_.data() + s;
 
-		EncodeNeighborList(dst, e - s, js, count, scratch);
+		EncodeNeighborList(dst, e - s, jsSorted, count);
 		return;
 	}
 
@@ -1205,24 +1272,19 @@ uint8_t NeighborLists_SingleCSRVector_VByteCompress_CPU01::DeltaMask(
 }
 
 uint64_t NeighborLists_SingleCSRVector_VByteCompress_CPU01::MeasureEncodedBytes(
-	const uint32_t* js, const uint32_t count, std::vector<uint32_t>& scratch)
+	const uint32_t* js, const uint32_t count)
 {
 	if (count == 0)
 	{
 		return 0;
 	}
 
-	// copy into thread-local scratch and sort to avoid negative deltas
-	// TODO: guarantee sorted input from in the query to avoid sorting here?
-	scratch.assign(js, js + count);
-	std::sort(scratch.begin(), scratch.end());
-
 	// determine size of encoded data
 	const uint32_t ctrlBytes = ControlBytesFor(count);
 	uint64_t dataBytes = 0;
 	for (uint32_t k = 1; k < count; k++)
 	{
-		const uint32_t gap = scratch[k] - scratch[k - 1];
+		const uint32_t gap = js[k] - js[k - 1];
 
 		// gap must be >= 1 for delta = gap - 1 to be non-negative
 	#if defined(_DEBUG)
@@ -1258,9 +1320,10 @@ inline void NeighborLists_SingleCSRVector_VByteCompress_CPU01::WriteU32LE(
 }
 
 // TODO: implement with SIMD optimizations?
+template<typename T_Out>
 void NeighborLists_SingleCSRVector_VByteCompress_CPU01::DecodeNeighborList(
 	const uint8_t* src, const uint64_t srcBytes, const uint32_t count,
-	std::vector<uint32_t>& out)
+	T_Out& out)
 {
 	if (count == 0)
 	{
@@ -1344,7 +1407,7 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::DecodeNeighborList(
 // TODO: implement with SIMD optimizations?
 void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 	uint8_t* dst, const uint64_t dstBytes, const uint32_t* js,
-	const uint32_t count, std::vector<uint32_t>& scratch)
+	const uint32_t count)
 {
 	if (count == 0)
 	{
@@ -1354,17 +1417,12 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 		return;
 	}
 
-	// copy into thread-local scratch and sort to avoid negative deltas
-	// TODO: guarantee sorted input from in the query to avoid sorting here?
-	scratch.assign(js, js + count);
-	std::sort(scratch.begin(), scratch.end());
-
 	// determine size of encoded data
 	const uint32_t ctrlBytes = ControlBytesFor(count);
 	uint64_t dataBytes = 0;
 	for (uint32_t k = 1; k < count; k++)
 	{
-		const uint32_t gap = scratch[k] - scratch[k - 1];
+		const uint32_t gap = js[k] - js[k - 1];
 
 		// gap must be >= 1 for delta = gap - 1 to be non-negative
 	#if defined(_DEBUG)
@@ -1385,7 +1443,7 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 	}
 
 	// encode first element (uncompressed)
-	WriteU32LE(dst, scratch[0]);
+	WriteU32LE(dst, js[0]);
 
 	// control bytes after first element
 	uint8_t* ctrl = dst + 4;
@@ -1399,7 +1457,7 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 	{
 		const uint32_t k = idx + 1;
 
-		const uint32_t gap = scratch[k] - scratch[k - 1];
+		const uint32_t gap = js[k] - js[k - 1];
 		const uint32_t delta = gap - 1u;
 
 		const uint8_t mask = DeltaMask(delta);

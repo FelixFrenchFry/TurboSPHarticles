@@ -452,7 +452,6 @@ void SimBackend_CPU01::FillMemoryRecord(
 
 		Add(usage, MemUsageOf_Vector(workBufferF_));
 		Add(usage, MemUsageOf_Vector(workBufferB_));
-		Add(usage, MemUsageOf_Vector(sortKeyBuffer_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
 
 		// finalize
@@ -803,6 +802,36 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 	const bool runCountQuery = neighborList_->RunCountQuery();
 	const bool runFillQuery = neighborList_->RunFillQuery();
 	const bool runSecondFillQuery = neighborList_->RunSecondFillQuery();
+	bool didDataReOrder = false;
+
+	// initial re-ordering of the data before the initial neighbor search
+	if (params.dataReOrderInterval > 0 && simStep_ % params.dataReOrderInterval == 0)
+	{
+		if (bench)
+		{
+			benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
+		}
+
+		neighborSearch_->DataReOrder(params);
+		affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+		didDataReOrder = true;
+
+		if (bench)
+		{
+			benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
+		}
+	}
+
+	NeighborListInputOrder inputOrder = NeighborListInputOrder::Unknown;
+	if (params.neighborSearchMethod == Base::NeighborSearchMethod::BruteForce)
+	{
+		inputOrder = NeighborListInputOrder::GuaranteedSorted;
+	}
+	else if (params.neighborSearchMethod == Base::NeighborSearchMethod::CellLinkedList_Compact
+		  && didDataReOrder)
+	{
+		inputOrder = NeighborListInputOrder::GuaranteedSorted;
+	}
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborSearch_->Construct(params);
@@ -821,6 +850,8 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 
 	if (runFillQuery)
 	{
+		neighborList_->SetInputOrder(inputOrder);
+
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearch_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
