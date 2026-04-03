@@ -1331,36 +1331,24 @@ uint64_t NeighborLists_SingleCSRVector_VByteCompress_CPU01::MeasureEncodedBytes(
 	}
 
 	const uint32_t ctrlBytes = ControlBytesFor(count);
-	uint64_t payloadBytes = 0ull;
-
-	uint32_t prev = js[0];
-	uint32_t remaining = count - 1u;
-	uint32_t k = 1u;
-	while (remaining > 0u)
+	uint64_t dataBytes = 0ull;
+	for (uint32_t k = 1; k < count; k++)
 	{
-		const uint32_t laneCount = std::min(remaining, 4u);
+		const uint32_t gap = js[k] - js[k - 1];
 
-		for (uint32_t lane = 0; lane < laneCount; lane++, k++)
-		{
-			const uint32_t gap = js[k] - prev;
-			prev = js[k];
-
-			// gap must be >= 1 for delta = gap - 1 to be non-negative
+		// gap must be >= 1 for delta = gap - 1 to be non-negative
 	#if defined(_DEBUG)
-			assert(gap >= 1u && "Neighbor list must be strictly increasing");
+		assert(gap >= 1u && "Neighbor list must be strictly increasing");
 	#endif
 
-			const uint32_t delta = gap - 1u;
-			const uint8_t mask = DeltaMask(delta);
+		const uint32_t delta = gap - 1u;
 
-			if (mask == 2u) { payloadBytes += 1ull; }
-			else if (mask == 3u) { payloadBytes += 4ull; }
-		}
-
-		remaining -= laneCount;
+		// map to size after encoding (0/1 => 0B, [2,256) => 1B, else 4B)
+		if (delta >= 2u && delta < 256u) { dataBytes += 1ull; }
+		else if (delta >= 256u) { dataBytes += 4ull; }
 	}
 
-	return 4ull + static_cast<uint64_t>(ctrlBytes) + payloadBytes;
+	return 4ull + static_cast<uint64_t>(ctrlBytes) + dataBytes;
 }
 
 inline uint32_t NeighborLists_SingleCSRVector_VByteCompress_CPU01::ReadU32LE(
@@ -1511,79 +1499,49 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 	}
 
 	const uint32_t ctrlBytes = ControlBytesFor(count);
+	#if defined(_DEBUG)
 	const uint64_t requiredBytes = MeasureEncodedBytes(js, count);
 	if (requiredBytes != dstBytes)
 	{
 		throw std::runtime_error(
 			"Measured and encoded VByte-compressed neighbor list sizes do not match.");
 	}
+	#endif
 
 	// encode first element (uncompressed)
 	WriteU32LE(dst, js[0]);
 
-	// control bytes after first element, then payload bytes
+	// control bytes after first element
 	uint8_t* ctrl = dst + 4;
+	std::memset(ctrl, 0, ctrlBytes);
+
+	// data bytes after control bytes
 	uint8_t* data = ctrl + ctrlBytes;
-	uint8_t* ctrlWrite = ctrl;
 
-	uint32_t prev = js[0];
-	uint32_t remaining = count - 1u;
-	uint32_t k = 1u;
-	while (remaining > 0u)
+	// encode (count - 1) deltas
+	for (uint32_t idx = 0; idx < count - 1; idx++)
 	{
-		const uint32_t laneCount = std::min(remaining, 4u);
-		uint32_t deltas[4] = {};
-		uint8_t masks[4] = {};
-		uint8_t ctrlByte = 0u;
+		const uint32_t k = idx + 1;
 
-		for (uint32_t lane = 0; lane < laneCount; lane++, k++)
+		const uint32_t gap = js[k] - js[k - 1];
+		const uint32_t delta = gap - 1u;
+
+		const uint8_t mask = DeltaMask(delta);
+		ctrl[idx >> 2] |= static_cast<uint8_t>(mask << ((idx & 3u) * 2u));
+
+		// mask 0/1 -> 0 data bytes
+		if (mask == 2u) // 1 data byte
 		{
-			const uint32_t delta = js[k] - prev - 1u;
-			prev = js[k];
-
-			const uint8_t mask = DeltaMask(delta);
-			deltas[lane] = delta;
-			masks[lane] = mask;
-			ctrlByte |= static_cast<uint8_t>(mask << (lane * 2u));
+			*data++ = static_cast<uint8_t>(delta);
 		}
-
-		*ctrlWrite++ = ctrlByte;
-
-		// common grouped patterns can write payload bytes without per-lane branching
-		if (laneCount == 4u && (ctrlByte == 0x00u || ctrlByte == 0x55u))
+		else if (mask == 3u) // 4 data bytes
 		{
-			remaining -= laneCount;
-			continue;
-		}
-		if (laneCount == 4u && ctrlByte == 0xAAu)
-		{
-			data[0] = static_cast<uint8_t>(deltas[0]);
-			data[1] = static_cast<uint8_t>(deltas[1]);
-			data[2] = static_cast<uint8_t>(deltas[2]);
-			data[3] = static_cast<uint8_t>(deltas[3]);
+			WriteU32LE(data, delta);
 			data += 4;
-			remaining -= laneCount;
-			continue;
 		}
-
-		for (uint32_t lane = 0; lane < laneCount; lane++)
-		{
-			if (masks[lane] == 2u)
-			{
-				*data++ = static_cast<uint8_t>(deltas[lane]);
-			}
-			else if (masks[lane] == 3u)
-			{
-				WriteU32LE(data, deltas[lane]);
-				data += 4;
-			}
-		}
-
-		remaining -= laneCount;
 	}
 
 	#if defined(_DEBUG)
-	assert(ctrlWrite == ctrl + ctrlBytes && "Encoded control byte count mismatch");
 	assert(data == dst + dstBytes && "Encoded byte count mismatch");
 	#endif
 }

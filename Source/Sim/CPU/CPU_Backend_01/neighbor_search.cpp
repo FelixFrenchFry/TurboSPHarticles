@@ -39,11 +39,11 @@ using namespace Sim;
 namespace
 {
 	// TODO: rework this?
-	template<typename TIdx>
+	template<typename TIdx, typename TData>
 	void ApplyPermutation(
 		const std::vector<TIdx>& sortedKeys,
-		std::vector<float>& data,
-		std::vector<float>& scratch,
+		std::vector<TData>& data,
+		std::vector<TData>& scratch,
 		bool preserveDataCapacity = false)
 	{
 		// (capped at uint32_t to correspond to max particle count)
@@ -391,6 +391,7 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	N_DimY_ = 0;
 	N_DimZ_ = 0;
 	cellFrameValid_ = false;
+	cellIdsMatchCurrentParticleOrder_ = false;
 
 	uniqueCellIdF_.clear();
 	cellStartIdxF_.clear();
@@ -418,6 +419,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		N_DimY_ = 0;
 		N_DimZ_ = 0;
 		cellFrameValid_ = false;
+		cellIdsMatchCurrentParticleOrder_ = false;
 
 		uniqueCellIdF_.clear();
 		cellStartIdxF_.clear();
@@ -453,52 +455,59 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	// --- [ cell coordinates and indices for fluid and boundary particles ] --------------------------
 
+	// if DataReOrder() already computed and permuted the per-particle cell IDs for
+	// this step, then they can be reused directly here and no re-computation is needed
+	const bool canReuseCellIds =
+		cellIdsMatchCurrentParticleOrder_
+		&& cellIdF_.size() == N_F
+		&& cellIdB_.size() == N_B;
+
 	// fluid
-	cellIdF_.resize(N_F);
-
-	if (N_F > 0)
+	if (!canReuseCellIds)
 	{
-		// particle arrays are already re-ordered by cell IDs in this step,
-		// so identity permutation can be used for direct access into them
-		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+		cellIdF_.resize(N_F);
+		cellIdB_.resize(N_B);
+
+		if (N_F > 0)
+		{
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
+				[&](const tbb::blocked_range<uint32_t>& r)
 				{
-					// compute cell coordinates
-					const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						// compute cell coordinates
+						const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+						const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+						const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
-					cellIdF_[i] = MapToCellId(cx, cy, cz);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-	}
+						cellIdF_[i] = MapToCellId(cx, cy, cz);
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+		}
 
-	// boundary
-	cellIdB_.resize(N_B);
-
-	if (N_B > 0)
-	{
-		// particle arrays are already re-ordered by cell IDs in this step,
-		// so identity permutation can be used for direct access into them
-		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+		if (N_B > 0)
+		{
+			tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
+				[&](const tbb::blocked_range<uint32_t>& r)
 				{
-					// compute cell coordinates
-					const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
+					for (uint32_t i = r.begin(); i != r.end(); i++)
+					{
+						// compute cell coordinates
+						const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
+						const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
+						const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
-					cellIdB_[i] = MapToCellId(cx, cy, cz);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
+						cellIdB_[i] = MapToCellId(cx, cy, cz);
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+		}
+
+		// cell IDs now correspond to the current particle order again
+		cellIdsMatchCurrentParticleOrder_ = true;
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
@@ -1267,7 +1276,13 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
-	if (N_F == 0 && N_B == 0) { return; }
+	if (N_F == 0 && N_B == 0)
+	{
+		cellIdsMatchCurrentParticleOrder_ = false;
+		return;
+	}
+
+	cellIdsMatchCurrentParticleOrder_ = false;
 
 	const float cellSize = params.kernelRadius * params.gridCellSizeRatio;
 	const float querySpanCells = Base::ApproxEqu(cellSize, 0.0f)
@@ -1316,6 +1331,10 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 				return a < b; // deterministic tie-break within the same cell
 			});
 
+		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
+		// so Construct() can reuse them instead of re-computing them right away
+		std::vector<uint64_t> cellIdScratchF;
+		ApplyPermutation(particleOrderF_, cellIdF_, cellIdScratchF);
 		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.zPosF_, be_.workBufferF_);
@@ -1362,10 +1381,16 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 				return a < b; // deterministic tie-break within the same cell
 			});
 
+		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
+		// so Construct() can reuse them instead of re-computing them right away
+		std::vector<uint64_t> cellIdScratchB;
+		ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB);
 		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
 	}
+
+	cellIdsMatchCurrentParticleOrder_ = true;
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemUsage(

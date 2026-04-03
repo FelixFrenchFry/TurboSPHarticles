@@ -108,6 +108,7 @@ namespace Sim
 		uint32_t N_DimY_ = 0;
 		uint32_t N_DimZ_ = 0;
 		bool cellFrameValid_ = false;
+		bool cellIdsMatchCurrentParticleOrder_ = false;
 
 		// query scratch
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
