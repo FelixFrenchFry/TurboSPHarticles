@@ -191,6 +191,8 @@ namespace Sim
 		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / offsetBlockParticleCount_ + 1
 		std::vector<uint8_t> nbrListCompressedFF_; // size: N_F * avg FF neighbor count * avg bytes per neighbor
 		std::vector<uint8_t> nbrListCompressedFB_; // size: N_F * avg FB neighbor count * avg bytes per neighbor
+		std::vector<uint8_t> nbrWidthCodeFF_; // width code from measure phase, reused in encode
+		std::vector<uint8_t> nbrWidthCodeFB_; // width code from measure phase, reused in encode
 
 		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
@@ -229,7 +231,8 @@ namespace Sim
 			std::vector<uint8_t>& nbrList) const;
 		static uint8_t ChooseWidthCode(uint32_t maxGap) noexcept;
 		static uint32_t GetNumWidthBytes(uint8_t widthCode) noexcept;
-		static uint64_t MeasureEncodedBytes(const uint32_t* js, uint32_t count);
+		static uint64_t MeasureEncodedBytes(
+			const uint32_t* js, uint32_t count, uint8_t& widthCode);
 		static inline uint16_t ReadU16LE(const uint8_t* src) noexcept;
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
 		static inline void WriteU16LE(uint8_t* dst, uint16_t v) noexcept;
@@ -238,7 +241,7 @@ namespace Sim
 		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
 			uint32_t count, T_Out& out);
 		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
-			const uint32_t* js, uint32_t count);
+			const uint32_t* js, uint32_t count, uint8_t widthCode);
 	};
 
 	// ---------------------------------------------------------------------------------------------

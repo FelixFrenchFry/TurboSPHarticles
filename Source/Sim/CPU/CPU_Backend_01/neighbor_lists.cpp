@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -21,6 +22,40 @@ using namespace Sim;
 
 namespace
 {
+	struct VByteControlInfo
+	{
+		uint8_t payloadBytes = 0;
+		std::array<uint8_t, 4> masks{};
+	};
+
+	inline std::array<VByteControlInfo, 256> BuildVByteControlLut() noexcept
+	{
+		std::array<VByteControlInfo, 256> lut{};
+
+		for (uint32_t c = 0; c < 256u; c++)
+		{
+			VByteControlInfo info{};
+			for (uint32_t lane = 0; lane < 4u; lane++)
+			{
+				const uint8_t mask = static_cast<uint8_t>((c >> (lane * 2u)) & 0x3u);
+				info.masks[lane] = mask;
+
+				if (mask == 2u) { info.payloadBytes += 1u; }
+				else if (mask == 3u) { info.payloadBytes += 4u; }
+			}
+
+			lut[c] = info;
+		}
+
+		return lut;
+	}
+
+	inline const std::array<VByteControlInfo, 256>& VByteControlLut() noexcept
+	{
+		static const std::array<VByteControlInfo, 256> lut = BuildVByteControlLut();
+		return lut;
+	}
+
 	uint64_t ExpectedPackedCSRCapacity(
 		const uint32_t N_F,
 		const uint32_t expctdAvgNbrCountHardMax)
@@ -118,6 +153,17 @@ namespace
 
 		AssertStrictlyIncreasing(scratch.data(), static_cast<uint32_t>(scratch.size()));
 		return scratch.data();
+	}
+
+	template<typename T_Out>
+	inline void EnsureDecodeScratchSize(
+		T_Out& out,
+		const uint32_t count)
+	{
+		if (out.size() < count)
+		{
+			out.resize(count);
+		}
 	}
 
 } // anonymous
@@ -436,6 +482,8 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::Resize(
 	nbrBlockBasesFB_.assign(static_cast<uint64_t>(numBlocks) + 1ull, 0);
 	nbrListCompressedFF_.clear();
 	nbrListCompressedFB_.clear();
+	nbrWidthCodeFF_.assign(N_F_, 0u);
+	nbrWidthCodeFB_.assign(N_F_, 0u);
 	fillPhase_ = FillPhase::Measure;
 
 	// reserve packed CSR storage up front based on the expected bytes per compressed list
@@ -465,6 +513,8 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::Finalize_Count()
 	nbrBlockBasesFB_.assign(static_cast<uint64_t>(numBlocks) + 1ull, 0);
 	nbrListCompressedFF_.clear();
 	nbrListCompressedFB_.clear();
+	nbrWidthCodeFF_.assign(N_F_, 0u);
+	nbrWidthCodeFB_.assign(N_F_, 0u);
 	fillPhase_ = FillPhase::Measure;
 }
 
@@ -507,11 +557,13 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFF(
 	if (fillPhase_ == FillPhase::Measure)
 	{
 		nbrCountFF_[i] = count;
-		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count);
+		uint8_t widthCode = 0u;
+		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count, widthCode);
 	#if defined(_DEBUG)
 		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
 			&& "Per-particle adapt-compressed neighbor list exceeds uint32_t byte count");
 	#endif
+		nbrWidthCodeFF_[i] = widthCode;
 		nbrLocalOffsetsFF_[i] = static_cast<uint32_t>(encodedBytes);
 		return;
 	}
@@ -530,7 +582,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFF(
 					 ? nullptr
 					 : nbrListCompressedFF_.data() + start;
 
-		EncodeNeighborList(dst, end - start, jsSorted, count);
+		EncodeNeighborList(dst, end - start, jsSorted, count, nbrWidthCodeFF_[i]);
 		return;
 	}
 
@@ -547,11 +599,13 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFB(
 	if (fillPhase_ == FillPhase::Measure)
 	{
 		nbrCountFB_[i] = count;
-		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count);
+		uint8_t widthCode = 0u;
+		const uint64_t encodedBytes = MeasureEncodedBytes(jsSorted, count, widthCode);
 	#if defined(_DEBUG)
 		assert(encodedBytes <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())
 			&& "Per-particle adapt-compressed neighbor list exceeds uint32_t byte count");
 	#endif
+		nbrWidthCodeFB_[i] = widthCode;
 		nbrLocalOffsetsFB_[i] = static_cast<uint32_t>(encodedBytes);
 		return;
 	}
@@ -570,7 +624,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFB(
 					 ? nullptr
 					 : nbrListCompressedFB_.data() + start;
 
-		EncodeNeighborList(dst, end - start, jsSorted, count);
+		EncodeNeighborList(dst, end - start, jsSorted, count, nbrWidthCodeFB_[i]);
 		return;
 	}
 
@@ -636,12 +690,14 @@ NeighborLists_SingleCSRVector_AdaptCompress_CPU01::GetMemUsage(
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrLocalOffsetsFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrBlockBasesFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListCompressedFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrWidthCodeFF_));
 
 	// FB
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrLocalOffsetsFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrBlockBasesFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListCompressedFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrWidthCodeFB_));
 
 	return { usageFF, usageFB };
 }
@@ -765,10 +821,11 @@ uint32_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::GetNumWidthBytes(
 }
 
 uint64_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::MeasureEncodedBytes(
-	const uint32_t* js, const uint32_t count)
+	const uint32_t* js, const uint32_t count, uint8_t& widthCode)
 {
 	if (count == 0)
 	{
+		widthCode = 0u;
 		return 0;
 	}
 
@@ -778,7 +835,8 @@ uint64_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::MeasureEncodedBytes(
 		maxGap = std::max(maxGap, js[k] - js[k - 1]);
 	}
 
-	return 1ull + 4ull + static_cast<uint64_t>(count - 1u) * GetNumWidthBytes(ChooseWidthCode(maxGap));
+	widthCode = ChooseWidthCode(maxGap);
+	return 1ull + 4ull + static_cast<uint64_t>(count - 1u) * GetNumWidthBytes(widthCode);
 }
 
 inline uint16_t NeighborLists_SingleCSRVector_AdaptCompress_CPU01::ReadU16LE(
@@ -832,7 +890,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::DecodeNeighborList(
 	assert(srcBytes == expectedBytes && "Compressed list size mismatch");
 	#endif
 
-	out.resize(count);
+	EnsureDecodeScratchSize(out, count);
 	uint32_t v = ReadU32LE(src + 1);
 	out[0] = v;
 
@@ -871,7 +929,7 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::DecodeNeighborList(
 
 void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
 	uint8_t* dst, const uint64_t dstBytes, const uint32_t* js,
-	const uint32_t count)
+	const uint32_t count, const uint8_t widthCode)
 {
 	if (count == 0)
 	{
@@ -881,13 +939,6 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::EncodeNeighborList(
 		return;
 	}
 
-	uint32_t maxGap = 0u;
-	for (uint32_t k = 1; k < count; k++)
-	{
-		maxGap = std::max(maxGap, js[k] - js[k - 1]);
-	}
-
-	const uint8_t widthCode = ChooseWidthCode(maxGap);
 	const uint32_t widthBytes = GetNumWidthBytes(widthCode);
 	const uint64_t requiredBytes =
 		1ull + 4ull + static_cast<uint64_t>(count - 1u) * widthBytes;
@@ -1279,26 +1330,37 @@ uint64_t NeighborLists_SingleCSRVector_VByteCompress_CPU01::MeasureEncodedBytes(
 		return 0;
 	}
 
-	// determine size of encoded data
 	const uint32_t ctrlBytes = ControlBytesFor(count);
-	uint64_t dataBytes = 0;
-	for (uint32_t k = 1; k < count; k++)
-	{
-		const uint32_t gap = js[k] - js[k - 1];
+	uint64_t payloadBytes = 0ull;
 
-		// gap must be >= 1 for delta = gap - 1 to be non-negative
+	uint32_t prev = js[0];
+	uint32_t remaining = count - 1u;
+	uint32_t k = 1u;
+	while (remaining > 0u)
+	{
+		const uint32_t laneCount = std::min(remaining, 4u);
+
+		for (uint32_t lane = 0; lane < laneCount; lane++, k++)
+		{
+			const uint32_t gap = js[k] - prev;
+			prev = js[k];
+
+			// gap must be >= 1 for delta = gap - 1 to be non-negative
 	#if defined(_DEBUG)
-		assert(gap >= 1u && "Neighbor list must be strictly increasing");
+			assert(gap >= 1u && "Neighbor list must be strictly increasing");
 	#endif
 
-		const uint32_t delta = gap - 1u;
+			const uint32_t delta = gap - 1u;
+			const uint8_t mask = DeltaMask(delta);
 
-		// map to size after encoding (0/1 => 0B, [2,256) => 1B, else 4B)
-		if (delta >= 2u && delta < 256u) { dataBytes += 1ull; }
-		else if (delta >= 256u) { dataBytes += 4ull; }
+			if (mask == 2u) { payloadBytes += 1ull; }
+			else if (mask == 3u) { payloadBytes += 4ull; }
+		}
+
+		remaining -= laneCount;
 	}
 
-	return 4ull + static_cast<uint64_t>(ctrlBytes) + dataBytes;
+	return 4ull + static_cast<uint64_t>(ctrlBytes) + payloadBytes;
 }
 
 inline uint32_t NeighborLists_SingleCSRVector_VByteCompress_CPU01::ReadU32LE(
@@ -1319,7 +1381,6 @@ inline void NeighborLists_SingleCSRVector_VByteCompress_CPU01::WriteU32LE(
 	dst[3] = static_cast<uint8_t>(v >> 24);
 }
 
-// TODO: implement with SIMD optimizations?
 template<typename T_Out>
 void NeighborLists_SingleCSRVector_VByteCompress_CPU01::DecodeNeighborList(
 	const uint8_t* src, const uint64_t srcBytes, const uint32_t count,
@@ -1342,15 +1403,15 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::DecodeNeighborList(
 
 		uint64_t expectedDataBytes = 0;
 		const uint8_t* ctrlDbg = src + 4;
+		const auto& ctrlLutDbg = VByteControlLut();
 
 		for (uint32_t idx = 0; idx < count - 1; idx++)
 		{
 			const uint8_t c = ctrlDbg[idx >> 2];
-			const uint8_t mask = static_cast<uint8_t>((c >> ((idx & 3u) * 2u)) & 0x3u);
-
-			if (mask == 2u) { expectedDataBytes += 1ull; }
-			else if (mask == 3u) { expectedDataBytes += 4ull; }
-			// mask 0/1 => 0 bytes
+			expectedDataBytes += static_cast<uint64_t>(
+				ctrlLutDbg[c].masks[idx & 3u] == 2u ? 1u
+				: ctrlLutDbg[c].masks[idx & 3u] == 3u ? 4u
+				: 0u);
 		}
 
 		const uint64_t expectedBytes = 4ull + static_cast<uint64_t>(ctrlBytes) + expectedDataBytes;
@@ -1358,7 +1419,7 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::DecodeNeighborList(
 	}
 	#endif
 
-	out.resize(count);
+	EnsureDecodeScratchSize(out, count);
 
 	// decode first element (uncompressed)
 	uint32_t v = ReadU32LE(src);
@@ -1369,34 +1430,66 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::DecodeNeighborList(
 	const uint32_t ctrlBytes = ControlBytesFor(count);
 	const uint8_t* ctrl = src + 4;
 	const uint8_t* data = ctrl + ctrlBytes;
+	const auto& ctrlLut = VByteControlLut();
 
-	// decode (count - 1) deltas, then undo (gap = delta + 1, prefix sum)
-	for (uint32_t idx = 0; idx < count - 1; idx++)
+	// decode in groups of 4 deltas (one control byte), then undo with a local prefix sum
+	uint32_t outIdx = 1u;
+	uint32_t remaining = count - 1u;
+	while (remaining > 0u)
 	{
-		const uint8_t c = ctrl[idx >> 2];
-		const uint8_t mask = static_cast<uint8_t>((c >> ((idx & 3u) * 2u)) & 0x3u);
+		const uint8_t c = *ctrl++;
+		const auto& info = ctrlLut[c];
+		const uint32_t laneCount = std::min(remaining, 4u);
+		const uint8_t* groupData = data;
+		data += info.payloadBytes;
 
-		uint32_t delta = 0;
-		if (mask == 0u)
+		// shortcuts for common cases to avoid always decoding LUT info
+		if (laneCount == 4u && c == 0x00u) // all 4 deltas are 0 -> control bits only
 		{
-			delta = 0u;
+			v += 1u; out[outIdx + 0u] = v;
+			v += 1u; out[outIdx + 1u] = v;
+			v += 1u; out[outIdx + 2u] = v;
+			v += 1u; out[outIdx + 3u] = v;
 		}
-		else if (mask == 1u)
+		else if (laneCount == 4u && c == 0x55u) // all 4 deltas are 1 -> control bits only
 		{
-			delta = 1u;
+			v += 2u; out[outIdx + 0u] = v;
+			v += 2u; out[outIdx + 1u] = v;
+			v += 2u; out[outIdx + 2u] = v;
+			v += 2u; out[outIdx + 3u] = v;
 		}
-		else if (mask == 2u)
+		else if (laneCount == 4u && c == 0xAAu) // all 4 deltas are [2,256) -> 1 data byte each
 		{
-			delta = static_cast<uint32_t>(*data++);
+			v += static_cast<uint32_t>(groupData[0]) + 1u; out[outIdx + 0u] = v;
+			v += static_cast<uint32_t>(groupData[1]) + 1u; out[outIdx + 1u] = v;
+			v += static_cast<uint32_t>(groupData[2]) + 1u; out[outIdx + 2u] = v;
+			v += static_cast<uint32_t>(groupData[3]) + 1u; out[outIdx + 3u] = v;
 		}
-		else // mask == 3
+		else // general case with LUT info decoding and variable data byte counts
 		{
-			delta = ReadU32LE(data);
-			data += 4;
+			const uint8_t* p = groupData;
+
+			for (uint32_t lane = 0; lane < laneCount; lane++)
+			{
+				uint32_t delta = 0u;
+				switch (info.masks[lane])
+				{
+					case 0u: delta = 0u; break;
+					case 1u: delta = 1u; break;
+					case 2u: delta = static_cast<uint32_t>(*p++); break;
+					default:
+						delta = ReadU32LE(p);
+						p += 4;
+						break;
+				}
+
+				v += (delta + 1u);
+				out[outIdx + lane] = v;
+			}
 		}
 
-		v += (delta + 1u);
-		out[idx + 1] = v;
+		outIdx += laneCount;
+		remaining -= laneCount;
 	}
 
 	#if defined(_DEBUG)
@@ -1417,25 +1510,8 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 		return;
 	}
 
-	// determine size of encoded data
 	const uint32_t ctrlBytes = ControlBytesFor(count);
-	uint64_t dataBytes = 0;
-	for (uint32_t k = 1; k < count; k++)
-	{
-		const uint32_t gap = js[k] - js[k - 1];
-
-		// gap must be >= 1 for delta = gap - 1 to be non-negative
-	#if defined(_DEBUG)
-		assert(gap >= 1u && "Neighbor list must be strictly increasing");
-	#endif
-
-		const uint32_t delta = gap - 1u;
-
-		// map to size after encoding (0/1 => 0B, [2,256) => 1B, else 4B)
-		if (delta >= 2u && delta < 256u) { dataBytes += 1ull; }
-		else if (delta >= 256u) { dataBytes += 4ull; }
-	}
-	const uint64_t requiredBytes = 4ull + static_cast<uint64_t>(ctrlBytes) + dataBytes;
+	const uint64_t requiredBytes = MeasureEncodedBytes(js, count);
 	if (requiredBytes != dstBytes)
 	{
 		throw std::runtime_error(
@@ -1445,37 +1521,69 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 	// encode first element (uncompressed)
 	WriteU32LE(dst, js[0]);
 
-	// control bytes after first element
+	// control bytes after first element, then payload bytes
 	uint8_t* ctrl = dst + 4;
-	std::memset(ctrl, 0, ctrlBytes);
-
-	// data bytes after control bytes
 	uint8_t* data = ctrl + ctrlBytes;
+	uint8_t* ctrlWrite = ctrl;
 
-	// encode (count - 1) deltas
-	for (uint32_t idx = 0; idx < count - 1; idx++)
+	uint32_t prev = js[0];
+	uint32_t remaining = count - 1u;
+	uint32_t k = 1u;
+	while (remaining > 0u)
 	{
-		const uint32_t k = idx + 1;
+		const uint32_t laneCount = std::min(remaining, 4u);
+		uint32_t deltas[4] = {};
+		uint8_t masks[4] = {};
+		uint8_t ctrlByte = 0u;
 
-		const uint32_t gap = js[k] - js[k - 1];
-		const uint32_t delta = gap - 1u;
-
-		const uint8_t mask = DeltaMask(delta);
-		ctrl[idx >> 2] |= static_cast<uint8_t>(mask << ((idx & 3u) * 2u));
-
-		// mask 0/1 -> 0 data bytes
-		if (mask == 2u) // 1 data byte
+		for (uint32_t lane = 0; lane < laneCount; lane++, k++)
 		{
-			*data++ = static_cast<uint8_t>(delta);
+			const uint32_t delta = js[k] - prev - 1u;
+			prev = js[k];
+
+			const uint8_t mask = DeltaMask(delta);
+			deltas[lane] = delta;
+			masks[lane] = mask;
+			ctrlByte |= static_cast<uint8_t>(mask << (lane * 2u));
 		}
-		else if (mask == 3u) // 4 data bytes
+
+		*ctrlWrite++ = ctrlByte;
+
+		// common grouped patterns can write payload bytes without per-lane branching
+		if (laneCount == 4u && (ctrlByte == 0x00u || ctrlByte == 0x55u))
 		{
-			WriteU32LE(data, delta);
+			remaining -= laneCount;
+			continue;
+		}
+		if (laneCount == 4u && ctrlByte == 0xAAu)
+		{
+			data[0] = static_cast<uint8_t>(deltas[0]);
+			data[1] = static_cast<uint8_t>(deltas[1]);
+			data[2] = static_cast<uint8_t>(deltas[2]);
+			data[3] = static_cast<uint8_t>(deltas[3]);
 			data += 4;
+			remaining -= laneCount;
+			continue;
 		}
+
+		for (uint32_t lane = 0; lane < laneCount; lane++)
+		{
+			if (masks[lane] == 2u)
+			{
+				*data++ = static_cast<uint8_t>(deltas[lane]);
+			}
+			else if (masks[lane] == 3u)
+			{
+				WriteU32LE(data, deltas[lane]);
+				data += 4;
+			}
+		}
+
+		remaining -= laneCount;
 	}
 
 	#if defined(_DEBUG)
+	assert(ctrlWrite == ctrl + ctrlBytes && "Encoded control byte count mismatch");
 	assert(data == dst + dstBytes && "Encoded byte count mismatch");
 	#endif
 }
