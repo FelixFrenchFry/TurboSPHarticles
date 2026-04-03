@@ -769,6 +769,16 @@ void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench
 
 	if (bench)
 	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
+	}
+	neighborSearch_->DataReOrder(params);
+	if (bench)
+	{
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
+	}
+
+	if (bench)
+	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	}
 	neighborSearch_->Construct(params);
@@ -804,17 +814,17 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 	{
 		GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
 
-		// --- [ neighbor search ] ----------------------------------------------------------------------
-
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-		neighborSearch_->Construct(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
-
 		// --- [ particle data re-ordering ] -----------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
 		neighborSearch_->DataReOrder(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
+
+		// --- [ neighbor search ] ----------------------------------------------------------------------
+
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+		neighborSearch_->Construct(params);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearch_->Query_Count(params);

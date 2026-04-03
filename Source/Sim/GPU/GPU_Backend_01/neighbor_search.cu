@@ -395,13 +395,57 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 {
-	(void)params;
-
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
 	const uint32_t N_MAX = std::max(N_F, N_B);
 
 	if (N_MAX == 0) { return; }
+
+	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
+	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
+				 ? 0.0f : (1.0f / cellSize_);
+	const float querySpanCells = Base::ApproxEqu(cellSize_, 0.0f)
+		? 0.0f : (params.kernelRadius / cellSize_);
+	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
+		? 1u : std::max<uint32_t>(1u,
+			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
+
+	EnsureStorageAllocation();
+
+	GPU01::NS_ReloadConstants(
+		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_,
+		0.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
+
+	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
+	if (N_F > 0)
+	{
+		GPU01::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+			N_F, be_.stream_, d_cellIdF_.Data(), d_sortedParticleIdxF_.Data());
+
+		thrust::device_ptr<uint64_t> keysF(d_cellIdF_.Data());
+		thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
+
+		// using radix sort from thrust
+		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
+			keysF, keysF + N_F, valsF);
+	}
+
+	// build the exact compact-CLL cell IDs and particle permutation for boundary particles
+	if (N_B > 0)
+	{
+		GPU01::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
+
+		thrust::device_ptr<uint64_t> keysB(d_cellIdB_.Data());
+		thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB_.Data());
+
+		// using radix sort from thrust
+		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
+			keysB, keysB + N_B, valsB);
+	}
 
 	// shared scratch buffers for permutation gather
 	if (be_.d_workBuffer_.Size() < N_MAX) { be_.d_workBuffer_.Resize(N_MAX); }
