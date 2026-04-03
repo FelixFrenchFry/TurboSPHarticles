@@ -381,11 +381,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	// --- [ data structuring ] ----------------------------------------------------------------------
 
-	if (auto it = j.find("dataReOrderInterval"); it != j.end())
-	{
-		Set_DataReOrderInterval(it->get<uint32_t>(), verbose);
-	}
-
 	if (auto it = j.find("gridCellSizeRatio"); it != j.end())
 	{
 		BeginWrite();
@@ -1180,26 +1175,6 @@ void SimParamsMgr::Set_MaxSolverIters(
 	// apply changes
 	BeginWrite();
 	params_.maxSolverIters = maxSolverIters;
-	EndWrite();
-}
-
-void SimParamsMgr::Set_DataReOrderInterval(
-	uint32_t dataReOrderInterval, bool verbose)
-{
-	// detect if parameter would actually change
-	bool changed = false;
-	Base::MarkIfChanged(dataReOrderInterval, params_.dataReOrderInterval, changed);
-	if (!changed) { return; } // nothing to change
-
-	if (verbose)
-	{
-		SPDLOG_INFO("Changed 'dataReOrderInterval' from {} to {}",
-			params_.dataReOrderInterval, dataReOrderInterval);
-	}
-
-	// apply changes
-	BeginWrite();
-	params_.dataReOrderInterval = dataReOrderInterval;
 	EndWrite();
 }
 

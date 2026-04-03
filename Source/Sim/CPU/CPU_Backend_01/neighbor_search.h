@@ -117,14 +117,14 @@ namespace Sim
 
 		// data structures
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
-		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the sorted particle index array
+		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the re-ordered particle arrays
 		std::vector<uint64_t> cellIdF_; // per-particle cell ID array
-		std::vector<uint32_t> sortedParticleIdxF_; // sorted fluid particle index array (permutation)
+		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
 
 		std::vector<uint64_t> uniqueCellIdB_;
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint64_t> cellIdB_;
-		std::vector<uint32_t> sortedParticleIdxB_;
+		std::vector<uint32_t> particleOrderB_;
 
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();

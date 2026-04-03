@@ -88,7 +88,6 @@ namespace Sim
         printf("%-24s = %u\n", "maxSolverIters", params.maxSolverIters);
         printf("%-24s = %s\n", "solverTerminationCond",
             Base::ToCString(params.solverTerminationCond));
-        printf("%-24s = %u\n", "dataReOrderInterval", params.dataReOrderInterval);
         printf("%-24s = %.6f\n", "gridCellSizeRatio", params.gridCellSizeRatio);
         printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
         printf("%-24s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);

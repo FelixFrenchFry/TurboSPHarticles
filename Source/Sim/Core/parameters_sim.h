@@ -83,7 +83,6 @@ namespace Sim
 			Base::SolverTerminationCond::FixedIters;
 
 		// data structuring
-		uint32_t dataReOrderInterval = 50;
 		float gridCellSizeRatio = 1.0f;
 
 		// fluid conditions
@@ -154,7 +153,6 @@ namespace Sim
 		void Set_DensityDevTarget(float densityDevTarget, bool verbose = false);
 		void Set_MinSolverIters(uint32_t minSolverIters, bool verbose = false);
 		void Set_MaxSolverIters(uint32_t maxSolverIters, bool verbose = false);
-		void Set_DataReOrderInterval(uint32_t dataReOrderInterval, bool verbose = false);
 		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
 
 		// helpers

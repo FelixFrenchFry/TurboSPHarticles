@@ -22,7 +22,6 @@
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
 
-  "dataReOrderInterval": 1,
   "gridCellSizeRatio": 1.0,
   "jitterFracF": 0.0,
   "jitterSeedF": 67,

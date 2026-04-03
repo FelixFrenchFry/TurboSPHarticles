@@ -812,14 +812,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 		// --- [ particle data re-ordering ] -----------------------------------------------------------
 
-		const int64_t simStep = simStep_ + step;
-		if (params.dataReOrderInterval > 0 &&
-			simStep % static_cast<int64_t>(params.dataReOrderInterval) == 0)
-		{
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
-			neighborSearch_->DataReOrder(params);
-			benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
-		}
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
+		neighborSearch_->DataReOrder(params);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearch_->Query_Count(params);

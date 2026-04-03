@@ -44,18 +44,13 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float restDensitySquInvF = 1.0f / (params.restDensityF * params.restDensityF);
 	const float massF = params.massF;
 	const float massB = params.massB;
-	bool didDataReOrder = false;
 
 	// --- [ particle data re-ordering ] -------------------------------------------------------------
 
-	if (params.dataReOrderInterval > 0 && simStep_ % params.dataReOrderInterval == 0)
-	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
-		neighborSearch_->DataReOrder(params);
-		affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
-		didDataReOrder = true;
-	}
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
+	neighborSearch_->DataReOrder(params);
+	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
 
 	// restricted pointers for all the SoA particle properties
 	float* RESTRICT xPosF = xPosF_.data();
@@ -86,8 +81,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	{
 		inputOrder = NeighborListInputOrder::GuaranteedSorted;
 	}
-	else if (params.neighborSearchMethod == Base::NeighborSearchMethod::CellLinkedList_Compact
-		  && didDataReOrder)
+	else if (params.neighborSearchMethod == Base::NeighborSearchMethod::CellLinkedList_Compact)
 	{
 		inputOrder = NeighborListInputOrder::GuaranteedSorted;
 	}

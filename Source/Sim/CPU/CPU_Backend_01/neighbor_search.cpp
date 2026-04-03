@@ -395,12 +395,12 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	uniqueCellIdF_.clear();
 	cellStartIdxF_.clear();
 	cellIdF_.clear();
-	sortedParticleIdxF_.clear();
+	particleOrderF_.clear();
 
 	uniqueCellIdB_.clear();
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
-	sortedParticleIdxB_.clear();
+	particleOrderB_.clear();
 }
 
 void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
@@ -422,12 +422,12 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		uniqueCellIdF_.clear();
 		cellStartIdxF_.clear();
 		cellIdF_.clear();
-		sortedParticleIdxF_.clear();
+		particleOrderF_.clear();
 
 		uniqueCellIdB_.clear();
 		cellStartIdxB_.clear();
 		cellIdB_.clear();
-		sortedParticleIdxB_.clear();
+		particleOrderB_.clear();
 
 		return;
 	}
@@ -455,11 +455,11 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	// fluid
 	cellIdF_.resize(N_F);
-	sortedParticleIdxF_.resize(N_F);
 
 	if (N_F > 0)
 	{
-		// TODO: should sortedParticleIdxF_ be initialized to identity in every step?
+		// particle arrays are already re-ordered by cell IDs in this step,
+		// so identity permutation can be used for direct access into them
 		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
@@ -471,7 +471,6 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
 					cellIdF_[i] = MapToCellId(cx, cy, cz);
-					sortedParticleIdxF_[i] = i; // initial identity permutation (unsorted)
 				}
 			},
 			tbb::auto_partitioner{}
@@ -480,11 +479,11 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	// boundary
 	cellIdB_.resize(N_B);
-	sortedParticleIdxB_.resize(N_B);
 
 	if (N_B > 0)
 	{
-		// TODO: should sortedParticleIdxB_ be initialized to identity in every step?
+		// particle arrays are already re-ordered by cell IDs in this step,
+		// so identity permutation can be used for direct access into them
 		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
@@ -496,36 +495,10 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
 					cellIdB_[i] = MapToCellId(cx, cy, cz);
-					sortedParticleIdxB_[i] = i; // initial identity permutation (unsorted)
 				}
 			},
 			tbb::auto_partitioner{}
 		);
-	}
-
-	// --- [ sort particle indices by cell IDs ] ------------------------------------------------------
-
-	if (N_F > 0)
-	{
-		// first sort by cell ID, secondly by particle index for deterministic order within the cells
-		tbb::parallel_sort(sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
-			[&](const uint32_t a, const uint32_t b)
-			{
-
-				if (cellIdF_[a] != cellIdF_[b]) { return cellIdF_[a] < cellIdF_[b]; }
-				return a < b;
-			});
-	}
-
-	if (N_B > 0)
-	{
-		// first sort by cell ID, secondly by particle index for deterministic order within the cells
-		tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
-			[&](const uint32_t a, const uint32_t b)
-			{
-				if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
-				return a < b;
-			});
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
@@ -546,8 +519,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		uint64_t cid_prev = EMPTY_64;
 		for (uint32_t i = 0; i < N_F; i++)
 		{
-			const uint32_t pidx = sortedParticleIdxF_[i];
-			const uint64_t cid = cellIdF_[pidx];
+			const uint64_t cid = cellIdF_[i];
 
 			if (cid != cid_prev) // new cell encountered
 			{
@@ -578,8 +550,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		uint64_t cid_prev = EMPTY_64;
 		for (uint32_t i = 0; i < N_B; i++)
 		{
-			const uint32_t pidx = sortedParticleIdxB_[i];
-			const uint64_t cid = cellIdB_[pidx];
+			const uint64_t cid = cellIdB_[i];
 
 			if (cid != cid_prev) // new cell encountered
 			{
@@ -699,7 +670,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 				if (sF >= eF) { continue; }
 
 				// determine a representative particle i0
-				const uint32_t i0 = sortedParticleIdxF_[sF];
+				const uint32_t i0 = sF;
 
 				const float xi0 = xPosF[i0];
 				const float yi0 = yPosF[i0];
@@ -852,7 +823,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					uint32_t cntFF = 0;
 					uint32_t cntFB = 0;
 
-					const uint32_t i = sortedParticleIdxF_[k];
+					const uint32_t i = k;
 
 					const float xi = xPosF[i];
 					const float yi = yPosF[i];
@@ -869,7 +840,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						#pragma omp simd
 						for (uint32_t l = sF_nbr; l < eF_nbr; l++)
 						{
-							const uint32_t j = sortedParticleIdxF_[l];
+							const uint32_t j = l;
 
 							// position difference
 							const float dx = xi - xPosF[j];
@@ -898,7 +869,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						#pragma omp simd
 						for (uint32_t l = sB_nbr; l < eB_nbr; l++)
 						{
-							const uint32_t j = sortedParticleIdxB_[l];
+							const uint32_t j = l;
 
 							// position difference
 							const float dx = xi - xPosB[j];
@@ -1051,7 +1022,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 				if (sF >= eF) { continue; }
 
 				// determine a representative particle i0
-				const uint32_t i0 = sortedParticleIdxF_[sF];
+				const uint32_t i0 = sF;
 
 				const float xi0 = xPosF[i0];
 				const float yi0 = yPosF[i0];
@@ -1205,7 +1176,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					scratchFF.clear();
 					scratchFB.clear();
 
-					const uint32_t i = sortedParticleIdxF_[k];
+					const uint32_t i = k;
 
 					const float xi = xPosF[i];
 					const float yi = yPosF[i];
@@ -1222,7 +1193,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						#pragma omp simd
 						for (uint32_t l = sF_nbr; l < eF_nbr; l++)
 						{
-							const uint32_t j = sortedParticleIdxF_[l];
+							const uint32_t j = l;
 							candCountFF_local++;
 
 							// position difference
@@ -1254,7 +1225,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						#pragma omp simd
 						for (uint32_t l = sB_nbr; l < eB_nbr; l++)
 						{
-							const uint32_t j = sortedParticleIdxB_[l];
+							const uint32_t j = l;
 							candCountFB_local++;
 
 							// position difference
@@ -1319,7 +1290,7 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 
 	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
 	cellIdF_.resize(N_F);
-	sortedParticleIdxF_.resize(N_F);
+	particleOrderF_.resize(N_F);
 	if (N_F > 0)
 	{
 		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_F),
@@ -1332,40 +1303,40 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
 					cellIdF_[i] = MapToCellId(cx, cy, cz);
-					sortedParticleIdxF_[i] = i;
+					particleOrderF_[i] = i;
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
-		tbb::parallel_sort(sortedParticleIdxF_.begin(), sortedParticleIdxF_.end(),
-			[&](uint32_t a, uint32_t b)
+		tbb::parallel_sort(particleOrderF_.begin(), particleOrderF_.end(),
+			[&](const uint32_t a, const uint32_t b)
 			{
 				if (cellIdF_[a] != cellIdF_[b]) { return cellIdF_[a] < cellIdF_[b]; }
 				return a < b; // deterministic tie-break within the same cell
 			});
 
-		ApplyPermutation(sortedParticleIdxF_, be_.xPosF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.yPosF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.zPosF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.xVelF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.yVelF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.zVelF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.xVelPredF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.yVelPredF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.zVelPredF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.xAccPressF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.yAccPressF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.zAccPressF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.sourceTermF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.diagElemF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.pressureF_, be_.workBufferF_);
-		ApplyPermutation(sortedParticleIdxF_, be_.densityF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.zPosF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.xVelF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.yVelF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.zVelF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.xVelPredF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.yVelPredF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.zVelPredF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.xAccPressF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.yAccPressF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.zAccPressF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.pressureF_, be_.workBufferF_);
+		ApplyPermutation(particleOrderF_, be_.densityF_, be_.workBufferF_);
 	}
 
 	// build the exact compact-CLL cell IDs and particle permutation for boundary particles
 	cellIdB_.resize(N_B);
-	sortedParticleIdxB_.resize(N_B);
+	particleOrderB_.resize(N_B);
 	if (N_B > 0)
 	{
 		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_B),
@@ -1378,22 +1349,22 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
 					cellIdB_[i] = MapToCellId(cx, cy, cz);
-					sortedParticleIdxB_[i] = i;
+					particleOrderB_[i] = i;
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
-		tbb::parallel_sort(sortedParticleIdxB_.begin(), sortedParticleIdxB_.end(),
-			[&](uint32_t a, uint32_t b)
+		tbb::parallel_sort(particleOrderB_.begin(), particleOrderB_.end(),
+			[&](const uint32_t a, const uint32_t b)
 			{
 				if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
 				return a < b; // deterministic tie-break within the same cell
 			});
 
-		ApplyPermutation(sortedParticleIdxB_, be_.xPosB_, be_.workBufferB_);
-		ApplyPermutation(sortedParticleIdxB_, be_.yPosB_, be_.workBufferB_);
-		ApplyPermutation(sortedParticleIdxB_, be_.zPosB_, be_.workBufferB_);
+		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
+		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
+		ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
 	}
 }
 
@@ -1406,12 +1377,12 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemU
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
-	Mem::Add(usageF, Mem::MemUsageOf_Vector(sortedParticleIdxF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
 
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
-	Mem::Add(usageB, Mem::MemUsageOf_Vector(sortedParticleIdxB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderB_));
 
 	return { usageF, usageB };
 }
