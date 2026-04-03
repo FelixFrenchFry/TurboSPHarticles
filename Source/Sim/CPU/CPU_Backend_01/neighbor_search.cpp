@@ -607,16 +607,15 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 			lookupCacheValF.fill(EMPTY_32);
 			lookupCacheValB.fill(EMPTY_32);
 
-			std::vector<uint32_t> sNbrF(N_NbrCells, 0);
-			std::vector<uint32_t> eNbrF(N_NbrCells, 0);
-
-			std::vector<uint32_t> sNbrB(N_NbrCells, 0);
-			std::vector<uint32_t> eNbrB(N_NbrCells, 0);
-
-			std::vector<uint64_t> nbrCellId(N_NbrCells, 0);
-			std::vector<uint32_t> cellOrder(N_NbrCells, 0);
-			std::vector<uint32_t> fluidCellOrder(N_NbrCells, 0);
-			std::vector<uint32_t> boundaryCellOrder(N_NbrCells, 0);
+			auto& queryMetaScratch = queryMetaScratch_.local();
+			auto& nbrCellId = queryMetaScratch.nbrCellId;
+			auto& cellOrder = queryMetaScratch.cellOrder;
+			auto& fluidRanges = queryMetaScratch.fluidRanges;
+			auto& boundaryRanges = queryMetaScratch.boundaryRanges;
+			nbrCellId.resize(N_NbrCells);
+			cellOrder.resize(N_NbrCells);
+			if (fluidRanges.capacity() < N_NbrCells) { fluidRanges.reserve(N_NbrCells); }
+			if (boundaryRanges.capacity() < N_NbrCells) { boundaryRanges.reserve(N_NbrCells); }
 
 			const auto findCellIdxTernary = [](const std::vector<uint64_t>& sortedCellIds,
 				uint64_t key,
@@ -750,8 +749,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						return nbrCellId[a] < nbrCellId[b];
 					});
 
-				uint32_t N_FluidCellsActive = 0;
-				uint32_t N_BoundaryCellsActive = 0;
+				fluidRanges.clear();
+				boundaryRanges.clear();
 
 				// check existence and location of all queried grid cells
 				for (uint32_t q = 0; q < N_NbrCells; q++)
@@ -785,9 +784,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 
 							if (sF_nbr < eF_nbr)
 							{
-								sNbrF[idx_nbr] = sF_nbr;
-								eNbrF[idx_nbr] = eF_nbr;
-								fluidCellOrder[N_FluidCellsActive++] = idx_nbr;
+								fluidRanges.push_back({ sF_nbr, eF_nbr });
 							}
 						}
 					}
@@ -818,9 +815,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 
 							if (sB_nbr < eB_nbr)
 							{
-								sNbrB[idx_nbr] = sB_nbr;
-								eNbrB[idx_nbr] = eB_nbr;
-								boundaryCellOrder[N_BoundaryCellsActive++] = idx_nbr;
+								boundaryRanges.push_back({ sB_nbr, eB_nbr });
 							}
 						}
 					}
@@ -839,15 +834,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					const float zi = zPosF[i];
 
 					// fluid neighbors
-					for (uint32_t q = 0; q < N_FluidCellsActive; q++)
+					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
-						const uint32_t idx_nbr = fluidCellOrder[q];
-
-						const uint32_t sF_nbr = sNbrF[idx_nbr];
-						const uint32_t eF_nbr = eNbrF[idx_nbr];
-
 						#pragma omp simd
-						for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
 							const uint32_t j = l;
 
@@ -868,15 +858,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					}
 
 					// boundary neighbors
-					for (uint32_t q = 0; q < N_BoundaryCellsActive; q++)
+					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
-						const uint32_t idx_nbr = boundaryCellOrder[q];
-
-						const uint32_t sB_nbr = sNbrB[idx_nbr];
-						const uint32_t eB_nbr = eNbrB[idx_nbr];
-
 						#pragma omp simd
-						for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
 							const uint32_t j = l;
 
@@ -942,16 +927,15 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 			lookupCacheValF.fill(EMPTY_32);
 			lookupCacheValB.fill(EMPTY_32);
 
-			std::vector<uint32_t> sNbrF(N_NbrCells, 0);
-			std::vector<uint32_t> eNbrF(N_NbrCells, 0);
-
-			std::vector<uint32_t> sNbrB(N_NbrCells, 0);
-			std::vector<uint32_t> eNbrB(N_NbrCells, 0);
-
-			std::vector<uint64_t> nbrCellId(N_NbrCells, 0);
-			std::vector<uint32_t> cellOrder(N_NbrCells, 0);
-			std::vector<uint32_t> fluidCellOrder(N_NbrCells, 0);
-			std::vector<uint32_t> boundaryCellOrder(N_NbrCells, 0);
+			auto& queryMetaScratch = queryMetaScratch_.local();
+			auto& nbrCellId = queryMetaScratch.nbrCellId;
+			auto& cellOrder = queryMetaScratch.cellOrder;
+			auto& fluidRanges = queryMetaScratch.fluidRanges;
+			auto& boundaryRanges = queryMetaScratch.boundaryRanges;
+			nbrCellId.resize(N_NbrCells);
+			cellOrder.resize(N_NbrCells);
+			if (fluidRanges.capacity() < N_NbrCells) { fluidRanges.reserve(N_NbrCells); }
+			if (boundaryRanges.capacity() < N_NbrCells) { boundaryRanges.reserve(N_NbrCells); }
 			uint64_t candCountFF_local = 0;
 			uint64_t posCountFF_local = 0;
 			uint64_t candCountFB_local = 0;
@@ -1102,8 +1086,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						return nbrCellId[a] < nbrCellId[b];
 					});
 
-				uint32_t N_FluidCellsActive = 0;
-				uint32_t N_BoundaryCellsActive = 0;
+				fluidRanges.clear();
+				boundaryRanges.clear();
 
 				// check existence and location of all queried grid cells
 				for (uint32_t q = 0; q < N_NbrCells; q++)
@@ -1137,9 +1121,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 
 							if (sF_nbr < eF_nbr)
 							{
-								sNbrF[idx_nbr] = sF_nbr;
-								eNbrF[idx_nbr] = eF_nbr;
-								fluidCellOrder[N_FluidCellsActive++] = idx_nbr;
+								fluidRanges.push_back({ sF_nbr, eF_nbr });
 							}
 						}
 					}
@@ -1170,9 +1152,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 
 							if (sB_nbr < eB_nbr)
 							{
-								sNbrB[idx_nbr] = sB_nbr;
-								eNbrB[idx_nbr] = eB_nbr;
-								boundaryCellOrder[N_BoundaryCellsActive++] = idx_nbr;
+								boundaryRanges.push_back({ sB_nbr, eB_nbr });
 							}
 						}
 					}
@@ -1192,15 +1172,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					const float zi = zPosF[i];
 
 					// fluid neighbors
-					for (uint32_t q = 0; q < N_FluidCellsActive; q++)
+					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
-						const uint32_t idx_nbr = fluidCellOrder[q];
-
-						const uint32_t sF_nbr = sNbrF[idx_nbr];
-						const uint32_t eF_nbr = eNbrF[idx_nbr];
-
 						#pragma omp simd
-						for (uint32_t l = sF_nbr; l < eF_nbr; l++)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
 							const uint32_t j = l;
 							candCountFF_local++;
@@ -1224,15 +1199,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					}
 
 					// boundary neighbors
-					for (uint32_t q = 0; q < N_BoundaryCellsActive; q++)
+					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
-						const uint32_t idx_nbr = boundaryCellOrder[q];
-
-						const uint32_t sB_nbr = sNbrB[idx_nbr];
-						const uint32_t eB_nbr = eNbrB[idx_nbr];
-
 						#pragma omp simd
-						for (uint32_t l = sB_nbr; l < eB_nbr; l++)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
 							const uint32_t j = l;
 							candCountFB_local++;

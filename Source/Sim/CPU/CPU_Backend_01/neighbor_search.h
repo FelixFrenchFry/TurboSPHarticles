@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <boost/container/small_vector.hpp>
 #include <cstdint>
 #include <limits>
 #include <tbb/enumerable_thread_specific.h>
@@ -99,6 +100,7 @@ namespace Sim
 		float kernelRadiusSqu_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CellFrameRebuildMargin_ = 8; // hysteresis buffer
+		static constexpr uint32_t N_QueryCellInline = 32;
 
 		// local grid frame in cell coordinates
 		int cellOrigX_ = 0;
@@ -115,6 +117,21 @@ namespace Sim
 			uint32_t, N_perScratchInlineFF>> scratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_perScratchInlineFB>> scratchFB_;
+
+		struct ActiveCellRange
+		{
+			uint32_t begin = 0;
+			uint32_t end = 0;
+		};
+
+		struct QueryMetaScratch
+		{
+			boost::container::small_vector<uint64_t, N_QueryCellInline> nbrCellId;
+			boost::container::small_vector<uint32_t, N_QueryCellInline> cellOrder;
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> fluidRanges;
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> boundaryRanges;
+		};
+		mutable tbb::enumerable_thread_specific<QueryMetaScratch> queryMetaScratch_;
 
 		// data structures
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
