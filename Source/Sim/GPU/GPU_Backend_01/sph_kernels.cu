@@ -143,7 +143,6 @@ namespace GPU01
 		if (i >= c_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];

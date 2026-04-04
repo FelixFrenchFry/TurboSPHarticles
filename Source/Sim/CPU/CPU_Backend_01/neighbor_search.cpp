@@ -233,17 +233,20 @@ namespace
 // --- [ brute force implementation ] --------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_BruteForce_CPU01::Init(const SimParams& params)
+void NS_BruteForce_CPU01::Init(
+	const SimParams& params)
 {
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
 }
 
-void NS_BruteForce_CPU01::Construct(const SimParams& params)
+void NS_BruteForce_CPU01::Construct(
+	const SimParams& params)
 {
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
 }
 
-void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
+void NS_BruteForce_CPU01::Query_Count(
+	const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -311,7 +314,8 @@ void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
 	);
 }
 
-void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
+void NS_BruteForce_CPU01::Query_Fill(
+	const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 
@@ -409,6 +413,8 @@ void NS_BruteForce_CPU01::DataReOrder(
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
+	(void)params;
+
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 

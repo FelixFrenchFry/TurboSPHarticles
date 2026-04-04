@@ -28,11 +28,11 @@ namespace GPU01
 	__constant__ uint32_t c_ns_EMPTY;
 
 	void NS_ReloadConstants(
-		uint32_t N_F, uint32_t N_B,
-		float kernelRadius, float cellSize, uint32_t cellQueryReach,
-		float xBoxOrig, float yBoxOrig, float zBoxOrig,
-		uint32_t N_DimX, uint32_t N_DimY, uint32_t N_DimZ,
-		uint32_t N_Cells, uint32_t EMPTY,
+		const uint32_t N_F, const uint32_t N_B,
+		const float kernelRadius, const float cellSize, const uint32_t cellQueryReach,
+		const float xBoxOrig, const float yBoxOrig, const float zBoxOrig,
+		const uint32_t N_DimX, const uint32_t N_DimY, const uint32_t N_DimZ,
+		const uint32_t N_Cells, const uint32_t EMPTY,
 		cudaStream_t stream)
 	{
 		float kernelRadiusSqu = kernelRadius * kernelRadius;
@@ -101,7 +101,6 @@ namespace GPU01
 		if (i >= c_ns_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -144,7 +143,6 @@ namespace GPU01
 		}
 
 		// update neighbor counts
-		// (global memory write)
 		nbrCountFF[i] = cntFF;
 		nbrCountFB[i] = cntFB;
 	}
@@ -168,7 +166,6 @@ namespace GPU01
 		if (i >= c_ns_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -197,7 +194,6 @@ namespace GPU01
 				if (wrFF < eFF)
 				{
 					// add fluid neighbor to the list
-					// (global memory write)
 					nbrListFF[wrFF++] = j;
 				}
 				else
@@ -210,7 +206,7 @@ namespace GPU01
 		// check boundary candidates (all particles)
 		for (uint32_t j = 0; j < c_ns_N_B; j++)
 		{
-			// position difference
+			// position difference (gmr)
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
@@ -223,7 +219,6 @@ namespace GPU01
 				if (wrFB < eFB)
 				{
 					// add boundary neighbor to the list
-					// (global memory write)
 					nbrListFB[wrFB++] = j;
 				}
 				else
@@ -246,8 +241,7 @@ namespace GPU01
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= N_F) { return; }
 
-		// particle i data
-		// (global memory reads)
+		// particle i data (gmr)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -279,7 +273,6 @@ namespace GPU01
 		if (i >= N_B) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosB[i];
 		const float yi = yPosB[i];
 		const float zi = zPosB[i];
@@ -1053,562 +1046,6 @@ namespace GPU01
 } // namespace GPU01
 
 // -------------------------------------------------------------------------------------------------
-// --- [ bounding volume hierarchy linear (LBVH) implementation ] ----------------------------------
-// -------------------------------------------------------------------------------------------------
-
-namespace GPU01
-{
-	static constexpr uint32_t LBVH_STACK_DEPTH = 64;
-	static constexpr uint32_t LBVH_LEAF_FLAG = 0x80000000u;
-
-	__device__ __forceinline__
-	uint32_t ExpandBits10_30bit(uint32_t v)
-	{
-		v = (v | (v << 16)) & 0x030000FFu;
-		v = (v | (v << 8)) & 0x0300F00Fu;
-		v = (v | (v << 4)) & 0x030C30C3u;
-		v = (v | (v << 2)) & 0x09249249u;
-
-		return v;
-	}
-
-	__device__ __forceinline__
-	uint32_t Morton3D_30bit_Normalized(float nx, float ny, float nz)
-	{
-		const float nxClamped = fminf(1.0f, fmaxf(0.0f, nx));
-		const float nyClamped = fminf(1.0f, fmaxf(0.0f, ny));
-		const float nzClamped = fminf(1.0f, fmaxf(0.0f, nz));
-
-		const uint32_t ixRaw = static_cast<uint32_t>(nxClamped * 1023.0f);
-		const uint32_t iyRaw = static_cast<uint32_t>(nyClamped * 1023.0f);
-		const uint32_t izRaw = static_cast<uint32_t>(nzClamped * 1023.0f);
-		const uint32_t ix = (ixRaw > 1023u) ? 1023u : ixRaw;
-		const uint32_t iy = (iyRaw > 1023u) ? 1023u : iyRaw;
-		const uint32_t iz = (izRaw > 1023u) ? 1023u : izRaw;
-
-		return (ExpandBits10_30bit(ix) << 2)
-			 | (ExpandBits10_30bit(iy) << 1)
-			 | ExpandBits10_30bit(iz);
-	}
-
-	__device__ __forceinline__
-	LBVH_AABB MakeParticleAABB(float x, float y, float z, float r)
-	{
-		LBVH_AABB box;
-		box.minX = x - r;
-		box.minY = y - r;
-		box.minZ = z - r;
-		box.maxX = x + r;
-		box.maxY = y + r;
-		box.maxZ = z + r;
-
-		return box;
-	}
-
-	__device__ __forceinline__
-	LBVH_AABB MergeAABB(const LBVH_AABB& a, const LBVH_AABB& b)
-	{
-		LBVH_AABB out;
-		out.minX = fminf(a.minX, b.minX);
-		out.minY = fminf(a.minY, b.minY);
-		out.minZ = fminf(a.minZ, b.minZ);
-		out.maxX = fmaxf(a.maxX, b.maxX);
-		out.maxY = fmaxf(a.maxY, b.maxY);
-		out.maxZ = fmaxf(a.maxZ, b.maxZ);
-
-		return out;
-	}
-
-	__device__ __forceinline__
-	bool OverlapsAABB(const LBVH_AABB& box, float x, float y, float z, float radiusSqu)
-	{
-		float dSqu = 0.0f;
-
-		if (x < box.minX) { const float d = box.minX - x; dSqu += d * d; }
-		else if (x > box.maxX) { const float d = x - box.maxX; dSqu += d * d; }
-
-		if (y < box.minY) { const float d = box.minY - y; dSqu += d * d; }
-		else if (y > box.maxY) { const float d = y - box.maxY; dSqu += d * d; }
-
-		if (z < box.minZ) { const float d = box.minZ - z; dSqu += d * d; }
-		else if (z > box.maxZ) { const float d = z - box.maxZ; dSqu += d * d; }
-
-		return dSqu <= radiusSqu;
-	}
-
-	__device__ __forceinline__
-	int CountLeadingZeros(uint32_t v)
-	{
-		return (v == 0u) ? 32 : __clz(v);
-	}
-
-	__device__ __forceinline__
-	int Delta(
-		const uint32_t* sortedMorton,
-		uint32_t N,
-		int i, int j)
-	{
-		if (j < 0 || j >= static_cast<int>(N))
-		{
-			return -1;
-		}
-
-		const uint32_t mi = sortedMorton[i];
-		const uint32_t mj = sortedMorton[j];
-
-		if (mi != mj)
-		{
-			return CountLeadingZeros(mi ^ mj);
-		}
-
-		return 32 + CountLeadingZeros(static_cast<uint32_t>(i) ^ static_cast<uint32_t>(j));
-	}
-
-	__global__
-	void K_LBVH_FillMortonAndAABB(
-		const float* __restrict__ xPos,
-		const float* __restrict__ yPos,
-		const float* __restrict__ zPos,
-		const uint32_t N,
-		const float sceneMinX, const float sceneMinY, const float sceneMinZ,
-		const float invExtX, const float invExtY, const float invExtZ,
-		const float leafAabbRadius,
-		// destinations
-		uint32_t* __restrict__ morton,
-		uint32_t* __restrict__ sortedParticleIdx,
-		LBVH_AABB* __restrict__ leafBox)
-	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N) { return; }
-
-		const float x = xPos[i];
-		const float y = yPos[i];
-		const float z = zPos[i];
-
-		const float nx = (x - sceneMinX) * invExtX;
-		const float ny = (y - sceneMinY) * invExtY;
-		const float nz = (z - sceneMinZ) * invExtZ;
-
-		morton[i] = Morton3D_30bit_Normalized(nx, ny, nz);
-		sortedParticleIdx[i] = i;
-		leafBox[i] = MakeParticleAABB(x, y, z, leafAabbRadius);
-	}
-
-	__global__
-	void K_LBVH_BuildInternalNodes(
-		const uint32_t* __restrict__ sortedMorton,
-		const uint32_t N,
-		// destinations
-		LBVH_InternalNode* __restrict__ nodes)
-	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		const uint32_t N_internal = N - 1;
-		if (i >= N_internal) { return; }
-
-		const int iInt = static_cast<int>(i);
-
-		const int deltaRight = Delta(sortedMorton, N, iInt, iInt + 1);
-		const int deltaLeft = Delta(sortedMorton, N, iInt, iInt - 1);
-		const int d = (deltaRight >= deltaLeft) ? 1 : -1;
-
-		const int deltaMin = Delta(sortedMorton, N, iInt, iInt - d);
-		uint32_t lMax = 2;
-		while (Delta(sortedMorton, N, iInt, iInt + static_cast<int>(lMax) * d) > deltaMin)
-		{
-			lMax <<= 1;
-		}
-
-		uint32_t l = 0;
-		for (uint32_t t = lMax >> 1; t >= 1; t >>= 1)
-		{
-			if (Delta(sortedMorton, N, iInt, iInt + static_cast<int>(l + t) * d) > deltaMin)
-			{
-				l += t;
-			}
-
-			if (t == 1) { break; }
-		}
-
-		const int j = iInt + static_cast<int>(l) * d;
-
-		const int deltaNode = Delta(sortedMorton, N, iInt, j);
-		uint32_t s = 0;
-		uint32_t t = 1;
-		while (t < l) { t <<= 1; }
-
-		for (; t >= 1; t = (t > 1) ? (t >> 1) : 0)
-		{
-			if (Delta(sortedMorton, N, iInt, iInt + static_cast<int>(s + t) * d) > deltaNode)
-			{
-				s += t;
-			}
-
-			if (t == 1) { break; }
-		}
-
-		const int gamma = iInt + static_cast<int>(s) * d + ((d < 0) ? d : 0);
-		const int iMin = (iInt < j) ? iInt : j;
-		const int iMax = (iInt > j) ? iInt : j;
-
-		LBVH_InternalNode node{};
-		node.leftChild = static_cast<uint32_t>(gamma);
-		node.leftIsLeaf = (iMin == gamma) ? 1u : 0u;
-		node.rightChild = static_cast<uint32_t>(gamma + 1);
-		node.rightIsLeaf = (iMax == gamma + 1) ? 1u : 0u;
-
-		nodes[i] = node;
-	}
-
-	__global__
-	void K_LBVH_BuildParentLookupAndResetVisits(
-		const LBVH_InternalNode* __restrict__ nodes,
-		const uint32_t N_internal,
-		const uint32_t N,
-		// destinations
-		uint32_t* __restrict__ parentOf,
-		uint32_t* __restrict__ visitCount)
-	{
-		(void)N;
-
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_internal) { return; }
-
-		visitCount[i] = 0u;
-
-		const LBVH_InternalNode node = nodes[i];
-
-		if (node.leftIsLeaf != 0u)
-		{
-			parentOf[N_internal + node.leftChild] = i;
-		}
-		else
-		{
-			parentOf[node.leftChild] = i;
-		}
-
-		if (node.rightIsLeaf != 0u)
-		{
-			parentOf[N_internal + node.rightChild] = i;
-		}
-		else
-		{
-			parentOf[node.rightChild] = i;
-		}
-	}
-
-	__global__
-	void K_LBVH_PropagateAABBs(
-		const LBVH_AABB* __restrict__ sortedLeafBox,
-		const uint32_t* __restrict__ parentOf,
-		const uint32_t N,
-		const uint32_t N_internal,
-		// destinations
-		LBVH_InternalNode* __restrict__ nodes,
-		uint32_t* __restrict__ visitCount)
-	{
-		const uint32_t leafIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (leafIdx >= N) { return; }
-
-		uint32_t current = parentOf[N_internal + leafIdx];
-
-		while (current != 0xFFFFFFFFu)
-		{
-			const uint32_t prev = atomicAdd(visitCount + current, 1u);
-			if (prev == 0u)
-			{
-				break;
-			}
-
-			const LBVH_InternalNode node = nodes[current];
-
-			const LBVH_AABB leftBox = (node.leftIsLeaf != 0u)
-				? sortedLeafBox[node.leftChild]
-				: nodes[node.leftChild].box;
-
-			const LBVH_AABB rightBox = (node.rightIsLeaf != 0u)
-				? sortedLeafBox[node.rightChild]
-				: nodes[node.rightChild].box;
-
-			nodes[current].box = MergeAABB(leftBox, rightBox);
-
-			// make merged box visible before touching the parent's visit counter.
-			__threadfence();
-
-			current = parentOf[current];
-		}
-	}
-
-	__device__ __forceinline__
-	void LBVH_QueryTree_Count(
-		const float xi, const float yi, const float zi,
-		const float* __restrict__ xPos,
-		const float* __restrict__ yPos,
-		const float* __restrict__ zPos,
-		const uint32_t* __restrict__ sortedParticleIdx,
-		const LBVH_InternalNode* __restrict__ nodes,
-		const uint32_t N,
-		// destinations
-		uint32_t& count)
-	{
-		if (N == 0) { return; }
-
-		if (N == 1)
-		{
-			const uint32_t j = sortedParticleIdx[0];
-			const float dx = xi - xPos[j];
-			const float dy = yi - yPos[j];
-			const float dz = zi - zPos[j];
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-			if (distSqu <= c_ns_kernelRadiusSqu)
-			{
-				count++;
-			}
-			return;
-		}
-
-		uint32_t stack[LBVH_STACK_DEPTH];
-		uint32_t stackTop = 0;
-		stack[stackTop++] = 0;
-
-		while (stackTop > 0)
-		{
-			const uint32_t entry = stack[--stackTop];
-
-			if ((entry & LBVH_LEAF_FLAG) != 0u)
-			{
-				const uint32_t leafIdx = entry & ~LBVH_LEAF_FLAG;
-				const uint32_t j = sortedParticleIdx[leafIdx];
-
-				const float dx = xi - xPos[j];
-				const float dy = yi - yPos[j];
-				const float dz = zi - zPos[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
-
-				if (distSqu <= c_ns_kernelRadiusSqu)
-				{
-					count++;
-				}
-			}
-			else
-			{
-				const LBVH_InternalNode node = nodes[entry];
-				if (!OverlapsAABB(node.box, xi, yi, zi, c_ns_kernelRadiusSqu))
-				{
-					continue;
-				}
-
-				if (node.rightIsLeaf != 0u)
-				{
-					stack[stackTop++] = node.rightChild | LBVH_LEAF_FLAG;
-				}
-				else
-				{
-					stack[stackTop++] = node.rightChild;
-				}
-
-				if (node.leftIsLeaf != 0u)
-				{
-					stack[stackTop++] = node.leftChild | LBVH_LEAF_FLAG;
-				}
-				else
-				{
-					stack[stackTop++] = node.leftChild;
-				}
-			}
-		}
-	}
-
-	__device__ __forceinline__
-	void LBVH_QueryTree_Fill(
-		const float xi, const float yi, const float zi,
-		const float* __restrict__ xPos,
-		const float* __restrict__ yPos,
-		const float* __restrict__ zPos,
-		const uint32_t* __restrict__ sortedParticleIdx,
-		const LBVH_InternalNode* __restrict__ nodes,
-		const uint32_t N,
-		// destinations
-		uint64_t& wr,
-		const uint64_t end,
-		uint32_t* __restrict__ nbrList,
-		uint32_t* __restrict__ overflowFlag)
-	{
-		if (N == 0) { return; }
-
-		if (N == 1)
-		{
-			const uint32_t j = sortedParticleIdx[0];
-			const float dx = xi - xPos[j];
-			const float dy = yi - yPos[j];
-			const float dz = zi - zPos[j];
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= c_ns_kernelRadiusSqu)
-			{
-				if (wr < end)
-				{
-					nbrList[wr++] = j;
-				}
-				else
-				{
-					atomicExch(overflowFlag, 1u);
-				}
-			}
-			return;
-		}
-
-		uint32_t stack[LBVH_STACK_DEPTH];
-		uint32_t stackTop = 0;
-		stack[stackTop++] = 0;
-
-		while (stackTop > 0)
-		{
-			const uint32_t entry = stack[--stackTop];
-
-			if ((entry & LBVH_LEAF_FLAG) != 0u)
-			{
-				const uint32_t leafIdx = entry & ~LBVH_LEAF_FLAG;
-				const uint32_t j = sortedParticleIdx[leafIdx];
-
-				const float dx = xi - xPos[j];
-				const float dy = yi - yPos[j];
-				const float dz = zi - zPos[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
-
-				if (distSqu <= c_ns_kernelRadiusSqu)
-				{
-					if (wr < end)
-					{
-						nbrList[wr++] = j;
-					}
-					else
-					{
-						atomicExch(overflowFlag, 1u);
-					}
-				}
-			}
-			else
-			{
-				const LBVH_InternalNode node = nodes[entry];
-				if (!OverlapsAABB(node.box, xi, yi, zi, c_ns_kernelRadiusSqu))
-				{
-					continue;
-				}
-
-				if (node.rightIsLeaf != 0u)
-				{
-					stack[stackTop++] = node.rightChild | LBVH_LEAF_FLAG;
-				}
-				else
-				{
-					stack[stackTop++] = node.rightChild;
-				}
-
-				if (node.leftIsLeaf != 0u)
-				{
-					stack[stackTop++] = node.leftChild | LBVH_LEAF_FLAG;
-				}
-				else
-				{
-					stack[stackTop++] = node.leftChild;
-				}
-			}
-		}
-	}
-
-	__global__
-	void K_LBVH_Query_Count(
-		const float* __restrict__ xPosF,
-		const float* __restrict__ yPosF,
-		const float* __restrict__ zPosF,
-		const float* __restrict__ xPosB,
-		const float* __restrict__ yPosB,
-		const float* __restrict__ zPosB,
-		const uint32_t* __restrict__ sortedParticleIdxF,
-		const uint32_t* __restrict__ sortedParticleIdxB,
-		const LBVH_InternalNode* __restrict__ nodesF,
-		const LBVH_InternalNode* __restrict__ nodesB,
-		const uint32_t N_F, const uint32_t N_B,
-		// destinations
-		uint32_t* __restrict__ nbrCountFF,
-		uint32_t* __restrict__ nbrCountFB)
-	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
-
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
-
-		uint32_t cntFF = 0;
-		uint32_t cntFB = 0;
-
-		LBVH_QueryTree_Count(
-			xi, yi, zi,
-			xPosF, yPosF, zPosF,
-			sortedParticleIdxF, nodesF, N_F,
-			cntFF);
-
-		LBVH_QueryTree_Count(
-			xi, yi, zi,
-			xPosB, yPosB, zPosB,
-			sortedParticleIdxB, nodesB, N_B,
-			cntFB);
-
-		nbrCountFF[i] = cntFF;
-		nbrCountFB[i] = cntFB;
-	}
-
-	__global__
-	void K_LBVH_Query_Fill(
-		const float* __restrict__ xPosF,
-		const float* __restrict__ yPosF,
-		const float* __restrict__ zPosF,
-		const float* __restrict__ xPosB,
-		const float* __restrict__ yPosB,
-		const float* __restrict__ zPosB,
-		const uint32_t* __restrict__ sortedParticleIdxF,
-		const uint32_t* __restrict__ sortedParticleIdxB,
-		const LBVH_InternalNode* __restrict__ nodesF,
-		const LBVH_InternalNode* __restrict__ nodesB,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
-		const uint32_t N_F, const uint32_t N_B,
-		// destinations
-		uint32_t* __restrict__ nbrListFF,
-		uint32_t* __restrict__ nbrListFB,
-		uint32_t* __restrict__ overflowFlag)
-	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
-
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
-
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-		uint64_t wrFF = sFF;
-		uint64_t wrFB = sFB;
-
-		LBVH_QueryTree_Fill(
-			xi, yi, zi,
-			xPosF, yPosF, zPosF,
-			sortedParticleIdxF, nodesF, N_F,
-			wrFF, eFF, nbrListFF, overflowFlag);
-
-		LBVH_QueryTree_Fill(
-			xi, yi, zi,
-			xPosB, yPosB, zPosB,
-			sortedParticleIdxB, nodesB, N_B,
-			wrFB, eFB, nbrListFB, overflowFlag);
-	}
-
-} // namespace GPU01
-
-// -------------------------------------------------------------------------------------------------
 // --- [ kernel launchers ] ------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
@@ -1894,141 +1331,6 @@ namespace GPU01
 			nbrListFF, nbrListFB, overflowFlag);
 
 		GPU::CheckLastKernel("K_CellLinkedList_Compact_Query_Fill()");
-	}
-
-	void Launch_LBVH_FillMortonAndAABB(
-		const float* xPos, const float* yPos, const float* zPos,
-		const uint32_t N,
-		const float sceneMinX, const float sceneMinY, const float sceneMinZ,
-		const float invExtX, const float invExtY, const float invExtZ,
-		const float leafAabbRadius,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* morton,
-		uint32_t* sortedParticleIdx,
-		LBVH_AABB* leafBox)
-	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_LBVH_FillMortonAndAABB<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPos, yPos, zPos, N,
-			sceneMinX, sceneMinY, sceneMinZ,
-			invExtX, invExtY, invExtZ, leafAabbRadius,
-			morton, sortedParticleIdx, leafBox);
-
-		GPU::CheckLastKernel("K_LBVH_FillMortonAndAABB()");
-	}
-
-	void Launch_LBVH_BuildInternalNodes(
-		const uint32_t* sortedMorton,
-		const uint32_t N,
-		cudaStream_t stream,
-		// destinations
-		LBVH_InternalNode* nodes)
-	{
-		if (N <= 1) { return; }
-
-		const uint32_t N_internal = N - 1;
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_internal + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_LBVH_BuildInternalNodes<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			sortedMorton, N, nodes);
-
-		GPU::CheckLastKernel("K_LBVH_BuildInternalNodes()");
-	}
-
-	void Launch_LBVH_BuildParentLookupAndResetVisits(
-		const LBVH_InternalNode* nodes,
-		const uint32_t N_internal,
-		const uint32_t N,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* parentOf,
-		uint32_t* visitCount)
-	{
-		if (N_internal == 0) { return; }
-
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_internal + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_LBVH_BuildParentLookupAndResetVisits<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			nodes, N_internal, N, parentOf, visitCount);
-
-		GPU::CheckLastKernel("K_LBVH_BuildParentLookupAndResetVisits()");
-	}
-
-	void Launch_LBVH_PropagateAABBs(
-		const LBVH_AABB* sortedLeafBox,
-		const uint32_t* parentOf,
-		const uint32_t N,
-		const uint32_t N_internal,
-		cudaStream_t stream,
-		// destinations
-		LBVH_InternalNode* nodes,
-		uint32_t* visitCount)
-	{
-		if (N <= 1) { return; }
-
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_LBVH_PropagateAABBs<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			sortedLeafBox, parentOf, N, N_internal, nodes, visitCount);
-
-		GPU::CheckLastKernel("K_LBVH_PropagateAABBs()");
-	}
-
-	void Launch_LBVH_Query_Count(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
-		const LBVH_InternalNode* nodesF, const LBVH_InternalNode* nodesB,
-		const uint32_t N_F, const uint32_t N_B,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* nbrCountFF, uint32_t* nbrCountFB)
-	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_LBVH_Query_Count<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			sortedParticleIdxF, sortedParticleIdxB,
-			nodesF, nodesB, N_F, N_B,
-			nbrCountFF, nbrCountFB);
-
-		GPU::CheckLastKernel("K_LBVH_Query_Count()");
-	}
-
-	void Launch_LBVH_Query_Fill(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
-		const LBVH_InternalNode* nodesF, const LBVH_InternalNode* nodesB,
-		const uint32_t N_F, const uint32_t N_B,
-		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
-		// destinations
-		uint32_t* nbrListFF, uint32_t* nbrListFB,
-		uint32_t* overflowFlag)
-	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_LBVH_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			sortedParticleIdxF, sortedParticleIdxB,
-			nodesF, nodesB,
-			nbrOffsetsFF, nbrOffsetsFB,
-			N_F, N_B,
-			nbrListFF, nbrListFB, overflowFlag);
-
-		GPU::CheckLastKernel("K_LBVH_Query_Fill()");
 	}
 
 } // namespace GPU01

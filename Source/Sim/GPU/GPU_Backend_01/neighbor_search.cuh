@@ -1,5 +1,4 @@
 // neighbor_search.cuh
-
 #pragma once
 
 // external
@@ -39,7 +38,8 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+		std::pair<Mem::MemUsage, Mem::MemUsage>
+			GetMemUsage(const SimParams& params) const override;
 
 	private: // ------------------------------------------------------------------------------------
 
@@ -70,7 +70,8 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(const SimParams& params) const override;
+		std::pair<Mem::MemUsage, Mem::MemUsage>
+			GetMemUsage(const SimParams& params) const override;
 
 	private: // ------------------------------------------------------------------------------------
 

@@ -65,7 +65,8 @@ namespace
 			thrust::device_pointer_cast(d_tmp.Data() + N),
 			thrust::device_pointer_cast(d_src.Data()));
 	}
-}
+
+} // anonymous
 
 void SimBackend_GPU01::FinalizeNeighborLists_Count()
 {
@@ -160,12 +161,16 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 // --- [ brute force implementation ] --------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_BruteForce_GPU01::Init(const SimParams& params)
+void NS_BruteForce_GPU01::Init(
+	const SimParams& params)
 {
-	// nothing
+	(void)params;
+
+	// nothing to do
 }
 
-void NS_BruteForce_GPU01::Construct(const SimParams& params)
+void NS_BruteForce_GPU01::Construct(
+	const SimParams& params)
 {
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 1u,
@@ -175,7 +180,8 @@ void NS_BruteForce_GPU01::Construct(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-void NS_BruteForce_GPU01::Query_Count(const SimParams& params)
+void NS_BruteForce_GPU01::Query_Count(
+	const SimParams& params)
 {
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
@@ -189,7 +195,8 @@ void NS_BruteForce_GPU01::Query_Count(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
+void NS_BruteForce_GPU01::Query_Fill(
+	const SimParams& params)
 {
 	// (count-query and fill-query MUST find the same number of neighbors)
 	// reset overflow before filling packed CSR lists
@@ -206,9 +213,12 @@ void NS_BruteForce_GPU01::Query_Fill(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-void NS_BruteForce_GPU01::DataReOrder(const SimParams& params)
+void NS_BruteForce_GPU01::DataReOrder(
+	const SimParams& params)
 {
-	// TODO: implement
+	(void)params;
+
+	// no re-ordering in brute force implementation
 }
 
 std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_GPU01::GetMemUsage(
