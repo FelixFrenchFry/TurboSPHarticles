@@ -180,16 +180,20 @@ namespace Sim
 		// boundary particles
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 
-		// neighbor list storage (CSRVector_DoubleQuery style)
+		// neighbor list storage (SELL32_DoubleQuery style)
 		DeviceBuffer<uint32_t> d_nbrCountFF_; // temporary counts written by count-query
 		DeviceBuffer<uint32_t> d_nbrCountFB_; // temporary counts written by count-query
-		DeviceBuffer<uint64_t> d_nbrOffsetsFF_; // CSR offsets built after count-query (N_F_ + 1)
-		DeviceBuffer<uint64_t> d_nbrOffsetsFB_; // CSR offsets built after count-query (N_F_ + 1)
-		DeviceBuffer<uint32_t> d_nbrListFF_; // packed CSR neighbor list
-		DeviceBuffer<uint32_t> d_nbrListFB_; // packed CSR neighbor list
+		DeviceBuffer<uint32_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
+		DeviceBuffer<uint32_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // SELL32 chunk offsets (N_chunks + 1)
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_; // SELL32 chunk offsets (N_chunks + 1)
+		DeviceBuffer<uint32_t> d_nbrListFF_; // packed SELL32 FF neighbor list
+		DeviceBuffer<uint32_t> d_nbrListFB_; // packed SELL32 FB neighbor list
 		DeviceBuffer<uint32_t> d_nbrOverflowFlag_; // TODO: use smaller data type?
-		uint64_t N_totalFF_ = 0;
-		uint64_t N_totalFB_ = 0;
+		uint64_t N_totalFF_ = 0; // actual FF neighbor count sum over all particles
+		uint64_t N_totalFB_ = 0; // actual FB neighbor count sum over all particles
+		uint64_t N_packedFF_ = 0; // padded SELL32 FF storage length
+		uint64_t N_packedFB_ = 0; // padded SELL32 FB storage length
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
 
 		// re-usable work (scratch) buffer for temp storage
@@ -199,7 +203,7 @@ namespace Sim
 		// (reduces per-export allocations and allocator overhead)
 		mutable std::vector<uint32_t> h_expNbrCountFF_;
 		mutable std::vector<uint32_t> h_expNbrCountFB_;
-		mutable std::vector<uint64_t> h_expNbrOffsetsFF_;
+		mutable std::vector<uint64_t> h_expNbrChunkOffsetsFF_;
 		mutable std::vector<uint32_t> h_expNbrListFF_;
 		mutable std::vector<float> h_expXPosF_;
 		mutable std::vector<float> h_expYPosF_;
@@ -268,6 +272,8 @@ namespace Sim
 		// (does not preserve data)
 		void EnsureCapacity(uint32_t N_F_new, uint32_t N_B_new, bool force = false)
 		{
+			const uint32_t N_chunks_new =
+				(N_F_new == 0u) ? 0u : ((N_F_new - 1u) / 32u) + 1u;
 			const bool needOverflow = (d_nbrOverflowFlag_.Size() != 1);
 
 			const bool needFluid =
@@ -280,8 +286,10 @@ namespace Sim
 				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
 				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new ||
 				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
-				d_nbrOffsetsFF_.Size() != static_cast<size_t>(N_F_new) + 1 ||
-				d_nbrOffsetsFB_.Size() != static_cast<size_t>(N_F_new) + 1;
+				d_nbrChunkMaxCountFF_.Size() != N_chunks_new ||
+				d_nbrChunkMaxCountFB_.Size() != N_chunks_new ||
+				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
+				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1;
 
 			const bool needBoundary =
 				force ||
@@ -311,15 +319,19 @@ namespace Sim
 			// neighbors
 			d_nbrCountFF_.Resize(N_F_);
 			d_nbrCountFB_.Resize(N_F_);
-			d_nbrOffsetsFF_.Resize(static_cast<uint64_t>(N_F_) + 1);
-			d_nbrOffsetsFB_.Resize(static_cast<uint64_t>(N_F_) + 1);
+			d_nbrChunkMaxCountFF_.Resize(N_chunks_new);
+			d_nbrChunkMaxCountFB_.Resize(N_chunks_new);
+			d_nbrChunkOffsetsFF_.Resize(static_cast<uint64_t>(N_chunks_new) + 1ull);
+			d_nbrChunkOffsetsFB_.Resize(static_cast<uint64_t>(N_chunks_new) + 1ull);
 			d_nbrOverflowFlag_.Resize(1);
 			N_totalFF_ = 0;
 			N_totalFB_ = 0;
+			N_packedFF_ = 0;
+			N_packedFB_ = 0;
 		}
 
-		// turns temporary count-query output into CSR offsets and ensures
-		// capacity of packed CSR neighbor list storage for the fill-query.
+		// turns temporary count-query output into SELL32 chunk metadata and ensures
+		// capacity of packed SELL32 neighbor list storage for the fill-query.
 		void FinalizeNeighborLists_Count();
 	};
 

@@ -14,6 +14,8 @@ constexpr float  PI = std::numbers::pi_v<float>;
 
 namespace GPU01
 {
+	static constexpr uint32_t N_SellWidth = 32u;
+
 	__constant__ uint32_t c_N_F;
 	__constant__ uint32_t c_N_B;
 	__constant__ float c_timeStep;
@@ -120,6 +122,16 @@ namespace GPU01
 		}
 	}
 
+	__device__ __forceinline__
+	uint32_t Sell32ReadNeighbor(
+		const uint64_t chunkBase,
+		const uint32_t lane,
+		const uint32_t k,
+		const uint32_t* __restrict__ nbrList)
+	{
+		return nbrList[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane];
+	}
+
 	// ------------------------------------------------------------------------------------------------
 	// --- [ kernels launched by host ] ---------------------------------------------------------------
 	// ------------------------------------------------------------------------------------------------
@@ -132,8 +144,10 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrCountFF,
+		const uint32_t* __restrict__ nbrCountFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
 		const uint32_t* __restrict__ nbrListFB,
 		// destinations
@@ -150,14 +164,18 @@ namespace GPU01
 		// temp accumulation variable
 		float tmp_density = 0.0f;
 
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t countFF = nbrCountFF[i];
+		const uint32_t countFB = nbrCountFB[i];
 
 		// FF
-		for (uint64_t k = sFF; k < eFF; k++)
+		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFF[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -172,14 +190,11 @@ namespace GPU01
 			tmp_density = fmaf(c_massF,kw, tmp_density);
 		}
 
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-
 		// FB
-		for (uint64_t k = sFB; k < eFB; k++)
+		for (uint32_t k = 0; k < countFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFB[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -209,8 +224,10 @@ namespace GPU01
 		const float* __restrict__ yVelF,
 		const float* __restrict__ zVelF,
 		const float* __restrict__ densityF,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrCountFF,
+		const uint32_t* __restrict__ nbrCountFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
 		const uint32_t* __restrict__ nbrListFB,
 		// destinations
@@ -235,14 +252,18 @@ namespace GPU01
 		float tmp_yAccViscF = 0.0f;
 		float tmp_zAccViscF = 0.0f;
 
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t countFF = nbrCountFF[i];
+		const uint32_t countFB = nbrCountFB[i];
 
 		// FF
-		for (uint64_t k = sFF; k < eFF; k++)
+		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFF[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -276,14 +297,11 @@ namespace GPU01
 		float tmp_yAccViscB = 0.0f;
 		float tmp_zAccViscB = 0.0f;
 
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-
 		// FB
-		for (uint64_t k = sFB; k < eFB; k++)
+		for (uint32_t k = 0; k < countFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFB[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -339,8 +357,10 @@ namespace GPU01
 		const float* __restrict__ yVelPredF,
 		const float* __restrict__ zVelPredF,
 		const float* __restrict__ densityF,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrCountFF,
+		const uint32_t* __restrict__ nbrCountFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
 		const uint32_t* __restrict__ nbrListFB,
 		// destinations
@@ -365,15 +385,18 @@ namespace GPU01
 		float xCTermF = 0.0f;
 		float yCTermF = 0.0f;
 		float zCTermF = 0.0f;
-
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t countFF = nbrCountFF[i];
+		const uint32_t countFB = nbrCountFB[i];
 
 		// FF
-		for (uint64_t k = sFF; k < eFF; k++)
+		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFF[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -406,14 +429,11 @@ namespace GPU01
 		float yCTermB = 0.0f;
 		float zCTermB = 0.0f;
 
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-
 		// FB
-		for (uint64_t k = sFB; k < eFB; k++)
+		for (uint32_t k = 0; k < countFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFB[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -453,10 +473,10 @@ namespace GPU01
 		float tmp_diagElemC = 0.0f;
 
 		// part A and B
-		for (uint64_t k = sFF; k < eFF; k++)
+		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFF[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -481,10 +501,10 @@ namespace GPU01
 		tmp_diagElemB *= c_massF;
 
 		// part C
-		for (uint64_t k = sFB; k < eFB; k++)
+		for (uint32_t k = 0; k < countFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFB[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -529,8 +549,10 @@ namespace GPU01
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
 		const float* __restrict__ pressureF,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrCountFF,
+		const uint32_t* __restrict__ nbrCountFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
 		const uint32_t* __restrict__ nbrListFB,
 		// destinations
@@ -555,15 +577,18 @@ namespace GPU01
 		float tmp_xAccPressF = 0.0f;
 		float tmp_yAccPressF = 0.0f;
 		float tmp_zAccPressF = 0.0f;
-
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t countFF = nbrCountFF[i];
+		const uint32_t countFB = nbrCountFB[i];
 
 		// FF
-		for (uint64_t k = sFF; k < eFF; k++)
+		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFF[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -585,17 +610,14 @@ namespace GPU01
 			tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
 		}
 
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-
 		const float accCoeffB = c_pressGamma * c_massB
 							  * 2.0f * presi * densiInvSqu;
 
 		// FB
-		for (uint64_t k = sFB; k < eFB; k++)
+		for (uint32_t k = 0; k < countFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFB[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -637,8 +659,10 @@ namespace GPU01
 		const float* __restrict__ zAccPressF,
 		const float* __restrict__ sourceTermF,
 		const float* __restrict__ diagElemF,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint32_t* __restrict__ nbrCountFF,
+		const uint32_t* __restrict__ nbrCountFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
 		const uint32_t* __restrict__ nbrListFB,
 		// destinations
@@ -660,15 +684,18 @@ namespace GPU01
 		float tmp_xSysVecElem = 0.0f;
 		float tmp_ySysVecElem = 0.0f;
 		float tmp_zSysVecElem = 0.0f;
-
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t countFF = nbrCountFF[i];
+		const uint32_t countFB = nbrCountFB[i];
 
 		// FF
-		for (uint64_t k = sFF; k < eFF; k++)
+		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFF[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -687,14 +714,11 @@ namespace GPU01
 			tmp_zSysVecElem = fmaf(c_massF * (azi - zAccPressF[j]), zkg, tmp_zSysVecElem);
 		}
 
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-
 		// FB
-		for (uint64_t k = sFB; k < eFB; k++)
+		for (uint32_t k = 0; k < countFB; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = nbrListFB[k];
+			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -771,8 +795,10 @@ namespace GPU01
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrCountFF,
+		const uint32_t* nbrCountFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
 		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
@@ -784,8 +810,8 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_Density<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, nbrOffsetsFF, nbrOffsetsFB,
-			nbrListFF, nbrListFB, densityF);
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, nbrCountFF, nbrCountFB,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB, densityF);
 
 		GPU::CheckLastKernel("K_Density()");
 	}
@@ -795,8 +821,10 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* densityF,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrCountFF,
+		const uint32_t* nbrCountFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
 		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
@@ -811,7 +839,7 @@ namespace GPU01
 
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, densityF,
-			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
+			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
 			xVelPredF, yVelPredF, zVelPredF);
 
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
@@ -822,8 +850,10 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* densityF,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrCountFF,
+		const uint32_t* nbrCountFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
 		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
@@ -840,7 +870,7 @@ namespace GPU01
 
 		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelPredF, yVelPredF, zVelPredF, densityF,
-			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
+			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
 			sourceTermF, diagElemF, pressureF);
 
 		GPU::CheckLastKernel("K_SourceTermAndDiagonalElementAndPressureJacobiInit()");
@@ -850,8 +880,10 @@ namespace GPU01
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* pressureF,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrCountFF,
+		const uint32_t* nbrCountFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
 		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
@@ -868,7 +900,7 @@ namespace GPU01
 
 		K_PressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, pressureF,
-			nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
+			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		GPU::CheckLastKernel("K_PressureAcceleration()");
@@ -880,8 +912,10 @@ namespace GPU01
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint32_t* nbrCountFF,
+		const uint32_t* nbrCountFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
 		const uint32_t* nbrListFB,
 		const uint32_t N_F, const uint32_t N_B,
@@ -896,7 +930,8 @@ namespace GPU01
 
 		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xAccPressF, yAccPressF, zAccPressF,
-			sourceTermF, diagElemF, nbrOffsetsFF, nbrOffsetsFB, nbrListFF, nbrListFB,
+			sourceTermF, diagElemF, nbrCountFF, nbrCountFB,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
 			pressureF);
 
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");

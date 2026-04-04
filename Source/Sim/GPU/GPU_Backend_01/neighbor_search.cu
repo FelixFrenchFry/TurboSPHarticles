@@ -27,6 +27,8 @@ using namespace Sim;
 
 namespace
 {
+	static constexpr uint32_t N_SellWidth = 32u;
+
 	struct ToU64
 	{
 		__host__ __device__ uint64_t operator()(const uint32_t v) const
@@ -34,6 +36,42 @@ namespace
 			return static_cast<uint64_t>(v);
 		}
 	};
+
+	struct SellChunkPitchToU64
+	{
+		__host__ __device__ uint64_t operator()(const uint32_t v) const
+		{
+			return static_cast<uint64_t>(v) * N_SellWidth;
+		}
+	};
+
+	__host__ __device__ inline uint32_t SellChunkNumTotal(const uint32_t N_F) noexcept
+	{
+		return (N_F == 0u) ? 0u : ((N_F - 1u) / N_SellWidth) + 1u;
+	}
+
+	__global__ void K_BuildSellChunkMaxCount(
+		const uint32_t* __restrict__ nbrCount,
+		const uint32_t N_F,
+		uint32_t* __restrict__ chunkMaxCount)
+	{
+		const uint32_t chunk = blockIdx.x * blockDim.x + threadIdx.x;
+		const uint32_t N_chunks = SellChunkNumTotal(N_F);
+		if (chunk >= N_chunks) { return; }
+
+		const uint32_t begin = chunk * N_SellWidth;
+		const uint32_t end = (begin + N_SellWidth < N_F)
+						   ? (begin + N_SellWidth)
+						   : N_F;
+
+		uint32_t maxCount = 0;
+		for (uint32_t i = begin; i < end; i++)
+		{
+			if (nbrCount[i] > maxCount) { maxCount = nbrCount[i]; }
+		}
+
+		chunkMaxCount[chunk] = maxCount;
+	}
 
 	template <typename T>
 	inline Mem::MemUsage MemUsageOf_DeviceBuffer(
@@ -74,83 +112,98 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 	{
 		N_totalFF_ = 0;
 		N_totalFB_ = 0;
+		N_packedFF_ = 0;
+		N_packedFB_ = 0;
 
-		if (d_nbrOffsetsFF_.Size() != 1) { d_nbrOffsetsFF_.Resize(1); }
-		if (d_nbrOffsetsFB_.Size() != 1) { d_nbrOffsetsFB_.Resize(1); }
+		if (d_nbrChunkOffsetsFF_.Size() != 1) { d_nbrChunkOffsetsFF_.Resize(1); }
+		if (d_nbrChunkOffsetsFB_.Size() != 1) { d_nbrChunkOffsetsFB_.Resize(1); }
 
 		const uint64_t zero = 0;
-		GPU::Copy_HostToDevice(d_nbrOffsetsFF_.Data(), &zero, 1, stream_);
-		GPU::Copy_HostToDevice(d_nbrOffsetsFB_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFF_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFB_.Data(), &zero, 1, stream_);
 		GPU::StreamSync(stream_);
 
 		return;
 	}
 
-	const uint64_t N_offsets = static_cast<uint64_t>(N_F_) + 1;
-	if (d_nbrOffsetsFF_.Size() != N_offsets) { d_nbrOffsetsFF_.Resize(N_offsets); }
-	if (d_nbrOffsetsFB_.Size() != N_offsets) { d_nbrOffsetsFB_.Resize(N_offsets); }
+	const uint32_t N_chunks = SellChunkNumTotal(N_F_);
+	const uint32_t N_BLOCKSIZE = 256;
+	const uint32_t N_GRIDSIZE = (N_chunks + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
-	// turn temporary counts into actual offsets for FF
-	thrust::transform_exclusive_scan(
+	K_BuildSellChunkMaxCount<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
+		d_nbrCountFF_.Data(), N_F_, d_nbrChunkMaxCountFF_.Data());
+	GPU::CheckLastKernel("K_BuildSellChunkMaxCount(FF)");
+
+	K_BuildSellChunkMaxCount<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
+		d_nbrCountFB_.Data(), N_F_, d_nbrChunkMaxCountFB_.Data());
+	GPU::CheckLastKernel("K_BuildSellChunkMaxCount(FB)");
+
+	const uint64_t zero = 0;
+	GPU::Copy_HostToDevice(d_nbrChunkOffsetsFF_.Data(), &zero, 1, stream_);
+	GPU::Copy_HostToDevice(d_nbrChunkOffsetsFB_.Data(), &zero, 1, stream_);
+
+	// build SELL32 chunk offsets from the per-chunk max neighbor counts
+	thrust::transform_inclusive_scan(
+		thrust::cuda::par.on(stream_),
+		thrust::device_pointer_cast(d_nbrChunkMaxCountFF_.Data()),
+		thrust::device_pointer_cast(d_nbrChunkMaxCountFF_.Data() + N_chunks),
+		thrust::device_pointer_cast(d_nbrChunkOffsetsFF_.Data() + 1),
+		SellChunkPitchToU64{},
+		thrust::plus<uint64_t>{}
+	);
+
+	thrust::transform_inclusive_scan(
+		thrust::cuda::par.on(stream_),
+		thrust::device_pointer_cast(d_nbrChunkMaxCountFB_.Data()),
+		thrust::device_pointer_cast(d_nbrChunkMaxCountFB_.Data() + N_chunks),
+		thrust::device_pointer_cast(d_nbrChunkOffsetsFB_.Data() + 1),
+		SellChunkPitchToU64{},
+		thrust::plus<uint64_t>{}
+	);
+
+	// actual total neighbor counts remain the sum of per-particle counts
+	N_totalFF_ = thrust::transform_reduce(
 		thrust::cuda::par.on(stream_),
 		thrust::device_pointer_cast(d_nbrCountFF_.Data()),
 		thrust::device_pointer_cast(d_nbrCountFF_.Data() + N_F_),
-		thrust::device_pointer_cast(d_nbrOffsetsFF_.Data()),
 		ToU64{},
 		uint64_t{ 0 },
 		thrust::plus<uint64_t>{}
 	);
 
-	// turn temporary counts into actual offsets for FB
-	thrust::transform_exclusive_scan(
+	N_totalFB_ = thrust::transform_reduce(
 		thrust::cuda::par.on(stream_),
 		thrust::device_pointer_cast(d_nbrCountFB_.Data()),
 		thrust::device_pointer_cast(d_nbrCountFB_.Data() + N_F_),
-		thrust::device_pointer_cast(d_nbrOffsetsFB_.Data()),
 		ToU64{},
 		uint64_t{ 0 },
 		thrust::plus<uint64_t>{}
 	);
 
-	uint64_t h_lastOffsetFF = 0;
-	uint64_t h_lastOffsetFB = 0;
-	uint32_t h_lastCountFF = 0;
-	uint32_t h_lastCountFB = 0;
-
-	GPU::Copy_DeviceToHost(&h_lastOffsetFF,
-		d_nbrOffsetsFF_.Data() + (N_F_ - 1), 1, stream_);
-	GPU::Copy_DeviceToHost(&h_lastOffsetFB,
-		d_nbrOffsetsFB_.Data() + (N_F_ - 1), 1, stream_);
-	GPU::Copy_DeviceToHost(&h_lastCountFF,
-		d_nbrCountFF_.Data() + (N_F_ - 1), 1, stream_);
-	GPU::Copy_DeviceToHost(&h_lastCountFB,
-		d_nbrCountFB_.Data() + (N_F_ - 1), 1, stream_);
-
+	uint64_t h_packedFF = 0;
+	uint64_t h_packedFB = 0;
+	GPU::Copy_DeviceToHost(&h_packedFF,
+		d_nbrChunkOffsetsFF_.Data() + N_chunks, 1, stream_);
+	GPU::Copy_DeviceToHost(&h_packedFB,
+		d_nbrChunkOffsetsFB_.Data() + N_chunks, 1, stream_);
 	GPU::StreamSync(stream_);
 
-	// finalize total fluid and boundary neighbor counts
-	N_totalFF_ = h_lastOffsetFF + static_cast<uint64_t>(h_lastCountFF);
-	N_totalFB_ = h_lastOffsetFB + static_cast<uint64_t>(h_lastCountFB);
+	N_packedFF_ = h_packedFF;
+	N_packedFB_ = h_packedFB;
 
-	// store sentinel offsets at i = N_F_
-	GPU::Copy_HostToDevice(
-		d_nbrOffsetsFF_.Data() + N_F_, &N_totalFF_, 1, stream_);
-	GPU::Copy_HostToDevice(
-		d_nbrOffsetsFB_.Data() + N_F_, &N_totalFB_, 1, stream_);
-
-	// ensure capacity of packed CSR storage for FF
-	if (N_totalFF_ > d_nbrListFF_.Size())
+	// ensure capacity of packed SELL32 storage for FF
+	if (N_packedFF_ > d_nbrListFF_.Size())
 	{
-		const uint64_t capTarget = N_totalFF_
-								 + Base::ExtraPercent(N_totalFF_, extraAllocCapacityPct_);
+		const uint64_t capTarget = N_packedFF_
+								 + Base::ExtraPercent(N_packedFF_, extraAllocCapacityPct_);
 		d_nbrListFF_.Resize(capTarget);
 	}
 
-	// ensure capacity of packed CSR storage for FB
-	if (N_totalFB_ > d_nbrListFB_.Size())
+	// ensure capacity of packed SELL32 storage for FB
+	if (N_packedFB_ > d_nbrListFB_.Size())
 	{
-		const uint64_t capTarget = N_totalFB_
-								 + Base::ExtraPercent(N_totalFB_, extraAllocCapacityPct_);
+		const uint64_t capTarget = N_packedFB_
+								 + Base::ExtraPercent(N_packedFB_, extraAllocCapacityPct_);
 		d_nbrListFB_.Resize(capTarget);
 	}
 
@@ -199,14 +252,14 @@ void NS_BruteForce_GPU01::Query_Fill(
 	const SimParams& params)
 {
 	// (count-query and fill-query MUST find the same number of neighbors)
-	// reset overflow before filling packed CSR lists
+	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
 
 	GPU01::Launch_BruteForce_Query_Fill(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		be_.N_F_, be_.N_B_, be_.stream_,
-		be_.d_nbrOffsetsFF_.Data(), be_.d_nbrOffsetsFB_.Data(),
+		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
 		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
 		be_.d_nbrOverflowFlag_.Data());
 
@@ -384,7 +437,7 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 {
 	// (count-query and fill-query MUST find the same number of neighbors)
-	// reset overflow before filling packed CSR lists
+	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
 
 	GPU01::Launch_CellLinkedList_Compact_Query_Fill(
@@ -394,7 +447,7 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
 		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
-		be_.d_nbrOffsetsFF_.Data(), be_.d_nbrOffsetsFB_.Data(),
+		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
 		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
 		be_.d_nbrOverflowFlag_.Data());
 

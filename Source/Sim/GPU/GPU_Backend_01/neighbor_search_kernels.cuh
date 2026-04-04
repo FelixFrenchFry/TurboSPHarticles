@@ -33,8 +33,8 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* nbrListFF,
 		uint32_t* nbrListFB,
@@ -86,8 +86,8 @@ namespace GPU01
 		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* nbrListFF, uint32_t* nbrListFB,
 		uint32_t* overflowFlag);
@@ -137,8 +137,8 @@ namespace GPU01
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* nbrListFF, uint32_t* nbrListFB,
 		uint32_t* overflowFlag);

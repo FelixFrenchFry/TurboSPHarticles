@@ -11,6 +11,8 @@
 
 namespace GPU01
 {
+	static constexpr uint32_t N_SellWidth = 32u;
+
 	__constant__ uint32_t c_ns_N_F;
 	__constant__ uint32_t c_ns_N_B;
 	__constant__ float c_ns_kernelRadius;
@@ -79,6 +81,27 @@ namespace GPU01
 	{
 		const int t = (v < low) ? low : v;
 		return static_cast<uint32_t>((t > high) ? high : t);
+	}
+
+	__device__ __forceinline__
+	void StoreNeighbor_SELL32(
+		const uint64_t chunkBase,
+		const uint64_t chunkPitch,
+		const uint32_t lane,
+		uint64_t& wr,
+		const uint32_t j,
+		uint32_t* __restrict__ nbrList,
+		uint32_t* __restrict__ overflowFlag)
+	{
+		if (wr < chunkPitch)
+		{
+			nbrList[chunkBase + wr * static_cast<uint64_t>(N_SellWidth) + lane] = j;
+			wr++;
+		}
+		else
+		{
+			atomicExch(overflowFlag, 1u);
+		}
 	}
 
 	// ------------------------------------------------------------------------------------------------
@@ -155,8 +178,8 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* __restrict__ nbrListFF,
 		uint32_t* __restrict__ nbrListFB,
@@ -170,13 +193,17 @@ namespace GPU01
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
 
-		// write ranges of packed neighbor lists
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-		uint64_t wrFF = sFF;
-		uint64_t wrFB = sFB;
+		// write ranges of packed SELL32 neighbor lists
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t pitchFF =
+			(nbrChunkOffsetsFF[chunk + 1] - baseFF) / static_cast<uint64_t>(N_SellWidth);
+		const uint64_t pitchFB =
+			(nbrChunkOffsetsFB[chunk + 1] - baseFB) / static_cast<uint64_t>(N_SellWidth);
+		uint64_t wrFF = 0;
+		uint64_t wrFB = 0;
 
 		// check fluid candidates (all particles)
 		for (uint32_t j = 0; j < c_ns_N_F; j++)
@@ -191,15 +218,8 @@ namespace GPU01
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 			{
-				if (wrFF < eFF)
-				{
-					// add fluid neighbor to the list
-					nbrListFF[wrFF++] = j;
-				}
-				else
-				{
-					atomicExch(overflowFlag, 1u);
-				}
+				// add fluid neighbor to the list
+				StoreNeighbor_SELL32(baseFF, pitchFF, lane, wrFF, j, nbrListFF, overflowFlag);
 			}
 		}
 
@@ -216,15 +236,8 @@ namespace GPU01
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 			{
-				if (wrFB < eFB)
-				{
-					// add boundary neighbor to the list
-					nbrListFB[wrFB++] = j;
-				}
-				else
-				{
-					atomicExch(overflowFlag, 1u);
-				}
+				// add boundary neighbor to the list
+				StoreNeighbor_SELL32(baseFB, pitchFB, lane, wrFB, j, nbrListFB, overflowFlag);
 			}
 		}
 	}
@@ -475,8 +488,8 @@ namespace GPU01
 		const uint32_t* __restrict__ cellEndIdxB,
 		const uint32_t* __restrict__ sortedParticleIdxF,
 		const uint32_t* __restrict__ sortedParticleIdxB,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t N_F,
 		// destinations
 		uint32_t* __restrict__ nbrListFF,
@@ -497,13 +510,17 @@ namespace GPU01
 		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
 		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
 
-		// write ranges of packed neighbor lists
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-		uint64_t wrFF = sFF;
-		uint64_t wrFB = sFB;
+		// write ranges of packed SELL32 neighbor lists
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t pitchFF =
+			(nbrChunkOffsetsFF[chunk + 1] - baseFF) / static_cast<uint64_t>(N_SellWidth);
+		const uint64_t pitchFB =
+			(nbrChunkOffsetsFB[chunk + 1] - baseFB) / static_cast<uint64_t>(N_SellWidth);
+		uint64_t wrFF = 0;
+		uint64_t wrFB = 0;
 
 		// check all particles j in neighboring grid cells
 		const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
@@ -550,16 +567,10 @@ namespace GPU01
 
 							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
-								if (wrFF < eFF)
-								{
-									// add fluid neighbor to the list
-									// (global memory write)
-									nbrListFF[wrFF++] = j;
-								}
-								else
-								{
-									atomicExch(overflowFlag, 1u);
-								}
+								// add fluid neighbor to the list
+								// (global memory write)
+								StoreNeighbor_SELL32(baseFF, pitchFF, lane, wrFF,
+									j, nbrListFF, overflowFlag);
 							}
 						}
 					}
@@ -587,16 +598,10 @@ namespace GPU01
 
 							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
-								if (wrFB < eFB)
-								{
-									// add boundary neighbor to the list
-									// (global memory write)
-									nbrListFB[wrFB++] = j;
-								}
-								else
-								{
-									atomicExch(overflowFlag, 1u);
-								}
+								// add boundary neighbor to the list
+								// (global memory write)
+								StoreNeighbor_SELL32(baseFB, pitchFB, lane, wrFB,
+									j, nbrListFB, overflowFlag);
 							}
 						}
 					}
@@ -912,8 +917,8 @@ namespace GPU01
 		const uint32_t* __restrict__ cellStartIdxB,
 		const uint32_t* __restrict__ sortedParticleIdxF,
 		const uint32_t* __restrict__ sortedParticleIdxB,
-		const uint64_t* __restrict__ nbrOffsetsFF,
-		const uint64_t* __restrict__ nbrOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFF,
+		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
 		const uint32_t N_F,
 		// destinations
@@ -935,13 +940,17 @@ namespace GPU01
 		const int cy = FloorToInt(y * c_ns_cellSizeInv);
 		const int cz = FloorToInt(z * c_ns_cellSizeInv);
 
-		// write ranges of packed neighbor lists
-		const uint64_t sFF = nbrOffsetsFF[i];
-		const uint64_t eFF = nbrOffsetsFF[i + 1];
-		const uint64_t sFB = nbrOffsetsFB[i];
-		const uint64_t eFB = nbrOffsetsFB[i + 1];
-		uint64_t wrFF = sFF;
-		uint64_t wrFB = sFB;
+		// write ranges of packed SELL32 neighbor lists
+		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t lane = i % N_SellWidth;
+		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
+		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t pitchFF =
+			(nbrChunkOffsetsFF[chunk + 1] - baseFF) / static_cast<uint64_t>(N_SellWidth);
+		const uint64_t pitchFB =
+			(nbrChunkOffsetsFB[chunk + 1] - baseFB) / static_cast<uint64_t>(N_SellWidth);
+		uint64_t wrFF = 0;
+		uint64_t wrFB = 0;
 
 		// check all particles j in the queried neighboring grid cells
 		const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
@@ -985,16 +994,10 @@ namespace GPU01
 
 							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
-								if (wrFF < eFF)
-								{
-									// add fluid neighbor to the list
-									// (global memory write)
-									nbrListFF[wrFF++] = j;
-								}
-								else
-								{
-									atomicExch(overflowFlag, 1u);
-								}
+								// add fluid neighbor to the list
+								// (global memory write)
+								StoreNeighbor_SELL32(baseFF, pitchFF, lane, wrFF,
+									j, nbrListFF, overflowFlag);
 							}
 						}
 					}
@@ -1025,16 +1028,10 @@ namespace GPU01
 
 							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
-								if (wrFB < eFB)
-								{
-									// add boundary neighbor to the list
-									// (global memory write)
-									nbrListFB[wrFB++] = j;
-								}
-								else
-								{
-									atomicExch(overflowFlag, 1u);
-								}
+								// add boundary neighbor to the list
+								// (global memory write)
+								StoreNeighbor_SELL32(baseFB, pitchFB, lane, wrFB,
+									j, nbrListFB, overflowFlag);
 							}
 						}
 					}
@@ -1077,8 +1074,8 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* nbrListFF,
 		uint32_t* nbrListFB,
@@ -1091,7 +1088,7 @@ namespace GPU01
 
 		K_BruteForce_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
-			nbrOffsetsFF, nbrOffsetsFB,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			nbrListFF, nbrListFB, overflowFlag);
 
 		GPU::CheckLastKernel("K_BruteForce_Query_Fill()");
@@ -1200,8 +1197,8 @@ namespace GPU01
 		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* nbrListFF, uint32_t* nbrListFB,
 		uint32_t* overflowFlag)
@@ -1214,7 +1211,7 @@ namespace GPU01
 		K_CellLinkedList_Basic_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, cellStartIdxF, cellEndIdxF,
 			cellStartIdxB, cellEndIdxB, sortedParticleIdxF, sortedParticleIdxB,
-			nbrOffsetsFF, nbrOffsetsFB, N_F,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, N_F,
 			nbrListFF, nbrListFB, overflowFlag);
 
 		GPU::CheckLastKernel("K_CellLinkedList_Basic_Query_Fill()");
@@ -1312,8 +1309,8 @@ namespace GPU01
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
-		const uint64_t* nbrOffsetsFF,
-		const uint64_t* nbrOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFF,
+		const uint64_t* nbrChunkOffsetsFB,
 		// destinations
 		uint32_t* nbrListFF, uint32_t* nbrListFB,
 		uint32_t* overflowFlag)
@@ -1326,7 +1323,7 @@ namespace GPU01
 		K_CellLinkedList_Compact_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, uniqueCellIdF, uniqueCellIdB,
 			cellStartIdxF, cellStartIdxB, sortedParticleIdxF, sortedParticleIdxB,
-			nbrOffsetsFF, nbrOffsetsFB,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			N_NonEmptyCellsF, N_NonEmptyCellsB, N_F,
 			nbrListFF, nbrListFB, overflowFlag);
 
