@@ -83,6 +83,7 @@ namespace Sim
 		uint32_t cellQueryReach_ = 1;
 		uint32_t N_NonEmptyCellsF_ = 0;
 		uint32_t N_NonEmptyCellsB_ = 0;
+		bool cellIdsMatchCurrentParticleOrder_ = false;
 
 		// data structures
 		DeviceBuffer<uint64_t> d_uniqueCellIdF_; // unique cell IDs of non-empty cells

@@ -296,6 +296,7 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	cellQueryReach_ = 1;
 	N_NonEmptyCellsF_ = 0;
 	N_NonEmptyCellsB_ = 0;
+	cellIdsMatchCurrentParticleOrder_ = false;
 
 	d_uniqueCellIdF_.Release();
 	d_cellStartIdxF_.Release();
@@ -321,6 +322,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 		N_NonEmptyCellsF_ = 0;
 		N_NonEmptyCellsB_ = 0;
+		cellIdsMatchCurrentParticleOrder_ = false;
 
 		d_uniqueCellIdF_.Release();
 		d_cellStartIdxF_.Release();
@@ -353,42 +355,54 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
-	// --- [ cell coordinates and indices for fluid and boundary particles ] -------------------------
+	// if DataReOrder() already computed and permuted the per-particle cell IDs for this step,
+	// then they can be reused directly here and no re-computation is needed
+	const bool canReuseCellIds =
+		cellIdsMatchCurrentParticleOrder_
+		&& d_cellIdF_.Size() >= N_F
+		&& d_cellIdB_.Size() >= N_B;
 
-	if (N_F > 0) // fluid
+	if (!canReuseCellIds)
 	{
-		GPU01::Launch_FillCellIdAndInitParticleIdx(
-			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-			N_F, be_.stream_, d_cellIdF_.Data(), d_sortedParticleIdxF_.Data());
-	}
+		cellIdsMatchCurrentParticleOrder_ = false;
 
-	if (N_B > 0) // boundary
-	{
-		GPU01::Launch_FillCellIdAndInitParticleIdx(
-			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-			N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
-	}
+		// --- [ cell coordinates and indices for fluid and boundary particles ] ---------------------
 
-	// --- [ sort particle indices by cell IDs ] -----------------------------------------------------
+		if (N_F > 0) // fluid
+		{
+			GPU01::Launch_FillCellIdAndInitParticleIdx(
+				be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+				N_F, be_.stream_, d_cellIdF_.Data(), d_sortedParticleIdxF_.Data());
+		}
 
-	if (N_F > 0) // fluid
-	{
-		thrust::device_ptr<uint64_t> keysF(d_cellIdF_.Data());
-		thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
+		if (N_B > 0) // boundary
+		{
+			GPU01::Launch_FillCellIdAndInitParticleIdx(
+				be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+				N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
+		}
 
-		// using radix sort from thrust
-		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
-			keysF, keysF + N_F,valsF);
-	}
+		// --- [ sort particle indices by cell IDs ] -------------------------------------------------
 
-	if (N_B > 0) // boundary
-	{
-		thrust::device_ptr<uint64_t> keysB(d_cellIdB_.Data());
-		thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB_.Data());
+		if (N_F > 0) // fluid
+		{
+			thrust::device_ptr<uint64_t> keysF(d_cellIdF_.Data());
+			thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
 
-		// using radix sort from thrust
-		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
-			keysB, keysB + N_B, valsB);
+			// using radix sort from thrust
+			thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
+				keysF, keysF + N_F,valsF);
+		}
+
+		if (N_B > 0) // boundary
+		{
+			thrust::device_ptr<uint64_t> keysB(d_cellIdB_.Data());
+			thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB_.Data());
+
+			// using radix sort from thrust
+			thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
+				keysB, keysB + N_B, valsB);
+		}
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] --------------------------------
@@ -462,7 +476,13 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	const uint32_t N_B = be_.N_B_;
 	const uint32_t N_MAX = std::max(N_F, N_B);
 
-	if (N_MAX == 0) { return; }
+	if (N_MAX == 0)
+	{
+		cellIdsMatchCurrentParticleOrder_ = false;
+		return;
+	}
+
+	cellIdsMatchCurrentParticleOrder_ = false;
 
 	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
 	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
@@ -563,6 +583,10 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data() + N_B),
 			0u);
 	}
+
+	// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
+	// so Construct() can reuse them instead of re-computing them right away
+	cellIdsMatchCurrentParticleOrder_ = true;
 
 	GPU::StreamSync(be_.stream_);
 }
