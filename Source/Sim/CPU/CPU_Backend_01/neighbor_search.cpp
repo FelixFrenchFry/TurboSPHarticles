@@ -186,6 +186,47 @@ namespace
 		return frame;
 	}
 
+	// TODO: parallelize this?
+	void BuildCompactCellTable(
+		const std::vector<uint64_t>& cellId,
+		std::vector<uint64_t>& uniqueCellId,
+		std::vector<uint32_t>& cellStartIdx)
+	{
+		const uint32_t N = static_cast<uint32_t>(cellId.size());
+		uniqueCellId.clear();
+		cellStartIdx.clear();
+		if (N == 0) { return; }
+
+		// first count the number of occupied cells so both output arrays can be sized exactly
+		uint32_t N_Cells = 1;
+		for (uint32_t i = 1; i < N; i++)
+		{
+			if (cellId[i] != cellId[i - 1]) { N_Cells++; }
+		}
+
+		uniqueCellId.resize(N_Cells);
+		cellStartIdx.resize(N_Cells + 1); // +1 for sentinel
+
+		uint32_t c = 0;
+		uniqueCellId[c] = cellId[0];
+		cellStartIdx[c] = 0;
+
+		for (uint32_t i = 1; i < N; i++)
+		{
+			const uint64_t cid = cellId[i];
+
+			if (cid != cellId[i - 1]) // new cell encountered
+			{
+				c++;
+				uniqueCellId[c] = cid;
+				cellStartIdx[c] = i;
+			}
+		}
+
+		// end of the last cell's range as sentinel
+		cellStartIdx[N_Cells] = N;
+	}
+
 } // unnamed
 
 // -------------------------------------------------------------------------------------------------
@@ -512,67 +553,11 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
 
-	uniqueCellIdF_.clear();
-	cellStartIdxF_.clear();
-
 	// fluid
-	// TODO: replace this with a parallel marker and scan version?
-	if (N_F > 0)
-	{
-		// worst case, all particles are in unique cells (highly unlikely)
-		// best case (realistically), each cell has 8 particles
-		// TODO: find a better heuristic
-		uniqueCellIdF_.reserve(N_F / 4);
-		cellStartIdxF_.reserve(N_F / 4 + 1); // +1 for sentinel
-
-		uint64_t cid_prev = EMPTY_64;
-		for (uint32_t i = 0; i < N_F; i++)
-		{
-			const uint64_t cid = cellIdF_[i];
-
-			if (cid != cid_prev) // new cell encountered
-			{
-				uniqueCellIdF_.push_back(cid);
-				cellStartIdxF_.push_back(i);
-
-				cid_prev = cid;
-			}
-		}
-
-		// end of the last cell's range as sentinel
-		cellStartIdxF_.push_back(N_F);
-	}
-
-	uniqueCellIdB_.clear();
-	cellStartIdxB_.clear();
+	BuildCompactCellTable(cellIdF_, uniqueCellIdF_, cellStartIdxF_);
 
 	// boundary
-	// TODO: replace this with a parallel marker and scan version?
-	if (N_B > 0)
-	{
-		// worst case, all particles are in unique cells (highly unlikely)
-		// best case (realistically), each cell has 8 particles
-		// TODO: find a better heuristic
-		uniqueCellIdB_.reserve(N_B / 4);
-		cellStartIdxB_.reserve(N_B / 4 + 1); // +1 for sentinel
-
-		uint64_t cid_prev = EMPTY_64;
-		for (uint32_t i = 0; i < N_B; i++)
-		{
-			const uint64_t cid = cellIdB_[i];
-
-			if (cid != cid_prev) // new cell encountered
-			{
-				uniqueCellIdB_.push_back(cid);
-				cellStartIdxB_.push_back(i);
-
-				cid_prev = cid;
-			}
-		}
-
-		// end of the last cell's range as sentinel
-		cellStartIdxB_.push_back(N_B);
-	}
+	BuildCompactCellTable(cellIdB_, uniqueCellIdB_, cellStartIdxB_);
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
