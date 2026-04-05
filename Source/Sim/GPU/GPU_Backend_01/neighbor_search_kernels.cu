@@ -791,8 +791,6 @@ namespace GPU01
 		const uint64_t* __restrict__ uniqueCellIdB,
 		const uint32_t* __restrict__ cellStartIdxF,
 		const uint32_t* __restrict__ cellStartIdxB,
-		const uint32_t* __restrict__ sortedParticleIdxF,
-		const uint32_t* __restrict__ sortedParticleIdxB,
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
 		const uint32_t N_F,
 		// destinations
@@ -844,7 +842,7 @@ namespace GPU01
 						for (uint32_t k = sF_nbr; k < eF_nbr; k++)
 						{
 							// index of fluid neighbor candidate
-							const uint32_t j = sortedParticleIdxF[k];
+							const uint32_t j = k;
 
 							// position difference
 							const float dx = x - xPosF[j];
@@ -875,7 +873,7 @@ namespace GPU01
 						for (uint32_t k = sB_nbr; k < eB_nbr; k++)
 						{
 							// index of boundary neighbor candidate
-							const uint32_t j = sortedParticleIdxB[k];
+							const uint32_t j = k;
 
 							// position difference
 							const float dx = x - xPosB[j];
@@ -915,8 +913,6 @@ namespace GPU01
 		const uint64_t* __restrict__ uniqueCellIdB,
 		const uint32_t* __restrict__ cellStartIdxF,
 		const uint32_t* __restrict__ cellStartIdxB,
-		const uint32_t* __restrict__ sortedParticleIdxF,
-		const uint32_t* __restrict__ sortedParticleIdxB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
@@ -980,7 +976,7 @@ namespace GPU01
 						for (uint32_t k = sF_nbr; k < eF_nbr; k++)
 						{
 							// index of fluid neighbor candidate
-							const uint32_t j = sortedParticleIdxF[k];
+							const uint32_t j = k;
 
 							// position difference
 							const float dx = x - xPosF[j];
@@ -1014,7 +1010,7 @@ namespace GPU01
 						for (uint32_t k = sB_nbr; k < eB_nbr; k++)
 						{
 							// index of boundary neighbor candidate
-							const uint32_t j = sortedParticleIdxB[k];
+							const uint32_t j = k;
 
 							// position difference
 							const float dx = x - xPosB[j];
@@ -1279,7 +1275,6 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint64_t* uniqueCellIdF, const uint64_t* uniqueCellIdB,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
-		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
@@ -1293,7 +1288,7 @@ namespace GPU01
 
 		K_CellLinkedList_Compact_Query_Count<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, uniqueCellIdF, uniqueCellIdB,
-			cellStartIdxF, cellStartIdxB, sortedParticleIdxF, sortedParticleIdxB,
+			cellStartIdxF, cellStartIdxB,
 			N_NonEmptyCellsF, N_NonEmptyCellsB, N_F,
 			nbrCountFF, nbrCountFB);
 
@@ -1305,7 +1300,6 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint64_t* uniqueCellIdF, const uint64_t* uniqueCellIdB,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
-		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
 		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
@@ -1322,7 +1316,7 @@ namespace GPU01
 
 		K_CellLinkedList_Compact_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, uniqueCellIdF, uniqueCellIdB,
-			cellStartIdxF, cellStartIdxB, sortedParticleIdxF, sortedParticleIdxB,
+			cellStartIdxF, cellStartIdxB,
 			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			N_NonEmptyCellsF, N_NonEmptyCellsB, N_F,
 			nbrListFF, nbrListFB, overflowFlag);

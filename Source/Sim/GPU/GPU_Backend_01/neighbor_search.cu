@@ -432,6 +432,14 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 {
+	(void)params;
+
+	if (!cellIdsMatchCurrentParticleOrder_)
+	{
+		throw std::runtime_error(
+			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
+	}
+
 	// reset per-particle counts before count-query
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
@@ -441,7 +449,6 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
-		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
 		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data());
 
@@ -450,6 +457,14 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 
 void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 {
+	(void)params;
+
+	if (!cellIdsMatchCurrentParticleOrder_)
+	{
+		throw std::runtime_error(
+			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
+	}
+
 	// (count-query and fill-query MUST find the same number of neighbors)
 	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
@@ -459,7 +474,6 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
-		d_sortedParticleIdxF_.Data(), d_sortedParticleIdxB_.Data(),
 		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
 		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
