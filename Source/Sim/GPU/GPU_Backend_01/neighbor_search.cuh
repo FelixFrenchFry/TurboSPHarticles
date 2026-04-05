@@ -90,7 +90,7 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_uniqueCellIdF_; // unique cell IDs of non-empty cells
 		DeviceBuffer<uint32_t> d_cellStartIdxF_; // per-cell start index in the re-ordered particle arrays
 		DeviceBuffer<uint64_t> d_cellIdF_; // per-particle cell ID array
-		DeviceBuffer<uint32_t> d_sortedParticleIdxF_; // sorted fluid particle index array (temporary permutation)
+		DeviceBuffer<uint32_t> d_sortedParticleIdxF_; // sorted fluid particle index array / per-particle compact cell index
 
 		DeviceBuffer<uint64_t> d_uniqueCellIdB_;
 		DeviceBuffer<uint32_t> d_cellStartIdxB_;
@@ -100,6 +100,8 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
 		DeviceBuffer<uint32_t> d_cellRefFByAny_; // merged-cell to compact fluid-cell index
 		DeviceBuffer<uint32_t> d_cellRefBByAny_; // merged-cell to compact boundary-cell index
+		DeviceBuffer<uint32_t> d_queryLoAnyByCellF_; // lower search bound in merged-cell table per source fluid cell
+		DeviceBuffer<uint32_t> d_queryHiAnyByCellF_; // upper search bound in merged-cell table per source fluid cell
 
 		// re-usable work (scratch) buffer for temp storage
 		DeviceBuffer<uint32_t> d_cellStartMarkerScan_;
@@ -116,6 +118,7 @@ namespace Sim
 			uint32_t N, uint32_t& N_NonEmptyCells);
 
 		void BuildMergedCompactCellLookup();
+		void BuildQueryLookupBounds();
 	};
 
 } // namespace Sim

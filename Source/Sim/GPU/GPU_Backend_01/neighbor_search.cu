@@ -313,6 +313,8 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	d_uniqueCellIdAny_.Release();
 	d_cellRefFByAny_.Release();
 	d_cellRefBByAny_.Release();
+	d_queryLoAnyByCellF_.Release();
+	d_queryHiAnyByCellF_.Release();
 
 	d_cellStartMarkerScan_.Release();
 }
@@ -344,6 +346,8 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		d_uniqueCellIdAny_.Release();
 		d_cellRefFByAny_.Release();
 		d_cellRefBByAny_.Release();
+		d_queryLoAnyByCellF_.Release();
+		d_queryHiAnyByCellF_.Release();
 
 		d_cellStartMarkerScan_.Release();
 
@@ -441,6 +445,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	}
 
 	BuildMergedCompactCellLookup();
+	BuildQueryLookupBounds();
 }
 
 void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
@@ -463,6 +468,8 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 		d_uniqueCellIdAny_.Data(),
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+		d_sortedParticleIdxF_.Data(),
+		d_queryLoAnyByCellF_.Data(), d_queryHiAnyByCellF_.Data(),
 		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data());
 
@@ -489,6 +496,8 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 		d_uniqueCellIdAny_.Data(),
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+		d_sortedParticleIdxF_.Data(),
+		d_queryLoAnyByCellF_.Data(), d_queryHiAnyByCellF_.Data(),
 		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
 		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
@@ -643,6 +652,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemU
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefFByAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefBByAny_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryLoAnyByCellF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryHiAnyByCellF_));
 
 	// shared scan scratch is accounted in the fluid-side bucket
 	// to avoid double-counting.
@@ -694,6 +705,14 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		if (d_uniqueCellIdAny_.Size() < N_ANY_MAX) { d_uniqueCellIdAny_.Resize(N_ANY_MAX); }
 		if (d_cellRefFByAny_.Size() < N_ANY_MAX) { d_cellRefFByAny_.Resize(N_ANY_MAX); }
 		if (d_cellRefBByAny_.Size() < N_ANY_MAX) { d_cellRefBByAny_.Resize(N_ANY_MAX); }
+	}
+
+	if (N_F > 0)
+	{
+		// keep capacity once allocated and only grow when needed
+		// (to avoid repeated device alloc/free between steps)
+		if (d_queryLoAnyByCellF_.Size() < N_F) { d_queryLoAnyByCellF_.Resize(N_F); }
+		if (d_queryHiAnyByCellF_.Size() < N_F) { d_queryHiAnyByCellF_.Resize(N_F); }
 	}
 }
 
@@ -785,4 +804,21 @@ void NS_CellLinkedList_Compact_GPU01::BuildMergedCompactCellLookup()
 		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
 		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.stream_,
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data());
+}
+
+void NS_CellLinkedList_Compact_GPU01::BuildQueryLookupBounds()
+{
+	if (N_NonEmptyCellsF_ == 0 || N_NonEmptyCellsAny_ == 0)
+	{
+		d_queryLoAnyByCellF_.Release();
+		d_queryHiAnyByCellF_.Release();
+		return;
+	}
+
+	GPU01::Launch_FillQueryLookupBoundsF(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		d_cellStartIdxF_.Data(), d_uniqueCellIdAny_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsAny_, cellQueryReach_, be_.stream_,
+		d_sortedParticleIdxF_.Data(),
+		d_queryLoAnyByCellF_.Data(), d_queryHiAnyByCellF_.Data());
 }

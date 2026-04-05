@@ -687,6 +687,81 @@ namespace GPU01
 		return -1; // not found
 	}
 
+	__device__
+	uint32_t LowerBoundUniqueCellId(
+		const uint64_t* uniqueCellId,
+		uint32_t N_NonEmptyCells, uint64_t cid)
+	{
+		uint32_t lo = 0;
+		uint32_t hi = N_NonEmptyCells;
+
+		while (lo < hi)
+		{
+			const uint32_t mid = lo + ((hi - lo) >> 1u);
+			if (uniqueCellId[mid] < cid)
+			{
+				lo = mid + 1u;
+			}
+			else
+			{
+				hi = mid;
+			}
+		}
+
+		return lo;
+	}
+
+	__device__
+	uint32_t UpperBoundUniqueCellId(
+		const uint64_t* uniqueCellId,
+		uint32_t N_NonEmptyCells, uint64_t cid)
+	{
+		uint32_t lo = 0;
+		uint32_t hi = N_NonEmptyCells;
+
+		while (lo < hi)
+		{
+			const uint32_t mid = lo + ((hi - lo) >> 1u);
+			if (uniqueCellId[mid] <= cid)
+			{
+				lo = mid + 1u;
+			}
+			else
+			{
+				hi = mid;
+			}
+		}
+
+		return lo;
+	}
+
+	__device__
+	int BinarySearchUniqueCellId(
+		const uint64_t* uniqueCellId,
+		uint32_t lo, uint32_t hi, uint64_t cid)
+	{
+		while (lo < hi)
+		{
+			const uint32_t mid = lo + ((hi - lo) >> 1u);
+			const uint64_t midVal = uniqueCellId[mid];
+
+			if (midVal < cid)
+			{
+				lo = mid + 1u;
+			}
+			else if (midVal > cid)
+			{
+				hi = mid;
+			}
+			else
+			{
+				return static_cast<int>(mid);
+			}
+		}
+
+		return -1;
+	}
+
 	__global__
 	void K_MarkCellStarts(
 		const uint64_t* __restrict__ cellIdSorted,
@@ -775,6 +850,78 @@ namespace GPU01
 	}
 
 	__global__
+	void K_FillQueryLookupBoundsF(
+		const float* __restrict__ xPosF,
+		const float* __restrict__ yPosF,
+		const float* __restrict__ zPosF,
+		const uint32_t* __restrict__ cellStartIdxF,
+		const uint64_t* __restrict__ uniqueCellIdAny,
+		const uint32_t N_NonEmptyCellsF,
+		const uint32_t N_NonEmptyCellsAny,
+		const uint32_t cellQueryReach,
+		// destinations
+		uint32_t* __restrict__ compactCellIdxByParticleF,
+		uint32_t* __restrict__ queryLoAnyByCellF,
+		uint32_t* __restrict__ queryHiAnyByCellF)
+	{
+		const uint32_t cF = blockIdx.x * blockDim.x + threadIdx.x;
+		if (cF >= N_NonEmptyCellsF) { return; }
+
+		const uint32_t srcBegin = cellStartIdxF[cF];
+		const uint32_t srcEnd = cellStartIdxF[cF + 1];
+		if (srcBegin >= srcEnd)
+		{
+			queryLoAnyByCellF[cF] = 0;
+			queryHiAnyByCellF[cF] = 0;
+			return;
+		}
+
+		const float x0 = xPosF[srcBegin];
+		const float y0 = yPosF[srcBegin];
+		const float z0 = zPosF[srcBegin];
+
+		const int cx = FloorToInt(x0 * c_ns_cellSizeInv);
+		const int cy = FloorToInt(y0 * c_ns_cellSizeInv);
+		const int cz = FloorToInt(z0 * c_ns_cellSizeInv);
+
+		uint64_t litMaxCellId = 0xffffffffffffffffull;
+		uint64_t bigMinCellId = 0;
+		const int iCellQueryReach = static_cast<int>(cellQueryReach);
+
+		for (int rz = -iCellQueryReach; rz <= iCellQueryReach; rz++)
+		{
+			const int cz_nbr = cz + rz;
+
+			for (int ry = -iCellQueryReach; ry <= iCellQueryReach; ry++)
+			{
+				const int cy_nbr = cy + ry;
+
+				for (int rx = -iCellQueryReach; rx <= iCellQueryReach; rx++)
+				{
+					const int cx_nbr = cx + rx;
+					const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
+					litMaxCellId = (cid_nbr < litMaxCellId) ? cid_nbr : litMaxCellId;
+					bigMinCellId = (cid_nbr > bigMinCellId) ? cid_nbr : bigMinCellId;
+				}
+			}
+		}
+
+		const uint32_t loAny = LowerBoundUniqueCellId(
+			uniqueCellIdAny, N_NonEmptyCellsAny, litMaxCellId);
+		uint32_t hiAny = UpperBoundUniqueCellId(
+			uniqueCellIdAny, N_NonEmptyCellsAny, bigMinCellId);
+		if (hiAny < loAny) { hiAny = loAny; }
+
+		queryLoAnyByCellF[cF] = loAny;
+		queryHiAnyByCellF[cF] = hiAny;
+
+		for (uint32_t i = srcBegin; i < srcEnd; i++)
+		{
+			compactCellIdxByParticleF[i] = cF;
+		}
+	}
+
+	__global__
 	void K_FillCellIdAndInitParticleIdx(
 		const float* __restrict__ xPos,
 		const float* __restrict__ yPos,
@@ -815,12 +962,17 @@ namespace GPU01
 		const uint32_t* __restrict__ cellRefBByAny,
 		const uint32_t* __restrict__ cellStartIdxF,
 		const uint32_t* __restrict__ cellStartIdxB,
+		const uint32_t* __restrict__ compactCellIdxByParticleF,
+		const uint32_t* __restrict__ queryLoAnyByCellF,
+		const uint32_t* __restrict__ queryHiAnyByCellF,
 		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F,
 		// destinations
 		uint32_t* __restrict__ nbrCountFF,
 		uint32_t* __restrict__ nbrCountFB)
 	{
+		(void)N_NonEmptyCellsAny;
+
 		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= N_F) { return; }
 
@@ -834,6 +986,15 @@ namespace GPU01
 		const int cx = FloorToInt(x * c_ns_cellSizeInv);
 		const int cy = FloorToInt(y * c_ns_cellSizeInv);
 		const int cz = FloorToInt(z * c_ns_cellSizeInv);
+		const uint32_t cF_src = compactCellIdxByParticleF[i];
+		const uint32_t loAny = queryLoAnyByCellF[cF_src];
+		const uint32_t hiAny = queryHiAnyByCellF[cF_src];
+		if (loAny >= hiAny)
+		{
+			nbrCountFF[i] = 0;
+			nbrCountFB[i] = 0;
+			return;
+		}
 
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
@@ -854,7 +1015,7 @@ namespace GPU01
 
 					const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
 					const int cAny_nbr = BinarySearchUniqueCellId(
-						uniqueCellIdAny, N_NonEmptyCellsAny, cid_nbr);
+						uniqueCellIdAny, loAny, hiAny, cid_nbr);
 
 					if (cAny_nbr < 0) { continue; }
 
@@ -942,6 +1103,9 @@ namespace GPU01
 		const uint32_t* __restrict__ cellRefBByAny,
 		const uint32_t* __restrict__ cellStartIdxF,
 		const uint32_t* __restrict__ cellStartIdxB,
+		const uint32_t* __restrict__ compactCellIdxByParticleF,
+		const uint32_t* __restrict__ queryLoAnyByCellF,
+		const uint32_t* __restrict__ queryHiAnyByCellF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t N_NonEmptyCellsAny,
@@ -951,6 +1115,8 @@ namespace GPU01
 		uint32_t* __restrict__ nbrListFB,
 		uint32_t* __restrict__ overflowFlag)
 	{
+		(void)N_NonEmptyCellsAny;
+
 		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= N_F) { return; }
 
@@ -964,6 +1130,10 @@ namespace GPU01
 		const int cx = FloorToInt(x * c_ns_cellSizeInv);
 		const int cy = FloorToInt(y * c_ns_cellSizeInv);
 		const int cz = FloorToInt(z * c_ns_cellSizeInv);
+		const uint32_t cF_src = compactCellIdxByParticleF[i];
+		const uint32_t loAny = queryLoAnyByCellF[cF_src];
+		const uint32_t hiAny = queryHiAnyByCellF[cF_src];
+		if (loAny >= hiAny) { return; }
 
 		// write ranges of packed SELL32 neighbor lists
 		const uint32_t chunk = i / N_SellWidth;
@@ -993,7 +1163,7 @@ namespace GPU01
 
 					const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
 					const int cAny_nbr = BinarySearchUniqueCellId(
-						uniqueCellIdAny, N_NonEmptyCellsAny, cid_nbr);
+						uniqueCellIdAny, loAny, hiAny, cid_nbr);
 
 					if (cAny_nbr < 0) { continue; }
 
@@ -1309,6 +1479,32 @@ namespace GPU01
 		GPU::CheckLastKernel("K_FillMergedCompactCellRefs()");
 	}
 
+	void Launch_FillQueryLookupBoundsF(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const uint32_t* cellStartIdxF,
+		const uint64_t* uniqueCellIdAny,
+		const uint32_t N_NonEmptyCellsF,
+		const uint32_t N_NonEmptyCellsAny,
+		const uint32_t cellQueryReach,
+		cudaStream_t stream,
+		// destinations
+		uint32_t* compactCellIdxByParticleF,
+		uint32_t* queryLoAnyByCellF,
+		uint32_t* queryHiAnyByCellF)
+	{
+		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_GRIDSIZE = (N_NonEmptyCellsF + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+
+		K_FillQueryLookupBoundsF<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			xPosF, yPosF, zPosF,
+			cellStartIdxF, uniqueCellIdAny,
+			N_NonEmptyCellsF, N_NonEmptyCellsAny, cellQueryReach,
+			compactCellIdxByParticleF,
+			queryLoAnyByCellF, queryHiAnyByCellF);
+
+		GPU::CheckLastKernel("K_FillQueryLookupBoundsF()");
+	}
+
 	void Launch_FillCellIdAndInitParticleIdx(
 		const float* xPos, const float* yPos, const float* zPos,
 		const uint32_t N,
@@ -1333,6 +1529,8 @@ namespace GPU01
 		const uint64_t* uniqueCellIdAny,
 		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
+		const uint32_t* compactCellIdxByParticleF,
+		const uint32_t* queryLoAnyByCellF, const uint32_t* queryHiAnyByCellF,
 		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
@@ -1348,6 +1546,8 @@ namespace GPU01
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, uniqueCellIdAny,
 			cellRefFByAny, cellRefBByAny,
 			cellStartIdxF, cellStartIdxB,
+			compactCellIdxByParticleF,
+			queryLoAnyByCellF, queryHiAnyByCellF,
 			N_NonEmptyCellsAny, N_F,
 			nbrCountFF, nbrCountFB);
 
@@ -1360,6 +1560,8 @@ namespace GPU01
 		const uint64_t* uniqueCellIdAny,
 		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
+		const uint32_t* compactCellIdxByParticleF,
+		const uint32_t* queryLoAnyByCellF, const uint32_t* queryHiAnyByCellF,
 		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
@@ -1378,6 +1580,8 @@ namespace GPU01
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, uniqueCellIdAny,
 			cellRefFByAny, cellRefBByAny,
 			cellStartIdxF, cellStartIdxB,
+			compactCellIdxByParticleF,
+			queryLoAnyByCellF, queryHiAnyByCellF,
 			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			N_NonEmptyCellsAny, N_F,
 			nbrListFF, nbrListFB, overflowFlag);
