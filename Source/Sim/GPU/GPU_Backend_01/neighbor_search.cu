@@ -9,6 +9,7 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
+#include <thrust/set_operations.h>
 #include <thrust/sort.h>
 #include <thrust/transform_scan.h>
 #include <thrust/transform_reduce.h>
@@ -296,6 +297,7 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	cellQueryReach_ = 1;
 	N_NonEmptyCellsF_ = 0;
 	N_NonEmptyCellsB_ = 0;
+	N_NonEmptyCellsAny_ = 0;
 	cellIdsMatchCurrentParticleOrder_ = false;
 
 	d_uniqueCellIdF_.Release();
@@ -307,6 +309,10 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	d_cellStartIdxB_.Release();
 	d_cellIdB_.Release();
 	d_sortedParticleIdxB_.Release();
+
+	d_uniqueCellIdAny_.Release();
+	d_cellRefFByAny_.Release();
+	d_cellRefBByAny_.Release();
 
 	d_cellStartMarkerScan_.Release();
 }
@@ -322,6 +328,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 		N_NonEmptyCellsF_ = 0;
 		N_NonEmptyCellsB_ = 0;
+		N_NonEmptyCellsAny_ = 0;
 		cellIdsMatchCurrentParticleOrder_ = false;
 
 		d_uniqueCellIdF_.Release();
@@ -333,6 +340,10 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		d_cellStartIdxB_.Release();
 		d_cellIdB_.Release();
 		d_sortedParticleIdxB_.Release();
+
+		d_uniqueCellIdAny_.Release();
+		d_cellRefFByAny_.Release();
+		d_cellRefBByAny_.Release();
 
 		d_cellStartMarkerScan_.Release();
 
@@ -428,6 +439,8 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	{
 		N_NonEmptyCellsB_ = 0;
 	}
+
+	BuildMergedCompactCellLookup();
 }
 
 void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
@@ -447,9 +460,10 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 	GPU01::Launch_CellLinkedList_Compact_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
+		d_uniqueCellIdAny_.Data(),
+		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
-		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
+		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data());
 
 	GPU::StreamSync(be_.stream_);
@@ -472,9 +486,10 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 	GPU01::Launch_CellLinkedList_Compact_Query_Fill(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
+		d_uniqueCellIdAny_.Data(),
+		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
-		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.N_F_, be_.N_B_, be_.stream_,
+		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
 		be_.d_nbrListFF_.Data(), be_.d_nbrListFB_.Data(),
 		be_.d_nbrOverflowFlag_.Data());
@@ -623,6 +638,12 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemU
 	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellIdB_));
 	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_sortedParticleIdxB_));
 
+	// shared merged lookup metadata is accounted in the fluid-side bucket
+	// to avoid double-counting.
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefFByAny_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefBByAny_));
+
 	// shared scan scratch is accounted in the fluid-side bucket
 	// to avoid double-counting.
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartMarkerScan_));
@@ -663,6 +684,16 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		// keep capacity once allocated and only grow when needed
 		// (to avoid repeated device alloc/free between steps)
 		if (d_cellStartMarkerScan_.Size() < N_MAX) { d_cellStartMarkerScan_.Resize(N_MAX); }
+	}
+
+	const uint32_t N_ANY_MAX = N_F + N_B;
+	if (N_ANY_MAX > 0)
+	{
+		// keep capacity once allocated and only grow when needed
+		// (to avoid repeated device alloc/free between steps)
+		if (d_uniqueCellIdAny_.Size() < N_ANY_MAX) { d_uniqueCellIdAny_.Resize(N_ANY_MAX); }
+		if (d_cellRefFByAny_.Size() < N_ANY_MAX) { d_cellRefFByAny_.Resize(N_ANY_MAX); }
+		if (d_cellRefBByAny_.Size() < N_ANY_MAX) { d_cellRefBByAny_.Resize(N_ANY_MAX); }
 	}
 }
 
@@ -707,4 +738,51 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 		d_cellIdSorted, d_cellStartMarkerScan_.Data(),
 		N, N_NonEmptyCells, be_.stream_,
 		d_uniqueCellId.Data(), d_cellStartIdx.Data());
+}
+
+void NS_CellLinkedList_Compact_GPU01::BuildMergedCompactCellLookup()
+{
+	N_NonEmptyCellsAny_ = 0;
+
+	if (N_NonEmptyCellsF_ == 0 && N_NonEmptyCellsB_ == 0) { return; }
+
+	const auto beginAny = thrust::device_pointer_cast(d_uniqueCellIdAny_.Data());
+	auto endAny = beginAny;
+
+	if (N_NonEmptyCellsF_ == 0)
+	{
+		endAny = thrust::copy(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_uniqueCellIdB_.Data()),
+			thrust::device_pointer_cast(d_uniqueCellIdB_.Data() + N_NonEmptyCellsB_),
+			beginAny);
+	}
+	else if (N_NonEmptyCellsB_ == 0)
+	{
+		endAny = thrust::copy(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_uniqueCellIdF_.Data()),
+			thrust::device_pointer_cast(d_uniqueCellIdF_.Data() + N_NonEmptyCellsF_),
+			beginAny);
+	}
+	else
+	{
+		endAny = thrust::set_union(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_uniqueCellIdF_.Data()),
+			thrust::device_pointer_cast(d_uniqueCellIdF_.Data() + N_NonEmptyCellsF_),
+			thrust::device_pointer_cast(d_uniqueCellIdB_.Data()),
+			thrust::device_pointer_cast(d_uniqueCellIdB_.Data() + N_NonEmptyCellsB_),
+			beginAny);
+	}
+
+	N_NonEmptyCellsAny_ = static_cast<uint32_t>(endAny - beginAny);
+
+	if (N_NonEmptyCellsAny_ == 0) { return; }
+
+	GPU01::Launch_FillMergedCompactCellRefs(
+		d_uniqueCellIdAny_.Data(), N_NonEmptyCellsAny_,
+		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsB_, be_.stream_,
+		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data());
 }

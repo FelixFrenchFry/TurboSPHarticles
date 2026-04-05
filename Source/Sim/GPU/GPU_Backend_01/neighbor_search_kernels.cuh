@@ -109,6 +109,18 @@ namespace GPU01
 		uint64_t* uniqueCellId,
 		uint32_t* cellStartIdx);
 
+	void Launch_FillMergedCompactCellRefs(
+		const uint64_t* uniqueCellIdAny,
+		const uint32_t N_NonEmptyCellsAny,
+		const uint64_t* uniqueCellIdF,
+		const uint64_t* uniqueCellIdB,
+		const uint32_t N_NonEmptyCellsF,
+		const uint32_t N_NonEmptyCellsB,
+		cudaStream_t stream,
+		// destinations
+		uint32_t* cellRefFByAny,
+		uint32_t* cellRefBByAny);
+
 	void Launch_FillCellIdAndInitParticleIdx(
 		const float* xPos, const float* yPos, const float* zPos,
 		const uint32_t N,
@@ -119,9 +131,10 @@ namespace GPU01
 	void Launch_CellLinkedList_Compact_Query_Count(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint64_t* uniqueCellIdF, const uint64_t* uniqueCellIdB,
+		const uint64_t* uniqueCellIdAny,
+		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
-		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
+		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -130,9 +143,10 @@ namespace GPU01
 	void Launch_CellLinkedList_Compact_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint64_t* uniqueCellIdF, const uint64_t* uniqueCellIdB,
+		const uint64_t* uniqueCellIdAny,
+		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
-		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
+		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		const uint64_t* nbrChunkOffsetsFF,
