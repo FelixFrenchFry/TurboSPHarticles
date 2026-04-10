@@ -5,12 +5,20 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <thrust/tuple.h>
 
 
 
 namespace GPU01
 {
+	enum class NbrChunkFormat : uint8_t
+	{
+		Delta8 = 0u,
+		Delta16 = 1u,
+		Abs32 = 2u
+	};
+
 	// host+device struct for AABB accumulation
 	struct MinMax3HD
 	{

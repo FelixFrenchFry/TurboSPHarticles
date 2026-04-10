@@ -180,20 +180,40 @@ namespace Sim
 		// boundary particles
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 
-		// neighbor list storage (SELL32_DoubleQuery style)
+		// neighbor list storage
+		// (compressed SELL32 for FF and FB)
 		DeviceBuffer<uint16_t> d_nbrCountFF_; // temporary counts written by count-query
 		DeviceBuffer<uint16_t> d_nbrCountFB_; // temporary counts written by count-query
 		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
 		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count
-		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // SELL32 chunk offsets (N_chunks + 1)
-		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_; // SELL32 chunk offsets (N_chunks + 1)
-		DeviceBuffer<uint32_t> d_nbrListFF_; // packed SELL32 FF neighbor list
-		DeviceBuffer<uint32_t> d_nbrListFB_; // packed SELL32 FB neighbor list
+		DeviceBuffer<uint32_t> d_nbrChunkMinRefFF_; // per-chunk min FF neighbor index
+		DeviceBuffer<uint32_t> d_nbrChunkMinRefFB_; // per-chunk min FB neighbor index
+		DeviceBuffer<uint32_t> d_nbrChunkMaxRefFF_; // per-chunk max FF neighbor index
+		DeviceBuffer<uint32_t> d_nbrChunkMaxRefFB_; // per-chunk max FB neighbor index
+		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFF_; // per-chunk FF base index used for delta storage
+		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_; // per-chunk FB base index used for delta storage
+		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk FF storage format
+		DeviceBuffer<uint8_t> d_nbrChunkFormatFB_; // per-chunk FB storage format
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // compressed FF chunk offsets into the selected format buffer
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_; // compressed FB chunk offsets into the selected format buffer
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsScratch_; // temp scan buffer used while building compressed chunk offsets
+		DeviceBuffer<uint8_t> d_nbrListDelta8FF_; // compressed FF delta8 storage
+		DeviceBuffer<uint8_t> d_nbrListDelta8FB_; // compressed FB delta8 storage
+		DeviceBuffer<uint16_t> d_nbrListDelta16FF_; // compressed FF delta16 storage
+		DeviceBuffer<uint16_t> d_nbrListDelta16FB_; // compressed FB delta16 storage
+		DeviceBuffer<uint32_t> d_nbrListAbs32FF_; // compressed FF abs32 storage
+		DeviceBuffer<uint32_t> d_nbrListAbs32FB_; // compressed FB abs32 storage
 		DeviceBuffer<uint32_t> d_nbrOverflowFlag_; // TODO: use smaller data type?
 		uint64_t N_totalFF_ = 0; // actual FF neighbor count sum over all particles
 		uint64_t N_totalFB_ = 0; // actual FB neighbor count sum over all particles
-		uint64_t N_packedFF_ = 0; // padded SELL32 FF storage length
-		uint64_t N_packedFB_ = 0; // padded SELL32 FB storage length
+		uint64_t N_packedFF_ = 0; // total compressed FF storage length in bytes
+		uint64_t N_packedFB_ = 0; // total compressed FB storage length in bytes
+		uint64_t N_delta8FF_ = 0; // compressed FF delta8 storage length in refs
+		uint64_t N_delta8FB_ = 0; // compressed FB delta8 storage length in refs
+		uint64_t N_delta16FF_ = 0; // compressed FF delta16 storage length in refs
+		uint64_t N_delta16FB_ = 0; // compressed FB delta16 storage length in refs
+		uint64_t N_abs32FF_ = 0; // compressed FF abs32 storage length in refs
+		uint64_t N_abs32FB_ = 0; // compressed FB abs32 storage length in refs
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
 
 		// re-usable work (scratch) buffer for temp storage
@@ -204,7 +224,11 @@ namespace Sim
 		mutable std::vector<uint16_t> h_expNbrCountFF_;
 		mutable std::vector<uint16_t> h_expNbrCountFB_;
 		mutable std::vector<uint64_t> h_expNbrChunkOffsetsFF_;
-		mutable std::vector<uint32_t> h_expNbrListFF_;
+		mutable std::vector<uint32_t> h_expNbrChunkBaseIdxFF_;
+		mutable std::vector<uint8_t> h_expNbrChunkFormatFF_;
+		mutable std::vector<uint8_t> h_expNbrListDelta8FF_;
+		mutable std::vector<uint16_t> h_expNbrListDelta16FF_;
+		mutable std::vector<uint32_t> h_expNbrListAbs32FF_;
 		mutable std::vector<float> h_expXPosF_;
 		mutable std::vector<float> h_expYPosF_;
 		mutable std::vector<float> h_expZPosF_;
@@ -275,7 +299,6 @@ namespace Sim
 			const uint32_t N_chunks_new =
 				(N_F_new == 0u) ? 0u : ((N_F_new - 1u) / 32u) + 1u;
 			const bool needOverflow = (d_nbrOverflowFlag_.Size() != 1);
-
 			const bool needFluid =
 				force ||
 				(N_F_new != N_F_) ||
@@ -288,8 +311,17 @@ namespace Sim
 				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
 				d_nbrChunkMaxCountFF_.Size() != N_chunks_new ||
 				d_nbrChunkMaxCountFB_.Size() != N_chunks_new ||
+				d_nbrChunkMinRefFF_.Size() != N_chunks_new ||
+				d_nbrChunkMinRefFB_.Size() != N_chunks_new ||
+				d_nbrChunkMaxRefFF_.Size() != N_chunks_new ||
+				d_nbrChunkMaxRefFB_.Size() != N_chunks_new ||
+				d_nbrChunkBaseIdxFF_.Size() != N_chunks_new ||
+				d_nbrChunkBaseIdxFB_.Size() != N_chunks_new ||
+				d_nbrChunkFormatFF_.Size() != N_chunks_new ||
+				d_nbrChunkFormatFB_.Size() != N_chunks_new ||
 				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1;
+				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
+				d_nbrChunkOffsetsScratch_.Size() != static_cast<size_t>(N_chunks_new) + 1;
 
 			const bool needBoundary =
 				force ||
@@ -321,17 +353,32 @@ namespace Sim
 			d_nbrCountFB_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_chunks_new);
 			d_nbrChunkMaxCountFB_.Resize(N_chunks_new);
+			d_nbrChunkMinRefFF_.Resize(N_chunks_new);
+			d_nbrChunkMinRefFB_.Resize(N_chunks_new);
+			d_nbrChunkMaxRefFF_.Resize(N_chunks_new);
+			d_nbrChunkMaxRefFB_.Resize(N_chunks_new);
+			d_nbrChunkBaseIdxFF_.Resize(N_chunks_new);
+			d_nbrChunkBaseIdxFB_.Resize(N_chunks_new);
+			d_nbrChunkFormatFF_.Resize(N_chunks_new);
+			d_nbrChunkFormatFB_.Resize(N_chunks_new);
 			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
 			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
+			d_nbrChunkOffsetsScratch_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
 			d_nbrOverflowFlag_.Resize(1);
 			N_totalFF_ = 0;
 			N_totalFB_ = 0;
 			N_packedFF_ = 0;
 			N_packedFB_ = 0;
+			N_delta8FF_ = 0;
+			N_delta8FB_ = 0;
+			N_delta16FF_ = 0;
+			N_delta16FB_ = 0;
+			N_abs32FF_ = 0;
+			N_abs32FB_ = 0;
 		}
 
-		// turns temporary count-query output into SELL32 chunk metadata and ensures
-		// capacity of packed SELL32 neighbor list storage for the fill-query.
+		// turns temporary count-query output into compressed SELL32 metadata
+		// and ensures list-storage capacity for the fill-query.
 		void FinalizeNeighborLists_Count();
 	};
 

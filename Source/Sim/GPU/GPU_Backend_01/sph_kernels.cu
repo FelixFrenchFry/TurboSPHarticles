@@ -123,13 +123,64 @@ namespace GPU01
 	}
 
 	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor(
+	uint32_t Sell32ReadNeighbor_Delta8(
+		const uint64_t chunkBase,
+		const uint32_t chunkBaseIdx,
+		const uint32_t lane,
+		const uint32_t k,
+		const uint8_t* __restrict__ nbrListDelta8)
+	{
+		return chunkBaseIdx + static_cast<uint32_t>(
+			nbrListDelta8[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane]);
+	}
+
+	__device__ __forceinline__
+	uint32_t Sell32ReadNeighbor_Delta16(
+		const uint64_t chunkBase,
+		const uint32_t chunkBaseIdx,
+		const uint32_t lane,
+		const uint32_t k,
+		const uint16_t* __restrict__ nbrListDelta16)
+	{
+		return chunkBaseIdx + static_cast<uint32_t>(
+			nbrListDelta16[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane]);
+	}
+
+	__device__ __forceinline__
+	uint32_t Sell32ReadNeighbor_Abs32(
 		const uint64_t chunkBase,
 		const uint32_t lane,
 		const uint32_t k,
-		const uint32_t* __restrict__ nbrList)
+		const uint32_t* __restrict__ nbrListAbs32)
 	{
-		return nbrList[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane];
+		return nbrListAbs32[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane];
+	}
+
+	__device__ __forceinline__
+	uint32_t Sell32ReadNeighbor(
+		const uint64_t chunkBase,
+		const uint32_t chunkBaseIdx,
+		const uint8_t chunkFormat,
+		const uint32_t lane,
+		const uint32_t k,
+		const uint8_t* __restrict__ nbrListDelta8,
+		const uint16_t* __restrict__ nbrListDelta16,
+		const uint32_t* __restrict__ nbrListAbs32)
+	{
+		if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta8))
+		{
+			return Sell32ReadNeighbor_Delta8(
+				chunkBase, chunkBaseIdx, lane, k, nbrListDelta8);
+		}
+
+		if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16))
+		{
+			return Sell32ReadNeighbor_Delta16(
+				chunkBase, chunkBaseIdx, lane, k, nbrListDelta16);
+		}
+
+		return Sell32ReadNeighbor_Abs32(
+			chunkBase, lane, k, nbrListAbs32);
 	}
 
 	// ------------------------------------------------------------------------------------------------
@@ -148,8 +199,16 @@ namespace GPU01
 		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrListFF,
-		const uint32_t* __restrict__ nbrListFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint8_t* __restrict__ nbrChunkFormatFF,
+		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrListDelta8FF,
+		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint16_t* __restrict__ nbrListDelta16FF,
+		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint32_t* __restrict__ nbrListAbs32FF,
+		const uint32_t* __restrict__ nbrListAbs32FB,
 		// destinations
 		float* __restrict__ densityF)
 	{
@@ -168,6 +227,10 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
+		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint8_t formatFF = nbrChunkFormatFF[chunk];
+		const uint8_t formatFB = nbrChunkFormatFB[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
@@ -175,7 +238,9 @@ namespace GPU01
 		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFF, baseIdxFF, formatFF, lane, k,
+				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -193,8 +258,9 @@ namespace GPU01
 		// FB
 		for (uint32_t k = 0; k < countFB; k++)
 		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFB, baseIdxFB, formatFB, lane, k,
+				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -228,8 +294,16 @@ namespace GPU01
 		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrListFF,
-		const uint32_t* __restrict__ nbrListFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint8_t* __restrict__ nbrChunkFormatFF,
+		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrListDelta8FF,
+		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint16_t* __restrict__ nbrListDelta16FF,
+		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint32_t* __restrict__ nbrListAbs32FF,
+		const uint32_t* __restrict__ nbrListAbs32FB,
 		// destinations
 		float* __restrict__ xVelPredF,
 		float* __restrict__ yVelPredF,
@@ -256,6 +330,10 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
+		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint8_t formatFF = nbrChunkFormatFF[chunk];
+		const uint8_t formatFB = nbrChunkFormatFB[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
@@ -263,7 +341,9 @@ namespace GPU01
 		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFF, baseIdxFF, formatFF, lane, k,
+				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -300,8 +380,9 @@ namespace GPU01
 		// FB
 		for (uint32_t k = 0; k < countFB; k++)
 		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFB, baseIdxFB, formatFB, lane, k,
+				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -361,8 +442,16 @@ namespace GPU01
 		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrListFF,
-		const uint32_t* __restrict__ nbrListFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint8_t* __restrict__ nbrChunkFormatFF,
+		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrListDelta8FF,
+		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint16_t* __restrict__ nbrListDelta16FF,
+		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint32_t* __restrict__ nbrListAbs32FF,
+		const uint32_t* __restrict__ nbrListAbs32FB,
 		// destinations
 		float* __restrict__ sourceTermF,
 		float* __restrict__ diagElemF,
@@ -389,6 +478,10 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
+		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint8_t formatFF = nbrChunkFormatFF[chunk];
+		const uint8_t formatFB = nbrChunkFormatFB[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
@@ -396,7 +489,9 @@ namespace GPU01
 		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFF, baseIdxFF, formatFF, lane, k,
+				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -432,8 +527,9 @@ namespace GPU01
 		// FB
 		for (uint32_t k = 0; k < countFB; k++)
 		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFB, baseIdxFB, formatFB, lane, k,
+				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -476,7 +572,9 @@ namespace GPU01
 		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFF, baseIdxFF, formatFF, lane, k,
+				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -503,8 +601,9 @@ namespace GPU01
 		// part C
 		for (uint32_t k = 0; k < countFB; k++)
 		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFB, baseIdxFB, formatFB, lane, k,
+				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -553,8 +652,16 @@ namespace GPU01
 		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrListFF,
-		const uint32_t* __restrict__ nbrListFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint8_t* __restrict__ nbrChunkFormatFF,
+		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrListDelta8FF,
+		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint16_t* __restrict__ nbrListDelta16FF,
+		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint32_t* __restrict__ nbrListAbs32FF,
+		const uint32_t* __restrict__ nbrListAbs32FB,
 		// destinations
 		float* __restrict__ xAccPressF,
 		float* __restrict__ yAccPressF,
@@ -581,6 +688,10 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
+		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint8_t formatFF = nbrChunkFormatFF[chunk];
+		const uint8_t formatFB = nbrChunkFormatFB[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
@@ -588,7 +699,9 @@ namespace GPU01
 		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFF, baseIdxFF, formatFF, lane, k,
+				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -616,8 +729,9 @@ namespace GPU01
 		// FB
 		for (uint32_t k = 0; k < countFB; k++)
 		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFB, baseIdxFB, formatFB, lane, k,
+				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -663,8 +777,16 @@ namespace GPU01
 		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrListFF,
-		const uint32_t* __restrict__ nbrListFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint8_t* __restrict__ nbrChunkFormatFF,
+		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrListDelta8FF,
+		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint16_t* __restrict__ nbrListDelta16FF,
+		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint32_t* __restrict__ nbrListAbs32FF,
+		const uint32_t* __restrict__ nbrListAbs32FB,
 		// destinations
 		float* __restrict__ pressureF)
 	{
@@ -688,6 +810,10 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
+		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint8_t formatFF = nbrChunkFormatFF[chunk];
+		const uint8_t formatFB = nbrChunkFormatFB[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
@@ -695,7 +821,9 @@ namespace GPU01
 		for (uint32_t k = 0; k < countFF; k++)
 		{
 			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFF, lane, k, nbrListFF);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFF, baseIdxFF, formatFF, lane, k,
+				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
 
 			// position difference
 			const float dx = xi - xPosF[j];
@@ -717,8 +845,9 @@ namespace GPU01
 		// FB
 		for (uint32_t k = 0; k < countFB; k++)
 		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(baseFB, lane, k, nbrListFB);
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFB, baseIdxFB, formatFB, lane, k,
+				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			// position difference
 			const float dx = xi - xPosB[j];
@@ -799,8 +928,16 @@ namespace GPU01
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrListFF,
-		const uint32_t* nbrListFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrListDelta8FF,
+		const uint8_t* nbrListDelta8FB,
+		const uint16_t* nbrListDelta16FF,
+		const uint16_t* nbrListDelta16FB,
+		const uint32_t* nbrListAbs32FF,
+		const uint32_t* nbrListAbs32FB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -811,7 +948,13 @@ namespace GPU01
 
 		K_Density<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, nbrCountFF, nbrCountFB,
-			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB, densityF);
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
+			nbrChunkFormatFF, nbrChunkFormatFB,
+			nbrListDelta8FF, nbrListDelta8FB,
+			nbrListDelta16FF, nbrListDelta16FB,
+			nbrListAbs32FF, nbrListAbs32FB,
+			densityF);
 
 		GPU::CheckLastKernel("K_Density()");
 	}
@@ -825,8 +968,16 @@ namespace GPU01
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrListFF,
-		const uint32_t* nbrListFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrListDelta8FF,
+		const uint8_t* nbrListDelta8FB,
+		const uint16_t* nbrListDelta16FF,
+		const uint16_t* nbrListDelta16FB,
+		const uint32_t* nbrListAbs32FF,
+		const uint32_t* nbrListAbs32FB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -839,7 +990,12 @@ namespace GPU01
 
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelF, yVelF, zVelF, densityF,
-			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
+			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
+			nbrChunkFormatFF, nbrChunkFormatFB,
+			nbrListDelta8FF, nbrListDelta8FB,
+			nbrListDelta16FF, nbrListDelta16FB,
+			nbrListAbs32FF, nbrListAbs32FB,
 			xVelPredF, yVelPredF, zVelPredF);
 
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
@@ -854,8 +1010,16 @@ namespace GPU01
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrListFF,
-		const uint32_t* nbrListFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrListDelta8FF,
+		const uint8_t* nbrListDelta8FB,
+		const uint16_t* nbrListDelta16FF,
+		const uint16_t* nbrListDelta16FB,
+		const uint32_t* nbrListAbs32FF,
+		const uint32_t* nbrListAbs32FB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -870,7 +1034,12 @@ namespace GPU01
 
 		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xVelPredF, yVelPredF, zVelPredF, densityF,
-			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
+			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
+			nbrChunkFormatFF, nbrChunkFormatFB,
+			nbrListDelta8FF, nbrListDelta8FB,
+			nbrListDelta16FF, nbrListDelta16FB,
+			nbrListAbs32FF, nbrListAbs32FB,
 			sourceTermF, diagElemF, pressureF);
 
 		GPU::CheckLastKernel("K_SourceTermAndDiagonalElementAndPressureJacobiInit()");
@@ -884,8 +1053,16 @@ namespace GPU01
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrListFF,
-		const uint32_t* nbrListFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrListDelta8FF,
+		const uint8_t* nbrListDelta8FB,
+		const uint16_t* nbrListDelta16FF,
+		const uint16_t* nbrListDelta16FB,
+		const uint32_t* nbrListAbs32FF,
+		const uint32_t* nbrListAbs32FB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -900,7 +1077,12 @@ namespace GPU01
 
 		K_PressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, pressureF,
-			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
+			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
+			nbrChunkFormatFF, nbrChunkFormatFB,
+			nbrListDelta8FF, nbrListDelta8FB,
+			nbrListDelta16FF, nbrListDelta16FB,
+			nbrListAbs32FF, nbrListAbs32FB,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		GPU::CheckLastKernel("K_PressureAcceleration()");
@@ -916,8 +1098,16 @@ namespace GPU01
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrListFF,
-		const uint32_t* nbrListFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrListDelta8FF,
+		const uint8_t* nbrListDelta8FB,
+		const uint16_t* nbrListDelta16FF,
+		const uint16_t* nbrListDelta16FB,
+		const uint32_t* nbrListAbs32FF,
+		const uint32_t* nbrListAbs32FB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -931,7 +1121,12 @@ namespace GPU01
 		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xAccPressF, yAccPressF, zAccPressF,
 			sourceTermF, diagElemF, nbrCountFF, nbrCountFB,
-			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrListFF, nbrListFB,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
+			nbrChunkFormatFF, nbrChunkFormatFB,
+			nbrListDelta8FF, nbrListDelta8FB,
+			nbrListDelta16FF, nbrListDelta16FB,
+			nbrListAbs32FF, nbrListAbs32FB,
 			pressureF);
 
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");

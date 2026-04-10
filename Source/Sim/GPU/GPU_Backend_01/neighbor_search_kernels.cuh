@@ -26,18 +26,32 @@ namespace GPU01
 		cudaStream_t stream,
 		// destinations
 		uint16_t* nbrCountFF,
-		uint16_t* nbrCountFB);
+		uint16_t* nbrCountFB,
+		uint32_t* nbrChunkMinRefFF,
+		uint32_t* nbrChunkMaxRefFF,
+		uint32_t* nbrChunkMinRefFB,
+		uint32_t* nbrChunkMaxRefFB);
 
 	void Launch_BruteForce_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
+		const uint16_t* nbrChunkMaxCountFF,
+		const uint16_t* nbrChunkMaxCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
 		// destinations
-		uint32_t* nbrListFF,
-		uint32_t* nbrListFB,
+		uint8_t* nbrListDelta8FF,
+		uint8_t* nbrListDelta8FB,
+		uint16_t* nbrListDelta16FF,
+		uint16_t* nbrListDelta16FB,
+		uint32_t* nbrListAbs32FF,
+		uint32_t* nbrListAbs32FB,
 		uint32_t* overflowFlag);
 
 	void Launch_FillCellIdAndIdxF(
@@ -153,7 +167,11 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint16_t* nbrCountFF, uint16_t* nbrCountFB);
+		uint16_t* nbrCountFF, uint16_t* nbrCountFB,
+		uint32_t* nbrChunkMinRefFF,
+		uint32_t* nbrChunkMaxRefFF,
+		uint32_t* nbrChunkMinRefFB,
+		uint32_t* nbrChunkMaxRefFB);
 
 	void Launch_CellLinkedList_Compact_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -166,10 +184,21 @@ namespace GPU01
 		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
+		const uint16_t* nbrChunkMaxCountFF,
+		const uint16_t* nbrChunkMaxCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint32_t* nbrChunkBaseIdxFF,
+		const uint32_t* nbrChunkBaseIdxFB,
+		const uint8_t* nbrChunkFormatFF,
+		const uint8_t* nbrChunkFormatFB,
 		// destinations
-		uint32_t* nbrListFF, uint32_t* nbrListFB,
+		uint8_t* nbrListDelta8FF,
+		uint8_t* nbrListDelta8FB,
+		uint16_t* nbrListDelta16FF,
+		uint16_t* nbrListDelta16FB,
+		uint32_t* nbrListAbs32FF,
+		uint32_t* nbrListAbs32FB,
 		uint32_t* overflowFlag);
 
 } // namespace GPU01
