@@ -521,8 +521,6 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	d_cellRefBByAny_.Release();
 	d_queryLoAnyByCellF_.Release();
 	d_queryHiAnyByCellF_.Release();
-
-	d_cellStartMarkerScan_.Release();
 }
 
 void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
@@ -554,8 +552,6 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		d_cellRefBByAny_.Release();
 		d_queryLoAnyByCellF_.Release();
 		d_queryHiAnyByCellF_.Release();
-
-		d_cellStartMarkerScan_.Release();
 
 		return;
 	}
@@ -630,7 +626,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	if (N_F > 0) // fluid
 	{
-		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_,
+		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_, d_sortedParticleIdxF_,
 			d_cellIdF_.Data(),
 			N_F, N_NonEmptyCellsF_);
 	}
@@ -641,7 +637,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	if (N_B > 0) // boundary
 	{
-		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_,
+		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_, d_sortedParticleIdxB_,
 			d_cellIdB_.Data(),
 			N_B, N_NonEmptyCellsB_);
 	}
@@ -789,34 +785,39 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 			keysB, keysB + N_B, valsB);
 	}
 
-	// shared scratch buffers for permutation gather
-	if (be_.d_workBuffer_.Size() < N_MAX) { be_.d_workBuffer_.Resize(N_MAX); }
+	// density array as temp scratch storage (only needed after the particle arrays are re-ordered)
+	DeviceBuffer<float>& d_reorderScratch = be_.d_densityF_;
 
 	// re-order fluid SoA arrays according to sorted fluid indices
 	if (N_F > 0)
 	{
 		const uint32_t* d_permF = d_sortedParticleIdxF_.Data();
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xPosF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yPosF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zPosF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xPosF_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yPosF_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zPosF_, d_reorderScratch, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelF_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelF_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelF_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelF_, d_reorderScratch, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelPredF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelPredF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelPredF_, be_.d_workBuffer_, be_.stream_);
+		// remaining particle arrays do not need to be re-ordered, since they are re-initialized completely
+		// (d_xyzVelPredF_, d_xyzAccPressF_, d_sourceTermF_, d_diagElemF_, d_pressureF_, d_densityF_)
+		if (false) // TODO: execute only if no full sim step is performed, e.g. neighbor search 0 before sim run?
+		{
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, d_reorderScratch, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, be_.d_workBuffer_, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelPredF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelPredF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelPredF_, d_reorderScratch, be_.stream_);
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, be_.d_workBuffer_, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, d_reorderScratch, be_.stream_);
+		}
 
 		// fluid arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
@@ -831,9 +832,9 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	{
 		const uint32_t* d_permB = d_sortedParticleIdxB_.Data();
 
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, be_.d_workBuffer_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, be_.d_workBuffer_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);
 
 		// boundary arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
@@ -878,7 +879,6 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemU
 
 	// shared scan scratch is accounted in the fluid-side bucket
 	// to avoid double-counting.
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartMarkerScan_));
 
 	return { usageF, usageB };
 }
@@ -887,7 +887,6 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
-	const uint32_t N_MAX = std::max(N_F, N_B);
 
 	if (N_F > 0)
 	{
@@ -909,13 +908,6 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		if (d_cellStartIdxB_.Size() < N_B + 1) { d_cellStartIdxB_.Resize(N_B + 1); }
 		if (d_cellIdB_.Size() < N_B) { d_cellIdB_.Resize(N_B); }
 		if (d_sortedParticleIdxB_.Size() < N_B + 1) { d_sortedParticleIdxB_.Resize(N_B + 1); }
-	}
-
-	if (N_MAX > 0)
-	{
-		// keep capacity once allocated and only grow when needed
-		// (to avoid repeated device alloc/free between steps)
-		if (d_cellStartMarkerScan_.Size() < N_MAX) { d_cellStartMarkerScan_.Resize(N_MAX); }
 	}
 
 	const uint32_t N_ANY_MAX = N_F + N_B;
@@ -940,6 +932,7 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	DeviceBuffer<uint64_t>& d_uniqueCellId,
 	DeviceBuffer<uint32_t>& d_cellStartIdx,
+	DeviceBuffer<uint32_t>& d_markerScanScratch,
 	const uint64_t* d_cellIdSorted,
 	uint32_t N, uint32_t& N_NonEmptyCells)
 {
@@ -949,14 +942,14 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 		return;
 	}
 
-	// mark cell starts in the shared marker/scan scratch buffer
+	// mark cell starts in the caller-provided marker/scan scratch buffer
 	GPU01::Launch_MarkCellStarts(
-		d_cellIdSorted, N, be_.stream_, d_cellStartMarkerScan_.Data());
+		d_cellIdSorted, N, be_.stream_, d_markerScanScratch.Data());
 
 	// inclusive scan in-place to get cell indices for each particle
 	{
-		thrust::device_ptr<uint32_t> scanBegin(d_cellStartMarkerScan_.Data());
-		thrust::device_ptr<uint32_t> scanEnd(d_cellStartMarkerScan_.Data() + N);
+		thrust::device_ptr<uint32_t> scanBegin(d_markerScanScratch.Data());
+		thrust::device_ptr<uint32_t> scanEnd(d_markerScanScratch.Data() + N);
 
 		thrust::inclusive_scan(thrust::cuda::par.on(be_.stream_),
 			scanBegin, scanEnd, scanBegin);
@@ -965,7 +958,7 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	// get last scan value to determine number of unique cells
 	uint32_t lastScan = 0;
 	GPU::Check(cudaMemcpyAsync(&lastScan,
-		d_cellStartMarkerScan_.Data() + (N - 1),
+		d_markerScanScratch.Data() + (N - 1),
 		sizeof(uint32_t),
 		cudaMemcpyDeviceToHost,
 		be_.stream_));
@@ -975,7 +968,7 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	// fill in cell-related data
 	// (write only first N_NonEmptyCells entries and one sentinel entry)
 	GPU01::Launch_FillUniqueCellIdAndCellStartIdx(
-		d_cellIdSorted, d_cellStartMarkerScan_.Data(),
+		d_cellIdSorted, d_markerScanScratch.Data(),
 		N, N_NonEmptyCells, be_.stream_,
 		d_uniqueCellId.Data(), d_cellStartIdx.Data());
 }

@@ -1299,19 +1299,28 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.zPosF_, be_.workBufferF_);
+
 		ApplyPermutation(particleOrderF_, be_.xVelF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.yVelF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.zVelF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.xVelPredF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.yVelPredF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.zVelPredF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.xAccPressF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.yAccPressF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.zAccPressF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.pressureF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.densityF_, be_.workBufferF_);
+
+		// remaining particle arrays do not need to be re-ordered, since they are re-initialized completely
+		// (xyzVelPredF_, xyzAccPressF_, sourceTermF_, diagElemF_, pressureF_, densityF_)
+		if (false) // TODO: execute only if no full sim step is performed, e.g. neighbor search 0 before sim run?
+		{
+			ApplyPermutation(particleOrderF_, be_.xVelPredF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.yVelPredF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.zVelPredF_, be_.workBufferF_);
+
+			ApplyPermutation(particleOrderF_, be_.xAccPressF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.yAccPressF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.zAccPressF_, be_.workBufferF_);
+
+			ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.pressureF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.densityF_, be_.workBufferF_);
+		}
 	}
 
 	// build the exact compact-CLL cell IDs and particle permutation for boundary particles

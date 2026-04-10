@@ -103,9 +103,6 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_queryLoAnyByCellF_; // lower search bound in merged-cell table per source fluid cell
 		DeviceBuffer<uint32_t> d_queryHiAnyByCellF_; // upper search bound in merged-cell table per source fluid cell
 
-		// re-usable work (scratch) buffer for temp storage
-		DeviceBuffer<uint32_t> d_cellStartMarkerScan_;
-
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 
@@ -114,6 +111,7 @@ namespace Sim
 		void BuildCompactCellList(
 			DeviceBuffer<uint64_t>& d_uniqueCellId,
 			DeviceBuffer<uint32_t>& d_cellStartIdx,
+			DeviceBuffer<uint32_t>& d_markerScanScratch,
 			const uint64_t* d_cellIdSorted,
 			uint32_t N, uint32_t& N_NonEmptyCells);
 

@@ -7,6 +7,7 @@
 
 // external
 #include <cuda_runtime.h>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -181,7 +182,7 @@ namespace Sim
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 
 		// neighbor list storage
-		// (compressed SELL32 for FF and FB)
+		// (compressed SELL32 for FF and FB neighbors)
 		DeviceBuffer<uint16_t> d_nbrCountFF_; // temporary counts written by count-query
 		DeviceBuffer<uint16_t> d_nbrCountFB_; // temporary counts written by count-query
 		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
@@ -215,9 +216,6 @@ namespace Sim
 		uint64_t N_abs32FF_ = 0; // compressed FF abs32 storage length in refs
 		uint64_t N_abs32FB_ = 0; // compressed FB abs32 storage length in refs
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
-
-		// re-usable work (scratch) buffer for temp storage
-		DeviceBuffer<float> d_workBuffer_;
 
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)
@@ -307,7 +305,7 @@ namespace Sim
 				d_xVelPredF_.Size() != N_F_new || d_yVelPredF_.Size() != N_F_new || d_zVelPredF_.Size() != N_F_new ||
 				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
 				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
-				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_F_new ||
+				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != std::max(N_F_new, N_B_new) ||
 				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
 				d_nbrChunkMaxCountFF_.Size() != N_chunks_new ||
 				d_nbrChunkMaxCountFB_.Size() != N_chunks_new ||
@@ -343,7 +341,7 @@ namespace Sim
 			d_sourceTermF_.Resize(N_F_);
 			d_diagElemF_.Resize(N_F_);
 			d_pressureF_.Resize(N_F_);
-			d_densityF_.Resize(N_F_);
+			d_densityF_.Resize(std::max(N_F_, N_B_));
 
 			// boundary
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
