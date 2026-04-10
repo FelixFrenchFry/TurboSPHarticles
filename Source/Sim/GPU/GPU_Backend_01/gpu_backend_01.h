@@ -181,10 +181,10 @@ namespace Sim
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 
 		// neighbor list storage (SELL32_DoubleQuery style)
-		DeviceBuffer<uint32_t> d_nbrCountFF_; // temporary counts written by count-query
-		DeviceBuffer<uint32_t> d_nbrCountFB_; // temporary counts written by count-query
-		DeviceBuffer<uint32_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
-		DeviceBuffer<uint32_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count
+		DeviceBuffer<uint16_t> d_nbrCountFF_; // temporary counts written by count-query
+		DeviceBuffer<uint16_t> d_nbrCountFB_; // temporary counts written by count-query
+		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
+		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count
 		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // SELL32 chunk offsets (N_chunks + 1)
 		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_; // SELL32 chunk offsets (N_chunks + 1)
 		DeviceBuffer<uint32_t> d_nbrListFF_; // packed SELL32 FF neighbor list
@@ -201,8 +201,8 @@ namespace Sim
 
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)
-		mutable std::vector<uint32_t> h_expNbrCountFF_;
-		mutable std::vector<uint32_t> h_expNbrCountFB_;
+		mutable std::vector<uint16_t> h_expNbrCountFF_;
+		mutable std::vector<uint16_t> h_expNbrCountFB_;
 		mutable std::vector<uint64_t> h_expNbrChunkOffsetsFF_;
 		mutable std::vector<uint32_t> h_expNbrListFF_;
 		mutable std::vector<float> h_expXPosF_;
@@ -321,8 +321,8 @@ namespace Sim
 			d_nbrCountFB_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_chunks_new);
 			d_nbrChunkMaxCountFB_.Resize(N_chunks_new);
-			d_nbrChunkOffsetsFF_.Resize(static_cast<uint64_t>(N_chunks_new) + 1ull);
-			d_nbrChunkOffsetsFB_.Resize(static_cast<uint64_t>(N_chunks_new) + 1ull);
+			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
+			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
 			d_nbrOverflowFlag_.Resize(1);
 			N_totalFF_ = 0;
 			N_totalFB_ = 0;

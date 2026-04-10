@@ -32,7 +32,7 @@ namespace
 
 	struct ToU64
 	{
-		__host__ __device__ uint64_t operator()(const uint32_t v) const
+		__host__ __device__ uint64_t operator()(const uint16_t v) const
 		{
 			return static_cast<uint64_t>(v);
 		}
@@ -40,7 +40,7 @@ namespace
 
 	struct SellChunkPitchToU64
 	{
-		__host__ __device__ uint64_t operator()(const uint32_t v) const
+		__host__ __device__ uint64_t operator()(const uint16_t v) const
 		{
 			return static_cast<uint64_t>(v) * N_SellWidth;
 		}
@@ -52,9 +52,9 @@ namespace
 	}
 
 	__global__ void K_BuildSellChunkMaxCount(
-		const uint32_t* __restrict__ nbrCount,
+		const uint16_t* __restrict__ nbrCount,
 		const uint32_t N_F,
-		uint32_t* __restrict__ chunkMaxCount)
+		uint16_t* __restrict__ chunkMaxCount)
 	{
 		const uint32_t chunk = blockIdx.x * blockDim.x + threadIdx.x;
 		const uint32_t N_chunks = SellChunkNumTotal(N_F);
@@ -65,7 +65,7 @@ namespace
 						   ? (begin + N_SellWidth)
 						   : N_F;
 
-		uint32_t maxCount = 0;
+		uint16_t maxCount = 0;
 		for (uint32_t i = begin; i < end; i++)
 		{
 			if (nbrCount[i] > maxCount) { maxCount = nbrCount[i]; }

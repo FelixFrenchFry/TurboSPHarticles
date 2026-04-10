@@ -25,8 +25,8 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* nbrCountFF,
-		uint32_t* nbrCountFB);
+		uint16_t* nbrCountFF,
+		uint16_t* nbrCountFB);
 
 	void Launch_BruteForce_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -76,7 +76,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* nbrCountFF, uint32_t* nbrCountFB);
+		uint16_t* nbrCountFF, uint16_t* nbrCountFB);
 
 	void Launch_CellLinkedList_Basic_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -153,7 +153,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* nbrCountFF, uint32_t* nbrCountFB);
+		uint16_t* nbrCountFF, uint16_t* nbrCountFB);
 
 	void Launch_CellLinkedList_Compact_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,

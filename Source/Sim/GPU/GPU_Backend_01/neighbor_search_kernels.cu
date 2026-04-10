@@ -95,7 +95,7 @@ namespace GPU01
 	{
 		if (wr < chunkPitch)
 		{
-			nbrList[chunkBase + wr * static_cast<uint64_t>(N_SellWidth) + lane] = j;
+			nbrList[chunkBase + wr * N_SellWidth + lane] = j;
 			wr++;
 		}
 		else
@@ -117,8 +117,8 @@ namespace GPU01
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
 		// destinations
-		uint32_t* __restrict__ nbrCountFF,
-		uint32_t* __restrict__ nbrCountFB)
+		uint16_t* __restrict__ nbrCountFF,
+		uint16_t* __restrict__ nbrCountFB)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= c_ns_N_F) { return; }
@@ -166,8 +166,8 @@ namespace GPU01
 		}
 
 		// update neighbor counts
-		nbrCountFF[i] = cntFF;
-		nbrCountFB[i] = cntFB;
+		nbrCountFF[i] = static_cast<uint16_t>(cntFF);
+		nbrCountFB[i] = static_cast<uint16_t>(cntFB);
 	}
 
 	__global__
@@ -198,10 +198,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint64_t pitchFF =
-			(nbrChunkOffsetsFF[chunk + 1] - baseFF) / static_cast<uint64_t>(N_SellWidth);
-		const uint64_t pitchFB =
-			(nbrChunkOffsetsFB[chunk + 1] - baseFB) / static_cast<uint64_t>(N_SellWidth);
+		const uint64_t pitchFF = (nbrChunkOffsetsFF[chunk + 1] - baseFF) / N_SellWidth;
+		const uint64_t pitchFB = (nbrChunkOffsetsFB[chunk + 1] - baseFB) / N_SellWidth;
 		uint64_t wrFF = 0;
 		uint64_t wrFB = 0;
 
@@ -366,8 +364,8 @@ namespace GPU01
 		const uint32_t* __restrict__ sortedParticleIdxB,
 		const uint32_t N_F,
 		// destinations
-		uint32_t* __restrict__ nbrCountFF,
-		uint32_t* __restrict__ nbrCountFB)
+		uint16_t* __restrict__ nbrCountFF,
+		uint16_t* __restrict__ nbrCountFB)
 	{
 		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= N_F) { return; }
@@ -470,8 +468,8 @@ namespace GPU01
 
 		// update neighbor counts
 		// (global memory write)
-		nbrCountFF[i] = cntFF;
-		nbrCountFB[i] = cntFB;
+		nbrCountFF[i] = static_cast<uint16_t>(cntFF);
+		nbrCountFB[i] = static_cast<uint16_t>(cntFB);
 	}
 
 	__global__
@@ -515,10 +513,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint64_t pitchFF =
-			(nbrChunkOffsetsFF[chunk + 1] - baseFF) / static_cast<uint64_t>(N_SellWidth);
-		const uint64_t pitchFB =
-			(nbrChunkOffsetsFB[chunk + 1] - baseFB) / static_cast<uint64_t>(N_SellWidth);
+		const uint64_t pitchFF = (nbrChunkOffsetsFF[chunk + 1] - baseFF) / N_SellWidth;
+		const uint64_t pitchFB = (nbrChunkOffsetsFB[chunk + 1] - baseFB) / N_SellWidth;
 		uint64_t wrFF = 0;
 		uint64_t wrFB = 0;
 
@@ -968,8 +964,8 @@ namespace GPU01
 		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F,
 		// destinations
-		uint32_t* __restrict__ nbrCountFF,
-		uint32_t* __restrict__ nbrCountFB)
+		uint16_t* __restrict__ nbrCountFF,
+		uint16_t* __restrict__ nbrCountFB)
 	{
 		(void)N_NonEmptyCellsAny;
 
@@ -991,8 +987,8 @@ namespace GPU01
 		const uint32_t hiAny = queryHiAnyByCellF[cF_src];
 		if (loAny >= hiAny)
 		{
-			nbrCountFF[i] = 0;
-			nbrCountFB[i] = 0;
+			nbrCountFF[i] = 0u;
+			nbrCountFB[i] = 0u;
 			return;
 		}
 
@@ -1086,8 +1082,8 @@ namespace GPU01
 
 		// update neighbor counts
 		// (global memory write)
-		nbrCountFF[i] = cntFF;
-		nbrCountFB[i] = cntFB;
+		nbrCountFF[i] = static_cast<uint16_t>(cntFF);
+		nbrCountFB[i] = static_cast<uint16_t>(cntFB);
 	}
 
 	__global__
@@ -1140,10 +1136,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint64_t pitchFF =
-			(nbrChunkOffsetsFF[chunk + 1] - baseFF) / static_cast<uint64_t>(N_SellWidth);
-		const uint64_t pitchFB =
-			(nbrChunkOffsetsFB[chunk + 1] - baseFB) / static_cast<uint64_t>(N_SellWidth);
+		const uint64_t pitchFF = (nbrChunkOffsetsFF[chunk + 1] - baseFF) / N_SellWidth;
+		const uint64_t pitchFB = (nbrChunkOffsetsFB[chunk + 1] - baseFB) / N_SellWidth;
 		uint64_t wrFF = 0;
 		uint64_t wrFB = 0;
 
@@ -1253,8 +1247,8 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* nbrCountFF,
-		uint32_t* nbrCountFB)
+		uint16_t* nbrCountFF,
+		uint16_t* nbrCountFB)
 	{
 		(void)N_B;
 
@@ -1373,7 +1367,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* nbrCountFF, uint32_t* nbrCountFB)
+		uint16_t* nbrCountFF, uint16_t* nbrCountFB)
 	{
 		(void)N_B;
 
@@ -1535,7 +1529,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* nbrCountFF, uint32_t* nbrCountFB)
+		uint16_t* nbrCountFF, uint16_t* nbrCountFB)
 	{
 		(void)N_B;
 

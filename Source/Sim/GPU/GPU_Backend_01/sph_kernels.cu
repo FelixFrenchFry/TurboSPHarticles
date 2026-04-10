@@ -144,8 +144,8 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const uint32_t* __restrict__ nbrCountFF,
-		const uint32_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFF,
+		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
@@ -168,8 +168,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t countFF = nbrCountFF[i];
-		const uint32_t countFB = nbrCountFB[i];
+		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
+		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -224,8 +224,8 @@ namespace GPU01
 		const float* __restrict__ yVelF,
 		const float* __restrict__ zVelF,
 		const float* __restrict__ densityF,
-		const uint32_t* __restrict__ nbrCountFF,
-		const uint32_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFF,
+		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
@@ -256,8 +256,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t countFF = nbrCountFF[i];
-		const uint32_t countFB = nbrCountFB[i];
+		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
+		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -357,8 +357,8 @@ namespace GPU01
 		const float* __restrict__ yVelPredF,
 		const float* __restrict__ zVelPredF,
 		const float* __restrict__ densityF,
-		const uint32_t* __restrict__ nbrCountFF,
-		const uint32_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFF,
+		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
@@ -389,8 +389,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t countFF = nbrCountFF[i];
-		const uint32_t countFB = nbrCountFB[i];
+		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
+		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -549,8 +549,8 @@ namespace GPU01
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
 		const float* __restrict__ pressureF,
-		const uint32_t* __restrict__ nbrCountFF,
-		const uint32_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFF,
+		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
@@ -581,8 +581,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t countFF = nbrCountFF[i];
-		const uint32_t countFB = nbrCountFB[i];
+		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
+		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -659,8 +659,8 @@ namespace GPU01
 		const float* __restrict__ zAccPressF,
 		const float* __restrict__ sourceTermF,
 		const float* __restrict__ diagElemF,
-		const uint32_t* __restrict__ nbrCountFF,
-		const uint32_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFF,
+		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
 		const uint32_t* __restrict__ nbrListFF,
@@ -688,8 +688,8 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t countFF = nbrCountFF[i];
-		const uint32_t countFB = nbrCountFB[i];
+		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
+		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -795,8 +795,8 @@ namespace GPU01
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* nbrCountFF,
-		const uint32_t* nbrCountFB,
+		const uint16_t* nbrCountFF,
+		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
@@ -821,8 +821,8 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* densityF,
-		const uint32_t* nbrCountFF,
-		const uint32_t* nbrCountFB,
+		const uint16_t* nbrCountFF,
+		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
@@ -850,8 +850,8 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* densityF,
-		const uint32_t* nbrCountFF,
-		const uint32_t* nbrCountFB,
+		const uint16_t* nbrCountFF,
+		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
@@ -880,8 +880,8 @@ namespace GPU01
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* pressureF,
-		const uint32_t* nbrCountFF,
-		const uint32_t* nbrCountFB,
+		const uint16_t* nbrCountFF,
+		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
@@ -912,8 +912,8 @@ namespace GPU01
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,
-		const uint32_t* nbrCountFF,
-		const uint32_t* nbrCountFB,
+		const uint16_t* nbrCountFF,
+		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
 		const uint32_t* nbrListFF,
