@@ -589,17 +589,12 @@ void SimBackend_GPU01::FillMemoryRecord(
 
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrCountFF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkMaxCountFF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkMinRefFF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkMaxRefFF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkBaseIdxFF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkFormatFF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsFF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsScratch_));
 
 		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrCountFB_));
 		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkMaxCountFB_));
-		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkMinRefFB_));
-		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkMaxRefFB_));
 		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkBaseIdxFB_));
 		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkFormatFB_));
 		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsFB_));

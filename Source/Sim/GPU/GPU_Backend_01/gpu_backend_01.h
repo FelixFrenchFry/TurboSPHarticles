@@ -187,17 +187,12 @@ namespace Sim
 		DeviceBuffer<uint16_t> d_nbrCountFB_; // temporary counts written by count-query
 		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
 		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count
-		DeviceBuffer<uint32_t> d_nbrChunkMinRefFF_; // per-chunk min FF neighbor index
-		DeviceBuffer<uint32_t> d_nbrChunkMinRefFB_; // per-chunk min FB neighbor index
-		DeviceBuffer<uint32_t> d_nbrChunkMaxRefFF_; // per-chunk max FF neighbor index
-		DeviceBuffer<uint32_t> d_nbrChunkMaxRefFB_; // per-chunk max FB neighbor index
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFF_; // per-chunk FF base index used for delta storage
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_; // per-chunk FB base index used for delta storage
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk FF storage format
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFB_; // per-chunk FB storage format
 		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // compressed FF chunk offsets into the selected format buffer
 		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_; // compressed FB chunk offsets into the selected format buffer
-		DeviceBuffer<uint64_t> d_nbrChunkOffsetsScratch_; // temp scan buffer used while building compressed chunk offsets
 		DeviceBuffer<uint8_t> d_nbrListDelta8FF_; // compressed FF delta8 storage
 		DeviceBuffer<uint8_t> d_nbrListDelta8FB_; // compressed FB delta8 storage
 		DeviceBuffer<uint16_t> d_nbrListDelta16FF_; // compressed FF delta16 storage
@@ -216,6 +211,7 @@ namespace Sim
 		uint64_t N_abs32FF_ = 0; // compressed FF abs32 storage length in refs
 		uint64_t N_abs32FB_ = 0; // compressed FB abs32 storage length in refs
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
+		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
 
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)
@@ -309,17 +305,12 @@ namespace Sim
 				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
 				d_nbrChunkMaxCountFF_.Size() != N_chunks_new ||
 				d_nbrChunkMaxCountFB_.Size() != N_chunks_new ||
-				d_nbrChunkMinRefFF_.Size() != N_chunks_new ||
-				d_nbrChunkMinRefFB_.Size() != N_chunks_new ||
-				d_nbrChunkMaxRefFF_.Size() != N_chunks_new ||
-				d_nbrChunkMaxRefFB_.Size() != N_chunks_new ||
 				d_nbrChunkBaseIdxFF_.Size() != N_chunks_new ||
 				d_nbrChunkBaseIdxFB_.Size() != N_chunks_new ||
 				d_nbrChunkFormatFF_.Size() != N_chunks_new ||
 				d_nbrChunkFormatFB_.Size() != N_chunks_new ||
 				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_nbrChunkOffsetsScratch_.Size() != static_cast<size_t>(N_chunks_new) + 1;
+				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1;
 
 			const bool needBoundary =
 				force ||
@@ -351,17 +342,12 @@ namespace Sim
 			d_nbrCountFB_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_chunks_new);
 			d_nbrChunkMaxCountFB_.Resize(N_chunks_new);
-			d_nbrChunkMinRefFF_.Resize(N_chunks_new);
-			d_nbrChunkMinRefFB_.Resize(N_chunks_new);
-			d_nbrChunkMaxRefFF_.Resize(N_chunks_new);
-			d_nbrChunkMaxRefFB_.Resize(N_chunks_new);
 			d_nbrChunkBaseIdxFF_.Resize(N_chunks_new);
 			d_nbrChunkBaseIdxFB_.Resize(N_chunks_new);
 			d_nbrChunkFormatFF_.Resize(N_chunks_new);
 			d_nbrChunkFormatFB_.Resize(N_chunks_new);
 			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
 			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
-			d_nbrChunkOffsetsScratch_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
 			d_nbrOverflowFlag_.Resize(1);
 			N_totalFF_ = 0;
 			N_totalFB_ = 0;
@@ -378,6 +364,15 @@ namespace Sim
 		// turns temporary count-query output into compressed SELL32 metadata
 		// and ensures list-storage capacity for the fill-query.
 		void FinalizeNeighborLists_Count();
+
+		void EnsureNsSharedScratchCapacity(const size_t requiredBytes)
+		{
+			if (requiredBytes <= d_nsSharedScratch_.Size()) { return; }
+
+			const size_t capacity = requiredBytes
+				+ (requiredBytes * static_cast<size_t>(extraAllocCapacityPct_)) / size_t{ 100 };
+			d_nsSharedScratch_.Resize(capacity);
+		}
 	};
 
 } // namespace Sim

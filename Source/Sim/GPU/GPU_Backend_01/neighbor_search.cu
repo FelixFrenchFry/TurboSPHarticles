@@ -59,6 +59,110 @@ namespace
 		return (N_F == 0u) ? 0u : ((N_F - 1u) / N_SellWidth) + 1u;
 	}
 
+	inline size_t AlignUpBytes(const size_t offset, const size_t align) noexcept
+	{
+		return (offset + align - 1u) & ~(align - 1u);
+	}
+
+	template <typename T>
+	inline size_t ReserveScratchElems(size_t& cursor, const size_t count) noexcept
+	{
+		cursor = AlignUpBytes(cursor, alignof(T));
+		const size_t offset = cursor;
+		cursor += count * sizeof(T);
+
+		return offset;
+	}
+
+	struct NS_FinalizeScratchLayout
+	{
+		size_t chunkMinRefFF = 0;
+		size_t chunkMinRefFB = 0;
+		size_t chunkMaxRefFF = 0;
+		size_t chunkMaxRefFB = 0;
+		size_t chunkOffsetsScratch = 0;
+		size_t totalBytes = 0;
+	};
+
+	struct NS_CompactBuildScratchLayout
+	{
+		size_t cellIdF = 0;
+		size_t cellIdB = 0;
+		size_t sortedParticleIdxB = 0;
+		size_t totalBytes = 0;
+	};
+
+	struct NS_CompactSharedScratchLayout
+	{
+		NS_FinalizeScratchLayout finalize;
+		NS_CompactBuildScratchLayout build;
+		size_t phaseScratchBytes = 0;
+		size_t queryLoAnyByCellF = 0;
+		size_t queryHiAnyByCellF = 0;
+		size_t totalBytes = 0;
+	};
+
+	inline NS_FinalizeScratchLayout BuildFinalizeScratchLayout(const uint32_t N_F)
+	{
+		NS_FinalizeScratchLayout layout{};
+		size_t cursor = 0;
+		const uint32_t N_chunks = SellChunkNumTotal(N_F);
+
+		layout.chunkMinRefFF = ReserveScratchElems<uint32_t>(cursor, N_chunks);
+		layout.chunkMinRefFB = ReserveScratchElems<uint32_t>(cursor, N_chunks);
+		layout.chunkMaxRefFF = ReserveScratchElems<uint32_t>(cursor, N_chunks);
+		layout.chunkMaxRefFB = ReserveScratchElems<uint32_t>(cursor, N_chunks);
+		layout.chunkOffsetsScratch = ReserveScratchElems<uint64_t>(
+			cursor, static_cast<size_t>(N_chunks) + 1ull);
+		layout.totalBytes = cursor;
+
+		return layout;
+	}
+
+	inline NS_CompactBuildScratchLayout BuildCompactBuildScratchLayout(
+		const uint32_t N_F, const uint32_t N_B)
+	{
+		NS_CompactBuildScratchLayout layout{};
+		size_t cursor = 0;
+
+		layout.cellIdF = ReserveScratchElems<uint64_t>(cursor, N_F);
+		layout.cellIdB = ReserveScratchElems<uint64_t>(cursor, N_B);
+		layout.sortedParticleIdxB = ReserveScratchElems<uint32_t>(cursor, N_B);
+		layout.totalBytes = cursor;
+
+		return layout;
+	}
+
+	inline NS_CompactSharedScratchLayout BuildCompactSharedScratchLayout(
+		const uint32_t N_F, const uint32_t N_B)
+	{
+		NS_CompactSharedScratchLayout layout{};
+		layout.finalize = BuildFinalizeScratchLayout(N_F);
+		layout.build = BuildCompactBuildScratchLayout(N_F, N_B);
+		layout.phaseScratchBytes = std::max(layout.finalize.totalBytes, layout.build.totalBytes);
+
+		size_t cursor = layout.phaseScratchBytes;
+		layout.queryLoAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
+		layout.queryHiAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
+		layout.totalBytes = cursor;
+
+		return layout;
+	}
+
+	template <typename T>
+	inline T* ScratchPtr(DeviceBuffer<uint8_t>& arena, const size_t offsetBytes) noexcept
+	{
+		if (arena.Size() == 0) { return nullptr; }
+		return reinterpret_cast<T*>(arena.Data() + offsetBytes);
+	}
+
+	template <typename T>
+	inline const T* ScratchPtr(const DeviceBuffer<uint8_t>& arena, const size_t offsetBytes) noexcept
+	{
+		if (arena.Size() == 0) { return nullptr; }
+		return reinterpret_cast<const T*>(arena.Data() + offsetBytes);
+	}
+
 	__global__ void K_BuildSellChunkMaxCount(
 		const uint16_t* __restrict__ nbrCount,
 		const uint32_t N_F,
@@ -194,6 +298,15 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 		return;
 	}
 
+	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(N_F_);
+	EnsureNsSharedScratchCapacity(scratchLayout.totalBytes);
+	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFF);
+	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFB);
+	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFF);
+	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFB);
+	uint64_t* const d_nbrChunkOffsetsScratch = ScratchPtr<uint64_t>(
+		d_nsSharedScratch_, scratchLayout.chunkOffsetsScratch);
+
 	const uint32_t N_chunks = SellChunkNumTotal(N_F_);
 	const uint32_t N_BLOCKSIZE = 256;
 	const uint32_t N_GRIDSIZE = (N_chunks + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
@@ -208,12 +321,12 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 
 	GPU::MemsetZero(d_nbrChunkOffsetsFF_.Data(), static_cast<size_t>(N_chunks) + 1ull, stream_);
 	GPU::MemsetZero(d_nbrChunkOffsetsFB_.Data(), static_cast<size_t>(N_chunks) + 1ull, stream_);
-	GPU::MemsetZero(d_nbrChunkOffsetsScratch_.Data(), static_cast<size_t>(N_chunks) + 1ull, stream_);
+	GPU::MemsetZero(d_nbrChunkOffsetsScratch, static_cast<size_t>(N_chunks) + 1ull, stream_);
 
 	K_BuildSellChunkCompressionMeta<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
 		d_nbrChunkMaxCountFF_.Data(),
-		d_nbrChunkMinRefFF_.Data(),
-		d_nbrChunkMaxRefFF_.Data(),
+		d_nbrChunkMinRefFF,
+		d_nbrChunkMaxRefFF,
 		N_chunks,
 		d_nbrChunkBaseIdxFF_.Data(),
 		d_nbrChunkFormatFF_.Data());
@@ -228,7 +341,7 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 			uint64_t& h_totalAbs32)
 	{
 		const uint64_t zero = 0;
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
 
 		thrust::transform_inclusive_scan(
 			thrust::cuda::par.on(stream_),
@@ -238,21 +351,21 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 			thrust::make_zip_iterator(thrust::make_tuple(
 				thrust::device_pointer_cast(d_chunkMaxCount + N_chunks),
 				thrust::device_pointer_cast(d_chunkFormat + N_chunks))),
-			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch_.Data() + 1),
+			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
 			SellChunkPitchIfFormat(static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8)),
 			thrust::plus<uint64_t>{}
 		);
 		K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-			d_nbrChunkOffsetsScratch_.Data(),
+			d_nbrChunkOffsetsScratch,
 			d_chunkFormat,
 			static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8),
 			N_chunks,
 			d_chunkOffsets);
 		GPU::CheckLastKernel("K_SelectChunkOffsetsByFormat(Delta8)");
 		GPU::Copy_DeviceToHost(&h_totalDelta8,
-			d_nbrChunkOffsetsScratch_.Data() + N_chunks, 1, stream_);
+			d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
 
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
 		thrust::transform_inclusive_scan(
 			thrust::cuda::par.on(stream_),
 			thrust::make_zip_iterator(thrust::make_tuple(
@@ -261,21 +374,21 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 			thrust::make_zip_iterator(thrust::make_tuple(
 				thrust::device_pointer_cast(d_chunkMaxCount + N_chunks),
 				thrust::device_pointer_cast(d_chunkFormat + N_chunks))),
-			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch_.Data() + 1),
+			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
 			SellChunkPitchIfFormat(static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta16)),
 			thrust::plus<uint64_t>{}
 		);
 		K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-			d_nbrChunkOffsetsScratch_.Data(),
+			d_nbrChunkOffsetsScratch,
 			d_chunkFormat,
 			static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta16),
 			N_chunks,
 			d_chunkOffsets);
 		GPU::CheckLastKernel("K_SelectChunkOffsetsByFormat(Delta16)");
 		GPU::Copy_DeviceToHost(&h_totalDelta16,
-			d_nbrChunkOffsetsScratch_.Data() + N_chunks, 1, stream_);
+			d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
 
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
 		thrust::transform_inclusive_scan(
 			thrust::cuda::par.on(stream_),
 			thrust::make_zip_iterator(thrust::make_tuple(
@@ -284,19 +397,19 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 			thrust::make_zip_iterator(thrust::make_tuple(
 				thrust::device_pointer_cast(d_chunkMaxCount + N_chunks),
 				thrust::device_pointer_cast(d_chunkFormat + N_chunks))),
-			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch_.Data() + 1),
+			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
 			SellChunkPitchIfFormat(static_cast<uint8_t>(GPU01::NbrChunkFormat::Abs32)),
 			thrust::plus<uint64_t>{}
 		);
 		K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-			d_nbrChunkOffsetsScratch_.Data(),
+			d_nbrChunkOffsetsScratch,
 			d_chunkFormat,
 			static_cast<uint8_t>(GPU01::NbrChunkFormat::Abs32),
 			N_chunks,
 			d_chunkOffsets);
 		GPU::CheckLastKernel("K_SelectChunkOffsetsByFormat(Abs32)");
 		GPU::Copy_DeviceToHost(&h_totalAbs32,
-			d_nbrChunkOffsetsScratch_.Data() + N_chunks, 1, stream_);
+			d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
 	};
 
 	uint64_t h_delta8FF = 0;
@@ -314,8 +427,8 @@ void SimBackend_GPU01::FinalizeNeighborLists_Count()
 
 	K_BuildSellChunkCompressionMeta<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
 		d_nbrChunkMaxCountFB_.Data(),
-		d_nbrChunkMinRefFB_.Data(),
-		d_nbrChunkMaxRefFB_.Data(),
+		d_nbrChunkMinRefFB,
+		d_nbrChunkMaxRefFB,
 		N_chunks,
 		d_nbrChunkBaseIdxFB_.Data(),
 		d_nbrChunkFormatFB_.Data());
@@ -428,21 +541,34 @@ void NS_BruteForce_GPU01::Construct(
 void NS_BruteForce_GPU01::Query_Count(
 	const SimParams& params)
 {
+	(void)params;
+
+	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(be_.N_F_);
+	be_.EnsureNsSharedScratchCapacity(scratchLayout.totalBytes);
+	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFF);
+	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFB);
+	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFF);
+	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFB);
+
 	const uint32_t N_chunks = SellChunkNumTotal(be_.N_F_);
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetBytes(be_.d_nbrChunkMinRefFF_.Data(), 0xff, N_chunks, be_.stream_);
-	GPU::MemsetBytes(be_.d_nbrChunkMinRefFB_.Data(), 0xff, N_chunks, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrChunkMaxRefFF_.Data(), N_chunks, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrChunkMaxRefFB_.Data(), N_chunks, be_.stream_);
+	GPU::MemsetBytes(d_nbrChunkMinRefFF, 0xff, N_chunks, be_.stream_);
+	GPU::MemsetBytes(d_nbrChunkMinRefFB, 0xff, N_chunks, be_.stream_);
+	GPU::MemsetZero(d_nbrChunkMaxRefFF, N_chunks, be_.stream_);
+	GPU::MemsetZero(d_nbrChunkMaxRefFB, N_chunks, be_.stream_);
 
 	GPU01::Launch_BruteForce_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 		be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(),
-		be_.d_nbrChunkMinRefFF_.Data(), be_.d_nbrChunkMaxRefFF_.Data(),
-		be_.d_nbrChunkMinRefFB_.Data(), be_.d_nbrChunkMaxRefFB_.Data());
+		d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
+		d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB);
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -489,6 +615,8 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_GPU01::GetMemUsage(
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
+
 	return { usageF, usageB };
 }
 
@@ -504,23 +632,19 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	N_NonEmptyCellsF_ = 0;
 	N_NonEmptyCellsB_ = 0;
 	N_NonEmptyCellsAny_ = 0;
-	cellIdsMatchCurrentParticleOrder_ = false;
+	particlesMatchCurrentCellOrder_ = false;
+	cellIdsAvailableForReuse_ = false;
 
 	d_uniqueCellIdF_.Release();
 	d_cellStartIdxF_.Release();
-	d_cellIdF_.Release();
 	d_sortedParticleIdxF_.Release();
 
 	d_uniqueCellIdB_.Release();
 	d_cellStartIdxB_.Release();
-	d_cellIdB_.Release();
-	d_sortedParticleIdxB_.Release();
 
 	d_uniqueCellIdAny_.Release();
 	d_cellRefFByAny_.Release();
 	d_cellRefBByAny_.Release();
-	d_queryLoAnyByCellF_.Release();
-	d_queryHiAnyByCellF_.Release();
 }
 
 void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
@@ -535,23 +659,19 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		N_NonEmptyCellsF_ = 0;
 		N_NonEmptyCellsB_ = 0;
 		N_NonEmptyCellsAny_ = 0;
-		cellIdsMatchCurrentParticleOrder_ = false;
+		particlesMatchCurrentCellOrder_ = false;
+		cellIdsAvailableForReuse_ = false;
 
 		d_uniqueCellIdF_.Release();
 		d_cellStartIdxF_.Release();
-		d_cellIdF_.Release();
 		d_sortedParticleIdxF_.Release();
 
 		d_uniqueCellIdB_.Release();
 		d_cellStartIdxB_.Release();
-		d_cellIdB_.Release();
-		d_sortedParticleIdxB_.Release();
 
 		d_uniqueCellIdAny_.Release();
 		d_cellRefFByAny_.Release();
 		d_cellRefBByAny_.Release();
-		d_queryLoAnyByCellF_.Release();
-		d_queryHiAnyByCellF_.Release();
 
 		return;
 	}
@@ -566,6 +686,12 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	EnsureStorageAllocation();
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(N_F, N_B);
+	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
+	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
+	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
 
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_,
@@ -575,13 +701,11 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	// if DataReOrder() already computed and permuted the per-particle cell IDs for this step,
 	// then they can be reused directly here and no re-computation is needed
 	const bool canReuseCellIds =
-		cellIdsMatchCurrentParticleOrder_
-		&& d_cellIdF_.Size() >= N_F
-		&& d_cellIdB_.Size() >= N_B;
+		particlesMatchCurrentCellOrder_ && cellIdsAvailableForReuse_;
 
 	if (!canReuseCellIds)
 	{
-		cellIdsMatchCurrentParticleOrder_ = false;
+		cellIdsAvailableForReuse_ = false;
 
 		// --- [ cell coordinates and indices for fluid and boundary particles ] ---------------------
 
@@ -589,21 +713,21 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		{
 			GPU01::Launch_FillCellIdAndInitParticleIdx(
 				be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-				N_F, be_.stream_, d_cellIdF_.Data(), d_sortedParticleIdxF_.Data());
+				N_F, be_.stream_, d_cellIdF, d_sortedParticleIdxF_.Data());
 		}
 
 		if (N_B > 0) // boundary
 		{
 			GPU01::Launch_FillCellIdAndInitParticleIdx(
 				be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-				N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
+				N_B, be_.stream_, d_cellIdB, d_sortedParticleIdxB);
 		}
 
 		// --- [ sort particle indices by cell IDs ] -------------------------------------------------
 
 		if (N_F > 0) // fluid
 		{
-			thrust::device_ptr<uint64_t> keysF(d_cellIdF_.Data());
+			thrust::device_ptr<uint64_t> keysF(d_cellIdF);
 			thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
 
 			// using radix sort from thrust
@@ -613,8 +737,8 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 		if (N_B > 0) // boundary
 		{
-			thrust::device_ptr<uint64_t> keysB(d_cellIdB_.Data());
-			thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB_.Data());
+			thrust::device_ptr<uint64_t> keysB(d_cellIdB);
+			thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB);
 
 			// using radix sort from thrust
 			thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
@@ -626,8 +750,8 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	if (N_F > 0) // fluid
 	{
-		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_, d_sortedParticleIdxF_,
-			d_cellIdF_.Data(),
+		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_, d_sortedParticleIdxF_.Data(),
+			d_cellIdF,
 			N_F, N_NonEmptyCellsF_);
 	}
 	else
@@ -637,8 +761,8 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	if (N_B > 0) // boundary
 	{
-		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_, d_sortedParticleIdxB_,
-			d_cellIdB_.Data(),
+		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_, d_sortedParticleIdxB,
+			d_cellIdB,
 			N_B, N_NonEmptyCellsB_);
 	}
 	else
@@ -648,26 +772,45 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	BuildMergedCompactCellLookup();
 	BuildQueryLookupBounds();
+
+	// the compact cell IDs live in shared scratch and are no longer considered reusable
+	// after construction completes, since later query/finalize phases alias that storage.
+	cellIdsAvailableForReuse_ = false;
 }
 
 void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 {
 	(void)params;
 
-	if (!cellIdsMatchCurrentParticleOrder_)
+	if (!particlesMatchCurrentCellOrder_)
 	{
 		throw std::runtime_error(
 			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
 	}
 
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
+	uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
+	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFF);
+	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFB);
+	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFF);
+	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFB);
+
 	// reset per-particle counts before count-query
 	const uint32_t N_chunks = SellChunkNumTotal(be_.N_F_);
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetBytes(be_.d_nbrChunkMinRefFF_.Data(), 0xff, N_chunks, be_.stream_);
-	GPU::MemsetBytes(be_.d_nbrChunkMinRefFB_.Data(), 0xff, N_chunks, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrChunkMaxRefFF_.Data(), N_chunks, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrChunkMaxRefFB_.Data(), N_chunks, be_.stream_);
+	GPU::MemsetBytes(d_nbrChunkMinRefFF, 0xff, N_chunks, be_.stream_);
+	GPU::MemsetBytes(d_nbrChunkMinRefFB, 0xff, N_chunks, be_.stream_);
+	GPU::MemsetZero(d_nbrChunkMaxRefFF, N_chunks, be_.stream_);
+	GPU::MemsetZero(d_nbrChunkMaxRefFB, N_chunks, be_.stream_);
 
 	GPU01::Launch_CellLinkedList_Compact_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
@@ -676,11 +819,11 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(),
-		d_queryLoAnyByCellF_.Data(), d_queryHiAnyByCellF_.Data(),
+		d_queryLoAnyByCellF, d_queryHiAnyByCellF,
 		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(),
-		be_.d_nbrChunkMinRefFF_.Data(), be_.d_nbrChunkMaxRefFF_.Data(),
-		be_.d_nbrChunkMinRefFB_.Data(), be_.d_nbrChunkMaxRefFB_.Data());
+		d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
+		d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB);
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -689,11 +832,18 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 {
 	(void)params;
 
-	if (!cellIdsMatchCurrentParticleOrder_)
+	if (!particlesMatchCurrentCellOrder_)
 	{
 		throw std::runtime_error(
 			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
 	}
+
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+	const uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
+	const uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
 
 	// (count-query and fill-query MUST find the same number of neighbors)
 	// reset overflow before filling packed SELL32 lists
@@ -706,7 +856,7 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(),
-		d_queryLoAnyByCellF_.Data(), d_queryHiAnyByCellF_.Data(),
+		d_queryLoAnyByCellF, d_queryHiAnyByCellF,
 		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
 		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
@@ -733,11 +883,13 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 
 	if (N_MAX == 0)
 	{
-		cellIdsMatchCurrentParticleOrder_ = false;
+		particlesMatchCurrentCellOrder_ = false;
+		cellIdsAvailableForReuse_ = false;
 		return;
 	}
 
-	cellIdsMatchCurrentParticleOrder_ = false;
+	particlesMatchCurrentCellOrder_ = false;
+	cellIdsAvailableForReuse_ = false;
 
 	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
 	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
@@ -749,6 +901,12 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	EnsureStorageAllocation();
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(N_F, N_B);
+	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
+	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
+	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
 
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_,
@@ -760,9 +918,9 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	{
 		GPU01::Launch_FillCellIdAndInitParticleIdx(
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-			N_F, be_.stream_, d_cellIdF_.Data(), d_sortedParticleIdxF_.Data());
+			N_F, be_.stream_, d_cellIdF, d_sortedParticleIdxF_.Data());
 
-		thrust::device_ptr<uint64_t> keysF(d_cellIdF_.Data());
+		thrust::device_ptr<uint64_t> keysF(d_cellIdF);
 		thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
 
 		// using radix sort from thrust
@@ -775,10 +933,10 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	{
 		GPU01::Launch_FillCellIdAndInitParticleIdx(
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-			N_B, be_.stream_, d_cellIdB_.Data(), d_sortedParticleIdxB_.Data());
+			N_B, be_.stream_, d_cellIdB, d_sortedParticleIdxB);
 
-		thrust::device_ptr<uint64_t> keysB(d_cellIdB_.Data());
-		thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB_.Data());
+		thrust::device_ptr<uint64_t> keysB(d_cellIdB);
+		thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB);
 
 		// using radix sort from thrust
 		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
@@ -830,7 +988,7 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	// re-order boundary SoA arrays according to sorted boundary indices
 	if (N_B > 0)
 	{
-		const uint32_t* d_permB = d_sortedParticleIdxB_.Data();
+		const uint32_t* d_permB = d_sortedParticleIdxB;
 
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
@@ -839,14 +997,15 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		// boundary arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
 			thrust::cuda::par.on(be_.stream_),
-			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data()),
-			thrust::device_pointer_cast(d_sortedParticleIdxB_.Data() + N_B),
+			thrust::device_pointer_cast(d_sortedParticleIdxB),
+			thrust::device_pointer_cast(d_sortedParticleIdxB + N_B),
 			0u);
 	}
 
 	// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 	// so Construct() can reuse them instead of re-computing them right away
-	cellIdsMatchCurrentParticleOrder_ = true;
+	particlesMatchCurrentCellOrder_ = true;
+	cellIdsAvailableForReuse_ = true;
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -861,21 +1020,17 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemU
 
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartIdxF_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellIdF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_sortedParticleIdxF_));
 
 	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_uniqueCellIdB_));
 	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellStartIdxB_));
-	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellIdB_));
-	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_sortedParticleIdxB_));
 
 	// shared merged lookup metadata is accounted in the fluid-side bucket
 	// to avoid double-counting.
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefFByAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefBByAny_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryLoAnyByCellF_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryHiAnyByCellF_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
 
 	// shared scan scratch is accounted in the fluid-side bucket
 	// to avoid double-counting.
@@ -895,7 +1050,6 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		// TODO: use heuristic instead of allocating worst-case size?
 		if (d_uniqueCellIdF_.Size() < N_F) { d_uniqueCellIdF_.Resize(N_F); }
 		if (d_cellStartIdxF_.Size() < N_F + 1) { d_cellStartIdxF_.Resize(N_F + 1); }
-		if (d_cellIdF_.Size() < N_F) { d_cellIdF_.Resize(N_F); }
 		if (d_sortedParticleIdxF_.Size() < N_F + 1) { d_sortedParticleIdxF_.Resize(N_F + 1); }
 	}
 
@@ -906,8 +1060,6 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		// TODO: use heuristic instead of allocating worst-case size?
 		if (d_uniqueCellIdB_.Size() < N_B) { d_uniqueCellIdB_.Resize(N_B); }
 		if (d_cellStartIdxB_.Size() < N_B + 1) { d_cellStartIdxB_.Resize(N_B + 1); }
-		if (d_cellIdB_.Size() < N_B) { d_cellIdB_.Resize(N_B); }
-		if (d_sortedParticleIdxB_.Size() < N_B + 1) { d_sortedParticleIdxB_.Resize(N_B + 1); }
 	}
 
 	const uint32_t N_ANY_MAX = N_F + N_B;
@@ -920,19 +1072,13 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		if (d_cellRefBByAny_.Size() < N_ANY_MAX) { d_cellRefBByAny_.Resize(N_ANY_MAX); }
 	}
 
-	if (N_F > 0)
-	{
-		// keep capacity once allocated and only grow when needed
-		// (to avoid repeated device alloc/free between steps)
-		if (d_queryLoAnyByCellF_.Size() < N_F) { d_queryLoAnyByCellF_.Resize(N_F); }
-		if (d_queryHiAnyByCellF_.Size() < N_F) { d_queryHiAnyByCellF_.Resize(N_F); }
-	}
+	be_.EnsureNsSharedScratchCapacity(BuildCompactSharedScratchLayout(N_F, N_B).totalBytes);
 }
 
 void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	DeviceBuffer<uint64_t>& d_uniqueCellId,
 	DeviceBuffer<uint32_t>& d_cellStartIdx,
-	DeviceBuffer<uint32_t>& d_markerScanScratch,
+	uint32_t* d_markerScanScratch,
 	const uint64_t* d_cellIdSorted,
 	uint32_t N, uint32_t& N_NonEmptyCells)
 {
@@ -944,12 +1090,12 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 
 	// mark cell starts in the caller-provided marker/scan scratch buffer
 	GPU01::Launch_MarkCellStarts(
-		d_cellIdSorted, N, be_.stream_, d_markerScanScratch.Data());
+		d_cellIdSorted, N, be_.stream_, d_markerScanScratch);
 
 	// inclusive scan in-place to get cell indices for each particle
 	{
-		thrust::device_ptr<uint32_t> scanBegin(d_markerScanScratch.Data());
-		thrust::device_ptr<uint32_t> scanEnd(d_markerScanScratch.Data() + N);
+		thrust::device_ptr<uint32_t> scanBegin(d_markerScanScratch);
+		thrust::device_ptr<uint32_t> scanEnd(d_markerScanScratch + N);
 
 		thrust::inclusive_scan(thrust::cuda::par.on(be_.stream_),
 			scanBegin, scanEnd, scanBegin);
@@ -958,7 +1104,7 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	// get last scan value to determine number of unique cells
 	uint32_t lastScan = 0;
 	GPU::Check(cudaMemcpyAsync(&lastScan,
-		d_markerScanScratch.Data() + (N - 1),
+		d_markerScanScratch + (N - 1),
 		sizeof(uint32_t),
 		cudaMemcpyDeviceToHost,
 		be_.stream_));
@@ -968,7 +1114,7 @@ void NS_CellLinkedList_Compact_GPU01::BuildCompactCellList(
 	// fill in cell-related data
 	// (write only first N_NonEmptyCells entries and one sentinel entry)
 	GPU01::Launch_FillUniqueCellIdAndCellStartIdx(
-		d_cellIdSorted, d_markerScanScratch.Data(),
+		d_cellIdSorted, d_markerScanScratch,
 		N, N_NonEmptyCells, be_.stream_,
 		d_uniqueCellId.Data(), d_cellStartIdx.Data());
 }
@@ -1024,15 +1170,20 @@ void NS_CellLinkedList_Compact_GPU01::BuildQueryLookupBounds()
 {
 	if (N_NonEmptyCellsF_ == 0 || N_NonEmptyCellsAny_ == 0)
 	{
-		d_queryLoAnyByCellF_.Release();
-		d_queryHiAnyByCellF_.Release();
 		return;
 	}
+
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
+	uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
 
 	GPU01::Launch_FillQueryLookupBoundsF(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		d_cellStartIdxF_.Data(), d_uniqueCellIdAny_.Data(),
 		N_NonEmptyCellsF_, N_NonEmptyCellsAny_, cellQueryReach_, be_.stream_,
 		d_sortedParticleIdxF_.Data(),
-		d_queryLoAnyByCellF_.Data(), d_queryHiAnyByCellF_.Data());
+		d_queryLoAnyByCellF, d_queryHiAnyByCellF);
 }
