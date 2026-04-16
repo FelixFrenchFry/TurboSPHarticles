@@ -86,6 +86,8 @@ namespace Sim
 		size_t size_ = 0;
 	};
 
+	class NS_CellLinkedList_Compact_GPU01;
+
 	class SimBackend_GPU01 final : public I_SimBackend
 	{
 	public: // ---------------------------------------------------------------------------------------
@@ -165,6 +167,8 @@ namespace Sim
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
 		uint32_t N_solverIterCount_ = 0;
+		Base::NeighborListMethod neighborListMethod_ =
+			Base::NeighborListMethod::SingleCSRVector_Explicit;
 
 		// --- [ backend-specific data structures for operating the simulation ]
 
@@ -290,9 +294,9 @@ namespace Sim
 		// (does not preserve data)
 		void EnsureCapacity(uint32_t N_F_new, uint32_t N_B_new, bool force = false)
 		{
+			const bool useExplicitNeighborLists = UsesExplicitNeighborLists();
 			const uint32_t N_chunks_new =
 				(N_F_new == 0u) ? 0u : ((N_F_new - 1u) / 32u) + 1u;
-			const bool needOverflow = (d_nbrOverflowFlag_.Size() != 1);
 			const bool needFluid =
 				force ||
 				(N_F_new != N_F_) ||
@@ -302,24 +306,45 @@ namespace Sim
 				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
 				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
 				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != std::max(N_F_new, N_B_new) ||
-				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new ||
-				d_nbrChunkMaxCountFF_.Size() != N_chunks_new ||
-				d_nbrChunkMaxCountFB_.Size() != N_chunks_new ||
-				d_nbrChunkBaseIdxFF_.Size() != N_chunks_new ||
-				d_nbrChunkBaseIdxFB_.Size() != N_chunks_new ||
-				d_nbrChunkFormatFF_.Size() != N_chunks_new ||
-				d_nbrChunkFormatFB_.Size() != N_chunks_new ||
-				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1;
+				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new;
 
 			const bool needBoundary =
 				force ||
 				(N_B_new != N_B_) ||
 				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new;
 
+			const bool needExplicitNeighborStorage =
+				force ||
+				(useExplicitNeighborLists &&
+					(d_nbrChunkMaxCountFF_.Size() != N_chunks_new ||
+					 d_nbrChunkMaxCountFB_.Size() != N_chunks_new ||
+					 d_nbrChunkBaseIdxFF_.Size() != N_chunks_new ||
+					 d_nbrChunkBaseIdxFB_.Size() != N_chunks_new ||
+					 d_nbrChunkFormatFF_.Size() != N_chunks_new ||
+					 d_nbrChunkFormatFB_.Size() != N_chunks_new ||
+					 d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_chunks_new) + 1ull ||
+					 d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1ull ||
+					 d_nbrOverflowFlag_.Size() != 1ull)) ||
+				(!useExplicitNeighborLists &&
+					(d_nbrChunkMaxCountFF_.Size() != 0ull ||
+					 d_nbrChunkMaxCountFB_.Size() != 0ull ||
+					 d_nbrChunkBaseIdxFF_.Size() != 0ull ||
+					 d_nbrChunkBaseIdxFB_.Size() != 0ull ||
+					 d_nbrChunkFormatFF_.Size() != 0ull ||
+					 d_nbrChunkFormatFB_.Size() != 0ull ||
+					 d_nbrChunkOffsetsFF_.Size() != 0ull ||
+					 d_nbrChunkOffsetsFB_.Size() != 0ull ||
+					 d_nbrListDelta8FF_.Size() != 0ull ||
+					 d_nbrListDelta8FB_.Size() != 0ull ||
+					 d_nbrListDelta16FF_.Size() != 0ull ||
+					 d_nbrListDelta16FB_.Size() != 0ull ||
+					 d_nbrListAbs32FF_.Size() != 0ull ||
+					 d_nbrListAbs32FB_.Size() != 0ull ||
+					 d_nbrOverflowFlag_.Size() != 0ull));
+
 			// detect if (re)allocation of buffers is needed
 			// (might be due to change in particle counts or lack of initialization)
-			if (!(needFluid || needBoundary || needOverflow)) { return; }
+			if (!(needFluid || needBoundary || needExplicitNeighborStorage)) { return; }
 
 			N_F_ = N_F_new;
 			N_B_ = N_B_new;
@@ -340,15 +365,37 @@ namespace Sim
 			// neighbors
 			d_nbrCountFF_.Resize(N_F_);
 			d_nbrCountFB_.Resize(N_F_);
-			d_nbrChunkMaxCountFF_.Resize(N_chunks_new);
-			d_nbrChunkMaxCountFB_.Resize(N_chunks_new);
-			d_nbrChunkBaseIdxFF_.Resize(N_chunks_new);
-			d_nbrChunkBaseIdxFB_.Resize(N_chunks_new);
-			d_nbrChunkFormatFF_.Resize(N_chunks_new);
-			d_nbrChunkFormatFB_.Resize(N_chunks_new);
-			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
-			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
-			d_nbrOverflowFlag_.Resize(1);
+			if (useExplicitNeighborLists)
+			{
+				d_nbrChunkMaxCountFF_.Resize(N_chunks_new);
+				d_nbrChunkMaxCountFB_.Resize(N_chunks_new);
+				d_nbrChunkBaseIdxFF_.Resize(N_chunks_new);
+				d_nbrChunkBaseIdxFB_.Resize(N_chunks_new);
+				d_nbrChunkFormatFF_.Resize(N_chunks_new);
+				d_nbrChunkFormatFB_.Resize(N_chunks_new);
+				d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
+				d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_chunks_new) + 1ull);
+				d_nbrOverflowFlag_.Resize(1);
+			}
+			else
+			{
+				d_nbrChunkMaxCountFF_.Release();
+				d_nbrChunkMaxCountFB_.Release();
+				d_nbrChunkBaseIdxFF_.Release();
+				d_nbrChunkBaseIdxFB_.Release();
+				d_nbrChunkFormatFF_.Release();
+				d_nbrChunkFormatFB_.Release();
+				d_nbrChunkOffsetsFF_.Release();
+				d_nbrChunkOffsetsFB_.Release();
+				d_nbrListDelta8FF_.Release();
+				d_nbrListDelta8FB_.Release();
+				d_nbrListDelta16FF_.Release();
+				d_nbrListDelta16FB_.Release();
+				d_nbrListAbs32FF_.Release();
+				d_nbrListAbs32FB_.Release();
+				d_nbrOverflowFlag_.Release();
+			}
+
 			N_totalFF_ = 0;
 			N_totalFB_ = 0;
 			N_packedFF_ = 0;
@@ -373,6 +420,12 @@ namespace Sim
 				+ (requiredBytes * static_cast<size_t>(extraAllocCapacityPct_)) / size_t{ 100 };
 			d_nsSharedScratch_.Resize(capacity);
 		}
+
+		bool UsesCellQueryCacheImplicitNeighbors() const noexcept;
+		bool UsesExplicitNeighborLists() const noexcept
+			{ return !UsesCellQueryCacheImplicitNeighbors(); }
+		NS_CellLinkedList_Compact_GPU01& CompactCellNeighborSearch();
+		const NS_CellLinkedList_Compact_GPU01& CompactCellNeighborSearch() const;
 	};
 
 } // namespace Sim
