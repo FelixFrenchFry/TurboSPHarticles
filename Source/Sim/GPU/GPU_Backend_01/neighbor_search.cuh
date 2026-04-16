@@ -73,14 +73,6 @@ namespace Sim
 		std::pair<Mem::MemUsage, Mem::MemUsage>
 			GetMemUsage(const SimParams& params) const override;
 
-		const uint32_t* CellRefFByAny() const;
-		const uint32_t* CellRefBByAny() const;
-		const uint32_t* CellStartIdxF() const;
-		const uint32_t* CellStartIdxB() const;
-		const uint32_t* CompactCellIdxByParticleF() const;
-		const uint32_t* QueryCellRefAnyByCellF() const;
-		uint32_t QueryCellSlotCount() const noexcept { return queryCellSlotCount_; }
-
 	private: // ------------------------------------------------------------------------------------
 
 		SimBackend_GPU01& be_;
@@ -106,8 +98,6 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
 		DeviceBuffer<uint32_t> d_cellRefFByAny_; // merged-cell to compact fluid-cell index
 		DeviceBuffer<uint32_t> d_cellRefBByAny_; // merged-cell to compact boundary-cell index
-		DeviceBuffer<uint32_t> d_queryCellRefAnyByCellF_; // per-source compact cell dense queried-cell cache
-		uint32_t queryCellSlotCount_ = 0;
 
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
@@ -122,7 +112,7 @@ namespace Sim
 			uint32_t N, uint32_t& N_NonEmptyCells);
 
 		void BuildMergedCompactCellLookup();
-		void BuildQueryCellCache();
+		void BuildQueryLookupBounds();
 	};
 
 } // namespace Sim

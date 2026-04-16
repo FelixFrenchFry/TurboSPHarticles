@@ -75,52 +75,11 @@ namespace
 
 } // anonymous
 
-bool SimBackend_GPU01::UsesCellQueryCacheImplicitNeighbors() const noexcept
-{
-	return neighborListMethod_ ==
-		Base::NeighborListMethod::CellQueryCache_Implicit;
-}
-
-NS_CellLinkedList_Compact_GPU01& SimBackend_GPU01::CompactCellNeighborSearch()
-{
-	auto* ns = dynamic_cast<NS_CellLinkedList_Compact_GPU01*>(neighborSearch_.get());
-	if (!ns)
-	{
-		throw std::runtime_error(
-			"GPU compact-cell neighbor traversal requires "
-			"'CellLinkedList_Compact' neighbor search.");
-	}
-
-	return *ns;
-}
-
-const NS_CellLinkedList_Compact_GPU01& SimBackend_GPU01::CompactCellNeighborSearch() const
-{
-	auto* ns = dynamic_cast<const NS_CellLinkedList_Compact_GPU01*>(neighborSearch_.get());
-	if (!ns)
-	{
-		throw std::runtime_error(
-			"GPU compact-cell neighbor traversal requires "
-			"'CellLinkedList_Compact' neighbor search.");
-	}
-
-	return *ns;
-}
-
 SimBackend_GPU01::SimBackend_GPU01(
 	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
 	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_ { benchmarksTracker }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
-	neighborListMethod_ = params.neighborListMethod;
-
-	if (UsesCellQueryCacheImplicitNeighbors() &&
-		params.neighborSearchMethod != Base::NeighborSearchMethod::CellLinkedList_Compact)
-	{
-		throw std::runtime_error(
-			"'CellQueryCache_Implicit' on GPU01 requires "
-			"'CellLinkedList_Compact' neighbor search.");
-	}
 
 	// select neighbor search method
 	if (params.neighborSearchMethod ==
@@ -139,8 +98,7 @@ SimBackend_GPU01::SimBackend_GPU01(
 	}
 	neighborSearch_->Init(params);
 
-	// GPU01 currently supports two execution modes:
-	// explicit SELL32 neighbor storage, and compact-cell implicit traversal with a cell query cache.
+	// TODO: select neighbor list method once implemented
 }
 
 SimBackend_GPU01::~SimBackend_GPU01()
@@ -197,10 +155,7 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	// reset neighbor counts for the next construction step
 	GPU::MemsetZero(d_nbrCountFF_.Data(), N_F_, stream_);
 	GPU::MemsetZero(d_nbrCountFB_.Data(), N_F_, stream_);
-	if (UsesExplicitNeighborLists())
-	{
-		GPU::MemsetZero(d_nbrOverflowFlag_.Data(), 1, stream_);
-	}
+	GPU::MemsetZero(d_nbrOverflowFlag_.Data(), 1, stream_);
 	N_totalFF_ = 0;
 	N_totalFB_ = 0;
 	N_packedFF_ = 0;
@@ -283,14 +238,9 @@ void SimBackend_GPU01::PackExportSnapshot(
 		return;
 	}
 
-	// host staging for fluid neighbor counts
+	// host staging for fluid neighbor list data
 	auto& h_nbrCountFF = h_expNbrCountFF_;
 	auto& h_nbrCountFB = h_expNbrCountFB_;
-
-	h_nbrCountFF.resize(N_F_);
-	h_nbrCountFB.resize(N_F_);
-
-	// host staging for explicit fluid neighbor list data
 	auto& h_nbrChunkOffsetsFF = h_expNbrChunkOffsetsFF_;
 	auto& h_nbrChunkBaseIdxFF = h_expNbrChunkBaseIdxFF_;
 	auto& h_nbrChunkFormatFF = h_expNbrChunkFormatFF_;
@@ -299,24 +249,14 @@ void SimBackend_GPU01::PackExportSnapshot(
 	auto& h_nbrListAbs32FF = h_expNbrListAbs32FF_;
 	const uint32_t N_sellChunks = SellChunkNumTotal(N_F_);
 
-	if (UsesExplicitNeighborLists())
-	{
-		h_nbrChunkOffsetsFF.resize(static_cast<size_t>(N_sellChunks) + 1ull);
-		h_nbrChunkBaseIdxFF.resize(N_sellChunks);
-		h_nbrChunkFormatFF.resize(N_sellChunks);
-		h_nbrListDelta8FF.resize(static_cast<size_t>(N_delta8FF_));
-		h_nbrListDelta16FF.resize(static_cast<size_t>(N_delta16FF_));
-		h_nbrListAbs32FF.resize(static_cast<size_t>(N_abs32FF_));
-	}
-	else
-	{
-		h_nbrChunkOffsetsFF.clear();
-		h_nbrChunkBaseIdxFF.clear();
-		h_nbrChunkFormatFF.clear();
-		h_nbrListDelta8FF.clear();
-		h_nbrListDelta16FF.clear();
-		h_nbrListAbs32FF.clear();
-	}
+	h_nbrCountFF.resize(N_F_);
+	h_nbrCountFB.resize(N_F_);
+	h_nbrChunkOffsetsFF.resize(static_cast<size_t>(N_sellChunks) + 1ull);
+	h_nbrChunkBaseIdxFF.resize(N_sellChunks);
+	h_nbrChunkFormatFF.resize(N_sellChunks);
+	h_nbrListDelta8FF.resize(static_cast<size_t>(N_delta8FF_));
+	h_nbrListDelta16FF.resize(static_cast<size_t>(N_delta16FF_));
+	h_nbrListAbs32FF.resize(static_cast<size_t>(N_abs32FF_));
 
 	// host staging for fluid positions and velocities
 	auto& h_xPosF = h_expXPosF_;
@@ -336,21 +276,18 @@ void SimBackend_GPU01::PackExportSnapshot(
 	// launch async device to host copies
 	GPU::Copy_DeviceToHost(h_nbrCountFF.data(), d_nbrCountFF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_nbrCountFB.data(), d_nbrCountFB_.Data(), N_F_, stream_);
-	if (UsesExplicitNeighborLists())
-	{
-		GPU::Copy_DeviceToHost(h_nbrChunkOffsetsFF.data(), d_nbrChunkOffsetsFF_.Data(),
-							   static_cast<size_t>(N_sellChunks) + 1ull, stream_);
-		GPU::Copy_DeviceToHost(h_nbrChunkBaseIdxFF.data(), d_nbrChunkBaseIdxFF_.Data(),
-							   N_sellChunks, stream_);
-		GPU::Copy_DeviceToHost(h_nbrChunkFormatFF.data(), d_nbrChunkFormatFF_.Data(),
-							   N_sellChunks, stream_);
-		GPU::Copy_DeviceToHost(h_nbrListDelta8FF.data(), d_nbrListDelta8FF_.Data(),
-							   static_cast<size_t>(N_delta8FF_), stream_);
-		GPU::Copy_DeviceToHost(h_nbrListDelta16FF.data(), d_nbrListDelta16FF_.Data(),
-							   static_cast<size_t>(N_delta16FF_), stream_);
-		GPU::Copy_DeviceToHost(h_nbrListAbs32FF.data(), d_nbrListAbs32FF_.Data(),
-							   static_cast<size_t>(N_abs32FF_), stream_);
-	}
+	GPU::Copy_DeviceToHost(h_nbrChunkOffsetsFF.data(), d_nbrChunkOffsetsFF_.Data(),
+						   static_cast<size_t>(N_sellChunks) + 1ull, stream_);
+	GPU::Copy_DeviceToHost(h_nbrChunkBaseIdxFF.data(), d_nbrChunkBaseIdxFF_.Data(),
+						   N_sellChunks, stream_);
+	GPU::Copy_DeviceToHost(h_nbrChunkFormatFF.data(), d_nbrChunkFormatFF_.Data(),
+						   N_sellChunks, stream_);
+	GPU::Copy_DeviceToHost(h_nbrListDelta8FF.data(), d_nbrListDelta8FF_.Data(),
+						   static_cast<size_t>(N_delta8FF_), stream_);
+	GPU::Copy_DeviceToHost(h_nbrListDelta16FF.data(), d_nbrListDelta16FF_.Data(),
+						   static_cast<size_t>(N_delta16FF_), stream_);
+	GPU::Copy_DeviceToHost(h_nbrListAbs32FF.data(), d_nbrListAbs32FF_.Data(),
+						   static_cast<size_t>(N_abs32FF_), stream_);
 
 	GPU::Copy_DeviceToHost(h_xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
@@ -379,8 +316,7 @@ void SimBackend_GPU01::PackExportSnapshot(
 							   h_nbrCountFF[i] < 28;
 
 				// if not surface itself, check its fluid neighbors
-				// (the matrix-free mode keeps counts but does not store the explicit lists)
-				if (!surface && UsesExplicitNeighborLists())
+				if (!surface)
 				{
 					const uint32_t N_FF = h_nbrCountFF[i];
 
@@ -652,42 +588,38 @@ void SimBackend_GPU01::FillMemoryRecord(
 		MemUsage usageB{};
 
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrCountFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkMaxCountFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkBaseIdxFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkFormatFF_));
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsFF_));
+
 		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrCountFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkMaxCountFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkBaseIdxFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkFormatFB_));
+		Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsFB_));
 
-		if (UsesExplicitNeighborLists())
-		{
-			Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkMaxCountFF_));
-			Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkBaseIdxFF_));
-			Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkFormatFF_));
-			Add(usageF, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsFF_));
+		// compressed SELL32 storage used for FF and FB neighbors
+		MemUsage listFF{};
+		listFF.usedBytes = static_cast<uint64_t>(N_packedFF_);
+		listFF.occupiedBytes = static_cast<uint64_t>(N_packedFF_);
+		listFF.allocBytes =
+			static_cast<uint64_t>(d_nbrListDelta8FF_.Size()) * sizeof(uint8_t)
+			+ static_cast<uint64_t>(d_nbrListDelta16FF_.Size()) * sizeof(uint16_t)
+			+ static_cast<uint64_t>(d_nbrListAbs32FF_.Size()) * sizeof(uint32_t);
+		Add(usageF, listFF);
 
-			Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkMaxCountFB_));
-			Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkBaseIdxFB_));
-			Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkFormatFB_));
-			Add(usageB, MemUsageOf_DeviceBuffer(d_nbrChunkOffsetsFB_));
+		MemUsage listFB{};
+		listFB.usedBytes = static_cast<uint64_t>(N_packedFB_);
+		listFB.occupiedBytes = static_cast<uint64_t>(N_packedFB_);
+		listFB.allocBytes =
+			static_cast<uint64_t>(d_nbrListDelta8FB_.Size()) * sizeof(uint8_t)
+			+ static_cast<uint64_t>(d_nbrListDelta16FB_.Size()) * sizeof(uint16_t)
+			+ static_cast<uint64_t>(d_nbrListAbs32FB_.Size()) * sizeof(uint32_t);
+		Add(usageB, listFB);
 
-			// compressed SELL32 storage used for FF and FB neighbors
-			MemUsage listFF{};
-			listFF.usedBytes = static_cast<uint64_t>(N_packedFF_);
-			listFF.occupiedBytes = static_cast<uint64_t>(N_packedFF_);
-			listFF.allocBytes =
-				static_cast<uint64_t>(d_nbrListDelta8FF_.Size()) * sizeof(uint8_t)
-				+ static_cast<uint64_t>(d_nbrListDelta16FF_.Size()) * sizeof(uint16_t)
-				+ static_cast<uint64_t>(d_nbrListAbs32FF_.Size()) * sizeof(uint32_t);
-			Add(usageF, listFF);
-
-			MemUsage listFB{};
-			listFB.usedBytes = static_cast<uint64_t>(N_packedFB_);
-			listFB.occupiedBytes = static_cast<uint64_t>(N_packedFB_);
-			listFB.allocBytes =
-				static_cast<uint64_t>(d_nbrListDelta8FB_.Size()) * sizeof(uint8_t)
-				+ static_cast<uint64_t>(d_nbrListDelta16FB_.Size()) * sizeof(uint16_t)
-				+ static_cast<uint64_t>(d_nbrListAbs32FB_.Size()) * sizeof(uint32_t);
-			Add(usageB, listFB);
-
-			// shared overflow flag is accounted in the fluid-side bucket to avoid double-counting
-			Add(usageF, MemUsageOf_DeviceBuffer(d_nbrOverflowFlag_));
-		}
+		// shared overflow flag is accounted in the fluid-side bucket to avoid double-counting
+		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrOverflowFlag_));
 
 		// finalize
 		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
@@ -944,11 +876,8 @@ void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 	}
 	neighborSearch_->Query_Count(params);
-	if (UsesExplicitNeighborLists())
-	{
-		FinalizeNeighborLists_Count();
-		neighborSearch_->Query_Fill(params);
-	}
+	FinalizeNeighborLists_Count();
+	neighborSearch_->Query_Fill(params);
 	if (bench)
 	{
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
@@ -967,8 +896,6 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 	for (int64_t step = 0; step < N_steps; step++)
 	{
-		const bool useCellQueryCacheImplicit = UsesCellQueryCacheImplicitNeighbors();
-
 		GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
 
 		// --- [ particle data re-ordering ] -----------------------------------------------------------
@@ -985,64 +912,25 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearch_->Query_Count(params);
-		if (UsesExplicitNeighborLists())
-		{
-			FinalizeNeighborLists_Count();
-			neighborSearch_->Query_Fill(params);
-		}
+		FinalizeNeighborLists_Count();
+		neighborSearch_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
-
-		const uint32_t* d_cellRefFByAny = nullptr;
-		const uint32_t* d_cellRefBByAny = nullptr;
-		const uint32_t* d_cellStartIdxF = nullptr;
-		const uint32_t* d_cellStartIdxB = nullptr;
-		const uint32_t* d_compactCellIdxByParticleF = nullptr;
-		const uint32_t* d_queryCellRefAnyByCellF = nullptr;
-		uint32_t queryCellSlotCount = 0;
-
-		if (useCellQueryCacheImplicit)
-		{
-			const auto& compactNs = CompactCellNeighborSearch();
-
-			d_cellRefFByAny = compactNs.CellRefFByAny();
-			d_cellRefBByAny = compactNs.CellRefBByAny();
-			d_cellStartIdxF = compactNs.CellStartIdxF();
-			d_cellStartIdxB = compactNs.CellStartIdxB();
-			d_compactCellIdxByParticleF = compactNs.CompactCellIdxByParticleF();
-			d_queryCellRefAnyByCellF = compactNs.QueryCellRefAnyByCellF();
-			queryCellSlotCount = compactNs.QueryCellSlotCount();
-		}
 
 		// --- [ density computations ] -----------------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });
-		if (useCellQueryCacheImplicit)
-		{
-			GPU01::Launch_Density_CellQueryCache_Implicit(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_cellRefFByAny, d_cellRefBByAny,
-				d_cellStartIdxF, d_cellStartIdxB,
-				d_compactCellIdxByParticleF,
-				d_queryCellRefAnyByCellF, queryCellSlotCount,
-				N_F_, N_B_, stream_,
-				d_densityF_.Data());
-		}
-		else
-		{
-			GPU01::Launch_Density(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
-				d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
-				d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
-				d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
-				d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
-				d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
-				d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
-				N_F_, N_B_, stream_,
-				d_densityF_.Data());
-		}
+		GPU01::Launch_Density(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
+			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
+			d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
+			d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
+			d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
+			d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
+			d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
+			N_F_, N_B_, stream_,
+			d_densityF_.Data());
 
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Solving });
@@ -1050,37 +938,20 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		// --- [ non-pressure accelerations ] -----------------------------------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
-		if (useCellQueryCacheImplicit)
-		{
-			GPU01::Launch_NonPressureAcceleration_CellQueryCache_Implicit(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
-				d_densityF_.Data(),
-				d_cellRefFByAny, d_cellRefBByAny,
-				d_cellStartIdxF, d_cellStartIdxB,
-				d_compactCellIdxByParticleF,
-				d_queryCellRefAnyByCellF, queryCellSlotCount,
-				N_F_, N_B_, stream_,
-				d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data());
-		}
-		else
-		{
-			GPU01::Launch_NonPressureAcceleration(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
-				d_densityF_.Data(),
-				d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
-				d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
-				d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
-				d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
-				d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
-				d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
-				d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
-				N_F_, N_B_, stream_,
-				d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data());
-		}
+		GPU01::Launch_NonPressureAcceleration(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
+			d_densityF_.Data(),
+			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
+			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
+			d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
+			d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
+			d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
+			d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
+			d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
+			N_F_, N_B_, stream_,
+			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data());
 
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
@@ -1088,37 +959,20 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		// --- [ source-term (density invariance) and diagonal elements ] -------------------------------
 
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
-		if (useCellQueryCacheImplicit)
-		{
-			GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit_CellQueryCache_Implicit(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
-				d_densityF_.Data(),
-				d_cellRefFByAny, d_cellRefBByAny,
-				d_cellStartIdxF, d_cellStartIdxB,
-				d_compactCellIdxByParticleF,
-				d_queryCellRefAnyByCellF, queryCellSlotCount,
-				N_F_, N_B_, stream_,
-				d_sourceTermF_.Data(), d_diagElemF_.Data(), d_pressureF_.Data());
-		}
-		else
-		{
-			GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
-				d_densityF_.Data(),
-				d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
-				d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
-				d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
-				d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
-				d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
-				d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
-				d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
-				N_F_, N_B_, stream_,
-				d_sourceTermF_.Data(), d_diagElemF_.Data(), d_pressureF_.Data());
-		}
+		GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
+			d_densityF_.Data(),
+			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
+			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
+			d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
+			d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
+			d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
+			d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
+			d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
+			N_F_, N_B_, stream_,
+			d_sourceTermF_.Data(), d_diagElemF_.Data(), d_pressureF_.Data());
 
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
@@ -1133,95 +987,6 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		do
 		{
 			// [ loop 1: pressure acceleration ] --------------------------------------------------------
-			if (useCellQueryCacheImplicit)
-			{
-				GPU01::Launch_PressureAcceleration_CellQueryCache_Implicit(
-					d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-					d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-					d_pressureF_.Data(),
-					d_cellRefFByAny, d_cellRefBByAny,
-					d_cellStartIdxF, d_cellStartIdxB,
-					d_compactCellIdxByParticleF,
-					d_queryCellRefAnyByCellF, queryCellSlotCount,
-					N_F_, N_B_, stream_,
-					d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
-			}
-			else
-			{
-				GPU01::Launch_PressureAcceleration(
-					d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-					d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-					d_pressureF_.Data(),
-					d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
-					d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
-					d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
-					d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
-					d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
-					d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
-					d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
-					N_F_, N_B_, stream_,
-					d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
-			}
-
-			GPU::StreamSync(stream_);
-
-			// [ loop 2: relaxed jacobi solver ] --------------------------------------------------------
-			if (useCellQueryCacheImplicit)
-			{
-				GPU01::Launch_PressureRelaxedJacobiSolver_CellQueryCache_Implicit(
-					d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-					d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-					d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
-					d_sourceTermF_.Data(), d_diagElemF_.Data(),
-					d_cellRefFByAny, d_cellRefBByAny,
-					d_cellStartIdxF, d_cellStartIdxB,
-					d_compactCellIdxByParticleF,
-					d_queryCellRefAnyByCellF, queryCellSlotCount,
-					N_F_, N_B_, stream_,
-					d_pressureF_.Data());
-			}
-			else
-			{
-				GPU01::Launch_PressureRelaxedJacobiSolver(
-					d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-					d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-					d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
-					d_sourceTermF_.Data(), d_diagElemF_.Data(),
-					d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
-					d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
-					d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
-					d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
-					d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
-					d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
-					d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
-					N_F_, N_B_, stream_,
-					d_pressureF_.Data());
-			}
-
-			GPU::StreamSync(stream_);
-
-			N_solverIterCount_++;
-		} while (!TerminationConditionSatisfied(params));
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
-
-		// --- [ finalize pressure acceleration for integration ] ---------------------------------------
-
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
-		if (useCellQueryCacheImplicit)
-		{
-			GPU01::Launch_PressureAcceleration_CellQueryCache_Implicit(
-				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
-				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-				d_pressureF_.Data(),
-				d_cellRefFByAny, d_cellRefBByAny,
-				d_cellStartIdxF, d_cellStartIdxB,
-				d_compactCellIdxByParticleF,
-				d_queryCellRefAnyByCellF, queryCellSlotCount,
-				N_F_, N_B_, stream_,
-				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
-		}
-		else
-		{
 			GPU01::Launch_PressureAcceleration(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1235,7 +1000,47 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
 				N_F_, N_B_, stream_,
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
-		}
+
+			GPU::StreamSync(stream_);
+
+			// [ loop 2: relaxed jacobi solver ] --------------------------------------------------------
+			GPU01::Launch_PressureRelaxedJacobiSolver(
+				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
+				d_sourceTermF_.Data(), d_diagElemF_.Data(),
+				d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
+				d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
+				d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
+				d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
+				d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
+				d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
+				d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
+				N_F_, N_B_, stream_,
+				d_pressureF_.Data());
+
+			GPU::StreamSync(stream_);
+
+			N_solverIterCount_++;
+		} while (!TerminationConditionSatisfied(params));
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
+
+		// --- [ finalize pressure acceleration for integration ] ---------------------------------------
+
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
+		GPU01::Launch_PressureAcceleration(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_pressureF_.Data(),
+			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
+			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
+			d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
+			d_nbrChunkFormatFF_.Data(), d_nbrChunkFormatFB_.Data(),
+			d_nbrListDelta8FF_.Data(), d_nbrListDelta8FB_.Data(),
+			d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(),
+			d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(),
+			N_F_, N_B_, stream_,
+			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });

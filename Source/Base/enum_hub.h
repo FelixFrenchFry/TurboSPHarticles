@@ -79,8 +79,7 @@ namespace Base
 		IndividualVectors_Explicit,		// 0
 		SingleCSRVector_Explicit,		// 1
 		SingleCSRVector_AdaptCompress,	// 2 TODO: implement
-		SingleCSRVector_VByteCompress,	// 3 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
-		CellQueryCache_Implicit		// 4
+		SingleCSRVector_VByteCompress	// 3 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
 	};
 	constexpr const char* ToCString(const NeighborListMethod v) noexcept
 	{
@@ -94,8 +93,6 @@ namespace Base
 			return "SingleCSRVector_AdaptCompress";
 		case NeighborListMethod::SingleCSRVector_VByteCompress:
 			return "SingleCSRVector_VByteCompress";
-		case NeighborListMethod::CellQueryCache_Implicit:
-			return "CellQueryCache_Implicit";
 		}
 		return "NeighborListStorage::<unknown>";
 	}

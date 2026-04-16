@@ -97,6 +97,8 @@ namespace
 		NS_FinalizeScratchLayout finalize;
 		NS_CompactBuildScratchLayout build;
 		size_t phaseScratchBytes = 0;
+		size_t queryLoAnyByCellF = 0;
+		size_t queryHiAnyByCellF = 0;
 		size_t totalBytes = 0;
 	};
 
@@ -138,7 +140,11 @@ namespace
 		layout.finalize = BuildFinalizeScratchLayout(N_F);
 		layout.build = BuildCompactBuildScratchLayout(N_F, N_B);
 		layout.phaseScratchBytes = std::max(layout.finalize.totalBytes, layout.build.totalBytes);
-		layout.totalBytes = layout.phaseScratchBytes;
+
+		size_t cursor = layout.phaseScratchBytes;
+		layout.queryLoAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
+		layout.queryHiAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
+		layout.totalBytes = cursor;
 
 		return layout;
 	}
@@ -626,7 +632,6 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	N_NonEmptyCellsF_ = 0;
 	N_NonEmptyCellsB_ = 0;
 	N_NonEmptyCellsAny_ = 0;
-	queryCellSlotCount_ = 0;
 	particlesMatchCurrentCellOrder_ = false;
 	cellIdsAvailableForReuse_ = false;
 
@@ -640,7 +645,6 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	d_uniqueCellIdAny_.Release();
 	d_cellRefFByAny_.Release();
 	d_cellRefBByAny_.Release();
-	d_queryCellRefAnyByCellF_.Release();
 }
 
 void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
@@ -655,7 +659,6 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		N_NonEmptyCellsF_ = 0;
 		N_NonEmptyCellsB_ = 0;
 		N_NonEmptyCellsAny_ = 0;
-		queryCellSlotCount_ = 0;
 		particlesMatchCurrentCellOrder_ = false;
 		cellIdsAvailableForReuse_ = false;
 
@@ -669,7 +672,6 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		d_uniqueCellIdAny_.Release();
 		d_cellRefFByAny_.Release();
 		d_cellRefBByAny_.Release();
-		d_queryCellRefAnyByCellF_.Release();
 
 		return;
 	}
@@ -769,7 +771,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	}
 
 	BuildMergedCompactCellLookup();
-	BuildQueryCellCache();
+	BuildQueryLookupBounds();
 
 	// the compact cell IDs live in shared scratch and are no longer considered reusable
 	// after construction completes, since later query/finalize phases alias that storage.
@@ -788,6 +790,10 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 
 	const NS_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
+	uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
 	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFF);
 	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
@@ -809,11 +815,12 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 	GPU01::Launch_CellLinkedList_Compact_Query_Count(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		d_uniqueCellIdAny_.Data(),
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(),
-		d_queryCellRefAnyByCellF_.Data(), queryCellSlotCount_,
-		be_.N_F_, be_.N_B_, be_.stream_,
+		d_queryLoAnyByCellF, d_queryHiAnyByCellF,
+		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(),
 		d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
 		d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB);
@@ -831,6 +838,13 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
 	}
 
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+	const uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
+	const uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
+
 	// (count-query and fill-query MUST find the same number of neighbors)
 	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
@@ -838,11 +852,12 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 	GPU01::Launch_CellLinkedList_Compact_Query_Fill(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+		d_uniqueCellIdAny_.Data(),
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
 		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		d_sortedParticleIdxF_.Data(),
-		d_queryCellRefAnyByCellF_.Data(), queryCellSlotCount_,
-		be_.N_F_, be_.N_B_, be_.stream_,
+		d_queryLoAnyByCellF, d_queryHiAnyByCellF,
+		N_NonEmptyCellsAny_, be_.N_F_, be_.N_B_, be_.stream_,
 		be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
 		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
 		be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
@@ -1015,43 +1030,12 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemU
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefFByAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefBByAny_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryCellRefAnyByCellF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
 
 	// shared scan scratch is accounted in the fluid-side bucket
 	// to avoid double-counting.
 
 	return { usageF, usageB };
-}
-
-const uint32_t* NS_CellLinkedList_Compact_GPU01::CellRefFByAny() const
-{
-	return d_cellRefFByAny_.Data();
-}
-
-const uint32_t* NS_CellLinkedList_Compact_GPU01::CellRefBByAny() const
-{
-	return d_cellRefBByAny_.Data();
-}
-
-const uint32_t* NS_CellLinkedList_Compact_GPU01::CellStartIdxF() const
-{
-	return d_cellStartIdxF_.Data();
-}
-
-const uint32_t* NS_CellLinkedList_Compact_GPU01::CellStartIdxB() const
-{
-	return d_cellStartIdxB_.Data();
-}
-
-const uint32_t* NS_CellLinkedList_Compact_GPU01::CompactCellIdxByParticleF() const
-{
-	return d_sortedParticleIdxF_.Data();
-}
-
-const uint32_t* NS_CellLinkedList_Compact_GPU01::QueryCellRefAnyByCellF() const
-{
-	return d_queryCellRefAnyByCellF_.Data();
 }
 
 void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
@@ -1086,10 +1070,6 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		if (d_uniqueCellIdAny_.Size() < N_ANY_MAX) { d_uniqueCellIdAny_.Resize(N_ANY_MAX); }
 		if (d_cellRefFByAny_.Size() < N_ANY_MAX) { d_cellRefFByAny_.Resize(N_ANY_MAX); }
 		if (d_cellRefBByAny_.Size() < N_ANY_MAX) { d_cellRefBByAny_.Resize(N_ANY_MAX); }
-	}
-	else
-	{
-		d_queryCellRefAnyByCellF_.Release();
 	}
 
 	be_.EnsureNsSharedScratchCapacity(BuildCompactSharedScratchLayout(N_F, N_B).totalBytes);
@@ -1186,42 +1166,24 @@ void NS_CellLinkedList_Compact_GPU01::BuildMergedCompactCellLookup()
 		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data());
 }
 
-void NS_CellLinkedList_Compact_GPU01::BuildQueryCellCache()
+void NS_CellLinkedList_Compact_GPU01::BuildQueryLookupBounds()
 {
 	if (N_NonEmptyCellsF_ == 0 || N_NonEmptyCellsAny_ == 0)
 	{
-		queryCellSlotCount_ = 0;
-		d_queryCellRefAnyByCellF_.Release();
 		return;
 	}
 
-	const uint32_t sideLen = 2u * cellQueryReach_ + 1u;
-	const uint64_t slotCount64 =
-		static_cast<uint64_t>(sideLen) * static_cast<uint64_t>(sideLen) * static_cast<uint64_t>(sideLen);
-	if (slotCount64 > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
-	{
-		throw std::runtime_error(
-			"GPU compact-cell query cache slot count exceeds uint32_t addressable range");
-	}
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
+	uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
 
-	queryCellSlotCount_ = static_cast<uint32_t>(slotCount64);
-	const uint64_t totalRefs64 =
-		static_cast<uint64_t>(N_NonEmptyCellsF_) * static_cast<uint64_t>(queryCellSlotCount_);
-	if (totalRefs64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max()))
-	{
-		throw std::runtime_error(
-			"GPU compact-cell query cache allocation exceeds host addressable range");
-	}
-
-	const size_t totalRefs = static_cast<size_t>(totalRefs64);
-	if (d_queryCellRefAnyByCellF_.Size() < totalRefs)
-	{
-		d_queryCellRefAnyByCellF_.Resize(totalRefs);
-	}
-
-	GPU01::Launch_FillQueryCellCacheF(
-		d_uniqueCellIdF_.Data(), d_cellStartIdxF_.Data(), d_uniqueCellIdAny_.Data(),
-		N_NonEmptyCellsF_, N_NonEmptyCellsAny_, cellQueryReach_, queryCellSlotCount_, be_.stream_,
+	GPU01::Launch_FillQueryLookupBoundsF(
+		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+		d_cellStartIdxF_.Data(), d_uniqueCellIdAny_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsAny_, cellQueryReach_, be_.stream_,
 		d_sortedParticleIdxF_.Data(),
-		d_queryCellRefAnyByCellF_.Data());
+		d_queryLoAnyByCellF, d_queryHiAnyByCellF);
 }

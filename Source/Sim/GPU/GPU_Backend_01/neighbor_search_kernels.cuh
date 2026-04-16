@@ -135,18 +135,18 @@ namespace GPU01
 		uint32_t* cellRefFByAny,
 		uint32_t* cellRefBByAny);
 
-	void Launch_FillQueryCellCacheF(
-		const uint64_t* uniqueCellIdF,
+	void Launch_FillQueryLookupBoundsF(
+		const float* xPosF, const float* yPosF, const float* zPosF,
 		const uint32_t* cellStartIdxF,
 		const uint64_t* uniqueCellIdAny,
 		const uint32_t N_NonEmptyCellsF,
 		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t cellQueryReach,
-		const uint32_t queryCellSlotCount,
 		cudaStream_t stream,
 		// destinations
 		uint32_t* compactCellIdxByParticleF,
-		uint32_t* queryCellRefAnyByCellF);
+		uint32_t* queryLoAnyByCellF,
+		uint32_t* queryHiAnyByCellF);
 
 	void Launch_FillCellIdAndInitParticleIdx(
 		const float* xPos, const float* yPos, const float* zPos,
@@ -158,11 +158,12 @@ namespace GPU01
 	void Launch_CellLinkedList_Compact_Query_Count(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const uint64_t* uniqueCellIdAny,
 		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
 		const uint32_t* compactCellIdxByParticleF,
-		const uint32_t* queryCellRefAnyByCellF,
-		const uint32_t queryCellSlotCount,
+		const uint32_t* queryLoAnyByCellF, const uint32_t* queryHiAnyByCellF,
+		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
@@ -175,11 +176,12 @@ namespace GPU01
 	void Launch_CellLinkedList_Compact_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const uint64_t* uniqueCellIdAny,
 		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
 		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
 		const uint32_t* compactCellIdxByParticleF,
-		const uint32_t* queryCellRefAnyByCellF,
-		const uint32_t queryCellSlotCount,
+		const uint32_t* queryLoAnyByCellF, const uint32_t* queryHiAnyByCellF,
+		const uint32_t N_NonEmptyCellsAny,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		const uint16_t* nbrChunkMaxCountFF,

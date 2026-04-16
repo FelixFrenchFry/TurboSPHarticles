@@ -133,8 +133,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborListMethod::SingleCSRVector_AdaptCompress; return true; }
 				if (s == "SingleCSRVector_VByteCompress")
 					{ out = Base::NeighborListMethod::SingleCSRVector_VByteCompress; return true; }
-				if (s == "CellQueryCache_Implicit")
-					{ out = Base::NeighborListMethod::CellQueryCache_Implicit; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
