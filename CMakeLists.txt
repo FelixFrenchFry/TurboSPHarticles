@@ -122,6 +122,7 @@ target_compile_options(Project_Warnings INTERFACE
     # NVCC compiling CUDA (.cu) with MSVC as host compiler
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CUDA>>:
         -Xcompiler=/utf-8
+        -Xcompiler=/Zc:preprocessor
     >
     # non-MSVC C++ compilation
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:

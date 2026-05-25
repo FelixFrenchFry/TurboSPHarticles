@@ -892,13 +892,12 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	cellIdsAvailableForReuse_ = false;
 
 	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
-	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
-				 ? 0.0f : (1.0f / cellSize_);
+	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f) ? 0.0f : (1.0f / cellSize_);
 	const float querySpanCells = Base::ApproxEqu(cellSize_, 0.0f)
 		? 0.0f : (params.kernelRadius / cellSize_);
 	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
 		? 1u : std::max<uint32_t>(1u,
-			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
+		static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	EnsureStorageAllocation();
 	const NS_CompactSharedScratchLayout scratchLayout =

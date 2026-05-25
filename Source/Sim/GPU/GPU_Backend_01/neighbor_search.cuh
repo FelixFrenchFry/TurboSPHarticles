@@ -90,7 +90,7 @@ namespace Sim
 		// data structures
 		DeviceBuffer<uint64_t> d_uniqueCellIdF_; // unique cell IDs of non-empty cells
 		DeviceBuffer<uint32_t> d_cellStartIdxF_; // per-cell start index in the re-ordered particle arrays
-		DeviceBuffer<uint32_t> d_sortedParticleIdxF_; // sorted fluid particle index array / per-particle compact cell index
+		DeviceBuffer<uint32_t> d_sortedParticleIdxF_; // fluid particle permutation / per-particle compact cell index
 
 		DeviceBuffer<uint64_t> d_uniqueCellIdB_;
 		DeviceBuffer<uint32_t> d_cellStartIdxB_;
