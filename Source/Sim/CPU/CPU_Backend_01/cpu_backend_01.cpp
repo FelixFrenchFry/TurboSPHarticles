@@ -7,6 +7,7 @@
 #include <glm/vec3.hpp>
 #include <limits>
 #include <numbers>
+#include <stdexcept>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
@@ -46,6 +47,12 @@ SimBackend_CPU01::SimBackend_CPU01(
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
+
+	if (params.neighborSearchMethod != Base::NeighborSearchMethod::CellLinkedList_Compact)
+	{
+		throw std::runtime_error(
+			"CPU01 supports only neighborSearchMethod=1 (CellLinkedList_Compact).");
+	}
 	neighborSearch_->Init(params);
 
 	// select neighbor list method
@@ -69,9 +76,20 @@ SimBackend_CPU01::SimBackend_CPU01(
 	{
 		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_VByteCompress_CPU01>();
 	}
+	else if (params.neighborListMethod ==
+		Base::NeighborListMethod::ChunkedSELL8_Explicit)
+	{
+		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_Explicit_CPU01>();
+	}
 	else
 	{
 		throw std::runtime_error("Unsupported 'NeighborListMethod' requested.");
+	}
+
+	if (params.neighborListMethod != Base::NeighborListMethod::ChunkedSELL8_Explicit)
+	{
+		throw std::runtime_error(
+			"CPU01 supports only neighborListStorage=4 (ChunkedSELL8_Explicit).");
 	}
 }
 

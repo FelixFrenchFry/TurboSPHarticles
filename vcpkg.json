@@ -9,6 +9,7 @@
     "cli11",
     "boost-container",
     "glm",
+    "xsimd",
     "glfw3",
     "glad",
     {

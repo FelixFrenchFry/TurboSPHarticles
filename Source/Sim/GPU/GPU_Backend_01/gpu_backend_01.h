@@ -185,8 +185,8 @@ namespace Sim
 		// (compressed SELL32 for FF and FB neighbors)
 		DeviceBuffer<uint16_t> d_nbrCountFF_; // temporary counts written by count-query
 		DeviceBuffer<uint16_t> d_nbrCountFB_; // temporary counts written by count-query
-		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count
-		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count
+		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count (pitch)
+		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count (pitch)
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFF_; // per-chunk FF base index used for delta storage
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_; // per-chunk FB base index used for delta storage
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk FF storage format

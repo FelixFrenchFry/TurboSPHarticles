@@ -42,6 +42,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(xsimd CONFIG REQUIRED)
 
 # probe for /openmp:llvm on MSVC and fall back
 if(MSVC)
@@ -158,16 +159,16 @@ target_compile_options(Project_Options INTERFACE
 )
 
 # optional native archtitecture-specific optimizations
-option(ENABLE_NATIVE_OPT "Enable -march=native (or /arch:AVX2) for release-builds" OFF)
+option(ENABLE_NATIVE_OPT "Enable AVX2/FMA CPU SIMD build flags" ON)
 if(ENABLE_NATIVE_OPT)
     target_compile_options(Project_Options INTERFACE
         # MSVC C++ only
         $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
-            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:/arch:AVX2>
+            /arch:AVX2
         >
         # GCC/Clang C++ only
         $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
-            $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-march=native>
+            -mavx2 -mfma
         >
     )
 endif()
@@ -208,6 +209,7 @@ target_link_libraries(TSP_H PUBLIC
     CLI11::CLI11
     Boost::boost
     glm::glm
+    xsimd
     TBB::tbb
     TBB::tbbmalloc
     $<$<BOOL:${ENABLE_CUDA}>:CUDA::cudart>

@@ -73,8 +73,18 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else if (v.is_number_integer())
 			{
-				out = static_cast<Base::BackendVersion>(v.get<int>());
-				return true;
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::BackendVersion::CPU01;
+					return true;
+				case 1:
+					out = Base::BackendVersion::GPU01;
+					return true;
+				default:
+					return false;
+				}
 			}
 
 			return false;
@@ -133,6 +143,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborListMethod::SingleCSRVector_AdaptCompress; return true; }
 				if (s == "SingleCSRVector_VByteCompress")
 					{ out = Base::NeighborListMethod::SingleCSRVector_VByteCompress; return true; }
+				if (s == "ChunkedSELL8_Explicit")
+					{ out = Base::NeighborListMethod::ChunkedSELL8_Explicit; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -157,6 +169,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'backendVersion' in JSON");
+				EndWrite();
+				return false;
 			}
 		}
 

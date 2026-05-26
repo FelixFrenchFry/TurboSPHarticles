@@ -20,6 +20,28 @@ static constexpr uint32_t N_perScratchInlineFB = 48;
 
 namespace Sim
 {
+	// read-view used in the neighbor retrieval (e.g. solver kernels)
+	struct ChunkedSELL8NeighborSpan_Read
+	{
+		const uint32_t* data = nullptr;
+		const uint32_t* counts = nullptr;
+		uint32_t chunk = 0;
+		uint32_t begin = 0;
+		uint32_t end = 0;
+		uint32_t pitch = 0;
+	};
+
+	// write-view used in the neighbor search (e.g. fill-queries)
+	struct ChunkedSELL8NeighborSpan_Write
+	{
+		uint32_t* data = nullptr;
+		const uint32_t* counts = nullptr;
+		uint32_t chunk = 0;
+		uint32_t begin = 0;
+		uint32_t end = 0;
+		uint32_t pitch = 0;
+	};
+
 	// ---------------------------------------------------------------------------------------------
 	// --- [ individual vectors neighbor lists, explicit ] -----------------------------------------
 	// ---------------------------------------------------------------------------------------------
@@ -354,6 +376,95 @@ namespace Sim
 			uint32_t count, T_Out& out);
 		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
 			const uint32_t* js, uint32_t count);
+	};
+
+	// ---------------------------------------------------------------------------------------------
+	// --- [ chunked SELL8 neighbor list, explicit ] -----------------------------------------------
+	// ---------------------------------------------------------------------------------------------
+
+	class NeighborLists_ChunkedSELL8_Explicit_CPU01 final
+		: public I_NeighborList
+	{
+	public: // -------------------------------------------------------------------------------------
+
+		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
+
+		void Finalize_Count() override;
+
+		void Finalize_Fill() override {}
+
+		void SetNbrCountFF(uint32_t i, uint32_t count) override;
+		void SetNbrCountFB(uint32_t i, uint32_t count) override;
+
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+
+		NeighborSpan FF(uint32_t i) const override;
+		NeighborSpan FB(uint32_t i) const override;
+
+		uint32_t CountFF(uint32_t i) const override;
+		uint32_t CountFB(uint32_t i) const override;
+
+		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
+			const SimParams& params) const override;
+
+		bool RunCountQuery() const override { return true; }
+		bool RunFillQuery() const override { return true; }
+		bool RunSecondFillQuery() const override { return false; }
+
+		uint32_t ChunkNumTotal() const noexcept;
+		ChunkedSELL8NeighborSpan_Read FFChunk(uint32_t chunk) const noexcept;
+		ChunkedSELL8NeighborSpan_Read FBChunk(uint32_t chunk) const noexcept;
+		ChunkedSELL8NeighborSpan_Write FFChunkWrite(uint32_t chunk) noexcept;
+		ChunkedSELL8NeighborSpan_Write FBChunkWrite(uint32_t chunk) noexcept;
+		void FinishFFChunkWrite(uint32_t chunk, const uint32_t* writtenCounts);
+		void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts);
+
+	private: // ------------------------------------------------------------------------------------
+
+		// metadata
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+
+		// explicit chunked SELL8 neighbor storage
+		std::vector<uint32_t> nbrCountFF_; // per-particle neighbor count
+		std::vector<uint32_t> nbrCountFB_;
+		std::vector<uint32_t> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
+		std::vector<uint32_t> nbrChunkMaxCountFB_;
+		std::vector<uint64_t> nbrChunkOffsetsFF_; // per-chunk starting index for neighbor stored in nbrListFF_
+		std::vector<uint64_t> nbrChunkOffsetsFB_;
+		std::vector<uint32_t> nbrListFF_; // actual neighbor indices, concatenated for all chunks
+		std::vector<uint32_t> nbrListFB_;
+
+		// thread-local neighbor scratch for contiguous access
+		// TODO: still needed despite chunked SELL8 storage?
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+
+		// misc
+		static constexpr uint32_t chunkWidth = 8u;
+		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+
+		// helpers
+		static uint32_t ChunkOfParticle(uint32_t i) noexcept;
+		static uint32_t LaneOfParticle(uint32_t i) noexcept;
+		static uint32_t ChunkBegin(uint32_t chunk) noexcept;
+		static uint32_t ChunkEnd(uint32_t chunk, uint32_t N_F) noexcept;
+		static uint32_t ChunkNumTotal(uint32_t N_F) noexcept;
+		static uint64_t ParticleStorageIdx(
+			uint32_t i, uint32_t k,
+			const std::vector<uint64_t>& nbrChunkOffsets) noexcept;
+
+		void BuildChunkMaxCount(
+			const std::vector<uint32_t>& nbrCounts,
+			std::vector<uint32_t>& nbrChunkMaxCount) const;
+
+		void FinalizeChunkOffsets(
+			const std::vector<uint32_t>& nbrChunkMaxCount,
+			std::vector<uint64_t>& nbrChunkOffsets,
+			std::vector<uint32_t>& nbrList) const;
 	};
 
 } // namespace Sim

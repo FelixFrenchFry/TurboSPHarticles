@@ -1,10 +1,10 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
-  "neighborListStorage": 1,
+  "neighborListStorage": 4,
 
-  "maxSteps": 2000,
+  "maxSteps": 100,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,

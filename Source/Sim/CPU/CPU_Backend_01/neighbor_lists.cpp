@@ -305,13 +305,14 @@ void NeighborLists_SingleCSRVector_Explicit_CPU01::SetNbrCountFB(
 void NeighborLists_SingleCSRVector_Explicit_CPU01::SetNbrListFF(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
+	#if defined(_DEBUG)
 	// (count-query and fill-query MUST find the same number of neighbors)
-	// TODO: make this only active in debug compile mode?
 	if (nbrCountFF_[i] != count) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in explicit CSR FF neighbor storage.");
-	}
+	} 
+	#endif
 
 	if (count == 0) [[unlikely]] { return; }
 
@@ -324,13 +325,14 @@ void NeighborLists_SingleCSRVector_Explicit_CPU01::SetNbrListFF(
 void NeighborLists_SingleCSRVector_Explicit_CPU01::SetNbrListFB(
 	const uint32_t i, const uint32_t* js, const uint32_t count)
 {
+	#if defined(_DEBUG)
 	// (count-query and fill-query MUST find the same number of neighbors)
-	// TODO: make this only active in debug compile mode?
 	if (nbrCountFB_[i] != count) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in explicit CSR FB neighbor storage.");
 	}
+	#endif
 
 	if (count == 0) [[likely]] { return; }
 
@@ -570,11 +572,13 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFF(
 
 	if (fillPhase_ == FillPhase::Encode)
 	{
+		#if defined(_DEBUG)
 		if (nbrCountFF_[i] != count) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Measured and encoded FF neighbor counts do not match in adapt-compressed single-CSR storage.");
 		}
+		#endif
 
 		const uint64_t start = ParticleStorageBegin(i, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
 		const uint64_t end = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
@@ -612,11 +616,13 @@ void NeighborLists_SingleCSRVector_AdaptCompress_CPU01::SetNbrListFB(
 
 	if (fillPhase_ == FillPhase::Encode)
 	{
+		#if defined(_DEBUG)
 		if (nbrCountFB_[i] != count) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Measured and encoded FB neighbor counts do not match in adapt-compressed single-CSR storage.");
 		}
+		#endif
 
 		const uint64_t start = ParticleStorageBegin(i, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
 		const uint64_t end = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
@@ -1081,11 +1087,13 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::SetNbrListFF(
 
 	if (fillPhase_ == FillPhase::Encode)
 	{
-		if (nbrCountFF_[i] != count)
+		#if defined(_DEBUG)
+		if (nbrCountFF_[i] != count) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Measured and encoded FF neighbor counts do not match in compressed single-CSR storage.");
 		}
+		#endif
 
 		const uint64_t s = ParticleStorageBegin(i, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
 		const uint64_t e = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFF_, nbrBlockBasesFF_);
@@ -1121,11 +1129,13 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::SetNbrListFB(
 
 	if (fillPhase_ == FillPhase::Encode)
 	{
+		#if defined(_DEBUG)
 		if (nbrCountFB_[i] != count)
 		{
 			throw std::runtime_error(
 				"Measured and encoded FB neighbor counts do not match in compressed single-CSR storage.");
 		}
+		#endif
 
 		const uint64_t s = ParticleStorageBegin(i, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
 		const uint64_t e = ParticleStorageEnd(i, N_F_, nbrLocalOffsetsFB_, nbrBlockBasesFB_);
@@ -1544,4 +1554,429 @@ void NeighborLists_SingleCSRVector_VByteCompress_CPU01::EncodeNeighborList(
 	#if defined(_DEBUG)
 	assert(data == dst + dstBytes && "Encoded byte count mismatch");
 	#endif
+}
+
+// -------------------------------------------------------------------------------------------------
+// --- [ chunked SELL8 neighbor list, explicit ] ---------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::Resize(
+	const uint32_t N_F, const uint32_t N_B, const SimParams& params)
+{
+	N_F_ = N_F;
+	N_B_ = N_B;
+
+	const uint32_t numChunks = ChunkNumTotal(N_F_);
+	const uint32_t paddedCount = numChunks * chunkWidth;
+
+	// count arrays are padded, tail chunk still has 8 lanes
+	nbrCountFF_.assign(paddedCount, 0);
+	nbrCountFB_.assign(paddedCount, 0);
+	nbrChunkMaxCountFF_.assign(numChunks, 0);
+	nbrChunkMaxCountFB_.assign(numChunks, 0);
+	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+	nbrListFF_.clear();
+	nbrListFB_.clear();
+
+	// reserve packed chunk storage up front based on the expected neighbor count
+	EnsurePackedCSRStorageCapacity(nbrListFF_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF));
+	EnsurePackedCSRStorageCapacity(nbrListFB_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB));
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::Finalize_Count()
+{
+	if (N_F_ == 0) // nothing to do for empty sim
+	{
+		nbrChunkOffsetsFF_.assign(1, 0);
+		nbrChunkOffsetsFB_.assign(1, 0);
+		nbrListFF_.clear();
+		nbrListFB_.clear();
+		return;
+	}
+
+	BuildChunkMaxCount(nbrCountFF_, nbrChunkMaxCountFF_);
+	BuildChunkMaxCount(nbrCountFB_, nbrChunkMaxCountFB_);
+
+	// chunk pitches are fixed after the count-query and shared by all lanes
+	FinalizeChunkOffsets(nbrChunkMaxCountFF_, nbrChunkOffsetsFF_, nbrListFF_);
+	FinalizeChunkOffsets(nbrChunkMaxCountFB_, nbrChunkOffsetsFB_, nbrListFB_);
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrCountFF(
+	const uint32_t i, const uint32_t count)
+{
+	nbrCountFF_[i] = count;
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrCountFB(
+	const uint32_t i, const uint32_t count)
+{
+	nbrCountFB_[i] = count;
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrListFF(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	#if defined(_DEBUG)
+	if (nbrCountFF_[i] != count) [[unlikely]]
+	{
+		throw std::runtime_error(
+			"Count and fill query mismatch in explicit chunked SELL8 FF neighbor storage.");
+	}
+	#endif
+
+	const uint32_t chunk = ChunkOfParticle(i);
+	const uint32_t pitch = nbrChunkMaxCountFF_[chunk];
+	if (count > pitch) [[unlikely]]
+	{
+		throw std::runtime_error("Chunked SELL8 FF neighbor count exceeds chunk pitch.");
+	}
+
+	for (uint32_t k = 0; k < count; k++)
+	{
+		nbrListFF_[ParticleStorageIdx(i, k, nbrChunkOffsetsFF_)] = js[k];
+	}
+
+	// padding entries are valid indices so SIMD gathers never touch invalid memory
+	for (uint32_t k = count; k < pitch; k++)
+	{
+		nbrListFF_[ParticleStorageIdx(i, k, nbrChunkOffsetsFF_)] = i;
+	}
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrListFB(
+	const uint32_t i, const uint32_t* js, const uint32_t count)
+{
+	#if defined(_DEBUG)
+	if (nbrCountFB_[i] != count) [[unlikely]]
+	{
+		throw std::runtime_error(
+			"Count and fill query mismatch in explicit chunked SELL8 FB neighbor storage.");
+	}
+	#endif
+
+	const uint32_t chunk = ChunkOfParticle(i);
+	const uint32_t pitch = nbrChunkMaxCountFB_[chunk];
+	if (count > pitch) [[unlikely]]
+	{
+		throw std::runtime_error("Chunked SELL8 FB neighbor count exceeds chunk pitch.");
+	}
+
+	const uint32_t safeBoundaryIdx = 0;
+	for (uint32_t k = 0; k < count; k++)
+	{
+		nbrListFB_[ParticleStorageIdx(i, k, nbrChunkOffsetsFB_)] = js[k];
+	}
+
+	// padding entries are valid indices so SIMD gathers never touch invalid memory
+	for (uint32_t k = count; k < pitch; k++)
+	{
+		nbrListFB_[ParticleStorageIdx(i, k, nbrChunkOffsetsFB_)] = safeBoundaryIdx;
+	}
+}
+
+NeighborSpan NeighborLists_ChunkedSELL8_Explicit_CPU01::FF(
+	const uint32_t i) const
+{
+	const uint32_t count = nbrCountFF_[i];
+	if (count == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
+
+	auto& out = nbrScratchFF_.local();
+	out.resize(count);
+
+	// reconstruct fluid neighbor list of one particle from SELL8 storage
+	for (uint32_t k = 0; k < count; k++)
+	{
+		out[k] = nbrListFF_[ParticleStorageIdx(i, k, nbrChunkOffsetsFF_)];
+	}
+
+	return NeighborSpan{ out.data(), count };
+}
+
+NeighborSpan NeighborLists_ChunkedSELL8_Explicit_CPU01::FB(
+	const uint32_t i) const
+{
+	const uint32_t count = nbrCountFB_[i];
+	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+
+	auto& out = nbrScratchFB_.local();
+	out.resize(count);
+
+	// reconstruct boundary neighbor list of one particle from SELL8 storage
+	for (uint32_t k = 0; k < count; k++)
+	{
+		out[k] = nbrListFB_[ParticleStorageIdx(i, k, nbrChunkOffsetsFB_)];
+	}
+
+	return NeighborSpan{ out.data(), count };
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::CountFF(
+	const uint32_t i) const
+{
+	return nbrCountFF_[i];
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::CountFB(
+	const uint32_t i) const
+{
+	return nbrCountFB_[i];
+}
+
+std::pair<Mem::MemUsage, Mem::MemUsage>
+NeighborLists_ChunkedSELL8_Explicit_CPU01::GetMemUsage(
+	const SimParams& params) const
+{
+	(void)params;
+
+	Mem::MemUsage usageFF{};
+	Mem::MemUsage usageFB{};
+
+	// FF
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkMaxCountFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkOffsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListFF_));
+
+	// FB
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkMaxCountFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkOffsetsFB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListFB_));
+
+	return { usageFF, usageFB };
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ChunkNumTotal() const noexcept
+{
+	return ChunkNumTotal(N_F_);
+}
+
+ChunkedSELL8NeighborSpan_Read NeighborLists_ChunkedSELL8_Explicit_CPU01::FFChunk(
+	const uint32_t chunk) const noexcept
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	const uint32_t end = ChunkEnd(chunk, N_F_);
+	const uint64_t offset = nbrChunkOffsetsFF_[chunk];
+
+	// chunk span to expose the layout used directly by SIMD kernels
+	return ChunkedSELL8NeighborSpan_Read
+	{
+		nbrListFF_.empty() ? nullptr : nbrListFF_.data() + offset,
+		nbrCountFF_.empty() ? nullptr : nbrCountFF_.data(),
+		chunk, begin, end,
+		nbrChunkMaxCountFF_[chunk]
+	};
+}
+
+ChunkedSELL8NeighborSpan_Read NeighborLists_ChunkedSELL8_Explicit_CPU01::FBChunk(
+	const uint32_t chunk) const noexcept
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	const uint32_t end = ChunkEnd(chunk, N_F_);
+	const uint64_t offset = nbrChunkOffsetsFB_[chunk];
+
+	// chunk span to expose the layout used directly by SIMD kernels
+	return ChunkedSELL8NeighborSpan_Read
+	{
+		nbrListFB_.empty() ? nullptr : nbrListFB_.data() + offset,
+		nbrCountFB_.empty() ? nullptr : nbrCountFB_.data(),
+		chunk, begin, end,
+		nbrChunkMaxCountFB_[chunk]
+	};
+}
+
+ChunkedSELL8NeighborSpan_Write NeighborLists_ChunkedSELL8_Explicit_CPU01::FFChunkWrite(
+	const uint32_t chunk) noexcept
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	const uint32_t end = ChunkEnd(chunk, N_F_);
+	const uint64_t offset = nbrChunkOffsetsFF_[chunk];
+
+	// query-fill writes neighbors directly into base + k * 8 + lane
+	return ChunkedSELL8NeighborSpan_Write
+	{
+		nbrListFF_.empty() ? nullptr : nbrListFF_.data() + offset,
+		nbrCountFF_.empty() ? nullptr : nbrCountFF_.data(),
+		chunk, begin, end,
+		nbrChunkMaxCountFF_[chunk]
+	};
+}
+
+ChunkedSELL8NeighborSpan_Write NeighborLists_ChunkedSELL8_Explicit_CPU01::FBChunkWrite(
+	const uint32_t chunk) noexcept
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	const uint32_t end = ChunkEnd(chunk, N_F_);
+	const uint64_t offset = nbrChunkOffsetsFB_[chunk];
+
+	// query-fill writes neighbors directly into base + k * 8 + lane
+	return ChunkedSELL8NeighborSpan_Write
+	{
+		nbrListFB_.empty() ? nullptr : nbrListFB_.data() + offset,
+		nbrCountFB_.empty() ? nullptr : nbrCountFB_.data(),
+		chunk, begin, end,
+		nbrChunkMaxCountFB_[chunk]
+	};
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::FinishFFChunkWrite(
+	const uint32_t chunk, const uint32_t* writtenCounts)
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	const uint32_t end = ChunkEnd(chunk, N_F_);
+	const uint32_t pitch = nbrChunkMaxCountFF_[chunk];
+	const uint64_t offset = nbrChunkOffsetsFF_[chunk];
+
+	// direct chunk fill already wrote the real neighbors
+	for (uint32_t i = begin; i < end; i++)
+	{
+		const uint32_t lane = LaneOfParticle(i);
+		const uint32_t count = writtenCounts[lane];
+
+		#if defined(_DEBUG)
+		if (nbrCountFF_[i] != count) [[unlikely]]
+		{
+			throw std::runtime_error(
+				"Count and fill query mismatch in direct chunked SELL8 FF neighbor storage.");
+		}
+		#endif
+
+		// padding entries are valid indices so SIMD gathers never touch invalid memory
+		for (uint32_t k = count; k < pitch; k++)
+		{
+			nbrListFF_[offset + static_cast<uint64_t>(k) * chunkWidth + lane] = i;
+		}
+	}
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::FinishFBChunkWrite(
+	const uint32_t chunk, const uint32_t* writtenCounts)
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	const uint32_t end = ChunkEnd(chunk, N_F_);
+	const uint32_t pitch = nbrChunkMaxCountFB_[chunk];
+	const uint64_t offset = nbrChunkOffsetsFB_[chunk];
+	const uint32_t safeBoundaryIdx = 0;
+
+	// direct chunk fill already wrote the real neighbors
+	for (uint32_t i = begin; i < end; i++)
+	{
+		const uint32_t lane = LaneOfParticle(i);
+		const uint32_t count = writtenCounts[lane];
+
+		#if defined(_DEBUG)
+		if (nbrCountFB_[i] != count) [[unlikely]]
+		{
+			throw std::runtime_error(
+				"Count and fill query mismatch in direct chunked SELL8 FB neighbor storage.");
+		}
+		#endif
+
+		// padding entries are valid indices so SIMD gathers never touch invalid memory
+		for (uint32_t k = count; k < pitch; k++)
+		{
+			nbrListFB_[offset + static_cast<uint64_t>(k) * chunkWidth + lane] = safeBoundaryIdx;
+		}
+	}
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ChunkOfParticle(
+	const uint32_t i) noexcept
+{
+	return i / chunkWidth;
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::LaneOfParticle(
+	const uint32_t i) noexcept
+{
+	return i % chunkWidth;
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ChunkBegin(
+	const uint32_t chunk) noexcept
+{
+	return chunk * chunkWidth;
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ChunkEnd(
+	const uint32_t chunk, const uint32_t N_F) noexcept
+{
+	return std::min(ChunkBegin(chunk) + chunkWidth, N_F);
+}
+
+uint32_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ChunkNumTotal(
+	const uint32_t N_F) noexcept
+{
+	return (N_F == 0u) ? 0u : ((N_F - 1u) / chunkWidth) + 1u;
+}
+
+uint64_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ParticleStorageIdx(
+	const uint32_t i,
+	const uint32_t k,
+	const std::vector<uint64_t>& nbrChunkOffsets) noexcept
+{
+	const uint32_t chunk = ChunkOfParticle(i);
+	const uint32_t lane = LaneOfParticle(i);
+
+	// storage is neighbor-major inside each chunk: base + k * 8 + lane
+	return nbrChunkOffsets[chunk]
+		+ static_cast<uint64_t>(k) * chunkWidth
+		+ static_cast<uint64_t>(lane);
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::BuildChunkMaxCount(
+	const std::vector<uint32_t>& nbrCounts,
+	std::vector<uint32_t>& nbrChunkMaxCount) const
+{
+	const uint32_t numChunks = ChunkNumTotal(N_F_);
+	nbrChunkMaxCount.assign(numChunks, 0);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, numChunks),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+			{
+				const uint32_t begin = ChunkBegin(chunk);
+				const uint32_t end = ChunkEnd(chunk, N_F_);
+				uint32_t maxCount = 0;
+
+				// one pitch per chunk keeps all 8 lanes aligned for SIMD traversal
+				for (uint32_t i = begin; i < end; i++)
+				{
+					maxCount = std::max(maxCount, nbrCounts[i]);
+				}
+
+				nbrChunkMaxCount[chunk] = maxCount;
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void NeighborLists_ChunkedSELL8_Explicit_CPU01::FinalizeChunkOffsets(
+	const std::vector<uint32_t>& nbrChunkMaxCount,
+	std::vector<uint64_t>& nbrChunkOffsets,
+	std::vector<uint32_t>& nbrList) const
+{
+	const uint32_t numChunks = ChunkNumTotal(N_F_);
+	nbrChunkOffsets.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+
+	for (uint32_t chunk = 0; chunk < numChunks; chunk++)
+	{
+		const uint64_t chunkStorage =
+			static_cast<uint64_t>(nbrChunkMaxCount[chunk]) * chunkWidth;
+
+		// offsets are an exclusive prefix sum over chunk pitch * 8
+		nbrChunkOffsets[static_cast<uint64_t>(chunk) + 1ull]
+			= nbrChunkOffsets[chunk] + chunkStorage;
+	}
+
+	const uint64_t N_total = nbrChunkOffsets[numChunks];
+	EnsurePackedCSRStorageCapacity(nbrList, N_total, extraAllocCapacityPct_);
+	nbrList.resize(N_total);
 }

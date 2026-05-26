@@ -57,7 +57,8 @@
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_NATIVE_OPT": "ON"
       }
     },
     {
@@ -86,7 +87,8 @@
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_NATIVE_OPT": "ON"
       }
     },
     {
