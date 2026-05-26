@@ -2,12 +2,8 @@
 
 // external
 #include <algorithm>
-#include <array>
-#include <atomic>
 #include <cassert>
 #include <cstdint>
-#include <numeric>
-#include <ranges>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
@@ -23,6 +19,7 @@
 #include "neighbor_lists.h"
 #include "neighbor_search.h"
 #include "Source/Base/helpers.h"
+#include "Source/Sim/CPU/simd8.h"
 
 #if defined(_MSC_VER)
 #define RESTRICT __restrict
@@ -91,6 +88,19 @@ namespace
 		int i = static_cast<int>(v);
 
 		return (v < static_cast<float>(i)) ? (i - 1) : i;
+	}
+
+	inline uint32_t ValidLaneMask_SIMD8(
+		const uint32_t begin,
+		const uint32_t end) noexcept
+	{
+		uint32_t mask = 0u;
+		for (uint32_t i = begin; i < end; i++)
+		{
+			mask |= (1u << (i - begin));
+		}
+
+		return mask;
 	}
 
 	struct SceneAABB
@@ -444,11 +454,13 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellStartIdxF_.clear();
 	cellIdF_.clear();
 	particleOrderF_.clear();
+	cellTableF_.clear();
 
 	uniqueCellIdB_.clear();
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
 	particleOrderB_.clear();
+	cellTableB_.clear();
 }
 
 void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
@@ -472,11 +484,13 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellStartIdxF_.clear();
 		cellIdF_.clear();
 		particleOrderF_.clear();
+		cellTableF_.clear();
 
 		uniqueCellIdB_.clear();
 		cellStartIdxB_.clear();
 		cellIdB_.clear();
 		particleOrderB_.clear();
+		cellTableB_.clear();
 
 		return;
 	}
@@ -564,286 +578,223 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	// boundary
 	BuildCompactCellTable(cellIdB_, uniqueCellIdB_, cellStartIdxB_);
+
+	BuildDenseCellTables();
+}
+
+void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
+{
+	const uint64_t tableSize = static_cast<uint64_t>(N_DimX_) * N_DimY_ * N_DimZ_;
+	if (tableSize > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) [[unlikely]]
+	{
+		throw std::runtime_error("CPU01 dense compact CLL cell table too large.");
+	}
+
+	cellTableF_.assign(static_cast<size_t>(tableSize), EMPTY_32);
+	cellTableB_.assign(static_cast<size_t>(tableSize), EMPTY_32);
+
+	const auto buildTable = [&](const std::vector<uint32_t>& cellStartIdx,
+		const std::vector<float>& xPos,
+		const std::vector<float>& yPos,
+		const std::vector<float>& zPos,
+		std::vector<uint32_t>& cellTable)
+		{
+			const uint32_t N_Cells =
+				(cellStartIdx.empty()) ? 0u : static_cast<uint32_t>(cellStartIdx.size() - 1u);
+
+			tbb::parallel_for(
+				tbb::blocked_range<uint32_t>(0, N_Cells),
+				[&](const tbb::blocked_range<uint32_t>& r)
+				{
+					for (uint32_t c = r.begin(); c != r.end(); c++)
+					{
+						const uint32_t begin = cellStartIdx[c];
+						const uint32_t end = cellStartIdx[c + 1];
+						if (begin >= end) { continue; }
+
+						const int cx = FloorToInt(xPos[begin] * cellSizeInv_);
+						const int cy = FloorToInt(yPos[begin] * cellSizeInv_);
+						const int cz = FloorToInt(zPos[begin] * cellSizeInv_);
+						const uint64_t idx = MapToDenseCellIdx(cx, cy, cz);
+						cellTable[idx] = c;
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+		};
+
+	buildTable(cellStartIdxF_, be_.xPosF_, be_.yPosF_, be_.zPosF_, cellTableF_);
+	buildTable(cellStartIdxB_, be_.xPosB_, be_.yPosB_, be_.zPosB_, cellTableB_);
+}
+
+void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
+	const int cx,
+	const int cy,
+	const int cz,
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const
+{
+	const int cellQueryReach = static_cast<int>(cellQueryReach_);
+
+	const auto appendUnique = [](auto& ranges, const ActiveCellRange range)
+		{
+			for (const ActiveCellRange& existing : ranges)
+			{
+				if (existing.begin == range.begin && existing.end == range.end)
+				{
+					return;
+				}
+			}
+
+			ranges.push_back(range);
+		};
+
+	// direct local-frame lookup for the compact-cell index of every queried cell
+	for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
+	{
+		const int oz = cz + rz; // target cell coordinate in z-direction
+
+		for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
+		{
+			const int oy = cy + ry; // target cell coordinate in y-direction
+
+			for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
+			{
+				const int ox = cx + rx; // target cell coordinate in x-direction
+				const uint64_t tableIdx = MapToDenseCellIdx(ox, oy, oz);
+
+				const uint32_t cF_nbr = cellTableF_[tableIdx];
+				if (cF_nbr != EMPTY_32)
+				{
+					const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
+					const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
+					if (sF_nbr < eF_nbr)
+					{
+						appendUnique(fluidRanges, ActiveCellRange{ sF_nbr, eF_nbr });
+					}
+				}
+
+				const uint32_t cB_nbr = cellTableB_[tableIdx];
+				if (cB_nbr != EMPTY_32)
+				{
+					const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
+					const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
+					if (sB_nbr < eB_nbr)
+					{
+						appendUnique(boundaryRanges, ActiveCellRange{ sB_nbr, eB_nbr });
+					}
+				}
+			}
+		}
+	}
+}
+
+void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
+	const uint32_t begin,
+	const uint32_t end,
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const
+{
+	fluidRanges.clear();
+	boundaryRanges.clear();
+
+	int cellX[CPU::N_SIMD_WIDTH]{};
+	int cellY[CPU::N_SIMD_WIDTH]{};
+	int cellZ[CPU::N_SIMD_WIDTH]{};
+
+	for (uint32_t i = begin; i < end; i++)
+	{
+		const uint32_t lane = i - begin;
+		cellX[lane] = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+		cellY[lane] = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+		cellZ[lane] = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+	}
+
+	for (uint32_t i = begin; i < end; i++)
+	{
+		const uint32_t lane = i - begin;
+		const int cx = cellX[lane];
+		const int cy = cellY[lane];
+		const int cz = cellZ[lane];
+
+		bool alreadyVisited = false;
+		for (uint32_t j = begin; j < i; j++)
+		{
+			const uint32_t prevLane = j - begin;
+			if (cx == cellX[prevLane] &&
+				cy == cellY[prevLane] &&
+				cz == cellZ[prevLane])
+			{
+				alreadyVisited = true;
+				break;
+			}
+		}
+
+		if (alreadyVisited) { continue; }
+
+		GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges);
+	}
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 {
-	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	const int cellQueryReach = static_cast<int>(cellQueryReach_);
-	const uint32_t N_NbrCells = NeighborCellCount();
+	{
+		const float kernelRadiusSqu = params.kernelRadiusSqu;
+		const uint32_t N_F = be_.N_F_;
+		if (N_F == 0) { return; }
 
-	// local references for fewer pointer indirections
-	float* RESTRICT xPosF = be_.xPosF_.data();
-	float* RESTRICT yPosF = be_.yPosF_.data();
-	float* RESTRICT zPosF = be_.zPosF_.data();
-	float* RESTRICT xPosB = be_.xPosB_.data();
-	float* RESTRICT yPosB = be_.yPosB_.data();
-	float* RESTRICT zPosB = be_.zPosB_.data();
+		// local references for fewer pointer indirections
+		const float* RESTRICT xPosF = be_.xPosF_.data();
+		const float* RESTRICT yPosF = be_.yPosF_.data();
+		const float* RESTRICT zPosF = be_.zPosF_.data();
+		const float* RESTRICT xPosB = be_.xPosB_.data();
+		const float* RESTRICT yPosB = be_.yPosB_.data();
+		const float* RESTRICT zPosB = be_.zPosB_.data();
 
-	// loop over all non-empty grid cells
-	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
-	tbb::parallel_for(
-		tbb::blocked_range<uint64_t>(0, N_Cells),
-		[&](const tbb::blocked_range<uint64_t>& range)
-		{
-			static constexpr uint32_t LookupCacheSize = 256;
-			static_assert((LookupCacheSize & (LookupCacheSize - 1)) == 0);
+		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
+		const CPU::Float32x8 kernelRadiusSquV = CPU::SetFloat32x8(kernelRadiusSqu);
 
-			std::array<uint64_t, LookupCacheSize> lookupCacheKeyF{};
-			std::array<uint32_t, LookupCacheSize> lookupCacheValF{};
-			std::array<uint64_t, LookupCacheSize> lookupCacheKeyB{};
-			std::array<uint32_t, LookupCacheSize> lookupCacheValB{};
-			lookupCacheKeyF.fill(EMPTY_64);
-			lookupCacheKeyB.fill(EMPTY_64);
-			lookupCacheValF.fill(EMPTY_32);
-			lookupCacheValB.fill(EMPTY_32);
-
-			auto& queryMetaScratch = queryMetaScratch_.local();
-			auto& nbrCellId = queryMetaScratch.nbrCellId;
-			auto& cellOrder = queryMetaScratch.cellOrder;
-			auto& fluidRanges = queryMetaScratch.fluidRanges;
-			auto& boundaryRanges = queryMetaScratch.boundaryRanges;
-			nbrCellId.resize(N_NbrCells);
-			cellOrder.resize(N_NbrCells);
-			if (fluidRanges.capacity() < N_NbrCells) { fluidRanges.reserve(N_NbrCells); }
-			if (boundaryRanges.capacity() < N_NbrCells) { boundaryRanges.reserve(N_NbrCells); }
-
-			const auto findCellIdxTernary = [](const std::vector<uint64_t>& sortedCellIds,
-				uint64_t key,
-				uint32_t lo,
-				uint32_t hi) noexcept
-				{
-					while (hi > lo + 24u)
-					{
-						const uint32_t span = hi - lo;
-						const uint32_t third = span / 3u;
-						const uint32_t m1 = lo + third;
-						const uint32_t m2 = hi - third - 1u;
-
-						const uint64_t v1 = sortedCellIds[m1];
-						const uint64_t v2 = sortedCellIds[m2];
-
-						if (key < v1)
-						{
-							hi = m1;
-							continue;
-						}
-						if (key > v2)
-						{
-							lo = m2 + 1u;
-							continue;
-						}
-						if (key == v1) { return m1; }
-						if (key == v2) { return m2; }
-
-						lo = m1 + 1u;
-						hi = m2;
-					}
-
-					while (lo < hi)
-					{
-						const uint32_t mid = lo + ((hi - lo) >> 1u);
-						if (sortedCellIds[mid] < key)
-						{
-							lo = mid + 1u;
-						}
-						else
-						{
-							hi = mid;
-						}
-					}
-
-					if (lo < sortedCellIds.size() && sortedCellIds[lo] == key)
-					{
-						return lo;
-					}
-
-					return EMPTY_32;
-				};
-
-			for (uint64_t c = range.begin(); c != range.end(); c++)
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, numChunks),
+			[&](const tbb::blocked_range<uint32_t>& range)
 			{
-				// range of all fluid particles in this cell
-				const uint32_t sF = cellStartIdxF_[c]; // start
-				const uint32_t eF = cellStartIdxF_[c + 1]; // end
-				if (sF >= eF) { continue; }
+				auto& queryMetaScratch = queryMetaScratch_.local();
+				auto& fluidRanges = queryMetaScratch.fluidRanges;
+				auto& boundaryRanges = queryMetaScratch.boundaryRanges;
 
-				// determine a representative particle i0
-				const uint32_t i0 = sF;
-
-				const float xi0 = xPosF[i0];
-				const float yi0 = yPosF[i0];
-				const float zi0 = zPosF[i0];
-
-				// cell coordinates of all particles in this cell
-				const int cx = FloorToInt(xi0 * cellSizeInv_);
-				const int cy = FloorToInt(yi0 * cellSizeInv_);
-				const int cz = FloorToInt(zi0 * cellSizeInv_);
-
-				// BigMin/LitMax range of the queried neighborhood in cell ID space
-				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
-				uint64_t bigMinCellId = 0;
-
-				for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
+				for (uint32_t chunk = range.begin(); chunk != range.end(); chunk++)
 				{
-					const int oz = cz + rz; // target cell coordinate in z-direction
+					const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+					const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
+					const uint32_t validMask = ValidLaneMask_SIMD8(begin, end);
+					const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+					const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
+					const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
+					const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
+					uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
+					uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
 
-					for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
-					{
-						const int oy = cy + ry; // target cell coordinate in y-direction
-
-						for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
-						{
-							const int ox = cx + rx; // target cell coordinate in x-direction
-
-							// index of this neighbor cell in the queried neighborhood
-							const int idx_nbr = NeighborOffset(rx, ry, rz);
-
-							// cell ID of this neighbor cell
-							const uint64_t cid_nbr = MapToCellId(ox, oy, oz);
-							nbrCellId[idx_nbr] = cid_nbr;
-							litMaxCellId = std::min(litMaxCellId, cid_nbr);
-							bigMinCellId = std::max(bigMinCellId, cid_nbr);
-						}
-					}
-				}
-
-				// fluid lower/upper bounds over the full neighborhood range
-				uint32_t loF = 0;
-				uint32_t hiF = 0;
-				if (!uniqueCellIdF_.empty())
-				{
-					loF = static_cast<uint32_t>(
-						std::ranges::lower_bound(uniqueCellIdF_, litMaxCellId) - uniqueCellIdF_.begin());
-					hiF = static_cast<uint32_t>(
-						std::ranges::upper_bound(uniqueCellIdF_, bigMinCellId) - uniqueCellIdF_.begin());
-					if (hiF < loF) { hiF = loF; }
-				}
-
-				// boundary lower/upper bounds over the full neighborhood range
-				uint32_t loB = 0;
-				uint32_t hiB = 0;
-				if (!uniqueCellIdB_.empty())
-				{
-					loB = static_cast<uint32_t>(
-						std::ranges::lower_bound(uniqueCellIdB_, litMaxCellId) - uniqueCellIdB_.begin());
-					hiB = static_cast<uint32_t>(
-						std::ranges::upper_bound(uniqueCellIdB_, bigMinCellId) - uniqueCellIdB_.begin());
-					if (hiB < loB) { hiB = loB; }
-				}
-
-				// sort queried cells by cell ID so that queried cells can be traversed in Z-order
-				std::iota(cellOrder.begin(), cellOrder.end(), 0u);
-				std::sort(cellOrder.begin(), cellOrder.end(),
-					[&](const uint32_t a, const uint32_t b)
-					{
-						return nbrCellId[a] < nbrCellId[b];
-					});
-
-				fluidRanges.clear();
-				boundaryRanges.clear();
-
-				// check existence and location of all queried grid cells
-				for (uint32_t q = 0; q < N_NbrCells; q++)
-				{
-					const uint32_t idx_nbr = cellOrder[q];
-					const uint64_t cid_nbr = nbrCellId[idx_nbr];
-
-					// fluid scope
-					{
-						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
-						uint32_t cF_nbr = EMPTY_32;
-
-						if (lookupCacheKeyF[slot] == cid_nbr)
-						{
-							cF_nbr = lookupCacheValF[slot];
-						}
-						else
-						{
-							if (loF < hiF)
-							{
-								cF_nbr = findCellIdxTernary(uniqueCellIdF_, cid_nbr, loF, hiF);
-							}
-							lookupCacheKeyF[slot] = cid_nbr;
-							lookupCacheValF[slot] = cF_nbr;
-						}
-
-						if (cF_nbr != EMPTY_32)
-						{
-							const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
-							const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
-
-							if (sF_nbr < eF_nbr)
-							{
-								fluidRanges.push_back({ sF_nbr, eF_nbr });
-							}
-						}
-					}
-
-					// boundary scope
-					{
-						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
-						uint32_t cB_nbr = EMPTY_32;
-
-						if (lookupCacheKeyB[slot] == cid_nbr)
-						{
-							cB_nbr = lookupCacheValB[slot];
-						}
-						else
-						{
-							if (loB < hiB)
-							{
-								cB_nbr = findCellIdxTernary(uniqueCellIdB_, cid_nbr, loB, hiB);
-							}
-							lookupCacheKeyB[slot] = cid_nbr;
-							lookupCacheValB[slot] = cB_nbr;
-						}
-
-						if (cB_nbr != EMPTY_32)
-						{
-							const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
-							const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
-
-							if (sB_nbr < eB_nbr)
-							{
-								boundaryRanges.push_back({ sB_nbr, eB_nbr });
-							}
-						}
-					}
-				}
-
-				// check all particles j in the queried neighboring grid cells
-				for (uint32_t k = sF; k < eF; k++)
-				{
-					uint32_t cntFF = 0;
-					uint32_t cntFB = 0;
-
-					const uint32_t i = k;
-
-					const float xi = xPosF[i];
-					const float yi = yPosF[i];
-					const float zi = zPosF[i];
+					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges);
 
 					// fluid neighbors
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
-						#pragma omp simd
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const uint32_t j = l;
+							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosF[l]);
+							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosF[l]);
+							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosF[l]);
+							const CPU::Float32x8 dx = xi - xj;
+							const CPU::Float32x8 dy = yi - yj;
+							const CPU::Float32x8 dz = zi - zj;
+							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
 
-							// position difference
-							const float dx = xi - xPosF[j];
-							const float dy = yi - yPosF[j];
-							const float dz = zi - zPosF[j];
-
-							const float distSqu = dx * dx
-												+ dy * dy
-												+ dz * dz;
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
-								cntFF++;
+								if ((mask & (1u << lane)) != 0u) { cntFF[lane]++; }
 							}
 						}
 					}
@@ -851,340 +802,120 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					// boundary neighbors
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
-						#pragma omp simd
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const uint32_t j = l;
+							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosB[l]);
+							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosB[l]);
+							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosB[l]);
+							const CPU::Float32x8 dx = xi - xj;
+							const CPU::Float32x8 dy = yi - yj;
+							const CPU::Float32x8 dz = zi - zj;
+							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
 
-							// position difference
-							const float dx = xi - xPosB[j];
-							const float dy = yi - yPosB[j];
-							const float dz = zi - zPosB[j];
-
-							const float distSqu = dx * dx
-												+ dy * dy
-												+ dz * dz;
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
-								cntFB++;
+								if ((mask & (1u << lane)) != 0u) { cntFB[lane]++; }
 							}
 						}
 					}
 
 					// commit final neighbor counts to backend storage
-					be_.neighborList_->SetNbrCountFF(i, cntFF);
-					be_.neighborList_->SetNbrCountFB(i, cntFB);
+					for (uint32_t lane = 0; lane < end - begin; lane++)
+					{
+						const uint32_t i = begin + lane;
+						be_.neighborList_->SetNbrCountFF(i, cntFF[lane]);
+						be_.neighborList_->SetNbrCountFB(i, cntFB[lane]);
+					}
 				}
-			}
-		},
-		tbb::auto_partitioner{}
-	);
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 {
-	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	const int cellQueryReach = static_cast<int>(cellQueryReach_);
-	const uint32_t N_NbrCells = NeighborCellCount();
+	{
+		const float kernelRadiusSqu = params.kernelRadiusSqu;
+		const uint32_t N_F = be_.N_F_;
+		if (N_F == 0) { return; }
 
-	// local references for fewer pointer indirections
-	float* RESTRICT xPosF = be_.xPosF_.data();
-	float* RESTRICT yPosF = be_.yPosF_.data();
-	float* RESTRICT zPosF = be_.zPosF_.data();
-	float* RESTRICT xPosB = be_.xPosB_.data();
-	float* RESTRICT yPosB = be_.yPosB_.data();
-	float* RESTRICT zPosB = be_.zPosB_.data();
-
-	// loop over all non-empty grid cells
-	const uint64_t N_Cells = static_cast<uint64_t>(uniqueCellIdF_.size());
-	std::atomic<uint64_t> candCountFF{ 0 };
-	std::atomic<uint64_t> posCountFF{ 0 };
-	std::atomic<uint64_t> candCountFB{ 0 };
-	std::atomic<uint64_t> posCountFB{ 0 };
-	tbb::parallel_for(
-		tbb::blocked_range<uint64_t>(0, N_Cells),
-		[&](const tbb::blocked_range<uint64_t>& range)
+		auto* chunkedSELL8NeighborList = dynamic_cast<NeighborLists_ChunkedSELL8_Explicit_CPU01*>(be_.neighborList_.get());
+		if (chunkedSELL8NeighborList == nullptr) [[unlikely]]
 		{
-			static constexpr uint32_t LookupCacheSize = 256;
-			static_assert((LookupCacheSize & (LookupCacheSize - 1)) == 0);
+			throw std::runtime_error(
+				"CPU01 compact CLL fill requires ChunkedSELL8_Explicit neighbor storage.");
+		}
 
-			std::array<uint64_t, LookupCacheSize> lookupCacheKeyF{};
-			std::array<uint32_t, LookupCacheSize> lookupCacheValF{};
-			std::array<uint64_t, LookupCacheSize> lookupCacheKeyB{};
-			std::array<uint32_t, LookupCacheSize> lookupCacheValB{};
-			lookupCacheKeyF.fill(EMPTY_64);
-			lookupCacheKeyB.fill(EMPTY_64);
-			lookupCacheValF.fill(EMPTY_32);
-			lookupCacheValB.fill(EMPTY_32);
+		// local references for fewer pointer indirections
+		const float* RESTRICT xPosF = be_.xPosF_.data();
+		const float* RESTRICT yPosF = be_.yPosF_.data();
+		const float* RESTRICT zPosF = be_.zPosF_.data();
+		const float* RESTRICT xPosB = be_.xPosB_.data();
+		const float* RESTRICT yPosB = be_.yPosB_.data();
+		const float* RESTRICT zPosB = be_.zPosB_.data();
 
-			auto& queryMetaScratch = queryMetaScratch_.local();
-			auto& nbrCellId = queryMetaScratch.nbrCellId;
-			auto& cellOrder = queryMetaScratch.cellOrder;
-			auto& fluidRanges = queryMetaScratch.fluidRanges;
-			auto& boundaryRanges = queryMetaScratch.boundaryRanges;
-			nbrCellId.resize(N_NbrCells);
-			cellOrder.resize(N_NbrCells);
-			if (fluidRanges.capacity() < N_NbrCells) { fluidRanges.reserve(N_NbrCells); }
-			if (boundaryRanges.capacity() < N_NbrCells) { boundaryRanges.reserve(N_NbrCells); }
-			uint64_t candCountFF_local = 0;
-			uint64_t posCountFF_local = 0;
-			uint64_t candCountFB_local = 0;
-			uint64_t posCountFB_local = 0;
+		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
+		const CPU::Float32x8 kernelRadiusSquV = CPU::SetFloat32x8(kernelRadiusSqu);
 
-			const auto findCellIdxTernary = [](const std::vector<uint64_t>& sortedCellIds,
-				uint64_t key,
-				uint32_t lo,
-				uint32_t hi) noexcept
-				{
-					while (hi > lo + 24u)
-					{
-						const uint32_t span = hi - lo;
-						const uint32_t third = span / 3u;
-						const uint32_t m1 = lo + third;
-						const uint32_t m2 = hi - third - 1u;
-
-						const uint64_t v1 = sortedCellIds[m1];
-						const uint64_t v2 = sortedCellIds[m2];
-
-						if (key < v1)
-						{
-							hi = m1;
-							continue;
-						}
-						if (key > v2)
-						{
-							lo = m2 + 1u;
-							continue;
-						}
-						if (key == v1) { return m1; }
-						if (key == v2) { return m2; }
-
-						lo = m1 + 1u;
-						hi = m2;
-					}
-
-					while (lo < hi)
-					{
-						const uint32_t mid = lo + ((hi - lo) >> 1u);
-						if (sortedCellIds[mid] < key)
-						{
-							lo = mid + 1u;
-						}
-						else
-						{
-							hi = mid;
-						}
-					}
-
-					if (lo < sortedCellIds.size() && sortedCellIds[lo] == key)
-					{
-						return lo;
-					}
-
-					return EMPTY_32;
-				};
-
-			// per-thread neighbor vectors for local accumulation and then bulk add
-			// (reserve preparation in case of inline capacity not being enough)
-			auto& scratchFF = scratchFF_.local();
-			auto& scratchFB = scratchFB_.local();
-			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, numChunks),
+			[&](const tbb::blocked_range<uint32_t>& range)
 			{
-				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
-			}
-			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
-			{
-				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
-			}
+				auto& queryMetaScratch = queryMetaScratch_.local();
+				auto& fluidRanges = queryMetaScratch.fluidRanges;
+				auto& boundaryRanges = queryMetaScratch.boundaryRanges;
 
-			for (uint64_t c = range.begin(); c != range.end(); c++)
-			{
-				// range of all fluid particles in this cell
-				const uint32_t sF = cellStartIdxF_[c]; // start
-				const uint32_t eF = cellStartIdxF_[c + 1]; // end
-				if (sF >= eF) { continue; }
-
-				// determine a representative particle i0
-				const uint32_t i0 = sF;
-
-				const float xi0 = xPosF[i0];
-				const float yi0 = yPosF[i0];
-				const float zi0 = zPosF[i0];
-
-				// cell coordinates of all particles in this cell
-				const int cx = FloorToInt(xi0 * cellSizeInv_);
-				const int cy = FloorToInt(yi0 * cellSizeInv_);
-				const int cz = FloorToInt(zi0 * cellSizeInv_);
-
-				// BigMin/LitMax range of the queried neighborhood in cell ID space
-				uint64_t litMaxCellId = std::numeric_limits<uint64_t>::max();
-				uint64_t bigMinCellId = 0;
-
-				for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
+				for (uint32_t chunk = range.begin(); chunk != range.end(); chunk++)
 				{
-					const int oz = cz + rz; // target cell coordinate in z-direction
+					const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+					const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
+					const uint32_t validMask = ValidLaneMask_SIMD8(begin, end);
+					const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+					const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
+					const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
+					const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
+					uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
+					uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
+					ChunkedSELL8NeighborSpan_Write chunkFF =
+						chunkedSELL8NeighborList->FFChunkWrite(chunk);
+					ChunkedSELL8NeighborSpan_Write chunkFB =
+						chunkedSELL8NeighborList->FBChunkWrite(chunk);
 
-					for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
-					{
-						const int oy = cy + ry; // target cell coordinate in y-direction
-
-						for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
-						{
-							const int ox = cx + rx; // target cell coordinate in x-direction
-
-							// index of this neighbor cell in the queried neighborhood
-							const int idx_nbr = NeighborOffset(rx, ry, rz);
-
-							// cell ID of this neighbor cell
-							const uint64_t cid_nbr = MapToCellId(ox, oy, oz);
-							nbrCellId[idx_nbr] = cid_nbr;
-							litMaxCellId = std::min(litMaxCellId, cid_nbr);
-							bigMinCellId = std::max(bigMinCellId, cid_nbr);
-						}
-					}
-				}
-
-				// fluid lower/upper bounds over the full neighborhood range
-				uint32_t loF = 0;
-				uint32_t hiF = 0;
-				if (!uniqueCellIdF_.empty())
-				{
-					loF = static_cast<uint32_t>(
-						std::ranges::lower_bound(uniqueCellIdF_, litMaxCellId) - uniqueCellIdF_.begin());
-					hiF = static_cast<uint32_t>(
-						std::ranges::upper_bound(uniqueCellIdF_, bigMinCellId) - uniqueCellIdF_.begin());
-					if (hiF < loF) { hiF = loF; }
-				}
-
-				// boundary lower/upper bounds over the full neighborhood range
-				uint32_t loB = 0;
-				uint32_t hiB = 0;
-				if (!uniqueCellIdB_.empty())
-				{
-					loB = static_cast<uint32_t>(
-						std::ranges::lower_bound(uniqueCellIdB_, litMaxCellId) - uniqueCellIdB_.begin());
-					hiB = static_cast<uint32_t>(
-						std::ranges::upper_bound(uniqueCellIdB_, bigMinCellId) - uniqueCellIdB_.begin());
-					if (hiB < loB) { hiB = loB; }
-				}
-
-				// sort queried cells by cell ID so that queried cells can be traversed in Z-order
-				std::iota(cellOrder.begin(), cellOrder.end(), 0u);
-				std::sort(cellOrder.begin(), cellOrder.end(),
-					[&](const uint32_t a, const uint32_t b)
-					{
-						return nbrCellId[a] < nbrCellId[b];
-					});
-
-				fluidRanges.clear();
-				boundaryRanges.clear();
-
-				// check existence and location of all queried grid cells
-				for (uint32_t q = 0; q < N_NbrCells; q++)
-				{
-					const uint32_t idx_nbr = cellOrder[q];
-					const uint64_t cid_nbr = nbrCellId[idx_nbr];
-
-					// fluid scope
-					{
-						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
-						uint32_t cF_nbr = EMPTY_32;
-
-						if (lookupCacheKeyF[slot] == cid_nbr)
-						{
-							cF_nbr = lookupCacheValF[slot];
-						}
-						else
-						{
-							if (loF < hiF)
-							{
-								cF_nbr = findCellIdxTernary(uniqueCellIdF_, cid_nbr, loF, hiF);
-							}
-							lookupCacheKeyF[slot] = cid_nbr;
-							lookupCacheValF[slot] = cF_nbr;
-						}
-
-						if (cF_nbr != EMPTY_32)
-						{
-							const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
-							const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
-
-							if (sF_nbr < eF_nbr)
-							{
-								fluidRanges.push_back({ sF_nbr, eF_nbr });
-							}
-						}
-					}
-
-					// boundary scope
-					{
-						const uint32_t slot = static_cast<uint32_t>(cid_nbr) & (LookupCacheSize - 1u);
-						uint32_t cB_nbr = EMPTY_32;
-
-						if (lookupCacheKeyB[slot] == cid_nbr)
-						{
-							cB_nbr = lookupCacheValB[slot];
-						}
-						else
-						{
-							if (loB < hiB)
-							{
-								cB_nbr = findCellIdxTernary(uniqueCellIdB_, cid_nbr, loB, hiB);
-							}
-							lookupCacheKeyB[slot] = cid_nbr;
-							lookupCacheValB[slot] = cB_nbr;
-						}
-
-						if (cB_nbr != EMPTY_32)
-						{
-							const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
-							const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
-
-							if (sB_nbr < eB_nbr)
-							{
-								boundaryRanges.push_back({ sB_nbr, eB_nbr });
-							}
-						}
-					}
-				}
-
-				// check all particles j in the queried neighboring grid cells
-				for (uint32_t k = sF; k < eF; k++)
-				{
-					// reset scratch neighbor lists
-					scratchFF.clear();
-					scratchFB.clear();
-
-					const uint32_t i = k;
-
-					const float xi = xPosF[i];
-					const float yi = yPosF[i];
-					const float zi = zPosF[i];
+					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges);
 
 					// fluid neighbors
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
-						#pragma omp simd
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const uint32_t j = l;
-							candCountFF_local++;
+							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosF[l]);
+							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosF[l]);
+							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosF[l]);
+							const CPU::Float32x8 dx = xi - xj;
+							const CPU::Float32x8 dy = yi - yj;
+							const CPU::Float32x8 dz = zi - zj;
+							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
 
-							// position difference
-							const float dx = xi - xPosF[j];
-							const float dy = yi - yPosF[j];
-							const float dz = zi - zPosF[j];
-
-							const float distSqu = dx * dx
-												+ dy * dy
-												+ dz * dz;
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
-								// accumulate actual neighbors in scratch list
-								posCountFF_local++;
-								scratchFF.push_back(j);
+								if ((mask & (1u << lane)) == 0u) { continue; }
+								if (writtenFF[lane] >= chunkFF.pitch) [[unlikely]]
+								{
+									throw std::runtime_error(
+										"CPU01 ChunkedSELL8 FF direct fill exceeded chunk pitch.");
+								}
+
+								chunkFF.data[static_cast<uint64_t>(writtenFF[lane]) *
+									CPU::N_SIMD_WIDTH + lane] = l;
+								writtenFF[lane]++;
 							}
 						}
 					}
@@ -1192,45 +923,43 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					// boundary neighbors
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
-						#pragma omp simd
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const uint32_t j = l;
-							candCountFB_local++;
+							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosB[l]);
+							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosB[l]);
+							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosB[l]);
+							const CPU::Float32x8 dx = xi - xj;
+							const CPU::Float32x8 dy = yi - yj;
+							const CPU::Float32x8 dz = zi - zj;
+							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
 
-							// position difference
-							const float dx = xi - xPosB[j];
-							const float dy = yi - yPosB[j];
-							const float dz = zi - zPosB[j];
-
-							const float distSqu = dx * dx
-												+ dy * dy
-												+ dz * dz;
-
-							if (distSqu <= kernelRadiusSqu) [[unlikely]]
+							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
-								// accumulate actual neighbors in scratch list
-								posCountFB_local++;
-								scratchFB.push_back(j);
+								if ((mask & (1u << lane)) == 0u) { continue; }
+								if (writtenFB[lane] >= chunkFB.pitch) [[unlikely]]
+								{
+									throw std::runtime_error(
+										"CPU01 ChunkedSELL8 FB direct fill exceeded chunk pitch.");
+								}
+
+								chunkFB.data[static_cast<uint64_t>(writtenFB[lane]) *
+									CPU::N_SIMD_WIDTH + lane] = l;
+								writtenFB[lane]++;
 							}
 						}
 					}
 
-					// commit final neighbor lists from scratch to backend storage
-					be_.neighborList_->SetNbrListFF(i, scratchFF.data(),
-						static_cast<uint32_t>(scratchFF.size()));
-					be_.neighborList_->SetNbrListFB(i, scratchFB.data(),
-						static_cast<uint32_t>(scratchFB.size()));
+					chunkedSELL8NeighborList->FinishFFChunkWrite(chunk, writtenFF);
+					chunkedSELL8NeighborList->FinishFBChunkWrite(chunk, writtenFB);
 				}
-			}
+			},
+			tbb::auto_partitioner{}
+		);
+	}
 
-			candCountFF.fetch_add(candCountFF_local, std::memory_order_relaxed);
-			posCountFF.fetch_add(posCountFF_local, std::memory_order_relaxed);
-			candCountFB.fetch_add(candCountFB_local, std::memory_order_relaxed);
-			posCountFB.fetch_add(posCountFB_local, std::memory_order_relaxed);
-		},
-		tbb::auto_partitioner{}
-	);
 }
 
 void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
@@ -1373,11 +1102,13 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemU
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellTableF_));
 
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellTableB_));
 
 	return { usageF, usageB };
 }
@@ -1521,12 +1252,6 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	cellFrameValid_ = true;
 }
 
-inline uint32_t NS_CellLinkedList_Compact_CPU01::NeighborCellCount() const noexcept
-{
-	const uint32_t N_NbrDim = 2u * cellQueryReach_ + 1u;
-	return N_NbrDim * N_NbrDim * N_NbrDim;
-}
-
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId(
 	int cx, int cy, int cz) const noexcept
 {
@@ -1558,6 +1283,20 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
 	return xx | yy | zz; // interleaved 3D Morton/Z-order code
 }
 
+inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToDenseCellIdx(
+	int cx, int cy, int cz) const noexcept
+{
+	const int lx = cx - cellOrigX_;
+	const int ly = cy - cellOrigY_;
+	const int lz = cz - cellOrigZ_;
+	assert(lx >= 0 && lx < static_cast<int>(N_DimX_));
+	assert(ly >= 0 && ly < static_cast<int>(N_DimY_));
+	assert(lz >= 0 && lz < static_cast<int>(N_DimZ_));
+
+	return (static_cast<uint64_t>(lz) * N_DimY_ + static_cast<uint32_t>(ly))
+		* N_DimX_ + static_cast<uint32_t>(lx);
+}
+
 // spread out lower 21 bits of v into lower 63 bits and fill with gaps zeros like 000x00x00x00x00x...
 inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint32_t v) noexcept
 {
@@ -1570,15 +1309,6 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 	x = (x | (x << 2)) & 0x1249249249249249ULL;
 
 	return x;
-}
-
-inline int NS_CellLinkedList_Compact_CPU01::NeighborOffset(int rx, int ry, int rz) const noexcept
-{
-	const int cellQueryReach = static_cast<int>(cellQueryReach_);
-	const int N_NbrDim = 2 * cellQueryReach + 1;
-	return (rz + cellQueryReach) * N_NbrDim * N_NbrDim
-		 + (ry + cellQueryReach) * N_NbrDim
-		 + (rx + cellQueryReach);
 }
 
 // -------------------------------------------------------------------------------------------------

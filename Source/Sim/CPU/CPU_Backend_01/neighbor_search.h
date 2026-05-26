@@ -114,12 +114,6 @@ namespace Sim
 		bool cellFrameValid_ = false;
 		bool cellIdsMatchCurrentParticleOrder_ = false;
 
-		// query scratch
-		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> scratchFF_;
-		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> scratchFB_;
-
 		struct ActiveCellRange
 		{
 			uint32_t begin = 0;
@@ -128,8 +122,6 @@ namespace Sim
 
 		struct QueryMetaScratch
 		{
-			boost::container::small_vector<uint64_t, N_QueryCellInline> nbrCellId;
-			boost::container::small_vector<uint32_t, N_QueryCellInline> cellOrder;
 			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> fluidRanges;
 			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> boundaryRanges;
 		};
@@ -140,22 +132,32 @@ namespace Sim
 		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the re-ordered particle arrays
 		std::vector<uint64_t> cellIdF_; // per-particle cell ID array
 		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
+		std::vector<uint32_t> cellTableF_; // dense local-frame lookup table for compact cell indices
 
 		std::vector<uint64_t> uniqueCellIdB_;
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint64_t> cellIdB_;
 		std::vector<uint32_t> particleOrderB_;
+		std::vector<uint32_t> cellTableB_;
 
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 
 		// helpers
 		void UpdateCellFrame();
-		inline uint32_t NeighborCellCount() const noexcept;
+		void BuildDenseCellTables();
+		void GatherCellQueryRanges(
+			int cx, int cy, int cz,
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const;
+		void GatherChunkQueryRanges(
+			uint32_t begin, uint32_t end,
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const;
 		inline uint64_t MapToCellId(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
+		inline uint64_t MapToDenseCellIdx(int cx, int cy, int cz) const noexcept;
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
-		inline int NeighborOffset(int rx, int ry, int rz) const noexcept;
 	};
 
 	// ---------------------------------------------------------------------------------------------
