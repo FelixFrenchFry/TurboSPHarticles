@@ -26,13 +26,38 @@
 
 namespace Sim
 {
+	namespace
+	{
+		constexpr int N_CLI_SEPARATOR_CHARS = 80;
+		constexpr const char* CLI_SEPARATOR =
+			"--------------------------------------------------------------------------------";
+
+		void PrintCliSeparator()
+		{
+			std::printf("%s\n", CLI_SEPARATOR);
+		}
+
+		void PrintCliSectionHeader(const char* title)
+		{
+			int N_chars = std::printf("--- [ %s ] ", title);
+			N_chars = std::max(0, N_chars);
+
+			for (int i = N_chars; i < N_CLI_SEPARATOR_CHARS; i++)
+			{
+				std::putchar('-');
+			}
+
+			std::putchar('\n');
+		}
+	}
+
     void DiagnosticsMgr::PrintHardwareSpecs(uint32_t N_totalThreads,
 											uint32_t N_simThreads,
 											uint32_t N_visThreads)
     {
         printf("\n");
-        printf("--- [ hardware specifications ] ------------------------------------------\n");
-        printf("--------------------------------------------------------------------------\n");
+		PrintCliSectionHeader("hardware specifications");
+		PrintCliSeparator();
 
         // hostname
         char hostname[256] = "unknown";
@@ -45,81 +70,81 @@ namespace Sim
 			gethostname(hostname, sizeof(hostname));
 		#endif
 
-        printf("%-24s = %s\n", "host", hostname);
-        printf("%-24s = %u\n", "threads total avail", N_totalThreads);
-        printf("%-24s = %u\n", "threads used for sim", N_simThreads);
-        printf("%-24s = %u\n", "threads used for vis", N_visThreads);
+        printf("%-30s = %s\n", "host", hostname);
+        printf("%-30s = %u\n", "threads total avail", N_totalThreads);
+        printf("%-30s = %u\n", "threads used for sim", N_simThreads);
+        printf("%-30s = %u\n", "threads used for vis", N_visThreads);
     }
 
     void DiagnosticsMgr::PrintSimParams(const SimParams& params)
     {
         printf("\n");
-        printf("--- [ simulation parameters ] --------------------------------------------\n");
-        printf("--------------------------------------------------------------------------\n");
+		PrintCliSectionHeader("simulation parameters");
+		PrintCliSeparator();
 
         // print table with aligned columns of sim parameters
-        printf("%-24s = %.6f\n", "timeStep", params.timeStep);
-        printf("%-24s = %.6f\n", "particleSizeF", params.particleSizeF);
-        printf("%-24s = %.6f\n", "particleSizeB", params.particleSizeB);
-        printf("%-24s = %.6f\n", "particleSizeInvF", params.particleSizeInvF);
-        printf("%-24s = %.6f\n", "particleSizeInvB", params.particleSizeInvB);
-        printf("%-24s = %.6f\n", "kernelSuppRatio", params.kernelSuppRatio);
-        printf("%-24s = %.6f\n", "kernelRadius", params.kernelRadius);
-        printf("%-24s = %.6f\n", "kernelRadiusSqu", params.kernelRadiusSqu);
-        printf("%-24s = %u\n", "expctdNbrCountSoftMax_FF", params.expctdNbrCountSoftMax_FF);
-        printf("%-24s = %u\n", "expctdNbrCountSoftMax_FB", params.expctdNbrCountSoftMax_FB);
-        printf("%-24s = %u\n", "expctdNbrCountHardMax_FF", params.expctdNbrCountHardMax_FF);
-        printf("%-24s = %u\n", "expctdNbrCountHardMax_FB", params.expctdNbrCountHardMax_FB);
-        printf("%-24s = %u\n", "expctdAvgNbrCountHardMax_FF", params.expctdAvgNbrCountHardMax_FF);
-        printf("%-24s = %u\n", "expctdAvgNbrCountHardMax_FB", params.expctdAvgNbrCountHardMax_FB);
-        printf("%-24s = %.6f\n", "restDensityF", params.restDensityF);
-        printf("%-24s = %.6f\n", "restDensityB", params.restDensityB);
-        printf("%-24s = %.6f\n", "massF", params.massF);
-        printf("%-24s = %.6f\n", "massB", params.massB);
-        printf("%-24s = %.6f\n", "viscosityF", params.viscosityF);
-        printf("%-24s = %.6f\n", "viscosityB", params.viscosityB);
-        printf("%-24s = (%.3f, %.3f, %.3f)\n", "gravity",
+        printf("%-30s = %.6f\n", "timeStep", params.timeStep);
+        printf("%-30s = %.6f\n", "particleSizeF", params.particleSizeF);
+        printf("%-30s = %.6f\n", "particleSizeB", params.particleSizeB);
+        printf("%-30s = %.6f\n", "particleSizeInvF", params.particleSizeInvF);
+        printf("%-30s = %.6f\n", "particleSizeInvB", params.particleSizeInvB);
+        printf("%-30s = %.6f\n", "kernelSuppRatio", params.kernelSuppRatio);
+        printf("%-30s = %.6f\n", "kernelRadius", params.kernelRadius);
+        printf("%-30s = %.6f\n", "kernelRadiusSqu", params.kernelRadiusSqu);
+        printf("%-30s = %u\n", "expctdNbrCountSoftMax_FF", params.expctdNbrCountSoftMax_FF);
+        printf("%-30s = %u\n", "expctdNbrCountSoftMax_FB", params.expctdNbrCountSoftMax_FB);
+        printf("%-30s = %u\n", "expctdNbrCountHardMax_FF", params.expctdNbrCountHardMax_FF);
+        printf("%-30s = %u\n", "expctdNbrCountHardMax_FB", params.expctdNbrCountHardMax_FB);
+        printf("%-30s = %u\n", "expctdAvgNbrCountHardMax_FF", params.expctdAvgNbrCountHardMax_FF);
+        printf("%-30s = %u\n", "expctdAvgNbrCountHardMax_FB", params.expctdAvgNbrCountHardMax_FB);
+        printf("%-30s = %.6f\n", "restDensityF", params.restDensityF);
+        printf("%-30s = %.6f\n", "restDensityB", params.restDensityB);
+        printf("%-30s = %.6f\n", "massF", params.massF);
+        printf("%-30s = %.6f\n", "massB", params.massB);
+        printf("%-30s = %.6f\n", "viscosityF", params.viscosityF);
+        printf("%-30s = %.6f\n", "viscosityB", params.viscosityB);
+        printf("%-30s = (%.3f, %.3f, %.3f)\n", "gravity",
             params.gravity.x, params.gravity.y, params.gravity.z);
-        printf("%-24s = %.6f\n", "pressGamma", params.pressGamma);
-        printf("%-24s = %.6f\n", "jacobiOmega", params.jacobiOmega);
-        printf("%-24s = %.6f\n", "densityDevTarget", params.densityDevTarget);
-        printf("%-24s = %u\n", "fixedIters", params.fixedIters);
-        printf("%-24s = %u\n", "minSolverIters", params.minSolverIters);
-        printf("%-24s = %u\n", "maxSolverIters", params.maxSolverIters);
-        printf("%-24s = %s\n", "solverTerminationCond",
+        printf("%-30s = %.6f\n", "pressGamma", params.pressGamma);
+        printf("%-30s = %.6f\n", "jacobiOmega", params.jacobiOmega);
+        printf("%-30s = %.6f\n", "densityDevTarget", params.densityDevTarget);
+        printf("%-30s = %u\n", "fixedIters", params.fixedIters);
+        printf("%-30s = %u\n", "minSolverIters", params.minSolverIters);
+        printf("%-30s = %u\n", "maxSolverIters", params.maxSolverIters);
+        printf("%-30s = %s\n", "solverTerminationCond",
             Base::ToCString(params.solverTerminationCond));
-        printf("%-24s = %.6f\n", "gridCellSizeRatio", params.gridCellSizeRatio);
-        printf("%-24s = %.6f\n", "jitterFracF", params.jitterFracF);
-        printf("%-24s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);
-        printf("%-24s = %.6f\n", "jitterFracB", params.jitterFracB);
-        printf("%-24s = %" PRId64 "\n", "jitterSeedB", params.jitterSeedB);
-        printf("%-24s = %u\n", "boundaryLayers", params.boundaryLayers);
-        printf("%-24s = %s\n", "exportEnabled", params.exportEnabled ? "true" : "false");
-        printf("%-24s = %s\n", "exportDir", params.exportDir.c_str());
-		printf("%-24s = %u\n", "exportInterval", params.exportInterval);
+        printf("%-30s = %.6f\n", "gridCellSizeRatio", params.gridCellSizeRatio);
+        printf("%-30s = %.6f\n", "jitterFracF", params.jitterFracF);
+        printf("%-30s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);
+        printf("%-30s = %.6f\n", "jitterFracB", params.jitterFracB);
+        printf("%-30s = %" PRId64 "\n", "jitterSeedB", params.jitterSeedB);
+        printf("%-30s = %u\n", "boundaryLayers", params.boundaryLayers);
+        printf("%-30s = %s\n", "exportEnabled", params.exportEnabled ? "true" : "false");
+        printf("%-30s = %s\n", "exportDir", params.exportDir.c_str());
+		printf("%-30s = %u\n", "exportInterval", params.exportInterval);
     }
 
     void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr,
 									   const SimParams& params)
     {
         printf("\n");
-        printf("--- [ simulation setup ] -------------------------------------------------\n");
-        printf("--------------------------------------------------------------------------\n");
+		PrintCliSectionHeader("simulation setup");
+		PrintCliSeparator();
 
         // modes
-		printf("%-24s = %s\n", "sim backend",
+		printf("%-30s = %s\n", "sim backend",
 			Base::ToCString(params.backendVersion));
-        printf("%-24s = %s\n", "sim scenario",
+        printf("%-30s = %s\n", "sim scenario",
             Base::ToCString(params.scenarioType));
-        printf("%-24s = %s\n", "neighbor search method",
+        printf("%-30s = %s\n", "neighbor search method",
 			Base::ToCString(params.neighborSearchMethod));
-        printf("%-24s = %s\n", "neighbor list storage",
+        printf("%-30s = %s\n", "neighbor list storage",
             Base::ToCString(params.neighborListMethod));
 
         // particle counts
-        printf("%-24s = %u\n", "fluid particles", 
+        printf("%-30s = %u\n", "fluid particles", 
             simMgr.simBackend_->GetNumFluidParticles());
-        printf("%-24s = %u\n", "boundary particles", 
+        printf("%-30s = %u\n", "boundary particles", 
             simMgr.simBackend_->GetNumBoundaryParticles());
     }
 
@@ -282,10 +307,10 @@ namespace Sim
         std::printf("\n");
         lineCount++;
         // header
-        printf("%-30.30s | %12s %6s | %12s %6s\n",
-            "benchmark summary", latestLabel, "%", avgLabel, "%");
+        printf("%-30.30s | %12s  %8s | %12s  %8s\n",
+            "benchmark summary", latestLabel, "% total", avgLabel, "% total");
         lineCount++;
-        printf("--------------------------------------------------------------------------\n");
+		PrintCliSeparator();
         lineCount++;
 
         auto PrintRow = [&](uint32_t i, bool isTotalSim)
@@ -337,13 +362,20 @@ namespace Sim
 
                 if (isTotalSim)
                 {
-                    std::printf("%-30.30s | %12.2f %6s | %12.2f %6s\n",
+                    std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
                         alias.c_str(), t_latest, "---", t_avg, "---");
                 }
                 else
                 {
-                    std::printf("%-30.30s | %12.2f %6.1f | %12.2f %6.1f\n",
-                        alias.c_str(), t_latest, pctLatest, t_avg, pctAvg);
+					char pctLatestLabel[16];
+					char pctAvgLabel[16];
+					std::snprintf(pctLatestLabel, sizeof(pctLatestLabel),
+						"%.1f %%", pctLatest);
+					std::snprintf(pctAvgLabel, sizeof(pctAvgLabel),
+						"%.1f %%", pctAvg);
+
+                    std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
+                        alias.c_str(), t_latest, pctLatestLabel, t_avg, pctAvgLabel);
                 }
 
                 lineCount++;
@@ -359,7 +391,7 @@ namespace Sim
         // total simulation row last
         if (totalSimIdx >= 0)
         {
-            printf("--------------------------------------------------------------------------\n");
+			PrintCliSeparator();
             lineCount++;
             PrintRow(static_cast<std::size_t>(totalSimIdx), true);
         }
@@ -432,27 +464,95 @@ namespace Sim
 
         const char* unitStr = Mem::UnitLabel(unit);
 
-        char maxUsedLabel[32];
-        char maxAllocLabel[32];
-        std::snprintf(maxUsedLabel, sizeof(maxUsedLabel), "max used [%s]", unitStr);
-        std::snprintf(maxAllocLabel, sizeof(maxAllocLabel), "max allocated [%s]", unitStr);
+        char usedLabel[32];
+        char allocLabel[32];
+        std::snprintf(usedLabel, sizeof(usedLabel), "used [%s]", unitStr);
+        std::snprintf(allocLabel, sizeof(allocLabel), "alloc [%s]", unitStr);
 
         std::printf("\n");
-        std::printf("%-30.30s | %19s | %19s\n",
-            "memory usage", maxUsedLabel, maxAllocLabel);
-        std::printf("--------------------------------------------------------------------------\n");
+        std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
+            "memory usage", usedLabel, "% fluid", allocLabel, "% fluid");
+		PrintCliSeparator();
 
-        for (uint8_t i = 0; i < BUCKET_COUNT; i++)
-        {
-            const auto& def = Mem::Definitions[i];
-            const double vMaxUsed = Mem::ConvertFromBytes(unit, snap.max[i].usedBytes);
-            const double vMaxAlloc = Mem::ConvertFromBytes(unit, snap.max[i].allocBytes);
+		auto GetMemBytes = [&](const Mem::MemBucket bucket, const bool alloc)
+			{
+				const auto& mem = snap.max[Mem::GetIdx(bucket)];
+				return alloc ? mem.allocBytes : mem.usedBytes;
+			};
 
-            std::printf("%-30.30s | %19.2f | %19.2f\n",
-                def.name.data(), vMaxUsed, vMaxAlloc);
-        }
+		auto PrintMemRow = [&](const char* name,
+							   const uint64_t maxUsedBytes,
+							   const char* pctUsedLabel,
+							   const uint64_t maxAllocBytes,
+							   const char* pctAllocLabel)
+			{
+				const double vMaxUsed = Mem::ConvertFromBytes(unit, maxUsedBytes);
+				const double vMaxAlloc = Mem::ConvertFromBytes(unit, maxAllocBytes);
 
-        std::printf("--------------------------------------------------------------------------\n");
+				std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
+					name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
+			};
+
+		auto PrintMemPair = [&](const char* name,
+								const Mem::MemBucket bucketF,
+								const Mem::MemBucket bucketB)
+			{
+				const uint64_t maxUsedBytesF = GetMemBytes(bucketF, false);
+				const uint64_t maxUsedBytesB = GetMemBytes(bucketB, false);
+				const uint64_t maxAllocBytesF = GetMemBytes(bucketF, true);
+				const uint64_t maxAllocBytesB = GetMemBytes(bucketB, true);
+
+				const uint64_t maxUsedBytes =
+					maxUsedBytesF + maxUsedBytesB;
+				const uint64_t maxAllocBytes =
+					maxAllocBytesF + maxAllocBytesB;
+
+				char pctUsedLabel[16];
+				char pctAllocLabel[16];
+				if (maxUsedBytes > 0ull)
+				{
+					const double pctUsed = 100.0 * static_cast<double>(maxUsedBytesF)
+						/ static_cast<double>(maxUsedBytes);
+					std::snprintf(pctUsedLabel, sizeof(pctUsedLabel),
+						"%.1f %%", pctUsed);
+				}
+				else
+				{
+					std::snprintf(pctUsedLabel, sizeof(pctUsedLabel), "---");
+				}
+				if (maxAllocBytes > 0ull)
+				{
+					const double pctAlloc = 100.0 * static_cast<double>(maxAllocBytesF)
+						/ static_cast<double>(maxAllocBytes);
+					std::snprintf(pctAllocLabel, sizeof(pctAllocLabel),
+						"%.1f %%", pctAlloc);
+				}
+				else
+				{
+					std::snprintf(pctAllocLabel, sizeof(pctAllocLabel), "---");
+				}
+
+				PrintMemRow(name, maxUsedBytes, pctUsedLabel,
+					maxAllocBytes, pctAllocLabel);
+			};
+
+		// combine fluid and boundary buckets for concise CLI output
+		PrintMemPair("particle properties",
+			Mem::MemBucket::ParticlePropertiesF,
+			Mem::MemBucket::ParticlePropertiesB);
+		PrintMemPair("neighbor search data struct",
+			Mem::MemBucket::Neighbors_SearchDataStructF,
+			Mem::MemBucket::Neighbors_SearchDataStructB);
+		PrintMemPair("neighbor list storage",
+			Mem::MemBucket::Neighbors_ListStorageF,
+			Mem::MemBucket::Neighbors_ListStorageB);
+		PrintMemRow("misc",
+			GetMemBytes(Mem::MemBucket::Misc, false),
+			"---",
+			GetMemBytes(Mem::MemBucket::Misc, true),
+			"---");
+
+		PrintCliSeparator();
 
         const double tMaxUsed = Mem::ConvertFromBytes(unit, totalMaxUsedBytes);
         const double tMaxAlloc = Mem::ConvertFromBytes(unit, totalMaxAllocBytes);
@@ -474,8 +574,8 @@ namespace Sim
         char totalAllocValueLabel[32];
         std::snprintf(totalUsedValueLabel, sizeof(totalUsedValueLabel), "> %.2f", tMaxUsed);
         std::snprintf(totalAllocValueLabel, sizeof(totalAllocValueLabel), "> %.2f", tMaxAlloc);
-        std::printf("%-30.30s | %19s | %19s\n",
-            totalLabel, totalUsedValueLabel, totalAllocValueLabel);
+        std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
+            totalLabel, totalUsedValueLabel, "---", totalAllocValueLabel, "---");
 
         std::fflush(stdout);
     }
