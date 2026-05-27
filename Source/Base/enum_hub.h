@@ -58,7 +58,6 @@ namespace Base
 	{
 		BruteForce,					// 0
 		CellLinkedList_Compact,		// 1 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
-		BoundVolHier_Linear,		// 2 TODO: implement ("Maximizing parallelism in the construction of BVHs, octrees, and k-d trees" Karras, 2012)
 	};
 	constexpr const char* ToCString(const NeighborSearchMethod v) noexcept
 	{
@@ -68,8 +67,6 @@ namespace Base
 			"BruteForce";
 		case NeighborSearchMethod::CellLinkedList_Compact: return
 			"CellLinkedList_Compact";
-		case NeighborSearchMethod::BoundVolHier_Linear: return
-			"BoundVolHier_Linear";
 		}
 		return "NeighborSearchMethod::<unknown>";
 	}

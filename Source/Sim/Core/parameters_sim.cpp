@@ -118,14 +118,22 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
 				if (s == "CellLinkedList_Compact")
 					{ out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
-				if (s == "BoundVolHier_Linear")
-					{ out = Base::NeighborSearchMethod::BoundVolHier_Linear; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
 			{
-				out = static_cast<Base::NeighborSearchMethod>(v.get<int>());
-				return true;
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::NeighborSearchMethod::BruteForce;
+					return true;
+				case 1:
+					out = Base::NeighborSearchMethod::CellLinkedList_Compact;
+					return true;
+				default:
+					return false;
+				}
 			}
 			return false;
 		};
@@ -197,6 +205,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'neighborSearchMethod' in JSON");
+				EndWrite();
+				return false;
 			}
 		}
 

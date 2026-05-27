@@ -83,7 +83,6 @@ namespace Sim
 		std::unique_ptr<I_NeighborList> neighborList_;
 		friend class NS_BruteForce_CPU01;
 		friend class NS_CellLinkedList_Compact_CPU01;
-		friend class NS_BoundVolHier_Linear_CPU01;
 
 		// metadata
 		uint32_t simStep_ = 0;

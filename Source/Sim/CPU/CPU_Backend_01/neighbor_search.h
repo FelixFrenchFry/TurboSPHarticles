@@ -160,10 +160,4 @@ namespace Sim
 		static inline uint64_t SpreadBitsWithGaps_21to63(uint32_t v) noexcept;
 	};
 
-	// ---------------------------------------------------------------------------------------------
-	// --- [ bounding volume hierarchy linear (LBVH) implementation ] ------------------------------
-	// ---------------------------------------------------------------------------------------------
-
-	// TODO: implement
-
 } // namespace Sim

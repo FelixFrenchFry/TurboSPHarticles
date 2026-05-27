@@ -1311,8 +1311,3 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 	return x;
 }
 
-// -------------------------------------------------------------------------------------------------
-// --- [ bounding volume hierarchy linear (LBVH) implementation ] ----------------------------------
-// -------------------------------------------------------------------------------------------------
-
-// TODO: implement

@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.24)
 project(TurboSPHarticles LANGUAGES CXX)
 
-# ==============================================
-# ===== language standards / build options =====
+# --- [ language standards / build options ] ---
+# ----------------------------------------------
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(ENABLE_CUDA "Build GPU backend with CUDA" OFF)
 option(ENABLE_VIS "Build window with visual interface and particle rendering" ON)
+option(ENABLE_NATIVE_OPT "Enable AVX2/FMA CPU SIMD build flags" ON)
+
+set(TSP_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA architectures")
 
 # default build type
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -27,8 +30,8 @@ set(TSP_EXPORT_DIR "${CMAKE_SOURCE_DIR}/Export")
 set(TSP_CONFIG_DIR "${CMAKE_SOURCE_DIR}/Configs")
 set(TSP_LOGS_DIR "${CMAKE_SOURCE_DIR}/Logs")
 
-# ==================================
-# ===== dependencies via vcpkg =====
+# --- [ dependencies via vcpkg ] ---
+# ----------------------------------
 
 if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   message(FATAL_ERROR
@@ -75,11 +78,6 @@ if(ENABLE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    #TODO: build for multiple architectures with set(CMAKE_CUDA_ARCHITECTURES 75 80 86 89 90 100 120)
-    set(CMAKE_CUDA_ARCHITECTURES 120)
-    #if(NOT CMAKE_CUDA_ARCHITECTURES)
-    #    set(CMAKE_CUDA_ARCHITECTURES native)
-    #endif()
 endif()
 
 if(ENABLE_VIS)
@@ -90,8 +88,8 @@ if(ENABLE_VIS)
     find_package(implot CONFIG REQUIRED)
 endif()
 
-# ===================
-# ===== sources =====
+# --- [ sources ] ---
+# -------------------
 
 file(GLOB_RECURSE SRC_BASE CONFIGURE_DEPENDS "Source/Base/*.cpp")
 file(GLOB_RECURSE SRC_EVAL CONFIGURE_DEPENDS "Source/Eval/*.cpp")
@@ -110,8 +108,8 @@ if(ENABLE_VIS)
     file(GLOB_RECURSE SRC_VIS CONFIGURE_DEPENDS "Source/Vis/*.cpp")
 endif()
 
-# ================================
-# ===== project-wide helpers =====
+# --- [ project-wide helpers ] ---
+# --------------------------------
 
 # warnings
 add_library(Project_Warnings INTERFACE)
@@ -159,7 +157,6 @@ target_compile_options(Project_Options INTERFACE
 )
 
 # optional native archtitecture-specific optimizations
-option(ENABLE_NATIVE_OPT "Enable AVX2/FMA CPU SIMD build flags" ON)
 if(ENABLE_NATIVE_OPT)
     target_compile_options(Project_Options INTERFACE
         # MSVC C++ only
@@ -180,8 +177,8 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
 # consistent debug info format
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "ProgramDatabase")
 
-# ============================
-# ===== headless library =====
+# --- [ headless library ] ---
+# ----------------------------
 
 add_library(TSP_H STATIC
     ${SRC_BASE}
@@ -206,7 +203,6 @@ target_compile_definitions(TSP_H PUBLIC
 target_link_libraries(TSP_H PUBLIC
     spdlog::spdlog
     nlohmann_json::nlohmann_json
-    CLI11::CLI11
     Boost::boost
     glm::glm
     xsimd
@@ -228,14 +224,14 @@ if(ENABLE_CUDA AND SRC_SIM_GPU)
     set_target_properties(TSP_H PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
-        CUDA_ARCHITECTURES "75;80;86;89;90;100;120"
+        CUDA_ARCHITECTURES "${TSP_CUDA_ARCHITECTURES}"
     )
     # keep IPO off when CUDA is enabled to avoid nvlink/LTO clashes
     set_property(TARGET TSP_H PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
 endif()
 
-# ============================================
-# ===== visual library (optional add-on) =====
+# --- [ visual library (optional add-on) ] ---
+# --------------------------------------------
 
 if(ENABLE_VIS)
     add_library(TSP_V STATIC
@@ -248,9 +244,6 @@ if(ENABLE_VIS)
         glfw
         imgui::imgui
         implot::implot
-        Project_Warnings
-        Project_Defines
-        Project_Options
     )
     # avoid GLFW including <GL/gl.h> before glad
     target_compile_definitions(TSP_V PUBLIC
@@ -261,24 +254,21 @@ if(ENABLE_VIS)
     )
 endif()
 
-# ================
-# ===== apps =====
+# --- [ apps ] ---
+# ----------------
 
 add_executable(TSP_Headless "Apps/main_headless.cpp")
 target_link_libraries(TSP_Headless PRIVATE 
-    TSP_H Project_Warnings Project_Defines Project_Options
-    $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
+    TSP_H
+    CLI11::CLI11
 )
-target_compile_definitions(TSP_Headless PRIVATE TURBOSPHARTICLES_HEADLESS=1)
 
 if(ENABLE_VIS)
     add_executable(TSP_Visual "Apps/main_visual.cpp")
     target_link_libraries(TSP_Visual PRIVATE
-    TSP_V Project_Warnings Project_Defines Project_Options
-    $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
-)
+        TSP_V
+        CLI11::CLI11
+    )
 endif()
 
 # make sure device link works on final executables and turn IPO off when CUDA is on
