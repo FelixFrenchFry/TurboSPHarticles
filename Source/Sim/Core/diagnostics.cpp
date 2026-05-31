@@ -49,6 +49,16 @@ namespace Sim
 
 			std::putchar('\n');
 		}
+
+		constexpr const char* EffectiveNeighborListStorageName(const SimParams& params) noexcept
+		{
+			if (params.backendVersion == Base::BackendVersion::GPU01)
+			{
+				return "CompressedSELL32_AdaptCompress";
+			}
+
+			return Base::ToCString(params.neighborListMethod);
+		}
 	}
 
     void DiagnosticsMgr::PrintHardwareSpecs(uint32_t N_totalThreads,
@@ -139,7 +149,7 @@ namespace Sim
         printf("%-30s = %s\n", "neighbor search method",
 			Base::ToCString(params.neighborSearchMethod));
         printf("%-30s = %s\n", "neighbor list storage",
-            Base::ToCString(params.neighborListMethod));
+            EffectiveNeighborListStorageName(params));
 
         // particle counts
         printf("%-30s = %u\n", "fluid particles", 

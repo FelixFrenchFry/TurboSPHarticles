@@ -2,9 +2,9 @@
   "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
-  "neighborListStorage": 5,
+  "neighborListStorage": 1,
 
-  "maxSteps": 100,
+  "maxSteps": 500,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,

@@ -2,7 +2,7 @@
   "backendVersion": "GPU01",
   "scenarioType": "ConvergingDam",
   "neighborSearchMethod": 5,
-  "neighborListStorage": 3,
+  "neighborListStorage": 1,
 
   "maxSteps": -1,
   "timeStep": 0.0006,

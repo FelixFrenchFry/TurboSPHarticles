@@ -143,14 +143,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
-				if (s == "IndividualVectors_Explicit")
-					{ out = Base::NeighborListMethod::IndividualVectors_Explicit; return true; }
-				if (s == "SingleCSRVector_Explicit")
-					{ out = Base::NeighborListMethod::SingleCSRVector_Explicit; return true; }
-				if (s == "SingleCSRVector_AdaptCompress")
-					{ out = Base::NeighborListMethod::SingleCSRVector_AdaptCompress; return true; }
-				if (s == "SingleCSRVector_VByteCompress")
-					{ out = Base::NeighborListMethod::SingleCSRVector_VByteCompress; return true; }
 				if (s == "ChunkedSELL8_Explicit")
 					{ out = Base::NeighborListMethod::ChunkedSELL8_Explicit; return true; }
 				if (s == "ChunkedSELL8_AdaptCompress")
@@ -159,8 +151,18 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else if (v.is_number_integer())
 			{
-				out = static_cast<Base::NeighborListMethod>(v.get<int>());
-				return true;
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::NeighborListMethod::ChunkedSELL8_Explicit;
+					return true;
+				case 1:
+					out = Base::NeighborListMethod::ChunkedSELL8_AdaptCompress;
+					return true;
+				default:
+					return false;
+				}
 			}
 			return false;
 		};
@@ -222,6 +224,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'neighborListStorage' in JSON");
+				EndWrite();
+				return false;
 			}
 		}
 

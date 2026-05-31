@@ -83,8 +83,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	I_NeighborListSELL8& neighborList = *chunkedSELL8NeighborList;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
-	const bool runSecondFillQuery = neighborList.RunSecondFillQuery();
-	const NeighborListInputOrder inputOrder = NeighborListInputOrder::GuaranteedSorted;
 
 	// --- [ neighbor search ] -----------------------------------------------------------------------
 
@@ -105,8 +103,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	if (runFillQuery)
 	{
-		neighborList.SetInputOrder(inputOrder);
-
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
 		neighborSearch_->Query_Fill(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
@@ -115,17 +111,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
 	neighborList.Finalize_Fill();
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
-
-	if (runFillQuery && runSecondFillQuery)
-	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
-		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
-
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
-		neighborList.Finalize_Fill();
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
-	}
 
 	// --- [ density computations ] ------------------------------------------------------------------
 

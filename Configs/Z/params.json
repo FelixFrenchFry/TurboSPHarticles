@@ -2,7 +2,7 @@
   "backendVersion": "CPU01",
   "scenarioType": "BigDroplet",
   "neighborSearchMethod": 5,
-  "neighborListStorage": 6,
+  "neighborListStorage": 1,
 
   "maxSteps": -1,
   "timeStep": 0.0005,

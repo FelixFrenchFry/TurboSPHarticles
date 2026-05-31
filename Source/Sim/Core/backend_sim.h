@@ -117,12 +117,6 @@ namespace Sim
 		uint32_t count = 0;
 	};
 
-	enum class NeighborListInputOrder : uint8_t
-	{
-		Unknown,
-		GuaranteedSorted
-	};
-
 	class I_NeighborList
 	{
 	public: // ---------------------------------------------------------------------------------------
@@ -148,13 +142,6 @@ namespace Sim
 		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 
-		// tells the neighbor list implementation whether the incoming fill-query lists
-		// are guaranteed to already be sorted by particle index in this step
-		virtual void SetInputOrder(NeighborListInputOrder inputOrder)
-		{
-			(void)inputOrder;
-		}
-
 		// gets a "span" of the fluid/boundary neighbor list of fluid particle i
 		// (for compressed neighbor lists, the span points to per-thread scratch space, which
 		// gets overwritten on each call, so the data must be processed before that)
@@ -172,7 +159,6 @@ namespace Sim
 		// flags
 		virtual bool RunCountQuery() const = 0;
 		virtual bool RunFillQuery() const = 0;
-		virtual bool RunSecondFillQuery() const = 0;
 	};
 
 } // namespace Sim

@@ -73,25 +73,13 @@ namespace Base
 
 	enum class NeighborListMethod : uint8_t
 	{
-		IndividualVectors_Explicit,		// 0
-		SingleCSRVector_Explicit,		// 1
-		SingleCSRVector_AdaptCompress,	// 2 TODO: implement
-		SingleCSRVector_VByteCompress,	// 3 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
-		ChunkedSELL8_Explicit,			// 4
-		ChunkedSELL8_AdaptCompress		// 5
+		ChunkedSELL8_Explicit,			// 0
+		ChunkedSELL8_AdaptCompress		// 1
 	};
 	constexpr const char* ToCString(const NeighborListMethod v) noexcept
 	{
 		switch (v)
 		{
-		case NeighborListMethod::IndividualVectors_Explicit:
-			return "IndividualVectors_Explicit";
-		case NeighborListMethod::SingleCSRVector_Explicit:
-			return "SingleCSRVector_Explicit";
-		case NeighborListMethod::SingleCSRVector_AdaptCompress:
-			return "SingleCSRVector_AdaptCompress";
-		case NeighborListMethod::SingleCSRVector_VByteCompress:
-			return "SingleCSRVector_VByteCompress";
 		case NeighborListMethod::ChunkedSELL8_Explicit:
 			return "ChunkedSELL8_Explicit";
 		case NeighborListMethod::ChunkedSELL8_AdaptCompress:
