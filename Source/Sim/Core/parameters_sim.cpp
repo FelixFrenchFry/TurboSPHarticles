@@ -143,10 +143,10 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
-				if (s == "ChunkedSELL8_Explicit")
-					{ out = Base::NeighborListMethod::ChunkedSELL8_Explicit; return true; }
-				if (s == "ChunkedSELL8_AdaptCompress")
-					{ out = Base::NeighborListMethod::ChunkedSELL8_AdaptCompress; return true; }
+				if (s == "ChunkedSELLX_Explicit")
+					{ out = Base::NeighborListMethod::ChunkedSELLX_Explicit; return true; }
+				if (s == "ChunkedSELLX_AdaptCompress")
+					{ out = Base::NeighborListMethod::ChunkedSELLX_AdaptCompress; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -155,10 +155,10 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				switch (i)
 				{
 				case 0:
-					out = Base::NeighborListMethod::ChunkedSELL8_Explicit;
+					out = Base::NeighborListMethod::ChunkedSELLX_Explicit;
 					return true;
 				case 1:
-					out = Base::NeighborListMethod::ChunkedSELL8_AdaptCompress;
+					out = Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
 					return true;
 				default:
 					return false;

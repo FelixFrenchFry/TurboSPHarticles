@@ -152,7 +152,6 @@ namespace Sim
 
 		// neighbor search
 		std::unique_ptr<I_NeighborSearch> neighborSearch_;
-		std::unique_ptr<I_NeighborList> neighborList_; // TODO: implement different neighbor list methods?
 		friend class NS_BruteForce_GPU01;
 		friend class NS_CellLinkedList_Compact_GPU01;
 

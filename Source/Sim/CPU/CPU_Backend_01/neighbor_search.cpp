@@ -754,10 +754,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 
 		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
 		const CPU::Float32x8 kernelRadiusSquV = CPU::SetFloat32x8(kernelRadiusSqu);
-		auto* chunkedSELL8NeighborList =
-			dynamic_cast<I_NeighborListSELL8*>(be_.neighborList_.get());
+		auto* chunkedSELL8NeighborList = be_.neighborList_.get();
 		const bool trackChunkNeighborIdxRange =
-			chunkedSELL8NeighborList != nullptr &&
 			chunkedSELL8NeighborList->NeedsChunkNeighborIdxRange();
 
 		tbb::parallel_for(
@@ -874,13 +872,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 		const uint32_t N_F = be_.N_F_;
 		if (N_F == 0) { return; }
 
-		auto* chunkedSELL8NeighborList =
-			dynamic_cast<I_NeighborListSELL8*>(be_.neighborList_.get());
-		if (chunkedSELL8NeighborList == nullptr) [[unlikely]]
-		{
-			throw std::runtime_error(
-				"CPU01 compact CLL fill requires SELL8 neighbor storage.");
-		}
+		auto* chunkedSELL8NeighborList = be_.neighborList_.get();
 
 		// local references for fewer pointer indirections
 		const float* RESTRICT xPosF = be_.xPosF_.data();

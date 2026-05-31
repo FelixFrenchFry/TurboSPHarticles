@@ -58,10 +58,13 @@ void DistributedSimulation::RunStartupCheck() const
 		{
 			SPDLOG_INFO(
 				"[rank {}/{}] Distributed startup validated "
-				"(backend={}, maxSteps={}, exportDir='{}')",
+				"(backend={}, neighborListStorage={}, maxSteps={}, exportDir='{}')",
 				mpiContext_.Rank(),
 				mpiContext_.Size(),
 				Base::ToCString(params.backendVersion),
+				Base::ToEffectiveNeighborListStorageCString(
+					params.backendVersion,
+					params.neighborListMethod),
 				params.maxSteps,
 				params.exportDir);
 		}

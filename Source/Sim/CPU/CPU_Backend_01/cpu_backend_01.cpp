@@ -57,12 +57,12 @@ SimBackend_CPU01::SimBackend_CPU01(
 
 	// select neighbor list method
 	if (params.neighborListMethod ==
-		Base::NeighborListMethod::ChunkedSELL8_Explicit)
+		Base::NeighborListMethod::ChunkedSELLX_Explicit)
 	{
 		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_Explicit_CPU01>();
 	}
 	else if (params.neighborListMethod ==
-		Base::NeighborListMethod::ChunkedSELL8_AdaptCompress)
+		Base::NeighborListMethod::ChunkedSELLX_AdaptCompress)
 	{
 		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_AdaptCompress_CPU01>();
 	}

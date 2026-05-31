@@ -73,19 +73,36 @@ namespace Base
 
 	enum class NeighborListMethod : uint8_t
 	{
-		ChunkedSELL8_Explicit,			// 0
-		ChunkedSELL8_AdaptCompress		// 1
+		ChunkedSELLX_Explicit,			// 0
+		ChunkedSELLX_AdaptCompress		// 1
 	};
 	constexpr const char* ToCString(const NeighborListMethod v) noexcept
 	{
 		switch (v)
 		{
-		case NeighborListMethod::ChunkedSELL8_Explicit:
-			return "ChunkedSELL8_Explicit";
-		case NeighborListMethod::ChunkedSELL8_AdaptCompress:
-			return "ChunkedSELL8_AdaptCompress";
+		case NeighborListMethod::ChunkedSELLX_Explicit:
+			return "ChunkedSELLX_Explicit";
+		case NeighborListMethod::ChunkedSELLX_AdaptCompress:
+			return "ChunkedSELLX_AdaptCompress";
 		}
 		return "NeighborListStorage::<unknown>";
+	}
+	constexpr const char* ToEffectiveNeighborListStorageCString(
+		const BackendVersion backend,
+		const NeighborListMethod v) noexcept
+	{
+		switch (v)
+		{
+		case NeighborListMethod::ChunkedSELLX_Explicit:
+			return (backend == BackendVersion::GPU01)
+				? "ChunkedSELL32_Explicit"
+				: "ChunkedSELL8_Explicit";
+		case NeighborListMethod::ChunkedSELLX_AdaptCompress:
+			return (backend == BackendVersion::GPU01)
+				? "ChunkedSELL32_AdaptCompress"
+				: "ChunkedSELL8_AdaptCompress";
+		}
+		return "ChunkedSELLX::<unknown>";
 	}
 
 	enum class SolverTerminationCond : uint8_t

@@ -333,9 +333,17 @@ namespace Export
 		meta["simSetup"] =
 		{
 			{ "backendVersion", static_cast<int>(simParams.backendVersion) },
+			{ "backendVersionName", Base::ToCString(simParams.backendVersion) },
 			{ "scenarioType", static_cast<int>(simParams.scenarioType) },
+			{ "scenarioTypeName", Base::ToCString(simParams.scenarioType) },
 			{ "neighborSearchMethod", static_cast<int>(simParams.neighborSearchMethod) },
+			{ "neighborSearchMethodName", Base::ToCString(simParams.neighborSearchMethod) },
 			{ "neighborListStorage", static_cast<int>(simParams.neighborListMethod) },
+			{ "neighborListStorageName", Base::ToCString(simParams.neighborListMethod) },
+			{ "neighborListStorageEffectiveName",
+				Base::ToEffectiveNeighborListStorageCString(
+					simParams.backendVersion,
+					simParams.neighborListMethod) },
 			{ "exportEnabled", simParams.exportEnabled },
 			{ "exportDir", simParams.exportDir },
 			{ "exportInterval", simParams.exportInterval },

@@ -74,13 +74,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT diagElemF = diagElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
-	auto* chunkedSELL8NeighborList =
-		dynamic_cast<I_NeighborListSELL8*>(neighborList_.get());
-	if (chunkedSELL8NeighborList == nullptr)
-	{
-		throw std::runtime_error("CPU01 internal error: missing chunked SELL8 neighbor storage.");
-	}
-	I_NeighborListSELL8& neighborList = *chunkedSELL8NeighborList;
+	I_NeighborListSELL8& neighborList = *neighborList_;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
 
