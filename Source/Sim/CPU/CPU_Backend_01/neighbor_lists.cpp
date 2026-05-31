@@ -49,6 +49,22 @@ namespace
 		}
 	}
 
+	SELL8NeighborCount NarrowNeighborCount_Debug(
+		const uint32_t count,
+		const char* overflowMsg)
+	{
+		#if defined(_DEBUG)
+		if (count > std::numeric_limits<SELL8NeighborCount>::max()) [[unlikely]]
+		{
+			throw std::runtime_error(overflowMsg);
+		}
+		#else
+		(void)overflowMsg;
+		#endif
+
+		return static_cast<SELL8NeighborCount>(count);
+	}
+
 } // anonymous
 
 // -------------------------------------------------------------------------------------------------
@@ -103,13 +119,17 @@ void NeighborLists_ChunkedSELL8_Explicit_CPU01::Finalize_Count()
 void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrCountFF(
 	const uint32_t i, const uint32_t count)
 {
-	nbrCountFF_[i] = count;
+	nbrCountFF_[i] = NarrowNeighborCount_Debug(
+		count,
+		"Chunked SELL8 FF neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrCountFB(
 	const uint32_t i, const uint32_t count)
 {
-	nbrCountFB_[i] = count;
+	nbrCountFB_[i] = NarrowNeighborCount_Debug(
+		count,
+		"Chunked SELL8 FB neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL8_Explicit_CPU01::SetNbrListFF(
@@ -458,8 +478,8 @@ uint64_t NeighborLists_ChunkedSELL8_Explicit_CPU01::ParticleStorageIdx(
 }
 
 void NeighborLists_ChunkedSELL8_Explicit_CPU01::BuildChunkMaxCount(
-	const std::vector<uint32_t>& nbrCounts,
-	std::vector<uint32_t>& nbrChunkMaxCount) const
+	const std::vector<SELL8NeighborCount>& nbrCounts,
+	std::vector<SELL8NeighborCount>& nbrChunkMaxCount) const
 {
 	const uint32_t numChunks = ChunkNumTotal(N_F_);
 	nbrChunkMaxCount.assign(numChunks, 0);
@@ -472,7 +492,7 @@ void NeighborLists_ChunkedSELL8_Explicit_CPU01::BuildChunkMaxCount(
 			{
 				const uint32_t begin = ChunkBegin(chunk);
 				const uint32_t end = ChunkEnd(chunk, N_F_);
-				uint32_t maxCount = 0;
+				SELL8NeighborCount maxCount = 0;
 
 				// one pitch per chunk keeps all 8 lanes aligned for SIMD traversal
 				for (uint32_t i = begin; i < end; i++)
@@ -488,7 +508,7 @@ void NeighborLists_ChunkedSELL8_Explicit_CPU01::BuildChunkMaxCount(
 }
 
 void NeighborLists_ChunkedSELL8_Explicit_CPU01::FinalizeChunkOffsets(
-	const std::vector<uint32_t>& nbrChunkMaxCount,
+	const std::vector<SELL8NeighborCount>& nbrChunkMaxCount,
 	std::vector<uint64_t>& nbrChunkOffsets,
 	std::vector<uint32_t>& nbrList) const
 {
@@ -582,13 +602,17 @@ void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::Finalize_Count()
 void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::SetNbrCountFF(
 	const uint32_t i, const uint32_t count)
 {
-	nbrCountFF_[i] = count;
+	nbrCountFF_[i] = NarrowNeighborCount_Debug(
+		count,
+		"Compressed chunked SELL8 FF neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::SetNbrCountFB(
 	const uint32_t i, const uint32_t count)
 {
-	nbrCountFB_[i] = count;
+	nbrCountFB_[i] = NarrowNeighborCount_Debug(
+		count,
+		"Compressed chunked SELL8 FB neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::SetNbrListFF(
@@ -1037,8 +1061,8 @@ ChunkedSELL8NeighborSpan_Write NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::M
 }
 
 void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::BuildChunkMaxCount(
-	const std::vector<uint32_t>& nbrCounts,
-	std::vector<uint32_t>& nbrChunkMaxCount) const
+	const std::vector<SELL8NeighborCount>& nbrCounts,
+	std::vector<SELL8NeighborCount>& nbrChunkMaxCount) const
 {
 	const uint32_t numChunks = ChunkNumTotal(N_F_);
 	nbrChunkMaxCount.assign(numChunks, 0);
@@ -1051,7 +1075,7 @@ void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::BuildChunkMaxCount(
 			{
 				const uint32_t begin = ChunkBegin(chunk);
 				const uint32_t end = ChunkEnd(chunk, N_F_);
-				uint32_t maxCount = 0;
+				SELL8NeighborCount maxCount = 0;
 
 				// one pitch per chunk keeps all 8 lanes aligned for SIMD traversal
 				for (uint32_t i = begin; i < end; i++)
@@ -1067,7 +1091,7 @@ void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::BuildChunkMaxCount(
 }
 
 void NeighborLists_ChunkedSELL8_AdaptCompress_CPU01::FinalizeChunkStorage(
-	const std::vector<uint32_t>& nbrChunkMaxCount,
+	const std::vector<SELL8NeighborCount>& nbrChunkMaxCount,
 	const std::vector<uint32_t>& nbrChunkMinRef,
 	const std::vector<uint32_t>& nbrChunkMaxRef,
 	std::vector<uint32_t>& nbrChunkBaseIdx,

@@ -4,6 +4,7 @@
 
 // external
 #include <cassert>
+#include <cstdint>
 #include <boost/container/small_vector.hpp>
 #include <vector>
 #include <tbb/enumerable_thread_specific.h>
@@ -28,13 +29,15 @@ namespace Sim
 		Abs32
 	};
 
+	using SELL8NeighborCount = uint16_t;
+
 	// read-view used in the neighbor retrieval (e.g. solver kernels)
 	struct ChunkedSELL8NeighborSpan_Read
 	{
 		const uint32_t* data32 = nullptr;
 		const uint16_t* data16 = nullptr;
 		const uint8_t* data8 = nullptr;
-		const uint32_t* counts = nullptr;
+		const SELL8NeighborCount* counts = nullptr;
 		uint32_t baseIdx = 0;
 		uint32_t chunk = 0;
 		uint32_t begin = 0;
@@ -83,7 +86,7 @@ namespace Sim
 		uint32_t* data32 = nullptr;
 		uint16_t* data16 = nullptr;
 		uint8_t* data8 = nullptr;
-		const uint32_t* counts = nullptr;
+		const SELL8NeighborCount* counts = nullptr;
 		uint32_t baseIdx = 0;
 		uint32_t chunk = 0;
 		uint32_t begin = 0;
@@ -189,10 +192,10 @@ namespace Sim
 		uint32_t N_B_ = 0;
 
 		// explicit chunked SELL8 neighbor storage
-		std::vector<uint32_t> nbrCountFF_; // per-particle neighbor count
-		std::vector<uint32_t> nbrCountFB_;
-		std::vector<uint32_t> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
-		std::vector<uint32_t> nbrChunkMaxCountFB_;
+		std::vector<SELL8NeighborCount> nbrCountFF_; // per-particle neighbor count
+		std::vector<SELL8NeighborCount> nbrCountFB_;
+		std::vector<SELL8NeighborCount> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
+		std::vector<SELL8NeighborCount> nbrChunkMaxCountFB_;
 		std::vector<uint64_t> nbrChunkOffsetsFF_; // per-chunk starting index for neighbor stored in nbrListFF_
 		std::vector<uint64_t> nbrChunkOffsetsFB_;
 		std::vector<uint32_t> nbrListFF_; // actual neighbor indices, concatenated for all chunks
@@ -220,11 +223,11 @@ namespace Sim
 			const std::vector<uint64_t>& nbrChunkOffsets) noexcept;
 
 		void BuildChunkMaxCount(
-			const std::vector<uint32_t>& nbrCounts,
-			std::vector<uint32_t>& nbrChunkMaxCount) const;
+			const std::vector<SELL8NeighborCount>& nbrCounts,
+			std::vector<SELL8NeighborCount>& nbrChunkMaxCount) const;
 
 		void FinalizeChunkOffsets(
-			const std::vector<uint32_t>& nbrChunkMaxCount,
+			const std::vector<SELL8NeighborCount>& nbrChunkMaxCount,
 			std::vector<uint64_t>& nbrChunkOffsets,
 			std::vector<uint32_t>& nbrList) const;
 	};
@@ -281,10 +284,10 @@ namespace Sim
 		uint32_t N_B_ = 0;
 
 		// compressed chunked SELL8 neighbor storage
-		std::vector<uint32_t> nbrCountFF_; // per-particle neighbor count
-		std::vector<uint32_t> nbrCountFB_;
-		std::vector<uint32_t> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
-		std::vector<uint32_t> nbrChunkMaxCountFB_;
+		std::vector<SELL8NeighborCount> nbrCountFF_; // per-particle neighbor count
+		std::vector<SELL8NeighborCount> nbrCountFB_;
+		std::vector<SELL8NeighborCount> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
+		std::vector<SELL8NeighborCount> nbrChunkMaxCountFB_;
 		std::vector<uint32_t> nbrChunkMinRefFF_; // per-chunk min neighbor index from the count-query
 		std::vector<uint32_t> nbrChunkMinRefFB_;
 		std::vector<uint32_t> nbrChunkMaxRefFF_; // per-chunk max neighbor index from the count-query
@@ -328,11 +331,11 @@ namespace Sim
 		ChunkedSELL8NeighborSpan_Write MakeWriteSpanFB(uint32_t chunk) noexcept;
 
 		void BuildChunkMaxCount(
-			const std::vector<uint32_t>& nbrCounts,
-			std::vector<uint32_t>& nbrChunkMaxCount) const;
+			const std::vector<SELL8NeighborCount>& nbrCounts,
+			std::vector<SELL8NeighborCount>& nbrChunkMaxCount) const;
 
 		void FinalizeChunkStorage(
-			const std::vector<uint32_t>& nbrChunkMaxCount,
+			const std::vector<SELL8NeighborCount>& nbrChunkMaxCount,
 			const std::vector<uint32_t>& nbrChunkMinRef,
 			const std::vector<uint32_t>& nbrChunkMaxRef,
 			std::vector<uint32_t>& nbrChunkBaseIdx,

@@ -129,11 +129,19 @@ namespace CPU
 	// return the valid lanes for neighbor-column k in a SELL8 chunk
 	inline Mask32x8 MaskKLessThanCounts32x8(
 		const uint32_t k,
+		const UInt32x8 countV) noexcept
+	{
+		const __m256i kV = _mm256_set1_epi32(static_cast<int>(k));
+		return Mask32x8(_mm256_castsi256_ps(
+			_mm256_cmpgt_epi32(static_cast<__m256i>(countV), kV)));
+	}
+
+	// return the valid lanes for neighbor-column k in a SELL8 chunk
+	inline Mask32x8 MaskKLessThanCounts32x8(
+		const uint32_t k,
 		const uint32_t* counts) noexcept
 	{
-		const __m256i countV = static_cast<__m256i>(LoadUInt32x8(counts));
-		const __m256i kV = _mm256_set1_epi32(static_cast<int>(k));
-		return Mask32x8(_mm256_castsi256_ps(_mm256_cmpgt_epi32(countV, kV)));
+		return MaskKLessThanCounts32x8(k, LoadUInt32x8(counts));
 	}
 
 	// select per lane between two float SIMD vectors

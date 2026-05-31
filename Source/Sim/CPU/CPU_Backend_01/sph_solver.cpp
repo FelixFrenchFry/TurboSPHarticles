@@ -471,6 +471,8 @@ void CPU01::Density_ChunkedSELL8(
 				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
+				const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+				const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
 
 				// one SELL8 chunk, covering (up to) 8 consecutive fluid particles
 				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
@@ -486,7 +488,7 @@ void CPU01::Density_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column, storing neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
 					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
@@ -505,7 +507,7 @@ void CPU01::Density_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column, storing neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
 					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
@@ -722,6 +724,8 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
+				const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+				const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
 
 				// one SELL8 chunk covers up to 8 consecutive i-particles
 				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
@@ -744,7 +748,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
 					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
@@ -781,7 +785,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 				// contributions from boundary neighbors
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
 					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
@@ -1101,6 +1105,8 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
+				const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+				const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
 				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
 
 				// one SELL8 chunk covers up to 8 consecutive i-particles
@@ -1124,7 +1130,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
 					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
@@ -1155,7 +1161,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
 					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
@@ -1198,7 +1204,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
 					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
@@ -1232,7 +1238,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
 					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
@@ -1423,6 +1429,8 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
+				const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+				const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
 				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
 
 				// one SELL8 chunk covers up to 8 consecutive i-particles
@@ -1440,7 +1448,7 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
 					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
@@ -1472,7 +1480,7 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
 					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
@@ -1754,6 +1762,8 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
+				const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+				const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
 				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
 
 				// one SELL8 chunk covers up to 8 consecutive i-particles
@@ -1771,7 +1781,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
 					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
@@ -1801,7 +1811,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
 					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
