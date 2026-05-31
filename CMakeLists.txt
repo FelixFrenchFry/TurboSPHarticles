@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(ENABLE_CUDA "Build GPU backend with CUDA" OFF)
 option(ENABLE_VIS "Build window with visual interface and particle rendering" ON)
+option(ENABLE_MPI "Build distributed headless application with MPI" OFF)
 option(ENABLE_NATIVE_OPT "Enable AVX2/FMA CPU SIMD build flags" ON)
 
 set(TSP_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA architectures")
@@ -88,6 +89,10 @@ if(ENABLE_VIS)
     find_package(implot CONFIG REQUIRED)
 endif()
 
+if(ENABLE_MPI)
+    find_package(MPI REQUIRED COMPONENTS CXX)
+endif()
+
 # --- [ sources ] ---
 # -------------------
 
@@ -106,6 +111,10 @@ endif()
 
 if(ENABLE_VIS)
     file(GLOB_RECURSE SRC_VIS CONFIGURE_DEPENDS "Source/Vis/*.cpp")
+endif()
+
+if(ENABLE_MPI)
+    file(GLOB_RECURSE SRC_SIM_DIST CONFIGURE_DEPENDS "Source/Sim/Dist/*.cpp")
 endif()
 
 # --- [ project-wide helpers ] ---
@@ -254,6 +263,22 @@ if(ENABLE_VIS)
     )
 endif()
 
+# --- [ distributed library (optional add-on) ] ---
+# -------------------------------------------------
+
+if(ENABLE_MPI)
+    add_library(TSP_D STATIC
+        ${SRC_SIM_DIST}
+    )
+    target_link_libraries(TSP_D PUBLIC
+        TSP_H # build on top of the headless base
+        MPI::MPI_CXX
+    )
+    target_compile_definitions(TSP_D PUBLIC
+        TURBOSPHARTICLES_WITH_MPI=1
+    )
+endif()
+
 # --- [ apps ] ---
 # ----------------
 
@@ -271,6 +296,14 @@ if(ENABLE_VIS)
     )
 endif()
 
+if(ENABLE_MPI)
+    add_executable(TSP_Distributed "Apps/main_distributed.cpp")
+    target_link_libraries(TSP_Distributed PRIVATE
+        TSP_D
+        CLI11::CLI11
+    )
+endif()
+
 # make sure device link works on final executables and turn IPO off when CUDA is on
 if(ENABLE_CUDA)
     set_target_properties(TSP_Headless PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
@@ -278,5 +311,9 @@ if(ENABLE_CUDA)
     if(ENABLE_VIS)
         set_target_properties(TSP_Visual  PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
         set_property(TARGET TSP_Visual  PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
+    endif()
+    if(ENABLE_MPI)
+        set_target_properties(TSP_Distributed PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+        set_property(TARGET TSP_Distributed PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
     endif()
 endif()

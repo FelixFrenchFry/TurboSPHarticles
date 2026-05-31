@@ -53,6 +53,30 @@
     },
 
     {
+      "name": "base-win-mpi",
+      "hidden": true,
+      "inherits": "base-win",
+      "cacheVariables": {
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_VIS": "OFF",
+        "ENABLE_MPI": "ON",
+        "ENABLE_NATIVE_OPT": "ON"
+      }
+    },
+
+    {
+      "name": "base-linux-mpi",
+      "hidden": true,
+      "inherits": "base-linux",
+      "cacheVariables": {
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_VIS": "OFF",
+        "ENABLE_MPI": "ON",
+        "ENABLE_NATIVE_OPT": "ON"
+      }
+    },
+
+    {
       "name": "Windows-x64-Debug",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
@@ -79,6 +103,32 @@
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_BUILD_TYPE": "release",
         "ENABLE_NATIVE_OPT": "ON"
+      }
+    },
+    {
+      "name": "Windows-x64-Debug-MPI",
+      "inherits": "base-win-mpi",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "Windows-x64-RelWithDeb-MPI",
+      "inherits": "base-win-mpi",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "VCPKG_BUILD_TYPE": "release"
+      }
+    },
+    {
+      "name": "Windows-x64-Release-MPI",
+      "inherits": "base-win-mpi",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
 
@@ -110,6 +160,32 @@
         "VCPKG_BUILD_TYPE": "release",
         "ENABLE_NATIVE_OPT": "ON"
       }
+    },
+    {
+      "name": "Linux-x64-Debug-MPI",
+      "inherits": "base-linux-mpi",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "Linux-x64-RelWithDeb-MPI",
+      "inherits": "base-linux-mpi",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "VCPKG_BUILD_TYPE": "release"
+      }
+    },
+    {
+      "name": "Linux-x64-Release-MPI",
+      "inherits": "base-linux-mpi",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_BUILD_TYPE": "release"
+      }
     }
   ],
 
@@ -126,6 +202,18 @@
       "name": "Windows-Release",
       "configurePreset": "Windows-x64-Release"
     },
+    {
+      "name": "Windows-Debug-MPI",
+      "configurePreset": "Windows-x64-Debug-MPI"
+    },
+    {
+      "name": "Windows-RelWithDeb-MPI",
+      "configurePreset": "Windows-x64-RelWithDeb-MPI"
+    },
+    {
+      "name": "Windows-Release-MPI",
+      "configurePreset": "Windows-x64-Release-MPI"
+    },
 
     {
       "name": "Linux-Debug",
@@ -138,6 +226,18 @@
     {
       "name": "Linux-Release",
       "configurePreset": "Linux-x64-Release"
+    },
+    {
+      "name": "Linux-Debug-MPI",
+      "configurePreset": "Linux-x64-Debug-MPI"
+    },
+    {
+      "name": "Linux-RelWithDeb-MPI",
+      "configurePreset": "Linux-x64-RelWithDeb-MPI"
+    },
+    {
+      "name": "Linux-Release-MPI",
+      "configurePreset": "Linux-x64-Release-MPI"
     }
   ]
 }
