@@ -77,7 +77,8 @@ namespace Base
 		SingleCSRVector_Explicit,		// 1
 		SingleCSRVector_AdaptCompress,	// 2 TODO: implement
 		SingleCSRVector_VByteCompress,	// 3 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
-		ChunkedSELL8_Explicit			// 4
+		ChunkedSELL8_Explicit,			// 4
+		ChunkedSELL8_AdaptCompress		// 5
 	};
 	constexpr const char* ToCString(const NeighborListMethod v) noexcept
 	{
@@ -93,6 +94,8 @@ namespace Base
 			return "SingleCSRVector_VByteCompress";
 		case NeighborListMethod::ChunkedSELL8_Explicit:
 			return "ChunkedSELL8_Explicit";
+		case NeighborListMethod::ChunkedSELL8_AdaptCompress:
+			return "ChunkedSELL8_AdaptCompress";
 		}
 		return "NeighborListStorage::<unknown>";
 	}

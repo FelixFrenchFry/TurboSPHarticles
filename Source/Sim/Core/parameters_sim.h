@@ -29,7 +29,7 @@ namespace Sim
 		Base::NeighborSearchMethod neighborSearchMethod =
 			Base::NeighborSearchMethod::CellLinkedList_Compact;
 		Base::NeighborListMethod neighborListMethod =
-			Base::NeighborListMethod::SingleCSRVector_Explicit;
+			Base::NeighborListMethod::ChunkedSELL8_Explicit;
 
 		// simulation state
 		bool simRunning			= false;

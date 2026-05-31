@@ -34,6 +34,13 @@ namespace CPU
 		return xsimd::broadcast<float, SimdArch>(v);
 	}
 
+	// broadcast one scalar uint32 to all 8 SIMD lanes
+	inline UInt32x8 SetUInt32x8(
+		const uint32_t v) noexcept
+	{
+		return xsimd::broadcast<uint32_t, SimdArch>(v);
+	}
+
 	// create a float SIMD vector with all lanes set to zero
 	inline Float32x8 ZeroFloat32x8() noexcept
 	{
@@ -52,6 +59,22 @@ namespace CPU
 		const uint32_t* p) noexcept
 	{
 		return xsimd::load_unaligned<SimdArch>(p);
+	}
+
+	// load 8 contiguous uint8 values and widen them to uint32 lanes
+	inline UInt32x8 LoadUInt8AsUInt32x8(
+		const uint8_t* p) noexcept
+	{
+		const __m128i lo = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(p));
+		return UInt32x8(_mm256_cvtepu8_epi32(lo));
+	}
+
+	// load 8 contiguous uint16 values and widen them to uint32 lanes
+	inline UInt32x8 LoadUInt16AsUInt32x8(
+		const uint16_t* p) noexcept
+	{
+		const __m128i lo = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+		return UInt32x8(_mm256_cvtepu16_epi32(lo));
 	}
 
 	// build 8 particle indices for one SIMD chunk, padding the last partial chunk safely

@@ -57,39 +57,19 @@ SimBackend_CPU01::SimBackend_CPU01(
 
 	// select neighbor list method
 	if (params.neighborListMethod ==
-		Base::NeighborListMethod::IndividualVectors_Explicit)
-	{
-		neighborList_ = std::make_unique<NeighborLists_IndividualVectors_Explicit_CPU01>();
-	}
-	else if (params.neighborListMethod ==
-		Base::NeighborListMethod::SingleCSRVector_Explicit)
-	{
-		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_Explicit_CPU01>();
-	}
-	else if (params.neighborListMethod ==
-		Base::NeighborListMethod::SingleCSRVector_AdaptCompress)
-	{
-		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_AdaptCompress_CPU01>();
-	}
-	else if (params.neighborListMethod ==
-		Base::NeighborListMethod::SingleCSRVector_VByteCompress)
-	{
-		neighborList_ = std::make_unique<NeighborLists_SingleCSRVector_VByteCompress_CPU01>();
-	}
-	else if (params.neighborListMethod ==
 		Base::NeighborListMethod::ChunkedSELL8_Explicit)
 	{
 		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_Explicit_CPU01>();
 	}
+	else if (params.neighborListMethod ==
+		Base::NeighborListMethod::ChunkedSELL8_AdaptCompress)
+	{
+		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_AdaptCompress_CPU01>();
+	}
 	else
 	{
-		throw std::runtime_error("Unsupported 'NeighborListMethod' requested.");
-	}
-
-	if (params.neighborListMethod != Base::NeighborListMethod::ChunkedSELL8_Explicit)
-	{
 		throw std::runtime_error(
-			"CPU01 supports only neighborListStorage=4 (ChunkedSELL8_Explicit).");
+			"CPU01 supports only SELL8 neighbor-list storage.");
 	}
 }
 

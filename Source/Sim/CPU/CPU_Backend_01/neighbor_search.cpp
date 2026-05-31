@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
@@ -753,6 +754,11 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 
 		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
 		const CPU::Float32x8 kernelRadiusSquV = CPU::SetFloat32x8(kernelRadiusSqu);
+		auto* chunkedSELL8NeighborList =
+			dynamic_cast<I_NeighborListSELL8*>(be_.neighborList_.get());
+		const bool trackChunkNeighborIdxRange =
+			chunkedSELL8NeighborList != nullptr &&
+			chunkedSELL8NeighborList->NeedsChunkNeighborIdxRange();
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, numChunks),
@@ -773,6 +779,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
 					uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
+					uint32_t minRefFF = std::numeric_limits<uint32_t>::max();
+					uint32_t minRefFB = std::numeric_limits<uint32_t>::max();
+					uint32_t maxRefFF = 0;
+					uint32_t maxRefFB = 0;
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges);
 
@@ -791,6 +801,12 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 								xsimd::fma(dy, dy, dz * dz));
 							const uint32_t mask =
 								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
+
+							if (trackChunkNeighborIdxRange && mask != 0u)
+							{
+								minRefFF = std::min(minRefFF, l);
+								maxRefFF = std::max(maxRefFF, l);
+							}
 
 							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
@@ -815,6 +831,12 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 							const uint32_t mask =
 								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
 
+							if (trackChunkNeighborIdxRange && mask != 0u)
+							{
+								minRefFB = std::min(minRefFB, l);
+								maxRefFB = std::max(maxRefFB, l);
+							}
+
 							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
 								if ((mask & (1u << lane)) != 0u) { cntFB[lane]++; }
@@ -828,6 +850,14 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						const uint32_t i = begin + lane;
 						be_.neighborList_->SetNbrCountFF(i, cntFF[lane]);
 						be_.neighborList_->SetNbrCountFB(i, cntFB[lane]);
+					}
+
+					if (trackChunkNeighborIdxRange)
+					{
+						chunkedSELL8NeighborList->SetChunkNeighborIdxRangeFF(
+							chunk, minRefFF, maxRefFF);
+						chunkedSELL8NeighborList->SetChunkNeighborIdxRangeFB(
+							chunk, minRefFB, maxRefFB);
 					}
 				}
 			},
@@ -844,11 +874,12 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 		const uint32_t N_F = be_.N_F_;
 		if (N_F == 0) { return; }
 
-		auto* chunkedSELL8NeighborList = dynamic_cast<NeighborLists_ChunkedSELL8_Explicit_CPU01*>(be_.neighborList_.get());
+		auto* chunkedSELL8NeighborList =
+			dynamic_cast<I_NeighborListSELL8*>(be_.neighborList_.get());
 		if (chunkedSELL8NeighborList == nullptr) [[unlikely]]
 		{
 			throw std::runtime_error(
-				"CPU01 compact CLL fill requires ChunkedSELL8_Explicit neighbor storage.");
+				"CPU01 compact CLL fill requires SELL8 neighbor storage.");
 		}
 
 		// local references for fewer pointer indirections
@@ -913,8 +944,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 										"CPU01 ChunkedSELL8 FF direct fill exceeded chunk pitch.");
 								}
 
-								chunkFF.data[static_cast<uint64_t>(writtenFF[lane]) *
-									CPU::N_SIMD_WIDTH + lane] = l;
+								chunkFF.StoreNeighbor(lane, writtenFF[lane], l);
 								writtenFF[lane]++;
 							}
 						}
@@ -945,8 +975,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 										"CPU01 ChunkedSELL8 FB direct fill exceeded chunk pitch.");
 								}
 
-								chunkFB.data[static_cast<uint64_t>(writtenFB[lane]) *
-									CPU::N_SIMD_WIDTH + lane] = l;
+								chunkFB.StoreNeighbor(lane, writtenFB[lane], l);
 								writtenFB[lane]++;
 							}
 						}

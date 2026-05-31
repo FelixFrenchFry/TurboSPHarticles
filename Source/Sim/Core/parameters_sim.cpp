@@ -153,6 +153,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 					{ out = Base::NeighborListMethod::SingleCSRVector_VByteCompress; return true; }
 				if (s == "ChunkedSELL8_Explicit")
 					{ out = Base::NeighborListMethod::ChunkedSELL8_Explicit; return true; }
+				if (s == "ChunkedSELL8_AdaptCompress")
+					{ out = Base::NeighborListMethod::ChunkedSELL8_AdaptCompress; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())

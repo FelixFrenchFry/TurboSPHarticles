@@ -1,12 +1,14 @@
 // main_headless.cpp
 
 // external
+#include <algorithm>
 #include <CLI/CLI.hpp>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <spdlog/spdlog.h>
+#include <string>
 #include <tbb/global_control.h>
 #include <vector>
 

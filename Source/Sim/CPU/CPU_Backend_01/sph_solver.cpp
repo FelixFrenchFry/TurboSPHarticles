@@ -75,12 +75,12 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
 	auto* chunkedSELL8NeighborList =
-		dynamic_cast<NeighborLists_ChunkedSELL8_Explicit_CPU01*>(neighborList_.get());
+		dynamic_cast<I_NeighborListSELL8*>(neighborList_.get());
 	if (chunkedSELL8NeighborList == nullptr)
 	{
-		throw std::runtime_error("CPU01 internal error: missing ChunkedSELL8_Explicit neighbor storage.");
+		throw std::runtime_error("CPU01 internal error: missing chunked SELL8 neighbor storage.");
 	}
-	NeighborLists_ChunkedSELL8_Explicit_CPU01& neighborList = *chunkedSELL8NeighborList;
+	I_NeighborListSELL8& neighborList = *chunkedSELL8NeighborList;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
 	const bool runSecondFillQuery = neighborList.RunSecondFillQuery();
@@ -469,7 +469,7 @@ void CPU01::Density_ChunkedSELL8(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const NeighborLists_ChunkedSELL8_Explicit_CPU01& neighborList,
+	const I_NeighborListSELL8& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float massF, const float massB,
 	const uint32_t N_F,
@@ -507,10 +507,8 @@ void CPU01::Density_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column, storing neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFF.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
@@ -528,10 +526,8 @@ void CPU01::Density_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column, storing neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFB.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
@@ -709,7 +705,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 	const float* RESTRICT yVelF,
 	const float* RESTRICT zVelF,
 	const float* RESTRICT densityF,
-	const NeighborLists_ChunkedSELL8_Explicit_CPU01& neighborList,
+	const I_NeighborListSELL8& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityF,
@@ -769,10 +765,8 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFF.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
@@ -808,10 +802,8 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 				// contributions from boundary neighbors
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFB.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
@@ -1093,7 +1085,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
 	const float* RESTRICT densityF,
-	const NeighborLists_ChunkedSELL8_Explicit_CPU01& neighborList,
+	const I_NeighborListSELL8& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float restDensitySquInvF,
@@ -1153,10 +1145,8 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFF.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
@@ -1186,10 +1176,8 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFB.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
@@ -1231,10 +1219,8 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFF.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
@@ -1267,10 +1253,8 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFB.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
@@ -1430,7 +1414,7 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
 	const float* RESTRICT pressureF,
-	const NeighborLists_ChunkedSELL8_Explicit_CPU01& neighborList,
+	const I_NeighborListSELL8& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityF,
 	const float massF, const float massB, const float pressGamma,
@@ -1477,10 +1461,8 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFF.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
@@ -1511,10 +1493,8 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFB.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
@@ -1741,7 +1721,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 	const float* RESTRICT zAccPressF,
 	const float* RESTRICT sourceTermF,
 	const float* RESTRICT diagElemF,
-	const NeighborLists_ChunkedSELL8_Explicit_CPU01& neighborList,
+	const I_NeighborListSELL8& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float massF, const float massB,
@@ -1812,10 +1792,8 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFF.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFF.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFF.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
@@ -1844,10 +1822,8 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 				for (uint32_t k = 0; k < nbrFB.pitch; k++)
 				{
 					// one SELL8 column stores neighbor k for all 8 lanes
-					const CPU::Mask32x8 mask =
-						CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
-					const CPU::UInt32x8 idxJ = CPU::LoadUInt32x8(
-						nbrFB.data + static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH);
+					const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, nbrFB.counts + begin);
+					const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
 
 					const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
 					const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
