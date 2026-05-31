@@ -47,12 +47,6 @@ SimBackend_CPU01::SimBackend_CPU01(
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
-
-	if (params.neighborSearchMethod != Base::NeighborSearchMethod::CellLinkedList_Compact)
-	{
-		throw std::runtime_error(
-			"CPU01 supports only neighborSearchMethod=1 (CellLinkedList_Compact).");
-	}
 	neighborSearch_->Init(params);
 
 	// select neighbor list method

@@ -12,12 +12,6 @@
 // internal
 #include "Source/Sim/Core/backend_sim.h"
 
-
-
-// TODO: make these used the params based on heuristic expected values?
-//static constexpr uint32_t N_perScratchInlineFF = 64;
-//static constexpr uint32_t N_perScratchInlineFB = 48;
-
 namespace Sim
 {
 	// forward declarations
@@ -53,12 +47,6 @@ namespace Sim
 	private: // ------------------------------------------------------------------------------------
 		
 		SimBackend_CPU01& be_;
-
-		// query scratch
-		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> scratchFF_;
-		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> scratchFB_;
 
 		float kernelRadiusSqu_ = 0.0f;
 	};
@@ -102,7 +90,7 @@ namespace Sim
 		float kernelRadiusSqu_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CellFrameRebuildMargin_ = 8; // hysteresis buffer
-		static constexpr uint32_t N_QueryCellInline = 32;
+		static constexpr uint32_t N_QueryCellInline = 96;
 
 		// local grid frame in cell coordinates
 		int cellOrigX_ = 0;

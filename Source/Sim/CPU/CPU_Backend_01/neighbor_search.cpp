@@ -162,18 +162,6 @@ namespace
 		return aabb;
 	}
 
-	inline void ExpandSceneAABB(
-		SceneAABB& aabb,
-		float pad) noexcept
-	{
-		aabb.minX -= pad;
-		aabb.minY -= pad;
-		aabb.minZ -= pad;
-		aabb.maxX += pad;
-		aabb.maxY += pad;
-		aabb.maxZ += pad;
-	}
-
 	inline CellCoordFrame ComputeCellCoordFrame_FromAABB(
 		const SceneAABB& aabb,
 		float cellSizeInv)
@@ -259,11 +247,13 @@ void NS_BruteForce_CPU01::Construct(
 void NS_BruteForce_CPU01::Query_Count(
 	const SimParams& params)
 {
-	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+	const float kernelRadiusSqu = params.kernelRadiusSqu;
 
 	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0) { return; }
+
 	const float* RESTRICT xPosF = be_.xPosF_.data();
 	const float* RESTRICT yPosF = be_.yPosF_.data();
 	const float* RESTRICT zPosF = be_.zPosF_.data();
@@ -271,54 +261,92 @@ void NS_BruteForce_CPU01::Query_Count(
 	const float* RESTRICT yPosB = be_.yPosB_.data();
 	const float* RESTRICT zPosB = be_.zPosB_.data();
 
+	const uint32_t numChunks = be_.neighborList_->ChunkNumTotal();
+	const bool trackChunkNeighborIdxRange =
+		be_.neighborList_->NeedsChunkNeighborIdxRange();
+
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
+		tbb::blocked_range<uint32_t>(0, numChunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
+			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				uint32_t cntFF = 0;
-				uint32_t cntFB = 0;
+				const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
+				uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
+				uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
+				uint32_t minRefFF = std::numeric_limits<uint32_t>::max();
+				uint32_t minRefFB = std::numeric_limits<uint32_t>::max();
+				uint32_t maxRefFF = 0;
+				uint32_t maxRefFB = 0;
 
-				const float xi = xPosF[i];
-				const float yi = yPosF[i];
-				const float zi = zPosF[i];
-
-				// check all fluid particles j
-				for (uint32_t j = 0; j < N_F; j++)
+				for (uint32_t i = begin; i < end; i++)
 				{
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
+					const uint32_t lane = i - begin;
+					const float xi = xPosF[i];
+					const float yi = yPosF[i];
+					const float zi = zPosF[i];
 
-					// squared distance between particles i and j
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					// check all fluid particles j
+					for (uint32_t j = 0; j < N_F; j++)
 					{
-						cntFF++;
+						const float dx = xi - xPosF[j];
+						const float dy = yi - yPosF[j];
+						const float dz = zi - zPosF[j];
+
+						// squared distance between particles i and j
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							cntFF[lane]++;
+
+							if (trackChunkNeighborIdxRange)
+							{
+								minRefFF = std::min(minRefFF, j);
+								maxRefFF = std::max(maxRefFF, j);
+							}
+						}
 					}
-				}
 
-				// check all boundary particles j
-				for (uint32_t j = 0; j < N_B; j++)
-				{
-					const float dx = xi - xPosB[j];
-					const float dy = yi - yPosB[j];
-					const float dz = zi - zPosB[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					// check all boundary particles j
+					for (uint32_t j = 0; j < N_B; j++)
 					{
-						cntFB++;
+						const float dx = xi - xPosB[j];
+						const float dy = yi - yPosB[j];
+						const float dz = zi - zPosB[j];
+
+						// squared distance between particles i and j
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							cntFB[lane]++;
+
+							if (trackChunkNeighborIdxRange)
+							{
+								minRefFB = std::min(minRefFB, j);
+								maxRefFB = std::max(maxRefFB, j);
+							}
+						}
 					}
 				}
 
 				// commit final neighbor counts to backend storage
-				be_.neighborList_->SetNbrCountFF(i, cntFF);
-				be_.neighborList_->SetNbrCountFB(i, cntFB);
+				for (uint32_t lane = 0; lane < end - begin; lane++)
+				{
+					const uint32_t i = begin + lane;
+					be_.neighborList_->SetNbrCountFF(i, cntFF[lane]);
+					be_.neighborList_->SetNbrCountFB(i, cntFB[lane]);
+				}
+
+				if (trackChunkNeighborIdxRange)
+				{
+					be_.neighborList_->SetChunkNeighborIdxRangeFF(
+						chunk, minRefFF, maxRefFF);
+					be_.neighborList_->SetChunkNeighborIdxRangeFB(
+						chunk, minRefFB, maxRefFB);
+				}
 			}
 		},
 		tbb::auto_partitioner{}
@@ -328,11 +356,13 @@ void NS_BruteForce_CPU01::Query_Count(
 void NS_BruteForce_CPU01::Query_Fill(
 	const SimParams& params)
 {
-	const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
+	const float kernelRadiusSqu = params.kernelRadiusSqu;
 
 	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
+	if (N_F == 0) { return; }
+
 	const float* RESTRICT xPosF = be_.xPosF_.data();
 	const float* RESTRICT yPosF = be_.yPosF_.data();
 	const float* RESTRICT zPosF = be_.zPosF_.data();
@@ -340,73 +370,85 @@ void NS_BruteForce_CPU01::Query_Fill(
 	const float* RESTRICT yPosB = be_.yPosB_.data();
 	const float* RESTRICT zPosB = be_.zPosB_.data();
 
+	const uint32_t numChunks = be_.neighborList_->ChunkNumTotal();
+
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F),
+		tbb::blocked_range<uint32_t>(0, numChunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			// per-thread neighbor vectors for local accumulation and then bulk add
-			// (reserve preparation in case of inline capacity not being enough)
-			auto& scratchFF = scratchFF_.local();
-			auto& scratchFB = scratchFB_.local();
-			if (scratchFF.capacity() < params.expctdNbrCountHardMax_FF)
+			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				scratchFF.reserve(params.expctdNbrCountHardMax_FF);
-			}
-			if (scratchFB.capacity() < params.expctdNbrCountHardMax_FB)
-			{
-				scratchFB.reserve(params.expctdNbrCountHardMax_FB);
-			}
+				const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
+				uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
+				uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
+				ChunkedSELL8NeighborSpan_Write chunkFF =
+					be_.neighborList_->FFChunkWrite(chunk);
+				ChunkedSELL8NeighborSpan_Write chunkFB =
+					be_.neighborList_->FBChunkWrite(chunk);
 
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				// reset neighbor list for particle i
-				// (delete contents, but keep capacity)
-				scratchFF.clear();
-				scratchFB.clear();
-
-				const float xi = xPosF[i];
-				const float yi = yPosF[i];
-				const float zi = zPosF[i];
-
-				// check all fluid particles j
-				for (uint32_t j = 0; j < N_F; j++)
+				for (uint32_t i = begin; i < end; i++)
 				{
-					const float dx = xi - xPosF[j];
-					const float dy = yi - yPosF[j];
-					const float dz = zi - zPosF[j];
+					const uint32_t lane = i - begin;
+					const float xi = xPosF[i];
+					const float yi = yPosF[i];
+					const float zi = zPosF[i];
 
-					// squared distance between particles i and j
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					// check all fluid particles j
+					for (uint32_t j = 0; j < N_F; j++)
 					{
-						// accumulate actual neighbors in scratch list
-						scratchFF.push_back(j);
+						const float dx = xi - xPosF[j];
+						const float dy = yi - yPosF[j];
+						const float dz = zi - zPosF[j];
+
+						// squared distance between particles i and j
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							const uint32_t k = writtenFF[lane]++;
+
+							#if defined(_DEBUG)
+							if (k >= chunkFF.pitch) [[unlikely]]
+							{
+								throw std::runtime_error(
+									"Brute-force SELL8 FF fill exceeded chunk pitch.");
+							}
+							#endif
+
+							chunkFF.StoreNeighbor(lane, k, j);
+						}
+					}
+
+					// check all boundary particles j
+					for (uint32_t j = 0; j < N_B; j++)
+					{
+						const float dx = xi - xPosB[j];
+						const float dy = yi - yPosB[j];
+						const float dz = zi - zPosB[j];
+
+						// squared distance between particles i and j
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							const uint32_t k = writtenFB[lane]++;
+
+							#if defined(_DEBUG)
+							if (k >= chunkFB.pitch) [[unlikely]]
+							{
+								throw std::runtime_error(
+									"Brute-force SELL8 FB fill exceeded chunk pitch.");
+							}
+							#endif
+
+							chunkFB.StoreNeighbor(lane, k, j);
+						}
 					}
 				}
 
-				// check all boundary particles j
-				for (uint32_t j = 0; j < N_B; j++)
-				{
-					const float dx = xi - xPosB[j];
-					const float dy = yi - yPosB[j];
-					const float dz = zi - zPosB[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						// accumulate actual neighbors in scratch list
-						scratchFB.push_back(j);
-					}
-				}
-
-				// commit final neighbor lists from scratch to backend storage
-				be_.neighborList_->SetNbrListFF(i, scratchFF.data(),
-					static_cast<uint32_t>(scratchFF.size()));
-				be_.neighborList_->SetNbrListFB(i, scratchFB.data(),
-					static_cast<uint32_t>(scratchFB.size()));
+				be_.neighborList_->FinishFFChunkWrite(chunk, writtenFF);
+				be_.neighborList_->FinishFBChunkWrite(chunk, writtenFB);
 			}
 		},
 		tbb::auto_partitioner{}
