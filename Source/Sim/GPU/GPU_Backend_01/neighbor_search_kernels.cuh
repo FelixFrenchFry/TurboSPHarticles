@@ -81,31 +81,6 @@ namespace GPU01
 		// destinations
 		uint32_t* cellStartIdx, uint32_t* cellEndIdx);
 
-	void Launch_CellLinkedList_Basic_Query_Count(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* cellStartIdxF, const uint32_t* cellEndIdxF,
-		const uint32_t* cellStartIdxB, const uint32_t* cellEndIdxB,
-		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
-		const uint32_t N_F, const uint32_t N_B,
-		cudaStream_t stream,
-		// destinations
-		uint16_t* nbrCountFF, uint16_t* nbrCountFB);
-
-	void Launch_CellLinkedList_Basic_Query_Fill(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* cellStartIdxF, const uint32_t* cellEndIdxF,
-		const uint32_t* cellStartIdxB, const uint32_t* cellEndIdxB,
-		const uint32_t* sortedParticleIdxF, const uint32_t* sortedParticleIdxB,
-		const uint32_t N_F, const uint32_t N_B,
-		cudaStream_t stream,
-		const uint64_t* nbrChunkOffsetsFF,
-		const uint64_t* nbrChunkOffsetsFB,
-		// destinations
-		uint32_t* nbrListFF, uint32_t* nbrListFB,
-		uint32_t* overflowFlag);
-
 	void Launch_MarkCellStarts(
 		const uint64_t* cellIdSorted,
 		const uint32_t N,
