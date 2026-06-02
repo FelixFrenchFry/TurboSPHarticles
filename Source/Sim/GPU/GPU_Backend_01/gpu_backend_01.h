@@ -183,32 +183,32 @@ namespace Sim
 		// neighbor list storage
 		// (compressed SELL32 for FF and FB neighbors)
 		DeviceBuffer<uint16_t> d_nbrCountFF_; // temporary counts written by count-query
-		DeviceBuffer<uint16_t> d_nbrCountFB_; // temporary counts written by count-query
-		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max FF neighbor count (pitch)
-		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_; // per-SELL32-chunk max FB neighbor count (pitch)
-		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFF_; // per-chunk FF base index used for delta storage
-		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_; // per-chunk FB base index used for delta storage
-		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk FF storage format
-		DeviceBuffer<uint8_t> d_nbrChunkFormatFB_; // per-chunk FB storage format
-		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // compressed FF chunk offsets into the selected format buffer
-		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_; // compressed FB chunk offsets into the selected format buffer
-		DeviceBuffer<uint8_t> d_nbrListDelta8FF_; // compressed FF delta8 storage
-		DeviceBuffer<uint8_t> d_nbrListDelta8FB_; // compressed FB delta8 storage
-		DeviceBuffer<uint16_t> d_nbrListDelta16FF_; // compressed FF delta16 storage
-		DeviceBuffer<uint16_t> d_nbrListDelta16FB_; // compressed FB delta16 storage
-		DeviceBuffer<uint32_t> d_nbrListAbs32FF_; // compressed FF abs32 storage
-		DeviceBuffer<uint32_t> d_nbrListAbs32FB_; // compressed FB abs32 storage
+		DeviceBuffer<uint16_t> d_nbrCountFB_;
+		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFF_; // per-SELL32-chunk max neighbor count (pitch)
+		DeviceBuffer<uint16_t> d_nbrChunkMaxCountFB_;
+		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFF_; // per-chunk base index used for delta storage
+		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_;
+		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk storage format
+		DeviceBuffer<uint8_t> d_nbrChunkFormatFB_;
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // compressed chunk offsets into the selected format buffer
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_;
+		DeviceBuffer<uint8_t> d_nbrListDelta8FF_; // contiguous delta8 neighbor storage
+		DeviceBuffer<uint8_t> d_nbrListDelta8FB_;
+		DeviceBuffer<uint16_t> d_nbrListDelta16FF_; // contiguous delta16 neighbor storage
+		DeviceBuffer<uint16_t> d_nbrListDelta16FB_;
+		DeviceBuffer<uint32_t> d_nbrListAbs32FF_; // contiguous abs32 neighbor storage
+		DeviceBuffer<uint32_t> d_nbrListAbs32FB_;
 		DeviceBuffer<uint32_t> d_nbrOverflowFlag_; // TODO: use smaller data type?
-		uint64_t N_totalFF_ = 0; // actual FF neighbor count sum over all particles
-		uint64_t N_totalFB_ = 0; // actual FB neighbor count sum over all particles
-		uint64_t N_packedFF_ = 0; // total compressed FF storage length in bytes
-		uint64_t N_packedFB_ = 0; // total compressed FB storage length in bytes
-		uint64_t N_delta8FF_ = 0; // compressed FF delta8 storage length in refs
-		uint64_t N_delta8FB_ = 0; // compressed FB delta8 storage length in refs
-		uint64_t N_delta16FF_ = 0; // compressed FF delta16 storage length in refs
-		uint64_t N_delta16FB_ = 0; // compressed FB delta16 storage length in refs
-		uint64_t N_abs32FF_ = 0; // compressed FF abs32 storage length in refs
-		uint64_t N_abs32FB_ = 0; // compressed FB abs32 storage length in refs
+		uint64_t N_totalFF_ = 0; // actual neighbor count sum over all particles
+		uint64_t N_totalFB_ = 0;
+		uint64_t N_packedFF_ = 0; // total compressed storage length in bytes
+		uint64_t N_packedFB_ = 0;
+		uint64_t N_delta8FF_ = 0; // compressed delta8 storage length in refs
+		uint64_t N_delta8FB_ = 0;
+		uint64_t N_delta16FF_ = 0; // compressed delta16 storage length in refs
+		uint64_t N_delta16FB_ = 0;
+		uint64_t N_abs32FF_ = 0; // compressed abs32 storage length in refs
+		uint64_t N_abs32FB_ = 0;
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
 

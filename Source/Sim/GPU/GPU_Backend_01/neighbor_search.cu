@@ -2,6 +2,8 @@
 
 // external
 #include <cmath>
+#include <stdexcept>
+#include <string>
 #include <thrust/copy.h>
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
@@ -162,6 +164,37 @@ namespace
 		if (arena.Size() == 0) { return nullptr; }
 		return reinterpret_cast<const T*>(arena.Data() + offsetBytes);
 	}
+
+	#if defined(_DEBUG)
+	inline void CheckNbrListErrorFlag(
+		const DeviceBuffer<uint32_t>& d_errorFlag,
+		cudaStream_t stream,
+		const char* context)
+	{
+		uint32_t errorFlag = 0u;
+		GPU::Copy_DeviceToHost(&errorFlag, d_errorFlag.Data(), 1, stream);
+		GPU::StreamSync(stream);
+
+		if (errorFlag == 0u) { return; }
+
+		std::string msg = std::string(context)
+			+ " failed while building compressed SELL32 neighbor lists";
+		if (errorFlag & GPU01::NbrListError_FillOverflow)
+		{
+			msg += "; fill count exceeded chunk pitch";
+		}
+		if (errorFlag & GPU01::NbrListError_InvalidChunkFormat)
+		{
+			msg += "; invalid compressed SELL32 chunk format";
+		}
+		if (errorFlag & GPU01::NbrListError_DeltaRangeOverflow)
+		{
+			msg += "; neighbor index does not fit selected delta format";
+		}
+
+		throw std::runtime_error(msg + ".");
+	}
+	#endif
 
 	__global__ void K_BuildSellChunkMaxCount(
 		const uint16_t* __restrict__ nbrCount,
@@ -576,7 +609,6 @@ void NS_BruteForce_GPU01::Query_Count(
 void NS_BruteForce_GPU01::Query_Fill(
 	const SimParams& params)
 {
-	// (count-query and fill-query MUST find the same number of neighbors)
 	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
 
@@ -596,7 +628,12 @@ void NS_BruteForce_GPU01::Query_Fill(
 		be_.d_nbrListAbs32FB_.Data(),
 		be_.d_nbrOverflowFlag_.Data());
 
+	#if defined(_DEBUG)
+	CheckNbrListErrorFlag(be_.d_nbrOverflowFlag_, be_.stream_,
+		"GPU brute force SELL32 fill-query");
+	#else
 	GPU::StreamSync(be_.stream_);
+	#endif
 }
 
 void NS_BruteForce_GPU01::DataReOrder(
@@ -845,7 +882,6 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 	const uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryHiAnyByCellF);
 
-	// (count-query and fill-query MUST find the same number of neighbors)
 	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
 
@@ -872,7 +908,12 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 
 	// TODO: implement smart version of this, iterating over cells instead of particles
 
+	#if defined(_DEBUG)
+	CheckNbrListErrorFlag(be_.d_nbrOverflowFlag_, be_.stream_,
+		"GPU compact CLL SELL32 fill-query");
+	#else
 	GPU::StreamSync(be_.stream_);
+	#endif
 }
 
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)

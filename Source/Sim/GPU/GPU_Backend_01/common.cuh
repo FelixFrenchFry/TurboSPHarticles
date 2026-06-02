@@ -19,6 +19,11 @@ namespace GPU01
 		Abs32 = 2u
 	};
 
+	// bit-mask written by chunked SELL32 neighbor-list safety checks
+	static constexpr uint32_t NbrListError_FillOverflow = 1u << 0u;
+	static constexpr uint32_t NbrListError_InvalidChunkFormat = 1u << 1u;
+	static constexpr uint32_t NbrListError_DeltaRangeOverflow = 1u << 2u;
+
 	// host+device struct for AABB accumulation
 	struct MinMax3HD
 	{

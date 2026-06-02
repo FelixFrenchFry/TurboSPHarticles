@@ -117,16 +117,40 @@ namespace GPU01
 
 			if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta8))
 			{
+				#if defined(_DEBUG)
+				if (j < chunkBaseIdx || j - chunkBaseIdx > 0xffu)
+				{
+					atomicOr(overflowFlag, NbrListError_DeltaRangeOverflow);
+					return;
+				}
+				#endif
+
 				nbrListDelta8[chunkBase + linearIdx] =
 					static_cast<uint8_t>(j - chunkBaseIdx);
 			}
 			else if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16))
 			{
+				#if defined(_DEBUG)
+				if (j < chunkBaseIdx || j - chunkBaseIdx > 0xffffu)
+				{
+					atomicOr(overflowFlag, NbrListError_DeltaRangeOverflow);
+					return;
+				}
+				#endif
+
 				nbrListDelta16[chunkBase + linearIdx] =
 					static_cast<uint16_t>(j - chunkBaseIdx);
 			}
 			else
 			{
+				#if defined(_DEBUG)
+				if (chunkFormat != static_cast<uint8_t>(NbrChunkFormat::Abs32))
+				{
+					atomicOr(overflowFlag, NbrListError_InvalidChunkFormat);
+					return;
+				}
+				#endif
+
 				nbrListAbs32[chunkBase + linearIdx] = j;
 			}
 
@@ -134,7 +158,7 @@ namespace GPU01
 		}
 		else
 		{
-			atomicExch(overflowFlag, 1u);
+			atomicOr(overflowFlag, NbrListError_FillOverflow);
 		}
 	}
 
@@ -312,6 +336,7 @@ namespace GPU01
 					overflowFlag);
 			}
 		}
+
 	}
 
 	__global__
@@ -1085,6 +1110,7 @@ namespace GPU01
 				}
 			}
 		}
+
 	}
 
 } // namespace GPU01
