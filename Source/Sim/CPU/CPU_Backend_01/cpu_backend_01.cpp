@@ -363,6 +363,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 	const SimParams& params) const
 {
 	using namespace Mem;
+	constexpr MemSpace memSpace = MemSpace::RAM;
 
 	// --- [ particle properties ] -------------------------------------------------------------------
 
@@ -392,7 +393,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(densityF_));
 
 		// finalize
-		Set(record, MemBucket::ParticlePropertiesF, usage);
+		Set(record, memSpace, MemBucket::ParticlePropertiesF, usage);
 	}
 
 	// boundary
@@ -404,7 +405,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(zPosB_));
 
 		// finalize
-		Set(record, MemBucket::ParticlePropertiesB, usage);
+		Set(record, memSpace, MemBucket::ParticlePropertiesB, usage);
 	}
 
 	// --- [ neighbor search data structures ] -------------------------------------------------------
@@ -418,8 +419,8 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usageB, usageFB.second);
 
 		// finalize
-		Set(record, MemBucket::Neighbors_SearchDataStructF, usageF);
-		Set(record, MemBucket::Neighbors_SearchDataStructB, usageB);
+		Set(record, memSpace, MemBucket::Neighbors_SearchDataStructF, usageF);
+		Set(record, memSpace, MemBucket::Neighbors_SearchDataStructB, usageB);
 	}
 
 	// --- [ neighbor list storage ] -----------------------------------------------------------------
@@ -433,8 +434,8 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usageB, usageFB.second);
 
 		// finalize
-		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
-		Set(record, MemBucket::Neighbors_ListStorageB, usageB);
+		Set(record, memSpace, MemBucket::Neighbors_ListStorageF, usageF);
+		Set(record, memSpace, MemBucket::Neighbors_ListStorageB, usageB);
 	}
 
 	// --- [ misc ] ----------------------------------------------------------------------------------
@@ -447,7 +448,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
 
 		// finalize
-		Set(record, MemBucket::Misc, usage);
+		Set(record, memSpace, MemBucket::Misc, usage);
 	}
 }
 

@@ -162,31 +162,36 @@ namespace Export
 	{
 		if (!active_ || !memoryMetricsCsv_.is_open()) { return; }
 
-		uint64_t totalUsed = 0;
-		uint64_t totalAlloc = 0;
-		uint64_t totalOccupied = 0;
-
 		memoryMetricsCsv_ << record.simStep << ','
 						  << std::setprecision(17) << record.simTime;
 
-		for (uint8_t i = 0; i < Mem::GetIdx(Mem::MemBucket::Count); i++)
+		for (uint8_t s = 0; s < Mem::GetIdx(Mem::MemSpace::Count); s++)
 		{
-			const Mem::MemUsage& usage = record.mem[i];
+			uint64_t totalUsed = 0;
+			uint64_t totalAlloc = 0;
+			uint64_t totalOccupied = 0;
 
-			totalUsed += usage.usedBytes;
-			totalAlloc += usage.allocBytes;
-			totalOccupied += usage.occupiedBytes;
+			for (uint8_t i = 0; i < Mem::GetIdx(Mem::MemBucket::Count); i++)
+			{
+				const Mem::MemUsage& usage = record.mem[s][i];
+
+				totalUsed += usage.usedBytes;
+				totalAlloc += usage.allocBytes;
+				totalOccupied += usage.occupiedBytes;
+
+				memoryMetricsCsv_ << ','
+								  << usage.usedBytes << ','
+								  << usage.allocBytes << ','
+								  << usage.occupiedBytes;
+			}
 
 			memoryMetricsCsv_ << ','
-							  << usage.usedBytes << ','
-							  << usage.allocBytes << ','
-							  << usage.occupiedBytes;
+							  << totalUsed << ','
+							  << totalAlloc << ','
+							  << totalOccupied;
 		}
 
-		memoryMetricsCsv_ << ','
-						  << totalUsed << ','
-						  << totalAlloc << ','
-						  << totalOccupied << '\n';
+		memoryMetricsCsv_ << '\n';
 		memoryMetricsCsv_.flush();
 
 		if (!memoryMetricsCsv_.good())
@@ -372,25 +377,31 @@ namespace Export
 
 		memoryMetricsCsv_ << "simStep,simTime";
 
-		for (const auto& def : Mem::Definitions)
+		for (const auto& spaceDef : Mem::SpaceDefinitions)
 		{
-			const std::string key = SanitizeCsvKey(def.name);
+			const std::string spaceKey = SanitizeCsvKey(spaceDef.key);
+
+			for (const auto& def : Mem::Definitions)
+			{
+				const std::string key = spaceKey + "_" + SanitizeCsvKey(def.name);
+
+				memoryMetricsCsv_ << ','
+								  << key << "_usedBytes"
+								  << ','
+								  << key << "_allocBytes"
+								  << ','
+								  << key << "_occupiedBytes";
+			}
 
 			memoryMetricsCsv_ << ','
-							  << key << "_usedBytes"
+							  << spaceKey << "_total_usedBytes"
 							  << ','
-							  << key << "_allocBytes"
+							  << spaceKey << "_total_allocBytes"
 							  << ','
-							  << key << "_occupiedBytes";
+							  << spaceKey << "_total_occupiedBytes";
 		}
 
-		memoryMetricsCsv_ << ','
-						  << "total_usedBytes"
-						  << ','
-						  << "total_allocBytes"
-						  << ','
-						  << "total_occupiedBytes"
-						  << '\n';
+		memoryMetricsCsv_ << '\n';
 	}
 
 	void LoggingMgr::WriteBenchmarkMetricsHeader()

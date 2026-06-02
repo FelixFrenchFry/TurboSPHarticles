@@ -125,9 +125,9 @@ namespace Sync
 		uint32_t simStep;
 		double simTime;
 
-		// per-bucket memory usage
-		std::array<Mem::MemUsage, Mem::GetIdx(Mem::MemBucket::Count)> latest{};
-		std::array<Mem::MemUsage, Mem::GetIdx(Mem::MemBucket::Count)> max{};
+		// per-space / per-bucket memory usage
+		Mem::MemSpaceRecord latest{};
+		Mem::MemSpaceRecord max{};
 	};
 
 	struct StatSnapshot

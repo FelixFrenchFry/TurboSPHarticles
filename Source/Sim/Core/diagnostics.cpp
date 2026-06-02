@@ -457,14 +457,6 @@ namespace Sim
 
         constexpr uint8_t BUCKET_COUNT = Mem::GetIdx(Mem::MemBucket::Count);
 
-        uint64_t totalMaxUsedBytes = 0;
-        uint64_t totalMaxAllocBytes = 0;
-        for (uint8_t i = 0; i < BUCKET_COUNT; i++)
-        {
-            totalMaxUsedBytes += snap.max[i].usedBytes;
-            totalMaxAllocBytes += snap.max[i].allocBytes;
-        }
-
         const char* unitStr = Mem::UnitLabel(unit);
 
         char usedLabel[32];
@@ -472,113 +464,127 @@ namespace Sim
         std::snprintf(usedLabel, sizeof(usedLabel), "used [%s]", unitStr);
         std::snprintf(allocLabel, sizeof(allocLabel), "alloc [%s]", unitStr);
 
-        std::printf("\n");
-        std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
-            "memory usage", usedLabel, "% fluid", allocLabel, "% fluid");
-		PrintCliSeparator();
-
-		auto GetMemBytes = [&](const Mem::MemBucket bucket, const bool alloc)
+		auto PrintSpaceTable = [&](const Mem::MemSpace space,
+								   const char* title,
+								   const char* totalLabel)
 			{
-				const auto& mem = snap.max[Mem::GetIdx(bucket)];
-				return alloc ? mem.allocBytes : mem.usedBytes;
+				const uint8_t spaceIdx = Mem::GetIdx(space);
+
+				uint64_t totalMaxUsedBytes = 0;
+				uint64_t totalMaxAllocBytes = 0;
+				for (uint8_t i = 0; i < BUCKET_COUNT; i++)
+				{
+					totalMaxUsedBytes += snap.max[spaceIdx][i].usedBytes;
+					totalMaxAllocBytes += snap.max[spaceIdx][i].allocBytes;
+				}
+
+				std::printf("\n");
+				std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
+					title, usedLabel, "% fluid", allocLabel, "% fluid");
+				PrintCliSeparator();
+
+				auto GetMemBytes = [&](const Mem::MemBucket bucket, const bool alloc)
+					{
+						const auto& mem = snap.max[spaceIdx][Mem::GetIdx(bucket)];
+						return alloc ? mem.allocBytes : mem.usedBytes;
+					};
+
+				auto PrintMemRow = [&](const char* name,
+									   const uint64_t maxUsedBytes,
+									   const char* pctUsedLabel,
+									   const uint64_t maxAllocBytes,
+									   const char* pctAllocLabel)
+					{
+						const double vMaxUsed = Mem::ConvertFromBytes(unit, maxUsedBytes);
+						const double vMaxAlloc = Mem::ConvertFromBytes(unit, maxAllocBytes);
+
+						std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
+							name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
+					};
+
+				auto PrintMemPair = [&](const char* name,
+										const Mem::MemBucket bucketF,
+										const Mem::MemBucket bucketB)
+					{
+						const uint64_t maxUsedBytesF = GetMemBytes(bucketF, false);
+						const uint64_t maxUsedBytesB = GetMemBytes(bucketB, false);
+						const uint64_t maxAllocBytesF = GetMemBytes(bucketF, true);
+						const uint64_t maxAllocBytesB = GetMemBytes(bucketB, true);
+
+						const uint64_t maxUsedBytes =
+							maxUsedBytesF + maxUsedBytesB;
+						const uint64_t maxAllocBytes =
+							maxAllocBytesF + maxAllocBytesB;
+
+						char pctUsedLabel[16];
+						char pctAllocLabel[16];
+						if (maxUsedBytes > 0ull)
+						{
+							const double pctUsed = 100.0 * static_cast<double>(maxUsedBytesF)
+								/ static_cast<double>(maxUsedBytes);
+							std::snprintf(pctUsedLabel, sizeof(pctUsedLabel),
+								"%.1f %%", pctUsed);
+						}
+						else
+						{
+							std::snprintf(pctUsedLabel, sizeof(pctUsedLabel), "---");
+						}
+						if (maxAllocBytes > 0ull)
+						{
+							const double pctAlloc = 100.0 * static_cast<double>(maxAllocBytesF)
+								/ static_cast<double>(maxAllocBytes);
+							std::snprintf(pctAllocLabel, sizeof(pctAllocLabel),
+								"%.1f %%", pctAlloc);
+						}
+						else
+						{
+							std::snprintf(pctAllocLabel, sizeof(pctAllocLabel), "---");
+						}
+
+						PrintMemRow(name, maxUsedBytes, pctUsedLabel,
+							maxAllocBytes, pctAllocLabel);
+					};
+
+				// combine fluid and boundary buckets for concise CLI output
+				PrintMemPair("particle properties",
+					Mem::MemBucket::ParticlePropertiesF,
+					Mem::MemBucket::ParticlePropertiesB);
+				PrintMemPair("neighbor search data struct",
+					Mem::MemBucket::Neighbors_SearchDataStructF,
+					Mem::MemBucket::Neighbors_SearchDataStructB);
+				PrintMemPair("neighbor list storage",
+					Mem::MemBucket::Neighbors_ListStorageF,
+					Mem::MemBucket::Neighbors_ListStorageB);
+				PrintMemRow("misc",
+					GetMemBytes(Mem::MemBucket::Misc, false),
+					"---",
+					GetMemBytes(Mem::MemBucket::Misc, true),
+					"---");
+
+				PrintCliSeparator();
+
+				const double tMaxUsed = Mem::ConvertFromBytes(unit, totalMaxUsedBytes);
+				const double tMaxAlloc = Mem::ConvertFromBytes(unit, totalMaxAllocBytes);
+
+				char totalUsedValueLabel[32];
+				char totalAllocValueLabel[32];
+				std::snprintf(totalUsedValueLabel, sizeof(totalUsedValueLabel), "> %.2f", tMaxUsed);
+				std::snprintf(totalAllocValueLabel, sizeof(totalAllocValueLabel), "> %.2f", tMaxAlloc);
+				std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
+					totalLabel, totalUsedValueLabel, "---", totalAllocValueLabel, "---");
 			};
 
-		auto PrintMemRow = [&](const char* name,
-							   const uint64_t maxUsedBytes,
-							   const char* pctUsedLabel,
-							   const uint64_t maxAllocBytes,
-							   const char* pctAllocLabel)
-			{
-				const double vMaxUsed = Mem::ConvertFromBytes(unit, maxUsedBytes);
-				const double vMaxAlloc = Mem::ConvertFromBytes(unit, maxAllocBytes);
-
-				std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
-					name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
-			};
-
-		auto PrintMemPair = [&](const char* name,
-								const Mem::MemBucket bucketF,
-								const Mem::MemBucket bucketB)
-			{
-				const uint64_t maxUsedBytesF = GetMemBytes(bucketF, false);
-				const uint64_t maxUsedBytesB = GetMemBytes(bucketB, false);
-				const uint64_t maxAllocBytesF = GetMemBytes(bucketF, true);
-				const uint64_t maxAllocBytesB = GetMemBytes(bucketB, true);
-
-				const uint64_t maxUsedBytes =
-					maxUsedBytesF + maxUsedBytesB;
-				const uint64_t maxAllocBytes =
-					maxAllocBytesF + maxAllocBytesB;
-
-				char pctUsedLabel[16];
-				char pctAllocLabel[16];
-				if (maxUsedBytes > 0ull)
-				{
-					const double pctUsed = 100.0 * static_cast<double>(maxUsedBytesF)
-						/ static_cast<double>(maxUsedBytes);
-					std::snprintf(pctUsedLabel, sizeof(pctUsedLabel),
-						"%.1f %%", pctUsed);
-				}
-				else
-				{
-					std::snprintf(pctUsedLabel, sizeof(pctUsedLabel), "---");
-				}
-				if (maxAllocBytes > 0ull)
-				{
-					const double pctAlloc = 100.0 * static_cast<double>(maxAllocBytesF)
-						/ static_cast<double>(maxAllocBytes);
-					std::snprintf(pctAllocLabel, sizeof(pctAllocLabel),
-						"%.1f %%", pctAlloc);
-				}
-				else
-				{
-					std::snprintf(pctAllocLabel, sizeof(pctAllocLabel), "---");
-				}
-
-				PrintMemRow(name, maxUsedBytes, pctUsedLabel,
-					maxAllocBytes, pctAllocLabel);
-			};
-
-		// combine fluid and boundary buckets for concise CLI output
-		PrintMemPair("particle properties",
-			Mem::MemBucket::ParticlePropertiesF,
-			Mem::MemBucket::ParticlePropertiesB);
-		PrintMemPair("neighbor search data struct",
-			Mem::MemBucket::Neighbors_SearchDataStructF,
-			Mem::MemBucket::Neighbors_SearchDataStructB);
-		PrintMemPair("neighbor list storage",
-			Mem::MemBucket::Neighbors_ListStorageF,
-			Mem::MemBucket::Neighbors_ListStorageB);
-		PrintMemRow("misc",
-			GetMemBytes(Mem::MemBucket::Misc, false),
-			"---",
-			GetMemBytes(Mem::MemBucket::Misc, true),
-			"---");
-
-		PrintCliSeparator();
-
-        const double tMaxUsed = Mem::ConvertFromBytes(unit, totalMaxUsedBytes);
-        const double tMaxAlloc = Mem::ConvertFromBytes(unit, totalMaxAllocBytes);
-
-		const char* totalLabel = "total";
 		switch (backendVersion)
 		{
-		case Base::BackendVersion::CPU01:
-			totalLabel = "total (RAM)";
-			break;
 		case Base::BackendVersion::GPU01:
-			totalLabel = "total (VRAM)";
+			PrintSpaceTable(Mem::MemSpace::VRAM, "memory usage (VRAM)", "total (VRAM)");
 			break;
+		case Base::BackendVersion::CPU01:
+			[[fallthrough]];
 		default:
+			PrintSpaceTable(Mem::MemSpace::RAM, "memory usage (RAM)", "total (RAM)");
 			break;
 		}
-
-        char totalUsedValueLabel[32];
-        char totalAllocValueLabel[32];
-        std::snprintf(totalUsedValueLabel, sizeof(totalUsedValueLabel), "> %.2f", tMaxUsed);
-        std::snprintf(totalAllocValueLabel, sizeof(totalAllocValueLabel), "> %.2f", tMaxAlloc);
-        std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
-            totalLabel, totalUsedValueLabel, "---", totalAllocValueLabel, "---");
 
         std::fflush(stdout);
     }

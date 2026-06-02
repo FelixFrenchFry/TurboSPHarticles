@@ -529,8 +529,60 @@ void SimBackend_GPU01::FillMemoryRecord(
 	const SimParams& params) const
 {
 	using namespace Mem;
+	constexpr MemSpace memSpaceRAM = MemSpace::RAM;
+	constexpr MemSpace memSpaceVRAM = MemSpace::VRAM;
 
-	// --- [ particle properties ] -------------------------------------------------------------------
+	// --- [ RAM: particle properties ] --------------------------------------------------------------
+
+	// fluid
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(h_expXPosF_));
+		Add(usage, MemUsageOf_Vector(h_expYPosF_));
+		Add(usage, MemUsageOf_Vector(h_expZPosF_));
+
+		Add(usage, MemUsageOf_Vector(h_expXVelF_));
+		Add(usage, MemUsageOf_Vector(h_expYVelF_));
+		Add(usage, MemUsageOf_Vector(h_expZVelF_));
+
+		// finalize
+		Set(record, memSpaceRAM, MemBucket::ParticlePropertiesF, usage);
+	}
+
+	// --- [ RAM: neighbor list storage ] ------------------------------------------------------------
+
+	{
+		MemUsage usageF{};
+		MemUsage usageB{};
+
+		Add(usageF, MemUsageOf_Vector(h_expNbrCountFF_));
+		Add(usageF, MemUsageOf_Vector(h_expNbrChunkOffsetsFF_));
+		Add(usageF, MemUsageOf_Vector(h_expNbrChunkBaseIdxFF_));
+		Add(usageF, MemUsageOf_Vector(h_expNbrChunkFormatFF_));
+		Add(usageF, MemUsageOf_Vector(h_expNbrListDelta8FF_));
+		Add(usageF, MemUsageOf_Vector(h_expNbrListDelta16FF_));
+		Add(usageF, MemUsageOf_Vector(h_expNbrListAbs32FF_));
+
+		Add(usageB, MemUsageOf_Vector(h_expNbrCountFB_));
+
+		// finalize
+		Set(record, memSpaceRAM, MemBucket::Neighbors_ListStorageF, usageF);
+		Set(record, memSpaceRAM, MemBucket::Neighbors_ListStorageB, usageB);
+	}
+
+	// --- [ RAM: misc ] -----------------------------------------------------------------------------
+
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(h_expSurfaceFlagsScratch_));
+
+		// finalize
+		Set(record, memSpaceRAM, MemBucket::Misc, usage);
+	}
+
+	// --- [ VRAM: particle properties ] -------------------------------------------------------------
 
 	// fluid
 	{
@@ -558,7 +610,7 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_densityF_));
 
 		// finalize
-		Set(record, MemBucket::ParticlePropertiesF, usage);
+		Set(record, memSpaceVRAM, MemBucket::ParticlePropertiesF, usage);
 	}
 
 	// boundary
@@ -570,10 +622,10 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_zPosB_));
 
 		// finalize
-		Set(record, MemBucket::ParticlePropertiesB, usage);
+		Set(record, memSpaceVRAM, MemBucket::ParticlePropertiesB, usage);
 	}
 
-	// --- [ neighbor search data structures ] -------------------------------------------------------
+	// --- [ VRAM: neighbor search data structures ] -------------------------------------------------
 
 	{
 		MemUsage usageF{};
@@ -584,11 +636,11 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usageB, usageFB.second);
 
 		// finalize
-		Set(record, MemBucket::Neighbors_SearchDataStructF, usageF);
-		Set(record, MemBucket::Neighbors_SearchDataStructB, usageB);
+		Set(record, memSpaceVRAM, MemBucket::Neighbors_SearchDataStructF, usageF);
+		Set(record, memSpaceVRAM, MemBucket::Neighbors_SearchDataStructB, usageB);
 	}
 
-	// --- [ neighbor list storage ] -----------------------------------------------------------------
+	// --- [ VRAM: neighbor list storage ] -----------------------------------------------------------
 
 	{
 		MemUsage usageF{};
@@ -629,13 +681,13 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usageF, MemUsageOf_DeviceBuffer(d_nbrOverflowFlag_));
 
 		// finalize
-		Set(record, MemBucket::Neighbors_ListStorageF, usageF);
-		Set(record, MemBucket::Neighbors_ListStorageB, usageB);
+		Set(record, memSpaceVRAM, MemBucket::Neighbors_ListStorageF, usageF);
+		Set(record, memSpaceVRAM, MemBucket::Neighbors_ListStorageB, usageB);
 	}
 
-	// --- [ misc ] ----------------------------------------------------------------------------------
+	// --- [ VRAM: misc ] ----------------------------------------------------------------------------
 
-	Set(record, MemBucket::Misc, MemUsage{});
+	Set(record, memSpaceVRAM, MemBucket::Misc, MemUsage{});
 }
 
 void SimBackend_GPU01::FillStatisticsRecord(

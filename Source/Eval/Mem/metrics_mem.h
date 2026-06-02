@@ -25,6 +25,14 @@ namespace Mem
 		Occupied
 	};
 
+	enum class MemSpace : uint8_t
+	{
+		RAM,
+		VRAM,
+
+		Count
+	};
+
 	struct MemUsage
 	{
 		uint64_t usedBytes = 0;
@@ -55,6 +63,31 @@ namespace Mem
 		std::string_view name; // display name
 		std::string_view tip;  // tooltip description
 	};
+
+	struct MemSpaceDef
+	{
+		MemSpace space;
+		std::string_view name;	// display name
+		std::string_view key;	// CSV key
+	};
+
+	constexpr inline std::array<MemSpaceDef, static_cast<uint16_t>(MemSpace::Count)> SpaceDefinitions =
+	{
+		{
+			{
+				.space = MemSpace::RAM,
+				.name = "RAM",
+				.key = "ram"
+			},
+			{
+				.space = MemSpace::VRAM,
+				.name = "VRAM",
+				.key = "vram"
+			}
+		}
+	};
+	static_assert(SpaceDefinitions.size() == static_cast<uint8_t>(MemSpace::Count),
+		"Mem::SpaceDefinitions must list all MemSpace entries");
 
 	constexpr inline std::array<MemBucketDef, static_cast<uint16_t>(MemBucket::Count)> Definitions =
 	{
@@ -121,7 +154,13 @@ namespace Mem
 	static_assert(Definitions.size() == static_cast<uint8_t>(MemBucket::Count),
 		"Mem::Definitions must list all MemBucket entries");
 
+	constexpr inline uint8_t GetIdx(MemSpace space) { return static_cast<uint8_t>(space); }
 	constexpr inline uint8_t GetIdx(MemBucket bucket) { return static_cast<uint8_t>(bucket); }
+
+	using MemBucketRecord =
+		std::array<MemUsage, GetIdx(MemBucket::Count)>;
+	using MemSpaceRecord =
+		std::array<MemBucketRecord, GetIdx(MemSpace::Count)>;
 
 	// record of all per-metric memory usage data for one particular sim step
 	struct MemRecordStep
@@ -131,18 +170,39 @@ namespace Mem
 		double simTime = 0.0;
 
 		// stat data
-		std::array<MemUsage, GetIdx(MemBucket::Count)> mem{};
+		MemSpaceRecord mem{};
 	};
 
+	inline MemUsage Get(const MemRecordStep& record, MemSpace space, MemBucket bucket)
+		{ return record.mem[GetIdx(space)][GetIdx(bucket)]; }
 	inline MemUsage Get(const MemRecordStep& record, MemBucket bucket)
-		{ return record.mem[GetIdx(bucket)]; }
+		{ return Get(record, MemSpace::RAM, bucket); }
+	inline void Set(MemRecordStep& record, MemSpace space, MemBucket bucket, const MemUsage& mem)
+		{ record.mem[GetIdx(space)][GetIdx(bucket)] = mem; }
 	inline void Set(MemRecordStep& record, MemBucket bucket, const MemUsage& mem)
-		{ record.mem[GetIdx(bucket)] = mem; }
+		{ Set(record, MemSpace::RAM, bucket, mem); }
 	inline void Add(MemUsage& a, const MemUsage& b)
 	{
 		a.usedBytes += b.usedBytes;
 		a.allocBytes += b.allocBytes;
 		a.occupiedBytes += b.occupiedBytes;
+	}
+	inline void Clear(MemBucketRecord& record)
+	{
+		record.fill(MemUsage{});
+	}
+	inline void Clear(MemSpaceRecord& record)
+	{
+		for (auto& spaceRecord : record)
+		{
+			Clear(spaceRecord);
+		}
+	}
+	inline void Clear(MemRecordStep& record)
+	{
+		record.simStep = 0u;
+		record.simTime = 0.0;
+		Clear(record.mem);
 	}
 
 	// helpers for computing memory usage of common data structures
