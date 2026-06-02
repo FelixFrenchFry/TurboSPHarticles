@@ -32,7 +32,7 @@
   "maxBenchRecs": 1000000,
   "maxStatRecs": 1000000,
   "timeUnit": "ms",
-  "byteUnit": "MiB",
+  "byteUnit": "MB",
   "statGroupsEnabled": {
     "particles": false,
     "density": false,

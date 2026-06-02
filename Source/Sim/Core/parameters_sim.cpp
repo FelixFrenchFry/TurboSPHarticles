@@ -516,9 +516,9 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				if (v.is_string())
 				{
 					const std::string s = v.get<std::string>();
-					if (s == "GiB") { out = Mem::ByteUnit::GiB; return true; }
-					if (s == "MiB") { out = Mem::ByteUnit::MiB; return true; }
-					if (s == "KiB") { out = Mem::ByteUnit::KiB; return true; }
+					if (s == "GB") { out = Mem::ByteUnit::GB; return true; }
+					if (s == "MB") { out = Mem::ByteUnit::MB; return true; }
+					if (s == "KB") { out = Mem::ByteUnit::KB; return true; }
 					if (s == "B") { out = Mem::ByteUnit::B; return true; }
 					return false;
 				}

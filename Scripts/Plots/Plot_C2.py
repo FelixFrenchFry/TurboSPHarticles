@@ -25,20 +25,20 @@ METHOD_COMPONENT_TIMES_MS = {
     "Spatial Hashing": {
         "Construction": [6468,  12198,  19115,  26349,  32753],
         "Query":        [2077,  4020,   6109,   8235,   9954],
-        "Fluid Data":   [0,     0,      0,      0,      0], # MiB
-        "Boundary Data":[0,     0,      0,      0,      0] # MiB
+        "Fluid Data":   [0,     0,      0,      0,      0], # MB
+        "Boundary Data":[0,     0,      0,      0,      0] # MB
     },
     "Cell-Linked List": {
         "Construction": [516,   1065,   1460,   1960,   2217],
         "Query":        [1451,  2850,   4245,   5659,   7053],
-        "Fluid Data":   [0,     2574,   3862,   5149,   6437], # MiB
-        "Boundary Data":[0,     248,    268,    289,    310] # MiB
+        "Fluid Data":   [0,     2699,   4050,   5399,   6750], # MB
+        "Boundary Data":[0,     260,    281,    303,    325] # MB
     },
     "Linear BVH": {
         "Construction": [844,   1818,   2890,   4079,   5936],
         "Query":        [2185,  3958,   5781,   7386,   8900],
-        "Fluid Data":   [9918,  19836,  29754,  39672,  49591], # MiB
-        "Boundary Data":[741,   809,    876,    943,    1010] # MiB
+        "Fluid Data":   [10400, 20800,  31199,  41599,  52000], # MB
+        "Boundary Data":[777,   848,    919,    989,    1059] # MB
     },
 }
 

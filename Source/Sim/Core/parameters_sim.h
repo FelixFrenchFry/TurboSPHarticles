@@ -103,7 +103,7 @@ namespace Sim
 
 		// memory
 		uint32_t maxMemRecs	= 1'000'000;
-		Mem::ByteUnit byteUnit = Mem::ByteUnit::MiB;
+		Mem::ByteUnit byteUnit = Mem::ByteUnit::MB;
 
 		// statistics
 		uint32_t maxStatRecs = 1'000'000;

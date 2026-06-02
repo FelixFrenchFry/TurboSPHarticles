@@ -25,14 +25,14 @@ METHOD_COMPONENT_TIMES_MS = {
     "Cell-Linked List": {
         "Construction": [2.39,  3.90,   5.44,   6.77,   8.38],
         "Query":        [31.19, 61.01,  84.52,  108.94, 134.08],
-        "Fluid Data":   [267,   534,    801,    1068,   1335], # MiB
-        "Boundary Data":[38,    52,     67,     82,     96] # MiB
+        "Fluid Data":   [280,   560,    840,    1120,   1400], # MB
+        "Boundary Data":[40,    55,     70,     86,     101] # MB
     },
     "Linear BVH": {
         "Construction": [3.25,  5.92,   8.41,   11.22,  16.58],
         "Query":        [74.68, 136.71, 193.63, 258.93, 321.02],
-        "Fluid Data":   [1029,  2059,   3089,   4119,   5149], # MiB
-        "Boundary Data":[76,    105,    135,    164,    193] # MiB
+        "Fluid Data":   [1079,  2159,   3239,   4319,   5399], # MB
+        "Boundary Data":[80,    110,    142,    172,    202] # MB
     },
 }
 

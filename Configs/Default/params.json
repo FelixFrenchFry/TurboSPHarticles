@@ -1,5 +1,5 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
@@ -33,7 +33,7 @@
   "maxBenchRecs": 100000,
   "maxStatRecs": 100000,
   "timeUnit": "ms",
-  "byteUnit": "MiB",
+  "byteUnit": "MB",
   "statGroupsEnabled": {
     "particles": false,
     "density": false,

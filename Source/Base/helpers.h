@@ -223,16 +223,16 @@ namespace Mem
 {
     enum class ByteUnit : uint8_t
     {
-        GiB, MiB, KiB, B
+        GB, MB, KB, B
     };
 
     static inline double ConvertFromBytes(ByteUnit unit, uint64_t bytes)
     {
         switch (unit)
         {
-        case ByteUnit::GiB: { return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0); }
-        case ByteUnit::MiB: { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
-        case ByteUnit::KiB: { return static_cast<double>(bytes) / 1024.0; }
+        case ByteUnit::GB: { return static_cast<double>(bytes) / (1000.0 * 1000.0 * 1000.0); }
+        case ByteUnit::MB: { return static_cast<double>(bytes) / (1000.0 * 1000.0); }
+        case ByteUnit::KB: { return static_cast<double>(bytes) / 1000.0; }
         case ByteUnit::B: { return static_cast<double>(bytes); }
         }
         return static_cast<double>(bytes);
@@ -242,9 +242,9 @@ namespace Mem
     {
         switch (u)
         {
-        case ByteUnit::GiB: { return "GiB"; }
-        case ByteUnit::MiB: { return "MiB"; }
-        case ByteUnit::KiB: { return "KiB"; }
+        case ByteUnit::GB: { return "GB"; }
+        case ByteUnit::MB: { return "MB"; }
+        case ByteUnit::KB: { return "KB"; }
         case ByteUnit::B: { return "B"; }
         }
         return "";
