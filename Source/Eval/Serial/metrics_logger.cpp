@@ -46,6 +46,24 @@ namespace Export
 
 			return out.is_object();
 		}
+
+		std::string MakeCompactRunDirString(
+			const std::filesystem::path& runDir,
+			const std::filesystem::path& baseDir)
+		{
+			namespace fs = std::filesystem;
+
+			const fs::path base = baseDir.lexically_normal();
+			const fs::path logsName = base.filename();
+			const fs::path runName = runDir.filename();
+
+			if (!logsName.empty() && !runName.empty())
+			{
+				return (fs::path("...") / logsName / runName).generic_string();
+			}
+
+			return runDir.lexically_normal().generic_string();
+		}
 	}
 
 	bool LoggingMgr::BeginRun(
@@ -106,7 +124,8 @@ namespace Export
 
 		active_ = true;
 
-		SPDLOG_INFO("Writing run logs to '{}'", runDir_.string());
+		SPDLOG_INFO("Writing run logs to '{}'",
+			MakeCompactRunDirString(runDir_, loggingOptions_.baseDir));
 
 		return true;
 	}
