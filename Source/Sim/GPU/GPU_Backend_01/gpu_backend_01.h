@@ -190,7 +190,7 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_;
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk storage format
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFB_;
-		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // compressed chunk offsets into the selected format buffer
+		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFF_; // per-chunk starting index into the selected format buffer
 		DeviceBuffer<uint64_t> d_nbrChunkOffsetsFB_;
 		DeviceBuffer<uint8_t> d_nbrListDelta8FF_; // contiguous delta8 neighbor storage
 		DeviceBuffer<uint8_t> d_nbrListDelta8FB_;

@@ -213,6 +213,8 @@ void SimulationMgr::Launch_Async()
 		return;
 	}
 
+	stopRequested_.store(false, std::memory_order_release);
+
 	// launch the controller thread
 	controllerThread_ = std::jthread([this](const std::stop_token& stopToken)
 		{
@@ -237,6 +239,8 @@ void SimulationMgr::Launch_Blocking()
 		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (already running)");
 		return;
 	}
+
+	stopRequested_.store(false, std::memory_order_release);
 
 	// launch threads
 	RunSim_Blocking();
@@ -283,7 +287,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
-	while (!stopToken.stop_requested())
+	while (!stopToken.stop_requested() &&
+		   !stopRequested_.load(std::memory_order_acquire))
 	{
 		SyncParameters(true);
 
@@ -420,7 +425,7 @@ void SimulationMgr::RunSim_Blocking()
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
-	while (true)
+	while (!stopRequested_.load(std::memory_order_acquire))
 	{
 		SyncParameters(true);
 
@@ -433,11 +438,11 @@ void SimulationMgr::RunSim_Blocking()
 			paramsInit.maxSteps > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet
-        if (!doSimStep)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            continue;
-        }
+		if (!doSimStep)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
 
 		// execute one simulation step
 		if (doSimStep)
@@ -504,6 +509,8 @@ void SimulationMgr::RunSim_Blocking()
 // requests the controller thread to stop cleanly
 void SimulationMgr::RequestStop()
 {
+	stopRequested_.store(true, std::memory_order_release);
+
 	if (controllerThread_.joinable())
 	{
 		controllerThread_.request_stop(); // non-blocking

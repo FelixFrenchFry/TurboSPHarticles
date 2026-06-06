@@ -1,6 +1,4 @@
 // simulation.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -124,6 +122,8 @@ namespace Sim
 		// controller thread spawns worker threads within OpenMP parallel regions
 		std::jthread controllerThread_;
 		std::atomic<bool> running_{ false };
+		// explicit stop request shared by blocking and async simulation loops
+		std::atomic<bool> stopRequested_{ false };
 		std::atomic<bool> initialized_{ false };
 
 		// benchmark tracking

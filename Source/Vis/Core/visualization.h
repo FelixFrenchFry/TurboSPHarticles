@@ -5,6 +5,7 @@
 #pragma once
 
 // external
+#include <atomic>
 #include <vector>
 #include <cstdint>
 #include <glm/glm.hpp>
@@ -42,6 +43,8 @@ namespace Vis
 
 		// main visualization loop (handle input, interface, render)
 		void RunVis();
+
+		void RequestStop();
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
 			{ visualSnapMailbox_ = visualSnapMailbox; }
@@ -90,6 +93,7 @@ namespace Vis
 
 		// window and GL context
 		GLFWwindow* window_ = nullptr;
+		std::atomic<bool> stopRequested_{ false };
 
 		// static callbacks for GLFW
 		static void GLFW_FramebufferSizeCB(GLFWwindow* window, int width, int height);

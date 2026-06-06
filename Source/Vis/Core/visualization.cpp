@@ -40,6 +40,7 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 
 	// initial snapshot
 	SyncParameters(true);
+	stopRequested_.store(false, std::memory_order_release);
 
 	// window and GL context creation
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, VisConstants::glVersion.major);
@@ -149,7 +150,8 @@ void VisualizationMgr::RunVis()
 
 	double lastTime = glfwGetTime();
 
-	while (!glfwWindowShouldClose(window_))
+	while (!glfwWindowShouldClose(window_) &&
+		   !stopRequested_.load(std::memory_order_acquire))
 	{
 		// process input events and parameter changes
 		glfwPollEvents();
@@ -190,6 +192,11 @@ void VisualizationMgr::RunVis()
 
 		glfwSwapBuffers(window_);
 	}
+}
+
+void VisualizationMgr::RequestStop()
+{
+	stopRequested_.store(true, std::memory_order_release);
 }
 
 // ===== callback trampolines =====

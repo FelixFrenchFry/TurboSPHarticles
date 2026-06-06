@@ -283,14 +283,18 @@ endif()
 # --- [ apps ] ---
 # ----------------
 
-add_executable(TSP_Headless "Apps/main_headless.cpp")
+add_executable(TSP_Headless
+    "Apps/main_headless.cpp"
+    "Apps/app_runtime.cpp")
 target_link_libraries(TSP_Headless PRIVATE 
     TSP_H
     CLI11::CLI11
 )
 
 if(ENABLE_VIS)
-    add_executable(TSP_Visual "Apps/main_visual.cpp")
+    add_executable(TSP_Visual
+        "Apps/main_visual.cpp"
+        "Apps/app_runtime.cpp")
     target_link_libraries(TSP_Visual PRIVATE
         TSP_V
         CLI11::CLI11
@@ -298,7 +302,9 @@ if(ENABLE_VIS)
 endif()
 
 if(ENABLE_MPI)
-    add_executable(TSP_Distributed "Apps/main_distributed.cpp")
+    add_executable(TSP_Distributed
+        "Apps/main_distributed.cpp"
+        "Apps/app_runtime.cpp")
     target_link_libraries(TSP_Distributed PRIVATE
         TSP_D
         CLI11::CLI11
