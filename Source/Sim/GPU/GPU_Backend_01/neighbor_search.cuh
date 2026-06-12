@@ -84,6 +84,7 @@ namespace Sim
 		uint32_t N_NonEmptyCellsF_ = 0;
 		uint32_t N_NonEmptyCellsB_ = 0;
 		uint32_t N_NonEmptyCellsAny_ = 0;
+		uint32_t N_queryCellSlots_ = 0;
 		bool particlesMatchCurrentCellOrder_ = false;
 		bool cellIdsAvailableForReuse_ = false;
 
@@ -98,6 +99,7 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
 		DeviceBuffer<uint32_t> d_cellRefFByAny_; // merged-cell to compact fluid-cell index
 		DeviceBuffer<uint32_t> d_cellRefBByAny_; // merged-cell to compact boundary-cell index
+		DeviceBuffer<uint32_t> d_queryCellRefAnyByCellF_; // cached references for source fluid-cell query slot -> merged-cell index
 
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
@@ -113,6 +115,7 @@ namespace Sim
 
 		void BuildMergedCompactCellLookup();
 		void BuildQueryLookupBounds();
+		void BuildQueryCellRefCache();
 	};
 
 } // namespace Sim
