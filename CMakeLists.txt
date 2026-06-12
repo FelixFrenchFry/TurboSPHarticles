@@ -192,7 +192,7 @@ if(TSP_CPU_SIMD_ARCH STREQUAL "AVX512") # 16-wide SIMD processing of floats
         >
         # GCC/Clang C++ only
         $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
-            -mavx512f -mavx512dq -mavx512bw -mfma
+            -mavx512f -mavx512cd -mavx512dq -mavx512bw -mfma
         >
     )
 else() # 8-wide SIMD processing of floats
