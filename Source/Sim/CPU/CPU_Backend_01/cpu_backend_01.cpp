@@ -53,17 +53,17 @@ SimBackend_CPU01::SimBackend_CPU01(
 	if (params.neighborListMethod ==
 		Base::NeighborListMethod::ChunkedSELLX_Explicit)
 	{
-		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_Explicit_CPU01>();
+		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL_Explicit_CPU01>();
 	}
 	else if (params.neighborListMethod ==
 		Base::NeighborListMethod::ChunkedSELLX_AdaptCompress)
 	{
-		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL8_AdaptCompress_CPU01>();
+		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL_AdaptCompress_CPU01>();
 	}
 	else
 	{
 		throw std::runtime_error(
-			"CPU01 supports only ChunkedSELL8 neighbor-list storage.");
+			"CPU01 supports only ChunkedSELL neighbor-list storage.");
 	}
 }
 

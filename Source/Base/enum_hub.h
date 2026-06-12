@@ -96,11 +96,19 @@ namespace Base
 		case NeighborListMethod::ChunkedSELLX_Explicit:
 			return (backend == BackendVersion::GPU01)
 				? "ChunkedSELL32_Explicit"
+			#if defined(TSP_CPU_SIMD_WIDTH) && TSP_CPU_SIMD_WIDTH == 16
+				: "ChunkedSELL16_Explicit";
+			#else
 				: "ChunkedSELL8_Explicit";
+			#endif
 		case NeighborListMethod::ChunkedSELLX_AdaptCompress:
 			return (backend == BackendVersion::GPU01)
 				? "ChunkedSELL32_AdaptCompress"
+			#if defined(TSP_CPU_SIMD_WIDTH) && TSP_CPU_SIMD_WIDTH == 16
+				: "ChunkedSELL16_AdaptCompress";
+			#else
 				: "ChunkedSELL8_AdaptCompress";
+			#endif
 		}
 		return "ChunkedSELLX::<unknown>";
 	}

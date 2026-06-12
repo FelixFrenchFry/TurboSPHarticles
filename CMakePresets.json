@@ -59,8 +59,7 @@
       "cacheVariables": {
         "ENABLE_CUDA": "OFF",
         "ENABLE_VIS": "OFF",
-        "ENABLE_MPI": "ON",
-        "ENABLE_NATIVE_OPT": "ON"
+        "ENABLE_MPI": "ON"
       }
     },
 
@@ -71,8 +70,7 @@
       "cacheVariables": {
         "ENABLE_CUDA": "OFF",
         "ENABLE_VIS": "OFF",
-        "ENABLE_MPI": "ON",
-        "ENABLE_NATIVE_OPT": "ON"
+        "ENABLE_MPI": "ON"
       }
     },
 
@@ -81,8 +79,7 @@
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_NATIVE_OPT": "ON"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -91,8 +88,7 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_BUILD_TYPE": "release",
-        "ENABLE_NATIVE_OPT": "ON"
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {
@@ -101,8 +97,7 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_BUILD_TYPE": "release",
-        "ENABLE_NATIVE_OPT": "ON"
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {
@@ -137,8 +132,7 @@
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_NATIVE_OPT": "ON"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -147,8 +141,7 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_BUILD_TYPE": "release",
-        "ENABLE_NATIVE_OPT": "ON"
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {
@@ -157,8 +150,7 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_BUILD_TYPE": "release",
-        "ENABLE_NATIVE_OPT": "ON"
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {

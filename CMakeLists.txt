@@ -12,9 +12,24 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(ENABLE_CUDA "Build GPU backend with CUDA" OFF)
 option(ENABLE_VIS "Build window with visual interface and particle rendering" ON)
 option(ENABLE_MPI "Build distributed headless application with MPI" OFF)
-option(ENABLE_NATIVE_OPT "Enable AVX2/FMA CPU SIMD build flags" ON)
 
-set(TSP_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA architectures")
+set(TSP_CUDA_ARCHITECTURE "native" CACHE STRING "CUDA architecture")
+set(TSP_CPU_SIMD_ARCH "AVX256" CACHE STRING "CPU SIMD architecture")
+set_property(CACHE TSP_CPU_SIMD_ARCH PROPERTY STRINGS AVX256 AVX512)
+
+if(TSP_CPU_SIMD_ARCH STREQUAL "AVX256")
+    set(TSP_CPU_SIMD_WIDTH 8)
+    set(TSP_CPU_SIMD_ARCH_DEFINE TSP_CPU_SIMD_ARCH_AVX256=1)
+elseif(TSP_CPU_SIMD_ARCH STREQUAL "AVX512")
+    set(TSP_CPU_SIMD_WIDTH 16)
+    set(TSP_CPU_SIMD_ARCH_DEFINE TSP_CPU_SIMD_ARCH_AVX512=1)
+else()
+    message(FATAL_ERROR
+        "Unsupported TSP_CPU_SIMD_ARCH='${TSP_CPU_SIMD_ARCH}'. "
+        "Expected AVX256 or AVX512.")
+endif()
+
+message(STATUS "CPU SIMD: ${TSP_CPU_SIMD_ARCH} (${TSP_CPU_SIMD_WIDTH} lanes)")
 
 # default build type
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -143,6 +158,8 @@ target_compile_options(Project_Warnings INTERFACE
 add_library(Project_Defines INTERFACE)
 target_compile_definitions(Project_Defines INTERFACE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE>
+    TSP_CPU_SIMD_WIDTH=${TSP_CPU_SIMD_WIDTH}
+    ${TSP_CPU_SIMD_ARCH_DEFINE}
 )
 
 # C++ optimization flags
@@ -166,8 +183,19 @@ target_compile_options(Project_Options INTERFACE
     >
 )
 
-# optional native archtitecture-specific optimizations
-if(ENABLE_NATIVE_OPT)
+# CPU SIMD ISA flags required by the selected SELL vector width
+if(TSP_CPU_SIMD_ARCH STREQUAL "AVX512") # 16-wide SIMD processing of floats
+    target_compile_options(Project_Options INTERFACE
+        # MSVC C++ only
+        $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
+            /arch:AVX512
+        >
+        # GCC/Clang C++ only
+        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
+            -mavx512f -mavx512dq -mavx512bw -mfma
+        >
+    )
+else() # 8-wide SIMD processing of floats
     target_compile_options(Project_Options INTERFACE
         # MSVC C++ only
         $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
@@ -234,7 +262,7 @@ if(ENABLE_CUDA AND SRC_SIM_GPU)
     set_target_properties(TSP_H PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
-        CUDA_ARCHITECTURES "${TSP_CUDA_ARCHITECTURES}"
+        CUDA_ARCHITECTURES "${TSP_CUDA_ARCHITECTURE}"
     )
     # keep IPO off when CUDA is enabled to avoid nvlink/LTO clashes
     set_property(TARGET TSP_H PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)

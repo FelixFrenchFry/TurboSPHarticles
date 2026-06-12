@@ -16,7 +16,7 @@
 #include "neighbor_search.h"
 #include "cpu_backend_01.h"
 #include "sph_solver.h"
-#include "Source/Sim/CPU/simd8.h"
+#include "Source/Sim/CPU/simd.h"
 #if defined(_MSC_VER)
 	#define RESTRICT __restrict
 #elif defined(__GNUC__) || defined(__clang__)
@@ -74,7 +74,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT diagElemF = diagElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
-	I_NeighborListSELL8& neighborList = *neighborList_;
+	I_NeighborListSELL& neighborList = *neighborList_;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
 
@@ -110,7 +110,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Solving });
 
-	CPU01::Density_ChunkedSELL8(
+	CPU01::Density_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		neighborList,
@@ -123,7 +123,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
-	CPU01::NonPressureAcceleration_ChunkedSELL8(
+	CPU01::NonPressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		xVelF, yVelF, zVelF,
@@ -141,7 +141,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceTerm, Bench::BenchOp::Pressure_DiagonalElem });
 
-	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
+	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		xVelPredF, yVelPredF, zVelPredF,
@@ -167,7 +167,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	do
 	{
 		// compute pressure acceleration from current pressure field
-		CPU01::PressureAcceleration_ChunkedSELL8(
+		CPU01::PressureAcceleration_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
 			pressureF,
@@ -177,7 +177,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			xAccPressF, yAccPressF, zAccPressF);
 
 		// update system vector and pressure
-		CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
+		CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
 			xAccPressF, yAccPressF, zAccPressF,
@@ -197,7 +197,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
 
-	CPU01::PressureAcceleration_ChunkedSELL8(
+	CPU01::PressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
 		pressureF,
@@ -270,14 +270,14 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) co
 	return satisfied;
 }
 
-void CPU01::Density_ChunkedSELL8(
+void CPU01::Density_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const I_NeighborListSELL8& neighborList,
+	const I_NeighborListSELL& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float massF, const float massB,
 	const uint32_t N_F,
@@ -287,8 +287,8 @@ void CPU01::Density_ChunkedSELL8(
 	(void)N_F;
 
 	const uint32_t numChunks = neighborList.ChunkNumTotal();
-	const CPU::Float32x8 massFV = CPU::SetFloat32x8(massF);
-	const CPU::Float32x8 massBV = CPU::SetFloat32x8(massB);
+	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::Float32xSIMD massBV = CPU::SetFloat32xSIMD(massB);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, numChunks),
@@ -296,37 +296,37 @@ void CPU01::Density_ChunkedSELL8(
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				const ChunkedSELL8NeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 
-				// one SELL8 chunk, covering (up to) 8 consecutive fluid particles
-				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+				// one SELL chunk, covering up to CPU::N_SIMD_WIDTH consecutive fluid particles
+				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
-				const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-				const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-				const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
+				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
 
-				CPU::Float32x8 tmp_densityF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_densityB = CPU::ZeroFloat32x8();
+				CPU::Float32xSIMD tmp_densityF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_densityB = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
-					const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFF.pitch; k++)
 					{
-						// one SELL8 column, storing neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
-						const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
+						// one SELL column, storing neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
+						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosF, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
 
-						const CPU::Float32x8 kw = CPU::ZeroMaskedFloat32x8(
-							CPU::KernelWeight_CubicSpline_SIMD8(
+						const CPU::Float32xSIMD kw = CPU::ZeroMaskedFloat32xSIMD(
+							CPU::KernelWeight_CubicSpline_SIMD(
 								dx, dy, dz, particleSizeInvF,
 								kernelRadiusSqu, cubicSplineAlpha), mask);
 						// padded lanes gathered valid indices but contribute zero
@@ -336,20 +336,20 @@ void CPU01::Density_ChunkedSELL8(
 
 				// contributions from boundary neighbors
 				{
-					const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
+					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFB.pitch; k++)
 					{
-						// one SELL8 column, storing neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
-						const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
+						// one SELL column, storing neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
+						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosB, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
 
-						const CPU::Float32x8 kw = CPU::ZeroMaskedFloat32x8(
-							CPU::KernelWeight_CubicSpline_SIMD8(
+						const CPU::Float32xSIMD kw = CPU::ZeroMaskedFloat32xSIMD(
+							CPU::KernelWeight_CubicSpline_SIMD(
 								dx, dy, dz, particleSizeInvF,
 								kernelRadiusSqu, cubicSplineAlpha), mask);
 						// padded lanes gathered valid indices but contribute zero
@@ -357,16 +357,16 @@ void CPU01::Density_ChunkedSELL8(
 					}
 				}
 
-				const CPU::Float32x8 density = massFV * tmp_densityF + massBV * tmp_densityB;
-				// final chunk, maybe containing less than 8 particles
-				CPU::StoreFloat32x8Partial(densityF, begin, end, density);
+				const CPU::Float32xSIMD density = massFV * tmp_densityF + massBV * tmp_densityB;
+				// final chunk, maybe containing fewer than CPU::N_SIMD_WIDTH particles
+				CPU::StoreFloat32xSIMDPartial(densityF, begin, end, density);
 			}
 		},
 		tbb::auto_partitioner{}
 	);
 }
 
-void CPU01::NonPressureAcceleration_ChunkedSELL8(
+void CPU01::NonPressureAcceleration_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
@@ -377,7 +377,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 	const float* RESTRICT yVelF,
 	const float* RESTRICT zVelF,
 	const float* RESTRICT densityF,
-	const I_NeighborListSELL8& neighborList,
+	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityF,
@@ -394,16 +394,16 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 	(void)N_F;
 
 	const uint32_t numChunks = neighborList.ChunkNumTotal();
-	const CPU::Float32x8 massFV = CPU::SetFloat32x8(massF);
-	const CPU::Float32x8 massBOverRestDensityBV = CPU::SetFloat32x8(massB / restDensityB);
-	const CPU::Float32x8 eps = CPU::SetFloat32x8(ZERO_EQU_LIM_F);
-	const CPU::Float32x8 particleSizeSquEps = CPU::SetFloat32x8(0.01f * particleSizeSquF);
-	const CPU::Float32x8 viscosityFacF = CPU::SetFloat32x8(10.0f * viscosityF);
-	const CPU::Float32x8 viscosityFacB = CPU::SetFloat32x8(10.0f * viscosityB);
-	const CPU::Float32x8 timeStepV = CPU::SetFloat32x8(timeStep);
-	const CPU::Float32x8 xGravityV = CPU::SetFloat32x8(xGravity);
-	const CPU::Float32x8 yGravityV = CPU::SetFloat32x8(yGravity);
-	const CPU::Float32x8 zGravityV = CPU::SetFloat32x8(zGravity);
+	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::Float32xSIMD massBOverRestDensityBV = CPU::SetFloat32xSIMD(massB / restDensityB);
+	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
+	const CPU::Float32xSIMD particleSizeSquEps = CPU::SetFloat32xSIMD(0.01f * particleSizeSquF);
+	const CPU::Float32xSIMD viscosityFacF = CPU::SetFloat32xSIMD(10.0f * viscosityF);
+	const CPU::Float32xSIMD viscosityFacB = CPU::SetFloat32xSIMD(10.0f * viscosityB);
+	const CPU::Float32xSIMD timeStepV = CPU::SetFloat32xSIMD(timeStep);
+	const CPU::Float32xSIMD xGravityV = CPU::SetFloat32xSIMD(xGravity);
+	const CPU::Float32xSIMD yGravityV = CPU::SetFloat32xSIMD(yGravity);
+	const CPU::Float32xSIMD zGravityV = CPU::SetFloat32xSIMD(zGravity);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, numChunks),
@@ -411,62 +411,62 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				const ChunkedSELL8NeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 
-				// one SELL8 chunk covers up to 8 consecutive i-particles
-				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
+				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
-				const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-				const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-				const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
-				const CPU::Float32x8 vxi = CPU::GatherFloat32x8(xVelF, idxI);
-				const CPU::Float32x8 vyi = CPU::GatherFloat32x8(yVelF, idxI);
-				const CPU::Float32x8 vzi = CPU::GatherFloat32x8(zVelF, idxI);
+				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+				const CPU::Float32xSIMD vxi = CPU::GatherFloat32xSIMD(xVelF, idxI);
+				const CPU::Float32xSIMD vyi = CPU::GatherFloat32xSIMD(yVelF, idxI);
+				const CPU::Float32xSIMD vzi = CPU::GatherFloat32xSIMD(zVelF, idxI);
 
-				CPU::Float32x8 tmp_xAccViscF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_yAccViscF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_zAccViscF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_xAccViscB = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_yAccViscB = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_zAccViscB = CPU::ZeroFloat32x8();
+				CPU::Float32xSIMD tmp_xAccViscF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_yAccViscF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_zAccViscF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_xAccViscB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_yAccViscB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_zAccViscB = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
-					const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFF.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
-						const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
+						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosF, idxJ);
-						const CPU::Float32x8 dvx = vxi - CPU::GatherFloat32x8(xVelF, idxJ);
-						const CPU::Float32x8 dvy = vyi - CPU::GatherFloat32x8(yVelF, idxJ);
-						const CPU::Float32x8 dvz = vzi - CPU::GatherFloat32x8(zVelF, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
+						const CPU::Float32xSIMD dvx = vxi - CPU::GatherFloat32xSIMD(xVelF, idxJ);
+						const CPU::Float32xSIMD dvy = vyi - CPU::GatherFloat32xSIMD(yVelF, idxJ);
+						const CPU::Float32xSIMD dvz = vzi - CPU::GatherFloat32xSIMD(zVelF, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 dot = xsimd::fma(dvx, dx,
+						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
 							xsimd::fma(dvy, dy, dvz * dz));
-						const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
-						const CPU::Float32x8 densityJ =
-							xsimd::max(CPU::GatherFloat32x8(densityF, idxJ), eps);
-						const CPU::Float32x8 accCoeff =
+						const CPU::Float32xSIMD densityJ =
+							xsimd::max(CPU::GatherFloat32xSIMD(densityF, idxJ), eps);
+						const CPU::Float32xSIMD accCoeff =
 							(massFV * dot) / (densityJ * (distSqu + particleSizeSquEps));
-						const CPU::Float32x8 accCoeffMasked =
-							CPU::ZeroMaskedFloat32x8(accCoeff, mask);
+						const CPU::Float32xSIMD accCoeffMasked =
+							CPU::ZeroMaskedFloat32xSIMD(accCoeff, mask);
 
 						// padded lanes gathered valid indices but contribute zero
 						tmp_xAccViscF = xsimd::fma(accCoeffMasked, xkg, tmp_xAccViscF);
@@ -477,32 +477,32 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 
 				// contributions from boundary neighbors
 				{
-					const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
+					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFB.pitch; k++)
 					{
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
-						const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
+						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosB, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 dot = xsimd::fma(vxi, dx,
+						const CPU::Float32xSIMD dot = xsimd::fma(vxi, dx,
 							xsimd::fma(vyi, dy, vzi * dz));
-						const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
-						const CPU::Float32x8 accCoeff =
+						const CPU::Float32xSIMD accCoeff =
 							(massBOverRestDensityBV * dot) / (distSqu + particleSizeSquEps);
-						const CPU::Float32x8 accCoeffMasked =
-							CPU::ZeroMaskedFloat32x8(accCoeff, mask);
+						const CPU::Float32xSIMD accCoeffMasked =
+							CPU::ZeroMaskedFloat32xSIMD(accCoeff, mask);
 
 						tmp_xAccViscB = xsimd::fma(accCoeffMasked, xkg, tmp_xAccViscB);
 						tmp_yAccViscB = xsimd::fma(accCoeffMasked, ykg, tmp_yAccViscB);
@@ -510,19 +510,19 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 					}
 				}
 
-				const CPU::Float32x8 xAccNonPressF =
+				const CPU::Float32xSIMD xAccNonPressF =
 					tmp_xAccViscF * viscosityFacF + tmp_xAccViscB * viscosityFacB + xGravityV;
-				const CPU::Float32x8 yAccNonPressF =
+				const CPU::Float32xSIMD yAccNonPressF =
 					tmp_yAccViscF * viscosityFacF + tmp_yAccViscB * viscosityFacB + yGravityV;
-				const CPU::Float32x8 zAccNonPressF =
+				const CPU::Float32xSIMD zAccNonPressF =
 					tmp_zAccViscF * viscosityFacF + tmp_zAccViscB * viscosityFacB + zGravityV;
 
-				// final chunk may contain fewer than 8 active particles
-				CPU::StoreFloat32x8Partial(
+				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
+				CPU::StoreFloat32xSIMDPartial(
 					xVelPredF, begin, end, xsimd::fma(xAccNonPressF, timeStepV, vxi));
-				CPU::StoreFloat32x8Partial(
+				CPU::StoreFloat32xSIMDPartial(
 					yVelPredF, begin, end, xsimd::fma(yAccNonPressF, timeStepV, vyi));
-				CPU::StoreFloat32x8Partial(
+				CPU::StoreFloat32xSIMDPartial(
 					zVelPredF, begin, end, xsimd::fma(zAccNonPressF, timeStepV, vzi));
 			}
 		},
@@ -530,7 +530,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL8(
 	);
 }
 
-void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
+void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
@@ -541,7 +541,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
 	const float* RESTRICT densityF,
-	const I_NeighborListSELL8& neighborList,
+	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float restDensitySquInvF,
@@ -556,17 +556,17 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 	(void)N_F;
 
 	const uint32_t numChunks = neighborList.ChunkNumTotal();
-	const CPU::Float32x8 timeStepV = CPU::SetFloat32x8(timeStep);
-	const CPU::Float32x8 timeStepSquV = CPU::SetFloat32x8(timeStep * timeStep);
-	const CPU::Float32x8 restDensityFV = CPU::SetFloat32x8(restDensityF);
-	const CPU::Float32x8 massFV = CPU::SetFloat32x8(massF);
-	const CPU::Float32x8 massBV = CPU::SetFloat32x8(massB);
-	const CPU::Float32x8 cTermFacF = CPU::SetFloat32x8(-massF * restDensitySquInvF);
-	const CPU::Float32x8 cTermFacB = CPU::SetFloat32x8(-2.0f * pressGamma * massB * restDensitySquInvF);
-	const CPU::Float32x8 diagBFac = CPU::SetFloat32x8(-massF * restDensitySquInvF);
-	const CPU::Float32x8 jacobiOmegaV = CPU::SetFloat32x8(jacobiOmega);
-	const CPU::Float32x8 zero = CPU::ZeroFloat32x8();
-	const CPU::Float32x8 eps = CPU::SetFloat32x8(ZERO_EQU_LIM_F);
+	const CPU::Float32xSIMD timeStepV = CPU::SetFloat32xSIMD(timeStep);
+	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
+	const CPU::Float32xSIMD restDensityFV = CPU::SetFloat32xSIMD(restDensityF);
+	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::Float32xSIMD massBV = CPU::SetFloat32xSIMD(massB);
+	const CPU::Float32xSIMD cTermFacF = CPU::SetFloat32xSIMD(-massF * restDensitySquInvF);
+	const CPU::Float32xSIMD cTermFacB = CPU::SetFloat32xSIMD(-2.0f * pressGamma * massB * restDensitySquInvF);
+	const CPU::Float32xSIMD diagBFac = CPU::SetFloat32xSIMD(-massF * restDensitySquInvF);
+	const CPU::Float32xSIMD jacobiOmegaV = CPU::SetFloat32xSIMD(jacobiOmega);
+	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
+	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, numChunks),
@@ -574,144 +574,144 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				const ChunkedSELL8NeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
-				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
-				// one SELL8 chunk covers up to 8 consecutive i-particles
-				const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-				const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-				const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
-				const CPU::Float32x8 vpxi = CPU::GatherFloat32x8(xVelPredF, idxI);
-				const CPU::Float32x8 vpyi = CPU::GatherFloat32x8(yVelPredF, idxI);
-				const CPU::Float32x8 vpzi = CPU::GatherFloat32x8(zVelPredF, idxI);
+				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
+				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+				const CPU::Float32xSIMD vpxi = CPU::GatherFloat32xSIMD(xVelPredF, idxI);
+				const CPU::Float32xSIMD vpyi = CPU::GatherFloat32xSIMD(yVelPredF, idxI);
+				const CPU::Float32xSIMD vpzi = CPU::GatherFloat32xSIMD(zVelPredF, idxI);
 
-				CPU::Float32x8 tmp_SourceTermF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_SourceTermB = CPU::ZeroFloat32x8();
-				CPU::Float32x8 xCTermF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 yCTermF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 zCTermF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 xCTermB = CPU::ZeroFloat32x8();
-				CPU::Float32x8 yCTermB = CPU::ZeroFloat32x8();
-				CPU::Float32x8 zCTermB = CPU::ZeroFloat32x8();
+				CPU::Float32xSIMD tmp_SourceTermF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_SourceTermB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD xCTermF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD yCTermF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD zCTermF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD xCTermB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD yCTermB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD zCTermB = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
-					const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFF.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
-						const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
+						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosF, idxJ);
-						const CPU::Float32x8 dvpx = vpxi - CPU::GatherFloat32x8(xVelPredF, idxJ);
-						const CPU::Float32x8 dvpy = vpyi - CPU::GatherFloat32x8(yVelPredF, idxJ);
-						const CPU::Float32x8 dvpz = vpzi - CPU::GatherFloat32x8(zVelPredF, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
+						const CPU::Float32xSIMD dvpx = vpxi - CPU::GatherFloat32xSIMD(xVelPredF, idxJ);
+						const CPU::Float32xSIMD dvpy = vpyi - CPU::GatherFloat32xSIMD(yVelPredF, idxJ);
+						const CPU::Float32xSIMD dvpz = vpzi - CPU::GatherFloat32xSIMD(zVelPredF, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 sourceTerm =
+						const CPU::Float32xSIMD sourceTerm =
 							xsimd::fma(dvpx, xkg, xsimd::fma(dvpy, ykg, dvpz * zkg));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_SourceTermF += CPU::ZeroMaskedFloat32x8(sourceTerm, mask);
-						xCTermF += CPU::ZeroMaskedFloat32x8(xkg, mask);
-						yCTermF += CPU::ZeroMaskedFloat32x8(ykg, mask);
-						zCTermF += CPU::ZeroMaskedFloat32x8(zkg, mask);
+						tmp_SourceTermF += CPU::ZeroMaskedFloat32xSIMD(sourceTerm, mask);
+						xCTermF += CPU::ZeroMaskedFloat32xSIMD(xkg, mask);
+						yCTermF += CPU::ZeroMaskedFloat32xSIMD(ykg, mask);
+						zCTermF += CPU::ZeroMaskedFloat32xSIMD(zkg, mask);
 					}
 				}
 
 				// contributions from boundary neighbors
 				{
-					const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
+					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFB.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
-						const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
+						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosB, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 sourceTerm =
+						const CPU::Float32xSIMD sourceTerm =
 							xsimd::fma(vpxi, xkg, xsimd::fma(vpyi, ykg, vpzi * zkg));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_SourceTermB += CPU::ZeroMaskedFloat32x8(sourceTerm, mask);
-						xCTermB += CPU::ZeroMaskedFloat32x8(xkg, mask);
-						yCTermB += CPU::ZeroMaskedFloat32x8(ykg, mask);
-						zCTermB += CPU::ZeroMaskedFloat32x8(zkg, mask);
+						tmp_SourceTermB += CPU::ZeroMaskedFloat32xSIMD(sourceTerm, mask);
+						xCTermB += CPU::ZeroMaskedFloat32xSIMD(xkg, mask);
+						yCTermB += CPU::ZeroMaskedFloat32xSIMD(ykg, mask);
+						zCTermB += CPU::ZeroMaskedFloat32xSIMD(zkg, mask);
 					}
 				}
 
 				tmp_SourceTermF *= massFV;
 				tmp_SourceTermB *= massBV;
 
-				const CPU::Float32x8 fin_sourceTermF =
-					restDensityFV - CPU::GatherFloat32x8(densityF, idxI)
+				const CPU::Float32xSIMD fin_sourceTermF =
+					restDensityFV - CPU::GatherFloat32xSIMD(densityF, idxI)
 					- timeStepV * (tmp_SourceTermF + tmp_SourceTermB);
 
-				const CPU::Float32x8 xCTerm = xCTermF * cTermFacF + xCTermB * cTermFacB;
-				const CPU::Float32x8 yCTerm = yCTermF * cTermFacF + yCTermB * cTermFacB;
-				const CPU::Float32x8 zCTerm = zCTermF * cTermFacF + zCTermB * cTermFacB;
+				const CPU::Float32xSIMD xCTerm = xCTermF * cTermFacF + xCTermB * cTermFacB;
+				const CPU::Float32xSIMD yCTerm = yCTermF * cTermFacF + yCTermB * cTermFacB;
+				const CPU::Float32xSIMD zCTerm = zCTermF * cTermFacF + zCTermB * cTermFacB;
 
-				CPU::Float32x8 tmp_DiagElemA = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_DiagElemB = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_DiagElemC = CPU::ZeroFloat32x8();
+				CPU::Float32xSIMD tmp_DiagElemA = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_DiagElemB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_DiagElemC = CPU::ZeroFloat32xSIMD();
 
 				// part A and B
 				{
-					const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFF.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
-						const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
+						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosF, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 diagElemA =
+						const CPU::Float32xSIMD diagElemA =
 							xsimd::fma(xCTerm, xkg, xsimd::fma(yCTerm, ykg, zCTerm * zkg));
 
-						const CPU::Float32x8 tmp_x = diagBFac * xkg;
-						const CPU::Float32x8 tmp_y = diagBFac * ykg;
-						const CPU::Float32x8 tmp_z = diagBFac * zkg;
-						const CPU::Float32x8 diagElemB =
+						const CPU::Float32xSIMD tmp_x = diagBFac * xkg;
+						const CPU::Float32xSIMD tmp_y = diagBFac * ykg;
+						const CPU::Float32xSIMD tmp_z = diagBFac * zkg;
+						const CPU::Float32xSIMD diagElemB =
 							xsimd::fma(tmp_x, xkg, xsimd::fma(tmp_y, ykg, tmp_z * zkg));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_DiagElemA += CPU::ZeroMaskedFloat32x8(diagElemA, mask);
-						tmp_DiagElemB += CPU::ZeroMaskedFloat32x8(diagElemB, mask);
+						tmp_DiagElemA += CPU::ZeroMaskedFloat32xSIMD(diagElemA, mask);
+						tmp_DiagElemB += CPU::ZeroMaskedFloat32xSIMD(diagElemB, mask);
 					}
 				}
 				tmp_DiagElemA *= massFV;
@@ -719,52 +719,52 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
 
 				// part C
 				{
-					const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
+					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFB.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
-						const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
+						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosB, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 diagElemC =
+						const CPU::Float32xSIMD diagElemC =
 							xsimd::fma(xCTerm, xkg, xsimd::fma(yCTerm, ykg, zCTerm * zkg));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_DiagElemC += CPU::ZeroMaskedFloat32x8(diagElemC, mask);
+						tmp_DiagElemC += CPU::ZeroMaskedFloat32xSIMD(diagElemC, mask);
 					}
 				}
 				tmp_DiagElemC *= massBV;
 
-				const CPU::Float32x8 fin_diagElemF =
+				const CPU::Float32xSIMD fin_diagElemF =
 					timeStepSquV * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);
-				const CPU::Mask32x8 validDiag = CPU::AbsFloat32x8(fin_diagElemF) > eps;
-				const CPU::Float32x8 pressure = xsimd::max(zero,
-					CPU::ZeroMaskedFloat32x8(
+				const CPU::Mask32xSIMD validDiag = CPU::AbsFloat32xSIMD(fin_diagElemF) > eps;
+				const CPU::Float32xSIMD pressure = xsimd::max(zero,
+					CPU::ZeroMaskedFloat32xSIMD(
 						jacobiOmegaV * (fin_sourceTermF / fin_diagElemF), validDiag));
 
-				// final chunk may contain fewer than 8 active particles
-				CPU::StoreFloat32x8Partial(sourceTermF, begin, end, fin_sourceTermF);
-				CPU::StoreFloat32x8Partial(diagElemF, begin, end, fin_diagElemF);
-				CPU::StoreFloat32x8Partial(pressureF, begin, end, pressure);
+				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
+				CPU::StoreFloat32xSIMDPartial(sourceTermF, begin, end, fin_sourceTermF);
+				CPU::StoreFloat32xSIMDPartial(diagElemF, begin, end, fin_diagElemF);
+				CPU::StoreFloat32xSIMDPartial(pressureF, begin, end, pressure);
 			}
 		},
 		tbb::auto_partitioner{}
 	);
 }
 
-void CPU01::PressureAcceleration_ChunkedSELL8(
+void CPU01::PressureAcceleration_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
@@ -772,7 +772,7 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
 	const float* RESTRICT pressureF,
-	const I_NeighborListSELL8& neighborList,
+	const I_NeighborListSELL& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensityF,
 	const float massF, const float massB, const float pressGamma,
@@ -787,10 +787,10 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 
 	const uint32_t numChunks = neighborList.ChunkNumTotal();
 	const float densiInvSqu = 1.0f / (restDensityF * restDensityF);
-	const CPU::Float32x8 massFV = CPU::SetFloat32x8(massF);
-	const CPU::Float32x8 densiInvSquV = CPU::SetFloat32x8(densiInvSqu);
-	const CPU::Float32x8 accCoeffB_outer = CPU::SetFloat32x8(2.0f * pressGamma * massB * densiInvSqu);
-	const CPU::Float32x8 zero = CPU::ZeroFloat32x8();
+	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::Float32xSIMD densiInvSquV = CPU::SetFloat32xSIMD(densiInvSqu);
+	const CPU::Float32xSIMD accCoeffB_outer = CPU::SetFloat32xSIMD(2.0f * pressGamma * massB * densiInvSqu);
+	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, numChunks),
@@ -798,49 +798,49 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				const ChunkedSELL8NeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
-				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
-				// one SELL8 chunk covers up to 8 consecutive i-particles
-				const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-				const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-				const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
-				const CPU::Float32x8 presi = CPU::GatherFloat32x8(pressureF, idxI);
-				const CPU::Float32x8 accCoeffF_outer = massFV * presi * densiInvSquV;
+				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
+				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+				const CPU::Float32xSIMD presi = CPU::GatherFloat32xSIMD(pressureF, idxI);
+				const CPU::Float32xSIMD accCoeffF_outer = massFV * presi * densiInvSquV;
 
-				CPU::Float32x8 tmp_xAccPressF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_yAccPressF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_zAccPressF = CPU::ZeroFloat32x8();
+				CPU::Float32xSIMD tmp_xAccPressF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_yAccPressF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_zAccPressF = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
-					const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFF.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
-						const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
+						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosF, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 presj = CPU::GatherFloat32x8(pressureF, idxJ);
-						const CPU::Float32x8 accCoeffF =
+						const CPU::Float32xSIMD presj = CPU::GatherFloat32xSIMD(pressureF, idxJ);
+						const CPU::Float32xSIMD accCoeffF =
 							accCoeffF_outer + massFV * presj * densiInvSquV;
-						const CPU::Float32x8 accCoeffFMasked =
-							CPU::ZeroMaskedFloat32x8(accCoeffF, mask);
+						const CPU::Float32xSIMD accCoeffFMasked =
+							CPU::ZeroMaskedFloat32xSIMD(accCoeffF, mask);
 
 						// padded lanes gathered valid indices but contribute zero
 						tmp_xAccPressF = xsimd::fma(accCoeffFMasked, xkg, tmp_xAccPressF);
@@ -849,31 +849,31 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 					}
 				}
 
-				const CPU::Float32x8 accCoeffB = accCoeffB_outer * presi;
+				const CPU::Float32xSIMD accCoeffB = accCoeffB_outer * presi;
 
 				// contributions from boundary neighbors
 				{
-					const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
+					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFB.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
-						const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
+						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosB, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 accCoeffBMasked =
-							CPU::ZeroMaskedFloat32x8(accCoeffB, mask);
+						const CPU::Float32xSIMD accCoeffBMasked =
+							CPU::ZeroMaskedFloat32xSIMD(accCoeffB, mask);
 
 						// padded lanes gathered valid indices but contribute zero
 						tmp_xAccPressF = xsimd::fma(accCoeffBMasked, xkg, tmp_xAccPressF);
@@ -882,17 +882,17 @@ void CPU01::PressureAcceleration_ChunkedSELL8(
 					}
 				}
 
-				// final chunk may contain fewer than 8 active particles
-				CPU::StoreFloat32x8Partial(xAccPressF, begin, end, zero - tmp_xAccPressF);
-				CPU::StoreFloat32x8Partial(yAccPressF, begin, end, zero - tmp_yAccPressF);
-				CPU::StoreFloat32x8Partial(zAccPressF, begin, end, zero - tmp_zAccPressF);
+				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
+				CPU::StoreFloat32xSIMDPartial(xAccPressF, begin, end, zero - tmp_xAccPressF);
+				CPU::StoreFloat32xSIMDPartial(yAccPressF, begin, end, zero - tmp_yAccPressF);
+				CPU::StoreFloat32xSIMDPartial(zAccPressF, begin, end, zero - tmp_zAccPressF);
 			}
 		},
 		affPart
 	);
 }
 
-void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
+void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
@@ -904,7 +904,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 	const float* RESTRICT zAccPressF,
 	const float* RESTRICT sourceTermF,
 	const float* RESTRICT diagElemF,
-	const I_NeighborListSELL8& neighborList,
+	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensityF, const float massF, const float massB,
@@ -938,123 +938,123 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL8(
 	};
 
 	const uint32_t numChunks = neighborList.ChunkNumTotal();
-	const CPU::Float32x8 timeStepSquV = CPU::SetFloat32x8(timeStep * timeStep);
-	const CPU::Float32x8 restDensityFV = CPU::SetFloat32x8(restDensityF);
-	const CPU::Float32x8 massFV = CPU::SetFloat32x8(massF);
-	const CPU::Float32x8 massBV = CPU::SetFloat32x8(massB);
-	const CPU::Float32x8 jacobiOmegaV = CPU::SetFloat32x8(jacobiOmega);
-	const CPU::Float32x8 zero = CPU::ZeroFloat32x8();
-	const CPU::Float32x8 eps = CPU::SetFloat32x8(ZERO_EQU_LIM_F);
+	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
+	const CPU::Float32xSIMD restDensityFV = CPU::SetFloat32xSIMD(restDensityF);
+	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::Float32xSIMD massBV = CPU::SetFloat32xSIMD(massB);
+	const CPU::Float32xSIMD jacobiOmegaV = CPU::SetFloat32xSIMD(jacobiOmega);
+	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
+	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 
 	DensityErrorAccum acc = tbb::parallel_reduce(
 		tbb::blocked_range<uint32_t>(0, numChunks), DensityErrorAccum{},
 		[&](const tbb::blocked_range<uint32_t>& r, DensityErrorAccum local)
 		{
-			alignas(32) float relErrTmp[CPU::N_SIMD_WIDTH]{};
+			alignas(CPU::N_SIMD_ALIGNMENT) float relErrTmp[CPU::N_SIMD_WIDTH]{};
 
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
-				const ChunkedSELL8NeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-				const ChunkedSELL8NeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
-				const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
+				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
-				// one SELL8 chunk covers up to 8 consecutive i-particles
-				const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-				const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-				const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
-				const CPU::Float32x8 axi = CPU::GatherFloat32x8(xAccPressF, idxI);
-				const CPU::Float32x8 ayi = CPU::GatherFloat32x8(yAccPressF, idxI);
-				const CPU::Float32x8 azi = CPU::GatherFloat32x8(zAccPressF, idxI);
+				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
+				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+				const CPU::Float32xSIMD axi = CPU::GatherFloat32xSIMD(xAccPressF, idxI);
+				const CPU::Float32xSIMD ayi = CPU::GatherFloat32xSIMD(yAccPressF, idxI);
+				const CPU::Float32xSIMD azi = CPU::GatherFloat32xSIMD(zAccPressF, idxI);
 
-				CPU::Float32x8 tmp_SysVecElemF = CPU::ZeroFloat32x8();
-				CPU::Float32x8 tmp_SysVecElemB = CPU::ZeroFloat32x8();
+				CPU::Float32xSIMD tmp_SysVecElemF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_SysVecElemB = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
-					const CPU::UInt32x8 countFF = CPU::LoadUInt16AsUInt32x8(nbrFF.counts + begin);
+					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFF.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFF);
-						const CPU::UInt32x8 idxJ = nbrFF.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
+						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosF, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosF, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosF, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32x8 dapx = axi - CPU::GatherFloat32x8(xAccPressF, idxJ);
-						const CPU::Float32x8 dapy = ayi - CPU::GatherFloat32x8(yAccPressF, idxJ);
-						const CPU::Float32x8 dapz = azi - CPU::GatherFloat32x8(zAccPressF, idxJ);
+						const CPU::Float32xSIMD dapx = axi - CPU::GatherFloat32xSIMD(xAccPressF, idxJ);
+						const CPU::Float32xSIMD dapy = ayi - CPU::GatherFloat32xSIMD(yAccPressF, idxJ);
+						const CPU::Float32xSIMD dapz = azi - CPU::GatherFloat32xSIMD(zAccPressF, idxJ);
 
-						const CPU::Float32x8 sysVecElem = CPU::FmaFloat32x8(
-							dapx, xkg, CPU::FmaFloat32x8(dapy, ykg, dapz * zkg));
+						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
+							dapx, xkg, CPU::FmaFloat32xSIMD(dapy, ykg, dapz * zkg));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_SysVecElemF += CPU::AndMaskedFloat32x8(sysVecElem, mask);
+						tmp_SysVecElemF += CPU::AndMaskedFloat32xSIMD(sysVecElem, mask);
 					}
 				}
 				tmp_SysVecElemF *= massFV;
 
 				// contributions from boundary neighbors
 				{
-					const CPU::UInt32x8 countFB = CPU::LoadUInt16AsUInt32x8(nbrFB.counts + begin);
+					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
 					for (uint32_t k = 0; k < nbrFB.pitch; k++)
 					{
-						// one SELL8 column stores neighbor k for all 8 lanes
-						const CPU::Mask32x8 mask = CPU::MaskKLessThanCounts32x8(k, countFB);
-						const CPU::UInt32x8 idxJ = nbrFB.LoadNeighborIdx32x8(k);
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
+						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
 
-						const CPU::Float32x8 dx = xi - CPU::GatherFloat32x8(xPosB, idxJ);
-						const CPU::Float32x8 dy = yi - CPU::GatherFloat32x8(yPosB, idxJ);
-						const CPU::Float32x8 dz = zi - CPU::GatherFloat32x8(zPosB, idxJ);
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
 
-						CPU::Float32x8 xkg;
-						CPU::Float32x8 ykg;
-						CPU::Float32x8 zkg;
-						CPU::KernelGradient_CubicSpline_SIMD8(
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
-						const CPU::Float32x8 sysVecElem = CPU::FmaFloat32x8(
-							axi, xkg, CPU::FmaFloat32x8(ayi, ykg, azi * zkg));
+						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
+							axi, xkg, CPU::FmaFloat32xSIMD(ayi, ykg, azi * zkg));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_SysVecElemB += CPU::AndMaskedFloat32x8(sysVecElem, mask);
+						tmp_SysVecElemB += CPU::AndMaskedFloat32xSIMD(sysVecElem, mask);
 					}
 				}
 				tmp_SysVecElemB *= massBV;
 
-				const CPU::Float32x8 sysVecElemF =
+				const CPU::Float32xSIMD sysVecElemF =
 					timeStepSquV * (tmp_SysVecElemF + tmp_SysVecElemB);
-				const CPU::Float32x8 sourceTerm = CPU::GatherFloat32x8(sourceTermF, idxI);
-				const CPU::Float32x8 diagElem = CPU::GatherFloat32x8(diagElemF, idxI);
-				const CPU::Float32x8 solverResidual = sourceTerm - sysVecElemF;
-				const CPU::Float32x8 predDensityError = sysVecElemF - sourceTerm;
+				const CPU::Float32xSIMD sourceTerm = CPU::GatherFloat32xSIMD(sourceTermF, idxI);
+				const CPU::Float32xSIMD diagElem = CPU::GatherFloat32xSIMD(diagElemF, idxI);
+				const CPU::Float32xSIMD solverResidual = sourceTerm - sysVecElemF;
+				const CPU::Float32xSIMD predDensityError = sysVecElemF - sourceTerm;
 
-				const CPU::Mask32x8 validDiag = CPU::AbsBitwiseFloat32x8(diagElem) > eps;
-				const CPU::Float32x8 pressure = CPU::GatherFloat32x8(pressureF, idxI);
-				const CPU::Float32x8 pressureNext = xsimd::max(zero,
-					CPU::AndMaskedFloat32x8(
-						CPU::FmaFloat32x8(jacobiOmegaV, solverResidual / diagElem, pressure),
+				const CPU::Mask32xSIMD validDiag = CPU::AbsBitwiseFloat32xSIMD(diagElem) > eps;
+				const CPU::Float32xSIMD pressure = CPU::GatherFloat32xSIMD(pressureF, idxI);
+				const CPU::Float32xSIMD pressureNext = xsimd::max(zero,
+					CPU::AndMaskedFloat32xSIMD(
+						CPU::FmaFloat32xSIMD(jacobiOmegaV, solverResidual / diagElem, pressure),
 						validDiag));
 
-				// final chunk may contain fewer than 8 active particles
-				CPU::StoreFloat32x8Partial(pressureF, begin, end, pressureNext);
+				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
+				CPU::StoreFloat32xSIMDPartial(pressureF, begin, end, pressureNext);
 
-				const CPU::Float32x8 relErr = predDensityError / restDensityFV;
-				const uint32_t validDiagMask = CPU::MaskBits32x8(validDiag);
+				const CPU::Float32xSIMD relErr = predDensityError / restDensityFV;
+				const uint32_t validDiagMask = CPU::MaskBits32xSIMD(validDiag);
 				relErr.store_aligned(relErrTmp);
 
 				for (uint32_t lane = 0; lane < end - begin; lane++)

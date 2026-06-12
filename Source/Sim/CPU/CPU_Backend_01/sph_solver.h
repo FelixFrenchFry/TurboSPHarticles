@@ -23,21 +23,21 @@ namespace CPU01
 	constexpr float ZERO_EQU_LIM_F = 1e-7f;
 	constexpr double ZERO_EQU_LIM_D = 1e-14;
 
-	void Density_ChunkedSELL8(
+	void Density_ChunkedSELL(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
 		const float* RESTRICT xPosB,
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
-		const Sim::I_NeighborListSELL8& neighborList,
+		const Sim::I_NeighborListSELL& neighborList,
 		float particleSizeInvF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float massF, float massB,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT densityF);
 
-	void NonPressureAcceleration_ChunkedSELL8(
+	void NonPressureAcceleration_ChunkedSELL(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
@@ -48,7 +48,7 @@ namespace CPU01
 		const float* RESTRICT yVelF,
 		const float* RESTRICT zVelF,
 		const float* RESTRICT densityF,
-		const Sim::I_NeighborListSELL8& neighborList,
+		const Sim::I_NeighborListSELL& neighborList,
 		float timeStep, float particleSizeInvF,
 		float particleSizeSquF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float restDensityF,
@@ -61,7 +61,7 @@ namespace CPU01
 		float* RESTRICT yVelPredF,
 		float* RESTRICT zVelPredF);
 
-	void SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL8(
+	void SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
@@ -72,7 +72,7 @@ namespace CPU01
 		const float* RESTRICT yVelPredF,
 		const float* RESTRICT zVelPredF,
 		const float* RESTRICT densityF,
-		const Sim::I_NeighborListSELL8& neighborList,
+		const Sim::I_NeighborListSELL& neighborList,
 		float timeStep, float particleSizeInvF,
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensityF, float restDensitySquInvF,
@@ -84,7 +84,7 @@ namespace CPU01
 		float* RESTRICT diagElemF,
 		float* RESTRICT pressureF);
 
-	void PressureAcceleration_ChunkedSELL8(
+	void PressureAcceleration_ChunkedSELL(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
@@ -92,7 +92,7 @@ namespace CPU01
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
 		const float* RESTRICT pressureF,
-		const Sim::I_NeighborListSELL8& neighborList,
+		const Sim::I_NeighborListSELL& neighborList,
 		float particleSizeInvF, float kernelRadiusSqu,
 		float cubicSplineAlpha, float restDensityF,
 		float massF, float massB, float pressGamma,
@@ -103,7 +103,7 @@ namespace CPU01
 		float* RESTRICT yAccPressF,
 		float* RESTRICT zAccPressF);
 
-	void PressureRelaxedJacobiSolver_ChunkedSELL8(
+	void PressureRelaxedJacobiSolver_ChunkedSELL(
 		const float* RESTRICT xPosF,
 		const float* RESTRICT yPosF,
 		const float* RESTRICT zPosF,
@@ -115,7 +115,7 @@ namespace CPU01
 		const float* RESTRICT zAccPressF,
 		const float* RESTRICT sourceTermF,
 		const float* RESTRICT diagElemF,
-		const Sim::I_NeighborListSELL8& neighborList,
+		const Sim::I_NeighborListSELL& neighborList,
 		float timeStep, float particleSizeInvF,
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensityF, float massF, float massB,

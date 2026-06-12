@@ -20,7 +20,7 @@
 #include "neighbor_lists.h"
 #include "neighbor_search.h"
 #include "Source/Base/helpers.h"
-#include "Source/Sim/CPU/simd8.h"
+#include "Source/Sim/CPU/simd.h"
 
 #if defined(_MSC_VER)
 #define RESTRICT __restrict
@@ -91,7 +91,7 @@ namespace
 		return (v < static_cast<float>(i)) ? (i - 1) : i;
 	}
 
-	inline uint32_t ValidLaneMask_SIMD8(
+	inline uint32_t ValidLaneMask_SIMD(
 		const uint32_t begin,
 		const uint32_t end) noexcept
 	{
@@ -382,9 +382,9 @@ void NS_BruteForce_CPU01::Query_Fill(
 				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
 				uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 				uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
-				ChunkedSELL8NeighborSpan_Write chunkFF =
+				ChunkedSELLNeighborSpan_Write chunkFF =
 					be_.neighborList_->FFChunkWrite(chunk);
-				ChunkedSELL8NeighborSpan_Write chunkFB =
+				ChunkedSELLNeighborSpan_Write chunkFB =
 					be_.neighborList_->FBChunkWrite(chunk);
 
 				for (uint32_t i = begin; i < end; i++)
@@ -412,7 +412,7 @@ void NS_BruteForce_CPU01::Query_Fill(
 							if (k >= chunkFF.pitch) [[unlikely]]
 							{
 								throw std::runtime_error(
-									"Brute-force SELL8 FF fill exceeded chunk pitch.");
+									"Brute-force SELL FF fill exceeded chunk pitch.");
 							}
 							#endif
 
@@ -438,7 +438,7 @@ void NS_BruteForce_CPU01::Query_Fill(
 							if (k >= chunkFB.pitch) [[unlikely]]
 							{
 								throw std::runtime_error(
-									"Brute-force SELL8 FB fill exceeded chunk pitch.");
+									"Brute-force SELL FB fill exceeded chunk pitch.");
 							}
 							#endif
 
@@ -795,10 +795,10 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 		const float* RESTRICT zPosB = be_.zPosB_.data();
 
 		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
-		const CPU::Float32x8 kernelRadiusSquV = CPU::SetFloat32x8(kernelRadiusSqu);
-		auto* chunkedSELL8NeighborList = be_.neighborList_.get();
+		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
+		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 		const bool trackChunkNeighborIdxRange =
-			chunkedSELL8NeighborList->NeedsChunkNeighborIdxRange();
+			chunkedSELLNeighborList->NeedsChunkNeighborIdxRange();
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, numChunks),
@@ -812,11 +812,11 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 				{
 					const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
 					const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
-					const uint32_t validMask = ValidLaneMask_SIMD8(begin, end);
-					const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
-					const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-					const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-					const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
+					const uint32_t validMask = ValidLaneMask_SIMD(begin, end);
+					const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
+					const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+					const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+					const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
 					uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
 					uint32_t minRefFF = std::numeric_limits<uint32_t>::max();
@@ -831,16 +831,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosF[l]);
-							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosF[l]);
-							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosF[l]);
-							const CPU::Float32x8 dx = xi - xj;
-							const CPU::Float32x8 dy = yi - yj;
-							const CPU::Float32x8 dz = zi - zj;
-							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
 							const uint32_t mask =
-								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
 
 							if (trackChunkNeighborIdxRange && mask != 0u)
 							{
@@ -860,16 +860,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosB[l]);
-							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosB[l]);
-							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosB[l]);
-							const CPU::Float32x8 dx = xi - xj;
-							const CPU::Float32x8 dy = yi - yj;
-							const CPU::Float32x8 dz = zi - zj;
-							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosB[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosB[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosB[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
 							const uint32_t mask =
-								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
 
 							if (trackChunkNeighborIdxRange && mask != 0u)
 							{
@@ -894,9 +894,9 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 
 					if (trackChunkNeighborIdxRange)
 					{
-						chunkedSELL8NeighborList->SetChunkNeighborIdxRangeFF(
+						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFF(
 							chunk, minRefFF, maxRefFF);
-						chunkedSELL8NeighborList->SetChunkNeighborIdxRangeFB(
+						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFB(
 							chunk, minRefFB, maxRefFB);
 					}
 				}
@@ -914,7 +914,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 		const uint32_t N_F = be_.N_F_;
 		if (N_F == 0) { return; }
 
-		auto* chunkedSELL8NeighborList = be_.neighborList_.get();
+		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 
 		// local references for fewer pointer indirections
 		const float* RESTRICT xPosF = be_.xPosF_.data();
@@ -925,7 +925,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 		const float* RESTRICT zPosB = be_.zPosB_.data();
 
 		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
-		const CPU::Float32x8 kernelRadiusSquV = CPU::SetFloat32x8(kernelRadiusSqu);
+		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, numChunks),
@@ -939,17 +939,17 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 				{
 					const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
 					const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
-					const uint32_t validMask = ValidLaneMask_SIMD8(begin, end);
-					const CPU::UInt32x8 idxI = CPU::ParticleIdx32x8(begin, end);
-					const CPU::Float32x8 xi = CPU::GatherFloat32x8(xPosF, idxI);
-					const CPU::Float32x8 yi = CPU::GatherFloat32x8(yPosF, idxI);
-					const CPU::Float32x8 zi = CPU::GatherFloat32x8(zPosF, idxI);
+					const uint32_t validMask = ValidLaneMask_SIMD(begin, end);
+					const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
+					const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
+					const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
+					const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
 					uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
-					ChunkedSELL8NeighborSpan_Write chunkFF =
-						chunkedSELL8NeighborList->FFChunkWrite(chunk);
-					ChunkedSELL8NeighborSpan_Write chunkFB =
-						chunkedSELL8NeighborList->FBChunkWrite(chunk);
+					ChunkedSELLNeighborSpan_Write chunkFF =
+						chunkedSELLNeighborList->FFChunkWrite(chunk);
+					ChunkedSELLNeighborSpan_Write chunkFB =
+						chunkedSELLNeighborList->FBChunkWrite(chunk);
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges);
 
@@ -958,16 +958,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosF[l]);
-							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosF[l]);
-							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosF[l]);
-							const CPU::Float32x8 dx = xi - xj;
-							const CPU::Float32x8 dy = yi - yj;
-							const CPU::Float32x8 dz = zi - zj;
-							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
 							const uint32_t mask =
-								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
 
 							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
@@ -975,7 +975,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 								if (writtenFF[lane] >= chunkFF.pitch) [[unlikely]]
 								{
 									throw std::runtime_error(
-										"CPU01 ChunkedSELL8 FF direct fill exceeded chunk pitch.");
+										"CPU01 ChunkedSELL FF direct fill exceeded chunk pitch.");
 								}
 
 								chunkFF.StoreNeighbor(lane, writtenFF[lane], l);
@@ -989,16 +989,16 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const CPU::Float32x8 xj = CPU::SetFloat32x8(xPosB[l]);
-							const CPU::Float32x8 yj = CPU::SetFloat32x8(yPosB[l]);
-							const CPU::Float32x8 zj = CPU::SetFloat32x8(zPosB[l]);
-							const CPU::Float32x8 dx = xi - xj;
-							const CPU::Float32x8 dy = yi - yj;
-							const CPU::Float32x8 dz = zi - zj;
-							const CPU::Float32x8 distSqu = xsimd::fma(dx, dx,
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosB[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosB[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosB[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
 							const uint32_t mask =
-								CPU::MaskBits32x8(distSqu <= kernelRadiusSquV) & validMask;
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
 
 							for (uint32_t lane = 0; lane < end - begin; lane++)
 							{
@@ -1006,7 +1006,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 								if (writtenFB[lane] >= chunkFB.pitch) [[unlikely]]
 								{
 									throw std::runtime_error(
-										"CPU01 ChunkedSELL8 FB direct fill exceeded chunk pitch.");
+										"CPU01 ChunkedSELL FB direct fill exceeded chunk pitch.");
 								}
 
 								chunkFB.StoreNeighbor(lane, writtenFB[lane], l);
@@ -1015,8 +1015,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						}
 					}
 
-					chunkedSELL8NeighborList->FinishFFChunkWrite(chunk, writtenFF);
-					chunkedSELL8NeighborList->FinishFBChunkWrite(chunk, writtenFB);
+					chunkedSELLNeighborList->FinishFFChunkWrite(chunk, writtenFF);
+					chunkedSELLNeighborList->FinishFBChunkWrite(chunk, writtenFB);
 				}
 			},
 			tbb::auto_partitioner{}
