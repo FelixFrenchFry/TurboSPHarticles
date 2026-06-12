@@ -7,6 +7,7 @@
 
 // internal
 #include "Apps/app_runtime.h"
+#include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Dist/distributed_simulation.h"
 #include "Source/Sim/Dist/mpi_context.h"
@@ -51,6 +52,10 @@ int main(int argc, char** argv)
 				SPDLOG_ERROR("Failed to initialize DistributedSimulation");
 			}
 			return EXIT_FAILURE;
+		}
+		if (mpiContext.IsRoot())
+		{
+			Sim::DiagnosticsMgr::PrintBuildConfig();
 		}
 
 		// --- [ main loop ] ------------------------------------------------------------------------

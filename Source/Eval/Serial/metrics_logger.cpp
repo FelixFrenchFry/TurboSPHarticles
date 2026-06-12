@@ -16,6 +16,7 @@
 
 // internal
 #include "metrics_logger.h"
+#include "Source/Sim/Core/build_config.h"
 
 
 
@@ -337,6 +338,20 @@ namespace Export
 		meta["configProfile"] = configProfile;
 		meta["createdAt"] = MakeTimestampString();
 		meta["runDir"] = runDir_.string();
+
+		meta["buildConfig"] =
+		{
+			{ "buildType", Sim::BuildConfig::buildType },
+			{ "compilerId", Sim::BuildConfig::cxxCompilerId },
+			{ "compilerVersion", Sim::BuildConfig::cxxCompilerVersion },
+			{ "cpuSimd",
+				{
+					{ "arch", Sim::BuildConfig::cpuSimdArch },
+					{ "width", Sim::BuildConfig::cpuSimdWidth }
+				}
+			},
+			{ "cpuIsaCompilerFlags", Sim::BuildConfig::cpuIsaCompilerFlags }
+		};
 
 		meta["paramsConfig"] =
 		{

@@ -231,7 +231,6 @@ bool App::LoadSimParams(
 			return false;
 		}
 	}
-	printf("\n");
 	SPDLOG_INFO("Using config profile '{}'", profile);
 
 	if (!simOverrides.empty())

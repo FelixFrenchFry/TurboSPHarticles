@@ -43,6 +43,7 @@ int main(int argc, char** argv)
 		const App::ThreadBudget threadBudget = App::ResolveThreadBudget(
 			simParamsMgr.SnapshotParams().first.maxThreadsSim, 1);
 
+		Sim::DiagnosticsMgr::PrintBuildConfig();
 		Sim::DiagnosticsMgr::PrintHardwareSpecs(
 			threadBudget.N_totalThreads, threadBudget.N_simThreads, threadBudget.N_visThreads);
 

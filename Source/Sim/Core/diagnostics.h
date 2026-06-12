@@ -22,6 +22,8 @@ namespace Sim
 
 		DiagnosticsMgr() = delete;
 
+		static void PrintBuildConfig();
+
 		static void PrintHardwareSpecs(uint32_t N_totalThreads,
 		                               uint32_t N_simThreads,
 		                               uint32_t N_visThreads);

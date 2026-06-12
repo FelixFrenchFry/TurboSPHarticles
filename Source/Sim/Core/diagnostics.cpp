@@ -17,6 +17,7 @@
 #endif
 
 // internal
+#include "build_config.h"
 #include "diagnostics.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Core/simulation.h"
@@ -52,6 +53,23 @@ namespace Sim
 
 	}
 
+	void DiagnosticsMgr::PrintBuildConfig()
+	{
+		printf("\n");
+		PrintCliSectionHeader("build configuration");
+		PrintCliSeparator();
+
+		printf("%-30s = %s\n", "build type", BuildConfig::buildType);
+		printf("%-30s = %s %s\n", "compiler",
+			BuildConfig::cxxCompilerId,
+			BuildConfig::cxxCompilerVersion);
+		printf("%-30s = %s (%u lanes)\n", "cpu simd arch",
+			BuildConfig::cpuSimdArch,
+			BuildConfig::cpuSimdWidth);
+		printf("%-30s = %s\n", "cpu isa compiler flags",
+			BuildConfig::cpuIsaCompilerFlags);
+	}
+
     void DiagnosticsMgr::PrintHardwareSpecs(uint32_t N_totalThreads,
 											uint32_t N_simThreads,
 											uint32_t N_visThreads)
@@ -75,6 +93,7 @@ namespace Sim
         printf("%-30s = %u\n", "threads total avail", N_totalThreads);
         printf("%-30s = %u\n", "threads used for sim", N_simThreads);
         printf("%-30s = %u\n", "threads used for vis", N_visThreads);
+        printf("\n");
     }
 
     void DiagnosticsMgr::PrintSimParams(const SimParams& params)
