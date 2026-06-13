@@ -30,6 +30,7 @@ namespace Sim
 	namespace
 	{
 		constexpr int N_CLI_SEPARATOR_CHARS = 80;
+		constexpr int N_CLI_SIM_PARAM_LABEL_CHARS = 38;
 		constexpr const char* CLI_SEPARATOR =
 			"--------------------------------------------------------------------------------";
 
@@ -49,6 +50,15 @@ namespace Sim
 			}
 
 			std::putchar('\n');
+		}
+
+		std::string MakeDisplayExportDir(const std::string& exportDir)
+		{
+			if (exportDir.empty()) { return "/"; }
+			if (exportDir[0] == '/' || exportDir[0] == '\\') { return exportDir; }
+			if (exportDir.size() >= 2 && exportDir[1] == ':') { return exportDir; }
+
+			return "/" + exportDir;
 		}
 
 	}
@@ -103,45 +113,46 @@ namespace Sim
 		PrintCliSeparator();
 
         // print table with aligned columns of sim parameters
-        printf("%-30s = %.6f\n", "timeStep", params.timeStep);
-        printf("%-30s = %.6f\n", "particleSizeF", params.particleSizeF);
-        printf("%-30s = %.6f\n", "particleSizeB", params.particleSizeB);
-        printf("%-30s = %.6f\n", "particleSizeInvF", params.particleSizeInvF);
-        printf("%-30s = %.6f\n", "particleSizeInvB", params.particleSizeInvB);
-        printf("%-30s = %.6f\n", "kernelSuppRatio", params.kernelSuppRatio);
-        printf("%-30s = %.6f\n", "kernelRadius", params.kernelRadius);
-        printf("%-30s = %.6f\n", "kernelRadiusSqu", params.kernelRadiusSqu);
-        printf("%-30s = %u\n", "expctdNbrCountSoftMax_FF", params.expctdNbrCountSoftMax_FF);
-        printf("%-30s = %u\n", "expctdNbrCountSoftMax_FB", params.expctdNbrCountSoftMax_FB);
-        printf("%-30s = %u\n", "expctdNbrCountHardMax_FF", params.expctdNbrCountHardMax_FF);
-        printf("%-30s = %u\n", "expctdNbrCountHardMax_FB", params.expctdNbrCountHardMax_FB);
-        printf("%-30s = %u\n", "expctdAvgNbrCountHardMax_FF", params.expctdAvgNbrCountHardMax_FF);
-        printf("%-30s = %u\n", "expctdAvgNbrCountHardMax_FB", params.expctdAvgNbrCountHardMax_FB);
-        printf("%-30s = %.6f\n", "restDensityF", params.restDensityF);
-        printf("%-30s = %.6f\n", "restDensityB", params.restDensityB);
-        printf("%-30s = %.6f\n", "massF", params.massF);
-        printf("%-30s = %.6f\n", "massB", params.massB);
-        printf("%-30s = %.6f\n", "viscosityF", params.viscosityF);
-        printf("%-30s = %.6f\n", "viscosityB", params.viscosityB);
-        printf("%-30s = (%.3f, %.3f, %.3f)\n", "gravity",
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "timeStep", params.timeStep);
+        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "particleSize [F / B]",
+			params.particleSizeF, params.particleSizeB);
+        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "particleSizeInv [F / B]",
+			params.particleSizeInvF, params.particleSizeInvB);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "kernelSuppRatio", params.kernelSuppRatio);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "kernelRadius", params.kernelRadius);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "kernelRadiusSqu", params.kernelRadiusSqu);
+        printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "expctdNbrCountSoftMax [FF / FB]",
+			params.expctdNbrCountSoftMax_FF, params.expctdNbrCountSoftMax_FB);
+        printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "expctdNbrCountHardMax [FF / FB]",
+			params.expctdNbrCountHardMax_FF, params.expctdNbrCountHardMax_FB);
+        printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "expctdAvgNbrCountHardMax [FF / FB]",
+			params.expctdAvgNbrCountHardMax_FF, params.expctdAvgNbrCountHardMax_FB);
+        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "restDensity [F / B]",
+			params.restDensityF, params.restDensityB);
+        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "mass [F / B]",
+			params.massF, params.massB);
+        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "viscosity [F / B]",
+			params.viscosityF, params.viscosityB);
+        printf("%-*s = (%.3f, %.3f, %.3f)\n", N_CLI_SIM_PARAM_LABEL_CHARS, "gravity",
             params.gravity.x, params.gravity.y, params.gravity.z);
-        printf("%-30s = %.6f\n", "pressGamma", params.pressGamma);
-        printf("%-30s = %.6f\n", "jacobiOmega", params.jacobiOmega);
-        printf("%-30s = %.6f\n", "densityDevTarget", params.densityDevTarget);
-        printf("%-30s = %u\n", "fixedIters", params.fixedIters);
-        printf("%-30s = %u\n", "minSolverIters", params.minSolverIters);
-        printf("%-30s = %u\n", "maxSolverIters", params.maxSolverIters);
-        printf("%-30s = %s\n", "solverTerminationCond",
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "pressGamma", params.pressGamma);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jacobiOmega", params.jacobiOmega);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "densityDevTarget", params.densityDevTarget);
+        printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "fixedIters", params.fixedIters);
+        printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "minSolverIters", params.minSolverIters);
+        printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "maxSolverIters", params.maxSolverIters);
+        printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "solverTerminationCond",
             Base::ToCString(params.solverTerminationCond));
-        printf("%-30s = %.6f\n", "gridCellSizeRatio", params.gridCellSizeRatio);
-        printf("%-30s = %.6f\n", "jitterFracF", params.jitterFracF);
-        printf("%-30s = %" PRId64 "\n", "jitterSeedF", params.jitterSeedF);
-        printf("%-30s = %.6f\n", "jitterFracB", params.jitterFracB);
-        printf("%-30s = %" PRId64 "\n", "jitterSeedB", params.jitterSeedB);
-        printf("%-30s = %u\n", "boundaryLayers", params.boundaryLayers);
-        printf("%-30s = %s\n", "exportEnabled", params.exportEnabled ? "true" : "false");
-        printf("%-30s = %s\n", "exportDir", params.exportDir.c_str());
-		printf("%-30s = %u\n", "exportInterval", params.exportInterval);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "gridCellSizeRatio", params.gridCellSizeRatio);
+        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterFrac [F / B]",
+			params.jitterFracF, params.jitterFracB);
+        printf("%-*s = [ %" PRId64 " / %" PRId64 " ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterSeed [F / B]",
+			params.jitterSeedF, params.jitterSeedB);
+        printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "boundaryLayers", params.boundaryLayers);
+        printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
+		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
+        printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());
+		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportInterval", params.exportInterval);
     }
 
     void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr,
@@ -164,9 +175,8 @@ namespace Sim
 				params.neighborListMethod));
 
         // particle counts
-        printf("%-30s = %u\n", "fluid particles", 
-            simMgr.simBackend_->GetNumFluidParticles());
-        printf("%-30s = %u\n", "boundary particles", 
+        printf("%-30s = [ %u / %u ]\n", "particles [F / B]",
+            simMgr.simBackend_->GetNumFluidParticles(),
             simMgr.simBackend_->GetNumBoundaryParticles());
     }
 
