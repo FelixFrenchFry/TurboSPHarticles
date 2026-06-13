@@ -593,6 +593,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				CPU::Float32xSIMD xCTermF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD yCTermF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD zCTermF = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD gradSquSumF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD xCTermB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD yCTermB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD zCTermB = CPU::ZeroFloat32xSIMD();
@@ -629,6 +630,10 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						xCTermF += CPU::ZeroMaskedFloat32xSIMD(xkg, mask);
 						yCTermF += CPU::ZeroMaskedFloat32xSIMD(ykg, mask);
 						zCTermF += CPU::ZeroMaskedFloat32xSIMD(zkg, mask);
+
+						const CPU::Float32xSIMD gradSqu =
+							xsimd::fma(xkg, xkg, xsimd::fma(ykg, ykg, zkg * zkg));
+						gradSquSumF += CPU::ZeroMaskedFloat32xSIMD(gradSqu, mask);
 					}
 				}
 
@@ -675,77 +680,16 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				const CPU::Float32xSIMD yCTerm = yCTermF * cTermFacF + yCTermB * cTermFacB;
 				const CPU::Float32xSIMD zCTerm = zCTermF * cTermFacF + zCTermB * cTermFacB;
 
-				CPU::Float32xSIMD tmp_DiagElemA = CPU::ZeroFloat32xSIMD();
-				CPU::Float32xSIMD tmp_DiagElemB = CPU::ZeroFloat32xSIMD();
-				CPU::Float32xSIMD tmp_DiagElemC = CPU::ZeroFloat32xSIMD();
-
-				// part A and B
-				{
-					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
-
-					for (uint32_t k = 0; k < nbrFF.pitch; k++)
-					{
-						// one SELL column stores neighbor k for all SIMD lanes
-						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFF);
-						const CPU::UInt32xSIMD idxJ = nbrFF.LoadNeighborIdx32xSIMD(k);
-
-						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosF, idxJ);
-						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
-						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
-
-						CPU::Float32xSIMD xkg;
-						CPU::Float32xSIMD ykg;
-						CPU::Float32xSIMD zkg;
-						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
-							cubicSplineAlpha, xkg, ykg, zkg);
-
-						const CPU::Float32xSIMD diagElemA =
-							xsimd::fma(xCTerm, xkg, xsimd::fma(yCTerm, ykg, zCTerm * zkg));
-
-						const CPU::Float32xSIMD tmp_x = diagBFac * xkg;
-						const CPU::Float32xSIMD tmp_y = diagBFac * ykg;
-						const CPU::Float32xSIMD tmp_z = diagBFac * zkg;
-						const CPU::Float32xSIMD diagElemB =
-							xsimd::fma(tmp_x, xkg, xsimd::fma(tmp_y, ykg, tmp_z * zkg));
-
-						// padded lanes gathered valid indices but contribute zero
-						tmp_DiagElemA += CPU::ZeroMaskedFloat32xSIMD(diagElemA, mask);
-						tmp_DiagElemB += CPU::ZeroMaskedFloat32xSIMD(diagElemB, mask);
-					}
-				}
-				tmp_DiagElemA *= massFV;
-				tmp_DiagElemB *= massFV;
-
-				// part C
-				{
-					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
-
-					for (uint32_t k = 0; k < nbrFB.pitch; k++)
-					{
-						// one SELL column stores neighbor k for all SIMD lanes
-						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFB);
-						const CPU::UInt32xSIMD idxJ = nbrFB.LoadNeighborIdx32xSIMD(k);
-
-						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosB, idxJ);
-						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosB, idxJ);
-						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosB, idxJ);
-
-						CPU::Float32xSIMD xkg;
-						CPU::Float32xSIMD ykg;
-						CPU::Float32xSIMD zkg;
-						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
-							cubicSplineAlpha, xkg, ykg, zkg);
-
-						const CPU::Float32xSIMD diagElemC =
-							xsimd::fma(xCTerm, xkg, xsimd::fma(yCTerm, ykg, zCTerm * zkg));
-
-						// padded lanes gathered valid indices but contribute zero
-						tmp_DiagElemC += CPU::ZeroMaskedFloat32xSIMD(diagElemC, mask);
-					}
-				}
-				tmp_DiagElemC *= massBV;
+				// part A of diagonal element
+				const CPU::Float32xSIMD tmp_DiagElemA = massFV *
+					xsimd::fma(xCTerm, xCTermF,
+						xsimd::fma(yCTerm, yCTermF, zCTerm * zCTermF));
+				// part B of diagonal element
+				const CPU::Float32xSIMD tmp_DiagElemB = massFV * diagBFac * gradSquSumF;
+				// part C of diagonal element
+				const CPU::Float32xSIMD tmp_DiagElemC = massBV *
+					xsimd::fma(xCTerm, xCTermB,
+						xsimd::fma(yCTerm, yCTermB, zCTerm * zCTermB));
 
 				const CPU::Float32xSIMD fin_diagElemF =
 					timeStepSquV * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);

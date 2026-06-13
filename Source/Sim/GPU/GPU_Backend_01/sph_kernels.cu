@@ -474,6 +474,7 @@ namespace GPU01
 		float xCTermF = 0.0f;
 		float yCTermF = 0.0f;
 		float zCTermF = 0.0f;
+		float gradSquSumF = 0.0f;
 		const uint32_t chunk = i / N_SellWidth;
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
@@ -515,6 +516,7 @@ namespace GPU01
 			xCTermF += xkg;
 			yCTermF += ykg;
 			zCTermF += zkg;
+			gradSquSumF += fmaf(xkg, xkg, fmaf(ykg, ykg, zkg * zkg));
 		}
 		tmp_sourceTermF *= c_massF;
 
@@ -564,61 +566,15 @@ namespace GPU01
 		const float zCTerm = -1.0f * (zCTermF * c_restDensitySquInvF * c_massF)
 			- 2.0f * c_pressGamma * (zCTermB * c_restDensitySquInvF * c_massB);
 
-		float tmp_diagElemA = 0.0f;
-		float tmp_diagElemB = 0.0f;
-		float tmp_diagElemC = 0.0f;
-
-		// part A and B
-		for (uint32_t k = 0; k < countFF; k++)
-		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFF, baseIdxFF, formatFF, lane, k,
-				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
-
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
-
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
-
-			tmp_diagElemA += fmaf(xCTerm, xkg, fmaf(yCTerm, ykg, zCTerm * zkg));
-
-			const float tmp_x = (c_massF * c_restDensitySquInvF) * (-xkg);
-			const float tmp_y = (c_massF * c_restDensitySquInvF) * (-ykg);
-			const float tmp_z = (c_massF * c_restDensitySquInvF) * (-zkg);
-
-			tmp_diagElemB += fmaf(tmp_x, xkg, fmaf(tmp_y, ykg, tmp_z * zkg));
-		}
-		tmp_diagElemA *= c_massF;
-		tmp_diagElemB *= c_massF;
-
-		// part C
-		for (uint32_t k = 0; k < countFB; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
-
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
-
-			tmp_diagElemC += fmaf(xCTerm, xkg, fmaf(yCTerm, ykg, zCTerm * zkg));
-		}
-		tmp_diagElemC *= c_massB;
+		// part A of diagonal element
+		const float tmp_diagElemA = c_massF *
+			fmaf(xCTerm, xCTermF, fmaf(yCTerm, yCTermF, zCTerm * zCTermF));
+		// part B of diagonal element
+		const float tmp_diagElemB =
+			-c_massF * c_massF * c_restDensitySquInvF * gradSquSumF;
+		// part C of diagonal element
+		const float tmp_diagElemC = c_massB *
+			fmaf(xCTerm, xCTermB, fmaf(yCTerm, yCTermB, zCTerm * zCTermB));
 
 		// finalize diagonal element
 		const float fin_diagElemF = c_timeStep * c_timeStep
