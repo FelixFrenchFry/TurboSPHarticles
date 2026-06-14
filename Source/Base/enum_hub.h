@@ -1,6 +1,4 @@
 // enum_hub.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -13,14 +11,14 @@ namespace Base
 {
 	enum class ParticleType : uint8_t
 	{
-		Fluid,				// 0
-		Boundary			// 1
+		Fluid,              // 0
+		Boundary            // 1
 	};
 
 	enum class BackendVersion : uint8_t
 	{
-		CPU01,				// 0
-		GPU01				// 1
+		CPU01,              // 0
+		GPU01               // 1
 	};
 	constexpr const char* ToCString(BackendVersion v) noexcept
 	{
@@ -36,9 +34,9 @@ namespace Base
 
 	enum class ScenarioType : uint8_t
 	{
-		BreakingDam,		// 0
-		ConvergingDam,		// 1
-		BigDroplet,			// 2
+		BreakingDam,        // 0
+		ConvergingDam,      // 1
+		BigDroplet,         // 2
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
@@ -56,8 +54,8 @@ namespace Base
 
 	enum class NeighborSearchMethod : uint8_t
 	{
-		BruteForce,					// 0
-		CellLinkedList_Compact,		// 1 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
+		BruteForce,                 // 0
+		CellLinkedList_Compact,     // 1 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
 	};
 	constexpr const char* ToCString(const NeighborSearchMethod v) noexcept
 	{
@@ -73,8 +71,8 @@ namespace Base
 
 	enum class NeighborListMethod : uint8_t
 	{
-		ChunkedSELLX_Explicit,			// 0
-		ChunkedSELLX_AdaptCompress		// 1
+		ChunkedSELLX_Explicit,          // 0
+		ChunkedSELLX_AdaptCompress      // 1
 	};
 	constexpr const char* ToCString(const NeighborListMethod v) noexcept
 	{
@@ -115,10 +113,10 @@ namespace Base
 
 	enum class SolverTerminationCond : uint8_t
 	{
-		FixedIters,				// 0
-		RelDensityError_Raw,	// 1
-		RelDensityError_Pos,	// 2
-		RelDensityError_Abs		// 3
+		FixedIters,             // 0
+		RelDensityError_Raw,    // 1
+		RelDensityError_Pos,    // 2
+		RelDensityError_Abs     // 3
 	};
 	constexpr const char* ToCString(SolverTerminationCond v) noexcept
 	{
@@ -138,10 +136,10 @@ namespace Base
 
 	enum class ColorCodingMode : uint8_t
 	{
-		None,				// 0
-		VelocityMag,		// 1
-		Density,			// 2
-		Pressure			// 3
+		None,               // 0
+		VelocityMag,        // 1
+		Density,            // 2
+		Pressure            // 3
 	};
 
 } // namespace Base

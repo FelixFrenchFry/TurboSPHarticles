@@ -1,6 +1,7 @@
 // mpi_context.cpp
 
 // external
+#include <cstdint>
 #include <stdexcept>
 
 // internal
@@ -41,7 +42,7 @@ MpiContext::MpiContext(
 
 MpiContext::~MpiContext()
 {
-	// no finalization if other application initialized it before
+	// only finalize MPI if this context initialized it
 	if (!ownsMpiLifetime_) { return; }
 
 	int alreadyFinalized = 0;
@@ -75,7 +76,7 @@ void MpiContext::BroadcastString(std::string& value, const int root) const
 
 	if (rank_ != root)
 	{
-		value.resize(static_cast<std::size_t>(length));
+		value.resize(static_cast<uint64_t>(length));
 	}
 
 	if (length > 0)

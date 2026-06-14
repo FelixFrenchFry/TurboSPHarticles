@@ -9,6 +9,7 @@
 
 namespace Dist
 {
+	// axis-aligned bounding box used by domain decomp
 	struct AABB
 	{
 		glm::vec3 min = glm::vec3(0.0f);

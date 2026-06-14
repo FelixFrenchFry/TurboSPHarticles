@@ -1,4 +1,4 @@
-// uniform_AABB_decomp.h
+// decomp_AABB_uniform.h
 
 #pragma once
 
@@ -12,11 +12,13 @@
 
 namespace Dist
 {
-	class UniformAABBDecomp final : public IDomainDecomp
+	// uniform AABB slab decomp, split along the longest global axis
+	class Decomp_AABB_Uniform final : public IDomainDecomp
 	{
 	public: // ---------------------------------------------------------------------------------------
 
-		const char* Name() const override;
+		const char* Name() const override { return "Decomp_AABB_Uniform"; }
+
 		void Build(const DomainDecompInput& input) override;
 		const AABB& GlobalExtentAABB() const override;
 
@@ -37,9 +39,9 @@ namespace Dist
 		struct AABBRankSubdomain
 		{
 			int rank = 0;
-			AABB ownedBounds;
-			AABB haloBounds;
-			std::vector<int> neighborRanks;
+			AABB ownedBounds; // domain bounds owned by this rank
+			AABB haloBounds; // owned bounds expanded by halo radius
+			std::vector<int> neighborRanks; // ranks whose owned bounds overlap this halo
 		};
 
 		const AABBRankSubdomain& Subdomain(int rank) const;

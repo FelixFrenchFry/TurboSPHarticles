@@ -3,6 +3,7 @@
 // external
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -14,7 +15,7 @@
 #include "Source/Base/enum_hub.h"
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "dist_simulation.h"
-#include "Layouts/uniform_AABB_decomp.h"
+#include "Layouts/decomp_AABB_uniform.h"
 
 
 
@@ -66,7 +67,7 @@ namespace
 		return boxAABB;
 	}
 
-	// build the full simulation box that will be split between MPI ranks
+	// build the global domain AABB that will be split between MPI ranks
 	AABB ComputeGlobalDomainBounds(
 		const std::vector<Scene::OBB>& boundaryBoxes,
 		const Sim::SimParams& params)
@@ -78,7 +79,7 @@ namespace
 
 		AABB globalBounds = ComputeAABBFromOBB(boundaryBoxes.front());
 
-		for (std::size_t i = 1; i < boundaryBoxes.size(); i++)
+		for (uint64_t i = 1; i < boundaryBoxes.size(); i++)
 		{
 			const AABB boxBounds = ComputeAABBFromOBB(boundaryBoxes[i]);
 			IncludePoint(globalBounds, boxBounds.min);
@@ -110,7 +111,7 @@ namespace
 	{
 		std::ostringstream oss;
 		oss << '[';
-		for (std::size_t i = 0; i < neighborRanks.size(); i++)
+		for (uint64_t i = 0; i < neighborRanks.size(); i++)
 		{
 			if (i > 0) { oss << ", "; }
 			oss << neighborRanks[i];
@@ -123,9 +124,9 @@ namespace
 DistSimulationMgr::DistSimulationMgr(
 	MpiContext& mpiContext,
 	Sim::SimParamsMgr& simParamsMgr)
-	: mpiContext_(mpiContext),
-	  simParamsMgr_(simParamsMgr),
-	  domainDecomp_(std::make_unique<UniformAABBDecomp>())
+	: mpiContext_{ mpiContext }
+	, simParamsMgr_{ simParamsMgr }
+	, domainDecomp_{ std::make_unique<Decomp_AABB_Uniform>() }
 {
 }
 
@@ -138,18 +139,129 @@ bool DistSimulationMgr::Init(
 		return false;
 	}
 
+	configProfile_ = profile;
+	SyncParameters(true);
+
 	if (!LoadParamsFromCliOverrides(simOverrides))
 	{
 		return false;
 	}
+	SyncParameters(true);
 
-	if (!BuildDomainDecomp(profile))
+	if (mpiContext_.IsRoot())
 	{
-		return false;
+		SPDLOG_INFO("Initializing distributed simulation state...");
 	}
+	SelectSimScenario(simParams_.scenarioType, configProfile_);
+	if (!mpiContext_.AllTrue(simScenario_ != nullptr)) { return false; }
+
+	if (mpiContext_.IsRoot())
+	{
+		SPDLOG_INFO("Initializing distributed domain decomp...");
+	}
+	if (!BuildDomainDecomp()) { return false; }
+
+	if (mpiContext_.IsRoot())
+	{
+		SPDLOG_INFO("Initializing rank-local distributed state...");
+	}
+	if (!ReBuildInitialSimState()) { return false; }
 
 	initialized_ = true;
+	SyncParameters(true);
 	return true;
+}
+
+void DistSimulationMgr::Shutdown()
+{
+	initialized_ = false;
+}
+
+void DistSimulationMgr::SyncParameters(const bool force)
+{
+	uint64_t latestSimParamsVersion = simParamsMgr_.StableVersion();
+	if (latestSimParamsVersion != simParamsVersion_ || force)
+	{
+		auto snapshot = simParamsMgr_.SnapshotParams();
+
+		simParams_ = std::get<0>(snapshot);
+		simParamsVersion_ = std::get<1>(snapshot);
+	}
+}
+
+void DistSimulationMgr::SelectSimScenario(
+	const Base::ScenarioType type,
+	const std::string& profile)
+{
+	// create new scenario
+	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, profile);
+	if (!simScenario_)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to create sim scenario ({})",
+			mpiContext_.Rank(),
+			mpiContext_.Size(),
+			static_cast<int>(type));
+		return;
+	}
+}
+
+bool DistSimulationMgr::ReBuildInitialSimState()
+{
+	bool localOk = true;
+
+	try
+	{
+		if (!simScenario_)
+		{
+			SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state (no scenario selected)",
+				mpiContext_.Rank(), mpiContext_.Size());
+			localOk = false;
+		}
+		if (!domainDecomp_)
+		{
+			SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state (no domain decomp)",
+				mpiContext_.Rank(), mpiContext_.Size());
+			localOk = false;
+		}
+
+		if (localOk)
+		{
+			SyncParameters();
+
+			// reset scenario and all its rank-local data
+			localSimState_ = {};
+			fluidParticleState_.Clear();
+			boundaryParticleState_.Clear();
+
+			Sync::UniversalSimState globalSimState{};
+			globalSimState.schemaVersion = 1;
+			globalSimState.step = 0;
+			globalSimState.time = 0.0;
+
+			// all ranks build the same global scenario, then keep owned + halo particles
+			simScenario_->Build(globalSimState, simParams_);
+			globalSimState.ShrinkToFitAll();
+
+			BuildLocalParticlesFromGlobalState(
+				localSimState_,
+				fluidParticleState_,
+				boundaryParticleState_,
+				globalSimState,
+				*domainDecomp_,
+				mpiContext_.Rank(),
+				simParams_.kernelRadius);
+
+			localSimState_.ShrinkToFitAll();
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		localOk = false;
+	}
+
+	return mpiContext_.AllTrue(localOk);
 }
 
 void DistSimulationMgr::RunStartupCheck() const
@@ -160,7 +272,7 @@ void DistSimulationMgr::RunStartupCheck() const
 		return;
 	}
 
-	const Sim::SimParams params = simParamsMgr_.SnapshotParams().first;
+	const Sim::SimParams params = simParams_;
 
 	if (mpiContext_.IsRoot() && domainDecomp_)
 	{
@@ -201,6 +313,21 @@ void DistSimulationMgr::RunStartupCheck() const
 					FormatNeighborRanks(domainDecomp_->NeighborRanks(mpiContext_.Rank())));
 			}
 
+			SPDLOG_INFO(
+				"[rank {}/{}] Local particles "
+				"(fluid owned={}, inner={}, outer={}, halo={}, "
+				"boundary owned={}, inner={}, outer={}, halo={})",
+				mpiContext_.Rank(),
+				mpiContext_.Size(),
+				fluidParticleState_.particleLocalIdx_Owned.size(),
+				fluidParticleState_.particleLocalIdx_Inner.size(),
+				fluidParticleState_.particleLocalIdx_Outer.size(),
+				fluidParticleState_.particleLocalIdx_Halo.size(),
+				boundaryParticleState_.particleLocalIdx_Owned.size(),
+				boundaryParticleState_.particleLocalIdx_Inner.size(),
+				boundaryParticleState_.particleLocalIdx_Outer.size(),
+				boundaryParticleState_.particleLocalIdx_Halo.size());
+
 			spdlog::default_logger()->flush();
 		}
 	}
@@ -211,11 +338,6 @@ void DistSimulationMgr::RunStartupCheck() const
 		SPDLOG_WARN("Distributed simulation stepping is not implemented yet; "
 			"exiting after MPI startup validation.");
 	}
-}
-
-void DistSimulationMgr::Shutdown()
-{
-	initialized_ = false;
 }
 
 bool DistSimulationMgr::LoadParamsFromProfileBroadcast(std::string& profile)
@@ -289,35 +411,28 @@ bool DistSimulationMgr::LoadParamsFromCliOverrides(
 	return globalOk;
 }
 
-bool DistSimulationMgr::BuildDomainDecomp(const std::string& profile)
+bool DistSimulationMgr::BuildDomainDecomp()
 {
 	bool localOk = true;
 
 	try
 	{
-		const Sim::SimParams params = simParamsMgr_.SnapshotParams().first;
-
-		// create the scenario only to recover the geometry used by the decomp
-		Scene::ScenarioMgr scenarioMgr{};
-		const std::unique_ptr<Scene::ISimScenario> scenario =
-			Scene::MakeSimScenario(scenarioMgr, params.scenarioType, profile);
-
-		if (!scenario)
+		if (!simScenario_)
 		{
-			SPDLOG_ERROR("[rank {}/{}] Failed to create scenario for domain decomp.",
+			SPDLOG_ERROR("[rank {}/{}] Failed to build distributed domain decomp (no scenario selected).",
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
 		else
 		{
 			const AABB globalBounds =
-				ComputeGlobalDomainBounds(scenario->GetBoundaryBoxes(), params);
+				ComputeGlobalDomainBounds(simScenario_->GetBoundaryBoxes(), simParams_);
 
 			// kernel radius defines initial halo thickness for ownership queries
 			const DomainDecompInput input
 			{
 				.globalBounds = globalBounds,
-				.haloRadius = params.kernelRadius,
+				.haloRadius = simParams_.kernelRadius,
 				.rankCount = mpiContext_.Size()
 			};
 

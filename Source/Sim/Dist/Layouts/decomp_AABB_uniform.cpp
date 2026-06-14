@@ -1,38 +1,44 @@
-// uniform_AABB_decomp.cpp
+// decomp_AABB_uniform.cpp
 
 // external
 #include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
 // internal
-#include "uniform_AABB_decomp.h"
+#include "decomp_AABB_uniform.h"
 
 
 
 using namespace Dist;
 
-const char* UniformAABBDecomp::Name() const
+namespace
 {
-	return "UniformAABBDecomp";
+	bool AABBIntersects(const AABB& a, const AABB& b)
+	{
+		return a.min.x <= b.max.x && a.max.x >= b.min.x
+			&& a.min.y <= b.max.y && a.max.y >= b.min.y
+			&& a.min.z <= b.max.z && a.max.z >= b.min.z;
+	}
 }
 
-void UniformAABBDecomp::Build(const DomainDecompInput& input)
+void Decomp_AABB_Uniform::Build(const DomainDecompInput& input)
 {
 	if (!input.globalBounds.IsValid())
 	{
-		throw std::runtime_error("Cannot decompose invalid global domain bounds.");
+		throw std::runtime_error("Cannot build Decomp_AABB_Uniform with invalid global domain bounds.");
 	}
 	if (input.haloRadius < 0.0f)
 	{
-		throw std::runtime_error("Cannot decompose domain with negative halo radius.");
+		throw std::runtime_error("Cannot build Decomp_AABB_Uniform with negative halo radius.");
 	}
 	if (input.rankCount <= 0)
 	{
-		throw std::runtime_error("Cannot decompose domain for non-positive rank count.");
+		throw std::runtime_error("Cannot build Decomp_AABB_Uniform for non-positive rank count.");
 	}
 
-	// one uniform slab per rank
+	// one uniform AABB slab per rank
 	const int splitAxis = ChooseSplitAxis(input.globalBounds);
 	std::vector<AABBRankSubdomain> rankSubdomains =
 		BuildSlabSubdomains(input, splitAxis);
@@ -41,12 +47,12 @@ void UniformAABBDecomp::Build(const DomainDecompInput& input)
 	rankSubdomains_ = std::move(rankSubdomains);
 }
 
-const AABB& UniformAABBDecomp::GlobalExtentAABB() const
+const AABB& Decomp_AABB_Uniform::GlobalExtentAABB() const
 {
 	return globalBounds_;
 }
 
-int UniformAABBDecomp::OwnerRank(const glm::vec3& position) const
+int Decomp_AABB_Uniform::OwnerRank(const glm::vec3& position) const
 {
 	if (!globalBounds_.Contains(position)) { return -1; }
 
@@ -63,7 +69,7 @@ int UniformAABBDecomp::OwnerRank(const glm::vec3& position) const
 	return ownerRank;
 }
 
-bool UniformAABBDecomp::IsInnerOwnedParticle(
+bool Decomp_AABB_Uniform::IsInnerOwnedParticle(
 	const int rank,
 	const glm::vec3& position,
 	const float kernelRadius) const
@@ -87,22 +93,22 @@ bool UniformAABBDecomp::IsInnerOwnedParticle(
 	return true;
 }
 
-const std::vector<int>& UniformAABBDecomp::NeighborRanks(const int rank) const
+const std::vector<int>& Decomp_AABB_Uniform::NeighborRanks(const int rank) const
 {
 	return Subdomain(rank).neighborRanks;
 }
 
-AABB UniformAABBDecomp::OwnedExtentAABB(const int rank) const
+AABB Decomp_AABB_Uniform::OwnedExtentAABB(const int rank) const
 {
 	return Subdomain(rank).ownedBounds;
 }
 
-AABB UniformAABBDecomp::HaloExtentAABB(const int rank) const
+AABB Decomp_AABB_Uniform::HaloExtentAABB(const int rank) const
 {
 	return Subdomain(rank).haloBounds;
 }
 
-bool UniformAABBDecomp::IsValidForRankCount(const int rankCount) const
+bool Decomp_AABB_Uniform::IsValidForRankCount(const int rankCount) const
 {
 	if (rankCount <= 0) { return false; }
 	if (static_cast<int>(rankSubdomains_.size()) != rankCount) { return false; }
@@ -132,18 +138,18 @@ bool UniformAABBDecomp::IsValidForRankCount(const int rankCount) const
 	return true;
 }
 
-const UniformAABBDecomp::AABBRankSubdomain& UniformAABBDecomp::Subdomain(
+const Decomp_AABB_Uniform::AABBRankSubdomain& Decomp_AABB_Uniform::Subdomain(
 	const int rank) const
 {
 	if (rank < 0 || rank >= static_cast<int>(rankSubdomains_.size()))
 	{
-		throw std::out_of_range("Invalid uniform AABB decomp rank.");
+		throw std::out_of_range("Invalid Decomp_AABB_Uniform rank.");
 	}
 
 	return rankSubdomains_[rank];
 }
 
-int UniformAABBDecomp::ChooseSplitAxis(const AABB& globalBounds) const
+int Decomp_AABB_Uniform::ChooseSplitAxis(const AABB& globalBounds) const
 {
 	const glm::vec3 extents = globalBounds.Extents();
 
@@ -155,13 +161,13 @@ int UniformAABBDecomp::ChooseSplitAxis(const AABB& globalBounds) const
 	return axis;
 }
 
-std::vector<UniformAABBDecomp::AABBRankSubdomain>
-UniformAABBDecomp::BuildSlabSubdomains(
+std::vector<Decomp_AABB_Uniform::AABBRankSubdomain>
+Decomp_AABB_Uniform::BuildSlabSubdomains(
 	const DomainDecompInput& input,
 	const int splitAxis) const
 {
 	std::vector<AABBRankSubdomain> subdomains{};
-	subdomains.reserve(static_cast<std::size_t>(input.rankCount));
+	subdomains.reserve(static_cast<uint64_t>(input.rankCount));
 
 	const float splitMin = input.globalBounds.min[splitAxis];
 	const float splitMax = input.globalBounds.max[splitAxis];
@@ -183,17 +189,22 @@ UniformAABBDecomp::BuildSlabSubdomains(
 		subdomain.ownedBounds = ownedBounds;
 		subdomain.haloBounds = ownedBounds.Expanded(input.haloRadius);
 
-		// each rank only touches previous / next ranks
-		if (rank > 0)
-		{
-			subdomain.neighborRanks.push_back(rank - 1);
-		}
-		if (rank + 1 < input.rankCount)
-		{
-			subdomain.neighborRanks.push_back(rank + 1);
-		}
-
 		subdomains.push_back(std::move(subdomain));
+	}
+
+	for (int rank = 0; rank < input.rankCount; rank++)
+	{
+		for (int otherRank = 0; otherRank < input.rankCount; otherRank++)
+		{
+			if (otherRank == rank) { continue; }
+
+			if (AABBIntersects(
+				subdomains[rank].haloBounds,
+				subdomains[otherRank].ownedBounds))
+			{
+				subdomains[rank].neighborRanks.push_back(otherRank);
+			}
+		}
 	}
 
 	return subdomains;
