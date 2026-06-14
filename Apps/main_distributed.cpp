@@ -9,7 +9,7 @@
 #include "Apps/app_runtime.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/Core/parameters_sim.h"
-#include "Source/Sim/Dist/distributed_simulation.h"
+#include "Source/Sim/Dist/dist_simulation.h"
 #include "Source/Sim/Dist/mpi_context.h"
 
 
@@ -41,15 +41,15 @@ int main(int argc, char** argv)
 		// --- [ initialization of manager systems ] ------------------------------------------------
 
 		Sim::SimParamsMgr simParamsMgr{};
-		Dist::DistributedSimulation distributedSimulation{
+		Dist::DistSimulationMgr distSimulationMgr{
 			mpiContext,
 			simParamsMgr };
 
-		if (!distributedSimulation.Init(profile, simOverrides))
+		if (!distSimulationMgr.Init(profile, simOverrides))
 		{
 			if (mpiContext.IsRoot())
 			{
-				SPDLOG_ERROR("Failed to initialize DistributedSimulation");
+				SPDLOG_ERROR("Failed to initialize DistSimulationMgr");
 			}
 			return EXIT_FAILURE;
 		}
@@ -60,11 +60,11 @@ int main(int argc, char** argv)
 
 		// --- [ main loop ] ------------------------------------------------------------------------
 
-		distributedSimulation.RunStartupCheck();
+		distSimulationMgr.RunStartupCheck();
 
 		// --- [ shutdown ] -------------------------------------------------------------------------
 
-		distributedSimulation.Shutdown();
+		distSimulationMgr.Shutdown();
 	}
 	catch (const std::exception& ex)
 	{

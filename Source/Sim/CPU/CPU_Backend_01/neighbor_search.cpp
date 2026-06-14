@@ -129,7 +129,7 @@ namespace
 		const float* xPosF, const float* yPosF, const float* zPosF, uint32_t N_F,
 		const float* xPosB, const float* yPosB, const float* zPosB, uint32_t N_B)
 	{
-		SceneAABB aabb{};
+		SceneAABB sceneAABB{};
 
 		for (uint32_t i = 0; i < N_F; i++)
 		{
@@ -137,12 +137,12 @@ namespace
 			const float y = yPosF[i];
 			const float z = zPosF[i];
 
-			aabb.minX = std::min(aabb.minX, x);
-			aabb.minY = std::min(aabb.minY, y);
-			aabb.minZ = std::min(aabb.minZ, z);
-			aabb.maxX = std::max(aabb.maxX, x);
-			aabb.maxY = std::max(aabb.maxY, y);
-			aabb.maxZ = std::max(aabb.maxZ, z);
+			sceneAABB.minX = std::min(sceneAABB.minX, x);
+			sceneAABB.minY = std::min(sceneAABB.minY, y);
+			sceneAABB.minZ = std::min(sceneAABB.minZ, z);
+			sceneAABB.maxX = std::max(sceneAABB.maxX, x);
+			sceneAABB.maxY = std::max(sceneAABB.maxY, y);
+			sceneAABB.maxZ = std::max(sceneAABB.maxZ, z);
 		}
 
 		for (uint32_t i = 0; i < N_B; i++)
@@ -151,29 +151,29 @@ namespace
 			const float y = yPosB[i];
 			const float z = zPosB[i];
 
-			aabb.minX = std::min(aabb.minX, x);
-			aabb.minY = std::min(aabb.minY, y);
-			aabb.minZ = std::min(aabb.minZ, z);
-			aabb.maxX = std::max(aabb.maxX, x);
-			aabb.maxY = std::max(aabb.maxY, y);
-			aabb.maxZ = std::max(aabb.maxZ, z);
+			sceneAABB.minX = std::min(sceneAABB.minX, x);
+			sceneAABB.minY = std::min(sceneAABB.minY, y);
+			sceneAABB.minZ = std::min(sceneAABB.minZ, z);
+			sceneAABB.maxX = std::max(sceneAABB.maxX, x);
+			sceneAABB.maxY = std::max(sceneAABB.maxY, y);
+			sceneAABB.maxZ = std::max(sceneAABB.maxZ, z);
 		}
 
-		return aabb;
+		return sceneAABB;
 	}
 
 	inline CellCoordFrame ComputeCellCoordFrame_FromAABB(
-		const SceneAABB& aabb,
+		const SceneAABB& sceneAABB,
 		float cellSizeInv)
 	{
 		CellCoordFrame frame{};
 
-		const int cxMin = FloorToInt(aabb.minX * cellSizeInv);
-		const int cyMin = FloorToInt(aabb.minY * cellSizeInv);
-		const int czMin = FloorToInt(aabb.minZ * cellSizeInv);
-		const int cxMax = FloorToInt(aabb.maxX * cellSizeInv);
-		const int cyMax = FloorToInt(aabb.maxY * cellSizeInv);
-		const int czMax = FloorToInt(aabb.maxZ * cellSizeInv);
+		const int cxMin = FloorToInt(sceneAABB.minX * cellSizeInv);
+		const int cyMin = FloorToInt(sceneAABB.minY * cellSizeInv);
+		const int czMin = FloorToInt(sceneAABB.minZ * cellSizeInv);
+		const int cxMax = FloorToInt(sceneAABB.maxX * cellSizeInv);
+		const int cyMax = FloorToInt(sceneAABB.maxY * cellSizeInv);
+		const int czMax = FloorToInt(sceneAABB.maxZ * cellSizeInv);
 
 		frame.cellOrigX = cxMin;
 		frame.cellOrigY = cyMin;

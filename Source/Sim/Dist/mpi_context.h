@@ -14,6 +14,7 @@ namespace Dist
 	{
 	public: // ---------------------------------------------------------------------------------------
 
+		// initializes MPI if needed, otherwise attaches to the existing MPI lifetime
 		MpiContext(int& argc, char**& argv, int requestedThreadSupport = MPI_THREAD_FUNNELED);
 		~MpiContext();
 
@@ -22,14 +23,14 @@ namespace Dist
 		MpiContext(MpiContext&&) = delete;
 		MpiContext& operator=(MpiContext&&) = delete;
 
-		// metadata
+		// metadata about MPI environment
 		int Rank() const { return rank_; }
 		int Size() const { return size_; }
-		bool IsRoot() const { return rank_ == rootRank_; }
 		int RootRank() const { return rootRank_; }
 		int ThreadSupport() const { return threadSupport_; }
+		bool IsRoot() const { return rank_ == rootRank_; }
 
-		// collectives
+		// collectives for MPI communication
 		void Barrier() const;
 		void BroadcastInt(int& value, int root = 0) const;
 		void BroadcastString(std::string& value, int root = 0) const;
@@ -46,6 +47,7 @@ namespace Dist
 		int size_ = 1;
 		int rootRank_ = 0;
 		int threadSupport_ = MPI_THREAD_SINGLE;
+		// only the context that called MPI_Init_thread is allowed to call MPI_Finalize
 		bool ownsMpiLifetime_ = false;
 	};
 

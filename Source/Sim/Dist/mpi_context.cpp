@@ -20,6 +20,7 @@ MpiContext::MpiContext(
 
 	if (!alreadyInitialized)
 	{
+		// request thread mode once, before any rank metadata is queried
 		CheckMpiResult(MPI_Init_thread(&argc, &argv, requestedThreadSupport, &threadSupport_),
 			"MPI_Init_thread");
 		ownsMpiLifetime_ = true;
@@ -40,6 +41,7 @@ MpiContext::MpiContext(
 
 MpiContext::~MpiContext()
 {
+	// no finalization if other application initialized it before
 	if (!ownsMpiLifetime_) { return; }
 
 	int alreadyFinalized = 0;
@@ -62,9 +64,8 @@ void MpiContext::BroadcastInt(int& value, const int root) const
 
 void MpiContext::BroadcastString(std::string& value, const int root) const
 {
-	int length = (rank_ == root)
-		? static_cast<int>(value.size())
-		: 0;
+	// broadcast length first, so non-root ranks can resize their receive buffer
+	int length = (rank_ == root) ? static_cast<int>(value.size()) : 0;
 
 	BroadcastInt(length, root);
 	if (length < 0)
