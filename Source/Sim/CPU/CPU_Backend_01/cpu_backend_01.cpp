@@ -834,6 +834,17 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
 }
 
+bool SimBackend_CPU01::TryGetLastParticleReOrder(
+	std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+	std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+{
+	if (!neighborSearch_) { return false; }
+
+	return neighborSearch_->TryGetLastParticleReOrder(
+		oldFluidLocalIdx_FromNewLocalIdx,
+		oldBoundaryLocalIdx_FromNewLocalIdx);
+}
+
 void SimBackend_CPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)
 {
 	if (N_F_ == 0) // empty sim

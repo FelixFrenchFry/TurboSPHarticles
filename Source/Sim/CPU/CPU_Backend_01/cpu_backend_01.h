@@ -56,6 +56,10 @@ namespace Sim
 		// executes only the neighbor search (construction and query of the data NS structure)
 		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;
 
+		bool TryGetLastParticleReOrder(
+			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+
 		// advances the simulation by N_steps
 		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
 

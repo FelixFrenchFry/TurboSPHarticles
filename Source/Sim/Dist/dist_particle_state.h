@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <vector>
 
 // internal
@@ -22,9 +23,14 @@ namespace Dist
 	};
 
 	// stores all classification of particles (F/B) based on the domain decomp
-	// local SoA layout is [owned particles][halo particles]
+	// local SoA layout is [ owned particles ][ halo particles ]
 	struct DistParticleState
 	{
+		// compact local SoA ranges before backend data re-ordering
+		uint32_t ownedParticleCount = 0;
+		uint32_t haloParticleCount = 0;
+		uint32_t firstHaloLocalIdx = 0;
+
 		// per-particle class flag, indexed by localIdx
 		std::vector<DistParticleClass> particleClasses;
 
@@ -40,7 +46,20 @@ namespace Dist
 
 		void Clear();
 		void ClearParticleClasses();
+
+		// validates compact [ owned ][ halo ] local SoA layout
+		bool IsValidLocalLayout(uint32_t localParticleCount) const;
+
+		// validates local metadata after backend data re-ordering
+		bool IsValidLocalParticleState(
+			uint32_t localParticleCount,
+			uint32_t globalParticleCount) const;
 	};
+
+	bool ApplyLocalParticleReOrder(
+		DistParticleState& particleState,
+		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+		uint32_t globalParticleCount);
 
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,

@@ -77,6 +77,10 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
+		bool TryGetLastParticleReOrder(
+			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+
 		std::pair<Mem::MemUsage, Mem::MemUsage>
 			GetMemUsage(const SimParams& params) const override;
 

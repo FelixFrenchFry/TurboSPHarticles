@@ -5,6 +5,7 @@
 // external
 #include <mpi.h>
 #include <string>
+#include <vector>
 
 
 
@@ -35,6 +36,23 @@ namespace Dist
 		void BroadcastInt(int& value, int root = 0) const;
 		void BroadcastString(std::string& value, int root = 0) const;
 		bool AllTrue(bool localValue) const;
+
+		// point-to-point helpers for neighbor communication
+		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;
+		void ISendInt(const int& sendValue, int peerRank, int tag, MPI_Request& request) const;
+		void IRecvBytes(
+			void* recvData,
+			int recvByteCount,
+			int peerRank,
+			int tag,
+			MPI_Request& request) const;
+		void ISendBytes(
+			const void* sendData,
+			int sendByteCount,
+			int peerRank,
+			int tag,
+			MPI_Request& request) const;
+		void WaitAll(std::vector<MPI_Request>& requests) const;
 
 		// helpers
 		static const char* ThreadSupportName(int threadSupport);

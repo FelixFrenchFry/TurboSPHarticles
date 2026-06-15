@@ -2,6 +2,7 @@
 
 // external
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 
 // internal
@@ -93,6 +94,114 @@ bool MpiContext::AllTrue(const bool localValue) const
 	CheckMpiResult(MPI_Allreduce(&local, &global, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD),
 		"MPI_Allreduce(bool)");
 	return global != 0;
+}
+
+void MpiContext::IRecvInt(
+	int& recvValue,
+	const int peerRank,
+	const int tag,
+	MPI_Request& request) const
+{
+	CheckMpiResult(
+		MPI_Irecv(
+			&recvValue,
+			1,
+			MPI_INT,
+			peerRank,
+			tag,
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Irecv(int)");
+}
+
+void MpiContext::ISendInt(
+	const int& sendValue,
+	const int peerRank,
+	const int tag,
+	MPI_Request& request) const
+{
+	CheckMpiResult(
+		MPI_Isend(
+			&sendValue,
+			1,
+			MPI_INT,
+			peerRank,
+			tag,
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Isend(int)");
+}
+
+void MpiContext::IRecvBytes(
+	void* recvData,
+	const int recvByteCount,
+	const int peerRank,
+	const int tag,
+	MPI_Request& request) const
+{
+	if (recvByteCount < 0)
+	{
+		throw std::runtime_error("Invalid negative MPI byte count.");
+	}
+	if (recvByteCount > 0 && recvData == nullptr)
+	{
+		throw std::runtime_error("Invalid null MPI receive buffer.");
+	}
+
+	CheckMpiResult(
+		MPI_Irecv(
+			recvData,
+			recvByteCount,
+			MPI_BYTE,
+			peerRank,
+			tag,
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Irecv(bytes)");
+}
+
+void MpiContext::ISendBytes(
+	const void* sendData,
+	const int sendByteCount,
+	const int peerRank,
+	const int tag,
+	MPI_Request& request) const
+{
+	if (sendByteCount < 0)
+	{
+		throw std::runtime_error("Invalid negative MPI byte count.");
+	}
+	if (sendByteCount > 0 && sendData == nullptr)
+	{
+		throw std::runtime_error("Invalid null MPI send buffer.");
+	}
+
+	CheckMpiResult(
+		MPI_Isend(
+			sendData,
+			sendByteCount,
+			MPI_BYTE,
+			peerRank,
+			tag,
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Isend(bytes)");
+}
+
+void MpiContext::WaitAll(std::vector<MPI_Request>& requests) const
+{
+	if (requests.empty()) { return; }
+	if (requests.size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+	{
+		throw std::runtime_error("MPI request count exceeds int range.");
+	}
+
+	CheckMpiResult(
+		MPI_Waitall(
+			static_cast<int>(requests.size()),
+			requests.data(),
+			MPI_STATUSES_IGNORE),
+		"MPI_Waitall");
 }
 
 const char* MpiContext::ThreadSupportName(const int threadSupport)

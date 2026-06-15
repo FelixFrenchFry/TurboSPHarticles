@@ -64,6 +64,16 @@ namespace Sim
 		// executes only the neighbor search (construction and query of the data NS structure)
 		virtual void ExecuteNeighborSearch(const SimParams& params, bool bench = false) = 0;
 
+		// provides the latest local re-order permutation if the backend exposes it
+		virtual bool TryGetLastParticleReOrder(
+			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+		{
+			(void)oldFluidLocalIdx_FromNewLocalIdx;
+			(void)oldBoundaryLocalIdx_FromNewLocalIdx;
+			return false;
+		}
+
 		// advances the simulation by N_steps
 		virtual void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps = 1) = 0;
 
@@ -106,6 +116,16 @@ namespace Sim
 		virtual void Query_Fill(const SimParams& params) = 0;
 
 		virtual void DataReOrder(const SimParams& params) = 0;
+
+		// provides the latest local re-order permutation if this neighbor search exposes it
+		virtual bool TryGetLastParticleReOrder(
+			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+		{
+			(void)oldFluidLocalIdx_FromNewLocalIdx;
+			(void)oldBoundaryLocalIdx_FromNewLocalIdx;
+			return false;
+		}
 
 		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
 			const SimParams& params) const = 0;
