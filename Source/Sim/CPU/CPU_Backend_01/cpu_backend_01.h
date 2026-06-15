@@ -60,6 +60,9 @@ namespace Sim
 			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
 
+		bool SetActiveFluidParticleLocalIdxs(const std::vector<int>& localIdxs) override;
+		void ClearActiveFluidParticleLocalIdxs() override;
+
 		// advances the simulation by N_steps
 		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
 
@@ -78,6 +81,8 @@ namespace Sim
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
 
 	private: // --------------------------------------------------------------------------------------
+
+		void ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;
@@ -113,6 +118,10 @@ namespace Sim
 		// boundary particles
 		// TODO: add boundary particle velocities?
 		std::vector<float> xPosB_, yPosB_, zPosB_;
+
+		// optional distributed integration filtering
+		bool useActiveFluidParticleLocalIdxs_ = false;
+		std::vector<uint32_t> activeFluidParticleLocalIdxs_;
 
 		// misc data
 		uint32_t N_solverIterCount_;

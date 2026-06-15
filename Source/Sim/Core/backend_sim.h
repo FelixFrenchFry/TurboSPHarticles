@@ -74,6 +74,16 @@ namespace Sim
 			return false;
 		}
 
+		// sets which local fluid particles are authoritative for integration
+		virtual bool SetActiveFluidParticleLocalIdxs(const std::vector<int>& localIdxs)
+		{
+			(void)localIdxs;
+			return false;
+		}
+
+		// clears distributed integration filtering
+		virtual void ClearActiveFluidParticleLocalIdxs() {}
+
 		// advances the simulation by N_steps
 		virtual void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps = 1) = 0;
 

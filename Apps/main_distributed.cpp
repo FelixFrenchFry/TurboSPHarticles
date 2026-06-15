@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <exception>
 #include <spdlog/spdlog.h>
+#include <tbb/global_control.h>
 
 // internal
 #include "Apps/app_runtime.h"
@@ -58,9 +59,35 @@ int main(int argc, char** argv)
 			Sim::DiagnosticsMgr::PrintBuildConfig();
 		}
 
+		const App::ThreadBudget threadBudget = App::ResolveThreadBudget(
+			simParamsMgr.SnapshotParams().first.maxThreadsSim, 0);
+		if (mpiContext.IsRoot())
+		{
+			Sim::DiagnosticsMgr::PrintHardwareSpecs(
+				threadBudget.N_totalThreads,
+				threadBudget.N_simThreads,
+				threadBudget.N_visThreads);
+		}
+
+		// limit TBB to the simulation thread budget on each MPI rank
+		tbb::global_control gc(
+			tbb::global_control::max_allowed_parallelism,
+			threadBudget.N_simThreads);
+
+		simParamsMgr.Set_SimRunning(true);
+
 		// --- [ main loop ] ------------------------------------------------------------------------
 
 		distSimulationMgr.RunStartupCheck();
+
+		App::AppStopWatcher stopWatcher{};
+		stopWatcher.Start([&]()
+			{
+				distSimulationMgr.RequestStop();
+			});
+
+		distSimulationMgr.RunSim_Blocking();
+		stopWatcher.Stop();
 
 		// --- [ shutdown ] -------------------------------------------------------------------------
 

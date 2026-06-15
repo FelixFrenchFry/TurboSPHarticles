@@ -845,6 +845,89 @@ bool SimBackend_CPU01::TryGetLastParticleReOrder(
 		oldBoundaryLocalIdx_FromNewLocalIdx);
 }
 
+bool SimBackend_CPU01::SetActiveFluidParticleLocalIdxs(
+	const std::vector<int>& localIdxs)
+{
+	activeFluidParticleLocalIdxs_.clear();
+	activeFluidParticleLocalIdxs_.reserve(localIdxs.size());
+
+	std::vector<uint8_t> activeIdxUsed(N_F_, 0);
+	for (const int localIdx : localIdxs)
+	{
+		if (localIdx < 0 || static_cast<uint32_t>(localIdx) >= N_F_)
+		{
+			SPDLOG_ERROR("Invalid active fluid particle local index ({})", localIdx);
+			useActiveFluidParticleLocalIdxs_ = false;
+			activeFluidParticleLocalIdxs_.clear();
+			return false;
+		}
+
+		const uint32_t localIdxU = static_cast<uint32_t>(localIdx);
+		if (activeIdxUsed[localIdxU] != 0)
+		{
+			SPDLOG_ERROR("Duplicate active fluid particle local index ({})", localIdx);
+			useActiveFluidParticleLocalIdxs_ = false;
+			activeFluidParticleLocalIdxs_.clear();
+			return false;
+		}
+
+		activeIdxUsed[localIdxU] = 1;
+		activeFluidParticleLocalIdxs_.push_back(localIdxU);
+	}
+
+	useActiveFluidParticleLocalIdxs_ = true;
+	return true;
+}
+
+void SimBackend_CPU01::ClearActiveFluidParticleLocalIdxs()
+{
+	useActiveFluidParticleLocalIdxs_ = false;
+	activeFluidParticleLocalIdxs_.clear();
+}
+
+void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
+{
+	if (!useActiveFluidParticleLocalIdxs_) { return; }
+	if (!neighborSearch_) { return; }
+
+	std::vector<uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
+	std::vector<uint32_t> oldBoundaryLocalIdx_FromNewLocalIdx;
+	if (!neighborSearch_->TryGetLastParticleReOrder(
+		oldFluidLocalIdx_FromNewLocalIdx,
+		oldBoundaryLocalIdx_FromNewLocalIdx))
+	{
+		return;
+	}
+
+	if (oldFluidLocalIdx_FromNewLocalIdx.size() != static_cast<uint64_t>(N_F_))
+	{
+		throw std::runtime_error("Invalid CPU01 fluid particle re-order size.");
+	}
+
+	std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx(N_F_);
+	for (uint64_t newLocalIdx = 0; newLocalIdx < oldFluidLocalIdx_FromNewLocalIdx.size(); newLocalIdx++)
+	{
+		const uint32_t oldLocalIdx = oldFluidLocalIdx_FromNewLocalIdx[newLocalIdx];
+		if (oldLocalIdx >= N_F_)
+		{
+			throw std::runtime_error("Invalid CPU01 fluid particle re-order index.");
+		}
+
+		newFluidLocalIdx_FromOldLocalIdx[oldLocalIdx] =
+			static_cast<uint32_t>(newLocalIdx);
+	}
+
+	for (uint32_t& localIdx : activeFluidParticleLocalIdxs_)
+	{
+		if (localIdx >= N_F_)
+		{
+			throw std::runtime_error("Invalid active CPU01 fluid particle local index.");
+		}
+
+		localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
+	}
+}
+
 void SimBackend_CPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_steps)
 {
 	if (N_F_ == 0) // empty sim

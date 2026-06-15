@@ -51,6 +51,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Data_Ordering });
 	neighborSearch_->DataReOrder(params);
+	ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Data_Ordering });
 
@@ -212,12 +213,25 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 
-	CPU01::Integration(
-		xVelPredF, yVelPredF, zVelPredF,
-		xAccPressF, yAccPressF, zAccPressF,
-		timeStep, N_F_,
-		xPosF, yPosF, zPosF,
-		xVelF, yVelF, zVelF);
+	if (useActiveFluidParticleLocalIdxs_)
+	{
+		CPU01::Integration_Indexed(
+			xVelPredF, yVelPredF, zVelPredF,
+			xAccPressF, yAccPressF, zAccPressF,
+			activeFluidParticleLocalIdxs_.data(),
+			timeStep, static_cast<uint32_t>(activeFluidParticleLocalIdxs_.size()),
+			xPosF, yPosF, zPosF,
+			xVelF, yVelF, zVelF);
+	}
+	else
+	{
+		CPU01::Integration(
+			xVelPredF, yVelPredF, zVelPredF,
+			xAccPressF, yAccPressF, zAccPressF,
+			timeStep, N_F_,
+			xPosF, yPosF, zPosF,
+			xVelF, yVelF, zVelF);
+	}
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 }
@@ -1064,6 +1078,49 @@ void CPU01::Integration(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				// explicit Euler integration
+				// (refining predicted velocity with pressure acc)
+				xVelF[i] = std::fmaf(timeStep, xAccPressF[i], xVelPredF[i]);
+				yVelF[i] = std::fmaf(timeStep, yAccPressF[i], yVelPredF[i]);
+				zVelF[i] = std::fmaf(timeStep, zAccPressF[i], zVelPredF[i]);
+
+				// semi-implicit Euler integration
+				// (using updated velocity for position update)
+				xPosF[i] = std::fmaf(timeStep, xVelF[i], xPosF[i]);
+				yPosF[i] = std::fmaf(timeStep, yVelF[i], yPosF[i]);
+				zPosF[i] = std::fmaf(timeStep, zVelF[i], zPosF[i]);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+}
+
+void CPU01::Integration_Indexed(
+	const float* RESTRICT xVelPredF,
+	const float* RESTRICT yVelPredF,
+	const float* RESTRICT zVelPredF,
+	const float* RESTRICT xAccPressF,
+	const float* RESTRICT yAccPressF,
+	const float* RESTRICT zAccPressF,
+	const uint32_t* RESTRICT fluidParticleLocalIdxs,
+	const float timeStep,
+	const uint32_t N_activeF,
+	// destinations
+	float* RESTRICT xPosF,
+	float* RESTRICT yPosF,
+	float* RESTRICT zPosF,
+	float* RESTRICT xVelF,
+	float* RESTRICT yVelF,
+	float* RESTRICT zVelF)
+{
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_activeF),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t ii = r.begin(); ii != r.end(); ii++)
+			{
+				const uint32_t i = fluidParticleLocalIdxs[ii];
+
 				// explicit Euler integration
 				// (refining predicted velocity with pressure acc)
 				xVelF[i] = std::fmaf(timeStep, xAccPressF[i], xVelPredF[i]);

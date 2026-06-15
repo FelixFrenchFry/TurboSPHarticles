@@ -145,4 +145,22 @@ namespace CPU01
 		float* RESTRICT yVelF,
 		float* RESTRICT zVelF);
 
+	void Integration_Indexed(
+		const float* RESTRICT xVelPredF,
+		const float* RESTRICT yVelPredF,
+		const float* RESTRICT zVelPredF,
+		const float* RESTRICT xAccPressF,
+		const float* RESTRICT yAccPressF,
+		const float* RESTRICT zAccPressF,
+		const uint32_t* RESTRICT fluidParticleLocalIdxs,
+		float timeStep,
+		uint32_t N_activeF,
+		// destinations
+		float* RESTRICT xPosF,
+		float* RESTRICT yPosF,
+		float* RESTRICT zPosF,
+		float* RESTRICT xVelF,
+		float* RESTRICT yVelF,
+		float* RESTRICT zVelF);
+
 } // namespace CPU01

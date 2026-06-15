@@ -3,6 +3,8 @@
 // external
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <cmath>
 #include <filesystem>
@@ -11,6 +13,7 @@
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 // internal
@@ -302,7 +305,9 @@ bool DistSimulationMgr::Init(
 
 void DistSimulationMgr::Shutdown()
 {
+	RequestStop();
 	initialized_ = false;
+	running_.store(false, std::memory_order_release);
 	simBackend_.reset();
 	benchmarksTracker_.reset();
 }
@@ -374,6 +379,9 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 
 		if (localOk)
 		{
+			simStep_ = 0;
+			simTime_ = 0.0;
+
 			SyncParameters();
 
 			if (!BuildGlobalSimState()) { localOk = false; }
@@ -449,9 +457,122 @@ void DistSimulationMgr::RunStartupCheck() const
 
 	if (mpiContext_.IsRoot())
 	{
-		SPDLOG_WARN("Distributed solver stepping is not implemented yet; "
-			"exiting after MPI startup and step skeleton validation.");
+		SPDLOG_INFO("Distributed startup check completed.");
 	}
+}
+
+void DistSimulationMgr::RunSim_Blocking()
+{
+	bool localOk = true;
+
+	if (!initialized_)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (not initialized)",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	if (!simBackend_)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no backend selected)",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	if (!benchmarksTracker_)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no benchmark tracker)",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	if (!mpiContext_.AllTrue(localOk)) { return; }
+
+	if (running_.exchange(true))
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (already running)",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	if (!mpiContext_.AllTrue(localOk))
+	{
+		running_.store(false, std::memory_order_release);
+		return;
+	}
+
+	stopRequested_.store(false, std::memory_order_release);
+
+	if (mpiContext_.IsRoot())
+	{
+		printf("\n");
+		SPDLOG_INFO("Distributed simulation started running...");
+	}
+
+	// local copy for consistent maximum-step handling during this run
+	const auto paramsInit = simParams_;
+
+	while (true)
+	{
+		SyncParameters(true);
+
+		// local copy for step-local consistency
+		const auto params = simParams_;
+		const bool doSimStep = (params.simRunning || params.simRunNextStep);
+
+		// let any rank stop the whole MPI loop cleanly
+		const bool keepRunning = mpiContext_.AllTrue(
+			!stopRequested_.load(std::memory_order_acquire));
+		if (!keepRunning) { break; }
+
+		// explicit maximum number of steps reached
+		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
+			paramsInit.maxSteps > 0) { break; }
+
+		// small sleep to avoid busy spin when nothing to do yet
+		if (!doSimStep)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
+
+		// reset data records for the new step
+		benchmarksTracker_->BeginStep();
+
+		// starting point of total sim benchmark
+		benchmarksTracker_->StartBench({ Bench::BenchOp::Total_Sim });
+
+		// perform the actual distributed simulation step
+		const bool stepOk = ExecuteDistributedStep(params);
+
+		// ending point of total sim benchmark, archive data and update aggregates
+		benchmarksTracker_->StopBench({ Bench::BenchOp::Total_Sim });
+
+		if (stepOk)
+		{
+			// update metadata
+			simStep_ += 1;
+			simTime_ += params.timeStep;
+			localSimState_.step = simStep_;
+			localSimState_.time = simTime_;
+		}
+
+		benchmarksTracker_->EndStep(simStep_, simTime_);
+
+		if (!stepOk) { break; }
+
+		// reset single-step flag
+		if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
+	}
+
+	running_.store(false, std::memory_order_release);
+
+	if (mpiContext_.IsRoot())
+	{
+		SPDLOG_INFO("Distributed simulation stopped running");
+		printf("\n");
+	}
+}
+
+void DistSimulationMgr::RequestStop()
+{
+	stopRequested_.store(true, std::memory_order_release);
 }
 
 bool DistSimulationMgr::LoadParamsFromProfileBroadcast(std::string& profile)
@@ -769,11 +890,11 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 			Sync::UniversalSimState backendSimState{};
 			simBackend_->PushToUniversalSimState(backendSimState);
 			localSimState_ = std::move(backendSimState);
+			localSimState_.step = simStep_;
+			localSimState_.time = simTime_;
 
 			if (localOk && !ValidateRankLocalBackendParticleOrder(
-				"before distributed step skeleton")) { localOk = false; }
-
-			if (localOk && !ExecuteDistributedStepSkeleton()) { localOk = false; }
+				"during backend startup check")) { localOk = false; }
 
 			SPDLOG_INFO(
 				"[rank {}/{}] Rank-local backend startup check "
@@ -795,7 +916,7 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 	return mpiContext_.AllTrue(localOk);
 }
 
-bool DistSimulationMgr::ExecuteDistributedStepSkeleton()
+bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 {
 	bool localOk = true;
 
@@ -803,13 +924,13 @@ bool DistSimulationMgr::ExecuteDistributedStepSkeleton()
 	{
 		if (!simBackend_)
 		{
-			SPDLOG_ERROR("[rank {}/{}] Failed distributed step skeleton (no backend selected).",
+			SPDLOG_ERROR("[rank {}/{}] Failed distributed step (no backend selected).",
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
 		if (!domainDecomp_)
 		{
-			SPDLOG_ERROR("[rank {}/{}] Failed distributed step skeleton (no domain decomp).",
+			SPDLOG_ERROR("[rank {}/{}] Failed distributed step (no domain decomp).",
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
@@ -835,33 +956,50 @@ bool DistSimulationMgr::ExecuteDistributedStepSkeleton()
 				localSimState_.fluidParticles,
 				*domainDecomp_,
 				mpiContext_.Rank(),
-				simParams_.kernelRadius);
+				params.kernelRadius);
 			ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 				boundaryParticleState_,
 				localSimState_.boundaryParticles,
 				*domainDecomp_,
 				mpiContext_.Rank(),
-				simParams_.kernelRadius);
+				params.kernelRadius);
 		}
 
 		if (localOk && !ExchangeRankLocalHalos()) { localOk = false; }
 		if (localOk && !ReloadRankLocalBackendAndRunNeighborSearch(
-			"after distributed step skeleton")) { localOk = false; }
+			"before distributed solver step")) { localOk = false; }
 
 		if (localOk)
 		{
-			SPDLOG_INFO(
-				"[rank {}/{}] Distributed step skeleton validated "
-				"(fluid={}, boundary={})",
-				mpiContext_.Rank(),
-				mpiContext_.Size(),
-				simBackend_->GetNumFluidParticles(),
-				simBackend_->GetNumBoundaryParticles());
+			if (!simBackend_->SetActiveFluidParticleLocalIdxs(
+				fluidParticleState_.particleLocalIdx_Owned))
+			{
+				SPDLOG_ERROR("[rank {}/{}] Selected backend does not support "
+					"distributed active fluid particle integration.",
+					mpiContext_.Rank(), mpiContext_.Size());
+				localOk = false;
+			}
+		}
+
+		if (localOk)
+		{
+			simBackend_->ExecuteFullSimStep(params);
+
+			if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
+
+			Sync::UniversalSimState backendSimState{};
+			simBackend_->PushToUniversalSimState(backendSimState);
+			localSimState_ = std::move(backendSimState);
+			localSimState_.step = simStep_;
+			localSimState_.time = simTime_;
+
+			if (localOk && !ValidateRankLocalParticleMetadata(
+				"after distributed solver step")) { localOk = false; }
 		}
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed distributed step skeleton: {}",
+		SPDLOG_ERROR("[rank {}/{}] Failed distributed step: {}",
 			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 		localOk = false;
 	}
@@ -971,8 +1109,10 @@ bool DistSimulationMgr::ReloadRankLocalBackendAndRunNeighborSearch(const char* p
 	Sync::UniversalSimState backendSimState{};
 	simBackend_->PushToUniversalSimState(backendSimState);
 	localSimState_ = std::move(backendSimState);
+	localSimState_.step = simStep_;
+	localSimState_.time = simTime_;
 
-	if (localOk && !ValidateRankLocalBackendParticleOrder(phaseName)) { localOk = false; }
+	if (localOk && !ValidateRankLocalParticleMetadata(phaseName)) { localOk = false; }
 
 	return localOk;
 }
@@ -1010,6 +1150,33 @@ bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder(const char* phaseN
 		mpiContext_.Rank(),
 		mpiContext_.Size(),
 		phaseName);
+
+	return true;
+}
+
+bool DistSimulationMgr::ValidateRankLocalParticleMetadata(const char* phaseName) const
+{
+	const bool fluidMetadataValid =
+		fluidParticleState_.IsValidLocalParticleState(
+			localSimState_.fluidParticles.N_,
+			globalSimState_.fluidParticles.N_);
+	const bool boundaryMetadataValid =
+		boundaryParticleState_.IsValidLocalParticleState(
+			localSimState_.boundaryParticles.N_,
+			globalSimState_.boundaryParticles.N_);
+
+	if (!fluidMetadataValid || !boundaryMetadataValid)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Invalid rank-local particle metadata {} "
+			"(fluid={}, boundary={})",
+			mpiContext_.Rank(),
+			mpiContext_.Size(),
+			phaseName,
+			fluidMetadataValid ? "valid" : "invalid",
+			boundaryMetadataValid ? "valid" : "invalid");
+		return false;
+	}
 
 	return true;
 }

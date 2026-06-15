@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -47,8 +48,17 @@ namespace Dist
 
 		bool ReBuildInitialSimState();
 
-		// temporary startup validation until the distributed step loop exists
+		// prints and validates current distributed startup state
 		void RunStartupCheck() const;
+
+		// main simulation loop
+		void RunSim_Blocking();
+
+		void RequestStop();
+
+		// metadata
+		uint32_t simStep_ = 0;
+		double simTime_ = 0.0;
 
 	private: // --------------------------------------------------------------------------------------
 
@@ -79,8 +89,8 @@ namespace Dist
 		// runs a backend startup smoke test on rank-local data
 		bool RunRankLocalBackendStartupCheck();
 
-		// runs the first distributed per-step orchestration without solver stepping
-		bool ExecuteDistributedStepSkeleton();
+		// runs one distributed step with data movement around the rank-local backend
+		bool ExecuteDistributedStep(const Sim::SimParams& params);
 
 		// migrates owned fluid particles to their current owner ranks
 		bool MigrateOwnedFluidParticlesToOwnerRanks();
@@ -93,6 +103,9 @@ namespace Dist
 
 		// validates particle identity metadata and payload against current backend state
 		bool ValidateRankLocalBackendParticleOrder(const char* phaseName) const;
+
+		// validates particle identity metadata without comparing changed solver payload
+		bool ValidateRankLocalParticleMetadata(const char* phaseName) const;
 
 		// exchanges halo particles and rebuilds compact rank-local state
 		bool ExchangeRankLocalHalos();
@@ -128,6 +141,8 @@ namespace Dist
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
 
+		std::atomic<bool> running_{ false };
+		std::atomic<bool> stopRequested_{ false };
 		bool initialized_ = false;
 	};
 
