@@ -4,6 +4,7 @@
 
 // external
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // internal
@@ -59,30 +60,39 @@ namespace Dist
 		std::vector<HaloFluidParticlePacket> fluidParticles;
 		std::vector<HaloBoundaryParticlePacket> boundaryParticles;
 
+		// clears packed fluid and boundary halo packets
 		void Clear();
 	};
 
-	void PackHaloExchangeBufferForRank(
+	// packs this rank's outer fluid/boundary particles that overlap the halo extent of destination rank
+	// into a sendBuffer; returns false + msg if local particle metadata is inconsistent
+	bool PackHaloExchangeBufferForRank(
 		HaloExchangeBuffer& sendBuffer,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
 		const IDomainDecomp& domainDecomp,
-		int dstRank);
+		int dstRank,
+		std::string* failMsg = nullptr);
 
+	// exchanges halo packet counts and payloads with all neighbor ranks and appends received packets
+	// into a recvBuffer; returns false + msg if packing fails on any rank or received counts are invalid
 	bool ExchangeHaloParticlesWithNeighborRanks(
 		HaloExchangeBuffer& recvBuffer,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
 		const IDomainDecomp& domainDecomp,
-		const MpiContext& mpiContext);
+		const MpiContext& mpiContext,
+		std::string* failMsg = nullptr);
 
+	// rebuilds local fluid/boundary SoA arrays as [ owned ][ received halos ] from halo package
+	// in the receive buffer and refreshes matching particle metadata
 	bool RebuildLocalStateWithReceivedHalos(
+		const HaloExchangeBuffer& recvBuffer,
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
 		DistParticleState& boundaryParticleState,
-		const HaloExchangeBuffer& recvBuffer,
 		uint32_t globalFluidParticleCount,
 		uint32_t globalBoundaryParticleCount);
 

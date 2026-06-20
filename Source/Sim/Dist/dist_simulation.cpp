@@ -1479,24 +1479,26 @@ bool DistSimulationMgr::ExchangeRankLocalHalos()
 		else
 		{
 			HaloExchangeBuffer recvBuffer{};
+			std::string failMsg{};
 			if (!ExchangeHaloParticlesWithNeighborRanks(
 				recvBuffer,
 				localSimState_,
 				fluidParticleState_,
 				boundaryParticleState_,
 				*domainDecomp_,
-				mpiContext_))
+				mpiContext_,
+				&failMsg))
 			{
-				SPDLOG_ERROR("[rank {}/{}] Failed to exchange halo particle packets.",
-					mpiContext_.Rank(), mpiContext_.Size());
+				SPDLOG_ERROR("[rank {}/{}] Failed to exchange halo particle packets: {}",
+					mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 				localOk = false;
 			}
 
 			if (localOk && !RebuildLocalStateWithReceivedHalos(
+				recvBuffer,
 				localSimState_,
 				fluidParticleState_,
 				boundaryParticleState_,
-				recvBuffer,
 				globalSimState_.fluidParticles.N_,
 				globalSimState_.boundaryParticles.N_))
 			{

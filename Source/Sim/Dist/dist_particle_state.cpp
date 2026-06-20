@@ -86,9 +86,7 @@ namespace
 		const int rank)
 	{
 		const int ownerRank = domainDecomp.OwnerRank(position);
-		return ownerRank >= 0 &&
-			ownerRank != rank &&
-			haloBounds.Contains(position);
+		return ownerRank >= 0 && ownerRank != rank && haloBounds.Contains(position);
 	}
 
 	void ClassifyHaloParticleRange(
@@ -201,6 +199,7 @@ namespace
 		return true;
 	}
 
+	// TODO: re-implement with TBB parallelization?
 	uint32_t CountOwnedFluidParticles(
 		const Sync::FluidParticles& fluidParticles,
 		const IDomainDecomp& domainDecomp,
@@ -219,6 +218,7 @@ namespace
 		return count;
 	}
 
+	// TODO: re-implement with TBB parallelization?
 	uint32_t CountHaloFluidParticles(
 		const Sync::FluidParticles& fluidParticles,
 		const IDomainDecomp& domainDecomp,
@@ -231,9 +231,7 @@ namespace
 		{
 			if (IsHaloParticleForRank(
 				FluidPositionAtArrayIdx(fluidParticles, static_cast<int>(i)),
-				domainDecomp,
-				haloBounds,
-				rank))
+				domainDecomp, haloBounds, rank))
 			{
 				count++;
 			}
@@ -242,6 +240,7 @@ namespace
 		return count;
 	}
 
+	// TODO: re-implement with TBB parallelization?
 	uint32_t CountOwnedBoundaryParticles(
 		const Sync::BoundaryParticles& boundaryParticles,
 		const IDomainDecomp& domainDecomp,
@@ -260,6 +259,7 @@ namespace
 		return count;
 	}
 
+	// TODO: re-implement with TBB parallelization?
 	uint32_t CountHaloBoundaryParticles(
 		const Sync::BoundaryParticles& boundaryParticles,
 		const IDomainDecomp& domainDecomp,
@@ -272,9 +272,7 @@ namespace
 		{
 			if (IsHaloParticleForRank(
 				BoundaryPositionAtArrayIdx(boundaryParticles, static_cast<int>(i)),
-				domainDecomp,
-				haloBounds,
-				rank))
+				domainDecomp, haloBounds, rank))
 			{
 				count++;
 			}
@@ -322,6 +320,7 @@ namespace
 		dst.zPos[localIdx] = src.zPos[globalIdx];
 	}
 
+	// TODO: re-implement with TBB parallelization?
 	void BuildLocalFluidParticlesFromGlobalState(
 		DistParticleState& particleState,
 		Sync::UniversalSimState& localState,
@@ -334,10 +333,8 @@ namespace
 		Sync::FluidParticles& localFluid = localState.fluidParticles;
 
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
-		const uint32_t ownedParticleCount =
-			CountOwnedFluidParticles(globalFluid, domainDecomp, rank);
-		const uint32_t haloParticleCount =
-			CountHaloFluidParticles(globalFluid, domainDecomp, haloBounds, rank);
+		const uint32_t ownedParticleCount = CountOwnedFluidParticles(globalFluid, domainDecomp, rank);
+		const uint32_t haloParticleCount = CountHaloFluidParticles(globalFluid, domainDecomp, haloBounds, rank);
 		const uint32_t localParticleCount = ownedParticleCount + haloParticleCount;
 
 		localState.ResizeFluid(localParticleCount);
@@ -363,9 +360,7 @@ namespace
 			const int globalIdx = static_cast<int>(i);
 			if (!IsHaloParticleForRank(
 				FluidPositionAtArrayIdx(globalFluid, globalIdx),
-				domainDecomp,
-				haloBounds,
-				rank)) { continue; }
+				domainDecomp, haloBounds, rank)) { continue; }
 
 			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, globalIdx, localIdx);
 
@@ -376,14 +371,11 @@ namespace
 
 		// classify after compaction so cached indices are localIdx values
 		ClassifyOwnedFluidParticlesIntoInnerOuter(
-			particleState,
-			localFluid,
-			domainDecomp,
-			rank,
-			kernelRadius);
+			particleState, localFluid, domainDecomp, rank, kernelRadius);
 		ClassifyHaloParticleRange(particleState, ownedParticleCount, localParticleCount);
 	}
 
+	// TODO: re-implement with TBB parallelization?
 	void BuildLocalBoundaryParticlesFromGlobalState(
 		DistParticleState& particleState,
 		Sync::UniversalSimState& localState,
@@ -396,10 +388,8 @@ namespace
 		Sync::BoundaryParticles& localBoundary = localState.boundaryParticles;
 
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
-		const uint32_t ownedParticleCount =
-			CountOwnedBoundaryParticles(globalBoundary, domainDecomp, rank);
-		const uint32_t haloParticleCount =
-			CountHaloBoundaryParticles(globalBoundary, domainDecomp, haloBounds, rank);
+		const uint32_t ownedParticleCount = CountOwnedBoundaryParticles(globalBoundary, domainDecomp, rank);
+		const uint32_t haloParticleCount = CountHaloBoundaryParticles(globalBoundary, domainDecomp, haloBounds, rank);
 		const uint32_t localParticleCount = ownedParticleCount + haloParticleCount;
 
 		localState.ResizeBoundary(localParticleCount);
@@ -425,9 +415,7 @@ namespace
 			const int globalIdx = static_cast<int>(i);
 			if (!IsHaloParticleForRank(
 				BoundaryPositionAtArrayIdx(globalBoundary, globalIdx),
-				domainDecomp,
-				haloBounds,
-				rank)) { continue; }
+				domainDecomp, haloBounds, rank)) { continue; }
 
 			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, globalIdx, localIdx);
 
@@ -438,11 +426,7 @@ namespace
 
 		// classify after compaction so cached indices are localIdx values
 		ClassifyOwnedBoundaryParticlesIntoInnerOuter(
-			particleState,
-			localBoundary,
-			domainDecomp,
-			rank,
-			kernelRadius);
+			particleState, localBoundary, domainDecomp, rank, kernelRadius);
 		ClassifyHaloParticleRange(particleState, ownedParticleCount, localParticleCount);
 	}
 
@@ -656,7 +640,6 @@ bool DistParticleState::IsValidLocalParticleState(
 		return fail("particleLocalIdx_FromGlobalIdx.size() does not match globalParticleCount.");
 	}
 
-	// owned and halo lists must cover each active local index exactly once
 	std::vector<uint8_t> activeLocalIdxs(localParticleCount, 0);
 
 	// owned list entries must be unique active inner or outer particles
@@ -709,7 +692,6 @@ bool DistParticleState::IsValidLocalParticleState(
 		}
 	}
 
-	// inner and outer lists must partition the owned local indices
 	std::vector<uint8_t> ownedLocalIdxs(localParticleCount, 0);
 
 	// inner list entries must be unique owned particles marked inner
@@ -899,7 +881,7 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 {
 	PrepareParticleClassification(particleState, fluidParticles.N_);
 
-	// TODO: use TBB to parallelize this?
+	// TODO: re-implement with TBB parallelization?
 	for (uint64_t i = 0; i < fluidParticles.N_; i++)
 	{
 		const int localIdx = static_cast<int>(i);
@@ -925,7 +907,7 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 {
 	PrepareParticleClassification(particleState, boundaryParticles.N_);
 
-	// TODO: use TBB to parallelize this?
+	// TODO: re-implement with TBB parallelization?
 	for (uint64_t i = 0; i < boundaryParticles.N_; i++)
 	{
 		const int localIdx = static_cast<int>(i);

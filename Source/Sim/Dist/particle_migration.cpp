@@ -276,96 +276,7 @@ bool Dist::PackMigratingFluidParticlesForRank(
 	return true;
 }
 
-bool Dist::RebuildLocalStateWithMigratedFluidParticles(
-	Sync::UniversalSimState& localState,
-	DistParticleState& fluidParticleState,
-	const ParticleMigrationBuffer& recvBuffer,
-	const IDomainDecomp& domainDecomp,
-	const int rank,
-	const float kernelRadius,
-	const uint32_t globalFluidParticleCount)
-{
-	uint32_t keptParticleCount = 0;
-	if (!CountKeptOwnedFluidParticles(
-		keptParticleCount,
-		localState,
-		fluidParticleState,
-		domainDecomp,
-		rank)) { return false; }
-
-	if (recvBuffer.fluidParticles.size() >
-		static_cast<uint64_t>(std::numeric_limits<uint32_t>::max() - keptParticleCount))
-	{
-		return false;
-	}
-
-	const uint32_t receivedParticleCount =
-		static_cast<uint32_t>(recvBuffer.fluidParticles.size());
-	const uint32_t localParticleCount = keptParticleCount + receivedParticleCount;
-
-	Sync::FluidParticles rebuiltFluidParticles{};
-	DistParticleState rebuiltParticleState{};
-
-	rebuiltFluidParticles.resizeAll(localParticleCount);
-	rebuiltParticleState.Clear();
-	rebuiltParticleState.particleGlobalIdx_FromLocalIdx.assign(localParticleCount, -1);
-	rebuiltParticleState.particleLocalIdx_FromGlobalIdx.assign(globalFluidParticleCount, -1);
-
-	int dstLocalIdx = 0;
-	for (const int srcLocalIdx : fluidParticleState.particleLocalIdx_Owned)
-	{
-		if (!IsLocalIdxInRange(srcLocalIdx, localState.fluidParticles.N_)) { return false; }
-		if (!HasParticleMetadataAtLocalIdx(fluidParticleState, srcLocalIdx)) { return false; }
-
-		const int ownerRank =
-			domainDecomp.OwnerRank(FluidPositionAtLocalIdx(localState.fluidParticles, srcLocalIdx));
-		if (ownerRank < 0) { return false; }
-		if (ownerRank != rank) { continue; }
-
-		const int globalIdx = fluidParticleState.particleGlobalIdx_FromLocalIdx[srcLocalIdx];
-		if (!AddParticleMapEntry(
-			rebuiltParticleState,
-			globalIdx,
-			dstLocalIdx,
-			globalFluidParticleCount)) { return false; }
-
-		CopyFluidParticle_LocalToLocal(
-			localState.fluidParticles,
-			rebuiltFluidParticles,
-			srcLocalIdx,
-			dstLocalIdx);
-
-		dstLocalIdx++;
-	}
-
-	for (const MigratingFluidParticlePacket& packet : recvBuffer.fluidParticles)
-	{
-		if (domainDecomp.OwnerRank(FluidPositionFromPacket(packet)) != rank) { return false; }
-		if (!AddParticleMapEntry(
-			rebuiltParticleState,
-			packet.globalIdx,
-			dstLocalIdx,
-			globalFluidParticleCount)) { return false; }
-
-		CopyFluidPacketToLocal(packet, rebuiltFluidParticles, dstLocalIdx);
-		dstLocalIdx++;
-	}
-
-	if (dstLocalIdx != static_cast<int>(localParticleCount)) { return false; }
-
-	localState.fluidParticles = std::move(rebuiltFluidParticles);
-	fluidParticleState = std::move(rebuiltParticleState);
-
-	ClassifyOwnedFluidParticlesIntoInnerOuter(
-		fluidParticleState,
-		localState.fluidParticles,
-		domainDecomp,
-		rank,
-		kernelRadius);
-
-	return fluidParticleState.IsValidLocalLayout(localParticleCount);
-}
-
+// TODO: re-implement with TBB (parallel count -> prefix sum -> parallel fill)?
 bool Dist::MigrateFluidParticlesToOwnerRanks(
 	Sync::UniversalSimState& localState,
 	DistParticleState& fluidParticleState,
@@ -496,4 +407,94 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	}
 
 	return globalOk;
+}
+
+bool Dist::RebuildLocalStateWithMigratedFluidParticles(
+	Sync::UniversalSimState& localState,
+	DistParticleState& fluidParticleState,
+	const ParticleMigrationBuffer& recvBuffer,
+	const IDomainDecomp& domainDecomp,
+	const int rank,
+	const float kernelRadius,
+	const uint32_t globalFluidParticleCount)
+{
+	uint32_t keptParticleCount = 0;
+	if (!CountKeptOwnedFluidParticles(
+		keptParticleCount,
+		localState,
+		fluidParticleState,
+		domainDecomp,
+		rank)) { return false; }
+
+	if (recvBuffer.fluidParticles.size() >
+		static_cast<uint64_t>(std::numeric_limits<uint32_t>::max() - keptParticleCount))
+	{
+		return false;
+	}
+
+	const uint32_t receivedParticleCount =
+		static_cast<uint32_t>(recvBuffer.fluidParticles.size());
+	const uint32_t localParticleCount = keptParticleCount + receivedParticleCount;
+
+	Sync::FluidParticles rebuiltFluidParticles{};
+	DistParticleState rebuiltParticleState{};
+
+	rebuiltFluidParticles.resizeAll(localParticleCount);
+	rebuiltParticleState.Clear();
+	rebuiltParticleState.particleGlobalIdx_FromLocalIdx.assign(localParticleCount, -1);
+	rebuiltParticleState.particleLocalIdx_FromGlobalIdx.assign(globalFluidParticleCount, -1);
+
+	int dstLocalIdx = 0;
+	for (const int srcLocalIdx : fluidParticleState.particleLocalIdx_Owned)
+	{
+		if (!IsLocalIdxInRange(srcLocalIdx, localState.fluidParticles.N_)) { return false; }
+		if (!HasParticleMetadataAtLocalIdx(fluidParticleState, srcLocalIdx)) { return false; }
+
+		const int ownerRank =
+			domainDecomp.OwnerRank(FluidPositionAtLocalIdx(localState.fluidParticles, srcLocalIdx));
+		if (ownerRank < 0) { return false; }
+		if (ownerRank != rank) { continue; }
+
+		const int globalIdx = fluidParticleState.particleGlobalIdx_FromLocalIdx[srcLocalIdx];
+		if (!AddParticleMapEntry(
+			rebuiltParticleState,
+			globalIdx,
+			dstLocalIdx,
+			globalFluidParticleCount)) { return false; }
+
+		CopyFluidParticle_LocalToLocal(
+			localState.fluidParticles,
+			rebuiltFluidParticles,
+			srcLocalIdx,
+			dstLocalIdx);
+
+		dstLocalIdx++;
+	}
+
+	for (const MigratingFluidParticlePacket& packet : recvBuffer.fluidParticles)
+	{
+		if (domainDecomp.OwnerRank(FluidPositionFromPacket(packet)) != rank) { return false; }
+		if (!AddParticleMapEntry(
+			rebuiltParticleState,
+			packet.globalIdx,
+			dstLocalIdx,
+			globalFluidParticleCount)) { return false; }
+
+		CopyFluidPacketToLocal(packet, rebuiltFluidParticles, dstLocalIdx);
+		dstLocalIdx++;
+	}
+
+	if (dstLocalIdx != static_cast<int>(localParticleCount)) { return false; }
+
+	localState.fluidParticles = std::move(rebuiltFluidParticles);
+	fluidParticleState = std::move(rebuiltParticleState);
+
+	ClassifyOwnedFluidParticlesIntoInnerOuter(
+		fluidParticleState,
+		localState.fluidParticles,
+		domainDecomp,
+		rank,
+		kernelRadius);
+
+	return fluidParticleState.IsValidLocalLayout(localParticleCount);
 }

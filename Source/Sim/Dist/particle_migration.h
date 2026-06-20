@@ -64,15 +64,6 @@ namespace Dist
 		const IDomainDecomp& domainDecomp,
 		int dstRank);
 
-	bool RebuildLocalStateWithMigratedFluidParticles(
-		Sync::UniversalSimState& localState,
-		DistParticleState& fluidParticleState,
-		const ParticleMigrationBuffer& recvBuffer,
-		const IDomainDecomp& domainDecomp,
-		int rank,
-		float kernelRadius,
-		uint32_t globalFluidParticleCount);
-
 	bool MigrateFluidParticlesToOwnerRanks(
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
@@ -81,5 +72,14 @@ namespace Dist
 		float kernelRadius,
 		uint32_t globalFluidParticleCount,
 		ParticleMigrationStats* stats = nullptr);
+
+	bool RebuildLocalStateWithMigratedFluidParticles(
+		Sync::UniversalSimState& localState,
+		DistParticleState& fluidParticleState,
+		const ParticleMigrationBuffer& recvBuffer,
+		const IDomainDecomp& domainDecomp,
+		int rank,
+		float kernelRadius,
+		uint32_t globalFluidParticleCount);
 
 } // namespace Dist

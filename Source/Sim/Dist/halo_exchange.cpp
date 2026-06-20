@@ -48,8 +48,7 @@ namespace
 	int CheckedByteCount(const std::vector<T>& packets)
 	{
 		const uint64_t packetCount = packets.size();
-		const uint64_t maxCount =
-			static_cast<uint64_t>(std::numeric_limits<int>::max()) / sizeof(T);
+		const uint64_t maxCount = static_cast<uint64_t>(std::numeric_limits<int>::max()) / sizeof(T);
 
 		if (packetCount > maxCount)
 		{
@@ -257,6 +256,7 @@ namespace
 		return true;
 	}
 
+	// TODO: find a more efficient way to do this without completely rebuilding the local state?
 	bool RebuildFluidParticlesWithReceivedHalos(
 		Sync::UniversalSimState& rebuiltState,
 		DistParticleState& rebuiltParticleState,
@@ -265,12 +265,13 @@ namespace
 		const std::vector<HaloFluidParticlePacket>& recvFluidParticles,
 		const uint32_t globalParticleCount)
 	{
-		const uint32_t ownedParticleCount =
-			static_cast<uint32_t>(srcParticleState.particleLocalIdx_Owned.size());
-		const uint32_t haloParticleCount =
-			static_cast<uint32_t>(recvFluidParticles.size());
+		// compute new local particle counts
+		const uint32_t ownedParticleCount = static_cast<uint32_t>(srcParticleState.particleLocalIdx_Owned.size());
+		const uint32_t haloParticleCount = static_cast<uint32_t>(recvFluidParticles.size());
 		const uint32_t localParticleCount = ownedParticleCount + haloParticleCount;
 
+		// resize rebuilt state and initialize metadata structures
+		// TODO: use permanent scratch space instead?
 		rebuiltState.ResizeFluid(localParticleCount);
 		rebuiltParticleState.Clear();
 		rebuiltParticleState.ownedParticleCount = ownedParticleCount;
@@ -286,25 +287,23 @@ namespace
 		int dstLocalIdx = 0;
 		for (const int srcLocalIdx : srcParticleState.particleLocalIdx_Owned)
 		{
-			if (!IsLocalIdxInRange(srcLocalIdx, srcState.fluidParticles.N_)) { return false; }
-			if (!HasParticleMetadataAtLocalIdx(srcParticleState, srcLocalIdx)) { return false; }
+			if (!IsLocalIdxInRange(srcLocalIdx, srcState.fluidParticles.N_))
+				{ return false; }
+			if (!HasParticleMetadataAtLocalIdx(srcParticleState, srcLocalIdx))
+				{ return false; }
 
 			const DistParticleClass particleClass = srcParticleState.particleClasses[srcLocalIdx];
 			if (particleClass != DistParticleClass::Inner &&
-				particleClass != DistParticleClass::Outer) { return false; }
+				particleClass != DistParticleClass::Outer)
+				{ return false; }
 
 			const int globalIdx = srcParticleState.particleGlobalIdx_FromLocalIdx[srcLocalIdx];
 			if (!AddParticleMapEntry(
-				rebuiltParticleState,
-				globalIdx,
-				dstLocalIdx,
-				globalParticleCount)) { return false; }
+				rebuiltParticleState, globalIdx, dstLocalIdx, globalParticleCount))
+				{ return false; }
 
 			CopyFluidParticle_LocalToLocal(
-				srcState.fluidParticles,
-				rebuiltState.fluidParticles,
-				srcLocalIdx,
-				dstLocalIdx);
+				srcState.fluidParticles, rebuiltState.fluidParticles, srcLocalIdx, dstLocalIdx);
 
 			rebuiltParticleState.particleClasses[dstLocalIdx] = particleClass;
 			rebuiltParticleState.particleLocalIdx_Owned.push_back(dstLocalIdx);
@@ -323,10 +322,8 @@ namespace
 		for (const HaloFluidParticlePacket& packet : recvFluidParticles)
 		{
 			if (!AddParticleMapEntry(
-				rebuiltParticleState,
-				packet.globalIdx,
-				dstLocalIdx,
-				globalParticleCount)) { return false; }
+				rebuiltParticleState, packet.globalIdx, dstLocalIdx, globalParticleCount))
+				{ return false; }
 
 			CopyFluidPacketToLocal(packet, rebuiltState.fluidParticles, dstLocalIdx);
 
@@ -335,9 +332,11 @@ namespace
 			dstLocalIdx++;
 		}
 
+		// TODO: enable validation only in debug builds?
 		return rebuiltParticleState.IsValidLocalLayout(localParticleCount);
 	}
 
+	// TODO: find a more efficient way to do this without completely rebuilding the local state?
 	bool RebuildBoundaryParticlesWithReceivedHalos(
 		Sync::UniversalSimState& rebuiltState,
 		DistParticleState& rebuiltParticleState,
@@ -346,12 +345,13 @@ namespace
 		const std::vector<HaloBoundaryParticlePacket>& recvBoundaryParticles,
 		const uint32_t globalParticleCount)
 	{
-		const uint32_t ownedParticleCount =
-			static_cast<uint32_t>(srcParticleState.particleLocalIdx_Owned.size());
-		const uint32_t haloParticleCount =
-			static_cast<uint32_t>(recvBoundaryParticles.size());
+		// compute new local particle counts
+		const uint32_t ownedParticleCount = static_cast<uint32_t>(srcParticleState.particleLocalIdx_Owned.size());
+		const uint32_t haloParticleCount = static_cast<uint32_t>(recvBoundaryParticles.size());
 		const uint32_t localParticleCount = ownedParticleCount + haloParticleCount;
 
+		// resize rebuilt state and initialize metadata structures
+		// TODO: use permanent scratch space instead?
 		rebuiltState.ResizeBoundary(localParticleCount);
 		rebuiltParticleState.Clear();
 		rebuiltParticleState.ownedParticleCount = ownedParticleCount;
@@ -367,25 +367,23 @@ namespace
 		int dstLocalIdx = 0;
 		for (const int srcLocalIdx : srcParticleState.particleLocalIdx_Owned)
 		{
-			if (!IsLocalIdxInRange(srcLocalIdx, srcState.boundaryParticles.N_)) { return false; }
-			if (!HasParticleMetadataAtLocalIdx(srcParticleState, srcLocalIdx)) { return false; }
+			if (!IsLocalIdxInRange(srcLocalIdx, srcState.boundaryParticles.N_))
+				{ return false; }
+			if (!HasParticleMetadataAtLocalIdx(srcParticleState, srcLocalIdx))
+				{ return false; }
 
 			const DistParticleClass particleClass = srcParticleState.particleClasses[srcLocalIdx];
 			if (particleClass != DistParticleClass::Inner &&
-				particleClass != DistParticleClass::Outer) { return false; }
+				particleClass != DistParticleClass::Outer)
+				{ return false; }
 
 			const int globalIdx = srcParticleState.particleGlobalIdx_FromLocalIdx[srcLocalIdx];
 			if (!AddParticleMapEntry(
-				rebuiltParticleState,
-				globalIdx,
-				dstLocalIdx,
-				globalParticleCount)) { return false; }
+				rebuiltParticleState, globalIdx, dstLocalIdx, globalParticleCount))
+				{ return false; }
 
 			CopyBoundaryParticle_LocalToLocal(
-				srcState.boundaryParticles,
-				rebuiltState.boundaryParticles,
-				srcLocalIdx,
-				dstLocalIdx);
+				srcState.boundaryParticles, rebuiltState.boundaryParticles, srcLocalIdx, dstLocalIdx);
 
 			rebuiltParticleState.particleClasses[dstLocalIdx] = particleClass;
 			rebuiltParticleState.particleLocalIdx_Owned.push_back(dstLocalIdx);
@@ -404,10 +402,8 @@ namespace
 		for (const HaloBoundaryParticlePacket& packet : recvBoundaryParticles)
 		{
 			if (!AddParticleMapEntry(
-				rebuiltParticleState,
-				packet.globalIdx,
-				dstLocalIdx,
-				globalParticleCount)) { return false; }
+				rebuiltParticleState, packet.globalIdx, dstLocalIdx, globalParticleCount))
+				{ return false; }
 
 			CopyBoundaryPacketToLocal(packet, rebuiltState.boundaryParticles, dstLocalIdx);
 
@@ -416,9 +412,11 @@ namespace
 			dstLocalIdx++;
 		}
 
+		// TODO: enable validation only in debug builds?
 		return rebuiltParticleState.IsValidLocalLayout(localParticleCount);
 	}
-}
+
+} // namespace anonymous
 
 void HaloExchangeBuffer::Clear()
 {
@@ -426,39 +424,74 @@ void HaloExchangeBuffer::Clear()
 	boundaryParticles.clear();
 }
 
-void Dist::PackHaloExchangeBufferForRank(
+// TODO: re-implement with TBB (parallel count -> prefix sum -> parallel fill)?
+bool Dist::PackHaloExchangeBufferForRank(
 	HaloExchangeBuffer& sendBuffer,
 	const Sync::UniversalSimState& localState,
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
 	const IDomainDecomp& domainDecomp,
-	const int dstRank)
+	const int dstRank,
+	std::string* failMsg)
 {
+	if (failMsg) { failMsg->clear(); }
+
+	const auto fail = [failMsg](std::string message) -> bool
+	{
+		if (failMsg) { *failMsg = std::move(message); }
+		return false;
+	};
+
 	sendBuffer.Clear();
 
+	// query domain decomp for the halo bounds of the destination rank
 	const AABB dstHaloBounds = domainDecomp.HaloExtentAABB(dstRank);
 
+	// pack fluid particles
 	for (const int localIdx : fluidParticleState.particleLocalIdx_Outer)
 	{
-		if (!IsLocalIdxInRange(localIdx, localState.fluidParticles.N_)) { continue; }
-		if (!HasParticleMetadataAtLocalIdx(fluidParticleState, localIdx)) { continue; }
-		if (!dstHaloBounds.Contains(
-			FluidPositionAtLocalIdx(localState.fluidParticles, localIdx))) { continue; }
+		// invariant checks for correct metadata
+		if (!IsLocalIdxInRange(localIdx, localState.fluidParticles.N_))
+		{
+			return fail("fluid outer local index is outside the local fluid particle range.");
+		}
+		if (!HasParticleMetadataAtLocalIdx(fluidParticleState, localIdx))
+		{
+			return fail("fluid outer local index has no particle metadata.");
+		}
+
+		// skip if particle outside of destination halo bounds
+		// (should be rare if domain decomposition is good)
+		if (!dstHaloBounds.Contains(FluidPositionAtLocalIdx(localState.fluidParticles, localIdx)))
+			{ continue; }
 
 		sendBuffer.fluidParticles.push_back(
 			PackFluidParticle(localState.fluidParticles, fluidParticleState, localIdx));
 	}
 
+	// pack boundary particles
 	for (const int localIdx : boundaryParticleState.particleLocalIdx_Outer)
 	{
-		if (!IsLocalIdxInRange(localIdx, localState.boundaryParticles.N_)) { continue; }
-		if (!HasParticleMetadataAtLocalIdx(boundaryParticleState, localIdx)) { continue; }
-		if (!dstHaloBounds.Contains(
-			BoundaryPositionAtLocalIdx(localState.boundaryParticles, localIdx))) { continue; }
+		// invariant checks for correct metadata
+		if (!IsLocalIdxInRange(localIdx, localState.boundaryParticles.N_))
+		{
+			return fail("boundary outer local index is outside the local boundary particle range.");
+		}
+		if (!HasParticleMetadataAtLocalIdx(boundaryParticleState, localIdx))
+		{
+			return fail("boundary outer local index has no particle metadata.");
+		}
+
+		// skip if particle outside of destination halo bounds
+		// (should be rare if domain decomposition is good)
+		if (!dstHaloBounds.Contains(BoundaryPositionAtLocalIdx(localState.boundaryParticles, localIdx)))
+			{ continue; }
 
 		sendBuffer.boundaryParticles.push_back(
 			PackBoundaryParticle(localState.boundaryParticles, boundaryParticleState, localIdx));
 	}
+
+	return true;
 }
 
 bool Dist::ExchangeHaloParticlesWithNeighborRanks(
@@ -467,37 +500,61 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
 	const IDomainDecomp& domainDecomp,
-	const MpiContext& mpiContext)
+	const MpiContext& mpiContext,
+	std::string* failMsg)
 {
+	if (failMsg) { failMsg->clear(); }
+
+	const auto fail = [failMsg](std::string message) -> bool
+	{
+		if (failMsg) { *failMsg = std::move(message); }
+		return false;
+	};
+
 	recvBuffer.Clear();
 
+	// query domain decomp for neighbor ranks and prepare halo exchange package for each neighbor
 	const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(mpiContext.Rank());
-
 	std::vector<NeighborHaloExchange> exchanges{};
 	exchanges.reserve(neighborRanks.size());
 
+	// pack halo exchange packages
+	bool localPackOk = true;
+	std::string localPackFailMsg{};
 	for (const int neighborRank : neighborRanks)
 	{
+		if (!localPackOk) { break; }
+
 		NeighborHaloExchange exchange{};
 		exchange.neighborRank = neighborRank;
-		PackHaloExchangeBufferForRank(
-			exchange.sendBuffer,
-			localState,
-			fluidParticleState,
-			boundaryParticleState,
-			domainDecomp,
-			neighborRank);
+		std::string packFailMsg{};
+		if (!PackHaloExchangeBufferForRank(
+			exchange.sendBuffer, localState, fluidParticleState, boundaryParticleState,
+			domainDecomp, neighborRank, &packFailMsg))
+		{
+			localPackOk = false;
+			localPackFailMsg =
+				"Failed to pack halo exchange buffer for rank " +
+				std::to_string(neighborRank) + ": " + packFailMsg;
+			break;
+		}
 
 		exchange.sendFluidCount = CheckedPacketCount(exchange.sendBuffer.fluidParticles);
 		exchange.sendBoundaryCount = CheckedPacketCount(exchange.sendBuffer.boundaryParticles);
 		exchanges.push_back(std::move(exchange));
 	}
 
+	if (!mpiContext.AllTrue(localPackOk))
+	{
+		if (!localPackOk) { return fail(localPackFailMsg); }
+		return fail("At least one rank failed to pack halo exchange buffers.");
+	}
+
 	std::vector<MPI_Request> requests{};
 	requests.reserve(exchanges.size() * 4);
 
 	// exchange packet counts before exchanging raw packet payloads
-	for (NeighborHaloExchange& exchange : exchanges)
+	for (NeighborHaloExchange& exchange : exchanges) // post non-blocking MPI receives
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.IRecvInt(
@@ -512,7 +569,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 			HALO_EXCHANGE_TAG_BOUNDARY_COUNT,
 			requests.back());
 	}
-	for (NeighborHaloExchange& exchange : exchanges)
+	for (NeighborHaloExchange& exchange : exchanges) // post non-blocking MPI sends
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendInt(
@@ -530,18 +587,20 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	mpiContext.WaitAll(requests);
 	requests.clear();
 
+	// resize receive buffers according to exchanged packet counts
 	for (NeighborHaloExchange& exchange : exchanges)
 	{
-		if (exchange.recvFluidCount < 0 || exchange.recvBoundaryCount < 0) { return false; }
+		if (exchange.recvFluidCount < 0 || exchange.recvBoundaryCount < 0)
+		{
+			return fail("Received negative halo exchange packet count.");
+		}
 
-		exchange.recvBuffer.fluidParticles.resize(
-			static_cast<uint64_t>(exchange.recvFluidCount));
-		exchange.recvBuffer.boundaryParticles.resize(
-			static_cast<uint64_t>(exchange.recvBoundaryCount));
+		exchange.recvBuffer.fluidParticles.resize(static_cast<uint64_t>(exchange.recvFluidCount));
+		exchange.recvBuffer.boundaryParticles.resize(static_cast<uint64_t>(exchange.recvBoundaryCount));
 	}
 
 	// exchange payloads after all receive buffers are sized correctly
-	for (NeighborHaloExchange& exchange : exchanges)
+	for (NeighborHaloExchange& exchange : exchanges) // post non-blocking MPI receives
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.IRecvBytes(
@@ -558,7 +617,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 			HALO_EXCHANGE_TAG_BOUNDARY_PAYLOAD,
 			requests.back());
 	}
-	for (NeighborHaloExchange& exchange : exchanges)
+	for (NeighborHaloExchange& exchange : exchanges) // post non-blocking MPI sends
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendBytes(
@@ -577,6 +636,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	}
 	mpiContext.WaitAll(requests);
 
+	// combine received halo particles from all neighbors into a single receive buffer
 	for (const NeighborHaloExchange& exchange : exchanges)
 	{
 		recvBuffer.fluidParticles.insert(
@@ -593,37 +653,36 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 }
 
 bool Dist::RebuildLocalStateWithReceivedHalos(
+	const HaloExchangeBuffer& recvBuffer,
 	Sync::UniversalSimState& localState,
 	DistParticleState& fluidParticleState,
 	DistParticleState& boundaryParticleState,
-	const HaloExchangeBuffer& recvBuffer,
 	const uint32_t globalFluidParticleCount,
 	const uint32_t globalBoundaryParticleCount)
 {
+	// create temp rebuilt state
 	Sync::UniversalSimState rebuiltState{};
 	DistParticleState rebuiltFluidParticleState{};
 	DistParticleState rebuiltBoundaryParticleState{};
 
+	// copy metadata into rebuilt state
 	rebuiltState.schemaVersion = localState.schemaVersion;
 	rebuiltState.step = localState.step;
 	rebuiltState.time = localState.time;
 
+	// rebuild fluid particle state
 	if (!RebuildFluidParticlesWithReceivedHalos(
-		rebuiltState,
-		rebuiltFluidParticleState,
-		localState,
-		fluidParticleState,
-		recvBuffer.fluidParticles,
-		globalFluidParticleCount)) { return false; }
+		rebuiltState, rebuiltFluidParticleState, localState, fluidParticleState,
+		recvBuffer.fluidParticles, globalFluidParticleCount))
+		{ return false; }
 
+	// rebuild boundary particle state
 	if (!RebuildBoundaryParticlesWithReceivedHalos(
-		rebuiltState,
-		rebuiltBoundaryParticleState,
-		localState,
-		boundaryParticleState,
-		recvBuffer.boundaryParticles,
-		globalBoundaryParticleCount)) { return false; }
+		rebuiltState, rebuiltBoundaryParticleState, localState, boundaryParticleState,
+		recvBuffer.boundaryParticles, globalBoundaryParticleCount))
+		{ return false; }
 
+	// move temp rebuilt state into live state
 	localState = std::move(rebuiltState);
 	fluidParticleState = std::move(rebuiltFluidParticleState);
 	boundaryParticleState = std::move(rebuiltBoundaryParticleState);
