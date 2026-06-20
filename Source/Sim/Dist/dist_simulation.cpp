@@ -860,17 +860,18 @@ bool DistSimulationMgr::ValidateRankLocalSimState() const
 	const uint32_t localFluidParticleCount = localSimState_.fluidParticles.N_;
 	const uint32_t localBoundaryParticleCount = localSimState_.boundaryParticles.N_;
 
-	if (!fluidParticleState_.IsValidLocalLayout(localFluidParticleCount))
+	std::string failMsg{};
+	if (!fluidParticleState_.IsValidLocalLayout(localFluidParticleCount, &failMsg))
 	{
-		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local fluid particle layout.",
-			mpiContext_.Rank(), mpiContext_.Size());
+		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local fluid particle layout: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 		localOk = false;
 	}
 
-	if (!boundaryParticleState_.IsValidLocalLayout(localBoundaryParticleCount))
+	if (!boundaryParticleState_.IsValidLocalLayout(localBoundaryParticleCount, &failMsg))
 	{
-		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local boundary particle layout.",
-			mpiContext_.Rank(), mpiContext_.Size());
+		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local boundary particle layout: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 		localOk = false;
 	}
 
@@ -1316,11 +1317,12 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 			localOk = false;
 		}
 
+		std::string failMsg{};
 		if (localOk &&
-			!fluidParticleState_.IsValidLocalLayout(localSimState_.fluidParticles.N_))
+			!fluidParticleState_.IsValidLocalLayout(localSimState_.fluidParticles.N_, &failMsg))
 		{
-			SPDLOG_ERROR("[rank {}/{}] Invalid migrated fluid particle layout.",
-				mpiContext_.Rank(), mpiContext_.Size());
+			SPDLOG_ERROR("[rank {}/{}] Invalid migrated fluid particle layout: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 			localOk = false;
 		}
 
@@ -1435,14 +1437,18 @@ bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder(const char* phaseN
 
 bool DistSimulationMgr::ValidateRankLocalParticleMetadata(const char* phaseName) const
 {
+	std::string fluidFailMsg{};
 	const bool fluidMetadataValid =
 		fluidParticleState_.IsValidLocalParticleState(
 			localSimState_.fluidParticles.N_,
-			globalSimState_.fluidParticles.N_);
+			globalSimState_.fluidParticles.N_,
+			&fluidFailMsg);
+	std::string boundaryFailMsg{};
 	const bool boundaryMetadataValid =
 		boundaryParticleState_.IsValidLocalParticleState(
 			localSimState_.boundaryParticles.N_,
-			globalSimState_.boundaryParticles.N_);
+			globalSimState_.boundaryParticles.N_,
+			&boundaryFailMsg);
 
 	if (!fluidMetadataValid || !boundaryMetadataValid)
 	{
@@ -1450,8 +1456,8 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata(const char* phaseName)
 			"[rank {}/{}] Invalid rank-local particle metadata {} "
 			"(fluid={}, boundary={})",
 			mpiContext_.Rank(), mpiContext_.Size(), phaseName,
-			fluidMetadataValid ? "valid" : "invalid",
-			boundaryMetadataValid ? "valid" : "invalid");
+			fluidMetadataValid ? "valid" : fluidFailMsg,
+			boundaryMetadataValid ? "valid" : boundaryFailMsg);
 		return false;
 	}
 

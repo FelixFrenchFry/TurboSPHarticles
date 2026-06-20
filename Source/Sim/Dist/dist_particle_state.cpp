@@ -474,59 +474,133 @@ void DistParticleState::ClearParticleClasses()
 	particleLocalIdx_Halo.clear();
 }
 
-bool DistParticleState::IsValidLocalLayout(const uint32_t localParticleCount) const
+bool DistParticleState::IsValidLocalLayout(
+	const uint32_t localParticleCount,
+	std::string* failMsg) const
 {
+	if (failMsg) { failMsg->clear(); }
+
+	const auto fail = [failMsg](std::string message) -> bool
+	{
+		if (failMsg) { *failMsg = std::move(message); }
+		return false;
+	};
+
 	const uint32_t haloStartLocalIdx = ownedParticleCount;
 
-	if (static_cast<uint64_t>(particleClasses.size()) != localParticleCount) { return false; }
-	if (static_cast<uint64_t>(ownedParticleCount) + haloParticleCount != localParticleCount) { return false; }
-	if (haloStartLocalIdx > localParticleCount) { return false; }
+	// core counts and class storage must match the compact local range
+	if (static_cast<uint64_t>(particleClasses.size()) != localParticleCount)
+	{
+		return fail("particleClasses.size() does not match localParticleCount.");
+	}
+	if (static_cast<uint64_t>(ownedParticleCount) + haloParticleCount != localParticleCount)
+	{
+		return fail("ownedParticleCount + haloParticleCount does not match localParticleCount.");
+	}
 
-	if (static_cast<uint64_t>(particleLocalIdx_Owned.size()) != ownedParticleCount) { return false; }
-	if (static_cast<uint64_t>(particleLocalIdx_Halo.size()) != haloParticleCount) { return false; }
+	// class index lists must have the expected compact owned / halo split
+	if (static_cast<uint64_t>(particleLocalIdx_Owned.size()) != ownedParticleCount)
+	{
+		return fail("particleLocalIdx_Owned.size() does not match ownedParticleCount.");
+	}
+	if (static_cast<uint64_t>(particleLocalIdx_Halo.size()) != haloParticleCount)
+	{
+		return fail("particleLocalIdx_Halo.size() does not match haloParticleCount.");
+	}
 	if (static_cast<uint64_t>(particleLocalIdx_Inner.size()) +
-		static_cast<uint64_t>(particleLocalIdx_Outer.size()) != ownedParticleCount) { return false; }
+		static_cast<uint64_t>(particleLocalIdx_Outer.size()) != ownedParticleCount)
+	{
+		return fail(
+			"particleLocalIdx_Inner.size() + particleLocalIdx_Outer.size() "
+			"does not match ownedParticleCount.");
+	}
 
-	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, haloStartLocalIdx)) { return false; }
-	if (!LocalIdxListCoversRange(particleLocalIdx_Halo, haloStartLocalIdx, localParticleCount)) { return false; }
-	if (!LocalIdxListsCoverRange(particleLocalIdx_Inner, particleLocalIdx_Outer, 0, haloStartLocalIdx)) { return false; }
+	// index lists must cover the compact owned and halo ranges
+	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, haloStartLocalIdx))
+	{
+		return fail("particleLocalIdx_Owned does not cover the owned local index range.");
+	}
+	if (!LocalIdxListCoversRange(particleLocalIdx_Halo, haloStartLocalIdx, localParticleCount))
+	{
+		return fail("particleLocalIdx_Halo does not cover the halo local index range.");
+	}
+	if (!LocalIdxListsCoverRange(particleLocalIdx_Inner, particleLocalIdx_Outer, 0, haloStartLocalIdx))
+	{
+		return fail("particleLocalIdx_Inner and particleLocalIdx_Outer do not cover the owned local index range.");
+	}
 
+	// compact owned range must contain only inner or outer particles
 	for (uint64_t i = 0; i < haloStartLocalIdx; i++)
 	{
 		const DistParticleClass particleClass = particleClasses[i];
 		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { return false; }
+			particleClass != DistParticleClass::Outer)
+		{
+			return fail("owned local index range contains a particle class that is not Inner or Outer.");
+		}
 	}
 
+	// compact halo range must contain only halo particles
 	for (uint64_t i = haloStartLocalIdx; i < localParticleCount; i++)
 	{
-		if (particleClasses[i] != DistParticleClass::Halo) { return false; }
+		if (particleClasses[i] != DistParticleClass::Halo)
+		{
+			return fail("halo local index range contains a particle class that is not Halo.");
+		}
 	}
 
+	// owned list entries must point into the compact owned range
 	for (const int localIdx : particleLocalIdx_Owned)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx)) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
+		{
+			return fail("particleLocalIdx_Owned contains an index outside the owned local index range.");
+		}
 		const DistParticleClass particleClass = particleClasses[localIdx];
 		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { return false; }
+			particleClass != DistParticleClass::Outer)
+		{
+			return fail("particleLocalIdx_Owned contains an index whose class is not Inner or Outer.");
+		}
 	}
 
+	// inner list entries must point to owned particles marked inner
 	for (const int localIdx : particleLocalIdx_Inner)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx)) { return false; }
-		if (particleClasses[localIdx] != DistParticleClass::Inner) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
+		{
+			return fail("particleLocalIdx_Inner contains an index outside the owned local index range.");
+		}
+		if (particleClasses[localIdx] != DistParticleClass::Inner)
+		{
+			return fail("particleLocalIdx_Inner contains an index whose class is not Inner.");
+		}
 	}
 
+	// outer list entries must point to owned particles marked outer
 	for (const int localIdx : particleLocalIdx_Outer)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx)) { return false; }
-		if (particleClasses[localIdx] != DistParticleClass::Outer) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
+		{
+			return fail("particleLocalIdx_Outer contains an index outside the owned local index range.");
+		}
+		if (particleClasses[localIdx] != DistParticleClass::Outer)
+		{
+			return fail("particleLocalIdx_Outer contains an index whose class is not Outer.");
+		}
 	}
 
+	// halo list entries must point to non-owned particles marked halo
 	for (const int localIdx : particleLocalIdx_Halo)
 	{
-		if (!IsLocalIdxInRange(localIdx, haloStartLocalIdx, localParticleCount)) { return false; }
-		if (particleClasses[localIdx] != DistParticleClass::Halo) { return false; }
+		if (!IsLocalIdxInRange(localIdx, haloStartLocalIdx, localParticleCount))
+		{
+			return fail("particleLocalIdx_Halo contains an index outside the halo local index range.");
+		}
+		if (particleClasses[localIdx] != DistParticleClass::Halo)
+		{
+			return fail("particleLocalIdx_Halo contains an index whose class is not Halo.");
+		}
 	}
 
 	return true;
@@ -534,89 +608,191 @@ bool DistParticleState::IsValidLocalLayout(const uint32_t localParticleCount) co
 
 bool DistParticleState::IsValidLocalParticleState(
 	const uint32_t localParticleCount,
-	const uint32_t globalParticleCount) const
+	const uint32_t globalParticleCount,
+	std::string* failMsg) const
 {
-	if (static_cast<uint64_t>(particleClasses.size()) != localParticleCount) { return false; }
-	if (static_cast<uint64_t>(ownedParticleCount) + haloParticleCount != localParticleCount) { return false; }
+	if (failMsg) { failMsg->clear(); }
 
-	if (static_cast<uint64_t>(particleLocalIdx_Owned.size()) != ownedParticleCount) { return false; }
-	if (static_cast<uint64_t>(particleLocalIdx_Halo.size()) != haloParticleCount) { return false; }
+	const auto fail = [failMsg](std::string message) -> bool
+	{
+		if (failMsg) { *failMsg = std::move(message); }
+		return false;
+	};
+
+	// core counts and class storage must match the active local range
+	if (static_cast<uint64_t>(particleClasses.size()) != localParticleCount)
+	{
+		return fail("particleClasses.size() does not match localParticleCount.");
+	}
+	if (static_cast<uint64_t>(ownedParticleCount) + haloParticleCount != localParticleCount)
+	{
+		return fail("ownedParticleCount + haloParticleCount does not match localParticleCount.");
+	}
+
+	// class index lists must have the expected owned / halo split
+	if (static_cast<uint64_t>(particleLocalIdx_Owned.size()) != ownedParticleCount)
+	{
+		return fail("particleLocalIdx_Owned.size() does not match ownedParticleCount.");
+	}
+	if (static_cast<uint64_t>(particleLocalIdx_Halo.size()) != haloParticleCount)
+	{
+		return fail("particleLocalIdx_Halo.size() does not match haloParticleCount.");
+	}
 	if (static_cast<uint64_t>(particleLocalIdx_Inner.size()) +
-		static_cast<uint64_t>(particleLocalIdx_Outer.size()) != ownedParticleCount) { return false; }
+		static_cast<uint64_t>(particleLocalIdx_Outer.size()) != ownedParticleCount)
+	{
+		return fail(
+			"particleLocalIdx_Inner.size() + particleLocalIdx_Outer.size() "
+			"does not match ownedParticleCount.");
+	}
 
-	if (static_cast<uint64_t>(particleGlobalIdx_FromLocalIdx.size()) != localParticleCount) { return false; }
-	if (static_cast<uint64_t>(particleLocalIdx_FromGlobalIdx.size()) != globalParticleCount) { return false; }
+	// index maps must be sized for the local and global particle domains
+	if (static_cast<uint64_t>(particleGlobalIdx_FromLocalIdx.size()) != localParticleCount)
+	{
+		return fail("particleGlobalIdx_FromLocalIdx.size() does not match localParticleCount.");
+	}
+	if (static_cast<uint64_t>(particleLocalIdx_FromGlobalIdx.size()) != globalParticleCount)
+	{
+		return fail("particleLocalIdx_FromGlobalIdx.size() does not match globalParticleCount.");
+	}
 
+	// owned and halo lists must cover each active local index exactly once
 	std::vector<uint8_t> activeLocalIdxs(localParticleCount, 0);
 
+	// owned list entries must be unique active inner or outer particles
 	for (const int localIdx : particleLocalIdx_Owned)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount)) { return false; }
-		if (activeLocalIdxs[localIdx] != 0) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount))
+		{
+			return fail("particleLocalIdx_Owned contains an index outside the local particle range.");
+		}
+		if (activeLocalIdxs[localIdx] != 0)
+		{
+			return fail("particleLocalIdx_Owned contains a duplicate active local index.");
+		}
 
 		const DistParticleClass particleClass = particleClasses[localIdx];
 		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { return false; }
+			particleClass != DistParticleClass::Outer)
+		{
+			return fail("particleLocalIdx_Owned contains an index whose class is not Inner or Outer.");
+		}
 
 		activeLocalIdxs[localIdx] = 1;
 	}
 
+	// halo list entries must be unique active halo particles
 	for (const int localIdx : particleLocalIdx_Halo)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount)) { return false; }
-		if (activeLocalIdxs[localIdx] != 0) { return false; }
-		if (particleClasses[localIdx] != DistParticleClass::Halo) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount))
+		{
+			return fail("particleLocalIdx_Halo contains an index outside the local particle range.");
+		}
+		if (activeLocalIdxs[localIdx] != 0)
+		{
+			return fail("particleLocalIdx_Halo contains a duplicate active local index.");
+		}
+		if (particleClasses[localIdx] != DistParticleClass::Halo)
+		{
+			return fail("particleLocalIdx_Halo contains an index whose class is not Halo.");
+		}
 
 		activeLocalIdxs[localIdx] = 1;
 	}
 
+	// every active local index must appear in either owned or halo
 	for (uint64_t localIdx = 0; localIdx < localParticleCount; localIdx++)
 	{
-		if (activeLocalIdxs[localIdx] == 0) { return false; }
+		if (activeLocalIdxs[localIdx] == 0)
+		{
+			return fail("owned and halo local index lists do not cover every active local index.");
+		}
 	}
 
+	// inner and outer lists must partition the owned local indices
 	std::vector<uint8_t> ownedLocalIdxs(localParticleCount, 0);
 
+	// inner list entries must be unique owned particles marked inner
 	for (const int localIdx : particleLocalIdx_Inner)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount)) { return false; }
-		if (ownedLocalIdxs[localIdx] != 0) { return false; }
-		if (particleClasses[localIdx] != DistParticleClass::Inner) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount))
+		{
+			return fail("particleLocalIdx_Inner contains an index outside the local particle range.");
+		}
+		if (ownedLocalIdxs[localIdx] != 0)
+		{
+			return fail("particleLocalIdx_Inner contains a duplicate owned local index.");
+		}
+		if (particleClasses[localIdx] != DistParticleClass::Inner)
+		{
+			return fail("particleLocalIdx_Inner contains an index whose class is not Inner.");
+		}
 
 		ownedLocalIdxs[localIdx] = 1;
 	}
 
+	// outer list entries must be unique owned particles marked outer
 	for (const int localIdx : particleLocalIdx_Outer)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount)) { return false; }
-		if (ownedLocalIdxs[localIdx] != 0) { return false; }
-		if (particleClasses[localIdx] != DistParticleClass::Outer) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount))
+		{
+			return fail("particleLocalIdx_Outer contains an index outside the local particle range.");
+		}
+		if (ownedLocalIdxs[localIdx] != 0)
+		{
+			return fail("particleLocalIdx_Outer contains a duplicate owned local index.");
+		}
+		if (particleClasses[localIdx] != DistParticleClass::Outer)
+		{
+			return fail("particleLocalIdx_Outer contains an index whose class is not Outer.");
+		}
 
 		ownedLocalIdxs[localIdx] = 1;
 	}
 
+	// every owned local index must appear in either inner or outer
 	for (const int localIdx : particleLocalIdx_Owned)
 	{
-		if (ownedLocalIdxs[localIdx] == 0) { return false; }
+		if (ownedLocalIdxs[localIdx] == 0)
+		{
+			return fail("inner and outer local index lists do not cover every owned local index.");
+		}
 	}
 
+	// local-to-global entries must be unique and round-trip through the inverse map
 	std::vector<uint8_t> activeGlobalIdxs(globalParticleCount, 0);
 	for (uint64_t localIdx = 0; localIdx < localParticleCount; localIdx++)
 	{
 		const int globalIdx = particleGlobalIdx_FromLocalIdx[localIdx];
-		if (globalIdx < 0 || static_cast<uint32_t>(globalIdx) >= globalParticleCount) { return false; }
-		if (activeGlobalIdxs[globalIdx] != 0) { return false; }
-		if (particleLocalIdx_FromGlobalIdx[globalIdx] != static_cast<int>(localIdx)) { return false; }
+		if (globalIdx < 0 || static_cast<uint32_t>(globalIdx) >= globalParticleCount)
+		{
+			return fail("particleGlobalIdx_FromLocalIdx contains an index outside the global particle range.");
+		}
+		if (activeGlobalIdxs[globalIdx] != 0)
+		{
+			return fail("particleGlobalIdx_FromLocalIdx contains a duplicate active global index.");
+		}
+		if (particleLocalIdx_FromGlobalIdx[globalIdx] != static_cast<int>(localIdx))
+		{
+			return fail("particleLocalIdx_FromGlobalIdx does not map active globalIdx back to localIdx.");
+		}
 
 		activeGlobalIdxs[globalIdx] = 1;
 	}
 
+	// non-empty global-to-local entries must also round-trip through the local map
 	for (uint64_t globalIdx = 0; globalIdx < globalParticleCount; globalIdx++)
 	{
 		const int localIdx = particleLocalIdx_FromGlobalIdx[globalIdx];
 		if (localIdx == -1) { continue; }
-		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount)) { return false; }
-		if (particleGlobalIdx_FromLocalIdx[localIdx] != static_cast<int>(globalIdx)) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, localParticleCount))
+		{
+			return fail("particleLocalIdx_FromGlobalIdx contains an index outside the local particle range.");
+		}
+		if (particleGlobalIdx_FromLocalIdx[localIdx] != static_cast<int>(globalIdx))
+		{
+			return fail("particleGlobalIdx_FromLocalIdx does not map active localIdx back to globalIdx.");
+		}
 	}
 
 	return true;

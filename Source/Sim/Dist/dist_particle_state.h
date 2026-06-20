@@ -4,6 +4,7 @@
 
 // external
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // internal
@@ -43,42 +44,54 @@ namespace Dist
 		std::vector<int> particleGlobalIdx_FromLocalIdx;
 		std::vector<int> particleLocalIdx_FromGlobalIdx;
 
+		// clears all particle classification metadata, compact range counts, and local/global index maps
 		void Clear();
+
+		// clears only particle class lists and compact range counts while preserving local/global index maps
 		void ClearParticleClasses();
 
-		// validates local metadata of compact [ owned ][ halo ] SoA layout
-		bool IsValidLocalLayout(uint32_t localParticleCount) const;
+		// validates metadata for compact pre-backend-reorder layout [ owned particles ][ halo particles ]
+		bool IsValidLocalLayout(uint32_t localParticleCount, std::string* failMsg = nullptr) const;
 
-		// validates local metadata after backend data re-ordering
-		bool IsValidLocalParticleState(uint32_t localParticleCount, uint32_t globalParticleCount) const;
+		// validates local metadata after backend data re-ordering, where owned
+		// and halo particles may no longer be stored in compact contiguous ranges
+		bool IsValidLocalParticleState(
+			uint32_t localParticleCount,
+			uint32_t globalParticleCount,
+			std::string* failMsg = nullptr) const;
 	};
 
+	// rebuilds particle classes, class index lists, and local/global maps after
+	// the backend changes local particle order
 	bool ApplyLocalParticleReOrder(
 		DistParticleState& particleState,
 		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
 		uint32_t globalParticleCount);
 
+	// rebuilds fluid particle class lists by keeping particles owned by this
+	// rank and splitting them into inner / outer by domain boundary distance
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
 		const Sync::FluidParticles& fluidParticles,
 		const IDomainDecomp& domainDecomp,
-		int rank,
-		float kernelRadius);
+		int rank, float kernelRadius);
 
+	// rebuilds boundary particle class lists by keeping particles owned by this
+	// rank and splitting them into inner / outer by domain boundary distance
 	void ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		DistParticleState& particleState,
 		const Sync::BoundaryParticles& boundaryParticles,
 		const IDomainDecomp& domainDecomp,
-		int rank,
-		float kernelRadius);
+		int rank, float kernelRadius);
 
+	// extracts the particles needed by this rank from the global state and
+	// fills the rank-local simulation state plus fluid / boundary metadata
 	void BuildLocalParticlesFromGlobalState(
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
 		DistParticleState& boundaryParticleState,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
-		int rank,
-		float kernelRadius);
+		int rank, float kernelRadius);
 
 } // namespace Dist
