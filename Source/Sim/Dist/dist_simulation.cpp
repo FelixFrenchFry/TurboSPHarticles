@@ -9,6 +9,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -20,7 +21,10 @@
 #include "Source/Base/enum_hub.h"
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "dist_simulation.h"
+#include "dist_helpers.h"
+#include "dist_snapshots.h"
 #include "halo_exchange.h"
+#include "owned_particle_gather.h"
 #include "particle_migration.h"
 #include "Layouts/decomp_AABB_uniform.h"
 
@@ -125,6 +129,71 @@ namespace
 		}
 		oss << ']';
 		return oss.str();
+	}
+
+	std::string FormatRankLogDirName(const int rank)
+	{
+		std::ostringstream oss;
+		oss << "rank_" << std::setw(3) << std::setfill('0') << rank;
+		return oss.str();
+	}
+
+	Export::LoggingOptions MakeRankLoggingOptions(const MpiContext& mpiContext)
+	{
+		Export::LoggingOptions loggingOptions{};
+		// each rank writes its own CSV files to avoid shared log-file writes
+		loggingOptions.baseDir /= FormatRankLogDirName(mpiContext.Rank());
+		return loggingOptions;
+	}
+
+	Mem::MemSpace PrimaryMemSpace(const Base::BackendVersion backendVersion)
+	{
+		return backendVersion == Base::BackendVersion::GPU01
+			? Mem::MemSpace::VRAM
+			: Mem::MemSpace::RAM;
+	}
+
+	const char* MemSpaceLabel(const Mem::MemSpace space)
+	{
+		switch (space)
+		{
+		case Mem::MemSpace::RAM: { return "RAM"; }
+		case Mem::MemSpace::VRAM: { return "VRAM"; }
+		case Mem::MemSpace::Count: { break; }
+		}
+
+		return "MemSpace::<unknown>";
+	}
+
+	Mem::MemUsage SumMemoryUsage(
+		const Mem::MemRecordStep& record,
+		const Mem::MemSpace space)
+	{
+		Mem::MemUsage total{};
+
+		for (uint8_t i = 0; i < Mem::GetIdx(Mem::MemBucket::Count); i++)
+		{
+			Mem::Add(total, record.mem[Mem::GetIdx(space)][i]);
+		}
+
+		return total;
+	}
+
+	Mem::MemUsage SumMaxMemoryUsage(
+		const Mem::MemoryTracker& memoryTracker,
+		const Mem::MemSpace space)
+	{
+		Mem::MemUsage total{};
+
+		for (uint8_t i = 0; i < Mem::GetIdx(Mem::MemBucket::Count); i++)
+		{
+			const auto bucket = static_cast<Mem::MemBucket>(i);
+			total.usedBytes += memoryTracker.GetMem_Max_Used(space, bucket);
+			total.allocBytes += memoryTracker.GetMem_Max_Alloc(space, bucket);
+			total.occupiedBytes += memoryTracker.GetMem_Max_Occupied(space, bucket);
+		}
+
+		return total;
 	}
 
 	bool AlmostEqual(const float a, const float b, const float eps = 1e-6f)
@@ -245,13 +314,14 @@ namespace
 	}
 }
 
-DistSimulationMgr::DistSimulationMgr(
-	MpiContext& mpiContext,
-	Sim::SimParamsMgr& simParamsMgr)
+DistSimulationMgr::DistSimulationMgr(MpiContext& mpiContext,
+									 Sim::SimParamsMgr& simParamsMgr)
 	: mpiContext_{ mpiContext }
 	, simParamsMgr_{ simParamsMgr }
 	, domainDecomp_{ std::make_unique<Decomp_AABB_Uniform>() }
+	, loggingMgr_{ MakeRankLoggingOptions(mpiContext) }
 {
+	// nothing to do
 }
 
 bool DistSimulationMgr::Init(
@@ -264,6 +334,10 @@ bool DistSimulationMgr::Init(
 	}
 
 	configProfile_ = profile;
+	paramsFile_ = configProfile_ + "/params.json";
+	scenariosFile_ = configProfile_ + "/scenarios.json";
+
+	// initial snapshot
 	SyncParameters(true);
 
 	if (!LoadParamsFromCliOverrides(simOverrides))
@@ -272,43 +346,41 @@ bool DistSimulationMgr::Init(
 	}
 	SyncParameters(true);
 
-	if (mpiContext_.IsRoot())
-	{
-		SPDLOG_INFO("Initializing distributed simulation state...");
-	}
+	SPDLOG_INFO_MPI("Initializing distributed simulation state...", mpiContext_);
 	SelectSimScenario(simParams_.scenarioType, configProfile_);
+	// TODO: select sim backend function?
 	if (!mpiContext_.AllTrue(simScenario_ != nullptr)) { return false; }
 
-	if (mpiContext_.IsRoot())
-	{
-		SPDLOG_INFO("Initializing distributed domain decomp...");
-	}
+	SPDLOG_INFO_MPI("Initializing distributed domain decomp...", mpiContext_);
 	if (!BuildDomainDecomp()) { return false; }
 
-	if (mpiContext_.IsRoot())
-	{
-		SPDLOG_INFO("Initializing rank-local distributed state...");
-	}
+	SPDLOG_INFO_MPI("Initializing rank-local distributed state...", mpiContext_);
 	if (!ReBuildInitialSimState()) { return false; }
 
-	if (mpiContext_.IsRoot())
-	{
-		SPDLOG_INFO("Initializing rank-local backend...");
-	}
+	SPDLOG_INFO_MPI("Initializing rank-local backend...", mpiContext_);
 	if (!InitRankLocalBackend()) { return false; }
 	if (!RunRankLocalBackendStartupCheck()) { return false; }
 
-	initialized_ = true;
+	// updated snapshot
+	initialized_.store(true, std::memory_order_release);
 	SyncParameters(true);
+
+	// TODO: diagnostic cli prints of sim params and sim setup?
+
 	return true;
 }
 
 void DistSimulationMgr::Shutdown()
 {
 	RequestStop();
-	initialized_ = false;
+	EndRunLogging();
+
+	// TODO: free memory occupied by particles, grids, etc...
+
+	initialized_.store(false, std::memory_order_release);
 	running_.store(false, std::memory_order_release);
 	simBackend_.reset();
+	memoryTracker_.reset();
 	benchmarksTracker_.reset();
 }
 
@@ -333,9 +405,7 @@ void DistSimulationMgr::SelectSimScenario(
 	if (!simScenario_)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to create sim scenario ({})",
-			mpiContext_.Rank(),
-			mpiContext_.Size(),
-			static_cast<int>(type));
+			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(type));
 		return;
 	}
 }
@@ -343,19 +413,22 @@ void DistSimulationMgr::SelectSimScenario(
 void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 {
 	simBackend_.reset();
+	memoryTracker_.reset();
 	benchmarksTracker_.reset();
+	curBenchOpGroups_.clear();
 
-	// create new benchmark tracker and backend over rank-local data
+	// create new metric trackers and backend over rank-local data
 	benchmarksTracker_ = std::make_unique<Bench::BenchmarksTracker>(simParams_);
+	memoryTracker_ = std::make_unique<Mem::MemoryTracker>(simParams_);
 	simBackend_ = Sim::MakeSimBackend(version, simParamsMgr_, *benchmarksTracker_, simParams_);
 	if (!simBackend_)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to create sim backend ({})",
-			mpiContext_.Rank(),
-			mpiContext_.Size(),
-			static_cast<int>(version));
+			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
 		return;
 	}
+
+	simBackend_->GetBenchOpGroups(curBenchOpGroups_);
 }
 
 bool DistSimulationMgr::ReBuildInitialSimState()
@@ -401,7 +474,7 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 
 void DistSimulationMgr::RunStartupCheck() const
 {
-	if (!initialized_)
+	if (!initialized_.load(std::memory_order_acquire))
 	{
 		SPDLOG_ERROR("DistSimulationMgr was not initialized.");
 		return;
@@ -409,13 +482,10 @@ void DistSimulationMgr::RunStartupCheck() const
 
 	const Sim::SimParams params = simParams_;
 
-	if (mpiContext_.IsRoot() && domainDecomp_)
+	if (domainDecomp_)
 	{
-		SPDLOG_INFO(
-			"Distributed domain decomp initialized "
-			"(method={}, globalBounds={})",
-			domainDecomp_->Name(),
-			FormatAABB(domainDecomp_->GlobalExtentAABB()));
+		SPDLOG_INFO_MPI("Distributed domain decomp initialized (method={}, globalBounds={})", mpiContext_,
+			domainDecomp_->Name(), FormatAABB(domainDecomp_->GlobalExtentAABB()));
 	}
 
 	// print one rank at a time to keep MPI startup logs readable
@@ -424,25 +494,18 @@ void DistSimulationMgr::RunStartupCheck() const
 		mpiContext_.Barrier();
 		if (mpiContext_.Rank() == r)
 		{
-			SPDLOG_INFO(
-				"[rank {}/{}] Distributed startup validated "
+			SPDLOG_INFO("[rank {}/{}] Distributed startup validated "
 				"(backend={}, neighborListStorage={}, maxSteps={}, exportDir='{}')",
-				mpiContext_.Rank(),
-				mpiContext_.Size(),
+				mpiContext_.Rank(), mpiContext_.Size(),
 				Base::ToCString(params.backendVersion),
 				Base::ToEffectiveNeighborListStorageCString(
-					params.backendVersion,
-					params.neighborListMethod),
-				params.maxSteps,
-				params.exportDir);
+					params.backendVersion, params.neighborListMethod),
+				params.maxSteps, params.exportDir);
 
 			if (domainDecomp_)
 			{
-				SPDLOG_INFO(
-					"[rank {}/{}] Domain "
-					"(owned={}, halo={}, neighbors={})",
-					mpiContext_.Rank(),
-					mpiContext_.Size(),
+				SPDLOG_INFO("[rank {}/{}] Domain (owned={}, halo={}, neighbors={})",
+					mpiContext_.Rank(), mpiContext_.Size(),
 					FormatAABB(domainDecomp_->OwnedExtentAABB(mpiContext_.Rank())),
 					FormatAABB(domainDecomp_->HaloExtentAABB(mpiContext_.Rank())),
 					FormatNeighborRanks(domainDecomp_->NeighborRanks(mpiContext_.Rank())));
@@ -455,17 +518,14 @@ void DistSimulationMgr::RunStartupCheck() const
 	}
 	mpiContext_.Barrier();
 
-	if (mpiContext_.IsRoot())
-	{
-		SPDLOG_INFO("Distributed startup check completed.");
-	}
+	SPDLOG_INFO_MPI("Distributed startup check completed.", mpiContext_);
 }
 
 void DistSimulationMgr::RunSim_Blocking()
 {
 	bool localOk = true;
 
-	if (!initialized_)
+	if (!initialized_.load(std::memory_order_acquire))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (not initialized)",
 			mpiContext_.Rank(), mpiContext_.Size());
@@ -480,6 +540,12 @@ void DistSimulationMgr::RunSim_Blocking()
 	if (!benchmarksTracker_)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no benchmark tracker)",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	if (!memoryTracker_)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no memory tracker)",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
@@ -502,14 +568,26 @@ void DistSimulationMgr::RunSim_Blocking()
 	if (mpiContext_.IsRoot())
 	{
 		printf("\n");
-		SPDLOG_INFO("Distributed simulation started running...");
 	}
+	SPDLOG_INFO_MPI("Distributed simulation started running...", mpiContext_);
 
 	// local copy for consistent maximum-step handling during this run
 	const auto paramsInit = simParams_;
+	BeginRunLogging(paramsInit);
+	bool runOk = true;
+
+	// pack and serialize export snapshot of initial state
+	if (paramsInit.exportEnabled)
+	{
+		if (!HandleExportSnapshot(paramsInit)) { runOk = false; }
+	}
+
+	AppendInitialMemoryMetricsLog(paramsInit);
 
 	while (true)
 	{
+		if (!runOk) { break; }
+
 		SyncParameters(true);
 
 		// local copy for step-local consistency
@@ -534,15 +612,13 @@ void DistSimulationMgr::RunSim_Blocking()
 
 		// reset data records for the new step
 		benchmarksTracker_->BeginStep();
+		memoryTracker_->BeginStep();
 
 		// starting point of total sim benchmark
 		benchmarksTracker_->StartBench({ Bench::BenchOp::Total_Sim });
 
 		// perform the actual distributed simulation step
 		const bool stepOk = ExecuteDistributedStep(params);
-
-		// ending point of total sim benchmark, archive data and update aggregates
-		benchmarksTracker_->StopBench({ Bench::BenchOp::Total_Sim });
 
 		if (stepOk)
 		{
@@ -553,19 +629,51 @@ void DistSimulationMgr::RunSim_Blocking()
 			localSimState_.time = simTime_;
 		}
 
-		benchmarksTracker_->EndStep(simStep_, simTime_);
-
-		if (!stepOk) { break; }
+		if (!stepOk)
+		{
+			FinalizeBenchMemMeasurements(params);
+			runOk = false;
+			break;
+		}
 
 		// reset single-step flag
 		if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
+
+		// pack and serialize export snapshot at given frequency
+		if (simStep_ % params.exportInterval == 0 &&
+			params.exportEnabled)
+		{
+			if (!HandleExportSnapshot(params)) { runOk = false; }
+		}
+
+		// evaluate the benchmarks and memory usage for this step
+		FinalizeBenchMemMeasurements(params);
+		AppendLatestMemoryMetricsLog();
+		AppendLatestBenchmarkMetricsLog();
+
+		SyncParameters();
+
+		DisplayMemoryUsageStats(params);
+		DisplayPerformanceStats(params);
 	}
 
-	running_.store(false, std::memory_order_release);
+	if (runOk && !GatherOwnedGlobalSimStateOnRoot("after distributed run"))
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to gather owned global state after distributed run.",
+			mpiContext_.Rank(), mpiContext_.Size());
+	}
 
+	// local copy for final summary output
+	const auto paramsFinal = simParams_;
+
+	DisplayMemoryUsageStats(paramsFinal, true);
+
+	running_.store(false, std::memory_order_release);
+	EndRunLogging();
+
+	SPDLOG_INFO_MPI("Distributed simulation stopped running", mpiContext_);
 	if (mpiContext_.IsRoot())
 	{
-		SPDLOG_INFO("Distributed simulation stopped running");
 		printf("\n");
 	}
 }
@@ -586,14 +694,15 @@ bool DistSimulationMgr::LoadParamsFromProfileBroadcast(std::string& profile)
 		{
 			if (profile != "Default")
 			{
-				SPDLOG_WARN("Failed to load '/{}/params.json'. Falling back to '/Default/params.json'.",
-					profile);
+				SPDLOG_WARN_MPI(
+					"Failed to load '/{}/params.json'. Falling back to '/Default/params.json'.",
+					mpiContext_, profile);
 				profile = "Default";
 			}
 
 			if (!TryReadProfileJson(profile, jsonText))
 			{
-				SPDLOG_ERROR("Failed to load '/{}/params.json'.", profile);
+				SPDLOG_ERROR_MPI("Failed to load '/{}/params.json'.", mpiContext_, profile);
 				loadOk = 0;
 			}
 		}
@@ -619,9 +728,9 @@ bool DistSimulationMgr::LoadParamsFromProfileBroadcast(std::string& profile)
 	}
 
 	const bool globalOk = mpiContext_.AllTrue(localOk);
-	if (globalOk && mpiContext_.IsRoot())
+	if (globalOk)
 	{
-		SPDLOG_INFO("Using config profile '{}'", profile);
+		SPDLOG_INFO_MPI("Using config profile '{}'", mpiContext_, profile);
 	}
 
 	return globalOk;
@@ -637,9 +746,11 @@ bool DistSimulationMgr::LoadParamsFromCliOverrides(
 	}
 
 	const bool globalOk = mpiContext_.AllTrue(localOk);
-	if (globalOk && mpiContext_.IsRoot() && !simOverrides.empty())
+	if (globalOk && !simOverrides.empty())
 	{
-		SPDLOG_INFO("Applied {} simulation override(s) from command line",
+		SPDLOG_INFO_MPI(
+			"Applied {} simulation override(s) from command line",
+			mpiContext_,
 			simOverrides.size());
 	}
 
@@ -916,6 +1027,181 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 	return mpiContext_.AllTrue(localOk);
 }
 
+bool DistSimulationMgr::GatherOwnedGlobalSimStateOnRoot(const char* phaseName) const
+{
+	Sync::UniversalSimState globalOwnedState{};
+	OwnedParticleGatherStats stats{};
+
+	const bool gatherOk = GatherOwnedParticlesToRoot(
+		globalOwnedState,
+		localSimState_,
+		fluidParticleState_,
+		boundaryParticleState_,
+		mpiContext_,
+		globalSimState_.fluidParticles.N_,
+		globalSimState_.boundaryParticles.N_,
+		&stats);
+
+	if (!gatherOk) { return false; }
+
+	SPDLOG_INFO_MPI("Gathered owned global state {} (fluid={}, boundary={}, step={}, time={})",
+		mpiContext_, phaseName,
+		stats.gatheredFluidParticleCount,
+		stats.gatheredBoundaryParticleCount,
+		globalOwnedState.step,
+		globalOwnedState.time);
+
+	return true;
+}
+
+bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
+{
+	DistSnapshotGatherStats stats{};
+
+	benchmarksTracker_->StartBench({ Bench::BenchOp::Snapshot_Export });
+	// fill export snapshot
+	auto& expSnap = exportSnapScratch_;
+	const bool gatherOk = GatherExportSnapshotToRoot(
+		expSnap,
+		localSimState_,
+		fluidParticleState_,
+		mpiContext_,
+		simStep_,
+		simTime_,
+		&stats);
+	benchmarksTracker_->StopBench({ Bench::BenchOp::Snapshot_Export });
+
+	if (!gatherOk) { return false; }
+
+	if (mpiContext_.IsRoot())
+	{
+		benchmarksTracker_->StartBench({ Bench::BenchOp::Serialization });
+		// write export snapshot to files
+		serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
+		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
+		benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
+
+		SPDLOG_INFO_MPI("Serialized distributed export snapshot (fluid={}, step={}, time={})",
+			mpiContext_,
+			stats.gatheredFluidParticleCount,
+			expSnap.simStep,
+			expSnap.simTime);
+	}
+
+	return true;
+}
+
+void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
+{
+	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params);
+}
+
+void DistSimulationMgr::EndRunLogging()
+{
+	loggingMgr_.EndRun();
+}
+
+void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& params) const
+{
+	if (!loggingMgr_.IsActive()) { return; }
+	if (!simBackend_) { return; }
+
+	Mem::MemRecordStep record{};
+	record.simStep = simStep_;
+	record.simTime = simTime_;
+
+	simBackend_->FillMemoryRecord(record, params);
+	loggingMgr_.AppendMemoryRecord(record);
+}
+
+void DistSimulationMgr::AppendLatestMemoryMetricsLog() const
+{
+	if (!loggingMgr_.IsActive()) { return; }
+	if (!memoryTracker_) { return; }
+
+	loggingMgr_.AppendMemoryRecord(memoryTracker_->GetCurrentRecord());
+}
+
+void DistSimulationMgr::AppendLatestBenchmarkMetricsLog() const
+{
+	if (!loggingMgr_.IsActive()) { return; }
+	if (!benchmarksTracker_) { return; }
+
+	loggingMgr_.AppendBenchmarkRecord(benchmarksTracker_->GetCurrentRecord());
+}
+
+void DistSimulationMgr::FinalizeBenchMemMeasurements(
+	const Sim::SimParams& params) const
+{
+	if (!simBackend_) { return; }
+	if (!memoryTracker_) { return; }
+	if (!benchmarksTracker_) { return; }
+
+	// record memory usage, archive data and update aggregates
+	simBackend_->FillMemoryRecord(memoryTracker_->GetCurrentRecord(), params);
+	memoryTracker_->EndStep(simStep_, simTime_);
+
+	// ending point of total sim benchmark, archive data and update aggregates
+	benchmarksTracker_->StopBench({ Bench::BenchOp::Total_Sim });
+	benchmarksTracker_->EndStep(simStep_, simTime_);
+}
+
+void DistSimulationMgr::DisplayPerformanceStats(
+	const Sim::SimParams& params) const
+{
+	if (!benchmarksTracker_) { return; }
+	if (simStep_ == 0) { return; }
+
+	const uint64_t latestNs =
+		benchmarksTracker_->GetBench_Latest(Bench::BenchOp::Total_Sim);
+	const uint64_t avgNs =
+		benchmarksTracker_->GetBench_Avg_OverAll(Bench::BenchOp::Total_Sim);
+
+	const double latest =
+		Bench::ConvertFromNs(params.timeUnit, latestNs);
+	const double avg =
+		Bench::ConvertFromNs(params.timeUnit, avgNs);
+	const char* unitStr = Bench::UnitLabel(params.timeUnit);
+
+	if (params.maxSteps > 0)
+	{
+		SPDLOG_INFO("[rank {}/{}] Performance (step={}/{}, totalSimLatest={:.3f} {}, totalSimAvg={:.3f} {})",
+			mpiContext_.Rank(), mpiContext_.Size(), simStep_, params.maxSteps,
+			latest, unitStr, avg, unitStr);
+	}
+	else
+	{
+		SPDLOG_INFO("[rank {}/{}] Performance (step={}, totalSimLatest={:.3f} {}, totalSimAvg={:.3f} {})",
+			mpiContext_.Rank(), mpiContext_.Size(), simStep_,
+			latest, unitStr, avg, unitStr);
+	}
+}
+
+void DistSimulationMgr::DisplayMemoryUsageStats(
+	const Sim::SimParams& params,
+	const bool force) const
+{
+	if (!memoryTracker_) { return; }
+	if (!force && simStep_ != 1) { return; }
+
+	const Mem::MemSpace memSpace = PrimaryMemSpace(params.backendVersion);
+	const Mem::MemUsage latest =
+		SumMemoryUsage(memoryTracker_->GetCurrentRecord(), memSpace);
+	const Mem::MemUsage max =
+		SumMaxMemoryUsage(*memoryTracker_, memSpace);
+
+	const char* unitStr = Mem::UnitLabel(params.byteUnit);
+
+	SPDLOG_INFO("[rank {}/{}] Memory usage ({}): latestUsed={:.3f} {}, "
+		"latestAlloc={:.3f} {}, maxUsed={:.3f} {}, maxAlloc={:.3f} {}",
+		mpiContext_.Rank(), mpiContext_.Size(),
+		MemSpaceLabel(memSpace),
+		Mem::ConvertFromBytes(params.byteUnit, latest.usedBytes), unitStr,
+		Mem::ConvertFromBytes(params.byteUnit, latest.allocBytes), unitStr,
+		Mem::ConvertFromBytes(params.byteUnit, max.usedBytes), unitStr,
+		Mem::ConvertFromBytes(params.byteUnit, max.allocBytes), unitStr);
+}
+
 bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 {
 	bool localOk = true;
@@ -1043,8 +1329,7 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 			SPDLOG_INFO(
 				"[rank {}/{}] Migrated fluid particles "
 				"(sent={}, received={}, owned={})",
-				mpiContext_.Rank(),
-				mpiContext_.Size(),
+				mpiContext_.Rank(), mpiContext_.Size(),
 				stats.sentFluidParticleCount,
 				stats.receivedFluidParticleCount,
 				fluidParticleState_.ownedParticleCount);
@@ -1083,9 +1368,7 @@ bool DistSimulationMgr::ValidateOwnedBoundaryParticlesStillOnRank() const
 			SPDLOG_ERROR(
 				"[rank {}/{}] Owned boundary particle needs migration "
 				"(localIdx={}, globalIdx={}).",
-				mpiContext_.Rank(),
-				mpiContext_.Size(),
-				localIdx,
+				mpiContext_.Rank(), mpiContext_.Size(), localIdx,
 				boundaryParticleState_.particleGlobalIdx_FromLocalIdx[localIdx]);
 			localOk = false;
 			break;
@@ -1136,9 +1419,7 @@ bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder(const char* phaseN
 			"[rank {}/{}] Rank-local backend particle order changed {} "
 			"(fluid={}, boundary={}) and DistParticleState localIdx metadata "
 			"or payload does not match the backend state.",
-			mpiContext_.Rank(),
-			mpiContext_.Size(),
-			phaseName,
+			mpiContext_.Rank(), mpiContext_.Size(), phaseName,
 			fluidOrderStable ? "stable" : "changed",
 			boundaryOrderStable ? "stable" : "changed");
 		return false;
@@ -1147,9 +1428,7 @@ bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder(const char* phaseN
 	SPDLOG_INFO(
 		"[rank {}/{}] Rank-local backend particle order stable {} "
 		"(fluid=stable, boundary=stable)",
-		mpiContext_.Rank(),
-		mpiContext_.Size(),
-		phaseName);
+		mpiContext_.Rank(), mpiContext_.Size(), phaseName);
 
 	return true;
 }
@@ -1170,9 +1449,7 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata(const char* phaseName)
 		SPDLOG_ERROR(
 			"[rank {}/{}] Invalid rank-local particle metadata {} "
 			"(fluid={}, boundary={})",
-			mpiContext_.Rank(),
-			mpiContext_.Size(),
-			phaseName,
+			mpiContext_.Rank(), mpiContext_.Size(), phaseName,
 			fluidMetadataValid ? "valid" : "invalid",
 			boundaryMetadataValid ? "valid" : "invalid");
 		return false;
@@ -1233,8 +1510,7 @@ bool DistSimulationMgr::ExchangeRankLocalHalos()
 				SPDLOG_INFO(
 					"[rank {}/{}] Exchanged halo particles "
 					"(fluid received={}, boundary received={}, fluid halo={}, boundary halo={})",
-					mpiContext_.Rank(),
-					mpiContext_.Size(),
+					mpiContext_.Rank(), mpiContext_.Size(),
 					recvBuffer.fluidParticles.size(),
 					recvBuffer.boundaryParticles.size(),
 					fluidParticleState_.haloParticleCount,

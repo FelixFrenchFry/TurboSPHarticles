@@ -11,6 +11,9 @@
 
 // internal
 #include "Source/Eval/Bench/benchmarks.h"
+#include "Source/Eval/Mem/memory.h"
+#include "Source/Eval/Serial/metrics_logger.h"
+#include "Source/Eval/Serial/serialization.h"
 #include "Source/Sim/Core/backend_sim.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Scene/scenario_sim.h"
@@ -24,7 +27,7 @@ namespace Dist
 {
 	class DistSimulationMgr final
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		DistSimulationMgr(MpiContext& mpiContext,
 						  Sim::SimParamsMgr& simParamsMgr);
@@ -60,7 +63,7 @@ namespace Dist
 		uint32_t simStep_ = 0;
 		double simTime_ = 0.0;
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// root reads params.json, then every rank loads the broadcast copy
 		bool LoadParamsFromProfileBroadcast(std::string& profile);
@@ -88,6 +91,22 @@ namespace Dist
 
 		// runs a backend startup smoke test on rank-local data
 		bool RunRankLocalBackendStartupCheck();
+
+		// gathers the authoritative owned state on the root rank
+		bool GatherOwnedGlobalSimStateOnRoot(const char* phaseName) const;
+
+		// gathers and serializes an export snapshot on the root rank
+		bool HandleExportSnapshot(const Sim::SimParams& params) const;
+
+		// mirrors SimulationMgr run logging for rank-local distributed records
+		void BeginRunLogging(const Sim::SimParams& params);
+		void EndRunLogging();
+		void AppendInitialMemoryMetricsLog(const Sim::SimParams& params) const;
+		void AppendLatestMemoryMetricsLog() const;
+		void AppendLatestBenchmarkMetricsLog() const;
+		void FinalizeBenchMemMeasurements(const Sim::SimParams& params) const;
+		void DisplayPerformanceStats(const Sim::SimParams& params) const;
+		void DisplayMemoryUsageStats(const Sim::SimParams& params, bool force = false) const;
 
 		// runs one distributed step with data movement around the rank-local backend
 		bool ExecuteDistributedStep(const Sim::SimParams& params);
@@ -125,6 +144,8 @@ namespace Dist
 
 		// configuration profile
 		std::string configProfile_ = "Default";
+		std::string paramsFile_ = "Default/params.json";
+		std::string scenariosFile_ = "Default/scenarios.json";
 
 		// scenario management
 		Scene::ScenarioMgr scenarioMgr_;
@@ -139,11 +160,18 @@ namespace Dist
 
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };
+		std::unique_ptr<Mem::MemoryTracker> memoryTracker_{ nullptr };
+		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
+
+		// serialization management
+		Export::SerializationMgr serializationMgr_{};
+		mutable Export::LoggingMgr loggingMgr_;
+		mutable Sync::ExportSnapshot exportSnapScratch_{};
 
 		std::atomic<bool> running_{ false };
 		std::atomic<bool> stopRequested_{ false };
-		bool initialized_ = false;
+		std::atomic<bool> initialized_{ false };
 	};
 
 } // namespace Dist

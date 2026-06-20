@@ -22,8 +22,7 @@
 namespace Sync
 {
 	// data structure for serializing the simulation state,
-	// (including a minimal subset of the data required to reconstruct
-	// the full state, enabling lossless save & load)
+	// (including a minimal subset of the data required to reconstruct the full state, enabling lossless save & load)
 	// TODO: how to deal with simulation method-specific data?
 	// TODO: how to deal with backend-specific data?
 	struct SerialSnapshot
@@ -67,8 +66,7 @@ namespace Sync
 	};
 
 	// data structure for exporting parts of the simulation state
-	// (including a minimal subset of the data requested to
-	// analyze/model the simulation offline)
+	// (including a minimal subset of the data requested to analyze/model the simulation offline)
 	// TODO: have one export snapshot per field (e.g. positions, velocities, etc...) and
 	// export the components of an export request individually, because they are in separate files anyway?
 	struct ExportSnapshot
@@ -86,8 +84,7 @@ namespace Sync
 	};
 
 	// data structure for visualizing parts of the simulation state interactively
-	// (including a minimal subset of the data required for the
-	// interactive visualization)
+	// (including a minimal subset of the data required for the interactive visualization)
 	struct VisualSnapshot
 	{
 		// metadata
