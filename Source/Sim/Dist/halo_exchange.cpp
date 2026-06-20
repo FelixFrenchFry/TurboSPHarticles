@@ -332,8 +332,11 @@ namespace
 			dstLocalIdx++;
 		}
 
-		// TODO: enable validation only in debug builds?
+	#if defined(_DEBUG)
 		return rebuiltParticleState.IsValidLocalLayout(localParticleCount);
+	#else
+		return true;
+	#endif
 	}
 
 	// TODO: find a more efficient way to do this without completely rebuilding the local state?
@@ -412,8 +415,11 @@ namespace
 			dstLocalIdx++;
 		}
 
-		// TODO: enable validation only in debug builds?
+	#if defined(_DEBUG)
 		return rebuiltParticleState.IsValidLocalLayout(localParticleCount);
+	#else
+		return true;
+	#endif
 	}
 
 } // namespace anonymous

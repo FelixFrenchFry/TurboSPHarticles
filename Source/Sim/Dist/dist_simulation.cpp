@@ -1507,11 +1507,12 @@ bool DistSimulationMgr::ExchangeRankLocalHalos()
 				localOk = false;
 			}
 
+		#if defined(_DEBUG)
 			if (localOk)
 			{
-				localSimState_.ShrinkToFitAll();
 				if (!ValidateRankLocalSimState()) { localOk = false; }
 			}
+		#endif
 
 			if (localOk)
 			{
