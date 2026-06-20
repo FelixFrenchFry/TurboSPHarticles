@@ -30,20 +30,22 @@ int main(int argc, char** argv)
 		std::string profile = parse.options.profile;
 		const auto& simOverrides = parse.options.simOverrides;
 
-		// --- [ initialization of manager systems ] ----------------------------------------------------
+        // --- [ initialization of manager systems ] -----------------------------------------------
 
 		// config profile and simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
 		if (!App::LoadSimParams(simParamsMgr, profile, simOverrides)) { return EXIT_FAILURE; }
 
-		// --- [ hardware budgets ] ---------------------------------------------------------------------
+        // --- [ hardware budgets ] ----------------------------------------------------------------
 
 		const App::ThreadBudget threadBudget = App::ResolveThreadBudget(
 			simParamsMgr.SnapshotParams().first.maxThreadsSim, 0);
 
 		Sim::DiagnosticsMgr::PrintBuildConfig();
 		Sim::DiagnosticsMgr::PrintHardwareSpecs(
-			threadBudget.N_totalThreads, threadBudget.N_simThreads, threadBudget.N_visThreads);
+			threadBudget.N_totalThreads,
+			threadBudget.N_simThreads,
+			threadBudget.N_visThreads);
 
 		// limit TBB to the simulation thread budget
 		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, threadBudget.N_simThreads);
@@ -84,7 +86,7 @@ int main(int argc, char** argv)
 		}
 		simParamsMgr.Set_SimRunning(true);
 
-		// --- [ main loop ] ----------------------------------------------------------------------------
+		// --- [ main loop ] -----------------------------------------------------------------------
 
 		App::AppStopWatcher stopWatcher{};
 		stopWatcher.Start([&]()
@@ -96,7 +98,7 @@ int main(int argc, char** argv)
 		simulationMgr.Launch_Blocking();
 		stopWatcher.Stop();
 
-		// --- [ shutdown ] -----------------------------------------------------------------------------
+		// --- [ shutdown ] ------------------------------------------------------------------------
 
 		simulationMgr.Shutdown();
 	}

@@ -38,8 +38,8 @@ void Decomp_AABB_Uniform::Build(const DomainDecompInput& input)
 		throw std::runtime_error("Cannot build Decomp_AABB_Uniform for non-positive rank count.");
 	}
 
-	// one uniform AABB slab per rank
-	const int splitAxis = ChooseSplitAxis(input.globalBounds);
+	// one uniform AABB slab per rank, always split along the global X axis
+	constexpr int splitAxis = 0;
 	std::vector<AABBRankSubdomain> rankSubdomains =
 		BuildSlabSubdomains(input, splitAxis);
 
@@ -147,18 +147,6 @@ const Decomp_AABB_Uniform::AABBRankSubdomain& Decomp_AABB_Uniform::Subdomain(
 	}
 
 	return rankSubdomains_[rank];
-}
-
-int Decomp_AABB_Uniform::ChooseSplitAxis(const AABB& globalBounds) const
-{
-	const glm::vec3 extents = globalBounds.Extents();
-
-	// split the longest axis
-	int axis = 0;
-	if (extents.y > extents[axis]) { axis = 1; }
-	if (extents.z > extents[axis]) { axis = 2; }
-
-	return axis;
 }
 
 std::vector<Decomp_AABB_Uniform::AABBRankSubdomain>

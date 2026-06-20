@@ -1119,6 +1119,7 @@ void CPU01::Integration_Indexed(
 		{
 			for (uint32_t ii = r.begin(); ii != r.end(); ii++)
 			{
+				// accessing only fluid particles in the provided index list
 				const uint32_t i = fluidParticleLocalIdxs[ii];
 
 				// explicit Euler integration

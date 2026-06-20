@@ -32,13 +32,13 @@ int main(int argc, char** argv)
 		std::string profile = parse.options.profile;
 		const auto& simOverrides = parse.options.simOverrides;
 
-		// --- [ initialization of manager systems ] ----------------------------------------------------
+        // --- [ initialization of manager systems ] -----------------------------------------------
 
 		// config profile and simulation parameters
 		Sim::SimParamsMgr simParamsMgr{};
 		if (!App::LoadSimParams(simParamsMgr, profile, simOverrides)) { return EXIT_FAILURE; }
 
-		// --- [ hardware budgets ] ---------------------------------------------------------------------
+		// --- [ hardware budgets ] ----------------------------------------------------------------
 
 		const App::ThreadBudget threadBudget = App::ResolveThreadBudget(
 			simParamsMgr.SnapshotParams().first.maxThreadsSim, 1);
@@ -106,7 +106,7 @@ int main(int argc, char** argv)
 			return EXIT_FAILURE;
 		}
 
-		// --- [ main loop ] ----------------------------------------------------------------------------
+		// --- [ main loop ] -----------------------------------------------------------------------
 
 		App::AppStopWatcher stopWatcher{};
 		stopWatcher.Start([&]()
@@ -122,7 +122,7 @@ int main(int argc, char** argv)
 		// visualization runs on main thread
 		visualizationMgr.RunVis();
 
-		// --- [ shutdown ] -----------------------------------------------------------------------------
+		// --- [ shutdown ] ------------------------------------------------------------------------
 
 		stopWatcher.Stop();
 		simulationMgr.RequestStop();

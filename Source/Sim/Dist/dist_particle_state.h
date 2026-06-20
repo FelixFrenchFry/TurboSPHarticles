@@ -29,7 +29,6 @@ namespace Dist
 		// compact local SoA ranges before backend data re-ordering
 		uint32_t ownedParticleCount = 0;
 		uint32_t haloParticleCount = 0;
-		uint32_t firstHaloLocalIdx = 0;
 
 		// per-particle class flag, indexed by localIdx
 		std::vector<DistParticleClass> particleClasses;
@@ -47,13 +46,11 @@ namespace Dist
 		void Clear();
 		void ClearParticleClasses();
 
-		// validates compact [ owned ][ halo ] local SoA layout
+		// validates local metadata of compact [ owned ][ halo ] SoA layout
 		bool IsValidLocalLayout(uint32_t localParticleCount) const;
 
 		// validates local metadata after backend data re-ordering
-		bool IsValidLocalParticleState(
-			uint32_t localParticleCount,
-			uint32_t globalParticleCount) const;
+		bool IsValidLocalParticleState(uint32_t localParticleCount, uint32_t globalParticleCount) const;
 	};
 
 	bool ApplyLocalParticleReOrder(

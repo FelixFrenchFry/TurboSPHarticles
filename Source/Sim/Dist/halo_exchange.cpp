@@ -275,7 +275,6 @@ namespace
 		rebuiltParticleState.Clear();
 		rebuiltParticleState.ownedParticleCount = ownedParticleCount;
 		rebuiltParticleState.haloParticleCount = haloParticleCount;
-		rebuiltParticleState.firstHaloLocalIdx = ownedParticleCount;
 		rebuiltParticleState.particleClasses.resize(localParticleCount, DistParticleClass::None);
 		rebuiltParticleState.particleLocalIdx_FromGlobalIdx.assign(globalParticleCount, -1);
 		rebuiltParticleState.particleGlobalIdx_FromLocalIdx.assign(localParticleCount, -1);
@@ -357,7 +356,6 @@ namespace
 		rebuiltParticleState.Clear();
 		rebuiltParticleState.ownedParticleCount = ownedParticleCount;
 		rebuiltParticleState.haloParticleCount = haloParticleCount;
-		rebuiltParticleState.firstHaloLocalIdx = ownedParticleCount;
 		rebuiltParticleState.particleClasses.resize(localParticleCount, DistParticleClass::None);
 		rebuiltParticleState.particleLocalIdx_FromGlobalIdx.assign(globalParticleCount, -1);
 		rebuiltParticleState.particleGlobalIdx_FromLocalIdx.assign(localParticleCount, -1);

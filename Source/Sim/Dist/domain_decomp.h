@@ -20,9 +20,10 @@ namespace Dist
 		int rankCount = 1;
 	};
 
+	// interface for domain decomp strategies
 	class IDomainDecomp
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		virtual ~IDomainDecomp() = default;
 

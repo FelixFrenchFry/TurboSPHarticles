@@ -12,7 +12,7 @@
 
 namespace Dist
 {
-	// uniform AABB slab decomp, split along the longest global axis
+	// uniform AABB slab decomp, split along the global X axis
 	class Decomp_AABB_Uniform final : public IDomainDecomp
 	{
 	public: // ---------------------------------------------------------------------------------------
@@ -46,7 +46,6 @@ namespace Dist
 
 		const AABBRankSubdomain& Subdomain(int rank) const;
 
-		int ChooseSplitAxis(const AABB& globalBounds) const;
 		std::vector<AABBRankSubdomain> BuildSlabSubdomains(
 			const DomainDecompInput& input,
 			int splitAxis) const;

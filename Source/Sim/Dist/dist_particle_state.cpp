@@ -93,14 +93,13 @@ namespace
 
 	void ClassifyHaloParticleRange(
 		DistParticleState& particleState,
-		const uint32_t firstHaloLocalIdx,
+		const uint32_t ownedParticleCount,
 		const uint32_t localParticleCount)
 	{
-		particleState.ownedParticleCount = firstHaloLocalIdx;
-		particleState.haloParticleCount = localParticleCount - firstHaloLocalIdx;
-		particleState.firstHaloLocalIdx = firstHaloLocalIdx;
+		particleState.ownedParticleCount = ownedParticleCount;
+		particleState.haloParticleCount = localParticleCount - ownedParticleCount;
 
-		for (uint64_t i = firstHaloLocalIdx;
+		for (uint64_t i = ownedParticleCount;
 			 i < static_cast<uint64_t>(localParticleCount);
 			 i++)
 		{
@@ -324,8 +323,8 @@ namespace
 	}
 
 	void BuildLocalFluidParticlesFromGlobalState(
-		Sync::UniversalSimState& localState,
 		DistParticleState& particleState,
+		Sync::UniversalSimState& localState,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
@@ -386,8 +385,8 @@ namespace
 	}
 
 	void BuildLocalBoundaryParticlesFromGlobalState(
-		Sync::UniversalSimState& localState,
 		DistParticleState& particleState,
+		Sync::UniversalSimState& localState,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
@@ -446,13 +445,13 @@ namespace
 			kernelRadius);
 		ClassifyHaloParticleRange(particleState, ownedParticleCount, localParticleCount);
 	}
-}
+
+} // namespace anonymous
 
 void DistParticleState::Clear()
 {
 	ownedParticleCount = 0;
 	haloParticleCount = 0;
-	firstHaloLocalIdx = 0;
 
 	particleClasses.clear();
 	particleLocalIdx_Owned.clear();
@@ -467,7 +466,6 @@ void DistParticleState::ClearParticleClasses()
 {
 	ownedParticleCount = 0;
 	haloParticleCount = 0;
-	firstHaloLocalIdx = 0;
 
 	particleClasses.clear();
 	particleLocalIdx_Owned.clear();
@@ -478,39 +476,36 @@ void DistParticleState::ClearParticleClasses()
 
 bool DistParticleState::IsValidLocalLayout(const uint32_t localParticleCount) const
 {
+	const uint32_t haloStartLocalIdx = ownedParticleCount;
+
 	if (static_cast<uint64_t>(particleClasses.size()) != localParticleCount) { return false; }
 	if (static_cast<uint64_t>(ownedParticleCount) + haloParticleCount != localParticleCount) { return false; }
-	if (firstHaloLocalIdx != ownedParticleCount) { return false; }
-	if (firstHaloLocalIdx > localParticleCount) { return false; }
+	if (haloStartLocalIdx > localParticleCount) { return false; }
 
 	if (static_cast<uint64_t>(particleLocalIdx_Owned.size()) != ownedParticleCount) { return false; }
 	if (static_cast<uint64_t>(particleLocalIdx_Halo.size()) != haloParticleCount) { return false; }
 	if (static_cast<uint64_t>(particleLocalIdx_Inner.size()) +
 		static_cast<uint64_t>(particleLocalIdx_Outer.size()) != ownedParticleCount) { return false; }
 
-	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, firstHaloLocalIdx)) { return false; }
-	if (!LocalIdxListCoversRange(particleLocalIdx_Halo, firstHaloLocalIdx, localParticleCount)) { return false; }
-	if (!LocalIdxListsCoverRange(
-		particleLocalIdx_Inner,
-		particleLocalIdx_Outer,
-		0,
-		firstHaloLocalIdx)) { return false; }
+	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, haloStartLocalIdx)) { return false; }
+	if (!LocalIdxListCoversRange(particleLocalIdx_Halo, haloStartLocalIdx, localParticleCount)) { return false; }
+	if (!LocalIdxListsCoverRange(particleLocalIdx_Inner, particleLocalIdx_Outer, 0, haloStartLocalIdx)) { return false; }
 
-	for (uint64_t i = 0; i < firstHaloLocalIdx; i++)
+	for (uint64_t i = 0; i < haloStartLocalIdx; i++)
 	{
 		const DistParticleClass particleClass = particleClasses[i];
 		if (particleClass != DistParticleClass::Inner &&
 			particleClass != DistParticleClass::Outer) { return false; }
 	}
 
-	for (uint64_t i = firstHaloLocalIdx; i < localParticleCount; i++)
+	for (uint64_t i = haloStartLocalIdx; i < localParticleCount; i++)
 	{
 		if (particleClasses[i] != DistParticleClass::Halo) { return false; }
 	}
 
 	for (const int localIdx : particleLocalIdx_Owned)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, firstHaloLocalIdx)) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx)) { return false; }
 		const DistParticleClass particleClass = particleClasses[localIdx];
 		if (particleClass != DistParticleClass::Inner &&
 			particleClass != DistParticleClass::Outer) { return false; }
@@ -518,19 +513,19 @@ bool DistParticleState::IsValidLocalLayout(const uint32_t localParticleCount) co
 
 	for (const int localIdx : particleLocalIdx_Inner)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, firstHaloLocalIdx)) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx)) { return false; }
 		if (particleClasses[localIdx] != DistParticleClass::Inner) { return false; }
 	}
 
 	for (const int localIdx : particleLocalIdx_Outer)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, firstHaloLocalIdx)) { return false; }
+		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx)) { return false; }
 		if (particleClasses[localIdx] != DistParticleClass::Outer) { return false; }
 	}
 
 	for (const int localIdx : particleLocalIdx_Halo)
 	{
-		if (!IsLocalIdxInRange(localIdx, firstHaloLocalIdx, localParticleCount)) { return false; }
+		if (!IsLocalIdxInRange(localIdx, haloStartLocalIdx, localParticleCount)) { return false; }
 		if (particleClasses[localIdx] != DistParticleClass::Halo) { return false; }
 	}
 
@@ -709,7 +704,6 @@ bool Dist::ApplyLocalParticleReOrder(
 		static_cast<uint32_t>(reOrderedParticleState.particleLocalIdx_Owned.size());
 	reOrderedParticleState.haloParticleCount =
 		static_cast<uint32_t>(reOrderedParticleState.particleLocalIdx_Halo.size());
-	reOrderedParticleState.firstHaloLocalIdx = reOrderedParticleState.ownedParticleCount;
 
 	if (!reOrderedParticleState.IsValidLocalParticleState(localParticleCount, globalParticleCount))
 	{
@@ -744,7 +738,6 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 
 	particleState.ownedParticleCount =
 		static_cast<uint32_t>(particleState.particleLocalIdx_Owned.size());
-	particleState.firstHaloLocalIdx = particleState.ownedParticleCount;
 }
 
 void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
@@ -771,7 +764,6 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 
 	particleState.ownedParticleCount =
 		static_cast<uint32_t>(particleState.particleLocalIdx_Owned.size());
-	particleState.firstHaloLocalIdx = particleState.ownedParticleCount;
 }
 
 void Dist::BuildLocalParticlesFromGlobalState(
@@ -789,18 +781,10 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	localState.time = globalState.time;
 
 	BuildLocalFluidParticlesFromGlobalState(
-		localState,
-		fluidParticleState,
-		globalState,
-		domainDecomp,
-		rank,
-		kernelRadius);
+		fluidParticleState, localState, globalState,
+		domainDecomp, rank, kernelRadius);
 
 	BuildLocalBoundaryParticlesFromGlobalState(
-		localState,
-		boundaryParticleState,
-		globalState,
-		domainDecomp,
-		rank,
-		kernelRadius);
+		boundaryParticleState, localState, globalState,
+		domainDecomp, rank, kernelRadius);
 }

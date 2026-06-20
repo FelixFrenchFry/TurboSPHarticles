@@ -13,7 +13,7 @@ namespace Dist
 {
 	class MpiContext final
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		// initializes MPI if needed, otherwise attaches to the existing MPI lifetime
 		MpiContext(int& argc, char**& argv, int requestedThreadSupport = MPI_THREAD_FUNNELED);
@@ -57,7 +57,7 @@ namespace Dist
 		// helpers
 		static const char* ThreadSupportName(int threadSupport);
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		static void CheckMpiResult(int result, const char* opName);
 

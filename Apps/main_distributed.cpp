@@ -10,6 +10,7 @@
 #include "Apps/app_runtime.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Dist/dist_helpers.h"
 #include "Source/Sim/Dist/dist_simulation.h"
 #include "Source/Sim/Dist/mpi_context.h"
 
@@ -21,46 +22,33 @@ int main(int argc, char** argv)
 
 	try // application setup
 	{
+		// init of MPI context
 		Dist::MpiContext mpiContext{ argc, argv };
 
 		if (mpiContext.IsRoot())
 		{
 			App::PrintPlatformBanner();
-			SPDLOG_INFO("Launching TSP (distributed MPI application)...");
-			SPDLOG_INFO("MPI world size: {}, thread support: {}",
-				mpiContext.Size(),
-				Dist::MpiContext::ThreadSupportName(mpiContext.ThreadSupport()));
 		}
+		SPDLOG_INFO_MPI("Launching TSP (distributed application)...", mpiContext);
+		SPDLOG_INFO_MPI("MPI world size: {}, thread support: {}", mpiContext,
+			mpiContext.Size(), Dist::MpiContext::ThreadSupportName(mpiContext.ThreadSupport()));
 
-		auto parse = App::ParseMainOptions(
-			argc, argv, "TSP Distributed", mpiContext.IsRoot());
+		auto parse = App::ParseMainOptions(argc, argv, "TSP Distributed", mpiContext.IsRoot());
 		if (parse.shouldExit) { return parse.exitCode; }
 
 		std::string profile = parse.options.profile;
 		const auto& simOverrides = parse.options.simOverrides;
 
-		// --- [ initialization of manager systems ] ------------------------------------------------
+		// --- [ initialization of manager systems ] -----------------------------------------------
 
 		Sim::SimParamsMgr simParamsMgr{};
-		Dist::DistSimulationMgr distSimulationMgr{
-			mpiContext,
-			simParamsMgr };
+		if (!App::LoadSimParams(simParamsMgr, profile, simOverrides)) { return EXIT_FAILURE; }
 
-		if (!distSimulationMgr.Init(profile, simOverrides))
-		{
-			if (mpiContext.IsRoot())
-			{
-				SPDLOG_ERROR("Failed to initialize DistSimulationMgr");
-			}
-			return EXIT_FAILURE;
-		}
-		if (mpiContext.IsRoot())
-		{
-			Sim::DiagnosticsMgr::PrintBuildConfig();
-		}
+		// --- [ hardware budgets ] ----------------------------------------------------------------
 
 		const App::ThreadBudget threadBudget = App::ResolveThreadBudget(
 			simParamsMgr.SnapshotParams().first.maxThreadsSim, 0);
+
 		if (mpiContext.IsRoot())
 		{
 			Sim::DiagnosticsMgr::PrintHardwareSpecs(
@@ -70,13 +58,26 @@ int main(int argc, char** argv)
 		}
 
 		// limit TBB to the simulation thread budget on each MPI rank
-		tbb::global_control gc(
-			tbb::global_control::max_allowed_parallelism,
-			threadBudget.N_simThreads);
+		tbb::global_control gc(tbb::global_control::max_allowed_parallelism, threadBudget.N_simThreads);
+
+		// main systems
+		Dist::DistSimulationMgr distSimulationMgr{
+			mpiContext,
+			simParamsMgr};
+
+		if (!distSimulationMgr.Init(profile, simOverrides))
+		{
+			SPDLOG_ERROR_MPI("Failed to initialize DistSimulationMgr", mpiContext);
+			return EXIT_FAILURE;
+		}
+		if (mpiContext.IsRoot())
+		{
+			Sim::DiagnosticsMgr::PrintBuildConfig();
+		}
 
 		simParamsMgr.Set_SimRunning(true);
 
-		// --- [ main loop ] ------------------------------------------------------------------------
+		// --- [ main loop ] -----------------------------------------------------------------------
 
 		distSimulationMgr.RunStartupCheck();
 
@@ -86,10 +87,11 @@ int main(int argc, char** argv)
 				distSimulationMgr.RequestStop();
 			});
 
+		// simulation runs on the configured simulation thread budget
 		distSimulationMgr.RunSim_Blocking();
 		stopWatcher.Stop();
 
-		// --- [ shutdown ] -------------------------------------------------------------------------
+        // --- [ shutdown ] ------------------------------------------------------------------------
 
 		distSimulationMgr.Shutdown();
 	}

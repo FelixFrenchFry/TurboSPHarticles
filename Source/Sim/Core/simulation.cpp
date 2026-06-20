@@ -32,7 +32,7 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 	, statisticsTracker_{ statisticsTracker }
 	, serializationMgr_{ serializationMgr }
 {
-	// nothing
+	// nothing to do
 }
 
 bool SimulationMgr::Init()
@@ -52,16 +52,12 @@ bool SimulationMgr::Init()
 	SPDLOG_INFO("Initializing backend data structures...");
 	ReBuildInitialSimState();
 
-	initialized_.store(true, std::memory_order_release);
-
 	// updated snapshot
+	initialized_.store(true, std::memory_order_release);
 	SyncParameters(true);
 
 	DiagnosticsMgr::PrintSimParams(simParams_);
 	DiagnosticsMgr::PrintSimSetup(*this, simParams_);
-
-	// TODO: reset universal sim state until it is needed again?
-	//universalSimState_ = Sync::UniversalSimState{};
 
 	return true;
 }
@@ -70,13 +66,16 @@ void SimulationMgr::Shutdown()
 {
 	RequestStop();
 	JoinThreads();
+	EndRunLogging();
 
 	// TODO: free memory occupied by particles, grids, etc...
 
 	initialized_.store(false, std::memory_order_release);
+	simBackend_.reset();
 }
 
-void SimulationMgr::SyncParameters(bool force)
+void SimulationMgr::SyncParameters(
+	bool force)
 {
 	uint64_t latestSimParamsVersion = simParamsMgr_.StableVersion();
 	if (latestSimParamsVersion != simParamsVersion_ || force)
@@ -88,7 +87,9 @@ void SimulationMgr::SyncParameters(bool force)
 	}
 }
 
-void SimulationMgr::SelectSimScenario(Base::ScenarioType type, const std::string& profile)
+void SimulationMgr::SelectSimScenario(
+	Base::ScenarioType type,
+	const std::string& profile)
 {
 	if (running_.load(std::memory_order_acquire))
 	{
@@ -106,7 +107,8 @@ void SimulationMgr::SelectSimScenario(Base::ScenarioType type, const std::string
 	}
 }
 
-void SimulationMgr::SelectSimBackend(Base::BackendVersion version)
+void SimulationMgr::SelectSimBackend(
+	Base::BackendVersion version)
 {
 	if (running_.load(std::memory_order_acquire))
 	{
