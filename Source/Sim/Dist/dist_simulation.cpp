@@ -1270,9 +1270,15 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 
 		if (localOk)
 		{
+			const bool solverMayReOrderParticles =
+				simBackend_->GetNumFluidParticles() > 0;
 			simBackend_->ExecuteFullSimStep(params);
 
-			if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
+			// skip solver step if no fluid particles to avoid re-application of neighbor search particle re-order
+			if (solverMayReOrderParticles && !ApplyLastBackendParticleReOrder())
+			{
+				localOk = false;
+			}
 
 			Sync::UniversalSimState backendSimState{};
 			simBackend_->PushToUniversalSimState(backendSimState);
