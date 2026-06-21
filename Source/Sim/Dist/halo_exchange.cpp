@@ -38,7 +38,7 @@ namespace
 	{
 		if (packets.size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 		{
-			throw std::runtime_error("Halo exchange packet count exceeds MPI int count range.");
+			throw std::runtime_error("halo exchange packet count exceeds MPI int count range.");
 		}
 
 		return static_cast<int>(packets.size());
@@ -52,7 +52,7 @@ namespace
 
 		if (packetCount > maxCount)
 		{
-			throw std::runtime_error("Halo exchange payload exceeds MPI byte count range.");
+			throw std::runtime_error("halo exchange payload exceeds MPI byte count range.");
 		}
 
 		return static_cast<int>(packetCount * sizeof(T));
@@ -540,7 +540,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 		{
 			localPackOk = false;
 			localPackFailMsg =
-				"Failed to pack halo exchange buffer for rank " +
+				"failed to pack halo exchange buffer for rank " +
 				std::to_string(neighborRank) + ": " + packFailMsg;
 			break;
 		}
@@ -553,13 +553,13 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	if (!mpiContext.AllTrue(localPackOk))
 	{
 		if (!localPackOk) { return fail(localPackFailMsg); }
-		return fail("At least one rank failed to pack halo exchange buffers.");
+		return fail("at least one rank failed to pack halo exchange buffers.");
 	}
 
 	std::vector<MPI_Request> requests{};
 	requests.reserve(exchanges.size() * 4);
 
-	// exchange packet counts before exchanging raw packet payloads
+	// exchange particle counts before exchanging raw payloads
 	for (NeighborHaloExchange& exchange : exchanges) // post non-blocking MPI receives
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
@@ -593,12 +593,12 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	mpiContext.WaitAll(requests);
 	requests.clear();
 
-	// resize receive buffers according to exchanged packet counts
+	// resize receive buffers according to exchanged particle counts
 	for (NeighborHaloExchange& exchange : exchanges)
 	{
 		if (exchange.recvFluidCount < 0 || exchange.recvBoundaryCount < 0)
 		{
-			return fail("Received negative halo exchange packet count.");
+			return fail("received negative halo exchange particle count.");
 		}
 
 		exchange.recvBuffer.fluidParticles.resize(static_cast<uint64_t>(exchange.recvFluidCount));
@@ -642,7 +642,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	}
 	mpiContext.WaitAll(requests);
 
-	// combine received halo particles from all neighbors into a single receive buffer
+	// combine received halo particles from all ranks into a single receive buffer
 	for (const NeighborHaloExchange& exchange : exchanges)
 	{
 		recvBuffer.fluidParticles.insert(

@@ -4,6 +4,7 @@
 
 // external
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // internal
@@ -48,22 +49,29 @@ namespace Dist
 	{
 		std::vector<MigratingFluidParticlePacket> fluidParticles;
 
+		// clears packed migrating fluid particles
 		void Clear();
 	};
 
+	// counts migrated fluid particles for rank-local diagnostics
 	struct ParticleMigrationStats
 	{
 		uint32_t sentFluidParticleCount = 0;
 		uint32_t receivedFluidParticleCount = 0;
 	};
 
+	// packs owned fluid particles whose current position belongs to destination rank;
+	// returns false + msg if local particle metadata or ownership lookup is inconsistent
 	bool PackMigratingFluidParticlesForRank(
 		ParticleMigrationBuffer& sendBuffer,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const IDomainDecomp& domainDecomp,
-		int dstRank);
+		int dstRank,
+		std::string* failMsg = nullptr);
 
+	// exchanges migrating fluid particle counts and payloads with all ranks, then rebuilds
+	// this rank's owned fluid state; returns false + msg if packing, exchange, or rebuild fails
 	bool MigrateFluidParticlesToOwnerRanks(
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
@@ -71,15 +79,19 @@ namespace Dist
 		const MpiContext& mpiContext,
 		float kernelRadius,
 		uint32_t globalFluidParticleCount,
-		ParticleMigrationStats* stats = nullptr);
+		ParticleMigrationStats* stats = nullptr,
+		std::string* failMsg = nullptr);
 
+	// rebuilds local fluid SoA arrays from kept owned particles plus received migrating particles
+	// and refreshes matching particle metadata
 	bool RebuildLocalStateWithMigratedFluidParticles(
+		const ParticleMigrationBuffer& recvBuffer,
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
-		const ParticleMigrationBuffer& recvBuffer,
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		float kernelRadius,
-		uint32_t globalFluidParticleCount);
+		uint32_t globalFluidParticleCount,
+		std::string* failMsg = nullptr);
 
 } // namespace Dist

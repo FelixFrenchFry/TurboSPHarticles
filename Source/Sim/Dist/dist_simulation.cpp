@@ -1309,6 +1309,7 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 	try
 	{
 		ParticleMigrationStats stats{};
+		std::string failMsg{};
 		if (!MigrateFluidParticlesToOwnerRanks(
 			localSimState_,
 			fluidParticleState_,
@@ -1316,21 +1317,24 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 			mpiContext_,
 			simParams_.kernelRadius,
 			globalSimState_.fluidParticles.N_,
-			&stats))
+			&stats,
+			&failMsg))
 		{
-			SPDLOG_ERROR("[rank {}/{}] Failed to migrate fluid particles.",
-				mpiContext_.Rank(), mpiContext_.Size());
-			localOk = false;
-		}
-
-		std::string failMsg{};
-		if (localOk &&
-			!fluidParticleState_.IsValidLocalLayout(localSimState_.fluidParticles.N_, &failMsg))
-		{
-			SPDLOG_ERROR("[rank {}/{}] Invalid migrated fluid particle layout: {}",
+			SPDLOG_ERROR("[rank {}/{}] Failed to migrate fluid particles: {}",
 				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 			localOk = false;
 		}
+
+	#if defined(_DEBUG)
+		std::string layoutFailMsg{};
+		if (localOk &&
+			!fluidParticleState_.IsValidLocalLayout(localSimState_.fluidParticles.N_, &layoutFailMsg))
+		{
+			SPDLOG_ERROR("[rank {}/{}] Invalid migrated fluid particle layout: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), layoutFailMsg);
+			localOk = false;
+		}
+	#endif
 
 		if (localOk)
 		{
