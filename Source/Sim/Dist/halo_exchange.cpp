@@ -664,12 +664,12 @@ bool Dist::RebuildLocalStateWithReceivedHalos(
 	DistParticleState& fluidParticleState,
 	DistParticleState& boundaryParticleState,
 	const uint32_t globalFluidParticleCount,
-	const uint32_t globalBoundaryParticleCount)
+	const uint32_t globalBoundaryParticleCount,
+	HaloRebuildScratch& scratch)
 {
-	// create temp rebuilt state
-	Sync::UniversalSimState rebuiltState{};
-	DistParticleState rebuiltFluidParticleState{};
-	DistParticleState rebuiltBoundaryParticleState{};
+	Sync::UniversalSimState& rebuiltState = scratch.state;
+	DistParticleState& rebuiltFluidParticleState = scratch.fluidParticleState;
+	DistParticleState& rebuiltBoundaryParticleState = scratch.boundaryParticleState;
 
 	// copy metadata into rebuilt state
 	rebuiltState.schemaVersion = localState.schemaVersion;
@@ -688,9 +688,10 @@ bool Dist::RebuildLocalStateWithReceivedHalos(
 		recvBuffer.boundaryParticles, globalBoundaryParticleCount))
 		{ return false; }
 
-	// move temp rebuilt state into live state
-	localState = std::move(rebuiltState);
-	fluidParticleState = std::move(rebuiltFluidParticleState);
-	boundaryParticleState = std::move(rebuiltBoundaryParticleState);
+	// publish rebuilt state and keep old allocations as scratch storage
+	// TODO: potential bug that causes memory alloc to grow in a spiral?
+	std::swap(localState, rebuiltState);
+	std::swap(fluidParticleState, rebuiltFluidParticleState);
+	std::swap(boundaryParticleState, rebuiltBoundaryParticleState);
 	return true;
 }

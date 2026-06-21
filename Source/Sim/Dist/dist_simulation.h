@@ -19,6 +19,7 @@
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "domain_decomp.h"
 #include "dist_particle_state.h"
+#include "halo_exchange.h"
 #include "mpi_context.h"
 
 
@@ -157,6 +158,7 @@ namespace Dist
 		Sync::UniversalSimState localSimState_{};
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
+		HaloRebuildScratch haloRebuildScratch_{};
 
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };

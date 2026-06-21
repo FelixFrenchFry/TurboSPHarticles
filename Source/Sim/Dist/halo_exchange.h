@@ -64,6 +64,14 @@ namespace Dist
 		void Clear();
 	};
 
+	// reusable destination storage for rebuilding [ owned ][ halo ] rank-local state
+	struct HaloRebuildScratch
+	{
+		Sync::UniversalSimState state;
+		DistParticleState fluidParticleState;
+		DistParticleState boundaryParticleState;
+	};
+
 	// packs this rank's outer fluid/boundary particles that overlap the halo extent of destination rank
 	// into a sendBuffer; returns false + msg if local particle metadata is inconsistent
 	bool PackHaloExchangeBufferForRank(
@@ -94,6 +102,7 @@ namespace Dist
 		DistParticleState& fluidParticleState,
 		DistParticleState& boundaryParticleState,
 		uint32_t globalFluidParticleCount,
-		uint32_t globalBoundaryParticleCount);
+		uint32_t globalBoundaryParticleCount,
+		HaloRebuildScratch& scratch);
 
 } // namespace Dist

@@ -1506,7 +1506,8 @@ bool DistSimulationMgr::ExchangeRankLocalHalos()
 				fluidParticleState_,
 				boundaryParticleState_,
 				globalSimState_.fluidParticles.N_,
-				globalSimState_.boundaryParticles.N_))
+				globalSimState_.boundaryParticles.N_,
+				haloRebuildScratch_))
 			{
 				SPDLOG_ERROR("[rank {}/{}] Failed to rebuild rank-local state with received halos.",
 					mpiContext_.Rank(), mpiContext_.Size());
