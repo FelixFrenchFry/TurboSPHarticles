@@ -60,6 +60,31 @@ namespace Dist
 		uint32_t receivedFluidParticleCount = 0;
 	};
 
+	// reusable storage for fluid particle migration exchange and local rebuild
+	struct ParticleMigrationWorkBuffers
+	{
+		struct RankBuffers
+		{
+			int rank = -1;
+
+			ParticleMigrationBuffer sendBuffer;
+			ParticleMigrationBuffer recvBuffer;
+
+			int sendFluidCount = 0;
+			int recvFluidCount = 0;
+		};
+
+		// per-peer send/receive storage reused across migration steps
+		std::vector<RankBuffers> rankBuffers;
+
+		// single receive buffer consumed by the rebuild step
+		ParticleMigrationBuffer aggregatedRecvBuffer;
+
+		// destination storage for rebuilding owned fluid SoA + metadata
+		Sync::FluidParticles rebuiltFluidParticles;
+		DistParticleState rebuiltParticleState;
+	};
+
 	// packs owned fluid particles whose current position belongs to destination rank;
 	// returns false + msg if local particle metadata or ownership lookup is inconsistent
 	bool PackMigratingFluidParticlesForRank(
@@ -79,6 +104,7 @@ namespace Dist
 		const MpiContext& mpiContext,
 		float kernelRadius,
 		uint32_t globalFluidParticleCount,
+		ParticleMigrationWorkBuffers& workBuffers,
 		ParticleMigrationStats* stats = nullptr,
 		std::string* failMsg = nullptr);
 
@@ -92,6 +118,7 @@ namespace Dist
 		int rank,
 		float kernelRadius,
 		uint32_t globalFluidParticleCount,
+		ParticleMigrationWorkBuffers& workBuffers,
 		std::string* failMsg = nullptr);
 
 } // namespace Dist

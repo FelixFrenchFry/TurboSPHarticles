@@ -19,17 +19,6 @@ namespace
 	constexpr int PARTICLE_MIGRATION_TAG_FLUID_COUNT = 5101;
 	constexpr int PARTICLE_MIGRATION_TAG_FLUID_PAYLOAD = 5102;
 
-	struct RankParticleMigration
-	{
-		int rank = -1;
-
-		ParticleMigrationBuffer sendBuffer;
-		ParticleMigrationBuffer recvBuffer;
-
-		int sendFluidCount = 0;
-		int recvFluidCount = 0;
-	};
-
 	template <typename T>
 	int CheckedPacketCount(const std::vector<T>& packets)
 	{
@@ -324,6 +313,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	const MpiContext& mpiContext,
 	const float kernelRadius,
 	const uint32_t globalFluidParticleCount,
+	ParticleMigrationWorkBuffers& workBuffers,
 	ParticleMigrationStats* stats,
 	std::string* failMsg)
 {
@@ -338,19 +328,23 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 
 	// prepare migration package for each neighbor
 	ParticleMigrationStats localStats{};
-	std::vector<RankParticleMigration> migrations{};
-	migrations.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
+	std::vector<ParticleMigrationWorkBuffers::RankBuffers>& migrations = workBuffers.rankBuffers;
+	migrations.resize(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
 
 	// pack migration packages
 	bool localPackOk = true;
 	std::string localPackFailMsg{};
+	uint64_t migrationIdx = 0;
 	for (int rank = 0; rank < mpiContext.Size(); rank++)
 	{
 		if (!localPackOk) { break; }
 		if (rank == mpiContext.Rank()) { continue; }
 
-		RankParticleMigration migration{};
+		ParticleMigrationWorkBuffers::RankBuffers& migration = migrations[migrationIdx++];
 		migration.rank = rank;
+		migration.sendFluidCount = 0;
+		migration.recvFluidCount = 0;
+
 		std::string packFailMsg{};
 		if (!PackMigratingFluidParticlesForRank(
 			migration.sendBuffer, localState, fluidParticleState,
@@ -365,7 +359,6 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 
 		migration.sendFluidCount = CheckedPacketCount(migration.sendBuffer.fluidParticles);
 		localStats.sentFluidParticleCount += static_cast<uint32_t>(migration.sendBuffer.fluidParticles.size());
-		migrations.push_back(std::move(migration));
 	}
 
 	if (!mpiContext.AllTrue(localPackOk))
@@ -378,7 +371,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	requests.reserve(migrations.size() * 2);
 
 	// exchange particle counts before exchanging raw payloads
-	for (RankParticleMigration& migration : migrations) // post non-blocking MPI receives
+	for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.IRecvInt(
@@ -387,7 +380,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 			PARTICLE_MIGRATION_TAG_FLUID_COUNT,
 			requests.back());
 	}
-	for (RankParticleMigration& migration : migrations) // post non-blocking MPI sends
+	for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI sends
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendInt(
@@ -402,7 +395,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	// resize receive buffers according to exchanged particle counts
 	bool localCountOk = true;
 	std::string localCountFailMsg{};
-	for (RankParticleMigration& migration : migrations)
+	for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
 	{
 		if (migration.recvFluidCount < 0)
 		{
@@ -421,7 +414,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	}
 
 	// exchange payloads after all receive buffers are sized correctly
-	for (RankParticleMigration& migration : migrations) // post non-blocking MPI receives
+	for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.IRecvBytes(
@@ -431,7 +424,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 			PARTICLE_MIGRATION_TAG_FLUID_PAYLOAD,
 			requests.back());
 	}
-	for (RankParticleMigration& migration : migrations) // post non-blocking MPI sends
+	for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI sends
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendBytes(
@@ -444,8 +437,17 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	mpiContext.WaitAll(requests);
 
 	// combine received migrating particles from all ranks into a single receive buffer
-	ParticleMigrationBuffer recvBuffer{};
-	for (const RankParticleMigration& migration : migrations)
+	ParticleMigrationBuffer& recvBuffer = workBuffers.aggregatedRecvBuffer;
+	recvBuffer.Clear();
+
+	uint64_t recvFluidParticleCount = 0;
+	for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
+	{
+		recvFluidParticleCount += migration.recvBuffer.fluidParticles.size();
+	}
+	recvBuffer.fluidParticles.reserve(recvFluidParticleCount);
+
+	for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
 	{
 		recvBuffer.fluidParticles.insert(
 			recvBuffer.fluidParticles.end(),
@@ -458,7 +460,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	std::string rebuildFailMsg{};
 	const bool localRebuildOk = RebuildLocalStateWithMigratedFluidParticles(
 		recvBuffer, localState, fluidParticleState, domainDecomp, mpiContext.Rank(),
-		kernelRadius, globalFluidParticleCount, &rebuildFailMsg);
+		kernelRadius, globalFluidParticleCount, workBuffers, &rebuildFailMsg);
 
 	const bool globalRebuildOk = mpiContext.AllTrue(localRebuildOk);
 	if (!globalRebuildOk)
@@ -484,6 +486,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 	const int rank,
 	const float kernelRadius,
 	const uint32_t globalFluidParticleCount,
+	ParticleMigrationWorkBuffers& workBuffers,
 	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
@@ -512,8 +515,8 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 	const uint32_t receivedParticleCount = static_cast<uint32_t>(recvBuffer.fluidParticles.size());
 	const uint32_t localParticleCount = keptParticleCount + receivedParticleCount;
 
-	Sync::FluidParticles rebuiltFluidParticles{};
-	DistParticleState rebuiltParticleState{};
+	Sync::FluidParticles& rebuiltFluidParticles = workBuffers.rebuiltFluidParticles;
+	DistParticleState& rebuiltParticleState = workBuffers.rebuiltParticleState;
 
 	rebuiltFluidParticles.resizeAll(localParticleCount);
 	rebuiltParticleState.Clear();
@@ -576,8 +579,9 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 		return fail("rebuilt fluid particle count does not match expected local particle count.");
 	}
 
-	localState.fluidParticles = std::move(rebuiltFluidParticles);
-	fluidParticleState = std::move(rebuiltParticleState);
+	// publish rebuilt state and keep old allocations available for the next migration
+	std::swap(localState.fluidParticles, rebuiltFluidParticles);
+	std::swap(fluidParticleState, rebuiltParticleState);
 
 	// refresh inner/outer class lists for the compact owned-only rebuilt state
 	ClassifyOwnedFluidParticlesIntoInnerOuter(

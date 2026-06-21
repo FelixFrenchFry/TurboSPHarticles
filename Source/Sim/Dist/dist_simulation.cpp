@@ -1317,6 +1317,7 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 			mpiContext_,
 			simParams_.kernelRadius,
 			globalSimState_.fluidParticles.N_,
+			particleMigrationWorkBuffers_,
 			&stats,
 			&failMsg))
 		{

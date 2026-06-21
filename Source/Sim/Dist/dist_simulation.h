@@ -21,6 +21,7 @@
 #include "dist_particle_state.h"
 #include "halo_exchange.h"
 #include "mpi_context.h"
+#include "particle_migration.h"
 
 
 
@@ -158,6 +159,7 @@ namespace Dist
 		Sync::UniversalSimState localSimState_{};
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
+		ParticleMigrationWorkBuffers particleMigrationWorkBuffers_{};
 		HaloRebuildScratch haloRebuildScratch_{};
 
 		// backend over compact rank-local state
