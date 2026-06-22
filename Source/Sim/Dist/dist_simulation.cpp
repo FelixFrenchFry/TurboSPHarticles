@@ -330,6 +330,8 @@ namespace
 		Mem::MemUsage usage{};
 
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.rankBufferIdx_FromRank));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.sendFluidCount_FromRank));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.recvFluidCount_FromRank));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.keptOwnedFluidLocalIdx));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migratingOutFluidLocalIdx));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationRouteIdx_FromOwnedIdx));

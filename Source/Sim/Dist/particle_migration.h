@@ -81,6 +81,10 @@ namespace Dist
 		// maps MPI ranks to rankBuffers entries, self-rank remains -1
 		std::vector<int> rankBufferIdx_FromRank;
 
+		// rank-indexed particle counts for the all-to-all migration count exchange
+		std::vector<int> sendFluidCount_FromRank;
+		std::vector<int> recvFluidCount_FromRank;
+
 		// owned local particles that still belong to this rank after routing
 		std::vector<int> keptOwnedFluidLocalIdx;
 
@@ -106,8 +110,8 @@ namespace Dist
 		ParticleMigrationBuffer aggregatedRecvBuffer;
 	};
 
-	// exchanges migrating fluid particle counts and payloads with all ranks, then rebuilds
-	// this rank's owned fluid state; returns false + msg if packing, exchange, or rebuild fails
+	// exchanges rank-indexed migration counts, sends payloads only to active ranks,
+	// then rebuilds this rank's owned fluid state; returns false + msg on failure
 	bool MigrateFluidParticlesToOwnerRanks(
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,

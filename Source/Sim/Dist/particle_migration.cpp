@@ -20,13 +20,16 @@ using namespace Dist;
 
 namespace
 {
-	constexpr int PARTICLE_MIGRATION_TAG_FLUID_COUNT = 5101;
 	constexpr int PARTICLE_MIGRATION_TAG_FLUID_PAYLOAD = 5102;
 	constexpr uint64_t PARTICLE_MIGRATION_PACK_CHUNK_SIZE = 4096;
 	constexpr int PARTICLE_MIGRATION_ROUTE_KEEP_LOCAL = 0;
 	constexpr uint8_t PARTICLE_MIGRATION_LOCAL_STATUS_NONE = 0;
 	constexpr uint8_t PARTICLE_MIGRATION_LOCAL_STATUS_KEPT = 1;
 	constexpr uint8_t PARTICLE_MIGRATION_LOCAL_STATUS_OUT = 2;
+
+	static_assert(
+		sizeof(MigratingFluidParticlePacket) == sizeof(int) + 16 * sizeof(float),
+		"MigratingFluidParticlePacket must remain a tightly packed MPI byte payload.");
 
 	enum class ParticleMigrationPackFailure : int
 	{
@@ -90,18 +93,18 @@ namespace
 	}
 
 	template <typename T>
-	int CheckedByteCount(const std::vector<T>& packets)
+	uint64_t CheckedByteSize(const std::vector<T>& packets)
 	{
 		const uint64_t packetCount = packets.size();
 		const uint64_t maxCount =
-			static_cast<uint64_t>(std::numeric_limits<int>::max()) / sizeof(T);
+			std::numeric_limits<uint64_t>::max() / sizeof(T);
 
 		if (packetCount > maxCount)
 		{
-			throw std::runtime_error("particle migration payload exceeds MPI byte count range.");
+			throw std::runtime_error("particle migration payload byte size exceeds uint64_t range.");
 		}
 
-		return static_cast<int>(packetCount * sizeof(T));
+		return packetCount * sizeof(T);
 	}
 
 	template <typename T>
@@ -669,40 +672,30 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 		}
 	}
 
-	std::vector<MPI_Request> requests{};
-	requests.reserve(migrations.size() * 2);
-
 	{
 		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
 			timingReport, ParticleMigrationTimingOp::CountExchange);
 
-		// exchange particle counts before exchanging raw payloads
-		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives
+		// exchange rank-indexed particle counts before exchanging raw payloads
+		workBuffers.sendFluidCount_FromRank.assign(
+			static_cast<uint64_t>(mpiContext.Size()), 0);
+		for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
 		{
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvInt(
-				migration.recvFluidCount,
-				migration.rank,
-				PARTICLE_MIGRATION_TAG_FLUID_COUNT,
-				requests.back());
+			workBuffers.sendFluidCount_FromRank[static_cast<uint64_t>(migration.rank)] =
+				migration.sendFluidCount;
 		}
-		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI sends
-		{
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.ISendInt(
-				migration.sendFluidCount,
-				migration.rank,
-				PARTICLE_MIGRATION_TAG_FLUID_COUNT,
-				requests.back());
-		}
-		mpiContext.WaitAll(requests);
-		requests.clear();
+
+		mpiContext.AllToAllInts(
+			workBuffers.sendFluidCount_FromRank,
+			workBuffers.recvFluidCount_FromRank);
 
 		// resize receive buffers according to exchanged particle counts
 		bool localCountOk = true;
 		std::string localCountFailMsg{};
 		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
 		{
+			migration.recvFluidCount =
+				workBuffers.recvFluidCount_FromRank[static_cast<uint64_t>(migration.rank)];
 			if (migration.recvFluidCount < 0)
 			{
 				localCountOk = false;
@@ -724,26 +717,31 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
 			timingReport, ParticleMigrationTimingOp::PayloadExchange);
 
-		// exchange payloads after all receive buffers are sized correctly
+		std::vector<MPI_Request> requests{};
+		requests.reserve(migrations.size() * 2);
+
+		// exchange only non-empty payload chunks after all receive buffers are sized correctly
 		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives
 		{
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvBytes(
+			if (migration.recvFluidCount <= 0) { continue; }
+
+			mpiContext.IRecvBytesChunked(
 				DataOrNull(migration.recvBuffer.fluidParticles),
-				CheckedByteCount(migration.recvBuffer.fluidParticles),
+				CheckedByteSize(migration.recvBuffer.fluidParticles),
 				migration.rank,
 				PARTICLE_MIGRATION_TAG_FLUID_PAYLOAD,
-				requests.back());
+				requests);
 		}
 		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI sends
 		{
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.ISendBytes(
+			if (migration.sendFluidCount <= 0) { continue; }
+
+			mpiContext.ISendBytesChunked(
 				DataOrNull(migration.sendBuffer.fluidParticles),
-				CheckedByteCount(migration.sendBuffer.fluidParticles),
+				CheckedByteSize(migration.sendBuffer.fluidParticles),
 				migration.rank,
 				PARTICLE_MIGRATION_TAG_FLUID_PAYLOAD,
-				requests.back());
+				requests);
 		}
 		mpiContext.WaitAll(requests);
 		requests.clear();

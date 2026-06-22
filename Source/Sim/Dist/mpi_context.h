@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <mpi.h>
 #include <string>
 #include <vector>
@@ -36,6 +37,9 @@ namespace Dist
 		void BroadcastInt(int& value, int root = 0) const;
 		void BroadcastString(std::string& value, int root = 0) const;
 		bool AllTrue(bool localValue) const;
+		void AllToAllInts(
+			const std::vector<int>& sendValues,
+			std::vector<int>& recvValues) const;
 
 		// point-to-point helpers for neighbor communication
 		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;
@@ -52,6 +56,18 @@ namespace Dist
 			int peerRank,
 			int tag,
 			MPI_Request& request) const;
+		void IRecvBytesChunked(
+			void* recvData,
+			uint64_t recvByteCount,
+			int peerRank,
+			int tag,
+			std::vector<MPI_Request>& requests) const;
+		void ISendBytesChunked(
+			const void* sendData,
+			uint64_t sendByteCount,
+			int peerRank,
+			int tag,
+			std::vector<MPI_Request>& requests) const;
 		void WaitAll(std::vector<MPI_Request>& requests) const;
 
 		// helpers

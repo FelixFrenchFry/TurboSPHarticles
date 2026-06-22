@@ -1,6 +1,7 @@
 // mpi_context.cpp
 
 // external
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -11,6 +12,22 @@
 
 
 using namespace Dist;
+
+namespace
+{
+	constexpr uint64_t MPI_CONTEXT_BYTE_CHUNK_SIZE =
+		256ull * 1024ull * 1024ull; // ~ 256 MiB
+
+	int CheckedChunkByteCount(const uint64_t byteCount)
+	{
+		if (byteCount > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+		{
+			throw std::runtime_error("MPI byte chunk exceeds int count range.");
+		}
+
+		return static_cast<int>(byteCount);
+	}
+}
 
 MpiContext::MpiContext(
 	int& argc,
@@ -94,6 +111,28 @@ bool MpiContext::AllTrue(const bool localValue) const
 	CheckMpiResult(MPI_Allreduce(&local, &global, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD),
 		"MPI_Allreduce(bool)");
 	return global != 0;
+}
+
+void MpiContext::AllToAllInts(
+	const std::vector<int>& sendValues,
+	std::vector<int>& recvValues) const
+{
+	if (sendValues.size() != static_cast<uint64_t>(size_))
+	{
+		throw std::runtime_error("MPI all-to-all int send buffer size does not match world size.");
+	}
+
+	recvValues.resize(static_cast<uint64_t>(size_));
+	CheckMpiResult(
+		MPI_Alltoall(
+			sendValues.data(),
+			1,
+			MPI_INT,
+			recvValues.data(),
+			1,
+			MPI_INT,
+			MPI_COMM_WORLD),
+		"MPI_Alltoall(int)");
 }
 
 void MpiContext::IRecvInt(
@@ -186,6 +225,74 @@ void MpiContext::ISendBytes(
 			MPI_COMM_WORLD,
 			&request),
 		"MPI_Isend(bytes)");
+}
+
+void MpiContext::IRecvBytesChunked(
+	void* recvData,
+	const uint64_t recvByteCount,
+	const int peerRank,
+	const int tag,
+	std::vector<MPI_Request>& requests) const
+{
+	if (recvByteCount == 0) { return; }
+	if (recvData == nullptr)
+	{
+		throw std::runtime_error("Invalid null MPI chunked receive buffer.");
+	}
+
+	uint8_t* recvBytes = static_cast<uint8_t*>(recvData);
+	uint64_t byteOffset = 0;
+
+	// use the same tag for each chunk; MPI preserves ordering for same peer/tag/communicator
+	while (byteOffset < recvByteCount)
+	{
+		const uint64_t chunkByteCount = std::min(
+			MPI_CONTEXT_BYTE_CHUNK_SIZE, recvByteCount - byteOffset);
+
+		requests.emplace_back(MPI_REQUEST_NULL);
+		IRecvBytes(
+			recvBytes + byteOffset,
+			CheckedChunkByteCount(chunkByteCount),
+			peerRank,
+			tag,
+			requests.back());
+
+		byteOffset += chunkByteCount;
+	}
+}
+
+void MpiContext::ISendBytesChunked(
+	const void* sendData,
+	const uint64_t sendByteCount,
+	const int peerRank,
+	const int tag,
+	std::vector<MPI_Request>& requests) const
+{
+	if (sendByteCount == 0) { return; }
+	if (sendData == nullptr)
+	{
+		throw std::runtime_error("Invalid null MPI chunked send buffer.");
+	}
+
+	const uint8_t* sendBytes = static_cast<const uint8_t*>(sendData);
+	uint64_t byteOffset = 0;
+
+	// use the same tag for each chunk; MPI preserves ordering for same peer/tag/communicator
+	while (byteOffset < sendByteCount)
+	{
+		const uint64_t chunkByteCount = std::min(
+			MPI_CONTEXT_BYTE_CHUNK_SIZE, sendByteCount - byteOffset);
+
+		requests.emplace_back(MPI_REQUEST_NULL);
+		ISendBytes(
+			sendBytes + byteOffset,
+			CheckedChunkByteCount(chunkByteCount),
+			peerRank,
+			tag,
+			requests.back());
+
+		byteOffset += chunkByteCount;
+	}
 }
 
 void MpiContext::WaitAll(std::vector<MPI_Request>& requests) const
