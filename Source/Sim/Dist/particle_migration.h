@@ -11,6 +11,7 @@
 #include "Source/Sim/Sync/state_sim.h"
 #include "dist_particle_state.h"
 #include "domain_decomp.h"
+#include "particle_migration_diagnostics.h"
 
 
 
@@ -77,23 +78,33 @@ namespace Dist
 		// per-peer send/receive storage reused across migration steps
 		std::vector<RankBuffers> rankBuffers;
 
+		// maps MPI ranks to rankBuffers entries, self-rank remains -1
+		std::vector<int> rankBufferIdx_FromRank;
+
+		// owned local particles that still belong to this rank after routing
+		std::vector<int> keptOwnedFluidLocalIdx;
+
+		// owned local particles that migrated out and leave holes in this rank-local state
+		std::vector<int> migratingOutFluidLocalIdx;
+
+		// per-owned-particle route, 0 means kept local, 1+ maps to rankBuffers index+1
+		std::vector<int> migrationRouteIdx_FromOwnedIdx;
+
+		// chunk-local route counts and write offsets used by parallel migration packing
+		std::vector<uint64_t> migrationRouteCounts_ByChunkRoute;
+		std::vector<uint64_t> migrationRouteWriteOffsets_ByChunkRoute;
+		std::vector<uint64_t> migrationRouteTotals;
+		std::vector<uint64_t> migrationOutCounts_ByChunk;
+		std::vector<uint64_t> migrationOutWriteOffsets_ByChunk;
+
+		// local-index status stamps used by in-place migration rebuild compaction
+		std::vector<uint32_t> migrationLocalStatusStamp_FromLocalIdx;
+		std::vector<uint8_t> migrationLocalStatus_FromLocalIdx;
+		uint32_t migrationLocalStatusStamp = 0;
+
 		// single receive buffer consumed by the rebuild step
 		ParticleMigrationBuffer aggregatedRecvBuffer;
-
-		// destination storage for rebuilding owned fluid SoA + metadata
-		Sync::FluidParticles rebuiltFluidParticles;
-		DistParticleState rebuiltParticleState;
 	};
-
-	// packs owned fluid particles whose current position belongs to destination rank;
-	// returns false + msg if local particle metadata or ownership lookup is inconsistent
-	bool PackMigratingFluidParticlesForRank(
-		ParticleMigrationBuffer& sendBuffer,
-		const Sync::UniversalSimState& localState,
-		const DistParticleState& fluidParticleState,
-		const IDomainDecomp& domainDecomp,
-		int dstRank,
-		std::string* failMsg = nullptr);
 
 	// exchanges migrating fluid particle counts and payloads with all ranks, then rebuilds
 	// this rank's owned fluid state; returns false + msg if packing, exchange, or rebuild fails
@@ -102,21 +113,22 @@ namespace Dist
 		DistParticleState& fluidParticleState,
 		const IDomainDecomp& domainDecomp,
 		const MpiContext& mpiContext,
-		float kernelRadius,
 		uint32_t globalFluidParticleCount,
 		ParticleMigrationWorkBuffers& workBuffers,
 		ParticleMigrationStats* stats = nullptr,
-		std::string* failMsg = nullptr);
+		std::string* failMsg = nullptr,
+		ParticleMigrationTimingReport* timingReport = nullptr);
 
-	// rebuilds local fluid SoA arrays from kept owned particles plus received migrating particles
-	// and refreshes matching particle metadata
+	// compacts kept owned fluid particles in-place, appends received migrating particles,
+	// and refreshes ownership maps; class lists are rebuilt by the distributed class phase
 	bool RebuildLocalStateWithMigratedFluidParticles(
 		const ParticleMigrationBuffer& recvBuffer,
+		const std::vector<int>& keptOwnedFluidLocalIdx,
+		const std::vector<int>& migratingOutFluidLocalIdx,
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
 		const IDomainDecomp& domainDecomp,
 		int rank,
-		float kernelRadius,
 		uint32_t globalFluidParticleCount,
 		ParticleMigrationWorkBuffers& workBuffers,
 		std::string* failMsg = nullptr);

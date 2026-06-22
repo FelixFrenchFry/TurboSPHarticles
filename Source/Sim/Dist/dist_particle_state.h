@@ -23,6 +23,14 @@ namespace Dist
 		None    // particle is not active in this rank (e.g. outside owned + halo bounds)
 	};
 
+	// reusable scratch for parallel owned-particle classification
+	struct ParticleClassificationWorkBuffers
+	{
+		std::vector<uint64_t> classCounts_ByChunkClass;
+		std::vector<uint64_t> classWriteOffsets_ByChunkClass;
+		std::vector<uint64_t> classTotals;
+	};
+
 	// stores all classification of particles (F/B) based on the domain decomp
 	// local SoA layout is [ owned particles ][ halo particles ]
 	struct DistParticleState
@@ -74,7 +82,9 @@ namespace Dist
 		DistParticleState& particleState,
 		const Sync::FluidParticles& fluidParticles,
 		const IDomainDecomp& domainDecomp,
-		int rank, float kernelRadius);
+		int rank,
+		float kernelRadius,
+		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
 	// rebuilds boundary particle class lists by keeping particles owned by this
 	// rank and splitting them into inner / outer by domain boundary distance
@@ -82,7 +92,9 @@ namespace Dist
 		DistParticleState& particleState,
 		const Sync::BoundaryParticles& boundaryParticles,
 		const IDomainDecomp& domainDecomp,
-		int rank, float kernelRadius);
+		int rank,
+		float kernelRadius,
+		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
 	// extracts the particles needed by this rank from the global state and
 	// fills the rank-local simulation state plus fluid / boundary metadata

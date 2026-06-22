@@ -167,9 +167,12 @@ namespace Dist
 		Sync::UniversalSimState localSimState_{};
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
+		ParticleClassificationWorkBuffers fluidParticleClassificationWorkBuffers_{};
+		ParticleClassificationWorkBuffers boundaryParticleClassificationWorkBuffers_{};
 		ParticleMigrationWorkBuffers particleMigrationWorkBuffers_{};
 		HaloRebuildScratch haloRebuildScratch_{};
 		ParticleMigrationStats lastParticleMigrationStats_{};
+		ParticleMigrationTimingReport particleMigrationTimingReport_{};
 		HaloExchangeStats lastHaloExchangeStats_{};
 
 		// backend over compact rank-local state

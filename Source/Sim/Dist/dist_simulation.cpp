@@ -286,6 +286,18 @@ namespace
 		return usage;
 	}
 
+	Mem::MemUsage MemoryUsageOfParticleClassificationWorkBuffers(
+		const ParticleClassificationWorkBuffers& workBuffers)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classCounts_ByChunkClass));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classWriteOffsets_ByChunkClass));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classTotals));
+
+		return usage;
+	}
+
 	Mem::MemUsage MemoryUsageOfParticleMigrationBuffer(
 		const ParticleMigrationBuffer& buffer)
 	{
@@ -317,8 +329,17 @@ namespace
 	{
 		Mem::MemUsage usage{};
 
-		Mem::Add(usage, MemoryUsageOfFluidParticles(workBuffers.rebuiltFluidParticles));
-		Mem::Add(usage, MemoryUsageOfParticleState(workBuffers.rebuiltParticleState));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.rankBufferIdx_FromRank));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.keptOwnedFluidLocalIdx));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migratingOutFluidLocalIdx));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationRouteIdx_FromOwnedIdx));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationRouteCounts_ByChunkRoute));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationRouteWriteOffsets_ByChunkRoute));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationRouteTotals));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationOutCounts_ByChunk));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationOutWriteOffsets_ByChunk));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationLocalStatusStamp_FromLocalIdx));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationLocalStatus_FromLocalIdx));
 
 		return usage;
 	}
@@ -753,6 +774,7 @@ void DistSimulationMgr::RunSim_Blocking()
 
 	// local copy for consistent maximum-step handling during this run
 	const auto paramsInit = simParams_;
+	particleMigrationTimingReport_ = {};
 	BeginRunLogging(paramsInit);
 	DistDiagnosticsMgr::ResetProgress();
 	bool runOk = true;
@@ -1319,6 +1341,12 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::MemUsage miscUsage{};
 	Mem::Add(miscUsage,
 		MemoryUsageOfParticleMigrationScratch(particleMigrationWorkBuffers_));
+	Mem::Add(miscUsage,
+		MemoryUsageOfParticleClassificationWorkBuffers(
+			fluidParticleClassificationWorkBuffers_));
+	Mem::Add(miscUsage,
+		MemoryUsageOfParticleClassificationWorkBuffers(
+			boundaryParticleClassificationWorkBuffers_));
 	Mem::Add(miscUsage, MemoryUsageOfHaloRebuildScratch(haloRebuildScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfExportSnapshot(exportSnapScratch_));
 	Mem::Set(
@@ -1455,7 +1483,9 @@ void DistSimulationMgr::DisplayDistributedProgress(
 
 	DistDiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
 		mpiContext_, params, curBenchOpGroups_,
-		BuildRankStepReport(params, exportedStep), BuildRankBenchReport());
+		BuildRankStepReport(params, exportedStep),
+		BuildRankBenchReport(),
+		particleMigrationTimingReport_);
 }
 
 bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
@@ -1503,13 +1533,16 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 			// refresh inner/outer lists after migration and backend order changes
 			ClassifyOwnedFluidParticlesIntoInnerOuter(
 				fluidParticleState_, localSimState_.fluidParticles, *domainDecomp_,
-				mpiContext_.Rank(), params.kernelRadius);
+				mpiContext_.Rank(), params.kernelRadius,
+				&fluidParticleClassificationWorkBuffers_);
 			ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 				boundaryParticleState_, localSimState_.boundaryParticles, *domainDecomp_,
-				mpiContext_.Rank(), params.kernelRadius);
+				mpiContext_.Rank(), params.kernelRadius,
+				&boundaryParticleClassificationWorkBuffers_);
 
 			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_ParticleClass });
 		}
+		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		if (localOk)
 		{
@@ -1587,28 +1620,17 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 			fluidParticleState_,
 			*domainDecomp_,
 			mpiContext_,
-			simParams_.kernelRadius,
 			globalSimState_.fluidParticles.N_,
 			particleMigrationWorkBuffers_,
 			&stats,
-			&failMsg))
+			&failMsg,
+			&particleMigrationTimingReport_))
 		{
 			SPDLOG_ERROR("[rank {}/{}] Failed to migrate fluid particles: {}",
 				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 			localOk = false;
 		}
 		lastParticleMigrationStats_ = stats;
-
-	#if defined(_DEBUG)
-		std::string layoutFailMsg{};
-		if (localOk &&
-			!fluidParticleState_.IsValidLocalLayout(localSimState_.fluidParticles.N_, &layoutFailMsg))
-		{
-			SPDLOG_ERROR("[rank {}/{}] Invalid migrated fluid particle layout: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), layoutFailMsg);
-			localOk = false;
-		}
-	#endif
 	}
 	catch (const std::exception& ex)
 	{

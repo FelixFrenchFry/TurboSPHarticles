@@ -1,8 +1,11 @@
 // dist_particle_state.cpp
 
 // external
+#include <algorithm>
 #include <cstdint>
 #include <utility>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 
 // internal
 #include "dist_particle_state.h"
@@ -13,6 +16,12 @@ using namespace Dist;
 
 namespace
 {
+	constexpr uint64_t PARTICLE_CLASSIFICATION_CHUNK_SIZE = 4096;
+	constexpr uint64_t PARTICLE_CLASSIFICATION_CLASS_COUNT = 3;
+	constexpr uint64_t PARTICLE_CLASSIFICATION_CLASS_OWNED = 0;
+	constexpr uint64_t PARTICLE_CLASSIFICATION_CLASS_INNER = 1;
+	constexpr uint64_t PARTICLE_CLASSIFICATION_CLASS_OUTER = 2;
+
 	// builds a position vector from the given fluid particle array
 	// (arrayIdx may be local or global)
 	glm::vec3 FluidPositionAtArrayIdx(
@@ -54,29 +63,144 @@ namespace
 		particleState.particleLocalIdx_Halo.reserve(particleCount);
 	}
 
-	void ClassifyOwnedParticleAtLocalIdx(
+	template <typename PositionAtLocalIdx>
+	void ClassifyOwnedParticlesIntoInnerOuter_Parallel(
 		DistParticleState& particleState,
-		const glm::vec3& position,
-		const int localIdx,
+		const uint32_t particleCount,
+		const PositionAtLocalIdx& positionAtLocalIdx,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float kernelRadius)
+		const float kernelRadius,
+		ParticleClassificationWorkBuffers& workBuffers)
 	{
-		if (domainDecomp.OwnerRank(position) != rank) { return; }
+		PrepareParticleClassification(particleState, particleCount);
 
-		particleState.particleLocalIdx_Owned.push_back(localIdx);
+		const uint64_t particleCount_U64 = particleCount;
+		const uint64_t chunkCount = particleCount_U64 > 0
+			? (particleCount_U64 + PARTICLE_CLASSIFICATION_CHUNK_SIZE - 1) /
+				PARTICLE_CLASSIFICATION_CHUNK_SIZE
+			: 0;
 
-		// inner owned particles do not need to be exported as halo data
-		if (domainDecomp.IsInnerOwnedParticle(rank, position, kernelRadius))
+		workBuffers.classCounts_ByChunkClass.assign(
+			chunkCount * PARTICLE_CLASSIFICATION_CLASS_COUNT, 0ull);
+		workBuffers.classWriteOffsets_ByChunkClass.assign(
+			chunkCount * PARTICLE_CLASSIFICATION_CLASS_COUNT, 0ull);
+		workBuffers.classTotals.assign(PARTICLE_CLASSIFICATION_CLASS_COUNT, 0ull);
+
+		// classify particles and count each class per chunk without shared push_back
+		tbb::parallel_for(
+			tbb::blocked_range<uint64_t>(0, chunkCount),
+			[&](const tbb::blocked_range<uint64_t>& range)
 		{
-			particleState.particleLocalIdx_Inner.push_back(localIdx);
-			particleState.particleClasses[localIdx] = DistParticleClass::Inner;
-		}
-		else
+			for (uint64_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			{
+				const uint64_t beginLocalIdx =
+					chunkIdx * PARTICLE_CLASSIFICATION_CHUNK_SIZE;
+				const uint64_t endLocalIdx = std::min(
+					beginLocalIdx + PARTICLE_CLASSIFICATION_CHUNK_SIZE,
+					particleCount_U64);
+				const uint64_t chunkClassBase =
+					chunkIdx * PARTICLE_CLASSIFICATION_CLASS_COUNT;
+
+				for (uint64_t localIdx_U64 = beginLocalIdx;
+					 localIdx_U64 != endLocalIdx;
+					 localIdx_U64++)
+				{
+					const int localIdx = static_cast<int>(localIdx_U64);
+					const glm::vec3 position = positionAtLocalIdx(localIdx);
+					if (domainDecomp.OwnerRank(position) != rank) { continue; }
+
+					workBuffers.classCounts_ByChunkClass[
+						chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_OWNED]++;
+
+					// inner owned particles do not need to be exported as halo data
+					if (domainDecomp.IsInnerOwnedParticle(rank, position, kernelRadius))
+					{
+						particleState.particleClasses[localIdx] = DistParticleClass::Inner;
+						workBuffers.classCounts_ByChunkClass[
+							chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_INNER]++;
+					}
+					else
+					{
+						particleState.particleClasses[localIdx] = DistParticleClass::Outer;
+						workBuffers.classCounts_ByChunkClass[
+							chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_OUTER]++;
+					}
+				}
+			}
+		});
+
+		// prefix chunk-local class counts so each worker fills disjoint output ranges
+		for (uint64_t classIdx = 0;
+			 classIdx != PARTICLE_CLASSIFICATION_CLASS_COUNT;
+			 classIdx++)
 		{
-			particleState.particleLocalIdx_Outer.push_back(localIdx);
-			particleState.particleClasses[localIdx] = DistParticleClass::Outer;
+			uint64_t classTotal = 0;
+			for (uint64_t chunkIdx = 0; chunkIdx != chunkCount; chunkIdx++)
+			{
+				const uint64_t chunkClassIdx =
+					chunkIdx * PARTICLE_CLASSIFICATION_CLASS_COUNT + classIdx;
+				workBuffers.classWriteOffsets_ByChunkClass[chunkClassIdx] = classTotal;
+				classTotal += workBuffers.classCounts_ByChunkClass[chunkClassIdx];
+			}
+			workBuffers.classTotals[classIdx] = classTotal;
 		}
+
+		particleState.particleLocalIdx_Owned.resize(
+			workBuffers.classTotals[PARTICLE_CLASSIFICATION_CLASS_OWNED]);
+		particleState.particleLocalIdx_Inner.resize(
+			workBuffers.classTotals[PARTICLE_CLASSIFICATION_CLASS_INNER]);
+		particleState.particleLocalIdx_Outer.resize(
+			workBuffers.classTotals[PARTICLE_CLASSIFICATION_CLASS_OUTER]);
+
+		// fill owned / inner / outer index lists while preserving local-index order
+		tbb::parallel_for(
+			tbb::blocked_range<uint64_t>(0, chunkCount),
+			[&](const tbb::blocked_range<uint64_t>& range)
+		{
+			for (uint64_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			{
+				const uint64_t beginLocalIdx =
+					chunkIdx * PARTICLE_CLASSIFICATION_CHUNK_SIZE;
+				const uint64_t endLocalIdx = std::min(
+					beginLocalIdx + PARTICLE_CLASSIFICATION_CHUNK_SIZE,
+					particleCount_U64);
+				const uint64_t chunkClassBase =
+					chunkIdx * PARTICLE_CLASSIFICATION_CLASS_COUNT;
+				uint64_t ownedWriteIdx =
+					workBuffers.classWriteOffsets_ByChunkClass[
+						chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_OWNED];
+				uint64_t innerWriteIdx =
+					workBuffers.classWriteOffsets_ByChunkClass[
+						chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_INNER];
+				uint64_t outerWriteIdx =
+					workBuffers.classWriteOffsets_ByChunkClass[
+						chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_OUTER];
+
+				for (uint64_t localIdx_U64 = beginLocalIdx;
+					 localIdx_U64 != endLocalIdx;
+					 localIdx_U64++)
+				{
+					const int localIdx = static_cast<int>(localIdx_U64);
+					const DistParticleClass particleClass =
+						particleState.particleClasses[localIdx];
+
+					if (particleClass == DistParticleClass::Inner)
+					{
+						particleState.particleLocalIdx_Owned[ownedWriteIdx++] = localIdx;
+						particleState.particleLocalIdx_Inner[innerWriteIdx++] = localIdx;
+					}
+					else if (particleClass == DistParticleClass::Outer)
+					{
+						particleState.particleLocalIdx_Owned[ownedWriteIdx++] = localIdx;
+						particleState.particleLocalIdx_Outer[outerWriteIdx++] = localIdx;
+					}
+				}
+			}
+		});
+
+		particleState.ownedParticleCount = static_cast<uint32_t>(
+			workBuffers.classTotals[PARTICLE_CLASSIFICATION_CLASS_OWNED]);
 	}
 
 	bool IsHaloParticleForRank(
@@ -877,25 +1001,24 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 	const Sync::FluidParticles& fluidParticles,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius)
+	const float kernelRadius,
+	ParticleClassificationWorkBuffers* workBuffers)
 {
-	PrepareParticleClassification(particleState, fluidParticles.N_);
+	ParticleClassificationWorkBuffers localWorkBuffers{};
+	ParticleClassificationWorkBuffers& classificationWorkBuffers =
+		workBuffers ? *workBuffers : localWorkBuffers;
 
-	// TODO: re-implement with TBB parallelization?
-	for (uint64_t i = 0; i < fluidParticles.N_; i++)
-	{
-		const int localIdx = static_cast<int>(i);
-		ClassifyOwnedParticleAtLocalIdx(
-			particleState,
-			FluidPositionAtArrayIdx(fluidParticles, localIdx),
-			localIdx,
-			domainDecomp,
-			rank,
-			kernelRadius);
-	}
-
-	particleState.ownedParticleCount =
-		static_cast<uint32_t>(particleState.particleLocalIdx_Owned.size());
+	ClassifyOwnedParticlesIntoInnerOuter_Parallel(
+		particleState,
+		fluidParticles.N_,
+		[&](const int localIdx)
+		{
+			return FluidPositionAtArrayIdx(fluidParticles, localIdx);
+		},
+		domainDecomp,
+		rank,
+		kernelRadius,
+		classificationWorkBuffers);
 }
 
 void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
@@ -903,25 +1026,24 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 	const Sync::BoundaryParticles& boundaryParticles,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius)
+	const float kernelRadius,
+	ParticleClassificationWorkBuffers* workBuffers)
 {
-	PrepareParticleClassification(particleState, boundaryParticles.N_);
+	ParticleClassificationWorkBuffers localWorkBuffers{};
+	ParticleClassificationWorkBuffers& classificationWorkBuffers =
+		workBuffers ? *workBuffers : localWorkBuffers;
 
-	// TODO: re-implement with TBB parallelization?
-	for (uint64_t i = 0; i < boundaryParticles.N_; i++)
-	{
-		const int localIdx = static_cast<int>(i);
-		ClassifyOwnedParticleAtLocalIdx(
-			particleState,
-			BoundaryPositionAtArrayIdx(boundaryParticles, localIdx),
-			localIdx,
-			domainDecomp,
-			rank,
-			kernelRadius);
-	}
-
-	particleState.ownedParticleCount =
-		static_cast<uint32_t>(particleState.particleLocalIdx_Owned.size());
+	ClassifyOwnedParticlesIntoInnerOuter_Parallel(
+		particleState,
+		boundaryParticles.N_,
+		[&](const int localIdx)
+		{
+			return BoundaryPositionAtArrayIdx(boundaryParticles, localIdx);
+		},
+		domainDecomp,
+		rank,
+		kernelRadius,
+		classificationWorkBuffers);
 }
 
 void Dist::BuildLocalParticlesFromGlobalState(

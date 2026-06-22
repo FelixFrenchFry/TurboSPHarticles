@@ -13,6 +13,7 @@
 // internal
 #include "dist_diagnostics.h"
 #include "mpi_context.h"
+#include "particle_migration_diagnostics.h"
 #include "Source/Base/enum_hub.h"
 #include "Source/Base/helpers.h"
 #include "Source/Sim/Core/diagnostics.h"
@@ -28,6 +29,7 @@ namespace Dist
 		constexpr int DIST_DIAGNOSTICS_TAG_STEP_REPORT = 8101;
 		constexpr int DIST_DIAGNOSTICS_TAG_STARTUP_REPORT = 8102;
 		constexpr int DIST_DIAGNOSTICS_TAG_BENCH_REPORT = 8103;
+		constexpr int DIST_DIAGNOSTICS_TAG_MIGRATION_TIMING_REPORT = 8104;
 		constexpr int DIST_DIAGNOSTICS_RANK_TABLE_LIMIT = 16;
 		constexpr int N_CLI_SECTION_SEPARATOR_CHARS = 80;
 		constexpr const char* CLI_SECTION_SEPARATOR =
@@ -320,6 +322,46 @@ namespace Dist
 					static_cast<int>(sizeof(DistRankBenchReport)),
 					mpiContext.RootRank(),
 					DIST_DIAGNOSTICS_TAG_BENCH_REPORT,
+					requests.back());
+			}
+
+			mpiContext.WaitAll(requests);
+		}
+
+		void GatherParticleMigrationTimingReports(
+			const MpiContext& mpiContext,
+			const ParticleMigrationTimingReport& localReport,
+			std::vector<ParticleMigrationTimingReport>& reports)
+		{
+			std::vector<MPI_Request> requests{};
+
+			if (mpiContext.IsRoot())
+			{
+				reports.assign(static_cast<uint64_t>(mpiContext.Size()), ParticleMigrationTimingReport{});
+				reports[static_cast<uint64_t>(mpiContext.Rank())] = localReport;
+				requests.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
+
+				for (int rank = 0; rank < mpiContext.Size(); rank++)
+				{
+					if (rank == mpiContext.RootRank()) { continue; }
+
+					requests.emplace_back(MPI_REQUEST_NULL);
+					mpiContext.IRecvBytes(
+						&reports[static_cast<uint64_t>(rank)],
+						static_cast<int>(sizeof(ParticleMigrationTimingReport)),
+						rank,
+						DIST_DIAGNOSTICS_TAG_MIGRATION_TIMING_REPORT,
+						requests.back());
+				}
+			}
+			else
+			{
+				requests.emplace_back(MPI_REQUEST_NULL);
+				mpiContext.ISendBytes(
+					&localReport,
+					static_cast<int>(sizeof(ParticleMigrationTimingReport)),
+					mpiContext.RootRank(),
+					DIST_DIAGNOSTICS_TAG_MIGRATION_TIMING_REPORT,
 					requests.back());
 			}
 
@@ -620,12 +662,12 @@ namespace Dist
 		{
 			int rank = 0;
 
-			uint64_t backendLatestNs = 0;
-			uint64_t distMigrLatestNs = 0;
-			uint64_t distClassLatestNs = 0;
-			uint64_t distHaloLatestNs = 0;
-			uint64_t distSyncLatestNs = 0;
-			uint64_t otherLatestNs = 0;
+			uint64_t backendAvgNs = 0;
+			uint64_t distMigrAvgNs = 0;
+			uint64_t distClassAvgNs = 0;
+			uint64_t distHaloAvgNs = 0;
+			uint64_t distSyncAvgNs = 0;
+			uint64_t otherAvgNs = 0;
 		};
 
 		std::vector<DistRankTimingSummary> BuildRankTimingSummaries(
@@ -645,53 +687,53 @@ namespace Dist
 				DistRankTimingSummary summary{};
 				summary.rank = report.rank;
 
-				uint64_t totalLatestNs = 0;
+				uint64_t totalAvgNs = 0;
 
 				for (uint32_t i = 0; i < opGroups.size(); i++)
 				{
 					const Bench::BenchOpGroupDef& group = opGroups[i];
-					const uint64_t latestNs = BenchGroupTimeNs(report, group, false);
+					const uint64_t avgNs = BenchGroupTimeNs(report, group, true);
 
 					if (static_cast<int>(i) == totalSimIdx)
 					{
-						totalLatestNs = latestNs;
+						totalAvgNs = avgNs;
 						continue;
 					}
 
 					if (IsSingleBenchOpGroup(group,
 						Bench::BenchOp::Dist_ParticleMigration))
 					{
-						summary.distMigrLatestNs += latestNs;
+						summary.distMigrAvgNs += avgNs;
 					}
 					else if (IsSingleBenchOpGroup(group,
 						Bench::BenchOp::Dist_ParticleClass))
 					{
-						summary.distClassLatestNs += latestNs;
+						summary.distClassAvgNs += avgNs;
 					}
 					else if (IsSingleBenchOpGroup(group,
 						Bench::BenchOp::Dist_HaloExchange))
 					{
-						summary.distHaloLatestNs += latestNs;
+						summary.distHaloAvgNs += avgNs;
 					}
 					else if (IsSingleBenchOpGroup(group,
 						Bench::BenchOp::Dist_StateSync))
 					{
-						summary.distSyncLatestNs += latestNs;
+						summary.distSyncAvgNs += avgNs;
 					}
 					else if (!IsDistBenchGroup(group))
 					{
-						summary.backendLatestNs += latestNs;
+						summary.backendAvgNs += avgNs;
 					}
 				}
 
-				const uint64_t displayedLatestNs =
-					summary.backendLatestNs +
-					summary.distMigrLatestNs +
-					summary.distClassLatestNs +
-					summary.distHaloLatestNs +
-					summary.distSyncLatestNs;
-				summary.otherLatestNs =
-					SaturatingSubtract(totalLatestNs, displayedLatestNs);
+				const uint64_t displayedAvgNs =
+					summary.backendAvgNs +
+					summary.distMigrAvgNs +
+					summary.distClassAvgNs +
+					summary.distHaloAvgNs +
+					summary.distSyncAvgNs;
+				summary.otherAvgNs =
+					SaturatingSubtract(totalAvgNs, displayedAvgNs);
 
 				summaries.push_back(summary);
 			}
@@ -757,6 +799,20 @@ namespace Dist
 					report.migratedBoundaryParticleRecvCount,
 					report.haloBoundaryParticleSendCount,
 					report.haloBoundaryParticleRecvCount);
+			}
+		}
+
+		void PrintParticleMigrationTimingTable(
+			int& lineCount,
+			const std::vector<ParticleMigrationTimingReport>& reports,
+			const Bench::TimeUnit unit)
+		{
+			const std::vector<std::string> lines =
+				BuildParticleMigrationTimingLines(reports, unit);
+
+			for (const std::string& line : lines)
+			{
+				PrintLine(lineCount, "%s", line.c_str());
 			}
 		}
 
@@ -848,7 +904,7 @@ namespace Dist
 					true);
 				PrintLine(lineCount,
 					"%-33.33s | %11d  %8s | %10d  %8s",
-					"critical rank used for latest/avg",
+					"critical rank for latest/avg",
 					tableSummary.latestCriticalRank, "---",
 					tableSummary.avgCriticalRank, "---");
 			}
@@ -870,7 +926,7 @@ namespace Dist
 			PrintLine(lineCount,
 				"%-2s | %10s | %9s | %9s | %9s | %9s | %9s %4s",
 				"r", "backend", "distMigr", "distClass",
-				"distHalo", "distSync", "other", "");
+				"distHalo", "distSync", "other", "avg");
 			PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
 
 			for (const DistRankTimingSummary& summary : summaries)
@@ -881,12 +937,12 @@ namespace Dist
 				PrintLine(lineCount,
 					"%-2s | %10.2f | %9.2f | %9.2f | %9.2f | %9.2f | %9.2f %4s",
 					rankLabel,
-					Bench::ConvertFromNs(unit, summary.backendLatestNs),
-					Bench::ConvertFromNs(unit, summary.distMigrLatestNs),
-					Bench::ConvertFromNs(unit, summary.distClassLatestNs),
-					Bench::ConvertFromNs(unit, summary.distHaloLatestNs),
-					Bench::ConvertFromNs(unit, summary.distSyncLatestNs),
-					Bench::ConvertFromNs(unit, summary.otherLatestNs),
+					Bench::ConvertFromNs(unit, summary.backendAvgNs),
+					Bench::ConvertFromNs(unit, summary.distMigrAvgNs),
+					Bench::ConvertFromNs(unit, summary.distClassAvgNs),
+					Bench::ConvertFromNs(unit, summary.distHaloAvgNs),
+					Bench::ConvertFromNs(unit, summary.distSyncAvgNs),
+					Bench::ConvertFromNs(unit, summary.otherAvgNs),
 					unitLabel);
 			}
 		}
@@ -1020,6 +1076,7 @@ namespace Dist
 		void PrintDashboard(
 			const std::vector<DistRankStepReport>& reports,
 			const std::vector<DistRankBenchReport>& benchReports,
+			const std::vector<ParticleMigrationTimingReport>& migrationTimingReports,
 			const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
 			const Sim::SimParams& params)
 		{
@@ -1077,24 +1134,6 @@ namespace Dist
 				percent = progress * 100.0;
 			}
 
-			const uint64_t latestMaxNs =
-				MaxReportField(reports, &DistRankStepReport::totalStepLatestNs);
-			const uint64_t avgMaxNs =
-				MaxReportField(reports, &DistRankStepReport::totalStepAvgNs);
-			const double latestAvgNs =
-				AvgReportField(reports, &DistRankStepReport::totalStepLatestNs);
-			const double imbalancePct = latestAvgNs > 0.0
-				? ((static_cast<double>(latestMaxNs) / latestAvgNs) - 1.0) * 100.0
-				: 0.0;
-			const int slowestRank =
-				RankWithMax(reports, &DistRankStepReport::totalStepLatestNs);
-			const bool exportedStep = std::any_of(
-				reports.begin(), reports.end(),
-				[](const DistRankStepReport& report)
-				{
-					return report.exportedStep != 0;
-				});
-
 			if (state.lastNumLines > 0)
 			{
 				std::printf("\x1b[%dA\r", state.lastNumLines);
@@ -1106,6 +1145,9 @@ namespace Dist
 				PrintParticleLayoutTable(lineCount, reports);
 				PrintLine(lineCount);
 				PrintParticleExchangeTable(lineCount, reports);
+				PrintLine(lineCount);
+				PrintParticleMigrationTimingTable(
+					lineCount, migrationTimingReports, params.timeUnit);
 			}
 			else
 			{
@@ -1135,17 +1177,6 @@ namespace Dist
 					"%02d:%02d:%02d elapsed | %u steps | %.3f steps/s (recently)",
 					elH, elM, elS, step, stepsPerSec);
 			}
-
-			PrintLine(lineCount);
-			PrintLine(lineCount,
-				"distributed summary | step latest max %.3f %s | avg max %.3f %s | slowest rank %d | imbalance %.1f %% | %s",
-				Bench::ConvertFromNs(params.timeUnit, latestMaxNs),
-				Bench::UnitLabel(params.timeUnit),
-				Bench::ConvertFromNs(params.timeUnit, avgMaxNs),
-				Bench::UnitLabel(params.timeUnit),
-				slowestRank,
-				std::max(0.0, imbalancePct),
-				exportedStep ? "exported step" : "no export");
 
 			std::fflush(stdout);
 			state.lastNumLines = lineCount;
@@ -1254,7 +1285,8 @@ namespace Dist
 		const Sim::SimParams& params,
 		const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
 		const DistRankStepReport& localStepReport,
-		const DistRankBenchReport& localBenchReport)
+		const DistRankBenchReport& localBenchReport,
+		const ParticleMigrationTimingReport& localMigrationTimingReport)
 	{
 		std::vector<DistRankStepReport> reports{};
 		GatherRankStepReports(mpiContext, localStepReport, reports);
@@ -1262,9 +1294,14 @@ namespace Dist
 		std::vector<DistRankBenchReport> benchReports{};
 		GatherRankBenchReports(mpiContext, localBenchReport, benchReports);
 
+		std::vector<ParticleMigrationTimingReport> migrationTimingReports{};
+		GatherParticleMigrationTimingReports(
+			mpiContext, localMigrationTimingReport, migrationTimingReports);
+
 		if (!mpiContext.IsRoot()) { return; }
 
-		PrintDashboard(reports, benchReports, benchOpGroups, params);
+		PrintDashboard(
+			reports, benchReports, migrationTimingReports, benchOpGroups, params);
 	}
 
 	void DistDiagnosticsMgr::PrintMemorySummary(
