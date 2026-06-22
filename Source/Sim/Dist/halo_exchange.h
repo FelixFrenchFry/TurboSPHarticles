@@ -64,6 +64,15 @@ namespace Dist
 		void Clear();
 	};
 
+	// counts exchanged halo particles for rank-local diagnostics
+	struct HaloExchangeStats
+	{
+		uint32_t sentFluidParticleCount = 0;
+		uint32_t sentBoundaryParticleCount = 0;
+		uint32_t recvFluidParticleCount = 0;
+		uint32_t recvBoundaryParticleCount = 0;
+	};
+
 	// reusable destination storage for rebuilding [ owned ][ halo ] rank-local state
 	struct HaloRebuildScratch
 	{
@@ -92,6 +101,7 @@ namespace Dist
 		const DistParticleState& boundaryParticleState,
 		const IDomainDecomp& domainDecomp,
 		const MpiContext& mpiContext,
+		HaloExchangeStats* stats = nullptr,
 		std::string* failMsg = nullptr);
 
 	// rebuilds local fluid/boundary SoA arrays as [ owned ][ received halos ] from halo package

@@ -1,6 +1,4 @@
 // diagnostics.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -18,7 +16,7 @@ namespace Sim
 {
 	class DiagnosticsMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		DiagnosticsMgr() = delete;
 

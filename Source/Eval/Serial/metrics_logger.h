@@ -40,7 +40,8 @@ namespace Export
 		bool BeginRun(const std::string& configProfile,
 					  const std::string& paramsFile,
 					  const std::string& scenariosFile,
-					  const Sim::SimParams& simParams);
+					  const Sim::SimParams& simParams,
+					  bool logStatus = true);
 
 		void EndRun();
 

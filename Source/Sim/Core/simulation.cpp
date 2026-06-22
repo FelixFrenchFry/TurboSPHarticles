@@ -45,11 +45,11 @@ bool SimulationMgr::Init()
 
 	// TODO: load initial sim state from a file?
 
-	SPDLOG_INFO("Initializing simulation state...");
+	SPDLOG_INFO("Init simulation state...");
 	SelectSimScenario(simParams_.scenarioType, configProfile_);
 	SelectSimBackend(simParams_.backendVersion);
 
-	SPDLOG_INFO("Initializing backend data structures...");
+	SPDLOG_INFO("Init backend data structures...");
 	ReBuildInitialSimState();
 
 	// updated snapshot

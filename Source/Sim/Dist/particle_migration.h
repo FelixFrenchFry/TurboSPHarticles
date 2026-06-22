@@ -57,7 +57,7 @@ namespace Dist
 	struct ParticleMigrationStats
 	{
 		uint32_t sentFluidParticleCount = 0;
-		uint32_t receivedFluidParticleCount = 0;
+		uint32_t recvFluidParticleCount = 0;
 	};
 
 	// reusable storage for fluid particle migration exchange and local rebuild

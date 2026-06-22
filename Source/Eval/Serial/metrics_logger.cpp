@@ -71,7 +71,8 @@ namespace Export
 		const std::string& configProfile,
 		const std::string& paramsFile,
 		const std::string& scenariosFile,
-		const Sim::SimParams& simParams)
+		const Sim::SimParams& simParams,
+		const bool logStatus)
 	{
 		EndRun();
 
@@ -125,8 +126,11 @@ namespace Export
 
 		active_ = true;
 
-		SPDLOG_INFO("Writing run logs to '{}'",
-			MakeCompactRunDirString(runDir_, loggingOptions_.baseDir));
+		if (logStatus)
+		{
+			SPDLOG_INFO("Writing run logs to '{}'",
+				MakeCompactRunDirString(runDir_, loggingOptions_.baseDir));
+		}
 
 		return true;
 	}

@@ -18,6 +18,7 @@
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "domain_decomp.h"
+#include "dist_diagnostics.h"
 #include "dist_particle_state.h"
 #include "halo_exchange.h"
 #include "mpi_context.h"
@@ -31,11 +32,10 @@ namespace Dist
 	{
 	public:
 
-		DistSimulationMgr(MpiContext& mpiContext,
-						  Sim::SimParamsMgr& simParamsMgr);
+		DistSimulationMgr(MpiContext& mpiContext, Sim::SimParamsMgr& simParamsMgr);
 
 		// initialize sub-systems
-		bool Init(std::string& profile, const std::vector<std::string>& simOverrides);
+		bool Init(std::string& profile, const std::vector<std::string>& simOverrides, bool logParamStatus = true);
 
 		// destroy sub-systems and free up resources
 		void Shutdown();
@@ -53,8 +53,11 @@ namespace Dist
 
 		bool ReBuildInitialSimState();
 
-		// prints and validates current distributed startup state
+		// prints root-gathered distributed setup diagnostics
 		void RunStartupCheck() const;
+
+		// builds root-level startup diagnostics after initialization
+		DistSimSetupReport BuildDistSimSetupReport() const;
 
 		// main simulation loop
 		void RunSim_Blocking();
@@ -68,10 +71,10 @@ namespace Dist
 	private:
 
 		// root reads params.json, then every rank loads the broadcast copy
-		bool LoadParamsFromProfileBroadcast(std::string& profile);
+		bool LoadParamsFromProfileBroadcast(std::string& profile, bool logStatus = true);
 
 		// applies the same command-line overrides on every rank
-		bool LoadParamsFromCliOverrides(const std::vector<std::string>& simOverrides);
+		bool LoadParamsFromCliOverrides(const std::vector<std::string>& simOverrides, bool logStatus = true);
 
 		// creates the ownership / halo decomp from the selected scenario bounds
 		bool BuildDomainDecomp();
@@ -85,9 +88,6 @@ namespace Dist
 		// validates rank-local [ owned ][ halo ] state
 		bool ValidateRankLocalSimState() const;
 
-		// prints rank-local particle ownership / halo counts
-		void LogRankLocalSimState() const;
-
 		// transfers rank-local state into the selected backend
 		bool InitRankLocalBackend();
 
@@ -100,15 +100,21 @@ namespace Dist
 		// gathers and serializes an export snapshot on the root rank
 		bool HandleExportSnapshot(const Sim::SimParams& params) const;
 
-		// mirrors SimulationMgr run logging for rank-local distributed records
+		// builds rank-local startup diagnostics gathered by the root rank
+		DistStartupRankReport BuildStartupRankReport() const;
+
+		// manages per-rank CSV metric logging
 		void BeginRunLogging(const Sim::SimParams& params);
 		void EndRunLogging();
 		void AppendInitialMemoryMetricsLog(const Sim::SimParams& params) const;
 		void AppendLatestMemoryMetricsLog() const;
 		void AppendLatestBenchmarkMetricsLog() const;
+
+		// archives step metrics and reports root-level distributed progress
 		void FinalizeBenchMemMeasurements(const Sim::SimParams& params) const;
-		void DisplayPerformanceStats(const Sim::SimParams& params) const;
-		void DisplayMemoryUsageStats(const Sim::SimParams& params, bool force = false) const;
+		DistRankStepReport BuildRankStepReport(const Sim::SimParams& params, bool exportedStep) const;
+		DistRankBenchReport BuildRankBenchReport() const;
+		void DisplayDistributedProgress(const Sim::SimParams& params, bool exportedStep) const;
 
 		// runs one distributed step with data movement around the rank-local backend
 		bool ExecuteDistributedStep(const Sim::SimParams& params);
@@ -161,6 +167,8 @@ namespace Dist
 		DistParticleState boundaryParticleState_{};
 		ParticleMigrationWorkBuffers particleMigrationWorkBuffers_{};
 		HaloRebuildScratch haloRebuildScratch_{};
+		ParticleMigrationStats lastParticleMigrationStats_{};
+		HaloExchangeStats lastHaloExchangeStats_{};
 
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };

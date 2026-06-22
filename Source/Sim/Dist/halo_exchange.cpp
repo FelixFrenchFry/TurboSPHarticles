@@ -507,9 +507,11 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	const DistParticleState& boundaryParticleState,
 	const IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
+	HaloExchangeStats* stats,
 	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
+	if (stats) { *stats = {}; }
 
 	const auto fail = [failMsg](std::string message) -> bool
 	{
@@ -518,6 +520,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 	};
 
 	recvBuffer.Clear();
+	HaloExchangeStats localStats{};
 
 	// query domain decomp for neighbor ranks and prepare halo exchange package for each neighbor
 	const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(mpiContext.Rank());
@@ -547,6 +550,8 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 
 		exchange.sendFluidCount = CheckedPacketCount(exchange.sendBuffer.fluidParticles);
 		exchange.sendBoundaryCount = CheckedPacketCount(exchange.sendBuffer.boundaryParticles);
+		localStats.sentFluidParticleCount += static_cast<uint32_t>(exchange.sendBuffer.fluidParticles.size());
+		localStats.sentBoundaryParticleCount += static_cast<uint32_t>(exchange.sendBuffer.boundaryParticles.size());
 		exchanges.push_back(std::move(exchange));
 	}
 
@@ -654,6 +659,10 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 			exchange.recvBuffer.boundaryParticles.begin(),
 			exchange.recvBuffer.boundaryParticles.end());
 	}
+
+	localStats.recvFluidParticleCount = static_cast<uint32_t>(recvBuffer.fluidParticles.size());
+	localStats.recvBoundaryParticleCount = static_cast<uint32_t>(recvBuffer.boundaryParticles.size());
+	if (stats) { *stats = localStats; }
 
 	return true;
 }

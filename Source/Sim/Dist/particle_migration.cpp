@@ -455,7 +455,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 			migration.recvBuffer.fluidParticles.end());
 	}
 
-	localStats.receivedFluidParticleCount = static_cast<uint32_t>(recvBuffer.fluidParticles.size());
+	localStats.recvFluidParticleCount = static_cast<uint32_t>(recvBuffer.fluidParticles.size());
 
 	std::string rebuildFailMsg{};
 	const bool localRebuildOk = RebuildLocalStateWithMigratedFluidParticles(
@@ -500,7 +500,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 	uint32_t keptParticleCount = 0;
 	std::string countFailMsg{};
 	if (!CountKeptOwnedFluidParticles(
-		keptParticleCount, localState, fluidParticleState, 
+		keptParticleCount, localState, fluidParticleState,
 		domainDecomp, rank, &countFailMsg))
 	{
 		return fail("failed to count kept owned fluid particles: " + countFailMsg);

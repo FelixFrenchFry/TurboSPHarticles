@@ -48,7 +48,8 @@ namespace App
 	bool LoadSimParams(
 		Sim::SimParamsMgr& simParamsMgr,
 		std::string& profile,
-		const std::vector<std::string>& simOverrides);
+		const std::vector<std::string>& simOverrides,
+		bool logStatus = true);
 
 	ThreadBudget ResolveThreadBudget(
 		int64_t maxThreadsSim,

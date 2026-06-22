@@ -64,6 +64,12 @@ namespace Bench
 		// serialization
 		Serialization,						// serialization of sim data to disk (either full serial snap or export snap)
 
+		// distributed simulation
+		Dist_ParticleMigration,             // migration of owned particles to their owner ranks
+		Dist_ParticleClass,                 // inner/outer classification of rank-local owned particles
+		Dist_HaloExchange,                  // halo particle packing, exchange, and local rebuild
+		Dist_StateSync,                     // rank-local state handoff around backend data structures
+
 		// visualization
 		Rendering,							// rendering of particles and structures
 		UserInterface,						// updating and processing of the user interface
@@ -86,9 +92,9 @@ namespace Bench
 	struct BenchOpDef
 	{
 		BenchOp op;
-		std::string_view name;	// display name
+		std::string_view name;  // display name
 		std::string_view alias; // abbreviated name
-		std::string_view unit;	// unit hint
+		std::string_view unit;  // unit hint
 	};
 
 	struct BenchOpGroupDef
@@ -247,6 +253,30 @@ namespace Bench
 				.op = BenchOp::Serialization,
 				.name = "serialization",
 				.alias = "serial",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Dist_ParticleMigration,
+				.name = "dist particle migration",
+				.alias = "distMigr",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Dist_ParticleClass,
+				.name = "dist particle classification",
+				.alias = "distClass",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Dist_HaloExchange,
+				.name = "dist halo exchange",
+				.alias = "distHalo",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Dist_StateSync,
+				.name = "dist state sync",
+				.alias = "distSync",
 				.unit = "ns"
 			},
 			{

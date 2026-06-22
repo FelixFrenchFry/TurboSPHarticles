@@ -210,13 +210,17 @@ App::ParseResult App::ParseMainOptions(
 bool App::LoadSimParams(
 	Sim::SimParamsMgr& simParamsMgr,
 	std::string& profile,
-	const std::vector<std::string>& simOverrides)
+	const std::vector<std::string>& simOverrides,
+	const bool logStatus)
 {
 	if (!simParamsMgr.LoadSimParamsFromProfile(profile))
 	{
 		if (profile != "Default")
 		{
-			SPDLOG_WARN("Failed to load '/{}/params.json'. Falling back to '/Default/params.json'.", profile);
+			if (logStatus)
+			{
+				SPDLOG_WARN("Failed to load '/{}/params.json'. Falling back to '/Default/params.json'.", profile);
+			}
 			profile = "Default";
 
 			if (!simParamsMgr.LoadSimParamsFromProfile(profile))
@@ -231,18 +235,24 @@ bool App::LoadSimParams(
 			return false;
 		}
 	}
-	SPDLOG_INFO("Using config profile '{}'", profile);
+	if (logStatus)
+	{
+		SPDLOG_INFO("Using config profile '{}'", profile);
+	}
 
 	if (!simOverrides.empty())
 	{
-		if (!simParamsMgr.LoadSimParamsFromCliOverrides(simOverrides, true))
+		if (!simParamsMgr.LoadSimParamsFromCliOverrides(simOverrides, logStatus))
 		{
 			SPDLOG_ERROR("Failed to apply one or more '-sim/--sim' overrides.");
 			return false;
 		}
 
-		SPDLOG_INFO("Applied {} simulation override(s) from command line",
-			simOverrides.size());
+		if (logStatus)
+		{
+			SPDLOG_INFO("Applied {} simulation override(s) from CLI args",
+				simOverrides.size());
+		}
 	}
 
 	return true;
