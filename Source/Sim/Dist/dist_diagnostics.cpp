@@ -891,6 +891,72 @@ namespace Dist
 			}
 		}
 
+		std::string BuildMemoryTable(
+			const std::vector<DistRankStepReport>& reports,
+			const Mem::ByteUnit unit,
+			const Base::BackendVersion backendVersion)
+		{
+			std::string table{};
+			char sectionTitle[64];
+			std::snprintf(sectionTitle, sizeof(sectionTitle),
+				"distributed memory usage [%s in %s]",
+				MemSpaceLabel(backendVersion), Mem::UnitLabel(unit));
+
+			char headerLine[128];
+			int N_chars = std::snprintf(headerLine, sizeof(headerLine), "--- [ %s ] ",
+				sectionTitle);
+			N_chars = std::max(0, N_chars);
+
+			table += headerLine;
+			for (int i = N_chars; i < N_CLI_SECTION_SEPARATOR_CHARS; i++)
+			{
+				table += '-';
+			}
+			table += '\n';
+			table += CLI_SECTION_SEPARATOR;
+			table += '\n';
+
+			char line[256];
+			std::snprintf(line, sizeof(line),
+				"%-2s | %8s | %8s | %8s | %8s | %8s | %8s | %9s",
+				"r", "backend", "global", "local",
+				"meta", "exch", "misc", "total");
+			table += line;
+			table += '\n';
+			table += CLI_SECTION_SEPARATOR;
+			table += '\n';
+
+			for (const DistRankStepReport& report : reports)
+			{
+				char rankLabel[32];
+				FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+
+				std::snprintf(line, sizeof(line),
+					"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9.2f",
+					rankLabel,
+					Mem::ConvertFromBytes(unit, report.maxBackendMemAllocBytes),
+					Mem::ConvertFromBytes(unit, report.maxDistGlobalStateMemAllocBytes),
+					Mem::ConvertFromBytes(unit, report.maxDistLocalStateMemAllocBytes),
+					Mem::ConvertFromBytes(unit, report.maxDistParticleMetadataMemAllocBytes),
+					Mem::ConvertFromBytes(unit, report.maxDistExchangeBuffersMemAllocBytes),
+					Mem::ConvertFromBytes(unit, report.maxDistMiscMemAllocBytes),
+					Mem::ConvertFromBytes(unit, report.maxTotalTrackedMemAllocBytes));
+				table += line;
+				table += '\n';
+			}
+
+			return table;
+		}
+
+		void PrintMemoryTable(
+			const std::vector<DistRankStepReport>& reports,
+			const Mem::ByteUnit unit,
+			const Base::BackendVersion backendVersion)
+		{
+			const std::string table = BuildMemoryTable(reports, unit, backendVersion);
+			std::printf("%s", table.c_str());
+		}
+
 		void PrintAggregateTable(
 			int& lineCount,
 			const std::vector<DistRankStepReport>& reports,
@@ -933,13 +999,6 @@ namespace Dist
 			const int slowestRank = RankWithMax(reports, &DistRankStepReport::totalStepLatestNs);
 
 			const char* timeUnitStr = Bench::UnitLabel(params.timeUnit);
-			const char* memUnitStr = Mem::UnitLabel(params.byteUnit);
-			const int maxMemRank = RankWithMax(reports, &DistRankStepReport::latestMemUsedBytes);
-			const uint64_t totalLatestUsed =
-				SumReportField(reports, &DistRankStepReport::latestMemUsedBytes);
-			const uint64_t maxRankLatestUsed =
-				MaxReportField(reports, &DistRankStepReport::latestMemUsedBytes);
-
 			PrintLine(lineCount,
 				"particles | owned F %" PRIu64 " | halo F %" PRIu64
 				" | owned B %" PRIu64 " | halo B %" PRIu64,
@@ -956,11 +1015,6 @@ namespace Dist
 			PrintLine(lineCount,
 				"timing    | min/avg/max %.3f / %.3f / %.3f %s | slowest rank %d",
 				latestMin, latestAvg, latestMax, timeUnitStr, slowestRank);
-			PrintLine(lineCount,
-				"memory    | total used %.3f %s | max rank %d used %.3f %s",
-				Mem::ConvertFromBytes(params.byteUnit, totalLatestUsed), memUnitStr,
-				maxMemRank,
-				Mem::ConvertFromBytes(params.byteUnit, maxRankLatestUsed), memUnitStr);
 		}
 
 		void PrintDashboard(
@@ -1065,7 +1119,6 @@ namespace Dist
 				PrintLine(lineCount);
 				PrintRankTimingTable(lineCount, benchReports, benchOpGroups, params.timeUnit);
 			}
-
 			PrintLine(lineCount);
 			int elH, elM, elS;
 			FormatHms(elapsedS, elH, elM, elS);
@@ -1085,14 +1138,13 @@ namespace Dist
 
 			PrintLine(lineCount);
 			PrintLine(lineCount,
-				"distributed summary | step latest max %.3f %s | avg max %.3f %s | slowest rank %d | imbalance %.1f %% | memory %s | %s",
+				"distributed summary | step latest max %.3f %s | avg max %.3f %s | slowest rank %d | imbalance %.1f %% | %s",
 				Bench::ConvertFromNs(params.timeUnit, latestMaxNs),
 				Bench::UnitLabel(params.timeUnit),
 				Bench::ConvertFromNs(params.timeUnit, avgMaxNs),
 				Bench::UnitLabel(params.timeUnit),
 				slowestRank,
 				std::max(0.0, imbalancePct),
-				MemSpaceLabel(params.backendVersion),
 				exportedStep ? "exported step" : "no export");
 
 			std::fflush(stdout);
@@ -1213,6 +1265,21 @@ namespace Dist
 		if (!mpiContext.IsRoot()) { return; }
 
 		PrintDashboard(reports, benchReports, benchOpGroups, params);
+	}
+
+	void DistDiagnosticsMgr::PrintMemorySummary(
+		const MpiContext& mpiContext,
+		const Sim::SimParams& params,
+		const DistRankStepReport& localStepReport)
+	{
+		std::vector<DistRankStepReport> reports{};
+		GatherRankStepReports(mpiContext, localStepReport, reports);
+
+		if (!mpiContext.IsRoot()) { return; }
+
+		PrintMemoryTable(reports, params.byteUnit, params.backendVersion);
+		std::printf("\n");
+		std::fflush(stdout);
 	}
 
 } // namespace Dist

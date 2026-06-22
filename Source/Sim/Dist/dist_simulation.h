@@ -110,10 +110,12 @@ namespace Dist
 		void AppendLatestMemoryMetricsLog() const;
 		void AppendLatestBenchmarkMetricsLog() const;
 
-		// archives step metrics and reports root-level distributed progress
+		// archives step metrics and reports root-level distributed diagnostics
+		void FillDistributedMemoryRecord(Mem::MemRecordStep& record) const;
 		void FinalizeBenchMemMeasurements(const Sim::SimParams& params) const;
 		DistRankStepReport BuildRankStepReport(const Sim::SimParams& params, bool exportedStep) const;
 		DistRankBenchReport BuildRankBenchReport() const;
+		void DisplayMemoryUsageStats(const Sim::SimParams& params, bool force = false) const;
 		void DisplayDistributedProgress(const Sim::SimParams& params, bool exportedStep) const;
 
 		// runs one distributed step with data movement around the rank-local backend

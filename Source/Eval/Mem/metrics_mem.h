@@ -53,6 +53,12 @@ namespace Mem
 
 		Misc,
 
+		Dist_GlobalState,               // additional full scenario state held by the distributed simulation manager
+		Dist_LocalState,                // backend-agnostic rank-local owned + halo particle state
+		Dist_ParticleMetadata,          // distributed ownership/classification/index-map metadata
+		Dist_ExchangeBuffers,           // persistent distributed send/receive/aggregation buffers
+		Dist_Misc,                      // reusable distributed rebuild/export scratches and other misc buffers
+
 		Count
 	};
 
@@ -148,6 +154,46 @@ namespace Mem
 				.name = "misc",
 				.tip =
 				"TODO"
+			},
+			{
+				.bucket = MemBucket::Dist_GlobalState,
+				.type = Base::ParticleType::Fluid,
+				.name = "dist global state",
+				.tip =
+				"Memory used/allocated by the full scenario state retained by the\n"
+				"distributed simulation manager"
+			},
+			{
+				.bucket = MemBucket::Dist_LocalState,
+				.type = Base::ParticleType::Fluid,
+				.name = "dist local state",
+				.tip =
+				"Memory used/allocated by backend-agnostic rank-local owned and\n"
+				"halo particle arrays"
+			},
+			{
+				.bucket = MemBucket::Dist_ParticleMetadata,
+				.type = Base::ParticleType::Fluid,
+				.name = "dist particle metadata",
+				.tip =
+				"Memory used/allocated by distributed particle class lists and\n"
+				"local/global index maps"
+			},
+			{
+				.bucket = MemBucket::Dist_ExchangeBuffers,
+				.type = Base::ParticleType::Fluid,
+				.name = "dist exchange buffers",
+				.tip =
+				"Memory used/allocated by persistent distributed send, receive,\n"
+				"and aggregation buffers"
+			},
+			{
+				.bucket = MemBucket::Dist_Misc,
+				.type = Base::ParticleType::Fluid,
+				.name = "dist misc",
+				.tip =
+				"Memory used/allocated by reusable distributed rebuild and export\n"
+				"scratches and other misc buffers"
 			}
 		}
 	};

@@ -178,6 +178,163 @@ namespace
 		return total;
 	}
 
+	constexpr std::array<Mem::MemBucket, 7> BACKEND_MEM_BUCKETS =
+	{
+		Mem::MemBucket::ParticlePropertiesF,
+		Mem::MemBucket::ParticlePropertiesB,
+		Mem::MemBucket::Neighbors_SearchDataStructF,
+		Mem::MemBucket::Neighbors_SearchDataStructB,
+		Mem::MemBucket::Neighbors_ListStorageF,
+		Mem::MemBucket::Neighbors_ListStorageB,
+		Mem::MemBucket::Misc
+	};
+
+	Mem::MemUsage SumBackendMaxMemoryUsage(
+		const Mem::MemoryTracker& memoryTracker,
+		const Mem::MemSpace space)
+	{
+		Mem::MemUsage total{};
+
+		for (const Mem::MemBucket bucket : BACKEND_MEM_BUCKETS)
+		{
+			total.usedBytes += memoryTracker.GetMem_Max_Used(space, bucket);
+			total.allocBytes += memoryTracker.GetMem_Max_Alloc(space, bucket);
+			total.occupiedBytes += memoryTracker.GetMem_Max_Occupied(space, bucket);
+		}
+
+		return total;
+	}
+
+	Mem::MemUsage MemoryUsageOfFluidParticles(
+		const Sync::FluidParticles& fluidParticles)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.xPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.yPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.zPos));
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.xVel));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.yVel));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.zVel));
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.xVelPred));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.yVelPred));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.zVelPred));
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.xAccPress));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.yAccPress));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.zAccPress));
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.sourceTerm));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.diagElem));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.pressure));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.density));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfBoundaryParticles(
+		const Sync::BoundaryParticles& boundaryParticles)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.xPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.yPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.zPos));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfUniversalSimState(
+		const Sync::UniversalSimState& state)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, MemoryUsageOfFluidParticles(state.fluidParticles));
+		Mem::Add(usage, MemoryUsageOfBoundaryParticles(state.boundaryParticles));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfExportSnapshot(
+		const Sync::ExportSnapshot& snap)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosF));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosF));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosF));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.velMagF));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfParticleState(
+		const DistParticleState& particleState)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleClasses));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Owned));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Inner));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Outer));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Halo));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleGlobalIdx_FromLocalIdx));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_FromGlobalIdx));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfParticleMigrationBuffer(
+		const ParticleMigrationBuffer& buffer)
+	{
+		return Mem::MemUsageOf_Vector(buffer.fluidParticles);
+	}
+
+	Mem::MemUsage MemoryUsageOfParticleMigrationExchangeBuffers(
+		const ParticleMigrationWorkBuffers& workBuffers)
+	{
+		Mem::MemUsage usage = Mem::MemUsageOf_Vector(workBuffers.rankBuffers);
+
+		for (const ParticleMigrationWorkBuffers::RankBuffers& rankBuffers :
+			workBuffers.rankBuffers)
+		{
+			Mem::Add(usage,
+				Mem::MemUsageOf_Vector_HeapOnly(rankBuffers.sendBuffer.fluidParticles));
+			Mem::Add(usage,
+				Mem::MemUsageOf_Vector_HeapOnly(rankBuffers.recvBuffer.fluidParticles));
+		}
+
+		Mem::Add(usage,
+			MemoryUsageOfParticleMigrationBuffer(workBuffers.aggregatedRecvBuffer));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfParticleMigrationScratch(
+		const ParticleMigrationWorkBuffers& workBuffers)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, MemoryUsageOfFluidParticles(workBuffers.rebuiltFluidParticles));
+		Mem::Add(usage, MemoryUsageOfParticleState(workBuffers.rebuiltParticleState));
+
+		return usage;
+	}
+
+	Mem::MemUsage MemoryUsageOfHaloRebuildScratch(
+		const HaloRebuildScratch& scratch)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, MemoryUsageOfUniversalSimState(scratch.state));
+		Mem::Add(usage, MemoryUsageOfParticleState(scratch.fluidParticleState));
+		Mem::Add(usage, MemoryUsageOfParticleState(scratch.boundaryParticleState));
+
+		return usage;
+	}
+
 	bool AlmostEqual(const float a, const float b, const float eps = 1e-6f)
 	{
 		return std::fabs(a - b) <= eps;
@@ -681,8 +838,16 @@ void DistSimulationMgr::RunSim_Blocking()
 
 		SyncParameters();
 
+		DisplayMemoryUsageStats(params);
 		DisplayDistributedProgress(params, exportedStep);
 	}
+
+	const auto paramsFinal = simParams_;
+	if (mpiContext_.IsRoot())
+	{
+		std::printf("\n");
+	}
+	DisplayMemoryUsageStats(paramsFinal, true);
 
 	if (runOk && !GatherOwnedGlobalSimStateOnRoot("after distributed run"))
 	{
@@ -1102,6 +1267,7 @@ void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& para
 	record.simTime = simTime_;
 
 	simBackend_->FillMemoryRecord(record, params);
+	FillDistributedMemoryRecord(record);
 	loggingMgr_.AppendMemoryRecord(record);
 }
 
@@ -1121,6 +1287,47 @@ void DistSimulationMgr::AppendLatestBenchmarkMetricsLog() const
 	loggingMgr_.AppendBenchmarkRecord(benchmarksTracker_->GetCurrentRecord());
 }
 
+void DistSimulationMgr::FillDistributedMemoryRecord(
+	Mem::MemRecordStep& record) const
+{
+	Mem::Set(
+		record,
+		Mem::MemSpace::RAM,
+		Mem::MemBucket::Dist_GlobalState,
+		MemoryUsageOfUniversalSimState(globalSimState_));
+	Mem::Set(
+		record,
+		Mem::MemSpace::RAM,
+		Mem::MemBucket::Dist_LocalState,
+		MemoryUsageOfUniversalSimState(localSimState_));
+
+	Mem::MemUsage particleMetadataUsage{};
+	Mem::Add(particleMetadataUsage, MemoryUsageOfParticleState(fluidParticleState_));
+	Mem::Add(particleMetadataUsage, MemoryUsageOfParticleState(boundaryParticleState_));
+	Mem::Set(
+		record,
+		Mem::MemSpace::RAM,
+		Mem::MemBucket::Dist_ParticleMetadata,
+		particleMetadataUsage);
+
+	Mem::Set(
+		record,
+		Mem::MemSpace::RAM,
+		Mem::MemBucket::Dist_ExchangeBuffers,
+		MemoryUsageOfParticleMigrationExchangeBuffers(particleMigrationWorkBuffers_));
+
+	Mem::MemUsage miscUsage{};
+	Mem::Add(miscUsage,
+		MemoryUsageOfParticleMigrationScratch(particleMigrationWorkBuffers_));
+	Mem::Add(miscUsage, MemoryUsageOfHaloRebuildScratch(haloRebuildScratch_));
+	Mem::Add(miscUsage, MemoryUsageOfExportSnapshot(exportSnapScratch_));
+	Mem::Set(
+		record,
+		Mem::MemSpace::RAM,
+		Mem::MemBucket::Dist_Misc,
+		miscUsage);
+}
+
 void DistSimulationMgr::FinalizeBenchMemMeasurements(
 	const Sim::SimParams& params) const
 {
@@ -1130,6 +1337,7 @@ void DistSimulationMgr::FinalizeBenchMemMeasurements(
 
 	// record memory usage, archive data and update aggregates
 	simBackend_->FillMemoryRecord(memoryTracker_->GetCurrentRecord(), params);
+	FillDistributedMemoryRecord(memoryTracker_->GetCurrentRecord());
 	memoryTracker_->EndStep(simStep_, simTime_);
 
 	// ending point of total sim benchmark, archive data and update aggregates
@@ -1175,11 +1383,36 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 		const Mem::MemSpace memSpace = PrimaryMemSpace(params.backendVersion);
 		const Mem::MemUsage latest = SumMemoryUsage(memoryTracker_->GetCurrentRecord(), memSpace);
 		const Mem::MemUsage max = SumMaxMemoryUsage(*memoryTracker_, memSpace);
+		const Mem::MemUsage backendMax = SumBackendMaxMemoryUsage(*memoryTracker_, memSpace);
 
 		report.latestMemUsedBytes = latest.usedBytes;
 		report.latestMemAllocBytes = latest.allocBytes;
 		report.maxMemUsedBytes = max.usedBytes;
 		report.maxMemAllocBytes = max.allocBytes;
+
+		report.maxBackendMemAllocBytes = backendMax.allocBytes;
+		report.maxDistGlobalStateMemAllocBytes =
+			memoryTracker_->GetMem_Max_Alloc(
+				Mem::MemSpace::RAM, Mem::MemBucket::Dist_GlobalState);
+		report.maxDistLocalStateMemAllocBytes =
+			memoryTracker_->GetMem_Max_Alloc(
+				Mem::MemSpace::RAM, Mem::MemBucket::Dist_LocalState);
+		report.maxDistParticleMetadataMemAllocBytes =
+			memoryTracker_->GetMem_Max_Alloc(
+				Mem::MemSpace::RAM, Mem::MemBucket::Dist_ParticleMetadata);
+		report.maxDistExchangeBuffersMemAllocBytes =
+			memoryTracker_->GetMem_Max_Alloc(
+				Mem::MemSpace::RAM, Mem::MemBucket::Dist_ExchangeBuffers);
+		report.maxDistMiscMemAllocBytes =
+			memoryTracker_->GetMem_Max_Alloc(
+				Mem::MemSpace::RAM, Mem::MemBucket::Dist_Misc);
+		report.maxTotalTrackedMemAllocBytes =
+			report.maxBackendMemAllocBytes +
+			report.maxDistGlobalStateMemAllocBytes +
+			report.maxDistLocalStateMemAllocBytes +
+			report.maxDistParticleMetadataMemAllocBytes +
+			report.maxDistExchangeBuffersMemAllocBytes +
+			report.maxDistMiscMemAllocBytes;
 	}
 
 	report.exportedStep = exportedStep ? 1 : 0;
@@ -1202,6 +1435,16 @@ DistRankBenchReport DistSimulationMgr::BuildRankBenchReport() const
 	}
 
 	return report;
+}
+
+void DistSimulationMgr::DisplayMemoryUsageStats(
+	const Sim::SimParams& params,
+	const bool force) const
+{
+	if (!force && simStep_ != 1) { return; }
+
+	DistDiagnosticsMgr::PrintMemorySummary(
+		mpiContext_, params, BuildRankStepReport(params, false));
 }
 
 void DistSimulationMgr::DisplayDistributedProgress(

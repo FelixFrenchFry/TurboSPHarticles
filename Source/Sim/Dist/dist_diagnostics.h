@@ -85,6 +85,14 @@ namespace Dist
 		uint64_t maxMemUsedBytes = 0;
 		uint64_t maxMemAllocBytes = 0;
 
+		uint64_t maxBackendMemAllocBytes = 0;
+		uint64_t maxDistGlobalStateMemAllocBytes = 0;
+		uint64_t maxDistLocalStateMemAllocBytes = 0;
+		uint64_t maxDistParticleMetadataMemAllocBytes = 0;
+		uint64_t maxDistExchangeBuffersMemAllocBytes = 0;
+		uint64_t maxDistMiscMemAllocBytes = 0;
+		uint64_t maxTotalTrackedMemAllocBytes = 0;
+
 		uint8_t exportedStep = 0;
 	};
 
@@ -129,6 +137,11 @@ namespace Dist
 			const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
 			const DistRankStepReport& localStepReport,
 			const DistRankBenchReport& localBenchReport);
+
+		static void PrintMemorySummary(
+			const MpiContext& mpiContext,
+			const Sim::SimParams& params,
+			const DistRankStepReport& localStepReport);
 	};
 
 } // namespace Dist
