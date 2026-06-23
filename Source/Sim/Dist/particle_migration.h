@@ -4,6 +4,7 @@
 
 // external
 #include <cstdint>
+#include <mpi.h>
 #include <string>
 #include <vector>
 
@@ -19,36 +20,84 @@ namespace Dist
 {
 	class MpiContext;
 
-	// fluid particle payload used for owner migration
-	struct MigratingFluidParticlePacket
+	// stores outgoing/incoming migrating fluid particle,
+	// mirroring the SoA data layout for direct MPI exchange and rebuild
+	class MigratingParticleBufferF
 	{
-		int globalIdx = -1;
+	public:
 
-		float xPos = 0.0f;
-		float yPos = 0.0f;
-		float zPos = 0.0f;
+		void Clear();
+		void Resize(uint64_t particleCount);
 
-		float xVel = 0.0f;
-		float yVel = 0.0f;
-		float zVel = 0.0f;
+		uint64_t Size() const { return globalIdx_.size(); }
+		bool Empty() const { return Size() == 0; }
 
-		float xVelPred = 0.0f;
-		float yVelPred = 0.0f;
-		float zVelPred = 0.0f;
+		int GlobalIdxAt(uint64_t bufferIdx) const;
+		glm::vec3 PositionAt(uint64_t bufferIdx) const;
 
-		float xAccPress = 0.0f;
-		float yAccPress = 0.0f;
-		float zAccPress = 0.0f;
+		// copies one local fluid particle into one slot of a send migration buffer
+		// TODO: do this in bulk, instead of per-particle?
+		void SetFromLocalParticle(
+			const Sync::FluidParticles& fluidParticles,
+			const DistParticleState& particleState,
+			uint64_t bufferIdx,
+			int localIdx);
 
-		float sourceTerm = 0.0f;
-		float diagElem = 0.0f;
-		float pressure = 0.0f;
-		float density = 0.0f;
+		// copies one slot of a receive migration buffer into one local fluid particle
+		// TODO: do this in bulk, instead of per-particle?
+		void CopyToLocalParticle(
+			Sync::FluidParticles& dst,
+			uint64_t bufferIdx,
+			int localIdx) const;
+
+		// posts non-blocking MPI receives for the payload of migrating fluid particles
+		void QueueIRecvPayload(
+			const MpiContext& mpiContext,
+			int peerRank,
+			int tagBase,
+			std::vector<MPI_Request>& requests);
+
+		// posts non-blocking MPI sends for the payload of migrating fluid particles
+		void QueueISendPayload(
+			const MpiContext& mpiContext,
+			int peerRank,
+			int tagBase,
+			std::vector<MPI_Request>& requests) const;
+
+		// helpers for diagnostics and memory usage reporting
+		int CheckedBufferCount() const;
+		uint64_t UsedBytes() const;
+		uint64_t AllocBytes() const;
+		uint64_t OccupiedBytes() const;
+		uint64_t HeapOccupiedBytes() const;
+
+	private:
+		
+		// metadata
+		std::vector<int> globalIdx_;
+
+		// particle data
+		std::vector<float> xPos_;
+		std::vector<float> yPos_;
+		std::vector<float> zPos_;
+		std::vector<float> xVel_;
+		std::vector<float> yVel_;
+		std::vector<float> zVel_;
+		std::vector<float> xVelPred_;
+		std::vector<float> yVelPred_;
+		std::vector<float> zVelPred_;
+		std::vector<float> xAccPress_;
+		std::vector<float> yAccPress_;
+		std::vector<float> zAccPress_;
+		std::vector<float> sourceTerm_;
+		std::vector<float> diagElem_;
+		std::vector<float> pressure_;
+		std::vector<float> density_;
 	};
 
 	struct ParticleMigrationBuffer
 	{
-		std::vector<MigratingFluidParticlePacket> fluidParticles;
+		MigratingParticleBufferF fluidParticles;
 
 		// clears packed migrating fluid particles
 		void Clear();
@@ -101,13 +150,9 @@ namespace Dist
 		std::vector<uint64_t> migrationOutCounts_ByChunk;
 		std::vector<uint64_t> migrationOutWriteOffsets_ByChunk;
 
-		// local-index status stamps used by in-place migration rebuild compaction
+		// local-index generation stamps used by in-place migration rebuild compaction
 		std::vector<uint32_t> migrationLocalStatusStamp_FromLocalIdx;
-		std::vector<uint8_t> migrationLocalStatus_FromLocalIdx;
 		uint32_t migrationLocalStatusStamp = 0;
-
-		// single receive buffer consumed by the rebuild step
-		ParticleMigrationBuffer aggregatedRecvBuffer;
 	};
 
 	// exchanges rank-indexed migration counts, sends payloads only to active ranks,
@@ -126,7 +171,7 @@ namespace Dist
 	// compacts kept owned fluid particles in-place, appends received migrating particles,
 	// and refreshes ownership maps; class lists are rebuilt by the distributed class phase
 	bool RebuildLocalStateWithMigratedFluidParticles(
-		const ParticleMigrationBuffer& recvBuffer,
+		const std::vector<ParticleMigrationWorkBuffers::RankBuffers>& migrations,
 		const std::vector<int>& keptOwnedFluidLocalIdx,
 		const std::vector<int>& migratingOutFluidLocalIdx,
 		Sync::UniversalSimState& localState,

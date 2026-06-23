@@ -86,9 +86,9 @@ namespace Dist
 		char header[128];
 		std::snprintf(
 			header, sizeof(header),
-			"%-2s | %9s | %9s | %9s | %9s | %9s | %9s %4s",
+			"%-2s | %9s | %9s | %9s | %9s | %9s %4s",
 			"r", "migrPack", "migrCntX", "migrPayX",
-			"migrAggr", "migrRebld", "migrTotal", "");
+			"migrRebld", "migrTotal", "");
 		lines.emplace_back(header);
 		lines.emplace_back(CLI_SECTION_SEPARATOR);
 
@@ -103,7 +103,7 @@ namespace Dist
 			char line[128];
 			std::snprintf(
 				line, sizeof(line),
-				"%-2s | %9.2f | %9.2f | %9.2f | %9.2f | %9.2f | %9.2f %4s",
+				"%-2s | %9.2f | %9.2f | %9.2f | %9.2f | %9.2f %4s",
 				rankLabel,
 				Bench::ConvertFromNs(
 					unit, AverageNs(report, ParticleMigrationTimingOp::Pack)),
@@ -111,8 +111,6 @@ namespace Dist
 					unit, AverageNs(report, ParticleMigrationTimingOp::CountExchange)),
 				Bench::ConvertFromNs(
 					unit, AverageNs(report, ParticleMigrationTimingOp::PayloadExchange)),
-				Bench::ConvertFromNs(
-					unit, AverageNs(report, ParticleMigrationTimingOp::Aggregate)),
 				Bench::ConvertFromNs(
 					unit, AverageNs(report, ParticleMigrationTimingOp::Rebuild)),
 				Bench::ConvertFromNs(unit, SumAverageNs(report)),

@@ -21,7 +21,6 @@ namespace Dist
 		Pack,
 		CountExchange,
 		PayloadExchange,
-		Aggregate,
 		Rebuild,
 
 		Count

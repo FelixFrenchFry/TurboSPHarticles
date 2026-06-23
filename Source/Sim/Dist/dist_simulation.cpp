@@ -301,7 +301,23 @@ namespace
 	Mem::MemUsage MemoryUsageOfParticleMigrationBuffer(
 		const ParticleMigrationBuffer& buffer)
 	{
-		return Mem::MemUsageOf_Vector(buffer.fluidParticles);
+		return
+		{
+			.usedBytes = buffer.fluidParticles.UsedBytes(),
+			.allocBytes = buffer.fluidParticles.AllocBytes(),
+			.occupiedBytes = buffer.fluidParticles.OccupiedBytes()
+		};
+	}
+
+	Mem::MemUsage MemoryUsageOfParticleMigrationBufferHeapOnly(
+		const ParticleMigrationBuffer& buffer)
+	{
+		return
+		{
+			.usedBytes = buffer.fluidParticles.UsedBytes(),
+			.allocBytes = buffer.fluidParticles.AllocBytes(),
+			.occupiedBytes = buffer.fluidParticles.HeapOccupiedBytes()
+		};
 	}
 
 	Mem::MemUsage MemoryUsageOfParticleMigrationExchangeBuffers(
@@ -313,13 +329,10 @@ namespace
 			workBuffers.rankBuffers)
 		{
 			Mem::Add(usage,
-				Mem::MemUsageOf_Vector_HeapOnly(rankBuffers.sendBuffer.fluidParticles));
+				MemoryUsageOfParticleMigrationBufferHeapOnly(rankBuffers.sendBuffer));
 			Mem::Add(usage,
-				Mem::MemUsageOf_Vector_HeapOnly(rankBuffers.recvBuffer.fluidParticles));
+				MemoryUsageOfParticleMigrationBufferHeapOnly(rankBuffers.recvBuffer));
 		}
-
-		Mem::Add(usage,
-			MemoryUsageOfParticleMigrationBuffer(workBuffers.aggregatedRecvBuffer));
 
 		return usage;
 	}
@@ -341,7 +354,6 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationOutCounts_ByChunk));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationOutWriteOffsets_ByChunk));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationLocalStatusStamp_FromLocalIdx));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.migrationLocalStatus_FromLocalIdx));
 
 		return usage;
 	}
