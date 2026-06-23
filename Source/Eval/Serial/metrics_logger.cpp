@@ -193,7 +193,6 @@ namespace Export
 		{
 			uint64_t totalUsed = 0;
 			uint64_t totalAlloc = 0;
-			uint64_t totalOccupied = 0;
 
 			for (uint8_t i = 0; i < Mem::GetIdx(Mem::MemBucket::Count); i++)
 			{
@@ -201,18 +200,15 @@ namespace Export
 
 				totalUsed += usage.usedBytes;
 				totalAlloc += usage.allocBytes;
-				totalOccupied += usage.occupiedBytes;
 
 				memoryMetricsCsv_ << ','
 								  << usage.usedBytes << ','
-								  << usage.allocBytes << ','
-								  << usage.occupiedBytes;
+								  << usage.allocBytes;
 			}
 
 			memoryMetricsCsv_ << ','
 							  << totalUsed << ','
-							  << totalAlloc << ','
-							  << totalOccupied;
+							  << totalAlloc;
 		}
 
 		memoryMetricsCsv_ << '\n';
@@ -426,17 +422,13 @@ namespace Export
 				memoryMetricsCsv_ << ','
 								  << key << "_usedBytes"
 								  << ','
-								  << key << "_allocBytes"
-								  << ','
-								  << key << "_occupiedBytes";
+								  << key << "_allocBytes";
 			}
 
 			memoryMetricsCsv_ << ','
 							  << spaceKey << "_total_usedBytes"
 							  << ','
-							  << spaceKey << "_total_allocBytes"
-							  << ','
-							  << spaceKey << "_total_occupiedBytes";
+							  << spaceKey << "_total_allocBytes";
 		}
 
 		memoryMetricsCsv_ << '\n';

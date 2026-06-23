@@ -28,7 +28,7 @@ namespace
 	{
 		const uint64_t bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
 
-		return Mem::MemUsage{ bytes, bytes, bytes };
+		return Mem::MemUsage{ bytes, bytes };
 	}
 
 	inline uint32_t SellChunkOfParticle(const uint32_t i) noexcept
@@ -661,7 +661,6 @@ void SimBackend_GPU01::FillMemoryRecord(
 		// compressed SELL32 storage used for FF and FB neighbors
 		MemUsage listFF{};
 		listFF.usedBytes = static_cast<uint64_t>(N_packedFF_);
-		listFF.occupiedBytes = static_cast<uint64_t>(N_packedFF_);
 		listFF.allocBytes =
 			static_cast<uint64_t>(d_nbrListDelta8FF_.Size()) * sizeof(uint8_t)
 			+ static_cast<uint64_t>(d_nbrListDelta16FF_.Size()) * sizeof(uint16_t)
@@ -670,7 +669,6 @@ void SimBackend_GPU01::FillMemoryRecord(
 
 		MemUsage listFB{};
 		listFB.usedBytes = static_cast<uint64_t>(N_packedFB_);
-		listFB.occupiedBytes = static_cast<uint64_t>(N_packedFB_);
 		listFB.allocBytes =
 			static_cast<uint64_t>(d_nbrListDelta8FB_.Size()) * sizeof(uint8_t)
 			+ static_cast<uint64_t>(d_nbrListDelta16FB_.Size()) * sizeof(uint16_t)

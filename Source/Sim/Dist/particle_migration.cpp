@@ -438,16 +438,6 @@ uint64_t MigratingParticleBufferF::AllocBytes() const
 	return allocBytes;
 }
 
-uint64_t MigratingParticleBufferF::OccupiedBytes() const
-{
-	return sizeof(MigratingParticleBufferF) + AllocBytes();
-}
-
-uint64_t MigratingParticleBufferF::HeapOccupiedBytes() const
-{
-	return AllocBytes();
-}
-
 namespace
 {
 	bool AddParticleMapEntry(

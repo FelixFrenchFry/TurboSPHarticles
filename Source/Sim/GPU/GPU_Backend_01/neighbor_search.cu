@@ -293,7 +293,7 @@ namespace
 	{
 		const uint64_t bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
 
-		return Mem::MemUsage{ bytes, bytes, bytes };
+		return Mem::MemUsage{ bytes, bytes };
 	}
 
 	template <typename T>

@@ -68,8 +68,6 @@ namespace Dist
 		int CheckedBufferCount() const;
 		uint64_t UsedBytes() const;
 		uint64_t AllocBytes() const;
-		uint64_t OccupiedBytes() const;
-		uint64_t HeapOccupiedBytes() const;
 
 	private:
 		

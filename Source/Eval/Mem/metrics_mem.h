@@ -18,13 +18,6 @@
 
 namespace Mem
 {
-	enum class MemUsageType : uint8_t
-	{
-		Used,
-		Alloc,
-		Occupied
-	};
-
 	enum class MemSpace : uint8_t
 	{
 		RAM,
@@ -37,7 +30,6 @@ namespace Mem
 	{
 		uint64_t usedBytes = 0;
 		uint64_t allocBytes = 0;
-		uint64_t occupiedBytes = 0;
 	};
 
 	// "buckets" of data structures used by the sim that allocate memory
@@ -231,7 +223,6 @@ namespace Mem
 	{
 		a.usedBytes += b.usedBytes;
 		a.allocBytes += b.allocBytes;
-		a.occupiedBytes += b.occupiedBytes;
 	}
 	inline void Clear(MemBucketRecord& record)
 	{
@@ -257,9 +248,8 @@ namespace Mem
 	{
 		const uint64_t used = static_cast<uint64_t>(N) * sizeof(T);
 		const uint64_t alloc = static_cast<uint64_t>(N) * sizeof(T);
-		const uint64_t occupied = sizeof(src);
 
-		return MemUsage{ used, alloc, occupied };
+		return MemUsage{ used, alloc };
 	}
 
 	template<class T, class Alloc>
@@ -267,21 +257,8 @@ namespace Mem
 	{
 		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
 		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
-		const uint64_t occupied = sizeof(src) + alloc;
 
-		return MemUsage{ used, alloc, occupied };
-	}
-
-	template<class T, class Alloc>
-	inline MemUsage MemUsageOf_Vector_HeapOnly(const std::vector<T, Alloc>& src)
-	{
-		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
-		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
-		// only count heap allocation as occupied memory
-		// (to prevent double-counting if nested in another data struct)
-		const uint64_t occupied = alloc;
-
-		return MemUsage{ used, alloc, occupied };
+		return MemUsage{ used, alloc };
 	}
 
 	template<class T, std::size_t N, class Alloc>
@@ -290,12 +267,7 @@ namespace Mem
 		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
 		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
 
-		// if inlined size is exceeded, add size of the spill into heap to the occupied amount
-		const bool spilled = src.capacity() > N;
-		const uint64_t heap = spilled ? static_cast<uint64_t>(src.capacity()) * sizeof(T) : 0ull;
-		const uint64_t occupied = heap + sizeof(src); // (inlined mem is included in sizeof(src))
-
-		return MemUsage{ used, alloc, occupied };
+		return MemUsage{ used, alloc };
 	}
 
 	template<class T, std::size_t N, class Alloc>
@@ -303,29 +275,28 @@ namespace Mem
 	{
 		if (src.capacity() <= N) // no spill -> no heap allocation
 		{
-			return MemUsage{ 0ull, 0ull, 0ull };
+			return MemUsage{ 0ull, 0ull };
 		}
 
 		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
 		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
-		// only count heap allocation as occupied memory
-		// (to prevent double-counting if nested in another data struct)
-		const uint64_t occupied = alloc;
+		// only count spill heap allocation to prevent double-counting
+		// inline small_vector storage nested in another data struct
 
-		return MemUsage{ used, alloc, occupied };
+		return MemUsage{ used, alloc };
 	}
 
 	template<class T, class AllocInner, class AllocOuter>
 	inline MemUsage MemUsageOf_VectorOfVector(
 		const std::vector<std::vector<T, AllocInner>, AllocOuter>& src)
 	{
-		// outer object + outer heap block containing inner vector objects
+		// outer heap block containing inner vector objects
 		MemUsage mem = MemUsageOf_Vector(src);
 
-		// add only the heap blocks of inner vectors (no sizeof(inner vector))
+		// add the heap blocks owned by each inner vector
 		for (auto const& v : src)
 		{
-			Add(mem, MemUsageOf_Vector_HeapOnly(v));
+			Add(mem, MemUsageOf_Vector(v));
 		}
 
 		return mem;
@@ -335,13 +306,13 @@ namespace Mem
 	inline MemUsage MemUsageOf_VectorOfSmallVector(
 		const std::vector<boost::container::small_vector<T, N, Alloc>>& src)
 	{
-		// outer object + outer heap block containing inner vector objects
+		// outer heap block containing inner small_vector objects
 		MemUsage total = MemUsageOf_Vector(src);
 
-		// add only the heap blocks of inner small_vectors (no sizeof(inner small_vector))
+		// add only spill heap blocks of inner small_vectors
 		for (auto const& sv : src)
 		{
-			Add(total, MemUsageOf_SmallVector_HeapOnly(sv)); // only spill heap
+			Add(total, MemUsageOf_SmallVector_HeapOnly(sv));
 		}
 
 		return total;

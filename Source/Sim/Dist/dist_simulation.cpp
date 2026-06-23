@@ -172,7 +172,6 @@ namespace
 			const auto bucket = static_cast<Mem::MemBucket>(i);
 			total.usedBytes += memoryTracker.GetMem_Max_Used(space, bucket);
 			total.allocBytes += memoryTracker.GetMem_Max_Alloc(space, bucket);
-			total.occupiedBytes += memoryTracker.GetMem_Max_Occupied(space, bucket);
 		}
 
 		return total;
@@ -199,7 +198,6 @@ namespace
 		{
 			total.usedBytes += memoryTracker.GetMem_Max_Used(space, bucket);
 			total.allocBytes += memoryTracker.GetMem_Max_Alloc(space, bucket);
-			total.occupiedBytes += memoryTracker.GetMem_Max_Occupied(space, bucket);
 		}
 
 		return total;
@@ -304,19 +302,7 @@ namespace
 		return
 		{
 			.usedBytes = buffer.fluidParticles.UsedBytes(),
-			.allocBytes = buffer.fluidParticles.AllocBytes(),
-			.occupiedBytes = buffer.fluidParticles.OccupiedBytes()
-		};
-	}
-
-	Mem::MemUsage MemoryUsageOfParticleMigrationBufferHeapOnly(
-		const ParticleMigrationBuffer& buffer)
-	{
-		return
-		{
-			.usedBytes = buffer.fluidParticles.UsedBytes(),
-			.allocBytes = buffer.fluidParticles.AllocBytes(),
-			.occupiedBytes = buffer.fluidParticles.HeapOccupiedBytes()
+			.allocBytes = buffer.fluidParticles.AllocBytes()
 		};
 	}
 
@@ -329,9 +315,9 @@ namespace
 			workBuffers.rankBuffers)
 		{
 			Mem::Add(usage,
-				MemoryUsageOfParticleMigrationBufferHeapOnly(rankBuffers.sendBuffer));
+				MemoryUsageOfParticleMigrationBuffer(rankBuffers.sendBuffer));
 			Mem::Add(usage,
-				MemoryUsageOfParticleMigrationBufferHeapOnly(rankBuffers.recvBuffer));
+				MemoryUsageOfParticleMigrationBuffer(rankBuffers.recvBuffer));
 		}
 
 		return usage;
