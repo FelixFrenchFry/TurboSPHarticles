@@ -306,12 +306,25 @@ namespace
 		};
 	}
 
+	Mem::MemUsage MemoryUsageOfHaloExchangeBuffer(
+		const HaloExchangeBuffer& buffer)
+	{
+		Mem::MemUsage usage{};
+
+		usage.usedBytes += buffer.fluidParticles.UsedBytes();
+		usage.allocBytes += buffer.fluidParticles.AllocBytes();
+		usage.usedBytes += buffer.boundaryParticles.UsedBytes();
+		usage.allocBytes += buffer.boundaryParticles.AllocBytes();
+
+		return usage;
+	}
+
 	Mem::MemUsage MemoryUsageOfParticleMigrationExchangeBuffers(
-		const ParticleMigrationWorkBuffers& workBuffers)
+		const MigrationWorkBuffers& workBuffers)
 	{
 		Mem::MemUsage usage = Mem::MemUsageOf_Vector(workBuffers.rankBuffers);
 
-		for (const ParticleMigrationWorkBuffers::RankBuffers& rankBuffers :
+		for (const MigrationWorkBuffers::RankBuffers& rankBuffers :
 			workBuffers.rankBuffers)
 		{
 			Mem::Add(usage,
@@ -323,8 +336,26 @@ namespace
 		return usage;
 	}
 
+	Mem::MemUsage MemoryUsageOfHaloExchangeWorkBuffers(
+		const HaloExchangeWorkBuffers& workBuffers)
+	{
+		Mem::MemUsage usage = Mem::MemUsageOf_Vector(workBuffers.rankBuffers);
+
+		for (const HaloExchangeWorkBuffers::RankBuffers& rankBuffers :
+			workBuffers.rankBuffers)
+		{
+			Mem::Add(usage,
+				MemoryUsageOfHaloExchangeBuffer(rankBuffers.sendBuffer));
+			Mem::Add(usage,
+				MemoryUsageOfHaloExchangeBuffer(rankBuffers.recvBuffer));
+		}
+		Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.rankBufferIdx_FromRank));
+
+		return usage;
+	}
+
 	Mem::MemUsage MemoryUsageOfParticleMigrationScratch(
-		const ParticleMigrationWorkBuffers& workBuffers)
+		const MigrationWorkBuffers& workBuffers)
 	{
 		Mem::MemUsage usage{};
 
@@ -1332,11 +1363,16 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 		Mem::MemBucket::Dist_ParticleMetadata,
 		particleMetadataUsage);
 
+	Mem::MemUsage exchangeBufferUsage{};
+	Mem::Add(exchangeBufferUsage,
+		MemoryUsageOfParticleMigrationExchangeBuffers(particleMigrationWorkBuffers_));
+	Mem::Add(exchangeBufferUsage,
+		MemoryUsageOfHaloExchangeWorkBuffers(haloExchangeWorkBuffers_));
 	Mem::Set(
 		record,
 		Mem::MemSpace::RAM,
 		Mem::MemBucket::Dist_ExchangeBuffers,
-		MemoryUsageOfParticleMigrationExchangeBuffers(particleMigrationWorkBuffers_));
+		exchangeBufferUsage);
 
 	Mem::MemUsage miscUsage{};
 	Mem::Add(miscUsage,
@@ -1771,16 +1807,15 @@ bool DistSimulationMgr::ExchangeRankLocalHalos()
 		}
 		else
 		{
-			HaloExchangeBuffer recvBuffer{};
 			HaloExchangeStats stats{};
 			std::string failMsg{};
 			if (!ExchangeHaloParticlesWithNeighborRanks(
-				recvBuffer,
 				localSimState_,
 				fluidParticleState_,
 				boundaryParticleState_,
 				*domainDecomp_,
 				mpiContext_,
+				haloExchangeWorkBuffers_,
 				&stats,
 				&failMsg))
 			{
@@ -1790,17 +1825,19 @@ bool DistSimulationMgr::ExchangeRankLocalHalos()
 			}
 			lastHaloExchangeStats_ = stats;
 
+			std::string rebuildFailMsg{};
 			if (localOk && !RebuildLocalStateWithReceivedHalos(
-				recvBuffer,
+				haloExchangeWorkBuffers_.rankBuffers,
 				localSimState_,
 				fluidParticleState_,
 				boundaryParticleState_,
 				globalSimState_.fluidParticles.N_,
 				globalSimState_.boundaryParticles.N_,
-				haloRebuildScratch_))
+				haloRebuildScratch_,
+				&rebuildFailMsg))
 			{
-				SPDLOG_ERROR("[rank {}/{}] Failed to rebuild rank-local state with received halos.",
-					mpiContext_.Rank(), mpiContext_.Size());
+				SPDLOG_ERROR("[rank {}/{}] Failed to rebuild rank-local state with received halos: {}",
+					mpiContext_.Rank(), mpiContext_.Size(), rebuildFailMsg);
 				localOk = false;
 			}
 

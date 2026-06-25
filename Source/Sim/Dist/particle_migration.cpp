@@ -455,7 +455,7 @@ namespace
 	}
 
 	MigrationLocalStatusStamps PrepareMigrationLocalStatusStamps(
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		const uint32_t localParticleCount)
 	{
 		workBuffers.migrationLocalStatusStamp_FromLocalIdx.resize(localParticleCount, 0);
@@ -465,8 +465,7 @@ namespace
 		{
 			std::fill(
 				workBuffers.migrationLocalStatusStamp_FromLocalIdx.begin(),
-				workBuffers.migrationLocalStatusStamp_FromLocalIdx.end(),
-				0);
+				workBuffers.migrationLocalStatusStamp_FromLocalIdx.end(), 0);
 			workBuffers.migrationLocalStatusStamp = 0;
 		}
 
@@ -481,26 +480,24 @@ namespace
 	}
 
 	bool IsMigrationLocalStatusMarked(
-		const ParticleMigrationWorkBuffers& workBuffers,
+		const MigrationWorkBuffers& workBuffers,
 		const MigrationLocalStatusStamps& stamps,
 		const uint32_t localIdx)
 	{
-		const uint32_t stamp =
-			workBuffers.migrationLocalStatusStamp_FromLocalIdx[localIdx];
+		const uint32_t stamp = workBuffers.migrationLocalStatusStamp_FromLocalIdx[localIdx];
 		return stamp == stamps.kept || stamp == stamps.out;
 	}
 
 	bool IsMigrationLocalStatusKept(
-		const ParticleMigrationWorkBuffers& workBuffers,
+		const MigrationWorkBuffers& workBuffers,
 		const MigrationLocalStatusStamps& stamps,
 		const uint32_t localIdx)
 	{
-		return workBuffers.migrationLocalStatusStamp_FromLocalIdx[localIdx] ==
-			stamps.kept;
+		return workBuffers.migrationLocalStatusStamp_FromLocalIdx[localIdx] == stamps.kept;
 	}
 
 	void SetMigrationLocalStatusKept(
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		const MigrationLocalStatusStamps& stamps,
 		const uint32_t localIdx)
 	{
@@ -508,7 +505,7 @@ namespace
 	}
 
 	void SetMigrationLocalStatusOut(
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		const MigrationLocalStatusStamps& stamps,
 		const uint32_t localIdx)
 	{
@@ -542,12 +539,11 @@ namespace
 	}
 
 	void PrepareParticleMigrationRankBuffers(
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		const int rank,
 		const int rankCount)
 	{
-		std::vector<ParticleMigrationWorkBuffers::RankBuffers>& migrations =
-			workBuffers.rankBuffers;
+		std::vector<MigrationWorkBuffers::RankBuffers>& migrations = workBuffers.rankBuffers;
 		migrations.resize(static_cast<uint64_t>(std::max(0, rankCount - 1)));
 
 		workBuffers.rankBufferIdx_FromRank.assign(
@@ -558,8 +554,7 @@ namespace
 		{
 			if (dstRank == rank) { continue; }
 
-			ParticleMigrationWorkBuffers::RankBuffers& migration =
-				migrations[migrationIdx];
+			MigrationWorkBuffers::RankBuffers& migration = migrations[migrationIdx];
 			migration.rank = dstRank;
 			migration.sendFluidCount = 0;
 			migration.recvFluidCount = 0;
@@ -573,7 +568,7 @@ namespace
 
 	// pack owned fluid particles using a parallel count -> prefix sum -> parallel fill pipeline
 	bool PackMigratingFluidParticlesByOwnerRank(
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		ParticleMigrationStats& stats,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
@@ -591,8 +586,7 @@ namespace
 
 		stats.sentFluidParticleCount = 0;
 
-		const std::vector<int>& ownedLocalIdxs =
-			fluidParticleState.particleLocalIdx_Owned;
+		const std::vector<int>& ownedLocalIdxs = fluidParticleState.particleLocalIdx_Owned;
 		const uint64_t ownedParticleCount = ownedLocalIdxs.size();
 		const uint64_t migrationCount = workBuffers.rankBuffers.size();
 		const uint64_t routeCount = migrationCount + 1;
@@ -602,10 +596,8 @@ namespace
 			: 0;
 
 		workBuffers.migrationRouteIdx_FromOwnedIdx.resize(ownedParticleCount);
-		workBuffers.migrationRouteCounts_ByChunkRoute.assign(
-			chunkCount * routeCount, 0ull);
-		workBuffers.migrationRouteWriteOffsets_ByChunkRoute.resize(
-			chunkCount * routeCount);
+		workBuffers.migrationRouteCounts_ByChunkRoute.assign(chunkCount * routeCount, 0ull);
+		workBuffers.migrationRouteWriteOffsets_ByChunkRoute.resize(chunkCount * routeCount);
 		workBuffers.migrationRouteTotals.resize(routeCount);
 		workBuffers.migrationOutCounts_ByChunk.assign(chunkCount, 0ull);
 		workBuffers.migrationOutWriteOffsets_ByChunk.resize(chunkCount);
@@ -623,8 +615,7 @@ namespace
 		{
 			for (uint64_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
 			{
-				const uint64_t beginOwnedIdx =
-					chunkIdx * PARTICLE_MIGRATION_PACK_CHUNK_SIZE;
+				const uint64_t beginOwnedIdx = chunkIdx * PARTICLE_MIGRATION_PACK_CHUNK_SIZE;
 				const uint64_t endOwnedIdx = std::min(
 					beginOwnedIdx + PARTICLE_MIGRATION_PACK_CHUNK_SIZE,
 					ownedParticleCount);
@@ -758,7 +749,7 @@ namespace
 		workBuffers.migratingOutFluidLocalIdx.resize(migratingOutParticleCount);
 		for (uint64_t migrationIdx = 0; migrationIdx != migrationCount; migrationIdx++)
 		{
-			ParticleMigrationWorkBuffers::RankBuffers& migration =
+			MigrationWorkBuffers::RankBuffers& migration =
 				workBuffers.rankBuffers[migrationIdx];
 			const uint64_t sendParticleCount =
 				workBuffers.migrationRouteTotals[migrationIdx + 1];
@@ -798,7 +789,7 @@ namespace
 							workBuffers.migrationOutWriteOffsets_ByChunk[chunkIdx]++;
 						workBuffers.migratingOutFluidLocalIdx[outIdx] = localIdx;
 
-						ParticleMigrationWorkBuffers::RankBuffers& migration =
+						MigrationWorkBuffers::RankBuffers& migration =
 							workBuffers.rankBuffers[routeIdx - 1];
 						migration.sendBuffer.fluidParticles.SetFromLocalParticle(
 							localState.fluidParticles, fluidParticleState, dstIdx, localIdx);
@@ -808,10 +799,9 @@ namespace
 		});
 
 		uint64_t sentFluidParticleCount = 0;
-		for (ParticleMigrationWorkBuffers::RankBuffers& migration : workBuffers.rankBuffers)
+		for (MigrationWorkBuffers::RankBuffers& migration : workBuffers.rankBuffers)
 		{
-			migration.sendFluidCount =
-				migration.sendBuffer.fluidParticles.CheckedBufferCount();
+			migration.sendFluidCount = migration.sendBuffer.fluidParticles.CheckedBufferCount();
 			sentFluidParticleCount += migration.sendBuffer.fluidParticles.Size();
 		}
 		if (sentFluidParticleCount > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
@@ -822,7 +812,8 @@ namespace
 
 		return true;
 	}
-}
+
+} // namespace anonymous
 
 void ParticleMigrationBuffer::Clear()
 {
@@ -836,7 +827,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	const IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
 	const uint32_t globalFluidParticleCount,
-	ParticleMigrationWorkBuffers& workBuffers,
+	MigrationWorkBuffers& workBuffers,
 	ParticleMigrationStats* stats,
 	std::string* failMsg,
 	ParticleMigrationTimingReport* timingReport)
@@ -853,16 +844,16 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 		return false;
 	};
 
-	// prepare migration packages for every peer rank
+	// prepare migration buffers for every peer rank
 	ParticleMigrationStats localStats{};
-	std::vector<ParticleMigrationWorkBuffers::RankBuffers>& migrations = workBuffers.rankBuffers;
+	std::vector<MigrationWorkBuffers::RankBuffers>& migrations = workBuffers.rankBuffers;
 	PrepareParticleMigrationRankBuffers(workBuffers, mpiContext.Rank(), mpiContext.Size());
 
 	{
 		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
 			timingReport, ParticleMigrationTimingOp::Pack);
 
-		// route and pack migration packages in one owned-particle scan
+		// route and pack migration payloads in one owned-particle scan
 		std::string localPackFailMsg{};
 		const bool localPackOk = PackMigratingFluidParticlesByOwnerRank(
 			workBuffers, localStats, localState, fluidParticleState,
@@ -880,9 +871,8 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 			timingReport, ParticleMigrationTimingOp::CountExchange);
 
 		// exchange rank-indexed particle counts before exchanging raw payloads
-		workBuffers.sendFluidCount_FromRank.assign(
-			static_cast<uint64_t>(mpiContext.Size()), 0);
-		for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
+		workBuffers.sendFluidCount_FromRank.assign(static_cast<uint64_t>(mpiContext.Size()), 0);
+		for (const MigrationWorkBuffers::RankBuffers& migration : migrations)
 		{
 			workBuffers.sendFluidCount_FromRank[static_cast<uint64_t>(migration.rank)] =
 				migration.sendFluidCount;
@@ -895,10 +885,9 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 		// resize receive buffers according to exchanged particle counts
 		bool localCountOk = true;
 		std::string localCountFailMsg{};
-		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
+		for (MigrationWorkBuffers::RankBuffers& migration : migrations)
 		{
-			migration.recvFluidCount =
-				workBuffers.recvFluidCount_FromRank[static_cast<uint64_t>(migration.rank)];
+			migration.recvFluidCount = workBuffers.recvFluidCount_FromRank[static_cast<uint64_t>(migration.rank)];
 			if (migration.recvFluidCount < 0)
 			{
 				localCountOk = false;
@@ -906,8 +895,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 				break;
 			}
 
-			const uint64_t recvParticleCount =
-				static_cast<uint64_t>(migration.recvFluidCount);
+			const uint64_t recvParticleCount = static_cast<uint64_t>(migration.recvFluidCount);
 			migration.recvBuffer.fluidParticles.Resize(recvParticleCount);
 		}
 		if (!mpiContext.AllTrue(localCountOk))
@@ -925,14 +913,14 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 		requests.reserve(migrations.size() * 34);
 
 		// exchange only non-empty payload chunks after all receive buffers are sized correctly
-		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives
+		for (MigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives
 		{
 			if (migration.recvFluidCount <= 0) { continue; }
 
 			migration.recvBuffer.fluidParticles.QueueIRecvPayload(
 				mpiContext, migration.rank, PARTICLE_MIGRATION_TAG_FLUID_PAYLOAD, requests);
 		}
-		for (ParticleMigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI sends
+		for (MigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI sends
 		{
 			if (migration.sendFluidCount <= 0) { continue; }
 
@@ -944,12 +932,10 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	}
 
 	uint64_t recvFluidParticleCount = 0;
-	for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
+	for (const MigrationWorkBuffers::RankBuffers& migration : migrations)
 	{
-		const uint64_t recvParticleCount =
-			migration.recvBuffer.fluidParticles.Size();
-		if (recvParticleCount >
-			std::numeric_limits<uint64_t>::max() - recvFluidParticleCount)
+		const uint64_t recvParticleCount = migration.recvBuffer.fluidParticles.Size();
+		if (recvParticleCount > std::numeric_limits<uint64_t>::max() - recvFluidParticleCount)
 		{
 			return fail("received migrating fluid particle count exceeds uint64_t range.");
 		}
@@ -959,8 +945,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	{
 		return fail("received migrating fluid particle count exceeds uint32_t range.");
 	}
-	localStats.recvFluidParticleCount =
-		static_cast<uint32_t>(recvFluidParticleCount);
+	localStats.recvFluidParticleCount = static_cast<uint32_t>(recvFluidParticleCount);
 
 	{
 		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
@@ -991,7 +976,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 }
 
 bool Dist::RebuildLocalStateWithMigratedFluidParticles(
-	const std::vector<ParticleMigrationWorkBuffers::RankBuffers>& migrations,
+	const std::vector<MigrationWorkBuffers::RankBuffers>& migrations,
 	const std::vector<int>& keptOwnedFluidLocalIdx,
 	const std::vector<int>& migratingOutFluidLocalIdx,
 	Sync::UniversalSimState& localState,
@@ -999,7 +984,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 	const IDomainDecomp& domainDecomp,
 	const int rank,
 	const uint32_t globalFluidParticleCount,
-	ParticleMigrationWorkBuffers& workBuffers,
+	MigrationWorkBuffers& workBuffers,
 	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
@@ -1042,14 +1027,12 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 		return fail("kept plus migrating-out fluid particle counts do not match ownedParticleCount.");
 	}
 
-	const uint32_t keptParticleCount =
-		static_cast<uint32_t>(keptOwnedFluidLocalIdx.size());
+	const uint32_t keptParticleCount = static_cast<uint32_t>(keptOwnedFluidLocalIdx.size());
 
 	uint64_t recvFluidParticleCount = 0;
-	for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
+	for (const MigrationWorkBuffers::RankBuffers& migration : migrations)
 	{
-		const uint64_t recvParticleCount =
-			migration.recvBuffer.fluidParticles.Size();
+		const uint64_t recvParticleCount = migration.recvBuffer.fluidParticles.Size();
 		if (recvParticleCount >
 			std::numeric_limits<uint64_t>::max() - recvFluidParticleCount)
 		{
@@ -1064,8 +1047,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 		return fail("migrated fluid particle count exceeds uint32_t local particle count range.");
 	}
 
-	const uint32_t receivedParticleCount =
-		static_cast<uint32_t>(recvFluidParticleCount);
+	const uint32_t receivedParticleCount = static_cast<uint32_t>(recvFluidParticleCount);
 	const uint32_t localParticleCount = keptParticleCount + receivedParticleCount;
 
 	const MigrationLocalStatusStamps migrationStatusStamps =
@@ -1175,8 +1157,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 			return fail("failed to clear overwritten fluid particle map entry.");
 		}
 
-		const int movedGlobalIdx =
-			fluidParticleState.particleGlobalIdx_FromLocalIdx[srcLocalIdx];
+		const int movedGlobalIdx = fluidParticleState.particleGlobalIdx_FromLocalIdx[srcLocalIdx];
 		if (!IsGlobalIdxInRange(movedGlobalIdx, globalFluidParticleCount))
 		{
 			return fail("kept fluid compaction source maps to an invalid global index.");
@@ -1191,8 +1172,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 			localState.fluidParticles, localState.fluidParticles,
 			srcLocalIdx, static_cast<int>(dstLocalIdx));
 		fluidParticleState.particleGlobalIdx_FromLocalIdx[dstLocalIdx] = movedGlobalIdx;
-		fluidParticleState.particleLocalIdx_FromGlobalIdx[movedGlobalIdx] =
-			static_cast<int>(dstLocalIdx);
+		fluidParticleState.particleLocalIdx_FromGlobalIdx[movedGlobalIdx] = static_cast<int>(dstLocalIdx);
 	}
 
 	// clear stale map entries from the dropped tail (old halos, outgoing particles, moved sources)
@@ -1217,7 +1197,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 
 	// map received fluid particles from each peer directly into the appended local tail
 	uint64_t recvParticleIdx = 0;
-	for (const ParticleMigrationWorkBuffers::RankBuffers& migration : migrations)
+	for (const MigrationWorkBuffers::RankBuffers& migration : migrations)
 	{
 		const MigratingParticleBufferF& recvFluidParticles =
 			migration.recvBuffer.fluidParticles;

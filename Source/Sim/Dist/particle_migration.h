@@ -20,7 +20,7 @@ namespace Dist
 {
 	class MpiContext;
 
-	// stores outgoing/incoming migrating fluid particle,
+	// stores outgoing/incoming migrating fluid particles,
 	// mirroring the SoA data layout for direct MPI exchange and rebuild
 	class MigratingParticleBufferF
 	{
@@ -97,7 +97,7 @@ namespace Dist
 	{
 		MigratingParticleBufferF fluidParticles;
 
-		// clears packed migrating fluid particles
+		// clears packed migrating particles
 		void Clear();
 	};
 
@@ -108,8 +108,8 @@ namespace Dist
 		uint32_t recvFluidParticleCount = 0;
 	};
 
-	// reusable storage for fluid particle migration exchange and local rebuild
-	struct ParticleMigrationWorkBuffers
+	// reusable work buffers for particle migration exchange and local rebuild
+	struct MigrationWorkBuffers
 	{
 		struct RankBuffers
 		{
@@ -161,7 +161,7 @@ namespace Dist
 		const IDomainDecomp& domainDecomp,
 		const MpiContext& mpiContext,
 		uint32_t globalFluidParticleCount,
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		ParticleMigrationStats* stats = nullptr,
 		std::string* failMsg = nullptr,
 		ParticleMigrationTimingReport* timingReport = nullptr);
@@ -169,7 +169,7 @@ namespace Dist
 	// compacts kept owned fluid particles in-place, appends received migrating particles,
 	// and refreshes ownership maps; class lists are rebuilt by the distributed class phase
 	bool RebuildLocalStateWithMigratedFluidParticles(
-		const std::vector<ParticleMigrationWorkBuffers::RankBuffers>& migrations,
+		const std::vector<MigrationWorkBuffers::RankBuffers>& migrations,
 		const std::vector<int>& keptOwnedFluidLocalIdx,
 		const std::vector<int>& migratingOutFluidLocalIdx,
 		Sync::UniversalSimState& localState,
@@ -177,7 +177,7 @@ namespace Dist
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		uint32_t globalFluidParticleCount,
-		ParticleMigrationWorkBuffers& workBuffers,
+		MigrationWorkBuffers& workBuffers,
 		std::string* failMsg = nullptr);
 
 } // namespace Dist

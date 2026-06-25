@@ -169,7 +169,8 @@ namespace Dist
 		DistParticleState boundaryParticleState_{};
 		ParticleClassificationWorkBuffers fluidParticleClassificationWorkBuffers_{};
 		ParticleClassificationWorkBuffers boundaryParticleClassificationWorkBuffers_{};
-		ParticleMigrationWorkBuffers particleMigrationWorkBuffers_{};
+		MigrationWorkBuffers particleMigrationWorkBuffers_{};
+		HaloExchangeWorkBuffers haloExchangeWorkBuffers_{};
 		HaloRebuildScratch haloRebuildScratch_{};
 		ParticleMigrationStats lastParticleMigrationStats_{};
 		ParticleMigrationTimingReport particleMigrationTimingReport_{};
