@@ -1,4 +1,4 @@
-// particle_migration_diagnostics.cpp
+// dist_sync_diagnostics.cpp
 
 // external
 #include <cstddef>
@@ -6,7 +6,7 @@
 #include <cstdio>
 
 // internal
-#include "particle_migration_diagnostics.h"
+#include "dist_sync_diagnostics.h"
 
 
 
@@ -17,7 +17,7 @@ namespace Dist
 		constexpr const char* CLI_SECTION_SEPARATOR =
 			"--------------------------------------------------------------------------------";
 
-		uint64_t SumAverageNs(const ParticleMigrationTimingReport& report)
+		uint64_t SumAverageNs(const DistSyncTimingReport& report)
 		{
 			uint64_t totalNs = 0;
 			for (const uint64_t ns : report.totalNs)
@@ -28,8 +28,8 @@ namespace Dist
 		}
 
 		uint64_t AverageNs(
-			const ParticleMigrationTimingReport& report,
-			const ParticleMigrationTimingOp op)
+			const DistSyncTimingReport& report,
+			const DistSyncTimingOp op)
 		{
 			if (report.sampleCount == 0) { return 0; }
 			return report.totalNs[GetIdx(op)] / report.sampleCount;
@@ -44,18 +44,18 @@ namespace Dist
 		}
 	}
 
-	ParticleMigrationTimingScope::ParticleMigrationTimingScope(
-		ParticleMigrationTimingReport* report,
-		const ParticleMigrationTimingOp op)
+	DistSyncTimingScope::DistSyncTimingScope(
+		DistSyncTimingReport* report,
+		const DistSyncTimingOp op)
 		: report_(report)
 		, op_(op)
 		, t0_(Clock::now())
-		, active_(report != nullptr && op != ParticleMigrationTimingOp::Count)
+		, active_(report != nullptr && op != DistSyncTimingOp::Count)
 	{
 		// nothing else to do
 	}
 
-	ParticleMigrationTimingScope::~ParticleMigrationTimingScope()
+	DistSyncTimingScope::~DistSyncTimingScope()
 	{
 		if (!active_) { return; }
 
@@ -66,16 +66,16 @@ namespace Dist
 		report_->totalNs[GetIdx(op_)] += ns;
 	}
 
-	void BeginParticleMigrationTimingReport(
-		ParticleMigrationTimingReport& report,
+	void BeginDistSyncTimingReport(
+		DistSyncTimingReport& report,
 		const int rank)
 	{
 		report.rank = rank;
 		report.sampleCount++;
 	}
 
-	std::vector<std::string> BuildParticleMigrationTimingLines(
-		const std::vector<ParticleMigrationTimingReport>& reports,
+	std::vector<std::string> BuildDistSyncTimingLines(
+		const std::vector<DistSyncTimingReport>& reports,
 		const Bench::TimeUnit unit)
 	{
 		std::vector<std::string> lines{};
@@ -86,16 +86,16 @@ namespace Dist
 		char header[128];
 		std::snprintf(
 			header, sizeof(header),
-			"%-2s | %9s | %9s | %9s | %9s | %9s %4s",
-			"r", "migrPack", "migrCntX", "migrPayX",
-			"migrRebld", "migrTotal", "");
+			"%-2s | %9s | %9s | %9s | %10s | %9s %4s",
+			"r", "syncPull", "syncReord", "syncPush",
+			"syncActive", "syncTotal", "avg");
 		lines.emplace_back(header);
 		lines.emplace_back(CLI_SECTION_SEPARATOR);
 
 		char unitLabel[8];
 		std::snprintf(unitLabel, sizeof(unitLabel), "[%s]", Bench::UnitLabel(unit));
 
-		for (const ParticleMigrationTimingReport& report : reports)
+		for (const DistSyncTimingReport& report : reports)
 		{
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
@@ -103,16 +103,16 @@ namespace Dist
 			char line[128];
 			std::snprintf(
 				line, sizeof(line),
-				"%-2s | %9.2f | %9.2f | %9.2f | %9.2f | %9.2f %4s",
+				"%-2s | %9.2f | %9.2f | %9.2f | %10.2f | %9.2f %4s",
 				rankLabel,
 				Bench::ConvertFromNs(
-					unit, AverageNs(report, ParticleMigrationTimingOp::Pack)),
+					unit, AverageNs(report, DistSyncTimingOp::Pull)),
 				Bench::ConvertFromNs(
-					unit, AverageNs(report, ParticleMigrationTimingOp::CountExchange)),
+					unit, AverageNs(report, DistSyncTimingOp::Reorder)),
 				Bench::ConvertFromNs(
-					unit, AverageNs(report, ParticleMigrationTimingOp::PayloadExchange)),
+					unit, AverageNs(report, DistSyncTimingOp::Push)),
 				Bench::ConvertFromNs(
-					unit, AverageNs(report, ParticleMigrationTimingOp::Rebuild)),
+					unit, AverageNs(report, DistSyncTimingOp::ActiveIdx)),
 				Bench::ConvertFromNs(unit, SumAverageNs(report)),
 				unitLabel);
 			lines.emplace_back(line);

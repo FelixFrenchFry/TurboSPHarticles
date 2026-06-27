@@ -12,7 +12,6 @@
 #include "Source/Sim/Sync/state_sim.h"
 #include "dist_particle_state.h"
 #include "domain_decomp.h"
-#include "particle_migration_diagnostics.h"
 
 
 
@@ -163,8 +162,7 @@ namespace Dist
 		uint32_t globalFluidParticleCount,
 		MigrationWorkBuffers& workBuffers,
 		ParticleMigrationStats* stats = nullptr,
-		std::string* failMsg = nullptr,
-		ParticleMigrationTimingReport* timingReport = nullptr);
+		std::string* failMsg = nullptr);
 
 	// compacts kept owned fluid particles in-place, appends received migrating particles,
 	// and refreshes ownership maps; class lists are rebuilt by the distributed class phase

@@ -20,6 +20,7 @@
 #include "domain_decomp.h"
 #include "dist_diagnostics.h"
 #include "dist_particle_state.h"
+#include "dist_sync_diagnostics.h"
 #include "halo_exchange.h"
 #include "mpi_context.h"
 #include "particle_migration.h"
@@ -127,8 +128,8 @@ namespace Dist
 		// temporary guard until boundary particle migration exists
 		bool ValidateOwnedBoundaryParticlesStillOnRank() const;
 
-		// reloads backend from rank-local state, runs neighbor search, and syncs order metadata
-		bool ReloadRankLocalBackendAndRunNeighborSearch(const char* phaseName);
+		// moves the current rank-local SoA state into backend-specific data structures
+		bool PullRankLocalStateIntoBackend();
 
 		// validates particle identity metadata and payload against current backend state
 		bool ValidateRankLocalBackendParticleOrder(const char* phaseName) const;
@@ -173,7 +174,7 @@ namespace Dist
 		HaloExchangeWorkBuffers haloExchangeWorkBuffers_{};
 		HaloRebuildScratch haloRebuildScratch_{};
 		ParticleMigrationStats lastParticleMigrationStats_{};
-		ParticleMigrationTimingReport particleMigrationTimingReport_{};
+		DistSyncTimingReport distSyncTimingReport_{};
 		HaloExchangeStats lastHaloExchangeStats_{};
 
 		// backend over compact rank-local state

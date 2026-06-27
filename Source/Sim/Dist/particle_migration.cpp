@@ -12,7 +12,6 @@
 // internal
 #include "particle_migration.h"
 #include "mpi_context.h"
-#include "particle_migration_diagnostics.h"
 
 
 
@@ -829,14 +828,9 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	const uint32_t globalFluidParticleCount,
 	MigrationWorkBuffers& workBuffers,
 	ParticleMigrationStats* stats,
-	std::string* failMsg,
-	ParticleMigrationTimingReport* timingReport)
+	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
-	if (timingReport)
-	{
-		BeginParticleMigrationTimingReport(*timingReport, mpiContext.Rank());
-	}
 
 	const auto fail = [failMsg](std::string message) -> bool
 	{
@@ -850,9 +844,6 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	PrepareParticleMigrationRankBuffers(workBuffers, mpiContext.Rank(), mpiContext.Size());
 
 	{
-		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
-			timingReport, ParticleMigrationTimingOp::Pack);
-
 		// route and pack migration payloads in one owned-particle scan
 		std::string localPackFailMsg{};
 		const bool localPackOk = PackMigratingFluidParticlesByOwnerRank(
@@ -867,9 +858,6 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	}
 
 	{
-		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
-			timingReport, ParticleMigrationTimingOp::CountExchange);
-
 		// exchange rank-indexed particle counts before exchanging raw payloads
 		workBuffers.sendFluidCount_FromRank.assign(static_cast<uint64_t>(mpiContext.Size()), 0);
 		for (const MigrationWorkBuffers::RankBuffers& migration : migrations)
@@ -906,9 +894,6 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	}
 
 	{
-		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
-			timingReport, ParticleMigrationTimingOp::PayloadExchange);
-
 		std::vector<MPI_Request> requests{};
 		requests.reserve(migrations.size() * 34);
 
@@ -948,9 +933,6 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 	localStats.recvFluidParticleCount = static_cast<uint32_t>(recvFluidParticleCount);
 
 	{
-		[[maybe_unused]] const ParticleMigrationTimingScope timingScope(
-			timingReport, ParticleMigrationTimingOp::Rebuild);
-
 		std::string rebuildFailMsg{};
 		const bool localRebuildOk = RebuildLocalStateWithMigratedFluidParticles(
 			migrations, workBuffers.keptOwnedFluidLocalIdx,

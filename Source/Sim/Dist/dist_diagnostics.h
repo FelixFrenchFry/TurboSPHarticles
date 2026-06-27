@@ -20,7 +20,7 @@ namespace Sim
 namespace Dist
 {
 	class MpiContext;
-	struct ParticleMigrationTimingReport;
+	struct DistSyncTimingReport;
 
 	constexpr int DIST_STARTUP_REPORT_TEXT_CHARS = 128;
 
@@ -138,7 +138,7 @@ namespace Dist
 			const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
 			const DistRankStepReport& localStepReport,
 			const DistRankBenchReport& localBenchReport,
-			const ParticleMigrationTimingReport& localMigrationTimingReport);
+			const DistSyncTimingReport& localDistSyncTimingReport);
 
 		static void PrintMemorySummary(
 			const MpiContext& mpiContext,

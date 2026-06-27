@@ -805,7 +805,7 @@ void DistSimulationMgr::RunSim_Blocking()
 
 	// local copy for consistent maximum-step handling during this run
 	const auto paramsInit = simParams_;
-	particleMigrationTimingReport_ = {};
+	distSyncTimingReport_ = {};
 	BeginRunLogging(paramsInit);
 	DistDiagnosticsMgr::ResetProgress();
 	bool runOk = true;
@@ -1521,7 +1521,7 @@ void DistSimulationMgr::DisplayDistributedProgress(
 		mpiContext_, params, curBenchOpGroups_,
 		BuildRankStepReport(params, exportedStep),
 		BuildRankBenchReport(),
-		particleMigrationTimingReport_);
+		distSyncTimingReport_);
 }
 
 bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
@@ -1543,6 +1543,8 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 			localOk = false;
 		}
 		if (!mpiContext_.AllTrue(localOk)) { return false; }
+
+		BeginDistSyncTimingReport(distSyncTimingReport_, mpiContext_.Rank());
 
 		if (localOk)
 		{
@@ -1587,14 +1589,18 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_HaloExchange });
 			if (!haloOk) { localOk = false; }
 		}
-		if (localOk && !ReloadRankLocalBackendAndRunNeighborSearch(
-			"before distributed solver step")) { localOk = false; }
+		if (localOk && !PullRankLocalStateIntoBackend()) { localOk = false; }
 
 		if (localOk)
 		{
 			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
-			const bool activeIdxOk =
-				simBackend_->SetActiveFluidParticleLocalIdxs(fluidParticleState_.particleLocalIdx_Owned);
+			bool activeIdxOk = false;
+			{
+				[[maybe_unused]] const DistSyncTimingScope syncTimingScope(
+					&distSyncTimingReport_, DistSyncTimingOp::ActiveIdx);
+				activeIdxOk =
+					simBackend_->SetActiveFluidParticleLocalIdxs(fluidParticleState_.particleLocalIdx_Owned);
+			}
 			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
 
 			if (!activeIdxOk)
@@ -1614,16 +1620,24 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
 
 			// skip solver step if no fluid particles to avoid re-application of neighbor search particle re-order
-			if (solverMayReOrderParticles && !ApplyLastBackendParticleReOrder())
 			{
-				localOk = false;
+				[[maybe_unused]] const DistSyncTimingScope syncTimingScope(
+					&distSyncTimingReport_, DistSyncTimingOp::Reorder);
+				if (solverMayReOrderParticles && !ApplyLastBackendParticleReOrder())
+				{
+					localOk = false;
+				}
 			}
 
-			Sync::UniversalSimState backendSimState{};
-			simBackend_->PushToUniversalSimState(backendSimState);
-			localSimState_ = std::move(backendSimState);
-			localSimState_.step = simStep_;
-			localSimState_.time = simTime_;
+			{
+				[[maybe_unused]] const DistSyncTimingScope syncTimingScope(
+					&distSyncTimingReport_, DistSyncTimingOp::Push);
+				Sync::UniversalSimState backendSimState{};
+				simBackend_->PushToUniversalSimState(backendSimState);
+				localSimState_ = std::move(backendSimState);
+				localSimState_.step = simStep_;
+				localSimState_.time = simTime_;
+			}
 
 			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
 
@@ -1659,8 +1673,7 @@ bool DistSimulationMgr::MigrateOwnedFluidParticlesToOwnerRanks()
 			globalSimState_.fluidParticles.N_,
 			particleMigrationWorkBuffers_,
 			&stats,
-			&failMsg,
-			&particleMigrationTimingReport_))
+			&failMsg))
 		{
 			SPDLOG_ERROR("[rank {}/{}] Failed to migrate fluid particles: {}",
 				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
@@ -1712,32 +1725,20 @@ bool DistSimulationMgr::ValidateOwnedBoundaryParticlesStillOnRank() const
 	return localOk;
 }
 
-bool DistSimulationMgr::ReloadRankLocalBackendAndRunNeighborSearch(const char* phaseName)
+bool DistSimulationMgr::PullRankLocalStateIntoBackend()
 {
 	if (!simBackend_) { return false; }
 
-	bool localOk = true;
-
 	// transfer rebuilt rank-local SoA state into backend-specific data structures
 	benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
-	simBackend_->PullFromUniversalSimState(localSimState_, simParams_);
+	{
+		[[maybe_unused]] const DistSyncTimingScope syncTimingScope(
+			&distSyncTimingReport_, DistSyncTimingOp::Pull);
+		simBackend_->PullFromUniversalSimState(localSimState_, simParams_);
+	}
 	benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
 
-	simBackend_->ExecuteNeighborSearch(simParams_);
-
-	benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
-	if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
-
-	Sync::UniversalSimState backendSimState{};
-	simBackend_->PushToUniversalSimState(backendSimState);
-	localSimState_ = std::move(backendSimState);
-	localSimState_.step = simStep_;
-	localSimState_.time = simTime_;
-	benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
-
-	if (localOk && !ValidateRankLocalParticleMetadata(phaseName)) { localOk = false; }
-
-	return localOk;
+	return true;
 }
 
 bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder(const char* phaseName) const
