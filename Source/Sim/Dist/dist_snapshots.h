@@ -28,9 +28,21 @@ namespace Dist
 		float velMag = 0.0f;
 	};
 
+	// boundary particle payload used to gather distributed export snapshots
+	struct DistExportBoundaryParticlePacket
+	{
+		int globalIdx = -1;
+
+		float xPos = 0.0f;
+		float yPos = 0.0f;
+		float zPos = 0.0f;
+		float volB = 0.0f;
+	};
+
 	struct DistExportSnapshotBuffer
 	{
 		std::vector<DistExportFluidParticlePacket> fluidParticles;
+		std::vector<DistExportBoundaryParticlePacket> boundaryParticles;
 
 		void Clear();
 	};
@@ -38,12 +50,14 @@ namespace Dist
 	struct DistSnapshotGatherStats
 	{
 		uint32_t gatheredFluidParticleCount = 0;
+		uint32_t gatheredBoundaryParticleCount = 0;
 	};
 
 	bool PackOwnedExportSnapshotBuffer(
 		DistExportSnapshotBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
-		const DistParticleState& fluidParticleState);
+		const DistParticleState& fluidParticleState,
+		const DistParticleState& boundaryParticleState);
 
 	bool RebuildExportSnapshotFromGatheredParticles(
 		Sync::ExportSnapshot& exportSnap,
@@ -55,6 +69,7 @@ namespace Dist
 		Sync::ExportSnapshot& exportSnap,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
+		const DistParticleState& boundaryParticleState,
 		const MpiContext& mpiContext,
 		uint32_t simStep,
 		double simTime,

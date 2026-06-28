@@ -5,6 +5,7 @@
 #pragma once
 
 // external
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -13,6 +14,8 @@
 
 namespace Sync
 {
+	constexpr uint64_t UniversalSimStateSchemaVersion = 2;
+
 	// view into fluid particle data
 	// (non-owning, for read-only access)
 	struct FluidView
@@ -40,6 +43,8 @@ namespace Sync
 
 		// fields
 		std::span<float> xPos, yPos, zPos;
+		std::span<float> volB;
+		std::span<float> psiB;
 	};
 
 	// backend-agnostic representation of fluid particles
@@ -204,12 +209,19 @@ namespace Sync
 		std::vector<float> yPos;
 		std::vector<float> zPos;
 
+		// boundary contribution coefficients
+		std::vector<float> volB;
+		std::vector<float> psiB;
+
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
 			xPos.reserve(N);
 			yPos.reserve(N);
 			zPos.reserve(N);
+
+			volB.reserve(N);
+			psiB.reserve(N);
 		}
 
 		// resizes all vectors consistently
@@ -220,6 +232,9 @@ namespace Sync
 			xPos.resize(N_);
 			yPos.resize(N_);
 			zPos.resize(N_);
+
+			volB.resize(N_);
+			psiB.resize(N_);
 		}
 
 		// compacts all vectors so capacity matches size
@@ -229,6 +244,25 @@ namespace Sync
 			xPos.shrink_to_fit();
 			yPos.shrink_to_fit();
 			zPos.shrink_to_fit();
+
+			volB.shrink_to_fit();
+			psiB.shrink_to_fit();
+		}
+
+		void EnsureBoundaryCoefficientsPresent(float defaultPsiB, float restDensityF)
+		{
+			const float defaultVolB = (restDensityF > 0.0f)
+				? (defaultPsiB / restDensityF)
+				: 0.0f;
+
+			if (volB.size() != static_cast<uint32_t>(N_))
+			{
+				volB.assign(N_, defaultVolB);
+			}
+			if (psiB.size() != static_cast<uint32_t>(N_))
+			{
+				psiB.assign(N_, defaultPsiB);
+			}
 		}
 
 		// builds and returns a mutable view into the data
@@ -241,6 +275,8 @@ namespace Sync
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
 				.zPos = std::span<float>(zPos),
+				.volB = std::span<float>(volB),
+				.psiB = std::span<float>(psiB),
 			};
 		}
 
@@ -258,7 +294,7 @@ namespace Sync
 	struct UniversalSimState
 	{
 		// persistent layout version
-		uint64_t schemaVersion = 1;
+		uint64_t schemaVersion = UniversalSimStateSchemaVersion;
 
 		// simulation metadata
 		uint32_t step = 0;			// simulation step at this state

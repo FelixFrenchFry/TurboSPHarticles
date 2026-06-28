@@ -442,6 +442,8 @@ namespace
 		dst.xPos[localIdx] = src.xPos[globalIdx];
 		dst.yPos[localIdx] = src.yPos[globalIdx];
 		dst.zPos[localIdx] = src.zPos[globalIdx];
+		dst.volB[localIdx] = src.volB[globalIdx];
+		dst.psiB[localIdx] = src.psiB[globalIdx];
 	}
 
 	// TODO: re-implement with TBB parallelization?

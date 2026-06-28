@@ -18,6 +18,21 @@
 
 using namespace Scene;
 
+namespace
+{
+	inline float DefaultBoundaryPsiB(const Sim::SimParams& params)
+	{
+		return params.massB;
+	}
+
+	inline float DefaultBoundaryVolB(const Sim::SimParams& params)
+	{
+		return params.restDensityF > 0.0f
+			? (DefaultBoundaryPsiB(params) / params.restDensityF)
+			: 0.0f;
+	}
+}
+
 void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 											 Sync::UniversalSimState& dst,
 											 const Sim::SimParams& params)
@@ -339,6 +354,8 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	const float jitAmp = params.jitterFracB * params.particleSizeB;
 	std::mt19937_64 rng(params.jitterSeedB);
 	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
+	const float defaultVolB = DefaultBoundaryVolB(params);
+	const float defaultPsiB = DefaultBoundaryPsiB(params);
 
 	uint32_t idx = N_base;
 
@@ -385,6 +402,8 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 				B.xPos[idx] = pos.x;
 				B.yPos[idx] = pos.y;
 				B.zPos[idx] = pos.z;
+				B.volB[idx] = defaultVolB;
+				B.psiB[idx] = defaultPsiB;
 
 				idx++;
 			}
@@ -488,10 +507,12 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	const uint32_t N_v = TilesCount(face.vLen, size); // num particles in v direction
 	if (N_u <= 0 || N_v <= 0) { return; }
 
-	auto& B = dst.boundaryParticles;
+	const float defaultVolB = DefaultBoundaryVolB(params);
+	const float defaultPsiB = DefaultBoundaryPsiB(params);
 
 	// pre-reserve memory for new particles
-	B.reserveAll(B.N_ + N_u * N_v * params.boundaryLayers);
+	dst.ReserveBoundaryAdditional(N_u * N_v * params.boundaryLayers);
+	auto& B = dst.boundaryParticles;
 
 	for (uint32_t layer = 0; layer < params.boundaryLayers; layer++)
 	{
@@ -516,6 +537,8 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				B.xPos.push_back(pos.x);
 				B.yPos.push_back(pos.y);
 				B.zPos.push_back(pos.z);
+				B.volB.push_back(defaultVolB);
+				B.psiB.push_back(defaultPsiB);
 
 			}
 		}

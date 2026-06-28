@@ -81,6 +81,13 @@ namespace Sync
 		std::vector<float> yPosF;
 		std::vector<float> zPosF;
 		std::vector<float> velMagF;
+
+		// data for boundary particles export
+		uint32_t N_B;
+		std::vector<float> xPosB;
+		std::vector<float> yPosB;
+		std::vector<float> zPosB;
+		std::vector<float> volB;
 	};
 
 	// data structure for visualizing parts of the simulation state interactively

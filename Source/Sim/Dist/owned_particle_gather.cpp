@@ -143,6 +143,8 @@ namespace
 		packet.xPos = boundaryParticles.xPos[localIdx];
 		packet.yPos = boundaryParticles.yPos[localIdx];
 		packet.zPos = boundaryParticles.zPos[localIdx];
+		packet.volB = boundaryParticles.volB[localIdx];
+		packet.psiB = boundaryParticles.psiB[localIdx];
 
 		return packet;
 	}
@@ -184,6 +186,8 @@ namespace
 		dst.xPos[globalIdx] = packet.xPos;
 		dst.yPos[globalIdx] = packet.yPos;
 		dst.zPos[globalIdx] = packet.zPos;
+		dst.volB[globalIdx] = packet.volB;
+		dst.psiB[globalIdx] = packet.psiB;
 	}
 
 	bool MarkGatheredParticle(

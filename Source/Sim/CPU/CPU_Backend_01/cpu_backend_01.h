@@ -118,6 +118,8 @@ namespace Sim
 		// boundary particles
 		// TODO: add boundary particle velocities?
 		std::vector<float> xPosB_, yPosB_, zPosB_;
+		std::vector<float> volB_; // non-uniform volumes for non-uniform boundary particle spacing
+		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
 		// optional distributed integration filtering
 		bool useActiveFluidParticleLocalIdxs_ = false;

@@ -389,6 +389,7 @@ void VisualizationMgr::SyncVisSimState()
 	// move snapshot data into back buffers
 	posF_[back_].swap(snap->posF);
 	scalarDataF_[back_].swap(snap->scalarDataF);
+	posB_[back_].swap(snap->posB);
 	boxesB_[back_].swap(snap->boxesB);
 	scalarMode_ = snap->scalarModeF;
 
@@ -418,6 +419,8 @@ void VisualizationMgr::SyncVisSimState()
 		? std::span<const float>()
 		: std::span<const float>(scalarDataF_[front_].data(), scalarDataF_[front_].size());
 	view_.scalarModeF = scalarMode_;
+	view_.N_B = static_cast<uint32_t>(posB_[front_].size());
+	view_.posB = std::span<const glm::vec3>(posB_[front_].data(), posB_[front_].size());
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
 
 	// local copy for thread safety

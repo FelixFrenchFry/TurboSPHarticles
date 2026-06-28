@@ -1146,6 +1146,8 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
+		ApplyPermutation(particleOrderB_, be_.volB_, be_.workBufferB_);
+		ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
 	}
 
 	cellIdsMatchCurrentParticleOrder_ = true;

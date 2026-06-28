@@ -1039,6 +1039,8 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_volB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_psiB_, d_reorderScratch, be_.stream_);
 
 		// boundary arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(

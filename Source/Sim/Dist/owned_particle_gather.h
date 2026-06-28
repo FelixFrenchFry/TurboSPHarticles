@@ -51,6 +51,8 @@ namespace Dist
 		float xPos = 0.0f;
 		float yPos = 0.0f;
 		float zPos = 0.0f;
+		float volB = 0.0f;
+		float psiB = 0.0f;
 	};
 
 	struct OwnedParticleGatherBuffer

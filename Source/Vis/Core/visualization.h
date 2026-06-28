@@ -76,6 +76,7 @@ namespace Vis
 		// double-buffered vis-specific state
 		std::vector<glm::vec3> posF_[2];	// positions of fluid particles
 		std::vector<float> scalarDataF_[2]; // data according to color coding mode
+		std::vector<glm::vec3> posB_[2];	// positions of boundary particles
 		std::vector<Scene::OBB> boxesB_[2]; // OBBs of boundary structures
 		int front_ = 0; int back_ = 1; // current / next buffer index
 

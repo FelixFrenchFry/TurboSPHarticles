@@ -77,6 +77,8 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	N_F_ = F.N_;
 	N_B_ = B.N_;
 	simStep_ = src.step;
+	simTime_ = src.time;
+	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensityF);
 
 	// transfer to backend fluid data structures
 	xPosF_ = std::move(F.xPos);
@@ -104,6 +106,8 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	xPosB_ = std::move(B.xPos);
 	yPosB_ = std::move(B.yPos);
 	zPosB_ = std::move(B.zPos);
+	volB_ = std::move(B.volB);
+	psiB_ = std::move(B.psiB);
 
 	// init neighbor list sizes
 	neighborList_->Resize(N_F_, N_B_, params);
@@ -114,6 +118,10 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
+
+	dst.schemaVersion = Sync::UniversalSimStateSchemaVersion;
+	dst.step = simStep_;
+	dst.time = simTime_;
 
 	// make sure the destination data structures have enough capacity
 	dst.ResizeFluid(N_F_);
@@ -162,6 +170,8 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 				B.xPos[i] = xPosB_[i];
 				B.yPos[i] = yPosB_[i];
 				B.zPos[i] = zPosB_[i];
+				B.volB[i] = volB_[i];
+				B.psiB[i] = psiB_[i];
 			}
 		},
 		tbb::auto_partitioner{}
@@ -174,10 +184,32 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 void SimBackend_CPU01::PackExportSnapshot(
 	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
+	snap.simStep = simStep_;
+	snap.simTime = simTime_;
+
+	snap.N_B = N_B_;
+	snap.xPosB.resize(N_B_);
+	snap.yPosB.resize(N_B_);
+	snap.zPosB.resize(N_B_);
+	snap.volB.resize(N_B_);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_B_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				snap.xPosB[i] = xPosB_[i];
+				snap.yPosB[i] = yPosB_[i];
+				snap.zPosB[i] = zPosB_[i];
+				snap.volB[i] = volB_[i];
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
 	if (N_F_ == 0)
 	{
-		snap.simStep = simStep_;
-		snap.simTime = simTime_;
 		snap.N_F = 0;
 		snap.xPosF.clear();
 		snap.yPosF.clear();
@@ -236,8 +268,6 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 	if (N_surface == 0) // no particles to export
 	{
-		snap.simStep = simStep_;
-		snap.simTime = simTime_;
 		snap.N_F = 0;
 		snap.xPosF.clear();
 		snap.yPosF.clear();
@@ -248,8 +278,6 @@ void SimBackend_CPU01::PackExportSnapshot(
 	}
 
 	// prepare snapshot buffers
-	snap.simStep = simStep_;
-	snap.simTime = simTime_;
 	snap.N_F = N_surface;
 
 	snap.xPosF.resize(N_surface);
@@ -279,30 +307,50 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
-	// TODO: add boundary particles
-
-	if (N_F_ == 0) { return; }
-
 	snap.simStep = simStep_;
 	snap.N_F = N_F_;
+	snap.N_B = N_B_;
 
-	snap.posF.resize(N_F_);
-	snap.scalarDataF.resize(N_F_);
+	if (N_F_ == 0)
+	{
+		snap.posF.clear();
+		snap.scalarDataF.clear();
+	}
+	else
+	{
+		snap.posF.resize(N_F_);
+		snap.scalarDataF.resize(N_F_);
 
-	// pack into the visual snapshot's data structures
+		// pack fluid positions into the visual snapshot's data structures
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					snap.posF[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		FillScalarData(snap, snap.scalarModeF);
+	}
+
+	snap.posB.resize(N_B_);
+
+	// pack boundary positions into the visual snapshot's data structures
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
+		tbb::blocked_range<uint32_t>(0, N_B_),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				snap.posF[i] = glm::vec3{ xPosF_[i], yPosF_[i], zPosF_[i] };
+				snap.posB[i] = glm::vec3{ xPosB_[i], yPosB_[i], zPosB_[i] };
 			}
 		},
 		tbb::auto_partitioner{}
 	);
-
-	FillScalarData(snap, snap.scalarModeF);
 }
 
 void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
@@ -403,6 +451,8 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(xPosB_));
 		Add(usage, MemUsageOf_Vector(yPosB_));
 		Add(usage, MemUsageOf_Vector(zPosB_));
+		Add(usage, MemUsageOf_Vector(volB_));
+		Add(usage, MemUsageOf_Vector(psiB_));
 
 		// finalize
 		Set(record, memSpace, MemBucket::ParticlePropertiesB, usage);

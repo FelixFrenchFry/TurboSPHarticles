@@ -144,6 +144,8 @@ namespace Dist
 		std::vector<float> xPos_;
 		std::vector<float> yPos_;
 		std::vector<float> zPos_;
+		std::vector<float> volB_;
+		std::vector<float> psiB_;
 	};
 
 	struct HaloExchangeBuffer

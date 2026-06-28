@@ -179,6 +179,8 @@ namespace Sim
 
 		// boundary particles
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
+		DeviceBuffer<float> d_volB_; // non-uniform volumes for non-uniform boundary particle spacing
+		DeviceBuffer<float> d_psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
 		// neighbor list storage
 		// (compressed SELL32 for FF and FB neighbors)
@@ -228,6 +230,9 @@ namespace Sim
 		mutable std::vector<float> h_expXVelF_;
 		mutable std::vector<float> h_expYVelF_;
 		mutable std::vector<float> h_expZVelF_;
+		mutable std::vector<float> h_expXPosB_;
+		mutable std::vector<float> h_expYPosB_;
+		mutable std::vector<float> h_expZPosB_;
 		mutable std::vector<uint8_t> h_expSurfaceFlagsScratch_;
 
 		// operation benchmarking groups
@@ -314,7 +319,8 @@ namespace Sim
 			const bool needBoundary =
 				force ||
 				(N_B_new != N_B_) ||
-				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new;
+				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
+				d_volB_.Size() != N_B_new || d_psiB_.Size() != N_B_new;
 
 			// detect if (re)allocation of buffers is needed
 			// (might be due to change in particle counts or lack of initialization)
@@ -335,6 +341,8 @@ namespace Sim
 
 			// boundary
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
+			d_volB_.Resize(N_B_);
+			d_psiB_.Resize(N_B_);
 
 			// neighbors
 			d_nbrCountFF_.Resize(N_F_);

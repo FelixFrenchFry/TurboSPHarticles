@@ -1167,7 +1167,7 @@ bool Dist::RebuildLocalStateWithMigratedFluidParticles(
 		}
 	}
 
-	localState.fluidParticles.resizeAll(localParticleCount);
+	localState.ResizeFluid(localParticleCount);
 	fluidParticleState.particleGlobalIdx_FromLocalIdx.resize(localParticleCount);
 	fluidParticleState.particleClasses.resize(localParticleCount, DistParticleClass::None);
 	fluidParticleState.particleLocalIdx_Owned.clear();

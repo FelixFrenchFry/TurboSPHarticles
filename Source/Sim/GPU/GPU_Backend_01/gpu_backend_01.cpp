@@ -125,6 +125,8 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	N_F_ = F.N_;
 	N_B_ = B.N_;
 	simStep_ = src.step;
+	simTime_ = src.time;
+	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensityF);
 
 	EnsureCapacity(N_F_, N_B_);
 
@@ -157,6 +159,8 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 		GPU::Copy_HostToDevice(d_xPosB_.Data(), B.xPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_yPosB_.Data(), B.yPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_zPosB_.Data(), B.zPos.data(), N_B_, stream_);
+		GPU::Copy_HostToDevice(d_volB_.Data(), B.volB.data(), N_B_, stream_);
+		GPU::Copy_HostToDevice(d_psiB_.Data(), B.psiB.data(), N_B_, stream_);
 	}
 
 	// reset neighbor counts for the next construction step
@@ -182,6 +186,10 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
+
+	dst.schemaVersion = Sync::UniversalSimStateSchemaVersion;
+	dst.step = static_cast<uint32_t>(simStep_);
+	dst.time = simTime_;
 
 	// make sure the destination data structures have enough capacity
 	dst.ResizeFluid(N_F_);
@@ -217,6 +225,8 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(B.xPos.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.yPos.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.zPos.data(), d_zPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(B.volB.data(), d_volB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(B.psiB.data(), d_psiB_.Data(), N_B_, stream_);
 	}
 
 	GPU::StreamSync(stream_);
@@ -232,10 +242,26 @@ void SimBackend_GPU01::PackExportSnapshot(
 
 	// TODO: only export surface particles?
 
+	snap.simStep = simStep_;
+	snap.simTime = simTime_;
+
+	snap.N_B = N_B_;
+	snap.xPosB.resize(N_B_);
+	snap.yPosB.resize(N_B_);
+	snap.zPosB.resize(N_B_);
+	snap.volB.resize(N_B_);
+
+	if (N_B_ > 0)
+	{
+		GPU::Copy_DeviceToHost(snap.xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(snap.yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(snap.zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(snap.volB.data(), d_volB_.Data(), N_B_, stream_);
+		GPU::StreamSync(stream_);
+	}
+
 	if (N_F_ == 0)
 	{
-		snap.simStep = simStep_;
-		snap.simTime = simTime_;
 		snap.N_F = 0;
 		snap.xPosF.clear();
 		snap.yPosF.clear();
@@ -358,8 +384,6 @@ void SimBackend_GPU01::PackExportSnapshot(
 
 	if (N_surface == 0) // no particles to export
 	{
-		snap.simStep = simStep_;
-		snap.simTime = simTime_;
 		snap.N_F = 0;
 		snap.xPosF.clear();
 		snap.yPosF.clear();
@@ -370,8 +394,6 @@ void SimBackend_GPU01::PackExportSnapshot(
 	}
 
 	// prepare snapshot buffers
-	snap.simStep = simStep_;
-	snap.simTime = simTime_;
 	snap.N_F = N_surface;
 
 	snap.xPosF.resize(N_surface);
@@ -401,50 +423,82 @@ void SimBackend_GPU01::PackExportSnapshot(
 
 void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
-	// TODO: add boundary particles
-
 	snap.N_F = N_F_;
+	snap.N_B = N_B_;
 	snap.simStep = simStep_;
 
 	if (N_F_ == 0) // empty sim
 	{
 		snap.posF.clear();
 		snap.scalarDataF.clear();
+	}
+	else
+	{
+		snap.posF.resize(N_F_);
 
-		// TODO: add boundary particles
+		// host staging for fluid positions
+		std::vector<float> h_xPosF(N_F_);
+		std::vector<float> h_yPosF(N_F_);
+		std::vector<float> h_zPosF(N_F_);
 
-		return;
+		// launch async device-to-host copies
+		GPU::Copy_DeviceToHost(h_xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(h_yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
+		GPU::Copy_DeviceToHost(h_zPosF.data(), d_zPosF_.Data(), N_F_, stream_);
+
+		// wait for all fluid copies to finish
+		GPU::StreamSync(stream_);
+
+		// pack fluid positions into the visual snapshot's data structures
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_F_),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					snap.posF[i] = glm::vec3{ h_xPosF[i], h_yPosF[i], h_zPosF[i] };
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		FillScalarData(snap, snap.scalarModeF);
 	}
 
-	snap.posF.resize(N_F_);
+	snap.posB.resize(N_B_);
 
-	// host staging for positions
-	std::vector<float> h_xPosF(N_F_);
-	std::vector<float> h_yPosF(N_F_);
-	std::vector<float> h_zPosF(N_F_);
+	if (N_B_ > 0)
+	{
+		// host staging for boundary positions
+		auto& h_xPosB = h_expXPosB_;
+		auto& h_yPosB = h_expYPosB_;
+		auto& h_zPosB = h_expZPosB_;
 
-	// launch async device to host copies
-	GPU::Copy_DeviceToHost(h_xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
-	GPU::Copy_DeviceToHost(h_yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
-	GPU::Copy_DeviceToHost(h_zPosF.data(), d_zPosF_.Data(), N_F_, stream_);
+		h_xPosB.resize(N_B_);
+		h_yPosB.resize(N_B_);
+		h_zPosB.resize(N_B_);
 
-	// wait for all copies to finish
-	GPU::StreamSync(stream_);
+		// launch async device-to-host copies
+		GPU::Copy_DeviceToHost(h_xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(h_yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(h_zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
 
-	// pack into the visual snapshot's data structures
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_F_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
+		// wait for all boundary copies to finish
+		GPU::StreamSync(stream_);
+
+		// pack boundary positions into the visual snapshot's data structures
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_B_),
+			[&](const tbb::blocked_range<uint32_t>& r)
 			{
-				snap.posF[i] = glm::vec3{ h_xPosF[i], h_yPosF[i], h_zPosF[i] };
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	FillScalarData(snap, snap.scalarModeF);
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					snap.posB[i] = glm::vec3{ h_xPosB[i], h_yPosB[i], h_zPosB[i] };
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+	}
 }
 
 void SimBackend_GPU01::FillScalarData(
@@ -550,6 +604,18 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Set(record, memSpaceRAM, MemBucket::ParticlePropertiesF, usage);
 	}
 
+	// boundary
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_Vector(h_expXPosB_));
+		Add(usage, MemUsageOf_Vector(h_expYPosB_));
+		Add(usage, MemUsageOf_Vector(h_expZPosB_));
+
+		// finalize
+		Set(record, memSpaceRAM, MemBucket::ParticlePropertiesB, usage);
+	}
+
 	// --- [ RAM: neighbor list storage ] ------------------------------------------------------------
 
 	{
@@ -620,6 +686,8 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_xPosB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yPosB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zPosB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_volB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_psiB_));
 
 		// finalize
 		Set(record, memSpaceVRAM, MemBucket::ParticlePropertiesB, usage);
@@ -979,6 +1047,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU01::Launch_Density(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_psiB_.Data(),
 			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
 			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
 			d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
@@ -998,6 +1067,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU01::Launch_NonPressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_volB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 			d_densityF_.Data(),
 			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
@@ -1019,6 +1089,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_psiB_.Data(),
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_densityF_.Data(),
 			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
@@ -1047,6 +1118,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			GPU01::Launch_PressureAcceleration(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+				d_psiB_.Data(),
 				d_pressureF_.Data(),
 				d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
 				d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
@@ -1064,6 +1136,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			GPU01::Launch_PressureRelaxedJacobiSolver(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+				d_psiB_.Data(),
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
 				d_sourceTermF_.Data(), d_diagElemF_.Data(),
 				d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
@@ -1088,6 +1161,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU01::Launch_PressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
+			d_psiB_.Data(),
 			d_pressureF_.Data(),
 			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
 			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),

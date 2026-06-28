@@ -21,6 +21,7 @@ namespace GPU01
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* psiB,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
@@ -43,6 +44,7 @@ namespace GPU01
 	void Launch_NonPressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* volB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* densityF,
 		const uint16_t* nbrCountFF,
@@ -67,6 +69,7 @@ namespace GPU01
 	void Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* psiB,
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* densityF,
 		const uint16_t* nbrCountFF,
@@ -93,6 +96,7 @@ namespace GPU01
 	void Launch_PressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* psiB,
 		const float* pressureF,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
@@ -118,6 +122,7 @@ namespace GPU01
 	void Launch_PressureRelaxedJacobiSolver(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* psiB,
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,

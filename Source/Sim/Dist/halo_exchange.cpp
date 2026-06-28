@@ -179,6 +179,8 @@ namespace
 		dst.xPos[dstLocalIdx] = src.xPos[srcLocalIdx];
 		dst.yPos[dstLocalIdx] = src.yPos[srcLocalIdx];
 		dst.zPos[dstLocalIdx] = src.zPos[srcLocalIdx];
+		dst.volB[dstLocalIdx] = src.volB[srcLocalIdx];
+		dst.psiB[dstLocalIdx] = src.psiB[srcLocalIdx];
 	}
 
 	bool AddParticleMapEntry(
@@ -517,6 +519,8 @@ void HaloParticleBufferB::Clear()
 	xPos_.clear();
 	yPos_.clear();
 	zPos_.clear();
+	volB_.clear();
+	psiB_.clear();
 }
 
 void HaloParticleBufferB::Resize(const uint64_t particleCount)
@@ -525,6 +529,8 @@ void HaloParticleBufferB::Resize(const uint64_t particleCount)
 	xPos_.resize(particleCount);
 	yPos_.resize(particleCount);
 	zPos_.resize(particleCount);
+	volB_.resize(particleCount);
+	psiB_.resize(particleCount);
 }
 
 int HaloParticleBufferB::GlobalIdxAt(const uint64_t bufferIdx) const
@@ -542,6 +548,8 @@ void HaloParticleBufferB::SetFromLocalParticle(
 	xPos_[bufferIdx] = boundaryParticles.xPos[localIdx];
 	yPos_[bufferIdx] = boundaryParticles.yPos[localIdx];
 	zPos_[bufferIdx] = boundaryParticles.zPos[localIdx];
+	volB_[bufferIdx] = boundaryParticles.volB[localIdx];
+	psiB_[bufferIdx] = boundaryParticles.psiB[localIdx];
 }
 
 void HaloParticleBufferB::CopyToLocalParticle(
@@ -552,6 +560,8 @@ void HaloParticleBufferB::CopyToLocalParticle(
 	dst.xPos[localIdx] = xPos_[bufferIdx];
 	dst.yPos[localIdx] = yPos_[bufferIdx];
 	dst.zPos[localIdx] = zPos_[bufferIdx];
+	dst.volB[localIdx] = volB_[bufferIdx];
+	dst.psiB[localIdx] = psiB_[bufferIdx];
 }
 
 void HaloParticleBufferB::QueueIRecvPayload(
@@ -566,6 +576,8 @@ void HaloParticleBufferB::QueueIRecvPayload(
 	QueueIRecvVector(mpiContext, xPos_, peerRank, tagBase + 2, requests);
 	QueueIRecvVector(mpiContext, yPos_, peerRank, tagBase + 3, requests);
 	QueueIRecvVector(mpiContext, zPos_, peerRank, tagBase + 4, requests);
+	QueueIRecvVector(mpiContext, volB_, peerRank, tagBase + 5, requests);
+	QueueIRecvVector(mpiContext, psiB_, peerRank, tagBase + 6, requests);
 }
 
 void HaloParticleBufferB::QueueISendPayload(
@@ -580,6 +592,8 @@ void HaloParticleBufferB::QueueISendPayload(
 	QueueISendVector(mpiContext, xPos_, peerRank, tagBase + 2, requests);
 	QueueISendVector(mpiContext, yPos_, peerRank, tagBase + 3, requests);
 	QueueISendVector(mpiContext, zPos_, peerRank, tagBase + 4, requests);
+	QueueISendVector(mpiContext, volB_, peerRank, tagBase + 5, requests);
+	QueueISendVector(mpiContext, psiB_, peerRank, tagBase + 6, requests);
 }
 
 int HaloParticleBufferB::CheckedBufferCount() const
@@ -600,6 +614,8 @@ uint64_t HaloParticleBufferB::UsedBytes() const
 	usedBytes += UsedByteSize(xPos_);
 	usedBytes += UsedByteSize(yPos_);
 	usedBytes += UsedByteSize(zPos_);
+	usedBytes += UsedByteSize(volB_);
+	usedBytes += UsedByteSize(psiB_);
 
 	return usedBytes;
 }
@@ -612,6 +628,8 @@ uint64_t HaloParticleBufferB::AllocBytes() const
 	allocBytes += AllocByteSize(xPos_);
 	allocBytes += AllocByteSize(yPos_);
 	allocBytes += AllocByteSize(zPos_);
+	allocBytes += AllocByteSize(volB_);
+	allocBytes += AllocByteSize(psiB_);
 
 	return allocBytes;
 }
@@ -895,7 +913,7 @@ namespace
 			}
 		}
 
-		localState.fluidParticles.resizeAll(localParticleCount);
+		localState.ResizeFluid(localParticleCount);
 		particleState.particleGlobalIdx_FromLocalIdx.resize(localParticleCount, -1);
 		particleState.particleClasses.resize(localParticleCount, DistParticleClass::None);
 		std::fill(
@@ -998,7 +1016,7 @@ namespace
 			}
 		}
 
-		localState.boundaryParticles.resizeAll(localParticleCount);
+		localState.ResizeBoundary(localParticleCount);
 		particleState.particleGlobalIdx_FromLocalIdx.resize(localParticleCount, -1);
 		particleState.particleClasses.resize(localParticleCount, DistParticleClass::None);
 		std::fill(
@@ -1293,7 +1311,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 			static_cast<uint64_t>(exchange.recvBoundaryCount));
 	}
 
-	requests.reserve(exchanges.size() * 42);
+	requests.reserve(exchanges.size() * 46);
 
 	// exchange only non-empty payload chunks after all receive buffers are sized correctly
 	for (HaloExchangeWorkBuffers::RankBuffers& exchange : exchanges) // post non-blocking MPI receives

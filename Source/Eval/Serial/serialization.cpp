@@ -68,7 +68,7 @@ namespace Export
 
 	struct BinHeaderSnap
 	{
-		char magic[8];        // "TSPSNAP\1"
+		char magic[8];        // "TSPSNAP\2"
 		uint32_t endianTag;   // kEndianLE
 		uint32_t headerBytes; // sizeof(BinHeaderSnap)
 
@@ -76,6 +76,7 @@ namespace Export
 		double time;
 
 		uint32_t NF;
+		uint32_t NB;
 	};
 	#pragma pack(pop)
 
@@ -178,6 +179,7 @@ namespace Export
 		[[maybe_unused]] const auto N = static_cast<size_t>(B.N_);
 
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
+		assert(B.volB.size() == N && B.psiB.size() == N);
 	}
 
 	// --- [ UniversalSimState <-> .bin ] ----------------------------------------------------------
@@ -254,6 +256,9 @@ namespace Export
 				WriteVec(ofs, B.xPos);
 				WriteVec(ofs, B.yPos);
 				WriteVec(ofs, B.zPos);
+
+				WriteVec(ofs, B.volB);
+				WriteVec(ofs, B.psiB);
 			}
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
@@ -379,6 +384,17 @@ namespace Export
 			ReadVec(ifs, B.yPos);
 			ReadVec(ifs, B.zPos);
 
+			if (schemaVersion >= 2)
+			{
+				ReadVec(ifs, B.volB);
+				ReadVec(ifs, B.psiB);
+			}
+			else
+			{
+				B.volB.clear();
+				B.psiB.clear();
+			}
+
 			// sanity check
 			B.N_ = NB;
 		}
@@ -406,10 +422,15 @@ namespace Export
 
 		// make sure data for every particle is present
 		const uint32_t NF_size = snap.N_F;
+		const uint32_t NB_size = snap.N_B;
 		assert(snap.xPosF.size() == NF_size);
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
+		assert(snap.xPosB.size() == NB_size);
+		assert(snap.yPosB.size() == NB_size);
+		assert(snap.zPosB.size() == NB_size);
+		assert(snap.volB.size() == NB_size);
 
 		// file path handling
 		const std::filesystem::path dstPath = saveOptions_.baseDir / dir / baseName;
@@ -428,15 +449,16 @@ namespace Export
 			}
 
 			// arrays are written in the same order as referenced by the XDMF file:
-			// xPosF, yPosF, zPosF, velMagF
+			// xPosF, yPosF, zPosF, velMagF, xPosB, yPosB, zPosB, volB
 
 			BinHeaderSnap hdr{};
-			std::memcpy(hdr.magic, "TSPSNAP\1", 8);
+			std::memcpy(hdr.magic, "TSPSNAP\2", 8);
 			hdr.endianTag = kEndianLE;
 			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
 			hdr.step = snap.simStep;
 			hdr.time = snap.simTime;
 			hdr.NF = NF_size;
+			hdr.NB = NB_size;
 
 			WritePod(ofs, hdr);
 
@@ -445,6 +467,11 @@ namespace Export
 			WriteVec(ofs, snap.yPosF);
 			WriteVec(ofs, snap.zPosF);
 			WriteVec(ofs, snap.velMagF);
+
+			WriteVec(ofs, snap.xPosB);
+			WriteVec(ofs, snap.yPosB);
+			WriteVec(ofs, snap.zPosB);
+			WriteVec(ofs, snap.volB);
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
 		}
@@ -485,10 +512,15 @@ namespace Export
 
 		// make sure data for every particle is present
 		const uint32_t NF_size = snap.N_F;
+		const uint32_t NB_size = snap.N_B;
 		assert(snap.xPosF.size() == NF_size);
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
+		assert(snap.xPosB.size() == NB_size);
+		assert(snap.yPosB.size() == NB_size);
+		assert(snap.zPosB.size() == NB_size);
+		assert(snap.volB.size() == NB_size);
 
 		// byte offsets (Seek) into the .bin file
 		//
@@ -498,22 +530,30 @@ namespace Export
 		// yPosF[NF] (float32)
 		// zPosF[NF] (float32)
 		// velMagF[NF] (float32)
+		// xPosB[NB] (float32)
+		// yPosB[NB] (float32)
+		// zPosB[NB] (float32)
+		// volB[NB] (float32)
 		const uint64_t headerBytes = sizeof(BinHeaderSnap);
 		const uint64_t elemBytes = 4; // float32
 
-		const uint64_t off_x = headerBytes;
-		const uint64_t off_y = off_x + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_z = off_y + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_v = off_z + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_xF = headerBytes;
+		const uint64_t off_yF = off_xF + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_zF = off_yF + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_vF = off_zF + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_xB = off_vF + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_yB = off_xB + uint64_t(NB_size) * elemBytes;
+		const uint64_t off_zB = off_yB + uint64_t(NB_size) * elemBytes;
+		const uint64_t off_volB = off_zB + uint64_t(NB_size) * elemBytes;
 
 		// XDMF header
 		ofs << R"(<?xml version="1.0" ?>)" << "\n";
 		ofs << R"(<Xdmf Version="3.0">)" << "\n";
 		ofs << R"(  <Domain>)" << "\n";
 
-		// one uniform grid per file
+		// one uniform grid for exported fluid particles
 		ofs << "    <Grid Name=\"Step_" << snap.simStep
-			<< "\" GridType=\"Uniform\">" << "\n";
+			<< "_Fluid\" GridType=\"Uniform\">" << "\n";
 
 		// time metadata
 		ofs << "      <Time Value=\""
@@ -535,7 +575,7 @@ namespace Export
 		ofs << "          <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" "
 			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_x << "\">\n";
+			<< off_xF << "\">\n";
 		ofs << "            " << baseName_bin << "\n";
 		ofs << "          </DataItem>\n";
 
@@ -543,7 +583,7 @@ namespace Export
 		ofs << "          <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" "
 			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_y << "\">\n";
+			<< off_yF << "\">\n";
 		ofs << "            " << baseName_bin << "\n";
 		ofs << "          </DataItem>\n";
 
@@ -551,7 +591,7 @@ namespace Export
 		ofs << "          <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" "
 			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_z << "\">\n";
+			<< off_zF << "\">\n";
 		ofs << "            " << baseName_bin << "\n";
 		ofs << "          </DataItem>\n";
 
@@ -564,13 +604,77 @@ namespace Export
 		ofs << "        <DataItem Dimensions=\"" << NF_size
 			<< "\" NumberType=\"Float\" Precision=\"4\" "
 			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_v << "\">\n";
+			<< off_vF << "\">\n";
 		ofs << "          " << baseName_bin << "\n";
 		ofs << "        </DataItem>\n";
 		ofs << "      </Attribute>\n";
 
-		// close everything
 		ofs << "    </Grid>\n";
+
+		if (NB_size > 0)
+		{
+			// one uniform grid for exported boundary particles
+			ofs << "    <Grid Name=\"Step_" << snap.simStep
+				<< "_Boundary\" GridType=\"Uniform\">" << "\n";
+
+			// time metadata
+			ofs << "      <Time Value=\""
+				<< std::setprecision(16) << snap.simTime
+				<< "\" />\n";
+
+			// topology of point cloud with NB vertices
+			ofs << "      <Topology TopologyType=\"Polyvertex\" "
+				<< "Dimensions=\"" << NB_size << "\"/>\n";
+
+			// geometry of XYZ coordinates
+			ofs << "      <Geometry GeometryType=\"XYZ\">\n";
+			ofs << "        <DataItem ItemType=\"Function\" "
+				<< "Function=\"JOIN($0, $1, $2)\" "
+				<< "Dimensions=\"" << NB_size << " 3\" "
+				<< "NumberType=\"Float\" Precision=\"4\">\n";
+
+			// x pos (Binary)
+			ofs << "          <DataItem Dimensions=\"" << NB_size
+				<< "\" NumberType=\"Float\" Precision=\"4\" "
+				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+				<< off_xB << "\">\n";
+			ofs << "            " << baseName_bin << "\n";
+			ofs << "          </DataItem>\n";
+
+			// y pos (Binary)
+			ofs << "          <DataItem Dimensions=\"" << NB_size
+				<< "\" NumberType=\"Float\" Precision=\"4\" "
+				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+				<< off_yB << "\">\n";
+			ofs << "            " << baseName_bin << "\n";
+			ofs << "          </DataItem>\n";
+
+			// z pos (Binary)
+			ofs << "          <DataItem Dimensions=\"" << NB_size
+				<< "\" NumberType=\"Float\" Precision=\"4\" "
+				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+				<< off_zB << "\">\n";
+			ofs << "            " << baseName_bin << "\n";
+			ofs << "          </DataItem>\n";
+
+			ofs << "        </DataItem>\n";
+			ofs << "      </Geometry>\n";
+
+			// represented boundary volume (Binary)
+			ofs << "      <Attribute Name=\"volB\" "
+				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
+			ofs << "        <DataItem Dimensions=\"" << NB_size
+				<< "\" NumberType=\"Float\" Precision=\"4\" "
+				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+				<< off_volB << "\">\n";
+			ofs << "          " << baseName_bin << "\n";
+			ofs << "        </DataItem>\n";
+			ofs << "      </Attribute>\n";
+
+			ofs << "    </Grid>\n";
+		}
+
+		// close everything
 		ofs << "  </Domain>\n";
 		ofs << "</Xdmf>\n";
 	}

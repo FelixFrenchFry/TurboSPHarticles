@@ -19,6 +19,8 @@ namespace
 {
 	constexpr int DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT = 7101;
 	constexpr int DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD = 7102;
+	constexpr int DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT = 7103;
+	constexpr int DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD = 7104;
 
 	struct RankDistExportSnapshotGather
 	{
@@ -27,6 +29,7 @@ namespace
 		DistExportSnapshotBuffer recvBuffer;
 
 		int recvFluidCount = 0;
+		int recvBoundaryCount = 0;
 	};
 
 	template <typename T>
@@ -110,6 +113,22 @@ namespace
 		return packet;
 	}
 
+	DistExportBoundaryParticlePacket PackExportBoundaryParticle(
+		const Sync::BoundaryParticles& boundaryParticles,
+		const DistParticleState& particleState,
+		const int localIdx)
+	{
+		DistExportBoundaryParticlePacket packet{};
+		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+
+		packet.xPos = boundaryParticles.xPos[localIdx];
+		packet.yPos = boundaryParticles.yPos[localIdx];
+		packet.zPos = boundaryParticles.zPos[localIdx];
+		packet.volB = boundaryParticles.volB[localIdx];
+
+		return packet;
+	}
+
 	void AppendDistExportSnapshotBuffer(
 		DistExportSnapshotBuffer& dst,
 		const DistExportSnapshotBuffer& src)
@@ -118,22 +137,30 @@ namespace
 			dst.fluidParticles.end(),
 			src.fluidParticles.begin(),
 			src.fluidParticles.end());
+		dst.boundaryParticles.insert(
+			dst.boundaryParticles.end(),
+			src.boundaryParticles.begin(),
+			src.boundaryParticles.end());
 	}
 }
 
 void DistExportSnapshotBuffer::Clear()
 {
 	fluidParticles.clear();
+	boundaryParticles.clear();
 }
 
 bool Dist::PackOwnedExportSnapshotBuffer(
 	DistExportSnapshotBuffer& gatherBuffer,
 	const Sync::UniversalSimState& localState,
-	const DistParticleState& fluidParticleState)
+	const DistParticleState& fluidParticleState,
+	const DistParticleState& boundaryParticleState)
 {
 	gatherBuffer.Clear();
 	gatherBuffer.fluidParticles.reserve(fluidParticleState.particleLocalIdx_Owned.size());
+	gatherBuffer.boundaryParticles.reserve(boundaryParticleState.particleLocalIdx_Owned.size());
 
+	// fluid particles
 	for (const int localIdx : fluidParticleState.particleLocalIdx_Owned)
 	{
 		if (!IsLocalIdxInRange(localIdx, localState.fluidParticles.N_)) { return false; }
@@ -146,6 +173,21 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 
 		gatherBuffer.fluidParticles.push_back(
 			PackExportFluidParticle(localState.fluidParticles, fluidParticleState, localIdx));
+	}
+
+	// boundary particles
+	for (const int localIdx : boundaryParticleState.particleLocalIdx_Owned)
+	{
+		if (!IsLocalIdxInRange(localIdx, localState.boundaryParticles.N_)) { return false; }
+		if (!HasParticleMetadataAtLocalIdx(boundaryParticleState, localIdx)) { return false; }
+
+		const DistParticleClass particleClass = boundaryParticleState.particleClasses[localIdx];
+		if (!IsOwnedParticleClass(particleClass)) { return false; }
+
+		if (boundaryParticleState.particleGlobalIdx_FromLocalIdx[localIdx] < 0) { return false; }
+
+		gatherBuffer.boundaryParticles.push_back(
+			PackExportBoundaryParticle(localState.boundaryParticles, boundaryParticleState, localIdx));
 	}
 
 	return true;
@@ -162,8 +204,14 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	{
 		return false;
 	}
+	if (gatherBuffer.boundaryParticles.size() >
+		static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
+	{
+		return false;
+	}
 
 	std::vector<DistExportFluidParticlePacket> sortedFluidParticles = gatherBuffer.fluidParticles;
+	std::vector<DistExportBoundaryParticlePacket> sortedBoundaryParticles = gatherBuffer.boundaryParticles;
 	std::sort(
 		sortedFluidParticles.begin(),
 		sortedFluidParticles.end(),
@@ -171,15 +219,27 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		{
 			return a.globalIdx < b.globalIdx;
 		});
+	std::sort(
+		sortedBoundaryParticles.begin(),
+		sortedBoundaryParticles.end(),
+		[](const DistExportBoundaryParticlePacket& a, const DistExportBoundaryParticlePacket& b)
+		{
+			return a.globalIdx < b.globalIdx;
+		});
 
 	exportSnap.simStep = simStep;
 	exportSnap.simTime = simTime;
 	exportSnap.N_F = static_cast<uint32_t>(sortedFluidParticles.size());
+	exportSnap.N_B = static_cast<uint32_t>(sortedBoundaryParticles.size());
 
 	exportSnap.xPosF.resize(exportSnap.N_F);
 	exportSnap.yPosF.resize(exportSnap.N_F);
 	exportSnap.zPosF.resize(exportSnap.N_F);
 	exportSnap.velMagF.resize(exportSnap.N_F);
+	exportSnap.xPosB.resize(exportSnap.N_B);
+	exportSnap.yPosB.resize(exportSnap.N_B);
+	exportSnap.zPosB.resize(exportSnap.N_B);
+	exportSnap.volB.resize(exportSnap.N_B);
 
 	int prevGlobalIdx = -1;
 	for (uint32_t i = 0; i < exportSnap.N_F; i++)
@@ -196,6 +256,21 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		prevGlobalIdx = packet.globalIdx;
 	}
 
+	prevGlobalIdx = -1;
+	for (uint32_t i = 0; i < exportSnap.N_B; i++)
+	{
+		const DistExportBoundaryParticlePacket& packet = sortedBoundaryParticles[i];
+		if (packet.globalIdx < 0) { return false; }
+		if (packet.globalIdx == prevGlobalIdx) { return false; }
+
+		exportSnap.xPosB[i] = packet.xPos;
+		exportSnap.yPosB[i] = packet.yPos;
+		exportSnap.zPosB[i] = packet.zPos;
+		exportSnap.volB[i] = packet.volB;
+
+		prevGlobalIdx = packet.globalIdx;
+	}
+
 	return true;
 }
 
@@ -203,6 +278,7 @@ bool Dist::GatherExportSnapshotToRoot(
 	Sync::ExportSnapshot& exportSnap,
 	const Sync::UniversalSimState& localState,
 	const DistParticleState& fluidParticleState,
+	const DistParticleState& boundaryParticleState,
 	const MpiContext& mpiContext,
 	const uint32_t simStep,
 	const double simTime,
@@ -214,12 +290,15 @@ bool Dist::GatherExportSnapshotToRoot(
 	bool localOk = PackOwnedExportSnapshotBuffer(
 		sendBuffer,
 		localState,
-		fluidParticleState);
+		fluidParticleState,
+		boundaryParticleState);
 
 	int sendFluidCount = 0;
+	int sendBoundaryCount = 0;
 	if (localOk)
 	{
 		sendFluidCount = CheckedPacketCount(sendBuffer.fluidParticles);
+		sendBoundaryCount = CheckedPacketCount(sendBuffer.boundaryParticles);
 	}
 
 	if (!mpiContext.AllTrue(localOk)) { return false; }
@@ -243,7 +322,7 @@ bool Dist::GatherExportSnapshotToRoot(
 	}
 
 	std::vector<MPI_Request> requests{};
-	requests.reserve(rankGathers.size());
+	requests.reserve(rankGathers.size() * 2);
 
 	// gather packet counts before gathering raw particle payloads
 	if (mpiContext.IsRoot())
@@ -256,6 +335,12 @@ bool Dist::GatherExportSnapshotToRoot(
 				rankGather.rank,
 				DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT,
 				requests.back());
+			requests.emplace_back(MPI_REQUEST_NULL);
+			mpiContext.IRecvInt(
+				rankGather.recvBoundaryCount,
+				rankGather.rank,
+				DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT,
+				requests.back());
 		}
 	}
 	else
@@ -266,6 +351,12 @@ bool Dist::GatherExportSnapshotToRoot(
 			mpiContext.RootRank(),
 			DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT,
 			requests.back());
+		requests.emplace_back(MPI_REQUEST_NULL);
+		mpiContext.ISendInt(
+			sendBoundaryCount,
+			mpiContext.RootRank(),
+			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT,
+			requests.back());
 	}
 	mpiContext.WaitAll(requests);
 	requests.clear();
@@ -274,7 +365,7 @@ bool Dist::GatherExportSnapshotToRoot(
 	{
 		for (RankDistExportSnapshotGather& rankGather : rankGathers)
 		{
-			if (rankGather.recvFluidCount < 0)
+			if (rankGather.recvFluidCount < 0 || rankGather.recvBoundaryCount < 0)
 			{
 				localOk = false;
 				break;
@@ -282,11 +373,13 @@ bool Dist::GatherExportSnapshotToRoot(
 
 			rankGather.recvBuffer.fluidParticles.resize(
 				static_cast<uint64_t>(rankGather.recvFluidCount));
+			rankGather.recvBuffer.boundaryParticles.resize(
+				static_cast<uint64_t>(rankGather.recvBoundaryCount));
 		}
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 
-	requests.reserve(rankGathers.size());
+	requests.reserve(rankGathers.size() * 2);
 
 	// gather payloads after all root receive buffers are sized correctly
 	if (mpiContext.IsRoot())
@@ -300,6 +393,13 @@ bool Dist::GatherExportSnapshotToRoot(
 				rankGather.rank,
 				DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
 				requests.back());
+			requests.emplace_back(MPI_REQUEST_NULL);
+			mpiContext.IRecvBytes(
+				DataOrNull(rankGather.recvBuffer.boundaryParticles),
+				CheckedByteCount(rankGather.recvBuffer.boundaryParticles),
+				rankGather.rank,
+				DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
+				requests.back());
 		}
 	}
 	else
@@ -310,6 +410,13 @@ bool Dist::GatherExportSnapshotToRoot(
 			CheckedByteCount(sendBuffer.fluidParticles),
 			mpiContext.RootRank(),
 			DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
+			requests.back());
+		requests.emplace_back(MPI_REQUEST_NULL);
+		mpiContext.ISendBytes(
+			DataOrNull(sendBuffer.boundaryParticles),
+			CheckedByteCount(sendBuffer.boundaryParticles),
+			mpiContext.RootRank(),
+			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
 			requests.back());
 	}
 	mpiContext.WaitAll(requests);
@@ -331,6 +438,8 @@ bool Dist::GatherExportSnapshotToRoot(
 		{
 			stats->gatheredFluidParticleCount =
 				static_cast<uint32_t>(gatheredBuffer.fluidParticles.size());
+			stats->gatheredBoundaryParticleCount =
+				static_cast<uint32_t>(gatheredBuffer.boundaryParticles.size());
 		}
 	}
 

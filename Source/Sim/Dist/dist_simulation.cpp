@@ -240,6 +240,8 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.xPos));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.yPos));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.zPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.volB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.psiB));
 
 		return usage;
 	}
@@ -264,6 +266,10 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.velMagF));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.volB));
 
 		return usage;
 	}
@@ -495,7 +501,9 @@ namespace
 
 			if (!AlmostEqual(backendBoundary.xPos[localIdx], globalBoundary.xPos[globalIdx]) ||
 				!AlmostEqual(backendBoundary.yPos[localIdx], globalBoundary.yPos[globalIdx]) ||
-				!AlmostEqual(backendBoundary.zPos[localIdx], globalBoundary.zPos[globalIdx]))
+				!AlmostEqual(backendBoundary.zPos[localIdx], globalBoundary.zPos[globalIdx]) ||
+				!AlmostEqual(backendBoundary.volB[localIdx], globalBoundary.volB[globalIdx]) ||
+				!AlmostEqual(backendBoundary.psiB[localIdx], globalBoundary.psiB[globalIdx]))
 			{
 				return false;
 			}
@@ -1061,12 +1069,14 @@ bool DistSimulationMgr::BuildGlobalSimState()
 
 	// reset scenario and all full-state data
 	globalSimState_ = {};
-	globalSimState_.schemaVersion = 1;
+	globalSimState_.schemaVersion = Sync::UniversalSimStateSchemaVersion;
 	globalSimState_.step = 0;
 	globalSimState_.time = 0.0;
 
 	// all ranks build the same full scenario before rank-local compaction
 	simScenario_->Build(globalSimState_, simParams_);
+	globalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
+		simParams_.massB, simParams_.restDensityF);
 	globalSimState_.ShrinkToFitAll();
 
 	return true;
@@ -1279,6 +1289,7 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 		expSnap,
 		localSimState_,
 		fluidParticleState_,
+		boundaryParticleState_,
 		mpiContext_,
 		simStep_,
 		simTime_,
