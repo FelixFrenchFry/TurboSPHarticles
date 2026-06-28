@@ -71,6 +71,7 @@ namespace Dist
 		std::vector<int> globalIdx_;
 
 		// particle data
+		std::vector<uint32_t> id_;
 		std::vector<float> xPos_;
 		std::vector<float> yPos_;
 		std::vector<float> zPos_;
@@ -141,6 +142,7 @@ namespace Dist
 		std::vector<int> globalIdx_;
 
 		// particle data
+		std::vector<uint32_t> id_;
 		std::vector<float> xPos_;
 		std::vector<float> yPos_;
 		std::vector<float> zPos_;

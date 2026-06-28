@@ -1088,6 +1088,7 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		// so Construct() can reuse them instead of re-computing them right away
 		std::vector<uint64_t> cellIdScratchF;
 		ApplyPermutation(particleOrderF_, cellIdF_, cellIdScratchF);
+		ApplyPermutation(particleOrderF_, be_.idF_, be_.workBufferIdF_);
 		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.zPosF_, be_.workBufferF_);
@@ -1143,6 +1144,7 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		// so Construct() can reuse them instead of re-computing them right away
 		std::vector<uint64_t> cellIdScratchB;
 		ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB);
+		ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
 		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);

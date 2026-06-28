@@ -21,6 +21,7 @@ namespace Dist
 	struct DistExportFluidParticlePacket
 	{
 		int globalIdx = -1;
+		uint32_t id = 0;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -32,6 +33,7 @@ namespace Dist
 	struct DistExportBoundaryParticlePacket
 	{
 		int globalIdx = -1;
+		uint32_t id = 0;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;

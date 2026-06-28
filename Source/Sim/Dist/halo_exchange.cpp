@@ -148,6 +148,8 @@ namespace
 		const int srcLocalIdx,
 		const int dstLocalIdx)
 	{
+		dst.id[dstLocalIdx] = src.id[srcLocalIdx];
+
 		dst.xPos[dstLocalIdx] = src.xPos[srcLocalIdx];
 		dst.yPos[dstLocalIdx] = src.yPos[srcLocalIdx];
 		dst.zPos[dstLocalIdx] = src.zPos[srcLocalIdx];
@@ -176,6 +178,7 @@ namespace
 		const int srcLocalIdx,
 		const int dstLocalIdx)
 	{
+		dst.id[dstLocalIdx] = src.id[srcLocalIdx];
 		dst.xPos[dstLocalIdx] = src.xPos[srcLocalIdx];
 		dst.yPos[dstLocalIdx] = src.yPos[srcLocalIdx];
 		dst.zPos[dstLocalIdx] = src.zPos[srcLocalIdx];
@@ -307,6 +310,7 @@ namespace
 void HaloParticleBufferF::Clear()
 {
 	globalIdx_.clear();
+	id_.clear();
 	xPos_.clear();
 	yPos_.clear();
 	zPos_.clear();
@@ -328,6 +332,7 @@ void HaloParticleBufferF::Clear()
 void HaloParticleBufferF::Resize(const uint64_t particleCount)
 {
 	globalIdx_.resize(particleCount);
+	id_.resize(particleCount);
 	xPos_.resize(particleCount);
 	yPos_.resize(particleCount);
 	zPos_.resize(particleCount);
@@ -358,6 +363,7 @@ void HaloParticleBufferF::SetFromLocalParticle(
 	const int localIdx)
 {
 	globalIdx_[bufferIdx] = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+	id_[bufferIdx] = fluidParticles.id[localIdx];
 	xPos_[bufferIdx] = fluidParticles.xPos[localIdx];
 	yPos_[bufferIdx] = fluidParticles.yPos[localIdx];
 	zPos_[bufferIdx] = fluidParticles.zPos[localIdx];
@@ -381,6 +387,7 @@ void HaloParticleBufferF::CopyToLocalParticle(
 	const uint64_t bufferIdx,
 	const int localIdx) const
 {
+	dst.id[localIdx] = id_[bufferIdx];
 	dst.xPos[localIdx] = xPos_[bufferIdx];
 	dst.yPos[localIdx] = yPos_[bufferIdx];
 	dst.zPos[localIdx] = zPos_[bufferIdx];
@@ -424,6 +431,7 @@ void HaloParticleBufferF::QueueIRecvPayload(
 	QueueIRecvVector(mpiContext, diagElem_, peerRank, tagBase + 15, requests);
 	QueueIRecvVector(mpiContext, pressure_, peerRank, tagBase + 16, requests);
 	QueueIRecvVector(mpiContext, density_, peerRank, tagBase + 17, requests);
+	QueueIRecvVector(mpiContext, id_, peerRank, tagBase + 18, requests);
 }
 
 void HaloParticleBufferF::QueueISendPayload(
@@ -451,6 +459,7 @@ void HaloParticleBufferF::QueueISendPayload(
 	QueueISendVector(mpiContext, diagElem_, peerRank, tagBase + 15, requests);
 	QueueISendVector(mpiContext, pressure_, peerRank, tagBase + 16, requests);
 	QueueISendVector(mpiContext, density_, peerRank, tagBase + 17, requests);
+	QueueISendVector(mpiContext, id_, peerRank, tagBase + 18, requests);
 }
 
 int HaloParticleBufferF::CheckedBufferCount() const
@@ -468,6 +477,7 @@ uint64_t HaloParticleBufferF::UsedBytes() const
 	uint64_t usedBytes = 0;
 
 	usedBytes += UsedByteSize(globalIdx_);
+	usedBytes += UsedByteSize(id_);
 	usedBytes += UsedByteSize(xPos_);
 	usedBytes += UsedByteSize(yPos_);
 	usedBytes += UsedByteSize(zPos_);
@@ -493,6 +503,7 @@ uint64_t HaloParticleBufferF::AllocBytes() const
 	uint64_t allocBytes = 0;
 
 	allocBytes += AllocByteSize(globalIdx_);
+	allocBytes += AllocByteSize(id_);
 	allocBytes += AllocByteSize(xPos_);
 	allocBytes += AllocByteSize(yPos_);
 	allocBytes += AllocByteSize(zPos_);
@@ -516,6 +527,7 @@ uint64_t HaloParticleBufferF::AllocBytes() const
 void HaloParticleBufferB::Clear()
 {
 	globalIdx_.clear();
+	id_.clear();
 	xPos_.clear();
 	yPos_.clear();
 	zPos_.clear();
@@ -526,6 +538,7 @@ void HaloParticleBufferB::Clear()
 void HaloParticleBufferB::Resize(const uint64_t particleCount)
 {
 	globalIdx_.resize(particleCount);
+	id_.resize(particleCount);
 	xPos_.resize(particleCount);
 	yPos_.resize(particleCount);
 	zPos_.resize(particleCount);
@@ -545,6 +558,7 @@ void HaloParticleBufferB::SetFromLocalParticle(
 	const int localIdx)
 {
 	globalIdx_[bufferIdx] = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+	id_[bufferIdx] = boundaryParticles.id[localIdx];
 	xPos_[bufferIdx] = boundaryParticles.xPos[localIdx];
 	yPos_[bufferIdx] = boundaryParticles.yPos[localIdx];
 	zPos_[bufferIdx] = boundaryParticles.zPos[localIdx];
@@ -557,6 +571,7 @@ void HaloParticleBufferB::CopyToLocalParticle(
 	const uint64_t bufferIdx,
 	const int localIdx) const
 {
+	dst.id[localIdx] = id_[bufferIdx];
 	dst.xPos[localIdx] = xPos_[bufferIdx];
 	dst.yPos[localIdx] = yPos_[bufferIdx];
 	dst.zPos[localIdx] = zPos_[bufferIdx];
@@ -578,6 +593,7 @@ void HaloParticleBufferB::QueueIRecvPayload(
 	QueueIRecvVector(mpiContext, zPos_, peerRank, tagBase + 4, requests);
 	QueueIRecvVector(mpiContext, volB_, peerRank, tagBase + 5, requests);
 	QueueIRecvVector(mpiContext, psiB_, peerRank, tagBase + 6, requests);
+	QueueIRecvVector(mpiContext, id_, peerRank, tagBase + 7, requests);
 }
 
 void HaloParticleBufferB::QueueISendPayload(
@@ -594,6 +610,7 @@ void HaloParticleBufferB::QueueISendPayload(
 	QueueISendVector(mpiContext, zPos_, peerRank, tagBase + 4, requests);
 	QueueISendVector(mpiContext, volB_, peerRank, tagBase + 5, requests);
 	QueueISendVector(mpiContext, psiB_, peerRank, tagBase + 6, requests);
+	QueueISendVector(mpiContext, id_, peerRank, tagBase + 7, requests);
 }
 
 int HaloParticleBufferB::CheckedBufferCount() const
@@ -611,6 +628,7 @@ uint64_t HaloParticleBufferB::UsedBytes() const
 	uint64_t usedBytes = 0;
 
 	usedBytes += UsedByteSize(globalIdx_);
+	usedBytes += UsedByteSize(id_);
 	usedBytes += UsedByteSize(xPos_);
 	usedBytes += UsedByteSize(yPos_);
 	usedBytes += UsedByteSize(zPos_);
@@ -625,6 +643,7 @@ uint64_t HaloParticleBufferB::AllocBytes() const
 	uint64_t allocBytes = 0;
 
 	allocBytes += AllocByteSize(globalIdx_);
+	allocBytes += AllocByteSize(id_);
 	allocBytes += AllocByteSize(xPos_);
 	allocBytes += AllocByteSize(yPos_);
 	allocBytes += AllocByteSize(zPos_);
@@ -1311,7 +1330,7 @@ bool Dist::ExchangeHaloParticlesWithNeighborRanks(
 			static_cast<uint64_t>(exchange.recvBoundaryCount));
 	}
 
-	requests.reserve(exchanges.size() * 46);
+	requests.reserve(exchanges.size() * 50);
 
 	// exchange only non-empty payload chunks after all receive buffers are sized correctly
 	for (HaloExchangeWorkBuffers::RankBuffers& exchange : exchanges) // post non-blocking MPI receives
@@ -1400,7 +1419,6 @@ bool Dist::RebuildLocalStateWithReceivedHalos(
 
 	if (!rebuiltFluidInPlace)
 	{
-		scratch.state.schemaVersion = localState.schemaVersion;
 		scratch.state.step = localState.step;
 		scratch.state.time = localState.time;
 
@@ -1427,7 +1445,6 @@ bool Dist::RebuildLocalStateWithReceivedHalos(
 
 	if (!rebuiltBoundaryInPlace)
 	{
-		scratch.state.schemaVersion = localState.schemaVersion;
 		scratch.state.step = localState.step;
 		scratch.state.time = localState.time;
 

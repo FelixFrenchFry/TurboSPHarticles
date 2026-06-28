@@ -193,6 +193,8 @@ namespace
 		const int srcLocalIdx,
 		const int dstLocalIdx)
 	{
+		dst.id[dstLocalIdx] = src.id[srcLocalIdx];
+
 		dst.xPos[dstLocalIdx] = src.xPos[srcLocalIdx];
 		dst.yPos[dstLocalIdx] = src.yPos[srcLocalIdx];
 		dst.zPos[dstLocalIdx] = src.zPos[srcLocalIdx];
@@ -219,6 +221,7 @@ namespace
 void MigratingParticleBufferF::Clear()
 {
 	globalIdx_.clear();
+	id_.clear();
 	xPos_.clear();
 	yPos_.clear();
 	zPos_.clear();
@@ -240,6 +243,7 @@ void MigratingParticleBufferF::Clear()
 void MigratingParticleBufferF::Resize(const uint64_t particleCount)
 {
 	globalIdx_.resize(particleCount);
+	id_.resize(particleCount);
 	xPos_.resize(particleCount);
 	yPos_.resize(particleCount);
 	zPos_.resize(particleCount);
@@ -282,6 +286,7 @@ void MigratingParticleBufferF::SetFromLocalParticle(
 	const int localIdx)
 {
 	globalIdx_[bufferIdx] = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+	id_[bufferIdx] = fluidParticles.id[localIdx];
 	xPos_[bufferIdx] = fluidParticles.xPos[localIdx];
 	yPos_[bufferIdx] = fluidParticles.yPos[localIdx];
 	zPos_[bufferIdx] = fluidParticles.zPos[localIdx];
@@ -305,6 +310,7 @@ void MigratingParticleBufferF::CopyToLocalParticle(
 	const uint64_t bufferIdx,
 	const int localIdx) const
 {
+	dst.id[localIdx] = id_[bufferIdx];
 	dst.xPos[localIdx] = xPos_[bufferIdx];
 	dst.yPos[localIdx] = yPos_[bufferIdx];
 	dst.zPos[localIdx] = zPos_[bufferIdx];
@@ -348,6 +354,7 @@ void MigratingParticleBufferF::QueueIRecvPayload(
 	QueueIRecvVector(mpiContext, diagElem_, peerRank, tagBase + 15, requests);
 	QueueIRecvVector(mpiContext, pressure_, peerRank, tagBase + 16, requests);
 	QueueIRecvVector(mpiContext, density_, peerRank, tagBase + 17, requests);
+	QueueIRecvVector(mpiContext, id_, peerRank, tagBase + 18, requests);
 }
 
 void MigratingParticleBufferF::QueueISendPayload(
@@ -375,6 +382,7 @@ void MigratingParticleBufferF::QueueISendPayload(
 	QueueISendVector(mpiContext, diagElem_, peerRank, tagBase + 15, requests);
 	QueueISendVector(mpiContext, pressure_, peerRank, tagBase + 16, requests);
 	QueueISendVector(mpiContext, density_, peerRank, tagBase + 17, requests);
+	QueueISendVector(mpiContext, id_, peerRank, tagBase + 18, requests);
 }
 
 int MigratingParticleBufferF::CheckedBufferCount() const
@@ -392,6 +400,7 @@ uint64_t MigratingParticleBufferF::UsedBytes() const
 	uint64_t usedBytes = 0;
 
 	usedBytes += UsedByteSize(globalIdx_);
+	usedBytes += UsedByteSize(id_);
 	usedBytes += UsedByteSize(xPos_);
 	usedBytes += UsedByteSize(yPos_);
 	usedBytes += UsedByteSize(zPos_);
@@ -417,6 +426,7 @@ uint64_t MigratingParticleBufferF::AllocBytes() const
 	uint64_t allocBytes = 0;
 
 	allocBytes += AllocByteSize(globalIdx_);
+	allocBytes += AllocByteSize(id_);
 	allocBytes += AllocByteSize(xPos_);
 	allocBytes += AllocByteSize(yPos_);
 	allocBytes += AllocByteSize(zPos_);
@@ -895,7 +905,7 @@ bool Dist::MigrateFluidParticlesToOwnerRanks(
 
 	{
 		std::vector<MPI_Request> requests{};
-		requests.reserve(migrations.size() * 34);
+		requests.reserve(migrations.size() * 36);
 
 		// exchange only non-empty payload chunks after all receive buffers are sized correctly
 		for (MigrationWorkBuffers::RankBuffers& migration : migrations) // post non-blocking MPI receives

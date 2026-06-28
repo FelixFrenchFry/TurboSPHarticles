@@ -36,11 +36,11 @@ namespace Export
 			: saveOptions_(std::move(opt)) {
 		}
 
-		// lossless, versioned serialization of the full simulation state into a file
+		// lossless serialization of the full simulation state into a file
 		void SaveUniversalSimState(const Sync::UniversalSimState& state,
 			const std::string& path) const;
 
-		// lossless, versioned de-serialization of the full simulation state from a file
+		// lossless de-serialization of the full simulation state from a file
 		void LoadUniversalSimState(Sync::UniversalSimState& state,
 			const std::string& path) const;
 

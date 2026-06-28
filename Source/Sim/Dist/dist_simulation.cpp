@@ -208,6 +208,7 @@ namespace
 	{
 		Mem::MemUsage usage{};
 
+		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.id));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.xPos));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.yPos));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(fluidParticles.zPos));
@@ -237,6 +238,7 @@ namespace
 	{
 		Mem::MemUsage usage{};
 
+		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.id));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.xPos));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.yPos));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(boundaryParticles.zPos));
@@ -453,13 +455,19 @@ namespace
 		{
 			return false;
 		}
+		if (backendFluid.id.size() != backendFluid.N_ ||
+			globalFluid.id.size() != globalFluid.N_)
+		{
+			return false;
+		}
 
 		for (uint64_t localIdx = 0; localIdx < backendFluid.N_; localIdx++)
 		{
 			const int globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 			if (globalIdx < 0 || static_cast<uint32_t>(globalIdx) >= globalFluid.N_) { return false; }
 
-			if (!AlmostEqual(backendFluid.xPos[localIdx], globalFluid.xPos[globalIdx]) ||
+			if (backendFluid.id[localIdx] != globalFluid.id[globalIdx] ||
+				!AlmostEqual(backendFluid.xPos[localIdx], globalFluid.xPos[globalIdx]) ||
 				!AlmostEqual(backendFluid.yPos[localIdx], globalFluid.yPos[globalIdx]) ||
 				!AlmostEqual(backendFluid.zPos[localIdx], globalFluid.zPos[globalIdx]) ||
 				!AlmostEqual(backendFluid.xVel[localIdx], globalFluid.xVel[globalIdx]) ||
@@ -495,13 +503,19 @@ namespace
 		{
 			return false;
 		}
+		if (backendBoundary.id.size() != backendBoundary.N_ ||
+			globalBoundary.id.size() != globalBoundary.N_)
+		{
+			return false;
+		}
 
 		for (uint64_t localIdx = 0; localIdx < backendBoundary.N_; localIdx++)
 		{
 			const int globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 			if (globalIdx < 0 || static_cast<uint32_t>(globalIdx) >= globalBoundary.N_) { return false; }
 
-			if (!AlmostEqual(backendBoundary.xPos[localIdx], globalBoundary.xPos[globalIdx]) ||
+			if (backendBoundary.id[localIdx] != globalBoundary.id[globalIdx] ||
+				!AlmostEqual(backendBoundary.xPos[localIdx], globalBoundary.xPos[globalIdx]) ||
 				!AlmostEqual(backendBoundary.yPos[localIdx], globalBoundary.yPos[globalIdx]) ||
 				!AlmostEqual(backendBoundary.zPos[localIdx], globalBoundary.zPos[globalIdx]) ||
 				!AlmostEqual(backendBoundary.volB[localIdx], globalBoundary.volB[globalIdx]) ||
@@ -1071,12 +1085,13 @@ bool DistSimulationMgr::BuildGlobalSimState()
 
 	// reset scenario and all full-state data
 	globalSimState_ = {};
-	globalSimState_.schemaVersion = Sync::UniversalSimStateSchemaVersion;
 	globalSimState_.step = 0;
 	globalSimState_.time = 0.0;
 
 	// all ranks build the same full scenario before rank-local compaction
 	simScenario_->Build(globalSimState_, simParams_);
+	globalSimState_.fluidParticles.ensureParticleIdsPresent();
+	globalSimState_.boundaryParticles.ensureParticleIdsPresent();
 	globalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
 		simParams_.massB, simParams_.restDensityF);
 	globalSimState_.ShrinkToFitAll();

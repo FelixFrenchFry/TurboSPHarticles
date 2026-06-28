@@ -78,9 +78,12 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	N_B_ = B.N_;
 	simStep_ = src.step;
 	simTime_ = src.time;
+	F.ensureParticleIdsPresent();
+	B.ensureParticleIdsPresent();
 	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensityF);
 
 	// transfer to backend fluid data structures
+	idF_ = std::move(F.id);
 	xPosF_ = std::move(F.xPos);
 	yPosF_ = std::move(F.yPos);
 	zPosF_ = std::move(F.zPos);
@@ -103,6 +106,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	densityF_ = std::move(F.density);
 
 	// transfer to boundary data structures
+	idB_ = std::move(B.id);
 	xPosB_ = std::move(B.xPos);
 	yPosB_ = std::move(B.yPos);
 	zPosB_ = std::move(B.zPos);
@@ -119,7 +123,6 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
 
-	dst.schemaVersion = Sync::UniversalSimStateSchemaVersion;
 	dst.step = simStep_;
 	dst.time = simTime_;
 
@@ -135,6 +138,8 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 			// TODO: also re-order the ones that get overwritten anyway?
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				F.id[i] = idF_[i];
+
 				F.xPos[i] = xPosF_[i];
 				F.yPos[i] = yPosF_[i];
 				F.zPos[i] = zPosF_[i];
@@ -167,6 +172,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				B.id[i] = idB_[i];
 				B.xPos[i] = xPosB_[i];
 				B.yPos[i] = yPosB_[i];
 				B.zPos[i] = zPosB_[i];
@@ -200,7 +206,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				snap.idB[i] = i;
+				snap.idB[i] = idB_[i];
 				snap.xPosB[i] = xPosB_[i];
 				snap.yPosB[i] = yPosB_[i];
 				snap.zPosB[i] = zPosB_[i];
@@ -299,7 +305,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 		snap.xPosF[dst] = xPosF_[i];
 		snap.yPosF[dst] = yPosF_[i];
 		snap.zPosF[dst] = zPosF_[i];
-		snap.idF[dst] = i;
+		snap.idF[dst] = idF_[i];
 
 		const float vx = xVelF_[i];
 		const float vy = yVelF_[i];
@@ -425,6 +431,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		Add(usage, MemUsageOf_Vector(idF_));
 		Add(usage, MemUsageOf_Vector(xPosF_));
 		Add(usage, MemUsageOf_Vector(yPosF_));
 		Add(usage, MemUsageOf_Vector(zPosF_));
@@ -454,6 +461,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		Add(usage, MemUsageOf_Vector(idB_));
 		Add(usage, MemUsageOf_Vector(xPosB_));
 		Add(usage, MemUsageOf_Vector(yPosB_));
 		Add(usage, MemUsageOf_Vector(zPosB_));
@@ -501,6 +509,8 @@ void SimBackend_CPU01::FillMemoryRecord(
 
 		Add(usage, MemUsageOf_Vector(workBufferF_));
 		Add(usage, MemUsageOf_Vector(workBufferB_));
+		Add(usage, MemUsageOf_Vector(workBufferIdF_));
+		Add(usage, MemUsageOf_Vector(workBufferIdB_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
 
 		// finalize

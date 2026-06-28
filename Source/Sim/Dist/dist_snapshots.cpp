@@ -104,6 +104,7 @@ namespace
 
 		DistExportFluidParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.id = fluidParticles.id[localIdx];
 
 		packet.xPos = fluidParticles.xPos[localIdx];
 		packet.yPos = fluidParticles.yPos[localIdx];
@@ -120,6 +121,7 @@ namespace
 	{
 		DistExportBoundaryParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.id = boundaryParticles.id[localIdx];
 
 		packet.xPos = boundaryParticles.xPos[localIdx];
 		packet.yPos = boundaryParticles.yPos[localIdx];
@@ -250,7 +252,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.globalIdx < 0) { return false; }
 		if (packet.globalIdx == prevGlobalIdx) { return false; }
 
-		exportSnap.idF[i] = static_cast<uint32_t>(packet.globalIdx);
+		exportSnap.idF[i] = packet.id;
 		exportSnap.xPosF[i] = packet.xPos;
 		exportSnap.yPosF[i] = packet.yPos;
 		exportSnap.zPosF[i] = packet.zPos;
@@ -266,7 +268,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.globalIdx < 0) { return false; }
 		if (packet.globalIdx == prevGlobalIdx) { return false; }
 
-		exportSnap.idB[i] = static_cast<uint32_t>(packet.globalIdx);
+		exportSnap.idB[i] = packet.id;
 		exportSnap.xPosB[i] = packet.xPos;
 		exportSnap.yPosB[i] = packet.yPos;
 		exportSnap.zPosB[i] = packet.zPos;

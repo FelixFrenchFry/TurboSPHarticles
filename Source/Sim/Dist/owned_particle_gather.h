@@ -20,6 +20,7 @@ namespace Dist
 	struct OwnedFluidParticlePacket
 	{
 		int globalIdx = -1;
+		uint32_t id = 0;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -47,6 +48,7 @@ namespace Dist
 	struct OwnedBoundaryParticlePacket
 	{
 		int globalIdx = -1;
+		uint32_t id = 0;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;

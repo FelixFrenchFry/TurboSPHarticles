@@ -126,6 +126,8 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	N_B_ = B.N_;
 	simStep_ = src.step;
 	simTime_ = src.time;
+	F.ensureParticleIdsPresent();
+	B.ensureParticleIdsPresent();
 	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensityF);
 
 	EnsureCapacity(N_F_, N_B_);
@@ -136,6 +138,8 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	// copy fluid particle data to device
 	if (hasF)
 	{
+		GPU::Copy_HostToDevice(d_idF_.Data(), F.id.data(), N_F_, stream_);
+
 		GPU::Copy_HostToDevice(d_xPosF_.Data(), F.xPos.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_yPosF_.Data(), F.yPos.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zPosF_.Data(), F.zPos.data(), N_F_, stream_);
@@ -156,6 +160,8 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	// copy boundary particle data to device
 	if (hasB)
 	{
+		GPU::Copy_HostToDevice(d_idB_.Data(), B.id.data(), N_B_, stream_);
+
 		GPU::Copy_HostToDevice(d_xPosB_.Data(), B.xPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_yPosB_.Data(), B.yPos.data(), N_B_, stream_);
 		GPU::Copy_HostToDevice(d_zPosB_.Data(), B.zPos.data(), N_B_, stream_);
@@ -187,7 +193,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
 
-	dst.schemaVersion = Sync::UniversalSimStateSchemaVersion;
 	dst.step = static_cast<uint32_t>(simStep_);
 	dst.time = simTime_;
 
@@ -201,6 +206,8 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	// copy fluid particle data into the host's universal state
 	if (hasF)
 	{
+		GPU::Copy_DeviceToHost(F.id.data(), d_idF_.Data(), N_F_, stream_);
+
 		GPU::Copy_DeviceToHost(F.xPos.data(), d_xPosF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.yPos.data(), d_yPosF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zPos.data(), d_zPosF_.Data(), N_F_, stream_);
@@ -222,6 +229,8 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	// copy boundary particle data into the host's universal state
 	if (hasB)
 	{
+		GPU::Copy_DeviceToHost(B.id.data(), d_idB_.Data(), N_B_, stream_);
+
 		GPU::Copy_DeviceToHost(B.xPos.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.yPos.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(B.zPos.data(), d_zPosB_.Data(), N_B_, stream_);
@@ -254,15 +263,17 @@ void SimBackend_GPU01::PackExportSnapshot(
 
 	if (N_B_ > 0)
 	{
+		auto& h_idB = h_expIdB_;
+		h_idB.resize(N_B_);
+
+		GPU::Copy_DeviceToHost(h_idB.data(), d_idB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.volB.data(), d_volB_.Data(), N_B_, stream_);
 		GPU::StreamSync(stream_);
-	}
-	for (uint32_t i = 0; i < N_B_; i++)
-	{
-		snap.idB[i] = i;
+
+		snap.idB = h_idB;
 	}
 
 	if (N_F_ == 0)
@@ -304,7 +315,9 @@ void SimBackend_GPU01::PackExportSnapshot(
 	auto& h_xVelF = h_expXVelF_;
 	auto& h_yVelF = h_expYVelF_;
 	auto& h_zVelF = h_expZVelF_;
+	auto& h_idF = h_expIdF_;
 
+	h_idF.resize(N_F_);
 	h_xPosF.resize(N_F_);
 	h_yPosF.resize(N_F_);
 	h_zPosF.resize(N_F_);
@@ -328,6 +341,7 @@ void SimBackend_GPU01::PackExportSnapshot(
 	GPU::Copy_DeviceToHost(h_nbrListAbs32FF.data(), d_nbrListAbs32FF_.Data(),
 						   static_cast<size_t>(N_abs32FF_), stream_);
 
+	GPU::Copy_DeviceToHost(h_idF.data(), d_idF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_zPosF.data(), d_zPosF_.Data(), N_F_, stream_);
@@ -418,7 +432,7 @@ void SimBackend_GPU01::PackExportSnapshot(
 		snap.xPosF[dst] = h_xPosF[i];
 		snap.yPosF[dst] = h_yPosF[i];
 		snap.zPosF[dst] = h_zPosF[i];
-		snap.idF[dst] = i;
+		snap.idF[dst] = h_idF[i];
 
 		const float vx = h_xVelF[i];
 		const float vy = h_yVelF[i];
@@ -601,6 +615,7 @@ void SimBackend_GPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		Add(usage, MemUsageOf_Vector(h_expIdF_));
 		Add(usage, MemUsageOf_Vector(h_expXPosF_));
 		Add(usage, MemUsageOf_Vector(h_expYPosF_));
 		Add(usage, MemUsageOf_Vector(h_expZPosF_));
@@ -617,6 +632,7 @@ void SimBackend_GPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		Add(usage, MemUsageOf_Vector(h_expIdB_));
 		Add(usage, MemUsageOf_Vector(h_expXPosB_));
 		Add(usage, MemUsageOf_Vector(h_expYPosB_));
 		Add(usage, MemUsageOf_Vector(h_expZPosB_));
@@ -663,6 +679,7 @@ void SimBackend_GPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		Add(usage, MemUsageOf_DeviceBuffer(d_idF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_xPosF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yPosF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zPosF_));
@@ -692,6 +709,7 @@ void SimBackend_GPU01::FillMemoryRecord(
 	{
 		MemUsage usage{};
 
+		Add(usage, MemUsageOf_DeviceBuffer(d_idB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_xPosB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yPosB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zPosB_));
@@ -762,7 +780,13 @@ void SimBackend_GPU01::FillMemoryRecord(
 
 	// --- [ VRAM: misc ] ----------------------------------------------------------------------------
 
-	Set(record, memSpaceVRAM, MemBucket::Misc, MemUsage{});
+	{
+		MemUsage usage{};
+
+		Add(usage, MemUsageOf_DeviceBuffer(d_reorderIdScratch_));
+
+		Set(record, memSpaceVRAM, MemBucket::Misc, usage);
+	}
 }
 
 void SimBackend_GPU01::FillStatisticsRecord(

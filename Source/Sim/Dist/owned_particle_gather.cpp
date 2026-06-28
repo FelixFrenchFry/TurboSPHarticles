@@ -107,6 +107,7 @@ namespace
 	{
 		OwnedFluidParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.id = fluidParticles.id[localIdx];
 
 		packet.xPos = fluidParticles.xPos[localIdx];
 		packet.yPos = fluidParticles.yPos[localIdx];
@@ -139,6 +140,7 @@ namespace
 	{
 		OwnedBoundaryParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.id = boundaryParticles.id[localIdx];
 
 		packet.xPos = boundaryParticles.xPos[localIdx];
 		packet.yPos = boundaryParticles.yPos[localIdx];
@@ -155,6 +157,7 @@ namespace
 	{
 		const int globalIdx = packet.globalIdx;
 
+		dst.id[globalIdx] = packet.id;
 		dst.xPos[globalIdx] = packet.xPos;
 		dst.yPos[globalIdx] = packet.yPos;
 		dst.zPos[globalIdx] = packet.zPos;
@@ -183,6 +186,7 @@ namespace
 	{
 		const int globalIdx = packet.globalIdx;
 
+		dst.id[globalIdx] = packet.id;
 		dst.xPos[globalIdx] = packet.xPos;
 		dst.yPos[globalIdx] = packet.yPos;
 		dst.zPos[globalIdx] = packet.zPos;
@@ -469,7 +473,6 @@ bool Dist::GatherOwnedParticlesToRoot(
 
 		if (localOk)
 		{
-			globalOwnedState.schemaVersion = localState.schemaVersion;
 			globalOwnedState.step = localState.step;
 			globalOwnedState.time = localState.time;
 

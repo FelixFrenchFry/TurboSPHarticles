@@ -96,9 +96,8 @@ namespace Mem
 				.name = "fluid particle properties",
 				.tip =
 				"Memory used/allocated by buffers that store fluid particle properties, namely:\n"
-				"position, velocity, predicted velocity, acceleration, pressure acceleration,\n"
-				"viscosity acceleration, external acceleration, source term, diagonal element,\n"
-				"system vector element, pressure, density"
+				"id, position, velocity, predicted velocity, pressure acceleration,\n"
+				"source term, diagonal element, pressure, density"
 			},
 			{
 				.bucket = MemBucket::ParticlePropertiesB,
@@ -106,7 +105,7 @@ namespace Mem
 				.name = "bound particle properties",
 				.tip =
 				"Memory used/allocated by buffers that store boundary particle properties, namely:\n"
-				"position, velocity"
+				"id, position, volB, psiB"
 			},
 			{
 				.bucket = MemBucket::Neighbors_SearchDataStructF,

@@ -411,22 +411,19 @@ namespace
 		const int globalIdx,
 		const int localIdx)
 	{
+		dst.id[localIdx] = src.id[globalIdx];
 		dst.xPos[localIdx] = src.xPos[globalIdx];
 		dst.yPos[localIdx] = src.yPos[globalIdx];
 		dst.zPos[localIdx] = src.zPos[globalIdx];
-
 		dst.xVel[localIdx] = src.xVel[globalIdx];
 		dst.yVel[localIdx] = src.yVel[globalIdx];
 		dst.zVel[localIdx] = src.zVel[globalIdx];
-
 		dst.xVelPred[localIdx] = src.xVelPred[globalIdx];
 		dst.yVelPred[localIdx] = src.yVelPred[globalIdx];
 		dst.zVelPred[localIdx] = src.zVelPred[globalIdx];
-
 		dst.xAccPress[localIdx] = src.xAccPress[globalIdx];
 		dst.yAccPress[localIdx] = src.yAccPress[globalIdx];
 		dst.zAccPress[localIdx] = src.zAccPress[globalIdx];
-
 		dst.sourceTerm[localIdx] = src.sourceTerm[globalIdx];
 		dst.diagElem[localIdx] = src.diagElem[globalIdx];
 		dst.pressure[localIdx] = src.pressure[globalIdx];
@@ -439,6 +436,7 @@ namespace
 		const int globalIdx,
 		const int localIdx)
 	{
+		dst.id[localIdx] = src.id[globalIdx];
 		dst.xPos[localIdx] = src.xPos[globalIdx];
 		dst.yPos[localIdx] = src.yPos[globalIdx];
 		dst.zPos[localIdx] = src.zPos[globalIdx];
@@ -1058,7 +1056,6 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	const float kernelRadius)
 {
 	localState = {};
-	localState.schemaVersion = globalState.schemaVersion;
 	localState.step = globalState.step;
 	localState.time = globalState.time;
 

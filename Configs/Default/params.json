@@ -40,7 +40,7 @@
     "velocity": false
   },
 
-  "exportEnabled": true,
+  "exportEnabled": false,
   "exportDir": "A",
   "exportInterval": 10
 }

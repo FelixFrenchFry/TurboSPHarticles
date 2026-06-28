@@ -997,6 +997,7 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	{
 		const uint32_t* d_permF = d_sortedParticleIdxF_.Data();
 
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, be_.d_reorderIdScratch_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xPosF_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yPosF_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zPosF_, d_reorderScratch, be_.stream_);
@@ -1036,6 +1037,7 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	{
 		const uint32_t* d_permB = d_sortedParticleIdxB;
 
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, be_.d_reorderIdScratch_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);

@@ -168,6 +168,7 @@ namespace Sim
 		// --- [ backend-specific data structures for operating the simulation ]
 
 		// fluid particles
+		DeviceBuffer<uint32_t> d_idF_;
 		DeviceBuffer<float> d_xPosF_, d_yPosF_, d_zPosF_;
 		DeviceBuffer<float> d_xVelF_, d_yVelF_, d_zVelF_;
 		DeviceBuffer<float> d_xVelPredF_, d_yVelPredF_, d_zVelPredF_;
@@ -178,6 +179,7 @@ namespace Sim
 		DeviceBuffer<float> d_densityF_;
 
 		// boundary particles
+		DeviceBuffer<uint32_t> d_idB_;
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 		DeviceBuffer<float> d_volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		DeviceBuffer<float> d_psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
@@ -213,6 +215,7 @@ namespace Sim
 		uint64_t N_abs32FB_ = 0;
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
+		DeviceBuffer<uint32_t> d_reorderIdScratch_;
 
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)
@@ -230,6 +233,8 @@ namespace Sim
 		mutable std::vector<float> h_expXVelF_;
 		mutable std::vector<float> h_expYVelF_;
 		mutable std::vector<float> h_expZVelF_;
+		mutable std::vector<uint32_t> h_expIdF_;
+		mutable std::vector<uint32_t> h_expIdB_;
 		mutable std::vector<float> h_expXPosB_;
 		mutable std::vector<float> h_expYPosB_;
 		mutable std::vector<float> h_expZPosB_;
@@ -296,10 +301,14 @@ namespace Sim
 		{
 			const uint32_t N_chunks_new =
 				(N_F_new == 0u) ? 0u : ((N_F_new - 1u) / 32u) + 1u;
+			const uint32_t N_reorder_scratch_new = std::max(N_F_new, N_B_new);
 			const bool needOverflow = (d_nbrOverflowFlag_.Size() != 1);
+			const bool needIdScratch =
+				d_reorderIdScratch_.Size() != N_reorder_scratch_new;
 			const bool needFluid =
 				force ||
 				(N_F_new != N_F_) ||
+				d_idF_.Size() != N_F_new ||
 				d_xPosF_.Size() != N_F_new || d_yPosF_.Size() != N_F_new || d_zPosF_.Size() != N_F_new ||
 				d_xVelF_.Size() != N_F_new || d_yVelF_.Size() != N_F_new || d_zVelF_.Size() != N_F_new ||
 				d_xVelPredF_.Size() != N_F_new || d_yVelPredF_.Size() != N_F_new || d_zVelPredF_.Size() != N_F_new ||
@@ -319,17 +328,19 @@ namespace Sim
 			const bool needBoundary =
 				force ||
 				(N_B_new != N_B_) ||
+				d_idB_.Size() != N_B_new ||
 				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
 				d_volB_.Size() != N_B_new || d_psiB_.Size() != N_B_new;
 
 			// detect if (re)allocation of buffers is needed
 			// (might be due to change in particle counts or lack of initialization)
-			if (!(needFluid || needBoundary || needOverflow)) { return; }
+			if (!(needFluid || needBoundary || needOverflow || needIdScratch)) { return; }
 
 			N_F_ = N_F_new;
 			N_B_ = N_B_new;
 
 			// fluid
+			d_idF_.Resize(N_F_);
 			d_xPosF_.Resize(N_F_); d_yPosF_.Resize(N_F_); d_zPosF_.Resize(N_F_);
 			d_xVelF_.Resize(N_F_); d_yVelF_.Resize(N_F_); d_zVelF_.Resize(N_F_);
 			d_xVelPredF_.Resize(N_F_); d_yVelPredF_.Resize(N_F_); d_zVelPredF_.Resize(N_F_);
@@ -340,9 +351,11 @@ namespace Sim
 			d_densityF_.Resize(std::max(N_F_, N_B_));
 
 			// boundary
+			d_idB_.Resize(N_B_);
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
 			d_volB_.Resize(N_B_);
 			d_psiB_.Resize(N_B_);
+			d_reorderIdScratch_.Resize(std::max(N_F_, N_B_));
 
 			// neighbors
 			d_nbrCountFF_.Resize(N_F_);

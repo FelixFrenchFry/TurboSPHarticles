@@ -23,6 +23,10 @@ namespace Export
 {
 	// binary format helpers
 	static constexpr uint32_t kEndianLE = 0x01020304u;
+	static constexpr char kSimStateMagic[8] =
+		{ 'T', 'S', 'P', 'S', 'I', 'M', '\1', '\0' };
+	static constexpr char kExportSnapshotMagic[8] =
+		{ 'T', 'S', 'P', 'S', 'N', 'A', 'P', '\3' };
 
 	static bool IsLittleEndian()
 	{
@@ -31,34 +35,12 @@ namespace Export
 	}
 
 	#pragma pack(push, 1)
-	struct BinHeaderSimCommon
-	{
-		char magic[8];        // "TSPSIM\1"
-		uint32_t endianTag;   // kEndianLE
-		uint32_t headerBytes; // sizeof(BinHeaderSim)
-	};
-
-	struct BinHeaderSimV1
-	{
-		char magic[8];        // "TSPSIM\1"
-		uint32_t endianTag;   // kEndianLE
-		uint32_t headerBytes; // sizeof(BinHeaderSimV1)
-
-		uint32_t schemaVersion;
-		uint32_t step;
-		double time;
-
-		uint32_t NF;
-		uint32_t NB;
-	};
-
 	struct BinHeaderSim
 	{
-		char magic[8];        // "TSPSIM\1"
+		char magic[8];        // sim-state file magic
 		uint32_t endianTag;   // kEndianLE
 		uint32_t headerBytes; // sizeof(BinHeaderSim)
 
-		uint64_t schemaVersion;
 		uint32_t step;
 		double time;
 
@@ -68,7 +50,7 @@ namespace Export
 
 	struct BinHeaderSnap
 	{
-		char magic[8];        // "TSPSNAP\3"
+		char magic[8];        // export-snapshot file magic
 		uint32_t endianTag;   // kEndianLE
 		uint32_t headerBytes; // sizeof(BinHeaderSnap)
 
@@ -160,6 +142,7 @@ namespace Export
 	{
 		[[maybe_unused]] const auto N = static_cast<size_t>(F.N_);
 
+		assert(F.id.size() == N);
 		assert(F.xPos.size() == N && F.yPos.size() == N && F.zPos.size() == N);
 
 		assert(F.xVel.size() == N && F.yVel.size() == N && F.zVel.size() == N);
@@ -178,6 +161,7 @@ namespace Export
 	{
 		[[maybe_unused]] const auto N = static_cast<size_t>(B.N_);
 
+		assert(B.id.size() == N);
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
 		assert(B.volB.size() == N && B.psiB.size() == N);
 	}
@@ -209,12 +193,10 @@ namespace Export
 
 			// header
 			BinHeaderSim hdr{};
-			std::memcpy(hdr.magic, "TSPSIM\1", 7);
-			hdr.magic[7] = '\0';
+			std::memcpy(hdr.magic, kSimStateMagic, sizeof(hdr.magic));
 			hdr.endianTag = kEndianLE;
 			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSim));
 
-			hdr.schemaVersion = state.schemaVersion;
 			hdr.step = state.step;
 			hdr.time = state.time;
 
@@ -227,6 +209,7 @@ namespace Export
 			{
 				const auto& F = state.fluidParticles;
 
+				WriteVec(ofs, F.id);
 				WriteVec(ofs, F.xPos);
 				WriteVec(ofs, F.yPos);
 				WriteVec(ofs, F.zPos);
@@ -253,6 +236,7 @@ namespace Export
 			{
 				const auto& B = state.boundaryParticles;
 
+				WriteVec(ofs, B.id);
 				WriteVec(ofs, B.xPos);
 				WriteVec(ofs, B.yPos);
 				WriteVec(ofs, B.zPos);
@@ -281,76 +265,41 @@ namespace Export
 			return;
 		}
 
-		// common header prefix
-		BinHeaderSimCommon hdrCommon{};
-		ReadPod(ifs, hdrCommon);
+		// header
+		BinHeaderSim hdr{};
+		ReadPod(ifs, hdr);
 
 		// basic validation
-		if (std::memcmp(hdrCommon.magic, "TSPSIM\1", 7) != 0)
+		if (std::memcmp(hdr.magic, kSimStateMagic, sizeof(hdr.magic)) != 0)
 		{
 			SPDLOG_ERROR("Invalid sim state file magic: {}", path);
 			return;
 		}
-		if (!IsLittleEndian() || hdrCommon.endianTag != kEndianLE)
+		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
 		{
 			SPDLOG_ERROR("Endianness mismatch (file is LE, host must be LE): {}", path);
 			return;
 		}
-		// parse the remaining header bytes
-		uint64_t schemaVersion = 0;
-		uint32_t step = 0;
-		double time = 0.0;
-		uint32_t NF = 0;
-		uint32_t NB = 0;
-
-		if (hdrCommon.headerBytes == sizeof(BinHeaderSim))
-		{
-			BinHeaderSim hdr{};
-			std::memcpy(&hdr, &hdrCommon, sizeof(BinHeaderSimCommon));
-			ReadExact(ifs,
-				reinterpret_cast<char*>(&hdr) + sizeof(BinHeaderSimCommon),
-				sizeof(BinHeaderSim) - sizeof(BinHeaderSimCommon));
-
-			schemaVersion = hdr.schemaVersion;
-			step = hdr.step;
-			time = hdr.time;
-			NF = hdr.NF;
-			NB = hdr.NB;
-		}
-		else if (hdrCommon.headerBytes == sizeof(BinHeaderSimV1))
-		{
-			BinHeaderSimV1 hdr{};
-			std::memcpy(&hdr, &hdrCommon, sizeof(BinHeaderSimCommon));
-			ReadExact(ifs,
-				reinterpret_cast<char*>(&hdr) + sizeof(BinHeaderSimCommon),
-				sizeof(BinHeaderSimV1) - sizeof(BinHeaderSimCommon));
-
-			schemaVersion = hdr.schemaVersion;
-			step = hdr.step;
-			time = hdr.time;
-			NF = hdr.NF;
-			NB = hdr.NB;
-		}
-		else
+		if (hdr.headerBytes != sizeof(BinHeaderSim))
 		{
 			SPDLOG_ERROR("Unexpected sim header size ({}): {}",
-				hdrCommon.headerBytes, path);
+				hdr.headerBytes, path);
 			return;
 		}
 
 		// metadata
-		state.schemaVersion = schemaVersion;
-		state.step = step;
-		state.time = time;
+		state.step = hdr.step;
+		state.time = hdr.time;
 
 		// resize storage
-		state.ResizeFluid(NF);
-		state.ResizeBoundary(NB);
+		state.ResizeFluid(hdr.NF);
+		state.ResizeBoundary(hdr.NB);
 
 		// fluid data (fixed order)
 		{
 			auto& F = state.fluidParticles;
 
+			ReadVec(ifs, F.id);
 			ReadVec(ifs, F.xPos);
 			ReadVec(ifs, F.yPos);
 			ReadVec(ifs, F.zPos);
@@ -373,30 +322,23 @@ namespace Export
 			ReadVec(ifs, F.density);
 
 			// sanity check
-			F.N_ = NF;
+			F.N_ = hdr.NF;
 		}
 
 		// boundary data (fixed order)
 		{
 			auto& B = state.boundaryParticles;
 
+			ReadVec(ifs, B.id);
 			ReadVec(ifs, B.xPos);
 			ReadVec(ifs, B.yPos);
 			ReadVec(ifs, B.zPos);
 
-			if (schemaVersion >= 2)
-			{
-				ReadVec(ifs, B.volB);
-				ReadVec(ifs, B.psiB);
-			}
-			else
-			{
-				B.volB.clear();
-				B.psiB.clear();
-			}
+			ReadVec(ifs, B.volB);
+			ReadVec(ifs, B.psiB);
 
 			// sanity check
-			B.N_ = NB;
+			B.N_ = hdr.NB;
 		}
 
 		EnsureStreamOk(ifs, "reading", path);
@@ -455,7 +397,7 @@ namespace Export
 			// xPosF, yPosF, zPosF, velMagF, idF, xPosB, yPosB, zPosB, volB, idB
 
 			BinHeaderSnap hdr{};
-			std::memcpy(hdr.magic, "TSPSNAP\3", 8);
+			std::memcpy(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic));
 			hdr.endianTag = kEndianLE;
 			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
 			hdr.step = snap.simStep;

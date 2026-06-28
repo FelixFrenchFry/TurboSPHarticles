@@ -156,6 +156,8 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 												+ box.vHat * v
 												+ box.wHat * w;
 
+							F.id[idx] = idx;
+
 							// use pos for new particle
 							F.xPos[idx] = pos.x;
 							F.yPos[idx] = pos.y;
@@ -284,6 +286,8 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 									+ box.vHat * v
 									+ box.wHat * w;
 
+				F.id[outIdx] = outIdx;
+
 				// use pos for new particle
 				F.xPos[outIdx] = pos.x;
 				F.yPos[outIdx] = pos.y;
@@ -397,6 +401,8 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 									+ box.uHat * u
 									+ box.vHat * v
 									+ box.wHat * w;
+
+				B.id[idx] = idx;
 
 				// use pos for new particle
 				B.xPos[idx] = pos.x;
@@ -532,6 +538,10 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				const glm::vec3 pos = face.origin + bu + bv + face.nHat * outOffset;
 
 				// TODO: add jittering
+
+				const uint32_t idx = static_cast<uint32_t>(B.xPos.size());
+
+				B.id.push_back(idx);
 
 				// use pos for new particle
 				B.xPos.push_back(pos.x);

@@ -14,8 +14,6 @@
 
 namespace Sync
 {
-	constexpr uint64_t UniversalSimStateSchemaVersion = 2;
-
 	// view into fluid particle data
 	// (non-owning, for read-only access)
 	struct FluidView
@@ -24,6 +22,7 @@ namespace Sync
 		uint32_t N_ = 0;
 
 		// fields
+		std::span<uint32_t> id;
 		std::span<float> xPos, yPos, zPos;
 		std::span<float> xVel, yVel, zVel;
 		std::span<float> xVelPred, yVelPred, zVelPred;
@@ -42,6 +41,7 @@ namespace Sync
 		uint32_t N_ = 0;
 
 		// fields
+		std::span<uint32_t> id;
 		std::span<float> xPos, yPos, zPos;
 		std::span<float> volB;
 		std::span<float> psiB;
@@ -53,6 +53,7 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
+		std::vector<uint32_t> id;
 
 		// positions
 		std::vector<float> xPos;
@@ -83,6 +84,8 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
+			id.reserve(N);
+
 			xPos.reserve(N);
 			yPos.reserve(N);
 			zPos.reserve(N);
@@ -110,6 +113,8 @@ namespace Sync
 		{
 			N_ = N;
 
+			id.resize(N_);
+
 			xPos.resize(N_);
 			yPos.resize(N_);
 			zPos.resize(N_);
@@ -136,6 +141,8 @@ namespace Sync
 		// (useful after staged scenario construction with repeated growth)
 		void shrinkToFitAll()
 		{
+			id.shrink_to_fit();
+
 			xPos.shrink_to_fit();
 			yPos.shrink_to_fit();
 			zPos.shrink_to_fit();
@@ -158,12 +165,30 @@ namespace Sync
 			density.shrink_to_fit();
 		}
 
+		void assignSequentialIds()
+		{
+			id.resize(N_);
+			for (uint32_t i = 0; i < N_; i++)
+			{
+				id[i] = i;
+			}
+		}
+
+		void ensureParticleIdsPresent()
+		{
+			if (id.size() == static_cast<size_t>(N_)) { return; }
+
+			assignSequentialIds();
+		}
+
 		// builds and returns a mutable view into the data
 		FluidView view()
 		{
 			return FluidView
 			{
 				.N_ = N_,
+
+				.id = std::span<uint32_t>(id),
 
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
@@ -203,6 +228,7 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
+		std::vector<uint32_t> id;
 
 		// positions
 		std::vector<float> xPos;
@@ -216,6 +242,8 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
+			id.reserve(N);
+
 			xPos.reserve(N);
 			yPos.reserve(N);
 			zPos.reserve(N);
@@ -229,6 +257,8 @@ namespace Sync
 		{
 			N_ = N;
 
+			id.resize(N_);
+
 			xPos.resize(N_);
 			yPos.resize(N_);
 			zPos.resize(N_);
@@ -241,12 +271,30 @@ namespace Sync
 		// (useful after staged scenario construction with repeated growth)
 		void shrinkToFitAll()
 		{
+			id.shrink_to_fit();
+
 			xPos.shrink_to_fit();
 			yPos.shrink_to_fit();
 			zPos.shrink_to_fit();
 
 			volB.shrink_to_fit();
 			psiB.shrink_to_fit();
+		}
+
+		void assignSequentialIds()
+		{
+			id.resize(N_);
+			for (uint32_t i = 0; i < N_; i++)
+			{
+				id[i] = i;
+			}
+		}
+
+		void ensureParticleIdsPresent()
+		{
+			if (id.size() == static_cast<size_t>(N_)) { return; }
+
+			assignSequentialIds();
 		}
 
 		void EnsureBoundaryCoefficientsPresent(float defaultPsiB, float restDensityF)
@@ -272,6 +320,7 @@ namespace Sync
 			{
 				.N_ = N_,
 
+				.id = std::span<uint32_t>(id),
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
 				.zPos = std::span<float>(zPos),
@@ -293,9 +342,6 @@ namespace Sync
 	// TODO: how to deal with simulation method-specific data?
 	struct UniversalSimState
 	{
-		// persistent layout version
-		uint64_t schemaVersion = UniversalSimStateSchemaVersion;
-
 		// simulation metadata
 		uint32_t step = 0;			// simulation step at this state
 		double time = 0.0;			// simulation time in seconds

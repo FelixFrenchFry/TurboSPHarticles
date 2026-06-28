@@ -181,7 +181,6 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	// reset scenario and all its data
 	universalSimState_ = {};
-	universalSimState_.schemaVersion = Sync::UniversalSimStateSchemaVersion;
 	universalSimState_.step = 0;
 	universalSimState_.time = 0.0;
 
@@ -189,6 +188,8 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);
+	universalSimState_.fluidParticles.ensureParticleIdsPresent();
+	universalSimState_.boundaryParticles.ensureParticleIdsPresent();
 	universalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
 		simParams_.massB, simParams_.restDensityF);
 

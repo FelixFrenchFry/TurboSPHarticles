@@ -106,6 +106,7 @@ namespace Sim
 		// --- [ backend-specific data structures for operating the simulation ] -------------------------
 
 		// fluid particles
+		std::vector<uint32_t> idF_;
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
 		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_; // TODO: unify with velF?
@@ -117,6 +118,7 @@ namespace Sim
 
 		// boundary particles
 		// TODO: add boundary particle velocities?
+		std::vector<uint32_t> idB_;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
@@ -135,6 +137,8 @@ namespace Sim
 		// TODO: rework this?
 		mutable std::vector<float> workBufferF_;
 		mutable std::vector<float> workBufferB_;
+		mutable std::vector<uint32_t> workBufferIdF_;
+		mutable std::vector<uint32_t> workBufferIdB_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;
 
 		// operation benchmarking groups
