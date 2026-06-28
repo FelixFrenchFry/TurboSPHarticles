@@ -80,7 +80,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	simTime_ = src.time;
 	F.ensureParticleIdsPresent();
 	B.ensureParticleIdsPresent();
-	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensityF);
+	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensity);
 
 	// transfer to backend fluid data structures
 	idF_ = std::move(F.id);
@@ -741,7 +741,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
 						// relative density error (aka deviation)
-						const float relErr = (densityF_[i] / simParams.restDensityF) - 1.0f;
+						const float relErr = (densityF_[i] / simParams.restDensity) - 1.0f;
 						const float relPosErr = std::max(0.0f, relErr);
 						const float relAbsErr = std::fabs(relErr);
 

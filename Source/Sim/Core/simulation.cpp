@@ -191,7 +191,7 @@ void SimulationMgr::ReBuildInitialSimState()
 	universalSimState_.fluidParticles.ensureParticleIdsPresent();
 	universalSimState_.boundaryParticles.ensureParticleIdsPresent();
 	universalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
-		simParams_.massB, simParams_.restDensityF);
+		simParams_.massB, simParams_.restDensity);
 
 	// compact staged particle vectors once after scenario construction
 	universalSimState_.ShrinkToFitAll();

@@ -21,10 +21,8 @@ namespace GPU01
 	__constant__ float c_timeStep;
 	__constant__ float c_sizeF;
 	__constant__ float c_sizeB;
-	__constant__ float c_restDensityF;
-	__constant__ float c_restDensityB;
-	__constant__ float c_restDensitySquInvF;
-	__constant__ float c_restDensitySquInvB;
+	__constant__ float c_restDensity;
+	__constant__ float c_restDensitySquInv;
 	__constant__ float c_massF;
 	__constant__ float c_massB;
 	__constant__ float c_pressGamma;
@@ -43,8 +41,7 @@ namespace GPU01
 		const float cubicSplineAlpha = static_cast<float>(
 			(1.0 / (4.0 * static_cast<double>(PI))) * sizeInv * sizeInv * sizeInv);
 		const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
-		const float restDensitySquInvF = 1.0f / (params.restDensityF * params.restDensityF);
-		const float restDensitySquInvB = 1.0f / (params.restDensityB * params.restDensityB);
+		const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
 
 		// store values in constant memory on the GPU
 		GPU::Check(cudaMemcpyToSymbol(c_N_F, &N_F, sizeof(uint32_t)));
@@ -52,10 +49,8 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_timeStep, &params.timeStep, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_sizeF, &params.particleSizeF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_sizeB, &params.particleSizeB, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_restDensityF, &params.restDensityF, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_restDensityB, &params.restDensityB, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInvF, &restDensitySquInvF, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInvB, &restDensitySquInvB, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_restDensity, &params.restDensity, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInv, &restDensitySquInv, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_massF, &params.massF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_massB, &params.massB, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_pressGamma, &params.pressGamma, sizeof(float)));
@@ -558,23 +553,23 @@ namespace GPU01
 		}
 
 		// finalize source term
-		const float fin_sourceTermF = c_restDensityF - densityF[i] - c_timeStep
+		const float fin_sourceTermF = c_restDensity - densityF[i] - c_timeStep
 									* (tmp_sourceTermF + tmp_sourceTermB);
 
 		// finalize c-term
-		const float xCTerm = -1.0f * (xCTermF * c_restDensitySquInvF * c_massF)
-			- 2.0f * c_pressGamma * (xCTermB * c_restDensitySquInvF);
-		const float yCTerm = -1.0f * (yCTermF * c_restDensitySquInvF * c_massF)
-			- 2.0f * c_pressGamma * (yCTermB * c_restDensitySquInvF);
-		const float zCTerm = -1.0f * (zCTermF * c_restDensitySquInvF * c_massF)
-			- 2.0f * c_pressGamma * (zCTermB * c_restDensitySquInvF);
+		const float xCTerm = -1.0f * (xCTermF * c_restDensitySquInv * c_massF)
+			- 2.0f * c_pressGamma * (xCTermB * c_restDensitySquInv);
+		const float yCTerm = -1.0f * (yCTermF * c_restDensitySquInv * c_massF)
+			- 2.0f * c_pressGamma * (yCTermB * c_restDensitySquInv);
+		const float zCTerm = -1.0f * (zCTermF * c_restDensitySquInv * c_massF)
+			- 2.0f * c_pressGamma * (zCTermB * c_restDensitySquInv);
 
 		// part A of diagonal element
 		const float tmp_diagElemA = c_massF *
 			fmaf(xCTerm, xCTermF, fmaf(yCTerm, yCTermF, zCTerm * zCTermF));
 		// part B of diagonal element
 		const float tmp_diagElemB =
-			-c_massF * c_massF * c_restDensitySquInvF * gradSquSumF;
+			-c_massF * c_massF * c_restDensitySquInv * gradSquSumF;
 		// part C of diagonal element
 		const float tmp_diagElemC =
 			fmaf(xCTerm, xCTermB, fmaf(yCTerm, yCTermB, zCTerm * zCTermB));
@@ -636,7 +631,7 @@ namespace GPU01
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
 		const float presi = pressureF[i];
-		const float densi = c_restDensityF;
+		const float densi = c_restDensity;
 		const float densiInvSqu = 1.0f / (densi * densi);
 		const float accCoeffF_outer = c_massF * presi * densiInvSqu;
 

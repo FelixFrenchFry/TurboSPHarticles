@@ -298,16 +298,9 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	// --- [ rest density ] --------------------------------------------------------------------------
 
-	if (auto it = j.find("restDensityF"); it != j.end())
+	if (auto it = j.find("restDensity"); it != j.end())
 	{
-		Set_RestDensity(it->get<float>(),
-			Base::ParticleType::Fluid, verbose);
-	}
-
-	if (auto it = j.find("restDensityB"); it != j.end())
-	{
-		Set_RestDensity(it->get<float>(),
-			Base::ParticleType::Boundary, verbose);
+		Set_RestDensity(it->get<float>(), verbose);
 	}
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
@@ -814,9 +807,9 @@ void SimParamsMgr::Set_ParticleSize(
 		// apply changes
 		params_.particleSizeF = particleSize;
 		params_.particleSizeInvF = 1.0f / particleSize;
-		params_.massF = params_.restDensityF * particleSize
-											 * particleSize
-											 * particleSize;
+		params_.massF = params_.restDensity * particleSize
+											* particleSize
+											* particleSize;
 		params_.kernelRadius = params_.kernelSuppRatio * params_.particleSizeF;
 		params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 	}
@@ -832,9 +825,9 @@ void SimParamsMgr::Set_ParticleSize(
 		// apply changes
 		params_.particleSizeB = particleSize;
 		params_.particleSizeInvB = 1.0f / particleSize;
-		params_.massB = params_.restDensityB * particleSize
-											 * particleSize
-											 * particleSize;
+		params_.massB = params_.restDensity * particleSize
+											* particleSize
+											* particleSize;
 		params_.kernelRadius = params_.kernelSuppRatio * params_.particleSizeF;
 		params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 	}
@@ -901,7 +894,7 @@ void SimParamsMgr::Set_KernelRadius(
 }
 
 void SimParamsMgr::Set_RestDensity(
-	float restDensity, Base::ParticleType type, bool verbose)
+	float restDensity, bool verbose)
 {
 	if (!(restDensity > 0.0f))
 	{
@@ -911,55 +904,24 @@ void SimParamsMgr::Set_RestDensity(
 
 	// detect if parameter would actually change
 	bool changed = false;
-
-	if (type == Base::ParticleType::Fluid)
-	{
-		Base::MarkIfChanged(restDensity, params_.restDensityF, changed);
-	}
-	else if (type == Base::ParticleType::Boundary)
-	{
-		Base::MarkIfChanged(restDensity, params_.restDensityB, changed);
-	}
-	else
-	{
-		SPDLOG_WARN("Change of 'restDensity' not implemented for this type");
-	}
-
+	Base::MarkIfChanged(restDensity, params_.restDensity, changed);
 	if (!changed) { return; } // nothing to change
 
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'restDensity' from {} to {} "
+					"(and dependent params accordingly)",
+			params_.restDensity, restDensity);
+	}
+
 	BeginWrite();
-
-	if (type == Base::ParticleType::Fluid)
-	{
-		if (verbose)
-		{
-			SPDLOG_INFO("Changed 'restDensityF' from {} to {} "
-						"(and dependent params accordingly)",
-				params_.restDensityF, restDensity);
-		}
-
-		// apply changes
-		params_.restDensityF = restDensity;
-		params_.massF = restDensity * params_.particleSizeF
-									* params_.particleSizeF
-									* params_.particleSizeF;
-	}
-	else if (type == Base::ParticleType::Boundary)
-	{
-		if (verbose)
-		{
-			SPDLOG_INFO("Changed 'restDensityB' from {} to {} "
-						"(and dependent params accordingly)",
-				params_.restDensityB, restDensity);
-		}
-
-		// apply changes
-		params_.restDensityB = restDensity;
-		params_.massB = restDensity * params_.particleSizeB
-									* params_.particleSizeB
-									* params_.particleSizeB;
-	}
-
+	params_.restDensity = restDensity;
+	params_.massF = restDensity * params_.particleSizeF
+								* params_.particleSizeF
+								* params_.particleSizeF;
+	params_.massB = restDensity * params_.particleSizeB
+								* params_.particleSizeB
+								* params_.particleSizeB;
 	EndWrite();
 }
 
@@ -990,7 +952,10 @@ void SimParamsMgr::Set_Mass(
 
 	if (!changed) { return; } // nothing to change
 
-	BeginWrite();
+	const float particleSize = type == Base::ParticleType::Fluid
+		? params_.particleSizeF
+		: params_.particleSizeB;
+	const float restDensity = mass / (particleSize * particleSize * particleSize);
 
 	if (type == Base::ParticleType::Fluid)
 	{
@@ -1000,12 +965,6 @@ void SimParamsMgr::Set_Mass(
 						"(and dependent params accordingly)",
 				params_.massF, mass);
 		}
-
-		// apply changes
-		params_.massF = mass;
-		params_.restDensityF = mass / (params_.particleSizeF 
-									* params_.particleSizeF
-									* params_.particleSizeF);
 	}
 	else if (type == Base::ParticleType::Boundary)
 	{
@@ -1015,14 +974,16 @@ void SimParamsMgr::Set_Mass(
 						"(and dependent params accordingly)",
 				params_.massB, mass);
 		}
-
-		// apply changes
-		params_.massB = mass;
-		params_.restDensityB = mass / (params_.particleSizeB
-									* params_.particleSizeB
-									* params_.particleSizeB);
 	}
 
+	BeginWrite();
+	params_.restDensity = restDensity;
+	params_.massF = restDensity * params_.particleSizeF
+								* params_.particleSizeF
+								* params_.particleSizeF;
+	params_.massB = restDensity * params_.particleSizeB
+								* params_.particleSizeB
+								* params_.particleSizeB;
 	EndWrite();
 }
 
@@ -1295,13 +1256,9 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		return par.particleSizeInvB > 0.0f;
 	});
-	ok &= Check("restDensityF <= 0", true, [&]()
+	ok &= Check("restDensity <= 0", true, [&]()
 	{
-		return par.restDensityF > 0.0f;
-	});
-	ok &= Check("restDensityB <= 0", true, [&]()
-	{
-		return par.restDensityB > 0.0f;
+		return par.restDensity > 0.0f;
 	});
 	ok &= Check("massF <= 0", true, [&]()
 	{
@@ -1339,18 +1296,18 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 		float expect = 1.0f / par.particleSizeB;
 		return Base::ApproxEqu(par.particleSizeInvB, expect);
 	});
-	ok &= Check("massF != restDensityF * particleSizeF^3", true, [&]()
+	ok &= Check("massF != restDensity * particleSizeF^3", true, [&]()
 	{
-		float expect = par.restDensityF * par.particleSizeF
-										* par.particleSizeF
-										* par.particleSizeF;
+		float expect = par.restDensity * par.particleSizeF
+									* par.particleSizeF
+									* par.particleSizeF;
 		return Base::ApproxEqu(par.massF, expect);
 	});
-	ok &= Check("massB != restDensityB * particleSizeB^3", true, [&]()
+	ok &= Check("massB != restDensity * particleSizeB^3", true, [&]()
 	{
-		float expect = par.restDensityB * par.particleSizeB
-										* par.particleSizeB
-										* par.particleSizeB;
+		float expect = par.restDensity * par.particleSizeB
+									* par.particleSizeB
+									* par.particleSizeB;
 		return Base::ApproxEqu(par.massB, expect);
 	});
 	ok &= Check("kernelSuppRatio < 1", true, [&]()

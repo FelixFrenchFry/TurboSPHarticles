@@ -1093,7 +1093,7 @@ bool DistSimulationMgr::BuildGlobalSimState()
 	globalSimState_.fluidParticles.ensureParticleIdsPresent();
 	globalSimState_.boundaryParticles.ensureParticleIdsPresent();
 	globalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
-		simParams_.massB, simParams_.restDensityF);
+		simParams_.massB, simParams_.restDensity);
 	globalSimState_.ShrinkToFitAll();
 
 	return true;

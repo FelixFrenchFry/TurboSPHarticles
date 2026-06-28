@@ -32,24 +32,24 @@ namespace Sim
 			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
 
 		// simulation state
-		bool simRunning			= false;
-		bool simRunNextStep		= false;
-		int64_t maxSteps		= -1;
+		bool simRunning         = false;
+		bool simRunNextStep     = false;
+		int64_t maxSteps        = -1;
 
 		// time
-		float timeStep			= 0.0001f;
+		float timeStep          = 0.0001f;
 
 		// particle sizes
 		// (is treated as smoothing length and spacing "h")
-		float particleSizeF		= 0.01f;
-		float particleSizeB		= 0.01f;
-		float particleSizeInvF	= 100.0f;
-		float particleSizeInvB	= 100.0f;
+		float particleSizeF     = 0.01f;
+		float particleSizeB     = 0.01f;
+		float particleSizeInvF  = 100.0f;
+		float particleSizeInvB  = 100.0f;
 
 		// kernel
-		float kernelSuppRatio	= 2.0f;
-		float kernelRadius		= 0.02f; // radius = size * supp ratio
-		float kernelRadiusSqu	= 0.0004f;
+		float kernelSuppRatio   = 2.0f;
+		float kernelRadius      = 0.02f; // radius = size * supp ratio
+		float kernelRadiusSqu   = 0.0004f;
 
 		// neighbor count heuristics
 		// TODO: use p95 and p99 values for heuristics?
@@ -62,23 +62,22 @@ namespace Sim
 		uint32_t expctdAvgNbrCountHardMax_FB = 3;
 
 		// density and mass
-		float restDensityF		= 1'000.0f;
-		float restDensityB		= 1'000.0f;
-		float massF				= 0.001f;
-		float massB				= 0.001f;
+		float restDensity       = 1'000.0f;
+		float massF             = 0.001f;
+		float massB             = 0.001f;
 
 		// non-pressure accelerations
-		float viscosityF		= 0.000003f;
-		float viscosityB		= 0.000003f;
-		glm::vec3 gravity		= { 0.0f, -9.81f, 0.0f };
+		float viscosityF        = 0.000003f;
+		float viscosityB        = 0.000003f;
+		glm::vec3 gravity       = { 0.0f, -9.81f, 0.0f };
 
 		// pressure solving
-		float pressGamma		= 0.5f;
-		float jacobiOmega		= 0.6f;
-		float densityDevTarget	= 0.01f;
-		uint32_t fixedIters		= 10;
-		uint32_t minSolverIters	= 5;
-		uint32_t maxSolverIters	= 50;
+		float pressGamma        = 0.5f;
+		float jacobiOmega       = 0.6f;
+		float densityDevTarget  = 0.01f;
+		uint32_t fixedIters     = 10;
+		uint32_t minSolverIters = 5;
+		uint32_t maxSolverIters = 50;
 		Base::SolverTerminationCond solverTerminationCond =
 			Base::SolverTerminationCond::FixedIters;
 
@@ -86,23 +85,23 @@ namespace Sim
 		float gridCellSizeRatio = 1.0f;
 
 		// fluid conditions
-		float jitterFracF		= 0.0f; // % of particle size
-		int64_t jitterSeedF		= 42; // RNG seed for jitter
+		float jitterFracF       = 0.0f; // % of particle size
+		int64_t jitterSeedF     = 42; // RNG seed for jitter
 
 		// boundary conditions
-		float jitterFracB		= 0.0f; // % of particle size
-		int64_t jitterSeedB		= 42; // RNG seed for jitter
-		uint32_t boundaryLayers	= 2;
+		float jitterFracB       = 0.0f; // % of particle size
+		int64_t jitterSeedB     = 42; // RNG seed for jitter
+		uint32_t boundaryLayers = 2;
 
 		// threading
-		int64_t maxThreadsSim	= -1; // -1 = use default budget
+		int64_t maxThreadsSim   = -1; // -1 = use default budget
 
 		// benchmarks
 		uint32_t maxBenchRecs = 1'000'000;
 		Bench::TimeUnit timeUnit = Bench::TimeUnit::ms;
 
 		// memory
-		uint32_t maxMemRecs	= 1'000'000;
+		uint32_t maxMemRecs = 1'000'000;
 		Mem::ByteUnit byteUnit = Mem::ByteUnit::MB;
 
 		// statistics
@@ -115,9 +114,9 @@ namespace Sim
 		};
 
 		// export
-		bool exportEnabled		= true;
-		std::string exportDir	= "A";
-		uint32_t exportInterval	= 10;
+		bool exportEnabled      = true;
+		std::string exportDir   = "A";
+		uint32_t exportInterval = 10;
 	};
 
 	class SimParamsMgr
@@ -144,7 +143,7 @@ namespace Sim
 		void Set_ParticleSize(float particleSize, Base::ParticleType type, bool verbose = false);
 		void Set_KernelSuppRatio(float kernelSuppRatio, bool verbose = false);
 		void Set_KernelRadius(float kernelRadius, bool verbose = false);
-		void Set_RestDensity(float restDensity, Base::ParticleType type, bool verbose = false);
+		void Set_RestDensity(float restDensity, bool verbose = false);
 		void Set_Mass(float mass, Base::ParticleType type, bool verbose = false);
 		void Set_Viscosity(float viscosity, Base::ParticleType type, bool verbose = false);
 		void Set_Gravity(glm::vec3 gravity, bool verbose = false);

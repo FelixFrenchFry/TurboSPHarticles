@@ -6,6 +6,7 @@
 
 // external
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
@@ -90,6 +91,12 @@ namespace Scene
 		void BuildBoundaryLayersOnFace(const OBBFace& face,
 									   Sync::UniversalSimState& dst,
 									   const Sim::SimParams& params);
+
+		// computes the non-uniform boundary contribution coefficients ("pseudo-mass") for boundary particles
+		// (inspired by "Versatile Rigid-Fluid Coupling for Incompressible SPH" Akinci et al. 2012)
+		static void ComputeBoundaryCoefficients(
+			Sync::BoundaryParticles& boundaryParticles,
+			const Sim::SimParams& params);
 
 		static inline float Jitter3D(uint64_t baseSeed, uint64_t key, float amp);
 

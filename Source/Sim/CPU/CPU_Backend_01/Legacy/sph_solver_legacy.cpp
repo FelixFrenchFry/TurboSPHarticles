@@ -201,8 +201,8 @@ void CPU01::NonPressureAcceleration(
 	const I_NeighborList& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF, const float kernelRadiusSqu,
-	const float cubicSplineAlpha, const float restDensityF,
-	const float restDensityB, const float massF, const float massB,
+	const float cubicSplineAlpha, const float restDensity,
+	const float massF, const float massB,
 	const float viscosityF, const float viscosityB,
 	const float xGravity, const float yGravity, const float zGravity,
 	const uint32_t N_F,
@@ -296,7 +296,7 @@ void CPU01::NonPressureAcceleration(
 						cubicSplineAlpha, xkg, ykg, zkg);
 
 					// viscosity acc contribution from boundary neighbor j
-					const float accCoeff = (massB / restDensityB)
+					const float accCoeff = (massB / restDensity)
 										 * (vxi * dx + vyi * dy + vzi * dz)
 										 / (dx * dx + dy * dy + dz * dz
 										 + 0.01f * particleSizeSquF);
@@ -345,7 +345,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 	const Sim::I_NeighborList& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
-	const float restDensityF, const float restDensitySquInvF,
+	const float restDensity, const float restDensitySquInv,
 	const float massF, const float massB,
 	const float pressGamma, const float jacobiOmega,
 	const uint32_t N_F,
@@ -456,17 +456,17 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 				tmp_SourceTermB *= massB;
 
 				// finalize source term
-				const float fin_sourceTermF = restDensityF - densityF[i] - timeStep
+				const float fin_sourceTermF = restDensity - densityF[i] - timeStep
 										    * (tmp_SourceTermF + tmp_SourceTermB);
 
 				// finalize c-term
 				// TODO: pre-compute the constant factors?
-				const float xCTerm = -1.0f * (xCTermF * restDensitySquInvF * massF)
-					- 2.0f * pressGamma * (xCTermB * restDensitySquInvF * massB);
-				const float yCTerm = -1.0f * (yCTermF * restDensitySquInvF * massF)
-					- 2.0f * pressGamma * (yCTermB * restDensitySquInvF * massB);
-				const float zCTerm = -1.0f * (zCTermF * restDensitySquInvF * massF)
-					- 2.0f * pressGamma * (zCTermB * restDensitySquInvF * massB);
+				const float xCTerm = -1.0f * (xCTermF * restDensitySquInv * massF)
+					- 2.0f * pressGamma * (xCTermB * restDensitySquInv * massB);
+				const float yCTerm = -1.0f * (yCTermF * restDensitySquInv * massF)
+					- 2.0f * pressGamma * (yCTermB * restDensitySquInv * massB);
+				const float zCTerm = -1.0f * (zCTermF * restDensitySquInv * massF)
+					- 2.0f * pressGamma * (zCTermB * restDensitySquInv * massB);
 
 				float tmp_DiagElemA = 0.0f;
 				float tmp_DiagElemB = 0.0f;
@@ -496,9 +496,9 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 						fmaf(yCTerm, ykg, zCTerm * zkg));
 
 					// TODO: pre-compute the constant factors?
-					const float tmp_x = (massF * restDensitySquInvF) * (-xkg);
-					const float tmp_y = (massF * restDensitySquInvF) * (-ykg);
-					const float tmp_z = (massF * restDensitySquInvF) * (-zkg);
+					const float tmp_x = (massF * restDensitySquInv) * (-xkg);
+					const float tmp_y = (massF * restDensitySquInv) * (-ykg);
+					const float tmp_z = (massF * restDensitySquInv) * (-zkg);
 
 					tmp_DiagElemB += fmaf(tmp_x, xkg, 
 						fmaf(tmp_y, ykg, tmp_z * zkg));
@@ -565,7 +565,7 @@ void CPU01::PressureAcceleration(
 	const float* RESTRICT pressureF,
 	const I_NeighborList& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
-	const float cubicSplineAlpha, const float restDensityF,
+	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float massB, const float pressGamma,
 	const uint32_t N_F,
 	tbb::affinity_partitioner& affPart,
@@ -575,7 +575,7 @@ void CPU01::PressureAcceleration(
 	float* RESTRICT zAccPressF)
 {
 	// hoisted constants
-	const float densiInvSqu = 1.0f / (restDensityF * restDensityF);
+	const float densiInvSqu = 1.0f / (restDensity * restDensity);
 	const float accCoeffB_outer = 2.0f * pressGamma * massB * densiInvSqu;
 
 	tbb::parallel_for(
@@ -684,7 +684,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 	const I_NeighborList& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
-	const float restDensityF, const float massF, const float massB,
+	const float restDensity, const float massF, const float massB,
 	const float jacobiOmega,
 	const uint32_t N_F,
 	tbb::affinity_partitioner& affPart,
@@ -812,7 +812,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 								  * (solverResidual / diagElemF[i]);
 
 					// relative density error
-					const double relErr = predDensityError / restDensityF;
+					const double relErr = predDensityError / restDensity;
 					const double relPosErr = std::max(0.0, relErr);
 					const double relAbsErr = std::fabs(relErr);
 

@@ -128,7 +128,7 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	simTime_ = src.time;
 	F.ensureParticleIdsPresent();
 	B.ensureParticleIdsPresent();
-	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensityF);
+	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensity);
 
 	EnsureCapacity(N_F_, N_B_);
 

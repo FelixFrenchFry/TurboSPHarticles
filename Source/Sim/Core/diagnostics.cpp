@@ -127,8 +127,8 @@ namespace Sim
 			params.expctdNbrCountHardMax_FF, params.expctdNbrCountHardMax_FB);
         printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "expctdAvgNbrCountHardMax [FF / FB]",
 			params.expctdAvgNbrCountHardMax_FF, params.expctdAvgNbrCountHardMax_FB);
-        printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "restDensity [F / B]",
-			params.restDensityF, params.restDensityB);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "restDensity",
+			params.restDensity);
         printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "mass [F / B]",
 			params.massF, params.massB);
         printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "viscosity [F / B]",

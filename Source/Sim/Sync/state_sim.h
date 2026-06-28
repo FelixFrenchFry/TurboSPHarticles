@@ -297,10 +297,10 @@ namespace Sync
 			assignSequentialIds();
 		}
 
-		void EnsureBoundaryCoefficientsPresent(float defaultPsiB, float restDensityF)
+		void EnsureBoundaryCoefficientsPresent(float defaultPsiB, float restDensity)
 		{
-			const float defaultVolB = (restDensityF > 0.0f)
-				? (defaultPsiB / restDensityF)
+			const float defaultVolB = (restDensity > 0.0f)
+				? (defaultPsiB / restDensity)
 				: 0.0f;
 
 			if (volB.size() != static_cast<uint32_t>(N_))

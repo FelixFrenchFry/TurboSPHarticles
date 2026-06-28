@@ -4,8 +4,13 @@
 #include <cassert>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <glm/vec3.hpp>
+#include <numbers>
 #include <random>
+#include <unordered_map>
+#include <vector>
+#include <tbb/blocked_range.h>
 #include <tbb/blocked_range3d.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
@@ -20,17 +25,207 @@ using namespace Scene;
 
 namespace
 {
-	inline float DefaultBoundaryPsiB(const Sim::SimParams& params)
+	// uniform fallback when coefficient pass cannot compute a valid sum
+	float DefaultBoundaryPsiB(const Sim::SimParams& params)
 	{
 		return params.massB;
 	}
 
-	inline float DefaultBoundaryVolB(const Sim::SimParams& params)
+	float DefaultBoundaryVolB(const Sim::SimParams& params)
 	{
-		return params.restDensityF > 0.0f
-			? (DefaultBoundaryPsiB(params) / params.restDensityF)
+		return params.restDensity > 0.0f
+			? (DefaultBoundaryPsiB(params) / params.restDensity)
 			: 0.0f;
 	}
+
+	// scalar kernel weight for boundary coefficient sums
+	float KernelWeight_CubicSpline(
+		const float dx, const float dy, const float dz,
+		const Sim::SimParams& params)
+	{
+		constexpr float PI = std::numbers::pi_v<float>;
+		constexpr float ZERO_EQU_LIM_F = 1e-7f;
+
+		const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+
+		if (distSqu >= params.kernelRadiusSqu) [[unlikely]]
+		{
+			return 0.0f;
+		}
+
+		const float cubicSplineAlpha =
+			(1.0f / (4.0f * PI))
+			* params.particleSizeInvF
+			* params.particleSizeInvF
+			* params.particleSizeInvF;
+
+		if (distSqu < ZERO_EQU_LIM_F) [[unlikely]]
+		{
+			return 4.0f * cubicSplineAlpha;
+		}
+
+		const float dist = std::sqrt(distSqu);
+		const float distNorm = dist * params.particleSizeInvF;
+
+		const float t1 = std::max(1.0f - distNorm, 0.0f);
+		const float t2 = std::max(2.0f - distNorm, 0.0f);
+		const float t1_2 = t1 * t1;
+		const float t2_2 = t2 * t2;
+		const float t1_3 = t1_2 * t1;
+		const float t2_3 = t2_2 * t2;
+
+		return cubicSplineAlpha * (t2_3 - 4.0f * t1_3);
+	}
+
+} // namespace anonymous
+
+void ScenarioMgr::ComputeBoundaryCoefficients(
+	Sync::BoundaryParticles& boundaryParticles,
+	const Sim::SimParams& params)
+{
+	// temp local cell buckets to avoid O(N_B^2) boundary neighbor search
+	struct CellCoord
+	{
+		int32_t x = 0;
+		int32_t y = 0;
+		int32_t z = 0;
+
+		bool operator==(const CellCoord&) const = default;
+	};
+
+	struct CellCoordHash
+	{
+		uint64_t operator()(const CellCoord& c) const noexcept
+		{
+			uint64_t h = static_cast<uint32_t>(c.x);
+			h ^= static_cast<uint64_t>(static_cast<uint32_t>(c.y))
+			   + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+			h ^= static_cast<uint64_t>(static_cast<uint32_t>(c.z))
+			   + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+			return h;
+		}
+	};
+
+	const auto makeCellCoord =
+		[](const float x, const float y, const float z, const float cellSizeInv) -> CellCoord
+		{
+			return CellCoord
+			{
+				.x = static_cast<int32_t>(std::floor(x * cellSizeInv)),
+				.y = static_cast<int32_t>(std::floor(y * cellSizeInv)),
+				.z = static_cast<int32_t>(std::floor(z * cellSizeInv)),
+			};
+		};
+
+	const uint32_t N_B = boundaryParticles.N_;
+	if (N_B == 0) { return; }
+
+	const float defaultVolB = DefaultBoundaryVolB(params);
+	const float defaultPsiB = DefaultBoundaryPsiB(params);
+	boundaryParticles.volB.resize(N_B);
+	boundaryParticles.psiB.resize(N_B);
+	const auto& xPosB = boundaryParticles.xPos;
+	const auto& yPosB = boundaryParticles.yPos;
+	const auto& zPosB = boundaryParticles.zPos;
+	auto& volB = boundaryParticles.volB;
+	auto& psiB = boundaryParticles.psiB;
+
+	// keep coefficients valid if params are incomplete
+	if (params.particleSizeF <= 0.0f ||
+		params.particleSizeInvF <= 0.0f ||
+		params.kernelRadius <= 0.0f ||
+		params.kernelRadiusSqu <= 0.0f ||
+		params.gridCellSizeRatio <= 0.0f ||
+		params.restDensity <= 0.0f)
+	{
+		std::ranges::fill(volB, defaultVolB);
+		std::ranges::fill(psiB, defaultPsiB);
+		return;
+	}
+
+	const float cellSize = params.kernelRadius * params.gridCellSizeRatio;
+	if (cellSize <= 0.0f)
+	{
+		std::ranges::fill(volB, defaultVolB);
+		std::ranges::fill(psiB, defaultPsiB);
+		return;
+	}
+
+	// same cell-reach rule as cell-linked list neighbor search
+	const float querySpanCells = params.kernelRadius / cellSize;
+	const int32_t cellQueryReach = std::max<int32_t>(
+		1,
+		static_cast<int32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
+	const float cellSizeInv = 1.0f / cellSize;
+
+	std::vector<CellCoord> cellCoords(N_B);
+	std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets;
+	cellBuckets.reserve(static_cast<uint64_t>(N_B) * 2ull);
+
+	// insert boundary particles into cell buckets
+	for (uint32_t i = 0; i < N_B; i++)
+	{
+		cellCoords[i] = makeCellCoord(
+			xPosB[i],
+			yPosB[i],
+			zPosB[i],
+			cellSizeInv);
+		cellBuckets[cellCoords[i]].push_back(i);
+	}
+
+	// compute non-uniform boundary contribution coefficients for all boundary particles
+	const auto& cellBucketsReadOnly = cellBuckets;
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_B),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				float sumW = 0.0f;
+				const CellCoord baseCell = cellCoords[i];
+
+				for (int32_t dz = -cellQueryReach; dz <= cellQueryReach; dz++)
+				{
+					for (int32_t dy = -cellQueryReach; dy <= cellQueryReach; dy++)
+					{
+						for (int32_t dx = -cellQueryReach; dx <= cellQueryReach; dx++)
+						{
+							const CellCoord cell
+							{
+								.x = baseCell.x + dx,
+								.y = baseCell.y + dy,
+								.z = baseCell.z + dz,
+							};
+							const auto it = cellBucketsReadOnly.find(cell);
+							if (it == cellBucketsReadOnly.end()) { continue; }
+
+							for (const uint32_t j : it->second)
+							{
+								sumW += KernelWeight_CubicSpline(
+									xPosB[i] - xPosB[j],
+									yPosB[i] - yPosB[j],
+									zPosB[i] - zPosB[j],
+									params);
+							}
+						}
+					}
+				}
+
+				if (sumW > 0.0f && std::isfinite(sumW))
+				{
+					// boundary volume from inverse boundary sample density
+					volB[i] = 1.0f / sumW;
+					psiB[i] = params.restDensity * volB[i];
+				}
+				else
+				{
+					volB[i] = defaultVolB;
+					psiB[i] = defaultPsiB;
+				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
@@ -78,6 +273,8 @@ void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 	{
 		BuildBoundaryLayersOnFace(face, dst, params);
 	}
+
+	ComputeBoundaryCoefficients(dst.boundaryParticles, params);
 }
 
 void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
@@ -180,7 +377,7 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 							F.sourceTerm[idx] = 0.0f;
 							F.diagElem[idx] = 0.0f;
 							F.pressure[idx] = 0.0f;
-							F.density[idx] = params.restDensityF;
+							F.density[idx] = params.restDensity;
 
 						}
 					}
@@ -310,7 +507,7 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				F.sourceTerm[outIdx] = 0.0f;
 				F.diagElem[outIdx] = 0.0f;
 				F.pressure[outIdx] = 0.0f;
-				F.density[outIdx] = params.restDensityF;
+				F.density[outIdx] = params.restDensity;
 
 				outIdx++;
 			}
@@ -358,8 +555,6 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	const float jitAmp = params.jitterFracB * params.particleSizeB;
 	std::mt19937_64 rng(params.jitterSeedB);
 	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
-	const float defaultVolB = DefaultBoundaryVolB(params);
-	const float defaultPsiB = DefaultBoundaryPsiB(params);
 
 	uint32_t idx = N_base;
 
@@ -408,8 +603,6 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 				B.xPos[idx] = pos.x;
 				B.yPos[idx] = pos.y;
 				B.zPos[idx] = pos.z;
-				B.volB[idx] = defaultVolB;
-				B.psiB[idx] = defaultPsiB;
 
 				idx++;
 			}
@@ -417,6 +610,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	}
 
 	assert(idx == (N_base + N_add));
+	ComputeBoundaryCoefficients(dst.boundaryParticles, params);
 }
 
 OBB ScenarioMgr::MakeOBB_FromAxes(glm::vec3 origin,
@@ -452,29 +646,6 @@ std::array<OBBFace, 6> inline ScenarioMgr::GetFacesFromOBB(const OBB& box)
 	faces[5] = { box.origin + box.vHat * box.vLen, box.uHat, box.wHat, +box.vHat, box.uLen, box.wLen };
 
 	return faces;
-}
-
-static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr)
-{
-	auto readVec3 = [](const json& v, glm::vec3 defaultVal) -> glm::vec3
-		{
-			if (!v.is_array() || v.size() != 3) return defaultVal;
-			return glm::vec3(
-				v[0].get<float>(),
-				v[1].get<float>(),
-				v[2].get<float>());
-		};
-
-	glm::vec3 origin = readVec3(j.value("origin", json::array({ 0.0f, 0.0f, 0.0f })), { 0,0,0 });
-	glm::vec3 uDir = readVec3(j.value("uDir", json::array({ 1.0f, 0.0f, 0.0f })), { 1,0,0 });
-	glm::vec3 vDir = readVec3(j.value("vDir", json::array({ 0.0f, 1.0f, 0.0f })), { 0,1,0 });
-	glm::vec3 wDir = readVec3(j.value("wDir", json::array({ 0.0f, 0.0f, 1.0f })), { 0,0,1 });
-
-	float uLen = j.value("uLen", 1.0f);
-	float vLen = j.value("vLen", 1.0f);
-	float wLen = j.value("wLen", 1.0f);
-
-	return scenarioMgr.MakeOBB_FromAxes(origin, uDir, uLen, vDir, vLen, wDir, wLen);
 }
 
 OBB ScenarioMgr::ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr)
