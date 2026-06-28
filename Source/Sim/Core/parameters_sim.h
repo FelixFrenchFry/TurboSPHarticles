@@ -18,6 +18,9 @@
 
 namespace Sim
 {
+	// TODO: leave cubic spline kernels hardcoded for support ratio 2.0?
+	inline constexpr float CubicSplineKernelSuppRatio = 2.0f;
+
 	// snapshot of simulation parameters (passed to compute-heavy functions)
 	struct SimParams
 	{
@@ -47,7 +50,7 @@ namespace Sim
 		float particleSizeInvB  = 100.0f;
 
 		// kernel
-		float kernelSuppRatio   = 2.0f;
+		float kernelSuppRatio   = CubicSplineKernelSuppRatio;
 		float kernelRadius      = 0.02f; // radius = size * supp ratio
 		float kernelRadiusSqu   = 0.0004f;
 

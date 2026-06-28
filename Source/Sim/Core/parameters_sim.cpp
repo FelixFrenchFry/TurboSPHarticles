@@ -838,9 +838,10 @@ void SimParamsMgr::Set_ParticleSize(
 void SimParamsMgr::Set_KernelSuppRatio(
 	float kernelSuppRatio, bool verbose)
 {
-	if (!(kernelSuppRatio >= 1.0f))
+	if (!Base::ApproxEqu(kernelSuppRatio, CubicSplineKernelSuppRatio))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be >= 1");
+		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be {} for hardcoded cubic-spline kernels",
+			CubicSplineKernelSuppRatio);
 		return;
 	}
 
@@ -873,6 +874,14 @@ void SimParamsMgr::Set_KernelRadius(
 		return;
 	}
 
+	const float kernelSuppRatio = kernelRadius / params_.particleSizeF;
+	if (!Base::ApproxEqu(kernelSuppRatio, CubicSplineKernelSuppRatio))
+	{
+		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must match hardcoded cubic spline support radius {}h",
+			CubicSplineKernelSuppRatio);
+		return;
+	}
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(kernelRadius, params_.kernelRadius, changed);
@@ -888,7 +897,7 @@ void SimParamsMgr::Set_KernelRadius(
 	BeginWrite();
 	params_.kernelRadius = kernelRadius;
 	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
-	params_.kernelSuppRatio = kernelRadius / params_.particleSizeF;
+	params_.kernelSuppRatio = kernelSuppRatio;
 	UpdateNeighborCountHeuristics_();
 	EndWrite();
 }
@@ -1310,9 +1319,9 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 									* par.particleSizeB;
 		return Base::ApproxEqu(par.massB, expect);
 	});
-	ok &= Check("kernelSuppRatio < 1", true, [&]()
+	ok &= Check("kernelSuppRatio != cubic spline support ratio", true, [&]()
 	{
-		return par.kernelSuppRatio >= 1.0f;
+		return Base::ApproxEqu(par.kernelSuppRatio, CubicSplineKernelSuppRatio);
 	});
 	ok &= Check("gridCellSizeRatio <= 0", true, [&]()
 	{
@@ -1403,11 +1412,10 @@ uint32_t SimParamsMgr::HeuristicExpectedNeighborCount_HardMax(
 uint32_t SimParamsMgr::HeuristicExpectedAvgNeighborCount_HardMax(
 	float kernelSuppRatio, Base::ParticleType type) const
 {
-	constexpr float refKernelSuppRatio = 2.0f;
 	const SimParams refParams{};
 
 	float volume = (4.0f / 3.0f) * PI * std::pow(kernelSuppRatio, 3.0f);
-	float refVolume = (4.0f / 3.0f) * PI * std::pow(refKernelSuppRatio, 3.0f);
+	float refVolume = (4.0f / 3.0f) * PI * std::pow(CubicSplineKernelSuppRatio, 3.0f);
 	float occupancy = type == Base::ParticleType::Fluid
 		? static_cast<float>(refParams.expctdAvgNbrCountHardMax_FF) / refVolume
 		: static_cast<float>(refParams.expctdAvgNbrCountHardMax_FB) / refVolume;
