@@ -77,6 +77,7 @@ namespace Sync
 
 		// data for fluid particles export
 		uint32_t N_F;
+		std::vector<uint32_t> idF;
 		std::vector<float> xPosF;
 		std::vector<float> yPosF;
 		std::vector<float> zPosF;
@@ -84,6 +85,7 @@ namespace Sync
 
 		// data for boundary particles export
 		uint32_t N_B;
+		std::vector<uint32_t> idB;
 		std::vector<float> xPosB;
 		std::vector<float> yPosB;
 		std::vector<float> zPosB;

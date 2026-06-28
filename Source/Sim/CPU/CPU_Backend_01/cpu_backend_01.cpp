@@ -188,6 +188,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 	snap.simTime = simTime_;
 
 	snap.N_B = N_B_;
+	snap.idB.resize(N_B_);
 	snap.xPosB.resize(N_B_);
 	snap.yPosB.resize(N_B_);
 	snap.zPosB.resize(N_B_);
@@ -199,6 +200,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				snap.idB[i] = i;
 				snap.xPosB[i] = xPosB_[i];
 				snap.yPosB[i] = yPosB_[i];
 				snap.zPosB[i] = zPosB_[i];
@@ -211,6 +213,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 	if (N_F_ == 0)
 	{
 		snap.N_F = 0;
+		snap.idF.clear();
 		snap.xPosF.clear();
 		snap.yPosF.clear();
 		snap.zPosF.clear();
@@ -269,6 +272,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 	if (N_surface == 0) // no particles to export
 	{
 		snap.N_F = 0;
+		snap.idF.clear();
 		snap.xPosF.clear();
 		snap.yPosF.clear();
 		snap.zPosF.clear();
@@ -280,6 +284,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 	// prepare snapshot buffers
 	snap.N_F = N_surface;
 
+	snap.idF.resize(N_surface);
 	snap.xPosF.resize(N_surface);
 	snap.yPosF.resize(N_surface);
 	snap.zPosF.resize(N_surface);
@@ -294,6 +299,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 		snap.xPosF[dst] = xPosF_[i];
 		snap.yPosF[dst] = yPosF_[i];
 		snap.zPosF[dst] = zPosF_[i];
+		snap.idF[dst] = i;
 
 		const float vx = xVelF_[i];
 		const float vy = yVelF_[i];

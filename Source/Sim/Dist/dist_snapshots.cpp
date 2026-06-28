@@ -232,10 +232,12 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	exportSnap.N_F = static_cast<uint32_t>(sortedFluidParticles.size());
 	exportSnap.N_B = static_cast<uint32_t>(sortedBoundaryParticles.size());
 
+	exportSnap.idF.resize(exportSnap.N_F);
 	exportSnap.xPosF.resize(exportSnap.N_F);
 	exportSnap.yPosF.resize(exportSnap.N_F);
 	exportSnap.zPosF.resize(exportSnap.N_F);
 	exportSnap.velMagF.resize(exportSnap.N_F);
+	exportSnap.idB.resize(exportSnap.N_B);
 	exportSnap.xPosB.resize(exportSnap.N_B);
 	exportSnap.yPosB.resize(exportSnap.N_B);
 	exportSnap.zPosB.resize(exportSnap.N_B);
@@ -248,6 +250,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.globalIdx < 0) { return false; }
 		if (packet.globalIdx == prevGlobalIdx) { return false; }
 
+		exportSnap.idF[i] = static_cast<uint32_t>(packet.globalIdx);
 		exportSnap.xPosF[i] = packet.xPos;
 		exportSnap.yPosF[i] = packet.yPos;
 		exportSnap.zPosF[i] = packet.zPos;
@@ -263,6 +266,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.globalIdx < 0) { return false; }
 		if (packet.globalIdx == prevGlobalIdx) { return false; }
 
+		exportSnap.idB[i] = static_cast<uint32_t>(packet.globalIdx);
 		exportSnap.xPosB[i] = packet.xPos;
 		exportSnap.yPosB[i] = packet.yPos;
 		exportSnap.zPosB[i] = packet.zPos;

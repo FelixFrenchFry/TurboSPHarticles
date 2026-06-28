@@ -262,10 +262,12 @@ namespace
 	{
 		Mem::MemUsage usage{};
 
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.velMagF));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosB));
@@ -1303,7 +1305,7 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 		benchmarksTracker_->StartBench({ Bench::BenchOp::Serialization });
 		// write export snapshot to files
 		serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-		serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
+		serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
 		benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
 	}
 

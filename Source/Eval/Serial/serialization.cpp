@@ -68,7 +68,7 @@ namespace Export
 
 	struct BinHeaderSnap
 	{
-		char magic[8];        // "TSPSNAP\2"
+		char magic[8];        // "TSPSNAP\3"
 		uint32_t endianTag;   // kEndianLE
 		uint32_t headerBytes; // sizeof(BinHeaderSnap)
 
@@ -408,7 +408,8 @@ namespace Export
 		const Sync::ExportSnapshot& snap,
 		const std::string& dir) const
 	{
-		const std::string baseName = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".bin";
+		const std::string baseName =
+			"particle_data_step_" + FormatStepPadded(snap.simStep) + ".bin";
 
 		// ensure export directory exists
 		std::error_code ec;
@@ -423,10 +424,12 @@ namespace Export
 		// make sure data for every particle is present
 		const uint32_t NF_size = snap.N_F;
 		const uint32_t NB_size = snap.N_B;
+		assert(snap.idF.size() == NF_size);
 		assert(snap.xPosF.size() == NF_size);
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
+		assert(snap.idB.size() == NB_size);
 		assert(snap.xPosB.size() == NB_size);
 		assert(snap.yPosB.size() == NB_size);
 		assert(snap.zPosB.size() == NB_size);
@@ -449,10 +452,10 @@ namespace Export
 			}
 
 			// arrays are written in the same order as referenced by the XDMF file:
-			// xPosF, yPosF, zPosF, velMagF, xPosB, yPosB, zPosB, volB
+			// xPosF, yPosF, zPosF, velMagF, idF, xPosB, yPosB, zPosB, volB, idB
 
 			BinHeaderSnap hdr{};
-			std::memcpy(hdr.magic, "TSPSNAP\2", 8);
+			std::memcpy(hdr.magic, "TSPSNAP\3", 8);
 			hdr.endianTag = kEndianLE;
 			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
 			hdr.step = snap.simStep;
@@ -467,11 +470,13 @@ namespace Export
 			WriteVec(ofs, snap.yPosF);
 			WriteVec(ofs, snap.zPosF);
 			WriteVec(ofs, snap.velMagF);
+			WriteVec(ofs, snap.idF);
 
 			WriteVec(ofs, snap.xPosB);
 			WriteVec(ofs, snap.yPosB);
 			WriteVec(ofs, snap.zPosB);
 			WriteVec(ofs, snap.volB);
+			WriteVec(ofs, snap.idB);
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
 		}
@@ -482,12 +487,14 @@ namespace Export
 		}
 	}
 
-	void SerializationMgr::SaveExportSnapXdmfInfo(
+	void SerializationMgr::SaveExportSnapshotXdmfViews(
 		const Sync::ExportSnapshot& snap,
 		const std::string& dir) const
 	{
-		const std::string baseName_bin = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".bin";
-		const std::string baseName_xdmf = "pos_vel_step_" + FormatStepPadded(snap.simStep) + ".xdmf";
+		const std::string step = FormatStepPadded(snap.simStep);
+		const std::string baseName_bin = "particle_data_step_" + step + ".bin";
+		const std::string fluidName_xdmf = "fluid_surface_step_" + step + ".xdmf";
+		const std::string boundaryName_xdmf = "boundary_step_" + step + ".xdmf";
 
 		// ensure export directory exists
 		std::error_code ec;
@@ -499,24 +506,27 @@ namespace Export
 			return;
 		}
 
-		const std::filesystem::path xdmfPath = saveOptions_.baseDir / dir / baseName_xdmf;
+		const std::filesystem::path fluidXdmfPath =
+			saveOptions_.baseDir / dir / fluidName_xdmf;
 
-		// open XDMF file
-		std::ofstream ofs(xdmfPath, std::ios::out | std::ios::trunc);
+		// open fluid XDMF view
+		std::ofstream ofs(fluidXdmfPath, std::ios::out | std::ios::trunc);
 		if (!ofs)
 		{
 			SPDLOG_ERROR("Failed to open XDMF file for write: {}",
-				xdmfPath.string());
+				fluidXdmfPath.string());
 			return;
 		}
 
 		// make sure data for every particle is present
 		const uint32_t NF_size = snap.N_F;
 		const uint32_t NB_size = snap.N_B;
+		assert(snap.idF.size() == NF_size);
 		assert(snap.xPosF.size() == NF_size);
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
+		assert(snap.idB.size() == NB_size);
 		assert(snap.xPosB.size() == NB_size);
 		assert(snap.yPosB.size() == NB_size);
 		assert(snap.zPosB.size() == NB_size);
@@ -530,21 +540,25 @@ namespace Export
 		// yPosF[NF] (float32)
 		// zPosF[NF] (float32)
 		// velMagF[NF] (float32)
+		// idF[NF] (uint32)
 		// xPosB[NB] (float32)
 		// yPosB[NB] (float32)
 		// zPosB[NB] (float32)
 		// volB[NB] (float32)
+		// idB[NB] (uint32)
 		const uint64_t headerBytes = sizeof(BinHeaderSnap);
-		const uint64_t elemBytes = 4; // float32
+		const uint64_t elemBytes = 4; // float32 / uint32
 
 		const uint64_t off_xF = headerBytes;
 		const uint64_t off_yF = off_xF + uint64_t(NF_size) * elemBytes;
 		const uint64_t off_zF = off_yF + uint64_t(NF_size) * elemBytes;
 		const uint64_t off_vF = off_zF + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_xB = off_vF + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_idF = off_vF + uint64_t(NF_size) * elemBytes;
+		const uint64_t off_xB = off_idF + uint64_t(NF_size) * elemBytes;
 		const uint64_t off_yB = off_xB + uint64_t(NB_size) * elemBytes;
 		const uint64_t off_zB = off_yB + uint64_t(NB_size) * elemBytes;
 		const uint64_t off_volB = off_zB + uint64_t(NB_size) * elemBytes;
+		const uint64_t off_idB = off_volB + uint64_t(NB_size) * elemBytes;
 
 		// XDMF header
 		ofs << R"(<?xml version="1.0" ?>)" << "\n";
@@ -552,8 +566,7 @@ namespace Export
 		ofs << R"(  <Domain>)" << "\n";
 
 		// one uniform grid for exported fluid particles
-		ofs << "    <Grid Name=\"Step_" << snap.simStep
-			<< "_Fluid\" GridType=\"Uniform\">" << "\n";
+		ofs << "    <Grid Name=\"FluidSurface\" GridType=\"Uniform\">" << "\n";
 
 		// time metadata
 		ofs << "      <Time Value=\""
@@ -565,7 +578,7 @@ namespace Export
 			<< "Dimensions=\"" << NF_size << "\"/>\n";
 
 		// geometry of XYZ coordinates
-		ofs << "      <Geometry GeometryType=\"XYZ\">\n";
+		ofs << "      <Geometry Name=\"posF\" GeometryType=\"XYZ\">\n";
 		ofs << "        <DataItem ItemType=\"Function\" "
 			<< "Function=\"JOIN($0, $1, $2)\" "
 			<< "Dimensions=\"" << NF_size << " 3\" "
@@ -609,13 +622,44 @@ namespace Export
 		ofs << "        </DataItem>\n";
 		ofs << "      </Attribute>\n";
 
+		// exported fluid particle id (Binary)
+		ofs << "      <Attribute Name=\"idF\" "
+			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
+		ofs << "        <DataItem Dimensions=\"" << NF_size
+			<< "\" NumberType=\"UInt\" Precision=\"4\" "
+			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+			<< off_idF << "\">\n";
+		ofs << "          " << baseName_bin << "\n";
+		ofs << "        </DataItem>\n";
+		ofs << "      </Attribute>\n";
+
 		ofs << "    </Grid>\n";
+		ofs << "  </Domain>\n";
+		ofs << "</Xdmf>\n";
+		EnsureStreamOk(ofs, "writing", fluidXdmfPath.string());
+		ofs.close();
 
 		if (NB_size > 0)
 		{
+			const std::filesystem::path boundaryXdmfPath =
+				saveOptions_.baseDir / dir / boundaryName_xdmf;
+
+			ofs.clear();
+			ofs.open(boundaryXdmfPath, std::ios::out | std::ios::trunc);
+			if (!ofs)
+			{
+				SPDLOG_ERROR("Failed to open XDMF file for write: {}",
+					boundaryXdmfPath.string());
+				return;
+			}
+
+			// XDMF header
+			ofs << R"(<?xml version="1.0" ?>)" << "\n";
+			ofs << R"(<Xdmf Version="3.0">)" << "\n";
+			ofs << R"(  <Domain>)" << "\n";
+
 			// one uniform grid for exported boundary particles
-			ofs << "    <Grid Name=\"Step_" << snap.simStep
-				<< "_Boundary\" GridType=\"Uniform\">" << "\n";
+			ofs << "    <Grid Name=\"Boundary\" GridType=\"Uniform\">" << "\n";
 
 			// time metadata
 			ofs << "      <Time Value=\""
@@ -627,7 +671,7 @@ namespace Export
 				<< "Dimensions=\"" << NB_size << "\"/>\n";
 
 			// geometry of XYZ coordinates
-			ofs << "      <Geometry GeometryType=\"XYZ\">\n";
+			ofs << "      <Geometry Name=\"posB\" GeometryType=\"XYZ\">\n";
 			ofs << "        <DataItem ItemType=\"Function\" "
 				<< "Function=\"JOIN($0, $1, $2)\" "
 				<< "Dimensions=\"" << NB_size << " 3\" "
@@ -671,12 +715,22 @@ namespace Export
 			ofs << "        </DataItem>\n";
 			ofs << "      </Attribute>\n";
 
-			ofs << "    </Grid>\n";
-		}
+			// exported boundary particle id (Binary)
+			ofs << "      <Attribute Name=\"idB\" "
+				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
+			ofs << "        <DataItem Dimensions=\"" << NB_size
+				<< "\" NumberType=\"UInt\" Precision=\"4\" "
+				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+				<< off_idB << "\">\n";
+			ofs << "          " << baseName_bin << "\n";
+			ofs << "        </DataItem>\n";
+			ofs << "      </Attribute>\n";
 
-		// close everything
-		ofs << "  </Domain>\n";
-		ofs << "</Xdmf>\n";
+			ofs << "    </Grid>\n";
+			ofs << "  </Domain>\n";
+			ofs << "</Xdmf>\n";
+			EnsureStreamOk(ofs, "writing", boundaryXdmfPath.string());
+		}
 	}
 
 } // namespace Export

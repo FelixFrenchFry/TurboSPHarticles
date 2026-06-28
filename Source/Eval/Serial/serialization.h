@@ -46,7 +46,7 @@ namespace Export
 
 		// serialization of a subset of the simulation state and metadata into separate files
 		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
-		void SaveExportSnapXdmfInfo(const Sync::ExportSnapshot& snap, const std::string& dir) const;
+		void SaveExportSnapshotXdmfViews(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
 	private: // ------------------------------------------------------------------------------------
 

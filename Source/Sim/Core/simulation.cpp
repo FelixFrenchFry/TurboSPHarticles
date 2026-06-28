@@ -560,7 +560,7 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 	benchmarksTracker_.StartBench({ Bench::BenchOp::Serialization });
 	// write export snapshot to files
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-	serializationMgr_.SaveExportSnapXdmfInfo(expSnap, params.exportDir);
+	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Serialization });
 }
 
