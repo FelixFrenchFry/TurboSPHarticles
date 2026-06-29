@@ -210,6 +210,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 	snap.N_B = N_B_;
 	snap.idB.resize(N_B_);
+	snap.bodyIdB.resize(N_B_);
 	snap.xPosB.resize(N_B_);
 	snap.yPosB.resize(N_B_);
 	snap.zPosB.resize(N_B_);
@@ -222,6 +223,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
 				snap.idB[i] = idB_[i];
+				snap.bodyIdB[i] = bodyIdB_[i];
 				snap.xPosB[i] = xPosB_[i];
 				snap.yPosB[i] = yPosB_[i];
 				snap.zPosB[i] = zPosB_[i];
@@ -365,6 +367,7 @@ void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	}
 
 	snap.posB.resize(N_B_);
+	snap.bodyIdB.resize(N_B_);
 
 	// pack boundary positions into the visual snapshot's data structures
 	tbb::parallel_for(
@@ -374,6 +377,7 @@ void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
 				snap.posB[i] = glm::vec3{ xPosB_[i], yPosB_[i], zPosB_[i] };
+				snap.bodyIdB[i] = bodyIdB_[i];
 			}
 		},
 		tbb::auto_partitioner{}

@@ -87,7 +87,8 @@ namespace Render
 		uint32_t capacity_ = 0; // number of instances capacity
 
 		// draw state
-		uint32_t N_impostorInstances_ = 0;
+		uint32_t N_fluidImpostorInstances_ = 0;
+		uint32_t N_rigidBoundaryImpostorInstances_ = 0;
 		uint64_t N_lineVertices_ = 0;
 
 		// helpers

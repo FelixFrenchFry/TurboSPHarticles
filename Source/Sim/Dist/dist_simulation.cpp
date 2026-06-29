@@ -270,6 +270,7 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.velMagF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.bodyIdB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosB));

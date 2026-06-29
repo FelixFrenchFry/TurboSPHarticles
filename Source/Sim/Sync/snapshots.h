@@ -86,6 +86,7 @@ namespace Sync
 		// data for boundary particles export
 		uint32_t N_B;
 		std::vector<uint32_t> idB;
+		std::vector<uint32_t> bodyIdB;
 		std::vector<float> xPosB;
 		std::vector<float> yPosB;
 		std::vector<float> zPosB;
@@ -97,18 +98,19 @@ namespace Sync
 	struct VisualSnapshot
 	{
 		// metadata
-		uint32_t simStep;					// simulation step at this snapshot
+		uint32_t simStep;                   // simulation step at this snapshot
 
 		// data for fluid particle vis
-		uint32_t N_F;						// number of fluid particles
-		std::vector<glm::vec3> posF;		// positions of all fluid particles
-		std::vector<float> scalarDataF;		// data according to color coding mode
-		Base::ColorCodingMode scalarModeF;	// color coding mode
+		uint32_t N_F;                       // number of fluid particles
+		std::vector<glm::vec3> posF;        // positions of all fluid particles
+		std::vector<float> scalarDataF;     // data according to color coding mode
+		Base::ColorCodingMode scalarModeF;  // color coding mode
 
 		// data for boundary particles and boundary structures vis
-		uint32_t N_B;						// number of boundary particles
-		std::vector<glm::vec3> posB;		// positions of all boundary particles
-		std::vector<Scene::OBB> boxesB;		// OBBs of boundary structures
+		uint32_t N_B;                       // number of boundary particles
+		std::vector<glm::vec3> posB;        // positions of all boundary particles
+		std::vector<uint32_t> bodyIdB;      // rigid body ownership for boundary particles
+		std::vector<Scene::OBB> boxesB;     // OBBs of boundary structures
 	};
 
 	struct BenchSnapshot

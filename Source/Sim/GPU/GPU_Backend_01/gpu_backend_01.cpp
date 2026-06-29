@@ -260,6 +260,7 @@ void SimBackend_GPU01::PackExportSnapshot(
 
 	snap.N_B = N_B_;
 	snap.idB.resize(N_B_);
+	snap.bodyIdB.assign(N_B_, Sync::InvalidRigidBodyId);
 	snap.xPosB.resize(N_B_);
 	snap.yPosB.resize(N_B_);
 	snap.zPosB.resize(N_B_);
@@ -493,6 +494,7 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	}
 
 	snap.posB.resize(N_B_);
+	snap.bodyIdB.assign(N_B_, Sync::InvalidRigidBodyId);
 
 	if (N_B_ > 0)
 	{

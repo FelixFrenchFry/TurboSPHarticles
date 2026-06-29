@@ -34,6 +34,7 @@ namespace Dist
 	{
 		int globalIdx = -1;
 		uint32_t id = 0;
+		uint32_t bodyId = Sync::InvalidRigidBodyId;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;

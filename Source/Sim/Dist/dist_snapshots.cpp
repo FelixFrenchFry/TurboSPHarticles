@@ -122,6 +122,7 @@ namespace
 		DistExportBoundaryParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 		packet.id = boundaryParticles.id[localIdx];
+		packet.bodyId = boundaryParticles.bodyId[localIdx];
 
 		packet.xPos = boundaryParticles.xPos[localIdx];
 		packet.yPos = boundaryParticles.yPos[localIdx];
@@ -240,6 +241,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	exportSnap.zPosF.resize(exportSnap.N_F);
 	exportSnap.velMagF.resize(exportSnap.N_F);
 	exportSnap.idB.resize(exportSnap.N_B);
+	exportSnap.bodyIdB.resize(exportSnap.N_B);
 	exportSnap.xPosB.resize(exportSnap.N_B);
 	exportSnap.yPosB.resize(exportSnap.N_B);
 	exportSnap.zPosB.resize(exportSnap.N_B);
@@ -269,6 +271,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.globalIdx == prevGlobalIdx) { return false; }
 
 		exportSnap.idB[i] = packet.id;
+		exportSnap.bodyIdB[i] = packet.bodyId;
 		exportSnap.xPosB[i] = packet.xPos;
 		exportSnap.yPosB[i] = packet.yPos;
 		exportSnap.zPosB[i] = packet.zPos;

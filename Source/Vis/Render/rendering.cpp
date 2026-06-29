@@ -1,10 +1,12 @@
 // rendering.cpp
 
 // external
+#include <algorithm>
 #include <cassert>
 #include <spdlog/spdlog.h>
 
 // internal
+#include "Source/Sim/Sync/state_sim.h"
 #include "rendering.h"
 #include "shader.h"
 
@@ -68,26 +70,59 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 								   const Sim::SimParams& simParams,
 								   const Vis::VisParams& visParams)
 {
-	N_impostorInstances_ = view.N_F;
-	if (N_impostorInstances_ == 0) { return; }
+	N_fluidImpostorInstances_ = view.N_F;
+	N_rigidBoundaryImpostorInstances_ = 0;
 
-	EnsureInstanceCapacity(N_impostorInstances_);
+	const bool hasBodyIdB = view.bodyIdB.size() == view.N_B;
+	if (hasBodyIdB)
+	{
+		for (uint32_t i = 0; i < view.N_B; i++)
+		{
+			if (view.bodyIdB[i] != Sync::InvalidRigidBodyId)
+			{
+				N_rigidBoundaryImpostorInstances_++;
+			}
+		}
+	}
+
+	const uint32_t N_total =
+		N_fluidImpostorInstances_ + N_rigidBoundaryImpostorInstances_;
+	if (N_total == 0) { return; }
+
+	EnsureInstanceCapacity(N_total);
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
-	// TODO: differentiate between fluid and boundary particles?
-	const float rad = simParams.particleSizeF * 0.5f;
+	const float fluidRad = simParams.particleSizeF * 0.5f;
+	const float rigidRad =
+		simParams.particleSizeB * 0.5f *
+		std::max(visParams.render.rigidBoundaryRadiusScale, 0.0f);
 	const bool hasScalar = (view.scalarModeF != Base::ColorCodingMode::None) &&
-							!view.scalarDataF.empty();
+							(view.scalarDataF.size() == view.N_F);
 
-	// write all instance data into the persistently mapped buffer
-	for (uint64_t i = 0; i < N_impostorInstances_; i++)
+	// write fluid particles instance data first
+	for (uint32_t i = 0; i < N_fluidImpostorInstances_; i++)
 	{
 		const glm::vec3 pos = view.posF[i];
-		out[i].posAndRad = glm::vec4(pos, rad);
+		out[i].posAndRad = glm::vec4(pos, fluidRad);
 		out[i].scalar = hasScalar ? view.scalarDataF[i] : 0.0f;
 	}
 
-	// no need to flush since persistently mapped
+	// append rigid boundary instance data
+	uint32_t dst = N_fluidImpostorInstances_;
+	if (hasBodyIdB)
+	{
+		for (uint32_t i = 0; i < view.N_B; i++)
+		{
+			if (view.bodyIdB[i] == Sync::InvalidRigidBodyId) { continue; }
+
+			const glm::vec3 pos = view.posB[i];
+			out[dst].posAndRad = glm::vec4(pos, rigidRad);
+			out[dst].scalar = 0.0f;
+			dst++;
+		}
+	}
+
+	// no need to flush, because buffer persistently mapped
 }
 
 void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::VisParams& params)
@@ -122,10 +157,9 @@ void RenderingMgr::UpdateColorMap(const std::vector<glm::vec4>& colorMap256)
 void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraState& cam)
 {
 	// make sure params cached on the GPU are up to date
-	UpdateParamsUBO(render);
 	UpdateCameraUBO(cam);
 
-	if (N_impostorInstances_ > 0)
+	if (N_fluidImpostorInstances_ > 0 || N_rigidBoundaryImpostorInstances_ > 0)
 	{
 		// bind state and bind color LUT
 		glUseProgram(progSphereImpostors_);
@@ -134,7 +168,29 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 
 		// draw 4-vertex quads (2 triangles), instanced N times
 		glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-		glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, static_cast<GLsizei>(N_impostorInstances_));
+		if (render.showFluidParticles && N_fluidImpostorInstances_ > 0)
+		{
+			// render fluid particle instances
+			UpdateParamsUBO(render);
+			glDrawArraysInstanced(
+				GL_TRIANGLE_FAN,
+				0, 4,
+				static_cast<GLsizei>(N_fluidImpostorInstances_));
+		}
+		if (render.showRigidBoundaryParticles && N_rigidBoundaryImpostorInstances_ > 0)
+		{
+			Vis::RenderConfig rigidRender = render;
+			rigidRender.baseColor = render.rigidBoundaryColor;
+			rigidRender.useScalar = false;
+
+			// render rigid boundary particle instances
+			UpdateParamsUBO(rigidRender);
+			glDrawArraysInstancedBaseInstance(
+				GL_TRIANGLE_FAN,
+				0, 4,
+				static_cast<GLsizei>(N_rigidBoundaryImpostorInstances_),
+				N_fluidImpostorInstances_);
+		}
 		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
 	}
 

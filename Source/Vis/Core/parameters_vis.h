@@ -67,15 +67,19 @@ namespace Vis
 
 		RenderConfig render
 		{
-			.lightDirVS		= {0.3f, 0.6f, 0.6f},
-			.clearColor		= {0.15f, 0.15f, 0.15f, 1.0f},
-			.baseColor		= {0.2f, 0.4f, 1.0f},
-			.lineColor		= {1.0f, 1.0f, 1.0f},
-			.alpha			= 1.0f,
-			.scalarMin		= 0.0f,
-			.scalarMax		= 1.0f,
-			.useScalar		= false,
-			.lineWidth		= 0.02f
+			.lightDirVS         = {0.3f, 0.6f, 0.6f},
+			.clearColor         = {0.15f, 0.15f, 0.15f, 1.0f},
+			.baseColor          = {0.2f, 0.4f, 1.0f},
+			.rigidBoundaryColor = {0.7f, 0.7f, 0.7f},
+			.lineColor          = {1.0f, 1.0f, 1.0f},
+			.alpha              = 1.0f,
+			.scalarMin          = 0.0f,
+			.scalarMax          = 1.0f,
+			.useScalar          = false,
+			.showFluidParticles = true,
+			.showRigidBoundaryParticles = true,
+			.rigidBoundaryRadiusScale   = 1.0f,
+			.lineWidth          = 0.02f
 		};
 	};
 
@@ -112,10 +116,14 @@ namespace Vis
 	{
 		std::optional<glm::vec3> lightDirVS;
 		std::optional<glm::vec3> baseColor;
+		std::optional<glm::vec3> rigidBoundaryColor;
 		std::optional<float> alpha;
 		std::optional<float> scalarMin;
 		std::optional<float> scalarMax;
 		std::optional<bool> useScalar;
+		std::optional<bool> showFluidParticles;
+		std::optional<bool> showRigidBoundaryParticles;
+		std::optional<float> rigidBoundaryRadiusScale;
 	};
 
 	class VisParamsMgr

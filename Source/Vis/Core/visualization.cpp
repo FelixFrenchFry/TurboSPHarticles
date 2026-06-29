@@ -390,6 +390,7 @@ void VisualizationMgr::SyncVisSimState()
 	posF_[back_].swap(snap->posF);
 	scalarDataF_[back_].swap(snap->scalarDataF);
 	posB_[back_].swap(snap->posB);
+	bodyIdB_[back_].swap(snap->bodyIdB);
 	boxesB_[back_].swap(snap->boxesB);
 	scalarMode_ = snap->scalarModeF;
 
@@ -421,6 +422,7 @@ void VisualizationMgr::SyncVisSimState()
 	view_.scalarModeF = scalarMode_;
 	view_.N_B = static_cast<uint32_t>(posB_[front_].size());
 	view_.posB = std::span<const glm::vec3>(posB_[front_].data(), posB_[front_].size());
+	view_.bodyIdB = std::span<const uint32_t>(bodyIdB_[front_].data(), bodyIdB_[front_].size());
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
 
 	// local copy for thread safety

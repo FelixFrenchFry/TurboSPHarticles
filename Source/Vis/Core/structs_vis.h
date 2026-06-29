@@ -20,18 +20,19 @@ namespace Vis
 	struct VisualSnapView
 	{
 		// metadata
-		int64_t simStep;					// simulation step at this snapshot
+		int64_t simStep;                    // simulation step at this snapshot
 
 		// data for fluid particle vis
-		uint32_t N_F;						// number of fluid particles
-		std::span<const glm::vec3> posF;	// positions of all fluid particles
-		std::span<const float> scalarDataF;	// data according to color coding mode
-		Base::ColorCodingMode scalarModeF;	// color coding mode
+		uint32_t N_F;                       // number of fluid particles
+		std::span<const glm::vec3> posF;    // positions of all fluid particles
+		std::span<const float> scalarDataF; // data according to color coding mode
+		Base::ColorCodingMode scalarModeF;  // color coding mode
 
 		// data for boundary particles and boundary structures vis
-		uint32_t N_B;						// number of boundary particles
-		std::span<const glm::vec3> posB;	// positions of all boundary particles
-		std::span<const Scene::OBB> boxesB;	// OBBs of boundary structures
+		uint32_t N_B;                       // number of boundary particles
+		std::span<const glm::vec3> posB;    // positions of all boundary particles
+		std::span<const uint32_t> bodyIdB;  // rigid body ownership for boundary particles
+		std::span<const Scene::OBB> boxesB; // OBBs of boundary structures
 	};
 
 	struct WindowConfig
@@ -53,14 +54,14 @@ namespace Vis
 		glm::mat4 viewMat;
 		glm::mat4 projMat;
 		glm::vec3 camPos;
-		float yawDeg;			// left/right angle in degrees
-		float pitchDeg;			// up/down angle in degrees
+		float yawDeg;           // left/right angle in degrees
+		float pitchDeg;         // up/down angle in degrees
 		float moveSpeed;
 		float turnSpeedDeg;
-		float speedMult;		// speed multiplier for fast movement toggle
-		float yFovDeg;			// vertical field of view in degrees
-		float zNear;			// near clipping plane
-		float zFar;				// far clipping plane
+		float speedMult;        // speed multiplier for fast movement toggle
+		float yFovDeg;          // vertical field of view in degrees
+		float zNear;            // near clipping plane
+		float zFar;             // far clipping plane
 	};
 
 	struct GLVersion
@@ -72,14 +73,18 @@ namespace Vis
 
 	struct RenderConfig
 	{
-		glm::vec3 lightDirVS;		// light direction in view space
-		glm::vec4 clearColor;		// background color RGBA
-		glm::vec3 baseColor;		// base sphere impostor color RGB
-		glm::vec3 lineColor;		// wireframe color RGB
+		glm::vec3 lightDirVS;           // light direction in view space
+		glm::vec4 clearColor;           // background color RGBA
+		glm::vec3 baseColor;            // base sphere impostor color RGB
+		glm::vec3 rigidBoundaryColor;   // rigid boundary particle color RGB
+		glm::vec3 lineColor;            // wireframe color RGB
 		float alpha;
 		float scalarMin;
 		float scalarMax;
 		bool useScalar;
+		bool showFluidParticles;
+		bool showRigidBoundaryParticles;
+		float rigidBoundaryRadiusScale;
 
 		float lineWidth;
 	};
