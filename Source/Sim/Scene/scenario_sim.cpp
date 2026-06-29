@@ -9,6 +9,7 @@
 #include "breaking_dam.h"
 #include "converging_dam.h"
 #include "big_droplet.h"
+#include "rigid_cube.h"
 
 
 
@@ -40,6 +41,13 @@ namespace Scene
 			cfg = LoadBigDropletConfigFromProfile(profile, scenarioMgr);
 
 			return std::make_unique<BigDropletScene>(scenarioMgr, cfg);
+		}
+		case Base::ScenarioType::RigidCube:
+		{
+			RigidCubeConfig cfg;
+			cfg = LoadRigidCubeConfigFromProfile(profile, scenarioMgr);
+
+			return std::make_unique<RigidCubeScene>(scenarioMgr, cfg);
 		}
 		default:
 			throw std::runtime_error("Unsupported sim scenario type requested.");

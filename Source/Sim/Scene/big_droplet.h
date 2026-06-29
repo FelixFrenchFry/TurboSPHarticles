@@ -1,6 +1,4 @@
 // big_droplet.h
-//
-// TODO: comment
 
 #pragma once
 

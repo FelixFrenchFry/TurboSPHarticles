@@ -614,6 +614,14 @@ void DistSimulationMgr::SelectSimScenario(
 	const Base::ScenarioType type,
 	const std::string& profile)
 {
+	if (type == Base::ScenarioType::RigidCube)
+	{
+		SPDLOG_ERROR("[rank {}/{}] RigidCube scenario is currently supported only by non-distributed CPU01.",
+			mpiContext_.Rank(), mpiContext_.Size());
+		simScenario_.reset();
+		return;
+	}
+
 	// create new scenario
 	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, profile);
 	if (!simScenario_)
@@ -1079,6 +1087,12 @@ bool DistSimulationMgr::BuildGlobalSimState()
 	if (!simScenario_)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to build global sim state (no scenario selected).",
+			mpiContext_.Rank(), mpiContext_.Size());
+		return false;
+	}
+	if (simParams_.scenarioType == Base::ScenarioType::RigidCube)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to build global sim state: RigidCube scenario is currently supported only by non-distributed CPU01.",
 			mpiContext_.Rank(), mpiContext_.Size());
 		return false;
 	}

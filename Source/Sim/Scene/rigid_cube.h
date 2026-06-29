@@ -1,0 +1,274 @@
+// rigid_cube.h
+
+#pragma once
+
+// external
+#include <algorithm>
+#include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <spdlog/spdlog.h>
+#include <string>
+
+// internal
+#include "Source/Base/helpers.h"
+#include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Sync/state_sim.h"
+#include "builder.h"
+#include "scenario_sim.h"
+
+
+
+namespace Scene
+{
+	struct RigidCubeConfig
+	{
+		// outer boundary container
+		OBB container;
+
+		// fluid block placed inside
+		OBB fluid;
+
+		// rigid cube
+		OBB rigidBody;
+
+		float rigidDensity;
+		glm::vec3 rigidInitVel;
+		glm::vec3 rigidInitOmega;
+	};
+
+	class RigidCubeScene final : public ISimScenario
+	{
+	public: // ---------------------------------------------------------------------------------------
+
+		RigidCubeScene(ScenarioMgr& scenarioMgr, RigidCubeConfig cfg)
+			: scenarioMgr_(scenarioMgr), cfg_(cfg) {}
+
+		const char* Name() const override { return "Rigid Cube"; }
+
+		void Build(Sync::UniversalSimState& dst, const Sim::SimParams& params) const override
+		{
+			scenarioMgr_.BuildBoundaryContainer_OBB(cfg_.container, dst, params);
+
+			scenarioMgr_.BuildFluidBlock_OBB(cfg_.fluid, dst, params);
+
+			const uint32_t bodyIdx = scenarioMgr_.BuildRigidBody_OBB_Hollow(
+				cfg_.rigidBody, dst, params, cfg_.rigidDensity);
+			if (bodyIdx == Sync::InvalidRigidBodyId) { return; }
+
+			ApplyInitialRigidBodyState(dst.rigidBodies, bodyIdx);
+		}
+
+		std::vector<OBB> GetBoundaryBoxes() const override
+		{
+			return { cfg_.container };
+		}
+
+	private: // --------------------------------------------------------------------------------------
+
+		void ApplyInitialRigidBodyState(
+			Sync::RigidBodies& rigidBodies,
+			const uint32_t bodyIdx) const
+		{
+			auto& R = rigidBodies;
+
+			R.xVel[bodyIdx] = cfg_.rigidInitVel.x;
+			R.yVel[bodyIdx] = cfg_.rigidInitVel.y;
+			R.zVel[bodyIdx] = cfg_.rigidInitVel.z;
+
+			R.xOmega[bodyIdx] = cfg_.rigidInitOmega.x;
+			R.yOmega[bodyIdx] = cfg_.rigidInitOmega.y;
+			R.zOmega[bodyIdx] = cfg_.rigidInitOmega.z;
+
+			const float omegaBodyX =
+				R.a00[bodyIdx] * cfg_.rigidInitOmega.x +
+				R.a10[bodyIdx] * cfg_.rigidInitOmega.y +
+				R.a20[bodyIdx] * cfg_.rigidInitOmega.z;
+			const float omegaBodyY =
+				R.a01[bodyIdx] * cfg_.rigidInitOmega.x +
+				R.a11[bodyIdx] * cfg_.rigidInitOmega.y +
+				R.a21[bodyIdx] * cfg_.rigidInitOmega.z;
+			const float omegaBodyZ =
+				R.a02[bodyIdx] * cfg_.rigidInitOmega.x +
+				R.a12[bodyIdx] * cfg_.rigidInitOmega.y +
+				R.a22[bodyIdx] * cfg_.rigidInitOmega.z;
+
+			const float iBodyX = R.iBodyInv00[bodyIdx] > 0.0f
+				? 1.0f / R.iBodyInv00[bodyIdx] : 0.0f;
+			const float iBodyY = R.iBodyInv11[bodyIdx] > 0.0f
+				? 1.0f / R.iBodyInv11[bodyIdx] : 0.0f;
+			const float iBodyZ = R.iBodyInv22[bodyIdx] > 0.0f
+				? 1.0f / R.iBodyInv22[bodyIdx] : 0.0f;
+
+			const float angMomBodyX = iBodyX * omegaBodyX;
+			const float angMomBodyY = iBodyY * omegaBodyY;
+			const float angMomBodyZ = iBodyZ * omegaBodyZ;
+
+			R.xAngMom[bodyIdx] =
+				R.a00[bodyIdx] * angMomBodyX +
+				R.a01[bodyIdx] * angMomBodyY +
+				R.a02[bodyIdx] * angMomBodyZ;
+			R.yAngMom[bodyIdx] =
+				R.a10[bodyIdx] * angMomBodyX +
+				R.a11[bodyIdx] * angMomBodyY +
+				R.a12[bodyIdx] * angMomBodyZ;
+			R.zAngMom[bodyIdx] =
+				R.a20[bodyIdx] * angMomBodyX +
+				R.a21[bodyIdx] * angMomBodyY +
+				R.a22[bodyIdx] * angMomBodyZ;
+		}
+
+		ScenarioMgr& scenarioMgr_;
+		RigidCubeConfig cfg_;
+	};
+
+	inline RigidCubeConfig MakeRigidCubeConfig_Default(ScenarioMgr& scenarioMgr)
+	{
+		constexpr glm::vec3 U{ 1, 0, 0 }; // forward
+		constexpr glm::vec3 V{ 0, 1, 0 }; // up
+		constexpr glm::vec3 W{ 0, 0, 1 }; // right
+
+		RigidCubeConfig cfg{};
+
+		cfg.container = scenarioMgr.MakeOBB_FromAxes
+		(
+			/* origin */		{ 0,0,0 },
+			/* uDir, uLen */	U, 1.0f,
+			/* vDir, vLen */	V, 1.0f,
+			/* wDir, wLen */	W, 1.0f
+		);
+
+		cfg.fluid = scenarioMgr.MakeOBB_FromAxes
+		(
+			/* origin */		{ 0.0f,0.0f,0.0f },
+			/* uDir, uLen */	U, 0.45f,
+			/* vDir, vLen */	V, 0.45f,
+			/* wDir, wLen */	W, 0.45f
+		);
+
+		cfg.rigidBody = scenarioMgr.MakeOBB_FromAxes
+		(
+			/* origin */		{ 0.62f,0.12f,0.42f },
+			/* uDir, uLen */	U, 0.16f,
+			/* vDir, vLen */	V, 0.16f,
+			/* wDir, wLen */	W, 0.16f
+		);
+
+		cfg.rigidDensity = 1'000.0f;
+		cfg.rigidInitVel = { 0.0f, 0.0f, 0.0f };
+		cfg.rigidInitOmega = { 0.0f, 0.0f, 0.0f };
+
+		return cfg;
+	}
+
+	inline RigidCubeConfig LoadRigidCubeConfigFromJson(
+		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
+	{
+		// cache default config
+		RigidCubeConfig cfg = MakeRigidCubeConfig_Default(scenarioMgr);
+
+		if (auto it = j.find("container"); it != j.end())
+		{
+			cfg.container = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+		}
+
+		if (auto it = j.find("fluid"); it != j.end())
+		{
+			cfg.fluid = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+		}
+
+		if (auto it = j.find("rigidBody"); it != j.end())
+		{
+			cfg.rigidBody = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+		}
+
+		if (auto it = j.find("rigidDensity"); it != j.end())
+		{
+			cfg.rigidDensity = it->get<float>();
+		}
+
+		if (auto it = j.find("rigidInitVel"); it != j.end() &&
+			it->is_array() && it->size() == 3)
+		{
+			cfg.rigidInitVel.x = (*it)[0].get<float>();
+			cfg.rigidInitVel.y = (*it)[1].get<float>();
+			cfg.rigidInitVel.z = (*it)[2].get<float>();
+		}
+
+		if (auto it = j.find("rigidInitOmega"); it != j.end() &&
+			it->is_array() && it->size() == 3)
+		{
+			cfg.rigidInitOmega.x = (*it)[0].get<float>();
+			cfg.rigidInitOmega.y = (*it)[1].get<float>();
+			cfg.rigidInitOmega.z = (*it)[2].get<float>();
+		}
+
+		// sanitize values
+		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen),
+								  cfg.container.uLen);
+		cfg.fluid.vLen = std::min(std::max(0.0f, cfg.fluid.vLen),
+								  cfg.container.vLen);
+		cfg.fluid.wLen = std::min(std::max(0.0f, cfg.fluid.wLen),
+								  cfg.container.wLen);
+		cfg.rigidBody.uLen = std::min(std::max(0.0f, cfg.rigidBody.uLen),
+									  cfg.container.uLen);
+		cfg.rigidBody.vLen = std::min(std::max(0.0f, cfg.rigidBody.vLen),
+									  cfg.container.vLen);
+		cfg.rigidBody.wLen = std::min(std::max(0.0f, cfg.rigidBody.wLen),
+									  cfg.container.wLen);
+		cfg.rigidDensity = std::max(0.0f, cfg.rigidDensity);
+
+		return cfg;
+	}
+
+	inline RigidCubeConfig LoadRigidCubeConfigFromProfile(
+		const std::string& profile, ScenarioMgr& scenarioMgr)
+	{
+		auto TryLoadFromScenarioFile = [&](const std::string& scenariosFile) -> std::optional<RigidCubeConfig>
+			{
+				nlohmann::json root;
+				if (!Base::LoadJsonObjectFromFile(scenariosFile, root))
+				{
+					return std::nullopt;
+				}
+
+				// expect root["scenarios"] object
+				if (!root.contains("scenarios") || !root["scenarios"].is_object())
+				{
+					return std::nullopt;
+				}
+
+				const auto& scenarios = root["scenarios"];
+
+				// expect scenarios["RigidCube"] object
+				if (!scenarios.contains("RigidCube") || !scenarios["RigidCube"].is_object())
+				{
+					return std::nullopt;
+				}
+
+				return LoadRigidCubeConfigFromJson(scenarios["RigidCube"], scenarioMgr);
+			};
+
+		// try chosen profile
+		{
+			const std::string file = profile + "/scenarios.json";
+			if (auto cfg = TryLoadFromScenarioFile(file)) { return *cfg; }
+
+			SPDLOG_WARN("Could not load RigidCube from '/{}'.", file);
+		}
+
+		// fallback to default profile if profile was not 'Default' already
+		if (profile != "Default")
+		{
+			const std::string file = "Default/scenarios.json";
+			if (auto cfg = TryLoadFromScenarioFile(file)) { return *cfg; }
+
+			SPDLOG_WARN("Could not load RigidCube from '/{}'.", file);
+		}
+
+		// final fallback to built-in defaults
+		SPDLOG_WARN("Using built-in RigidCube defaults.");
+		return MakeRigidCubeConfig_Default(scenarioMgr);
+	}
+
+} // namespace Scene

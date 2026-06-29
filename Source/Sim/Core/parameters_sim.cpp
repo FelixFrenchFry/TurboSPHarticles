@@ -98,6 +98,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				if (s == "BreakingDam") { out = Base::ScenarioType::BreakingDam; return true; }
 				if (s == "ConvergingDam") { out = Base::ScenarioType::ConvergingDam; return true; }
 				if (s == "BigDroplet") { out = Base::ScenarioType::BigDroplet; return true; }
+				if (s == "RigidCube") { out = Base::ScenarioType::RigidCube; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())

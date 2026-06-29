@@ -1,6 +1,4 @@
 // converging_dam.h
-//
-// TODO: comment
 
 #pragma once
 

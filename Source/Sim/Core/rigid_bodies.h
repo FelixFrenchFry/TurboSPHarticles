@@ -22,6 +22,10 @@ namespace Sim
 
 		void ClearForces(Sync::RigidBodies& rigidBodies) const;
 
+		void AddGravity(
+			Sync::RigidBodies& rigidBodies,
+			float xGravity, float yGravity, float zGravity) const;
+
 		void AddForce(
 			Sync::RigidBodies& rigidBodies,
 			uint32_t bodyIdx,

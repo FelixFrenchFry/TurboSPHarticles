@@ -170,6 +170,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	if (rigidBodies_.N_ > 0)
 	{
 		rigidBodyMgr_.ClearForces(rigidBodies_);
+		rigidBodyMgr_.AddGravity(
+			rigidBodies_,
+			params.gravity.x, params.gravity.y, params.gravity.z);
 	}
 
 	CPU01::NonPressureAcceleration_ChunkedSELL(

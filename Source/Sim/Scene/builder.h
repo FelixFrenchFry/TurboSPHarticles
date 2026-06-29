@@ -76,6 +76,12 @@ namespace Scene
 										   Sync::UniversalSimState& dst,
 										   const Sim::SimParams& params);
 
+		// builds a hollow rigid body sampled by boundary particles
+		uint32_t BuildRigidBody_OBB_Hollow(const OBB& box,
+										   Sync::UniversalSimState& dst,
+										   const Sim::SimParams& params,
+										   float rigidDensity);
+
 		OBB MakeOBB_FromAxes(glm::vec3 origin,
 							 glm::vec3 uDir, float uLen,
 							 glm::vec3 vDir, float vLen,
@@ -97,6 +103,12 @@ namespace Scene
 		static void ComputeBoundaryCoefficients(
 			Sync::BoundaryParticles& boundaryParticles,
 			const Sim::SimParams& params);
+
+		static void ComputeBoundaryCoefficients(
+			Sync::BoundaryParticles& boundaryParticles,
+			const Sim::SimParams& params,
+			uint32_t beginB,
+			uint32_t endB);
 
 		static inline float Jitter3D(uint64_t baseSeed, uint64_t key, float amp);
 

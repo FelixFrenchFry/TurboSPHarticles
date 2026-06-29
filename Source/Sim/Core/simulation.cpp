@@ -97,6 +97,13 @@ void SimulationMgr::SelectSimScenario(
 		return;
 	}
 
+	if (type == Base::ScenarioType::RigidCube &&
+		simParams_.backendVersion != Base::BackendVersion::CPU01)
+	{
+		SPDLOG_ERROR("RigidCube scenario is currently supported only by CPU01.");
+		return;
+	}
+
 	// create new scenario
 	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, profile);
 	if (!simScenario_)
@@ -113,6 +120,13 @@ void SimulationMgr::SelectSimBackend(
 	if (running_.load(std::memory_order_acquire))
 	{
 		SPDLOG_ERROR("Stop the simulation before switching backend");
+		return;
+	}
+
+	if (simParams_.scenarioType == Base::ScenarioType::RigidCube &&
+		version != Base::BackendVersion::CPU01)
+	{
+		SPDLOG_ERROR("RigidCube scenario is currently supported only by CPU01.");
 		return;
 	}
 
@@ -185,6 +199,13 @@ void SimulationMgr::ReBuildInitialSimState()
 	universalSimState_.time = 0.0;
 
 	SyncParameters();
+
+	if (simParams_.scenarioType == Base::ScenarioType::RigidCube &&
+		simParams_.backendVersion != Base::BackendVersion::CPU01)
+	{
+		SPDLOG_ERROR("Failed to re-build initial sim state: RigidCube scenario is currently supported only by CPU01.");
+		return;
+	}
 
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);

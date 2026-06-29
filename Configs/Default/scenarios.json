@@ -51,6 +51,39 @@
       "dropletGap": 0.0,
       "dropletOffset": [ 10.0, 10.0 ],
       "dropletInitVel": [ -5.0, 0.0, -5.0 ]
+    },
+    "RigidCube": {
+      "type": "RigidCube",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 1.0,
+        "vLen": 0.1,
+        "wLen": 1.0
+      },
+      "rigidBody": {
+        "origin": [ 0.42, 0.2, 0.42 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 0.16,
+        "vLen": 0.16,
+        "wLen": 0.16
+      },
+      "rigidDensity": 1000.0,
+      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+      "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }
   }
 }

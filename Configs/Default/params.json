@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "BreakingDam",
+  "scenarioType": "RigidCube",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
 

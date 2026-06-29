@@ -37,6 +37,7 @@ namespace Base
 		BreakingDam,        // 0
 		ConvergingDam,      // 1
 		BigDroplet,         // 2
+		RigidCube,          // 3
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
@@ -48,6 +49,8 @@ namespace Base
 			return "ConvergingDam";
 		case ScenarioType::BigDroplet:
 			return "BigDroplet";
+		case ScenarioType::RigidCube:
+			return "RigidCube";
 		}
 		return "ScenarioType::<unknown>";
 	}

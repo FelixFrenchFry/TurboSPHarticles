@@ -77,11 +77,27 @@ namespace
 		return cubicSplineAlpha * (t2_3 - 4.0f * t1_3);
 	}
 
+	float Dot(
+		const glm::vec3& a,
+		const glm::vec3& b)
+	{
+		return a.x * b.x + a.y * b.y + a.z * b.z;
+	}
+
 } // namespace anonymous
 
 void ScenarioMgr::ComputeBoundaryCoefficients(
 	Sync::BoundaryParticles& boundaryParticles,
 	const Sim::SimParams& params)
+{
+	ComputeBoundaryCoefficients(boundaryParticles, params, 0, boundaryParticles.N_);
+}
+
+void ScenarioMgr::ComputeBoundaryCoefficients(
+	Sync::BoundaryParticles& boundaryParticles,
+	const Sim::SimParams& params,
+	const uint32_t beginB,
+	const uint32_t endB)
 {
 	// temp local cell buckets to avoid O(N_B^2) boundary neighbor search
 	struct CellCoord
@@ -118,7 +134,9 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 		};
 
 	const uint32_t N_B = boundaryParticles.N_;
-	if (N_B == 0) { return; }
+	assert(beginB <= endB);
+	assert(endB <= N_B);
+	if (beginB == endB) { return; }
 
 	const float defaultVolB = DefaultBoundaryVolB(params);
 	const float defaultPsiB = DefaultBoundaryPsiB(params);
@@ -138,16 +156,16 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 		params.gridCellSizeRatio <= 0.0f ||
 		params.restDensity <= 0.0f)
 	{
-		std::ranges::fill(volB, defaultVolB);
-		std::ranges::fill(psiB, defaultPsiB);
+		std::fill(volB.begin() + beginB, volB.begin() + endB, defaultVolB);
+		std::fill(psiB.begin() + beginB, psiB.begin() + endB, defaultPsiB);
 		return;
 	}
 
 	const float cellSize = params.kernelRadius * params.gridCellSizeRatio;
 	if (cellSize <= 0.0f)
 	{
-		std::ranges::fill(volB, defaultVolB);
-		std::ranges::fill(psiB, defaultPsiB);
+		std::fill(volB.begin() + beginB, volB.begin() + endB, defaultVolB);
+		std::fill(psiB.begin() + beginB, psiB.begin() + endB, defaultPsiB);
 		return;
 	}
 
@@ -157,32 +175,35 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 		1,
 		static_cast<int32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 	const float cellSizeInv = 1.0f / cellSize;
+	const uint32_t N_compute = endB - beginB;
 
-	std::vector<CellCoord> cellCoords(N_B);
+	std::vector<CellCoord> cellCoords(N_compute);
 	std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets;
-	cellBuckets.reserve(static_cast<uint64_t>(N_B) * 2ull);
+	cellBuckets.reserve(static_cast<uint64_t>(N_compute) * 2ull);
 
 	// insert boundary particles into cell buckets
-	for (uint32_t i = 0; i < N_B; i++)
+	for (uint32_t localIdx = 0; localIdx < N_compute; localIdx++)
 	{
-		cellCoords[i] = makeCellCoord(
+		const uint32_t i = beginB + localIdx;
+		cellCoords[localIdx] = makeCellCoord(
 			xPosB[i],
 			yPosB[i],
 			zPosB[i],
 			cellSizeInv);
-		cellBuckets[cellCoords[i]].push_back(i);
+		cellBuckets[cellCoords[localIdx]].push_back(i);
 	}
 
 	// compute non-uniform boundary contribution coefficients for all boundary particles
 	const auto& cellBucketsReadOnly = cellBuckets;
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_B),
+		tbb::blocked_range<uint32_t>(0, N_compute),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
+			for (uint32_t localIdx = r.begin(); localIdx != r.end(); localIdx++)
 			{
+				const uint32_t i = beginB + localIdx;
 				float sumW = 0.0f;
-				const CellCoord baseCell = cellCoords[i];
+				const CellCoord baseCell = cellCoords[localIdx];
 
 				for (int32_t dz = -cellQueryReach; dz <= cellQueryReach; dz++)
 				{
@@ -521,7 +542,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 {
 	const float size = params.particleSizeB;
 	const float radius = params.particleSizeB * 0.5f;
-	const uint32_t layers = params.boundaryLayers < 0 ? 0 : params.boundaryLayers;
+	const uint32_t layers = params.boundaryLayers;
 
 	// shrink OBB lengths by radius in all directions, resulting in "inner" lengths
 	const float uLen_i = box.uLen - 2.0f * radius;
@@ -611,6 +632,152 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 
 	assert(idx == (N_base + N_add));
 	ComputeBoundaryCoefficients(dst.boundaryParticles, params);
+}
+
+uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
+	const OBB& box,
+	Sync::UniversalSimState& dst,
+	const Sim::SimParams& params,
+	const float rigidDensity)
+{
+	const float size = params.particleSizeB;
+	const float radius = params.particleSizeB * 0.5f;
+	const uint32_t layers = params.boundaryLayers;
+
+	// shrink OBB lengths by radius in all directions, resulting in "inner" lengths
+	const float uLen_i = box.uLen - 2.0f * radius;
+	const float vLen_i = box.vLen - 2.0f * radius;
+	const float wLen_i = box.wLen - 2.0f * radius;
+	if (uLen_i <= 0.0f || vLen_i <= 0.0f || wLen_i <= 0.0f)
+	{
+		return Sync::InvalidRigidBodyId;
+	}
+
+	const glm::vec3 origin_i = box.origin
+							 + box.uHat * radius
+							 + box.vHat * radius
+							 + box.wHat * radius;
+
+	const uint32_t N_u = TilesCount(uLen_i, size);
+	const uint32_t N_v = TilesCount(vLen_i, size);
+	const uint32_t N_w = TilesCount(wLen_i, size);
+	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
+	if (N_keep <= 0) { return Sync::InvalidRigidBodyId; }
+
+	auto& B = dst.boundaryParticles;
+	auto& R = dst.rigidBodies;
+
+	const uint32_t bodyIdx = R.N_;
+	const uint32_t sampleBase = R.sampleN_;
+	const uint32_t N_base = B.N_;
+	const uint32_t N_add = N_keep;
+
+	dst.ResizeRigidBodies(bodyIdx + 1);
+	R.resizeSamples(sampleBase + N_add);
+	dst.ResizeBoundary(N_base + N_add);
+
+	const glm::vec3 center = box.origin
+						   + box.uHat * (0.5f * box.uLen)
+						   + box.vHat * (0.5f * box.vLen)
+						   + box.wHat * (0.5f * box.wLen);
+
+	const float volume = box.uLen * box.vLen * box.wLen;
+	const float bodyMass = rigidDensity > 0.0f ? rigidDensity * volume : 0.0f;
+	const float bodyMassInv = bodyMass > 0.0f ? 1.0f / bodyMass : 0.0f;
+
+	R.id[bodyIdx] = bodyIdx;
+	R.xCM[bodyIdx] = center.x;
+	R.yCM[bodyIdx] = center.y;
+	R.zCM[bodyIdx] = center.z;
+	R.sampleBegin[bodyIdx] = sampleBase;
+	R.sampleCount[bodyIdx] = N_add;
+	R.mass[bodyIdx] = bodyMass;
+	R.massInv[bodyIdx] = bodyMassInv;
+
+	R.a00[bodyIdx] = box.uHat.x; R.a01[bodyIdx] = box.vHat.x; R.a02[bodyIdx] = box.wHat.x;
+	R.a10[bodyIdx] = box.uHat.y; R.a11[bodyIdx] = box.vHat.y; R.a12[bodyIdx] = box.wHat.y;
+	R.a20[bodyIdx] = box.uHat.z; R.a21[bodyIdx] = box.vHat.z; R.a22[bodyIdx] = box.wHat.z;
+
+	R.iBodyInv00[bodyIdx] = bodyMass > 0.0f
+		? 12.0f / (bodyMass * (box.vLen * box.vLen + box.wLen * box.wLen))
+		: 0.0f;
+	R.iBodyInv11[bodyIdx] = bodyMass > 0.0f
+		? 12.0f / (bodyMass * (box.uLen * box.uLen + box.wLen * box.wLen))
+		: 0.0f;
+	R.iBodyInv22[bodyIdx] = bodyMass > 0.0f
+		? 12.0f / (bodyMass * (box.uLen * box.uLen + box.vLen * box.vLen))
+		: 0.0f;
+
+	// jittering params
+	const float jitAmp = params.jitterFracB * params.particleSizeB;
+	std::mt19937_64 rng(params.jitterSeedB);
+	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
+
+	uint32_t idx = N_base;
+	uint32_t sampleIdx = sampleBase;
+
+	for (uint32_t kw = 0; kw < N_w; kw++) // loop over depth
+	{
+		// interior particle beyond layers in w, and clamp to prevent drift
+		const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
+		float w = std::min(wLen_i, static_cast<float>(kw) * size);
+
+		for (uint32_t jv = 0; jv < N_v; jv++) // loop over height
+		{
+			// interior particle beyond layers in v, and clamp to prevent drift
+			const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
+			float v = std::min(vLen_i, static_cast<float>(jv) * size);
+
+			for (uint32_t iu = 0; iu < N_u; iu++) // loop over width
+			{
+				// interior particle beyond layers in u, and clamp to prevent drift
+				const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
+				float u = std::min(uLen_i, static_cast<float>(iu) * size);
+
+				if (uInside && vInside && wInside) { continue; }
+
+				if (jitAmp > 0.0f)
+				{
+					u += uniformDist(rng);
+					v += uniformDist(rng);
+					w += uniformDist(rng);
+				}
+
+				u = std::clamp(u, 0.0f, uLen_i);
+				v = std::clamp(v, 0.0f, vLen_i);
+				w = std::clamp(w, 0.0f, wLen_i);
+
+				const glm::vec3 pos = origin_i
+									+ box.uHat * u
+									+ box.vHat * v
+									+ box.wHat * w;
+				const glm::vec3 rel = pos - center;
+
+				B.id[idx] = idx;
+				B.bodyId[idx] = bodyIdx;
+				B.rigidSampleIdx[idx] = sampleIdx;
+				B.xPos[idx] = pos.x;
+				B.yPos[idx] = pos.y;
+				B.zPos[idx] = pos.z;
+				B.xVel[idx] = 0.0f;
+				B.yVel[idx] = 0.0f;
+				B.zVel[idx] = 0.0f;
+
+				R.xLocalB[sampleIdx] = Dot(rel, box.uHat);
+				R.yLocalB[sampleIdx] = Dot(rel, box.vHat);
+				R.zLocalB[sampleIdx] = Dot(rel, box.wHat);
+
+				idx++;
+				sampleIdx++;
+			}
+		}
+	}
+
+	assert(idx == (N_base + N_add));
+	assert(sampleIdx == (sampleBase + N_add));
+	ComputeBoundaryCoefficients(dst.boundaryParticles, params, N_base, N_base + N_add);
+
+	return bodyIdx;
 }
 
 OBB ScenarioMgr::MakeOBB_FromAxes(glm::vec3 origin,

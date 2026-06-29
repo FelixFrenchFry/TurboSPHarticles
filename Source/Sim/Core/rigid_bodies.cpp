@@ -180,6 +180,25 @@ namespace Sim
 		std::fill(rigidBodies.zTorque.begin(), rigidBodies.zTorque.end(), 0.0f);
 	}
 
+	void RigidBodyMgr::AddGravity(
+		Sync::RigidBodies& rigidBodies,
+		const float xGravity, const float yGravity, const float zGravity) const
+	{
+		// TODO: parallelize with TBB?
+		// gravity acts at the center of mass
+		for (uint32_t bodyIdx = 0; bodyIdx < rigidBodies.N_; bodyIdx++)
+		{
+			if (rigidBodies.massInv[bodyIdx] <= 0.0f) { continue; }
+
+			const float mass = rigidBodies.mass[bodyIdx];
+			if (mass <= 0.0f) { continue; }
+
+			rigidBodies.xForce[bodyIdx] += mass * xGravity;
+			rigidBodies.yForce[bodyIdx] += mass * yGravity;
+			rigidBodies.zForce[bodyIdx] += mass * zGravity;
+		}
+	}
+
 	void RigidBodyMgr::AddForce(
 		Sync::RigidBodies& rigidBodies,
 		const uint32_t bodyIdx,

@@ -1,6 +1,4 @@
 // breaking_dam.h
-//
-// TODO: comment
 
 #pragma once
 
