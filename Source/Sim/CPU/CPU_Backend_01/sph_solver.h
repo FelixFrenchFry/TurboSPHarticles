@@ -6,6 +6,7 @@
 #include <cstdint>
 
 // internal
+#include "Source/Sim/Core/rigid_bodies.h"
 #include "neighbor_lists.h"
 
 #if defined(_MSC_VER)
@@ -20,6 +21,8 @@
 
 namespace CPU01
 {
+	namespace Sync = ::Sync;
+
 	constexpr float ZERO_EQU_LIM_F = 1e-7f;
 	constexpr double ZERO_EQU_LIM_D = 1e-14;
 
@@ -49,6 +52,9 @@ namespace CPU01
 		const float* RESTRICT xVelF,
 		const float* RESTRICT yVelF,
 		const float* RESTRICT zVelF,
+		const float* RESTRICT xVelB,
+		const float* RESTRICT yVelB,
+		const float* RESTRICT zVelB,
 		const float* RESTRICT densityF,
 		const Sim::I_NeighborListSELL& neighborList,
 		float timeStep, float particleSizeInvF,
@@ -73,6 +79,9 @@ namespace CPU01
 		const float* RESTRICT xVelPredF,
 		const float* RESTRICT yVelPredF,
 		const float* RESTRICT zVelPredF,
+		const float* RESTRICT xVelB,
+		const float* RESTRICT yVelB,
+		const float* RESTRICT zVelB,
 		const float* RESTRICT densityF,
 		const Sim::I_NeighborListSELL& neighborList,
 		float timeStep, float particleSizeInvF,
@@ -130,6 +139,47 @@ namespace CPU01
 		float& avgRelDensityErrorF_raw,
 		float& avgRelDensityErrorF_pos,
 		float& avgRelDensityErrorF_abs);
+
+	void AccumulateRigidBodyNonPressureForces_ChunkedSELL(
+		const float* RESTRICT xPosF,
+		const float* RESTRICT yPosF,
+		const float* RESTRICT zPosF,
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
+		const uint32_t* RESTRICT bodyIdB,
+		const float* RESTRICT volB,
+		const float* RESTRICT xVelF,
+		const float* RESTRICT yVelF,
+		const float* RESTRICT zVelF,
+		const float* RESTRICT xVelB,
+		const float* RESTRICT yVelB,
+		const float* RESTRICT zVelB,
+		const Sim::I_NeighborListSELL& neighborList,
+		float particleSizeInvF, float particleSizeSquF,
+		float kernelRadiusSqu, float cubicSplineAlpha,
+		float massF, float viscosityB,
+		uint32_t N_F,
+		const Sim::RigidBodyMgr& rigidBodyMgr,
+		Sync::RigidBodies& rigidBodies);
+
+	void AccumulateRigidBodyPressureForces_ChunkedSELL(
+		const float* RESTRICT xPosF,
+		const float* RESTRICT yPosF,
+		const float* RESTRICT zPosF,
+		const float* RESTRICT xPosB,
+		const float* RESTRICT yPosB,
+		const float* RESTRICT zPosB,
+		const uint32_t* RESTRICT bodyIdB,
+		const float* RESTRICT psiB,
+		const float* RESTRICT pressureF,
+		const Sim::I_NeighborListSELL& neighborList,
+		float particleSizeInvF, float kernelRadiusSqu,
+		float cubicSplineAlpha, float restDensity,
+		float massF, float pressGamma,
+		uint32_t N_F,
+		const Sim::RigidBodyMgr& rigidBodyMgr,
+		Sync::RigidBodies& rigidBodies);
 
 	void Integration(
 		const float* RESTRICT xVelPredF,

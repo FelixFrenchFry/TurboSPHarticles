@@ -80,7 +80,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	simTime_ = src.time;
 	F.ensureParticleIdsPresent();
 	B.ensureParticleIdsPresent();
+	B.EnsureBoundaryKinematicsPresent();
 	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensity);
+	src.rigidBodies.ensureRigidBodyIdsPresent();
 
 	// transfer to backend fluid data structures
 	idF_ = std::move(F.id);
@@ -107,11 +109,18 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 
 	// transfer to boundary data structures
 	idB_ = std::move(B.id);
+	bodyIdB_ = std::move(B.bodyId);
+	rigidSampleIdxB_ = std::move(B.rigidSampleIdx);
 	xPosB_ = std::move(B.xPos);
 	yPosB_ = std::move(B.yPos);
 	zPosB_ = std::move(B.zPos);
+	xVelB_ = std::move(B.xVel);
+	yVelB_ = std::move(B.yVel);
+	zVelB_ = std::move(B.zVel);
 	volB_ = std::move(B.volB);
 	psiB_ = std::move(B.psiB);
+
+	rigidBodies_ = std::move(src.rigidBodies);
 
 	// init neighbor list sizes
 	neighborList_->Resize(N_F_, N_B_, params);
@@ -173,9 +182,14 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
 				B.id[i] = idB_[i];
+				B.bodyId[i] = bodyIdB_[i];
+				B.rigidSampleIdx[i] = rigidSampleIdxB_[i];
 				B.xPos[i] = xPosB_[i];
 				B.yPos[i] = yPosB_[i];
 				B.zPos[i] = zPosB_[i];
+				B.xVel[i] = xVelB_[i];
+				B.yVel[i] = yVelB_[i];
+				B.zVel[i] = zVelB_[i];
 				B.volB[i] = volB_[i];
 				B.psiB[i] = psiB_[i];
 			}
@@ -185,6 +199,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
+	dst.rigidBodies = rigidBodies_;
 }
 
 void SimBackend_CPU01::PackExportSnapshot(
@@ -462,9 +477,14 @@ void SimBackend_CPU01::FillMemoryRecord(
 		MemUsage usage{};
 
 		Add(usage, MemUsageOf_Vector(idB_));
+		Add(usage, MemUsageOf_Vector(bodyIdB_));
+		Add(usage, MemUsageOf_Vector(rigidSampleIdxB_));
 		Add(usage, MemUsageOf_Vector(xPosB_));
 		Add(usage, MemUsageOf_Vector(yPosB_));
 		Add(usage, MemUsageOf_Vector(zPosB_));
+		Add(usage, MemUsageOf_Vector(xVelB_));
+		Add(usage, MemUsageOf_Vector(yVelB_));
+		Add(usage, MemUsageOf_Vector(zVelB_));
 		Add(usage, MemUsageOf_Vector(volB_));
 		Add(usage, MemUsageOf_Vector(psiB_));
 
@@ -991,6 +1011,63 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
 		}
 
 		localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
+	}
+}
+
+void SimBackend_CPU01::UpdateRigidBoundaryParticles()
+{
+	// TODO: parallelize with TBB?
+	for (uint32_t i = 0; i < N_B_; i++)
+	{
+		const uint32_t bodyIdx = bodyIdB_[i];
+		if (bodyIdx == Sync::InvalidRigidBodyId)
+		{
+			xVelB_[i] = 0.0f;
+			yVelB_[i] = 0.0f;
+			zVelB_[i] = 0.0f;
+			continue;
+		}
+
+		const uint32_t sampleIdx = rigidSampleIdxB_[i];
+		if (bodyIdx >= rigidBodies_.N_ || sampleIdx >= rigidBodies_.sampleN_)
+		{
+			throw std::runtime_error("Invalid CPU01 rigid boundary attachment.");
+		}
+		const uint32_t sampleBegin = rigidBodies_.sampleBegin[bodyIdx];
+		const uint32_t sampleCount = rigidBodies_.sampleCount[bodyIdx];
+
+		// TODO: gate behind debug compiler flag?
+		if (sampleBegin > rigidBodies_.sampleN_ || sampleCount > rigidBodies_.sampleN_ - sampleBegin)
+		{
+			throw std::runtime_error("Invalid CPU01 rigid boundary sample range.");
+		}
+		if (sampleIdx < sampleBegin || sampleIdx >= sampleBegin + sampleCount)
+		{
+			throw std::runtime_error("CPU01 rigid boundary sample belongs to a different body.");
+		}
+
+		const float lx = rigidBodies_.xLocalB[sampleIdx];
+		const float ly = rigidBodies_.yLocalB[sampleIdx];
+		const float lz = rigidBodies_.zLocalB[sampleIdx];
+
+		const float rx = std::fmaf(rigidBodies_.a00[bodyIdx], lx,
+			std::fmaf(rigidBodies_.a01[bodyIdx], ly, rigidBodies_.a02[bodyIdx] * lz));
+		const float ry = std::fmaf(rigidBodies_.a10[bodyIdx], lx,
+			std::fmaf(rigidBodies_.a11[bodyIdx], ly, rigidBodies_.a12[bodyIdx] * lz));
+		const float rz = std::fmaf(rigidBodies_.a20[bodyIdx], lx,
+			std::fmaf(rigidBodies_.a21[bodyIdx], ly, rigidBodies_.a22[bodyIdx] * lz));
+
+		xPosB_[i] = rigidBodies_.xCM[bodyIdx] + rx;
+		yPosB_[i] = rigidBodies_.yCM[bodyIdx] + ry;
+		zPosB_[i] = rigidBodies_.zCM[bodyIdx] + rz;
+
+		const float wx = rigidBodies_.xOmega[bodyIdx];
+		const float wy = rigidBodies_.yOmega[bodyIdx];
+		const float wz = rigidBodies_.zOmega[bodyIdx];
+
+		xVelB_[i] = rigidBodies_.xVel[bodyIdx] + wy * rz - wz * ry;
+		yVelB_[i] = rigidBodies_.yVel[bodyIdx] + wz * rx - wx * rz;
+		zVelB_[i] = rigidBodies_.zVel[bodyIdx] + wx * ry - wy * rx;
 	}
 }
 

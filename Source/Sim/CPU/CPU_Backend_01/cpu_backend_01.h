@@ -10,6 +10,7 @@
 #include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Sim/Core/backend_sim.h"
 #include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Core/rigid_bodies.h"
 #include "neighbor_lists.h"
 
 
@@ -84,9 +85,12 @@ namespace Sim
 
 		void ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 
+		void UpdateRigidBoundaryParticles();
+
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;
 		Bench::BenchmarksTracker& benchmarksTracker_;
+		Sim::RigidBodyMgr rigidBodyMgr_;
 
 		// neighbor search
 		std::unique_ptr<I_NeighborSearch> neighborSearch_;
@@ -117,11 +121,16 @@ namespace Sim
 		std::vector<float> densityF_;
 
 		// boundary particles
-		// TODO: add boundary particle velocities?
 		std::vector<uint32_t> idB_;
+		std::vector<uint32_t> bodyIdB_;
+		std::vector<uint32_t> rigidSampleIdxB_;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
+		std::vector<float> xVelB_, yVelB_, zVelB_;
 		std::vector<float> volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
+
+		// rigid bodies
+		Sync::RigidBodies rigidBodies_;
 
 		// optional distributed integration filtering
 		bool useActiveFluidParticleLocalIdxs_ = false;

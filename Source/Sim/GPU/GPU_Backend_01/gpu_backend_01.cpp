@@ -129,6 +129,10 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	F.ensureParticleIdsPresent();
 	B.ensureParticleIdsPresent();
 	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensity);
+	if (src.rigidBodies.N_ > 0)
+	{
+		throw std::runtime_error("GPU01 rigid-body coupling is not implemented.");
+	}
 
 	EnsureCapacity(N_F_, N_B_);
 

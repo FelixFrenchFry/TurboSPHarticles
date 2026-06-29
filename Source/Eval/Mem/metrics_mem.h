@@ -105,7 +105,7 @@ namespace Mem
 				.name = "bound particle properties",
 				.tip =
 				"Memory used/allocated by buffers that store boundary particle properties, namely:\n"
-				"id, position, volB, psiB"
+				"id, body attachment, position, velocity, volB, psiB"
 			},
 			{
 				.bucket = MemBucket::Neighbors_SearchDataStructF,

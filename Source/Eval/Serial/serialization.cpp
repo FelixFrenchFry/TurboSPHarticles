@@ -24,7 +24,7 @@ namespace Export
 	// binary format helpers
 	static constexpr uint32_t kEndianLE = 0x01020304u;
 	static constexpr char kSimStateMagic[8] =
-		{ 'T', 'S', 'P', 'S', 'I', 'M', '\1', '\0' };
+		{ 'T', 'S', 'P', 'S', 'I', 'M', '\3', '\0' };
 	static constexpr char kExportSnapshotMagic[8] =
 		{ 'T', 'S', 'P', 'S', 'N', 'A', 'P', '\3' };
 
@@ -46,6 +46,8 @@ namespace Export
 
 		uint32_t NF;
 		uint32_t NB;
+		uint32_t NR;
+		uint32_t NS;
 	};
 
 	struct BinHeaderSnap
@@ -162,8 +164,41 @@ namespace Export
 		[[maybe_unused]] const auto N = static_cast<size_t>(B.N_);
 
 		assert(B.id.size() == N);
+		assert(B.bodyId.size() == N && B.rigidSampleIdx.size() == N);
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
+		assert(B.xVel.size() == N && B.yVel.size() == N && B.zVel.size() == N);
 		assert(B.volB.size() == N && B.psiB.size() == N);
+	}
+
+	static void CheckRigidBodiesConsistent(const Sync::RigidBodies& R)
+	{
+		[[maybe_unused]] const auto N = static_cast<size_t>(R.N_);
+		[[maybe_unused]] const auto NS = static_cast<size_t>(R.sampleN_);
+
+		assert(R.id.size() == N);
+		assert(R.sampleBegin.size() == N && R.sampleCount.size() == N);
+		assert(R.xCM.size() == N && R.yCM.size() == N && R.zCM.size() == N);
+		assert(R.xVel.size() == N && R.yVel.size() == N && R.zVel.size() == N);
+		assert(R.xOmega.size() == N && R.yOmega.size() == N && R.zOmega.size() == N);
+		assert(R.xAngMom.size() == N && R.yAngMom.size() == N && R.zAngMom.size() == N);
+		assert(R.xForce.size() == N && R.yForce.size() == N && R.zForce.size() == N);
+		assert(R.xTorque.size() == N && R.yTorque.size() == N && R.zTorque.size() == N);
+		assert(R.a00.size() == N && R.a01.size() == N && R.a02.size() == N);
+		assert(R.a10.size() == N && R.a11.size() == N && R.a12.size() == N);
+		assert(R.a20.size() == N && R.a21.size() == N && R.a22.size() == N);
+		assert(R.mass.size() == N && R.massInv.size() == N);
+		assert(R.iBodyInv00.size() == N && R.iBodyInv01.size() == N && R.iBodyInv02.size() == N);
+		assert(R.iBodyInv10.size() == N && R.iBodyInv11.size() == N && R.iBodyInv12.size() == N);
+		assert(R.iBodyInv20.size() == N && R.iBodyInv21.size() == N && R.iBodyInv22.size() == N);
+		assert(R.xLocalB.size() == NS && R.yLocalB.size() == NS && R.zLocalB.size() == NS);
+
+		for (uint32_t bodyIdx = 0; bodyIdx < R.N_; bodyIdx++)
+		{
+			const uint32_t sampleBegin = R.sampleBegin[bodyIdx];
+			const uint32_t sampleCount = R.sampleCount[bodyIdx];
+			assert(sampleBegin <= R.sampleN_);
+			assert(sampleCount <= R.sampleN_ - sampleBegin);
+		}
 	}
 
 	// --- [ UniversalSimState <-> .bin ] ----------------------------------------------------------
@@ -181,6 +216,7 @@ namespace Export
 		// sanity check before writing
 		CheckFluidConsistent(state.fluidParticles);
 		CheckBoundaryConsistent(state.boundaryParticles);
+		CheckRigidBodiesConsistent(state.rigidBodies);
 
 		// open scope for writer
 		{
@@ -202,6 +238,8 @@ namespace Export
 
 			hdr.NF = state.fluidParticles.N_;
 			hdr.NB = state.boundaryParticles.N_;
+			hdr.NR = state.rigidBodies.N_;
+			hdr.NS = state.rigidBodies.sampleN_;
 
 			WritePod(ofs, hdr);
 
@@ -237,12 +275,76 @@ namespace Export
 				const auto& B = state.boundaryParticles;
 
 				WriteVec(ofs, B.id);
+				WriteVec(ofs, B.bodyId);
+				WriteVec(ofs, B.rigidSampleIdx);
 				WriteVec(ofs, B.xPos);
 				WriteVec(ofs, B.yPos);
 				WriteVec(ofs, B.zPos);
 
+				WriteVec(ofs, B.xVel);
+				WriteVec(ofs, B.yVel);
+				WriteVec(ofs, B.zVel);
+
 				WriteVec(ofs, B.volB);
 				WriteVec(ofs, B.psiB);
+			}
+
+			// rigid body data (fixed order)
+			{
+				const auto& R = state.rigidBodies;
+
+				WriteVec(ofs, R.id);
+				WriteVec(ofs, R.sampleBegin);
+				WriteVec(ofs, R.sampleCount);
+
+				WriteVec(ofs, R.xCM);
+				WriteVec(ofs, R.yCM);
+				WriteVec(ofs, R.zCM);
+
+				WriteVec(ofs, R.xVel);
+				WriteVec(ofs, R.yVel);
+				WriteVec(ofs, R.zVel);
+
+				WriteVec(ofs, R.xOmega);
+				WriteVec(ofs, R.yOmega);
+				WriteVec(ofs, R.zOmega);
+
+				WriteVec(ofs, R.xAngMom);
+				WriteVec(ofs, R.yAngMom);
+				WriteVec(ofs, R.zAngMom);
+
+				WriteVec(ofs, R.a00);
+				WriteVec(ofs, R.a01);
+				WriteVec(ofs, R.a02);
+				WriteVec(ofs, R.a10);
+				WriteVec(ofs, R.a11);
+				WriteVec(ofs, R.a12);
+				WriteVec(ofs, R.a20);
+				WriteVec(ofs, R.a21);
+				WriteVec(ofs, R.a22);
+
+				WriteVec(ofs, R.iBodyInv00);
+				WriteVec(ofs, R.iBodyInv01);
+				WriteVec(ofs, R.iBodyInv02);
+				WriteVec(ofs, R.iBodyInv10);
+				WriteVec(ofs, R.iBodyInv11);
+				WriteVec(ofs, R.iBodyInv12);
+				WriteVec(ofs, R.iBodyInv20);
+				WriteVec(ofs, R.iBodyInv21);
+				WriteVec(ofs, R.iBodyInv22);
+
+				WriteVec(ofs, R.mass);
+				WriteVec(ofs, R.massInv);
+				WriteVec(ofs, R.xForce);
+				WriteVec(ofs, R.yForce);
+				WriteVec(ofs, R.zForce);
+				WriteVec(ofs, R.xTorque);
+				WriteVec(ofs, R.yTorque);
+				WriteVec(ofs, R.zTorque);
+
+				WriteVec(ofs, R.xLocalB);
+				WriteVec(ofs, R.yLocalB);
+				WriteVec(ofs, R.zLocalB);
 			}
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
@@ -294,6 +396,8 @@ namespace Export
 		// resize storage
 		state.ResizeFluid(hdr.NF);
 		state.ResizeBoundary(hdr.NB);
+		state.ResizeRigidBodies(hdr.NR);
+		state.rigidBodies.resizeSamples(hdr.NS);
 
 		// fluid data (fixed order)
 		{
@@ -330,15 +434,82 @@ namespace Export
 			auto& B = state.boundaryParticles;
 
 			ReadVec(ifs, B.id);
+			ReadVec(ifs, B.bodyId);
+			ReadVec(ifs, B.rigidSampleIdx);
 			ReadVec(ifs, B.xPos);
 			ReadVec(ifs, B.yPos);
 			ReadVec(ifs, B.zPos);
+
+			ReadVec(ifs, B.xVel);
+			ReadVec(ifs, B.yVel);
+			ReadVec(ifs, B.zVel);
 
 			ReadVec(ifs, B.volB);
 			ReadVec(ifs, B.psiB);
 
 			// sanity check
 			B.N_ = hdr.NB;
+		}
+
+		// rigid body data (fixed order)
+		{
+			auto& R = state.rigidBodies;
+
+			ReadVec(ifs, R.id);
+			ReadVec(ifs, R.sampleBegin);
+			ReadVec(ifs, R.sampleCount);
+
+			ReadVec(ifs, R.xCM);
+			ReadVec(ifs, R.yCM);
+			ReadVec(ifs, R.zCM);
+
+			ReadVec(ifs, R.xVel);
+			ReadVec(ifs, R.yVel);
+			ReadVec(ifs, R.zVel);
+
+			ReadVec(ifs, R.xOmega);
+			ReadVec(ifs, R.yOmega);
+			ReadVec(ifs, R.zOmega);
+
+			ReadVec(ifs, R.xAngMom);
+			ReadVec(ifs, R.yAngMom);
+			ReadVec(ifs, R.zAngMom);
+
+			ReadVec(ifs, R.a00);
+			ReadVec(ifs, R.a01);
+			ReadVec(ifs, R.a02);
+			ReadVec(ifs, R.a10);
+			ReadVec(ifs, R.a11);
+			ReadVec(ifs, R.a12);
+			ReadVec(ifs, R.a20);
+			ReadVec(ifs, R.a21);
+			ReadVec(ifs, R.a22);
+
+			ReadVec(ifs, R.iBodyInv00);
+			ReadVec(ifs, R.iBodyInv01);
+			ReadVec(ifs, R.iBodyInv02);
+			ReadVec(ifs, R.iBodyInv10);
+			ReadVec(ifs, R.iBodyInv11);
+			ReadVec(ifs, R.iBodyInv12);
+			ReadVec(ifs, R.iBodyInv20);
+			ReadVec(ifs, R.iBodyInv21);
+			ReadVec(ifs, R.iBodyInv22);
+
+			ReadVec(ifs, R.mass);
+			ReadVec(ifs, R.massInv);
+			ReadVec(ifs, R.xForce);
+			ReadVec(ifs, R.yForce);
+			ReadVec(ifs, R.zForce);
+			ReadVec(ifs, R.xTorque);
+			ReadVec(ifs, R.yTorque);
+			ReadVec(ifs, R.zTorque);
+
+			ReadVec(ifs, R.xLocalB);
+			ReadVec(ifs, R.yLocalB);
+			ReadVec(ifs, R.zLocalB);
+
+			R.N_ = hdr.NR;
+			R.sampleN_ = hdr.NS;
 		}
 
 		EnsureStreamOk(ifs, "reading", path);
