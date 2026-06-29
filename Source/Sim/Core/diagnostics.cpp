@@ -25,44 +25,44 @@
 
 
 
-namespace Sim
+namespace
 {
-	namespace
+	constexpr int N_CLI_SEPARATOR_CHARS = 80;
+	constexpr int N_CLI_SIM_PARAM_LABEL_CHARS = 38;
+	constexpr const char* CLI_SEPARATOR =
+		"--------------------------------------------------------------------------------";
+
+	void PrintCliSeparator()
 	{
-		constexpr int N_CLI_SEPARATOR_CHARS = 80;
-		constexpr int N_CLI_SIM_PARAM_LABEL_CHARS = 38;
-		constexpr const char* CLI_SEPARATOR =
-			"--------------------------------------------------------------------------------";
-
-		void PrintCliSeparator()
-		{
-			std::printf("%s\n", CLI_SEPARATOR);
-		}
-
-		void PrintCliSectionHeader(const char* title)
-		{
-			int N_chars = std::printf("--- [ %s ] ", title);
-			N_chars = std::max(0, N_chars);
-
-			for (int i = N_chars; i < N_CLI_SEPARATOR_CHARS; i++)
-			{
-				std::putchar('-');
-			}
-
-			std::putchar('\n');
-		}
-
-		std::string MakeDisplayExportDir(const std::string& exportDir)
-		{
-			if (exportDir.empty()) { return "/"; }
-			if (exportDir[0] == '/' || exportDir[0] == '\\') { return exportDir; }
-			if (exportDir.size() >= 2 && exportDir[1] == ':') { return exportDir; }
-
-			return "/" + exportDir;
-		}
-
+		std::printf("%s\n", CLI_SEPARATOR);
 	}
 
+	void PrintCliSectionHeader(const char* title)
+	{
+		int N_chars = std::printf("--- [ %s ] ", title);
+		N_chars = std::max(0, N_chars);
+
+		for (int i = N_chars; i < N_CLI_SEPARATOR_CHARS; i++)
+		{
+			std::putchar('-');
+		}
+
+		std::putchar('\n');
+	}
+
+	std::string MakeDisplayExportDir(const std::string& exportDir)
+	{
+		if (exportDir.empty()) { return "/"; }
+		if (exportDir[0] == '/' || exportDir[0] == '\\') { return exportDir; }
+		if (exportDir.size() >= 2 && exportDir[1] == ':') { return exportDir; }
+
+		return "/" + exportDir;
+	}
+
+} // namespace anonymous
+
+namespace Sim
+{
 	void DiagnosticsMgr::PrintBuildConfig()
 	{
 		printf("\n");

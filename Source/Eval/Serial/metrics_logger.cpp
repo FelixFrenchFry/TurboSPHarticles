@@ -20,53 +20,54 @@
 
 
 
-namespace Export
+namespace
 {
-	namespace
+	bool LoadJsonObjectFromFile_Silent(
+		const std::string& relPath,
+		nlohmann::json& out)
 	{
-		bool LoadJsonObjectFromFile_Silent(
-			const std::string& relPath,
-			nlohmann::json& out)
+		namespace fs = std::filesystem;
+
+		const fs::path base{ TSP_CONFIG_DIR };
+		const fs::path full = base / relPath;
+
+		std::ifstream in(full);
+		if (!in) { return false; }
+
+		try
 		{
-			namespace fs = std::filesystem;
-
-			const fs::path base{ TSP_CONFIG_DIR };
-			const fs::path full = base / relPath;
-
-			std::ifstream in(full);
-			if (!in) { return false; }
-
-			try
-			{
-				in >> out;
-			}
-			catch (const std::exception&)
-			{
-				return false;
-			}
-
-			return out.is_object();
+			in >> out;
+		}
+		catch (const std::exception&)
+		{
+			return false;
 		}
 
-		std::string MakeCompactRunDirString(
-			const std::filesystem::path& runDir,
-			const std::filesystem::path& baseDir)
-		{
-			namespace fs = std::filesystem;
-
-			const fs::path base = baseDir.lexically_normal();
-			const fs::path logsName = base.filename();
-			const fs::path runName = runDir.filename();
-
-			if (!logsName.empty() && !runName.empty())
-			{
-				return (fs::path("...") / logsName / runName).generic_string();
-			}
-
-			return runDir.lexically_normal().generic_string();
-		}
+		return out.is_object();
 	}
 
+	std::string MakeCompactRunDirString(
+		const std::filesystem::path& runDir,
+		const std::filesystem::path& baseDir)
+	{
+		namespace fs = std::filesystem;
+
+		const fs::path base = baseDir.lexically_normal();
+		const fs::path logsName = base.filename();
+		const fs::path runName = runDir.filename();
+
+		if (!logsName.empty() && !runName.empty())
+		{
+			return (fs::path("...") / logsName / runName).generic_string();
+		}
+
+		return runDir.lexically_normal().generic_string();
+	}
+
+} // namespace anonymous
+
+namespace Export
+{
 	bool LoggingMgr::BeginRun(
 		const std::string& configProfile,
 		const std::string& paramsFile,

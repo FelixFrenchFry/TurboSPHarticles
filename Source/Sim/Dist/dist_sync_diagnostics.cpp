@@ -10,40 +10,43 @@
 
 
 
-namespace Dist
+using namespace Dist;
+
+namespace
 {
-	namespace
+	constexpr const char* CLI_SECTION_SEPARATOR =
+		"--------------------------------------------------------------------------------";
+
+	uint64_t SumAverageNs(const DistSyncTimingReport& report)
 	{
-		constexpr const char* CLI_SECTION_SEPARATOR =
-			"--------------------------------------------------------------------------------";
-
-		uint64_t SumAverageNs(const DistSyncTimingReport& report)
+		uint64_t totalNs = 0;
+		for (const uint64_t ns : report.totalNs)
 		{
-			uint64_t totalNs = 0;
-			for (const uint64_t ns : report.totalNs)
-			{
-				totalNs += ns;
-			}
-			return report.sampleCount > 0 ? totalNs / report.sampleCount : 0;
+			totalNs += ns;
 		}
-
-		uint64_t AverageNs(
-			const DistSyncTimingReport& report,
-			const DistSyncTimingOp op)
-		{
-			if (report.sampleCount == 0) { return 0; }
-			return report.totalNs[GetIdx(op)] / report.sampleCount;
-		}
-
-		void FormatRankLabel(
-			char* buffer,
-			const size_t bufferSize,
-			const int rank)
-		{
-			std::snprintf(buffer, bufferSize, "%d", rank);
-		}
+		return report.sampleCount > 0 ? totalNs / report.sampleCount : 0;
 	}
 
+	uint64_t AverageNs(
+		const DistSyncTimingReport& report,
+		const DistSyncTimingOp op)
+	{
+		if (report.sampleCount == 0) { return 0; }
+		return report.totalNs[GetIdx(op)] / report.sampleCount;
+	}
+
+	void FormatRankLabel(
+		char* buffer,
+		const size_t bufferSize,
+		const int rank)
+	{
+		std::snprintf(buffer, bufferSize, "%d", rank);
+	}
+
+} // namespace anonymous
+
+namespace Dist
+{
 	DistSyncTimingScope::DistSyncTimingScope(
 		DistSyncTimingReport* report,
 		const DistSyncTimingOp op)
