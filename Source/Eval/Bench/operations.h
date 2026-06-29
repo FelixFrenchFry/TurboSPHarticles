@@ -51,6 +51,10 @@ namespace Bench
 		VelocityUpdate,
 		PositionUpdate,
 
+		// rigid bodies
+		Rigid_Update,						// update of rigid body states and attached boundary particles
+		Rigid_ForceAccumulation,			// accumulation of rigid-body forces and torques
+
 		// statistics
 		Statistics_Particles,				// processing of particle/neighbor count statistics
 		Statistics_Density,					// processing of density statistics
@@ -211,6 +215,18 @@ namespace Bench
 				.op = BenchOp::PositionUpdate,
 				.name = "position update",
 				.alias = "posUpd",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Rigid_Update,
+				.name = "rigid update",
+				.alias = "rigidUpdate",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Rigid_ForceAccumulation,
+				.name = "rigid force accumulation",
+				.alias = "rigidForceAcc",
 				.unit = "ns"
 			},
 			{

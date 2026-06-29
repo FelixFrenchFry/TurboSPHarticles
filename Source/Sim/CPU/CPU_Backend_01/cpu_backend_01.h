@@ -180,8 +180,14 @@ namespace Sim
 				.ops = { Bench::BenchOp::Pressure_Acceleration }
 			},
 			{
+				.ops = { Bench::BenchOp::Rigid_ForceAccumulation }
+			},
+			{
 				.ops = { Bench::BenchOp::VelocityUpdate,
-						   Bench::BenchOp::PositionUpdate }
+							Bench::BenchOp::PositionUpdate }
+			},
+			{
+				.ops = { Bench::BenchOp::Rigid_Update }
 			},
 			{
 				.ops = { Bench::BenchOp::Statistics_Particles,

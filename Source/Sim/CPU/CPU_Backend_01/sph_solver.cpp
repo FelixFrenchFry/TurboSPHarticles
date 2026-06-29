@@ -81,7 +81,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	if (rigidBodies_.N_ > 0)
 	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 		UpdateRigidBoundaryParticles();
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_Update });
 	}
 
 	// --- [ particle data re-ordering ] -------------------------------------------------------------
@@ -166,14 +168,17 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 	if (rigidBodies_.N_ > 0)
 	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		rigidBodyMgr_.ClearForces(rigidBodies_);
 		rigidBodyMgr_.AddGravity(
 			rigidBodies_,
 			params.gravity.x, params.gravity.y, params.gravity.z);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 	}
+
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
 	CPU01::NonPressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
@@ -189,8 +194,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
 		xVelPredF, yVelPredF, zVelPredF);
 
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
+
 	if (rigidBodies_.N_ > 0)
 	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
@@ -203,9 +211,8 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			cubicSplineAlpha, massF, params.viscosityB, N_F_,
 			rigidBodyMgr_,
 			rigidBodies_);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 	}
-
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
 	// --- [ source-term (density invariance) and diagonal elements ] --------------------------------
 
@@ -285,6 +292,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	if (rigidBodies_.N_ > 0)
 	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
@@ -296,6 +304,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			massF, params.pressGamma, N_F_,
 			rigidBodyMgr_,
 			rigidBodies_);
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 	}
 
 	// --- [ integrate velocity and position ] -------------------------------------------------------
@@ -326,8 +335,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	if (rigidBodies_.N_ > 0)
 	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 		rigidBodyMgr_.Integrate(rigidBodies_, timeStep);
+
 		UpdateRigidBoundaryParticles();
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_Update });
 	}
 }
 

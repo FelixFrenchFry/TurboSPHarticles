@@ -69,19 +69,19 @@
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
         "uLen": 1.0,
-        "vLen": 0.1,
+        "vLen": 0.3,
         "wLen": 1.0
       },
       "rigidBody": {
-        "origin": [ 0.42, 0.2, 0.42 ],
+        "origin": [ 0.2, 0.4, 0.4 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 0.16,
-        "vLen": 0.16,
-        "wLen": 0.16
+        "uLen": 0.6,
+        "vLen": 0.4,
+        "wLen": 0.2
       },
-      "rigidDensity": 1000.0,
+      "rigidDensity": 300.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }
