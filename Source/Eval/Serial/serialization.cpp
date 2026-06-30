@@ -1,6 +1,7 @@
 // serialization.cpp
 
 // external
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,13 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 // internal
 #include "serialization.h"
@@ -66,6 +74,7 @@ namespace Export
 	};
 	#pragma pack(pop)
 
+	// split boundary particles into the static and rigid views
 	struct BoundaryExportViews
 	{
 		uint32_t NB_static = 0;
@@ -186,18 +195,41 @@ namespace Export
 
 	// --- [ small utilities ] ---------------------------------------------------------------------
 
-	static void AtomicReplace(const std::filesystem::path& tmp,
+	static bool TryAtomicReplace(
+		const std::filesystem::path& tmp,
+		const std::filesystem::path& dst,
+		std::string& error)
+	{
+	#ifdef _WIN32
+		if (MoveFileExW(
+			tmp.native().c_str(),
+			dst.native().c_str(),
+			MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+		{
+			return true;
+		}
+
+		error = "Win32 error " + std::to_string(GetLastError());
+		return false;
+	#else
+		std::error_code ec;
+		std::filesystem::rename(tmp, dst, ec);
+		if (!ec) { return true; }
+
+		error = ec.message();
+		return false;
+	#endif
+	}
+
+	static void AtomicReplace(
+		const std::filesystem::path& tmp,
 		const std::filesystem::path& dst)
 	{
-		std::error_code ec;
-
-		// try to rename directly
-		std::filesystem::rename(tmp, dst, ec);
-		if (!ec) { return; }
-
-		// remove existing then rename as fallback
-		std::filesystem::remove(dst, ec);
-		std::filesystem::rename(tmp, dst);
+		std::string error;
+		if (!TryAtomicReplace(tmp, dst, error))
+		{
+			throw std::runtime_error("Atomic replace failed: " + error);
+		}
 	}
 
 	static std::string FormatStepPadded(uint32_t step, uint32_t width = 9)
@@ -205,6 +237,357 @@ namespace Export
 		std::ostringstream oss;
 		oss << std::setfill('0') << std::setw(width) << step;
 		return oss.str();
+	}
+
+	// header-only metadata for rebuilding XDMF time series
+	struct ExportSnapshotBinInfo
+	{
+		std::string fileName;
+
+		uint32_t step = 0;
+		double time = 0.0;
+
+		uint32_t NF = 0;
+		uint32_t NB = 0;
+		uint32_t NB_static = 0;
+		uint32_t NB_rigid = 0;
+	};
+
+	struct ExportSnapshotOffsets
+	{
+		uint64_t xF = 0;
+		uint64_t yF = 0;
+		uint64_t zF = 0;
+		uint64_t vF = 0;
+		uint64_t idF = 0;
+
+		uint64_t xPosB_static = 0;
+		uint64_t yPosB_static = 0;
+		uint64_t zPosB_static = 0;
+		uint64_t volB_static = 0;
+		uint64_t idB_static = 0;
+
+		uint64_t xPosB_rigid = 0;
+		uint64_t yPosB_rigid = 0;
+		uint64_t zPosB_rigid = 0;
+		uint64_t volB_rigid = 0;
+		uint64_t idB_rigid = 0;
+		uint64_t bodyIdB_rigid = 0;
+	};
+
+	static bool IsExportSnapshotBinFileName(const std::string& fileName)
+	{
+		constexpr char prefix[] = "particle_data_step_";
+		constexpr char suffix[] = ".bin";
+
+		return fileName.rfind(prefix, 0) == 0
+			&& fileName.size() >= sizeof(prefix) + sizeof(suffix) - 2
+			&& fileName.compare(fileName.size() - (sizeof(suffix) - 1),
+				sizeof(suffix) - 1, suffix) == 0;
+	}
+
+	static bool TryReadExportSnapshotBinInfo(
+		const std::filesystem::path& path,
+		ExportSnapshotBinInfo& info)
+	{
+		std::ifstream ifs(path, std::ios::binary | std::ios::in);
+		if (!ifs) { return false; }
+
+		BinHeaderSnap hdr{};
+		ifs.read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+		if (!ifs) { return false; }
+
+		if (std::memcmp(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic)) != 0)
+		{
+			return false;
+		}
+		if (hdr.endianTag != kEndianLE || hdr.headerBytes != sizeof(BinHeaderSnap))
+		{
+			return false;
+		}
+
+		info.fileName = path.filename().string();
+		info.step = hdr.step;
+		info.time = hdr.time;
+		info.NF = hdr.NF;
+		info.NB = hdr.NB;
+		info.NB_static = hdr.NB_static;
+		info.NB_rigid = hdr.NB_rigid;
+		return true;
+	}
+
+	static std::vector<ExportSnapshotBinInfo> CollectExportSnapshotBinInfos(
+		const std::filesystem::path& dirPath)
+	{
+		// all valid export bins in this directory become one time series
+		std::vector<ExportSnapshotBinInfo> infos;
+
+		std::error_code ec;
+		for (const auto& entry : std::filesystem::directory_iterator(dirPath, ec))
+		{
+			if (ec) { break; }
+
+			std::error_code fileEc;
+			if (!entry.is_regular_file(fileEc) || fileEc) { continue; }
+
+			const std::string fileName = entry.path().filename().string();
+			if (!IsExportSnapshotBinFileName(fileName)) { continue; }
+
+			ExportSnapshotBinInfo info{};
+			if (TryReadExportSnapshotBinInfo(entry.path(), info))
+			{
+				infos.push_back(std::move(info));
+			}
+		}
+
+		std::sort(infos.begin(), infos.end(),
+			[](const ExportSnapshotBinInfo& a, const ExportSnapshotBinInfo& b)
+			{
+				if (a.time != b.time) { return a.time < b.time; }
+				return a.step < b.step;
+			});
+
+		return infos;
+	}
+
+	static ExportSnapshotOffsets ComputeExportSnapshotOffsets(
+		const ExportSnapshotBinInfo& info)
+	{
+		constexpr uint64_t elemBytes = 4; // float32 / uint32
+
+		// offsets must match SaveExportSnapshot write order
+		ExportSnapshotOffsets off{};
+		off.xF = sizeof(BinHeaderSnap);
+		off.yF = off.xF + uint64_t(info.NF) * elemBytes;
+		off.zF = off.yF + uint64_t(info.NF) * elemBytes;
+		off.vF = off.zF + uint64_t(info.NF) * elemBytes;
+		off.idF = off.vF + uint64_t(info.NF) * elemBytes;
+
+		off.xPosB_static = off.idF + uint64_t(info.NF) * elemBytes;
+		off.yPosB_static = off.xPosB_static + uint64_t(info.NB_static) * elemBytes;
+		off.zPosB_static = off.yPosB_static + uint64_t(info.NB_static) * elemBytes;
+		off.volB_static = off.zPosB_static + uint64_t(info.NB_static) * elemBytes;
+		off.idB_static = off.volB_static + uint64_t(info.NB_static) * elemBytes;
+
+		off.xPosB_rigid = off.idB_static + uint64_t(info.NB_static) * elemBytes;
+		off.yPosB_rigid = off.xPosB_rigid + uint64_t(info.NB_rigid) * elemBytes;
+		off.zPosB_rigid = off.yPosB_rigid + uint64_t(info.NB_rigid) * elemBytes;
+		off.volB_rigid = off.zPosB_rigid + uint64_t(info.NB_rigid) * elemBytes;
+		off.idB_rigid = off.volB_rigid + uint64_t(info.NB_rigid) * elemBytes;
+		off.bodyIdB_rigid = off.idB_rigid + uint64_t(info.NB_rigid) * elemBytes;
+
+		return off;
+	}
+
+	static void WriteBinaryDataItem(
+		std::ofstream& ofs,
+		uint32_t count,
+		const char* numberType,
+		uint64_t offset,
+		const std::string& fileName,
+		const char* indent)
+	{
+		ofs << indent << "<DataItem Dimensions=\"" << count
+			<< "\" NumberType=\"" << numberType << "\" Precision=\"4\" "
+			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
+			<< offset << "\">\n";
+		ofs << indent << "  " << fileName << "\n";
+		ofs << indent << "</DataItem>\n";
+	}
+
+	static void WriteXyzGeometry(
+		std::ofstream& ofs,
+		const char* name,
+		uint32_t count,
+		uint64_t offX,
+		uint64_t offY,
+		uint64_t offZ,
+		const std::string& fileName)
+	{
+		ofs << "        <Geometry Name=\"" << name << "\" GeometryType=\"XYZ\">\n";
+		ofs << "          <DataItem ItemType=\"Function\" "
+			<< "Function=\"JOIN($0, $1, $2)\" "
+			<< "Dimensions=\"" << count << " 3\" "
+			<< "NumberType=\"Float\" Precision=\"4\">\n";
+		WriteBinaryDataItem(ofs, count, "Float", offX, fileName, "            ");
+		WriteBinaryDataItem(ofs, count, "Float", offY, fileName, "            ");
+		WriteBinaryDataItem(ofs, count, "Float", offZ, fileName, "            ");
+		ofs << "          </DataItem>\n";
+		ofs << "        </Geometry>\n";
+	}
+
+	static void WriteScalarAttribute(
+		std::ofstream& ofs,
+		const char* name,
+		uint32_t count,
+		const char* numberType,
+		uint64_t offset,
+		const std::string& fileName)
+	{
+		ofs << "        <Attribute Name=\"" << name << "\" "
+			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
+		WriteBinaryDataItem(ofs, count, numberType, offset, fileName, "          ");
+		ofs << "        </Attribute>\n";
+	}
+
+	static void WriteFluidSurfaceGrid(
+		std::ofstream& ofs,
+		const ExportSnapshotBinInfo& info)
+	{
+		const ExportSnapshotOffsets off = ComputeExportSnapshotOffsets(info);
+
+		ofs << "      <Grid Name=\"FluidSurface\" GridType=\"Uniform\">\n";
+		ofs << "        <Time Value=\""
+			<< std::setprecision(16) << info.time
+			<< "\" />\n";
+		ofs << "        <Topology TopologyType=\"Polyvertex\" "
+			<< "Dimensions=\"" << info.NF << "\"/>\n";
+		WriteXyzGeometry(ofs, "posF", info.NF, off.xF, off.yF, off.zF, info.fileName);
+		WriteScalarAttribute(ofs, "velMagF", info.NF, "Float", off.vF, info.fileName);
+		WriteScalarAttribute(ofs, "idF", info.NF, "UInt", off.idF, info.fileName);
+		ofs << "      </Grid>\n";
+	}
+
+	static void WriteStaticBoundaryGrid(
+		std::ofstream& ofs,
+		const ExportSnapshotBinInfo& info)
+	{
+		const ExportSnapshotOffsets off = ComputeExportSnapshotOffsets(info);
+
+		ofs << "      <Grid Name=\"StaticBoundary\" GridType=\"Uniform\">\n";
+		ofs << "        <Time Value=\""
+			<< std::setprecision(16) << info.time
+			<< "\" />\n";
+		ofs << "        <Topology TopologyType=\"Polyvertex\" "
+			<< "Dimensions=\"" << info.NB_static << "\"/>\n";
+		WriteXyzGeometry(ofs, "posB_static", info.NB_static,
+			off.xPosB_static, off.yPosB_static, off.zPosB_static, info.fileName);
+		WriteScalarAttribute(ofs, "volB_static", info.NB_static,
+			"Float", off.volB_static, info.fileName);
+		WriteScalarAttribute(ofs, "idB_static", info.NB_static,
+			"UInt", off.idB_static, info.fileName);
+		ofs << "      </Grid>\n";
+	}
+
+	static void WriteRigidBoundaryGrid(
+		std::ofstream& ofs,
+		const ExportSnapshotBinInfo& info)
+	{
+		const ExportSnapshotOffsets off = ComputeExportSnapshotOffsets(info);
+
+		ofs << "      <Grid Name=\"RigidBoundary\" GridType=\"Uniform\">\n";
+		ofs << "        <Time Value=\""
+			<< std::setprecision(16) << info.time
+			<< "\" />\n";
+		ofs << "        <Topology TopologyType=\"Polyvertex\" "
+			<< "Dimensions=\"" << info.NB_rigid << "\"/>\n";
+		WriteXyzGeometry(ofs, "posB_rigid", info.NB_rigid,
+			off.xPosB_rigid, off.yPosB_rigid, off.zPosB_rigid, info.fileName);
+		WriteScalarAttribute(ofs, "volB_rigid", info.NB_rigid,
+			"Float", off.volB_rigid, info.fileName);
+		WriteScalarAttribute(ofs, "idB_rigid", info.NB_rigid,
+			"UInt", off.idB_rigid, info.fileName);
+		WriteScalarAttribute(ofs, "bodyIdB_rigid", info.NB_rigid,
+			"UInt", off.bodyIdB_rigid, info.fileName);
+		ofs << "      </Grid>\n";
+	}
+
+	using XdmfGridWriter = void(*)(std::ofstream&, const ExportSnapshotBinInfo&);
+
+	static bool WriteXdmfCollectionFile(
+		const std::filesystem::path& path,
+		const char* name,
+		const std::vector<ExportSnapshotBinInfo>& infos,
+		XdmfGridWriter writeGrid,
+		const SaveOptions& saveOptions)
+	{
+		// rewrite the complete collection through a temp file when requested
+		const std::string tempSuffix = saveOptions.tempSuffix.empty()
+			? ".tmp"
+			: saveOptions.tempSuffix;
+		std::filesystem::path writePath = path;
+		if (saveOptions.atomicWrite)
+		{
+			writePath += tempSuffix;
+		}
+
+		std::ofstream ofs(writePath, std::ios::out | std::ios::trunc);
+		if (!ofs)
+		{
+			SPDLOG_ERROR("Failed to open XDMF file for write: {}", writePath.string());
+			return false;
+		}
+
+		const auto removeTempFile = [&]()
+		{
+			if (!saveOptions.atomicWrite) { return; }
+
+			std::error_code removeEc;
+			std::filesystem::remove(writePath, removeEc);
+		};
+
+		ofs << R"(<?xml version="1.0" ?>)" << "\n";
+		ofs << R"(<Xdmf Version="3.0">)" << "\n";
+		ofs << R"(  <Domain>)" << "\n";
+		ofs << "    <Grid Name=\"" << name
+			<< "\" GridType=\"Collection\" CollectionType=\"Temporal\">\n";
+
+		for (const ExportSnapshotBinInfo& info : infos)
+		{
+			writeGrid(ofs, info);
+		}
+
+		ofs << "    </Grid>\n";
+		ofs << "  </Domain>\n";
+		ofs << "</Xdmf>\n";
+		if (!ofs.good())
+		{
+			SPDLOG_ERROR("I/O error while writing XDMF file: {}", writePath.string());
+			ofs.close();
+			removeTempFile();
+			return false;
+		}
+
+		ofs.close();
+		if (!ofs)
+		{
+			SPDLOG_ERROR("I/O error while closing XDMF file: {}", writePath.string());
+			removeTempFile();
+			return false;
+		}
+
+		if (saveOptions.atomicWrite)
+		{
+			std::string error;
+			if (!TryAtomicReplace(writePath, path, error))
+			{
+				SPDLOG_ERROR("Failed to replace XDMF file '{}': {}",
+					path.string(), error);
+
+				removeTempFile();
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	static bool HasStaticBoundary(const std::vector<ExportSnapshotBinInfo>& infos)
+	{
+		return std::any_of(infos.begin(), infos.end(),
+			[](const ExportSnapshotBinInfo& info)
+			{
+				return info.NB_static > 0;
+			});
+	}
+
+	static bool HasRigidBoundary(const std::vector<ExportSnapshotBinInfo>& infos)
+	{
+		return std::any_of(infos.begin(), infos.end(),
+			[](const ExportSnapshotBinInfo& info)
+			{
+				return info.NB_rigid > 0;
+			});
 	}
 
 	static void CheckFluidConsistent(const Sync::FluidParticles& F)
@@ -261,8 +644,8 @@ namespace Export
 
 		for (uint32_t bodyIdx = 0; bodyIdx < R.N_; bodyIdx++)
 		{
-			const uint32_t sampleBegin = R.sampleBegin[bodyIdx];
-			const uint32_t sampleCount = R.sampleCount[bodyIdx];
+			[[maybe_unused]] const uint32_t sampleBegin = R.sampleBegin[bodyIdx];
+			[[maybe_unused]] const uint32_t sampleCount = R.sampleCount[bodyIdx];
 			assert(sampleBegin <= R.sampleN_);
 			assert(sampleCount <= R.sampleN_ - sampleBegin);
 		}
@@ -275,6 +658,7 @@ namespace Export
 		const std::string& path) const
 	{
 		// file path handling
+		// (full sim state is a fixed-order SoA dump for exact restart)
 		const std::filesystem::path dstPath{ path };
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
 			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
@@ -466,7 +850,7 @@ namespace Export
 		state.ResizeRigidBodies(hdr.NR);
 		state.rigidBodies.resizeSamples(hdr.NS);
 
-		// fluid data (fixed order)
+		// fluid data (read order must match SaveUniversalSimState)
 		{
 			auto& F = state.fluidParticles;
 
@@ -588,7 +972,8 @@ namespace Export
 		const Sync::ExportSnapshot& snap,
 		const std::string& dir) const
 	{
-		const std::string baseName =
+		// binary payload owns the data, XDMF only references offsets into it
+		const std::string binFileName =
 			"particle_data_step_" + FormatStepPadded(snap.simStep) + ".bin";
 
 		// ensure export directory exists
@@ -621,7 +1006,7 @@ namespace Export
 		const uint32_t NB_rigid = boundaryViews.NB_rigid;
 
 		// file path handling
-		const std::filesystem::path dstPath = saveOptions_.baseDir / dir / baseName;
+		const std::filesystem::path dstPath = saveOptions_.baseDir / dir / binFileName;
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
 			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
 			: dstPath;
@@ -687,16 +1072,15 @@ namespace Export
 		const Sync::ExportSnapshot& snap,
 		const std::string& dir) const
 	{
-		const std::string step = FormatStepPadded(snap.simStep);
-		const std::string baseName_bin = "particle_data_step_" + step + ".bin";
-		const std::string fluidName_xdmf = "fluid_surface_step_" + step + ".xdmf";
-		const std::string staleBoundaryName_xdmf = "boundary_step_" + step + ".xdmf";
-		const std::string staticBoundaryName_xdmf = "static_boundary_step_" + step + ".xdmf";
-		const std::string rigidBoundaryName_xdmf = "rigid_boundary_step_" + step + ".xdmf";
+		const std::string fluidXdmfFileName = "fluid_surface.xdmf";
+		const std::string staticBoundaryXdmfFileName = "static_boundary.xdmf";
+		const std::string rigidBoundaryXdmfFileName = "rigid_boundary.xdmf";
+		const std::filesystem::path dirPath = saveOptions_.baseDir / dir;
 
 		// ensure export directory exists
+		// (stable XDMF files are rebuilt as temporal collections)
 		std::error_code ec;
-		std::filesystem::create_directories(saveOptions_.baseDir / dir, ec);
+		std::filesystem::create_directories(dirPath, ec);
 		if (ec)
 		{
 			SPDLOG_ERROR("Failed to create export directory '{}': {}",
@@ -704,33 +1088,16 @@ namespace Export
 			return;
 		}
 
-		// remove stale boundary views for this step
-		std::error_code removeEc;
-		std::filesystem::remove(
-			saveOptions_.baseDir / dir / staleBoundaryName_xdmf,
-			removeEc);
-		std::filesystem::remove(
-			saveOptions_.baseDir / dir / staticBoundaryName_xdmf,
-			removeEc);
-		std::filesystem::remove(
-			saveOptions_.baseDir / dir / rigidBoundaryName_xdmf,
-			removeEc);
-
 		const std::filesystem::path fluidXdmfPath =
-			saveOptions_.baseDir / dir / fluidName_xdmf;
-
-		// open fluid XDMF view
-		std::ofstream ofs(fluidXdmfPath, std::ios::out | std::ios::trunc);
-		if (!ofs)
-		{
-			SPDLOG_ERROR("Failed to open XDMF file for write: {}",
-				fluidXdmfPath.string());
-			return;
-		}
+			dirPath / fluidXdmfFileName;
+		const std::filesystem::path staticBoundaryXdmfPath =
+			dirPath / staticBoundaryXdmfFileName;
+		const std::filesystem::path rigidBoundaryXdmfPath =
+			dirPath / rigidBoundaryXdmfFileName;
 
 		// make sure data for every particle is present
-		const uint32_t NF_size = snap.N_F;
-		const uint32_t NB_size = snap.N_B;
+		[[maybe_unused]] const uint32_t NF_size = snap.N_F;
+		[[maybe_unused]] const uint32_t NB_size = snap.N_B;
 		assert(snap.idF.size() == NF_size);
 		assert(snap.xPosF.size() == NF_size);
 		assert(snap.yPosF.size() == NF_size);
@@ -743,325 +1110,48 @@ namespace Export
 		assert(snap.zPosB.size() == NB_size);
 		assert(snap.volB.size() == NB_size);
 
-		const BoundaryExportViews boundaryViews = BuildBoundaryExportViews(snap);
-		const uint32_t NB_static = boundaryViews.NB_static;
-		const uint32_t NB_rigid = boundaryViews.NB_rigid;
-
-		// byte offsets (Seek) into the .bin file
-		//
-		// layout:
-		// [BinHeaderSnap]
-		// xPosF[NF] (float32)
-		// yPosF[NF] (float32)
-		// zPosF[NF] (float32)
-		// velMagF[NF] (float32)
-		// idF[NF] (uint32)
-		// xPosB_static[NB_static] (float32)
-		// yPosB_static[NB_static] (float32)
-		// zPosB_static[NB_static] (float32)
-		// volB_static[NB_static] (float32)
-		// idB_static[NB_static] (uint32)
-		// xPosB_rigid[NB_rigid] (float32)
-		// yPosB_rigid[NB_rigid] (float32)
-		// zPosB_rigid[NB_rigid] (float32)
-		// volB_rigid[NB_rigid] (float32)
-		// idB_rigid[NB_rigid] (uint32)
-		// bodyIdB_rigid[NB_rigid] (uint32)
-		const uint64_t headerBytes = sizeof(BinHeaderSnap);
-		const uint64_t elemBytes = 4; // float32 / uint32
-
-		const uint64_t off_xF = headerBytes;
-		const uint64_t off_yF = off_xF + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_zF = off_yF + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_vF = off_zF + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_idF = off_vF + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_xPosB_static = off_idF + uint64_t(NF_size) * elemBytes;
-		const uint64_t off_yPosB_static = off_xPosB_static + uint64_t(NB_static) * elemBytes;
-		const uint64_t off_zPosB_static = off_yPosB_static + uint64_t(NB_static) * elemBytes;
-		const uint64_t off_volB_static = off_zPosB_static + uint64_t(NB_static) * elemBytes;
-		const uint64_t off_idB_static = off_volB_static + uint64_t(NB_static) * elemBytes;
-		const uint64_t off_xPosB_rigid = off_idB_static + uint64_t(NB_static) * elemBytes;
-		const uint64_t off_yPosB_rigid = off_xPosB_rigid + uint64_t(NB_rigid) * elemBytes;
-		const uint64_t off_zPosB_rigid = off_yPosB_rigid + uint64_t(NB_rigid) * elemBytes;
-		const uint64_t off_volB_rigid = off_zPosB_rigid + uint64_t(NB_rigid) * elemBytes;
-		const uint64_t off_idB_rigid = off_volB_rigid + uint64_t(NB_rigid) * elemBytes;
-		const uint64_t off_bodyIdB_rigid = off_idB_rigid + uint64_t(NB_rigid) * elemBytes;
-
-		// XDMF header
-		ofs << R"(<?xml version="1.0" ?>)" << "\n";
-		ofs << R"(<Xdmf Version="3.0">)" << "\n";
-		ofs << R"(  <Domain>)" << "\n";
-
-		// one uniform grid for exported fluid particles
-		ofs << "    <Grid Name=\"FluidSurface\" GridType=\"Uniform\">" << "\n";
-
-		// time metadata
-		ofs << "      <Time Value=\""
-			<< std::setprecision(16) << snap.simTime
-			<< "\" />\n";
-
-		// topology of point cloud with NF vertices
-		ofs << "      <Topology TopologyType=\"Polyvertex\" "
-			<< "Dimensions=\"" << NF_size << "\"/>\n";
-
-		// geometry of XYZ coordinates
-		ofs << "      <Geometry Name=\"posF\" GeometryType=\"XYZ\">\n";
-		ofs << "        <DataItem ItemType=\"Function\" "
-			<< "Function=\"JOIN($0, $1, $2)\" "
-			<< "Dimensions=\"" << NF_size << " 3\" "
-			<< "NumberType=\"Float\" Precision=\"4\">\n";
-
-		// x pos (Binary)
-		ofs << "          <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" "
-			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_xF << "\">\n";
-		ofs << "            " << baseName_bin << "\n";
-		ofs << "          </DataItem>\n";
-
-		// y pos (Binary)
-		ofs << "          <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" "
-			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_yF << "\">\n";
-		ofs << "            " << baseName_bin << "\n";
-		ofs << "          </DataItem>\n";
-
-		// z pos (Binary)
-		ofs << "          <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" "
-			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_zF << "\">\n";
-		ofs << "            " << baseName_bin << "\n";
-		ofs << "          </DataItem>\n";
-
-		ofs << "        </DataItem>\n";
-		ofs << "      </Geometry>\n";
-
-		// velocity magnitude (Binary)
-		ofs << "      <Attribute Name=\"velMagF\" "
-			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-		ofs << "        <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"Float\" Precision=\"4\" "
-			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_vF << "\">\n";
-		ofs << "          " << baseName_bin << "\n";
-		ofs << "        </DataItem>\n";
-		ofs << "      </Attribute>\n";
-
-		// exported fluid particle id (Binary)
-		ofs << "      <Attribute Name=\"idF\" "
-			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-		ofs << "        <DataItem Dimensions=\"" << NF_size
-			<< "\" NumberType=\"UInt\" Precision=\"4\" "
-			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-			<< off_idF << "\">\n";
-		ofs << "          " << baseName_bin << "\n";
-		ofs << "        </DataItem>\n";
-		ofs << "      </Attribute>\n";
-
-		ofs << "    </Grid>\n";
-		ofs << "  </Domain>\n";
-		ofs << "</Xdmf>\n";
-		EnsureStreamOk(ofs, "writing", fluidXdmfPath.string());
-		ofs.close();
-
-		if (NB_static > 0)
+		const std::vector<ExportSnapshotBinInfo> infos =
+			CollectExportSnapshotBinInfos(dirPath);
+		if (infos.empty())
 		{
-			const std::filesystem::path staticBoundaryXdmfPath =
-				saveOptions_.baseDir / dir / staticBoundaryName_xdmf;
-
-			ofs.clear();
-			ofs.open(staticBoundaryXdmfPath, std::ios::out | std::ios::trunc);
-			if (!ofs)
-			{
-				SPDLOG_ERROR("Failed to open XDMF file for write: {}",
-					staticBoundaryXdmfPath.string());
-				return;
-			}
-
-			// XDMF header
-			ofs << R"(<?xml version="1.0" ?>)" << "\n";
-			ofs << R"(<Xdmf Version="3.0">)" << "\n";
-			ofs << R"(  <Domain>)" << "\n";
-
-			// one uniform grid for exported static boundary particles
-			ofs << "    <Grid Name=\"StaticBoundary\" GridType=\"Uniform\">" << "\n";
-
-			// time metadata
-			ofs << "      <Time Value=\""
-				<< std::setprecision(16) << snap.simTime
-				<< "\" />\n";
-
-			// topology of point cloud with NB_static vertices
-			ofs << "      <Topology TopologyType=\"Polyvertex\" "
-				<< "Dimensions=\"" << NB_static << "\"/>\n";
-
-			// geometry of XYZ coordinates
-			ofs << "      <Geometry Name=\"posStaticB\" GeometryType=\"XYZ\">\n";
-			ofs << "        <DataItem ItemType=\"Function\" "
-				<< "Function=\"JOIN($0, $1, $2)\" "
-				<< "Dimensions=\"" << NB_static << " 3\" "
-				<< "NumberType=\"Float\" Precision=\"4\">\n";
-
-			// x pos (Binary)
-			ofs << "          <DataItem Dimensions=\"" << NB_static
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_xPosB_static << "\">\n";
-			ofs << "            " << baseName_bin << "\n";
-			ofs << "          </DataItem>\n";
-
-			// y pos (Binary)
-			ofs << "          <DataItem Dimensions=\"" << NB_static
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_yPosB_static << "\">\n";
-			ofs << "            " << baseName_bin << "\n";
-			ofs << "          </DataItem>\n";
-
-			// z pos (Binary)
-			ofs << "          <DataItem Dimensions=\"" << NB_static
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_zPosB_static << "\">\n";
-			ofs << "            " << baseName_bin << "\n";
-			ofs << "          </DataItem>\n";
-
-			ofs << "        </DataItem>\n";
-			ofs << "      </Geometry>\n";
-
-			// represented boundary volume (Binary)
-			ofs << "      <Attribute Name=\"volStaticB\" "
-				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-			ofs << "        <DataItem Dimensions=\"" << NB_static
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_volB_static << "\">\n";
-			ofs << "          " << baseName_bin << "\n";
-			ofs << "        </DataItem>\n";
-			ofs << "      </Attribute>\n";
-
-			// exported boundary particle id (Binary)
-			ofs << "      <Attribute Name=\"idStaticB\" "
-				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-			ofs << "        <DataItem Dimensions=\"" << NB_static
-				<< "\" NumberType=\"UInt\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_idB_static << "\">\n";
-			ofs << "          " << baseName_bin << "\n";
-			ofs << "        </DataItem>\n";
-			ofs << "      </Attribute>\n";
-
-			ofs << "    </Grid>\n";
-			ofs << "  </Domain>\n";
-			ofs << "</Xdmf>\n";
-			EnsureStreamOk(ofs, "writing", staticBoundaryXdmfPath.string());
-			ofs.close();
+			SPDLOG_WARN("No export snapshot binary files found in '{}'",
+				dirPath.string());
+			return;
 		}
 
-		if (NB_rigid > 0)
+		if (!WriteXdmfCollectionFile(
+			fluidXdmfPath, "FluidSurface", infos, WriteFluidSurfaceGrid, saveOptions_))
 		{
-			const std::filesystem::path rigidBoundaryXdmfPath =
-				saveOptions_.baseDir / dir / rigidBoundaryName_xdmf;
+			return;
+		}
 
-			ofs.clear();
-			ofs.open(rigidBoundaryXdmfPath, std::ios::out | std::ios::trunc);
-			if (!ofs)
+		std::error_code removeEc;
+		if (HasStaticBoundary(infos))
+		{
+			if (!WriteXdmfCollectionFile(
+				staticBoundaryXdmfPath, "StaticBoundary", infos,
+				WriteStaticBoundaryGrid, saveOptions_))
 			{
-				SPDLOG_ERROR("Failed to open XDMF file for write: {}",
-					rigidBoundaryXdmfPath.string());
 				return;
 			}
+		}
+		else
+		{
+			std::filesystem::remove(staticBoundaryXdmfPath, removeEc);
+		}
 
-			// XDMF header
-			ofs << R"(<?xml version="1.0" ?>)" << "\n";
-			ofs << R"(<Xdmf Version="3.0">)" << "\n";
-			ofs << R"(  <Domain>)" << "\n";
-
-			// one uniform grid for exported rigid boundary particles
-			ofs << "    <Grid Name=\"RigidBoundary\" GridType=\"Uniform\">" << "\n";
-
-			// time metadata
-			ofs << "      <Time Value=\""
-				<< std::setprecision(16) << snap.simTime
-				<< "\" />\n";
-
-			// topology of point cloud with NB_rigid vertices
-			ofs << "      <Topology TopologyType=\"Polyvertex\" "
-				<< "Dimensions=\"" << NB_rigid << "\"/>\n";
-
-			// geometry of XYZ coordinates
-			ofs << "      <Geometry Name=\"posRigidB\" GeometryType=\"XYZ\">\n";
-			ofs << "        <DataItem ItemType=\"Function\" "
-				<< "Function=\"JOIN($0, $1, $2)\" "
-				<< "Dimensions=\"" << NB_rigid << " 3\" "
-				<< "NumberType=\"Float\" Precision=\"4\">\n";
-
-			// x pos (Binary)
-			ofs << "          <DataItem Dimensions=\"" << NB_rigid
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_xPosB_rigid << "\">\n";
-			ofs << "            " << baseName_bin << "\n";
-			ofs << "          </DataItem>\n";
-
-			// y pos (Binary)
-			ofs << "          <DataItem Dimensions=\"" << NB_rigid
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_yPosB_rigid << "\">\n";
-			ofs << "            " << baseName_bin << "\n";
-			ofs << "          </DataItem>\n";
-
-			// z pos (Binary)
-			ofs << "          <DataItem Dimensions=\"" << NB_rigid
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_zPosB_rigid << "\">\n";
-			ofs << "            " << baseName_bin << "\n";
-			ofs << "          </DataItem>\n";
-
-			ofs << "        </DataItem>\n";
-			ofs << "      </Geometry>\n";
-
-			// represented boundary volume (Binary)
-			ofs << "      <Attribute Name=\"volRigidB\" "
-				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-			ofs << "        <DataItem Dimensions=\"" << NB_rigid
-				<< "\" NumberType=\"Float\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_volB_rigid << "\">\n";
-			ofs << "          " << baseName_bin << "\n";
-			ofs << "        </DataItem>\n";
-			ofs << "      </Attribute>\n";
-
-			// exported boundary particle id (Binary)
-			ofs << "      <Attribute Name=\"idRigidB\" "
-				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-			ofs << "        <DataItem Dimensions=\"" << NB_rigid
-				<< "\" NumberType=\"UInt\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_idB_rigid << "\">\n";
-			ofs << "          " << baseName_bin << "\n";
-			ofs << "        </DataItem>\n";
-			ofs << "      </Attribute>\n";
-
-			// rigid body id (Binary)
-			ofs << "      <Attribute Name=\"bodyIdRigidB\" "
-				<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-			ofs << "        <DataItem Dimensions=\"" << NB_rigid
-				<< "\" NumberType=\"UInt\" Precision=\"4\" "
-				<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
-				<< off_bodyIdB_rigid << "\">\n";
-			ofs << "          " << baseName_bin << "\n";
-			ofs << "        </DataItem>\n";
-			ofs << "      </Attribute>\n";
-
-			ofs << "    </Grid>\n";
-			ofs << "  </Domain>\n";
-			ofs << "</Xdmf>\n";
-			EnsureStreamOk(ofs, "writing", rigidBoundaryXdmfPath.string());
+		if (HasRigidBoundary(infos))
+		{
+			if (!WriteXdmfCollectionFile(
+				rigidBoundaryXdmfPath, "RigidBoundary", infos,
+				WriteRigidBoundaryGrid, saveOptions_))
+			{
+				return;
+			}
+		}
+		else
+		{
+			std::filesystem::remove(rigidBoundaryXdmfPath, removeEc);
 		}
 	}
 
