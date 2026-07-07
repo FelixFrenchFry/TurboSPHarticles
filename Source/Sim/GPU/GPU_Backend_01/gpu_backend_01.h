@@ -203,6 +203,11 @@ namespace Sim
 		DeviceBuffer<float> d_xForceR_, d_yForceR_, d_zForceR_; // force accumulated from rigid boundary particles
 		DeviceBuffer<float> d_xTorqueR_, d_yTorqueR_, d_zTorqueR_; // torque accumulated from rigid boundary particles
 
+		// force accumulated per rigid boundary particle before body reduction
+		DeviceBuffer<float> d_xForceRigidBoundaryParticle_;
+		DeviceBuffer<float> d_yForceRigidBoundaryParticle_;
+		DeviceBuffer<float> d_zForceRigidBoundaryParticle_;
+
 		// orientation matrix A, stored row-major
 		DeviceBuffer<float> d_a00R_, d_a01R_, d_a02R_;
 		DeviceBuffer<float> d_a10R_, d_a11R_, d_a12R_;
@@ -463,6 +468,9 @@ namespace Sim
 			const bool needRigidBoundaryParticles =
 				force ||
 				(N_rigidBoundaryParticles_new != N_rigidBoundaryParticles_) ||
+				d_xForceRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
+				d_yForceRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
+				d_zForceRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
 				d_xLocalRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
 				d_yLocalRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
 				d_zLocalRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new;
@@ -494,6 +502,9 @@ namespace Sim
 			d_iBodyInv10R_.Resize(N_rigidBodies_); d_iBodyInv11R_.Resize(N_rigidBodies_); d_iBodyInv12R_.Resize(N_rigidBodies_);
 			d_iBodyInv20R_.Resize(N_rigidBodies_); d_iBodyInv21R_.Resize(N_rigidBodies_); d_iBodyInv22R_.Resize(N_rigidBodies_);
 
+			d_xForceRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
+			d_yForceRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
+			d_zForceRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
 			d_xLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
 			d_yLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
 			d_zLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);

@@ -40,10 +40,19 @@ namespace GPU01
 		float* xForceR, float* yForceR, float* zForceR,
 		float* xTorqueR, float* yTorqueR, float* zTorqueR);
 
+	void Launch_ClearRigidBoundaryParticleForces(
+		uint32_t N_rigidBoundaryParticles,
+		cudaStream_t stream,
+		// destinations
+		float* xForceRigidBoundaryParticle,
+		float* yForceRigidBoundaryParticle,
+		float* zForceRigidBoundaryParticle);
+
 	void Launch_AccumulateRigidBodyNonPressureForces(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t* bodyIdB,
+		const uint32_t* rigidBoundaryParticleIdxB,
 		const float* volB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* xVelB, const float* yVelB, const float* zVelB,
@@ -60,17 +69,18 @@ namespace GPU01
 		float cubicSplineAlpha,
 		float massF,
 		float viscosityB,
-		uint32_t N_F, uint32_t N_rigidBodies,
+		uint32_t N_F, uint32_t N_rigidBoundaryParticles,
 		cudaStream_t stream,
 		// destinations
-		float* xForceR, float* yForceR, float* zForceR,
-		float* xTorqueR, float* yTorqueR, float* zTorqueR,
-		const float* xCMR, const float* yCMR, const float* zCMR);
+		float* xForceRigidBoundaryParticle,
+		float* yForceRigidBoundaryParticle,
+		float* zForceRigidBoundaryParticle);
 
 	void Launch_AccumulateRigidBodyPressureForces(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const uint32_t* bodyIdB,
+		const uint32_t* rigidBoundaryParticleIdxB,
 		const float* psiB,
 		const float* pressureF,
 		const uint16_t* nbrCountFB,
@@ -86,12 +96,31 @@ namespace GPU01
 		float restDensity,
 		float massF,
 		float pressGamma,
-		uint32_t N_F, uint32_t N_rigidBodies,
+		uint32_t N_F, uint32_t N_rigidBoundaryParticles,
+		cudaStream_t stream,
+		// destinations
+		float* xForceRigidBoundaryParticle,
+		float* yForceRigidBoundaryParticle,
+		float* zForceRigidBoundaryParticle);
+
+	void Launch_ReduceRigidBoundaryParticleForces(
+		const uint32_t* rigidBoundaryParticleBeginR,
+		const uint32_t* rigidBoundaryParticleCountR,
+		const float* xLocalRigidBoundaryParticle,
+		const float* yLocalRigidBoundaryParticle,
+		const float* zLocalRigidBoundaryParticle,
+		const float* a00R, const float* a01R, const float* a02R,
+		const float* a10R, const float* a11R, const float* a12R,
+		const float* a20R, const float* a21R, const float* a22R,
+		const float* xForceRigidBoundaryParticle,
+		const float* yForceRigidBoundaryParticle,
+		const float* zForceRigidBoundaryParticle,
+		uint32_t N_rigidBodies,
+		uint32_t N_rigidBoundaryParticles,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
-		float* xTorqueR, float* yTorqueR, float* zTorqueR,
-		const float* xCMR, const float* yCMR, const float* zCMR);
+		float* xTorqueR, float* yTorqueR, float* zTorqueR);
 
 	void Launch_IntegrateRigidBodies(
 		float timeStep,

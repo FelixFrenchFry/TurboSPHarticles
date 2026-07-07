@@ -148,6 +148,7 @@ namespace CPU01
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
 		const uint32_t* RESTRICT bodyIdB,
+		const uint32_t* RESTRICT rigidBoundaryParticleIdxB,
 		const float* RESTRICT volB,
 		const float* RESTRICT xVelF,
 		const float* RESTRICT yVelF,
@@ -160,15 +161,9 @@ namespace CPU01
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float massF, float viscosityB,
 		uint32_t N_F,
-		const float* RESTRICT xCMR,
-		const float* RESTRICT yCMR,
-		const float* RESTRICT zCMR,
-		float* RESTRICT xForceR,
-		float* RESTRICT yForceR,
-		float* RESTRICT zForceR,
-		float* RESTRICT xTorqueR,
-		float* RESTRICT yTorqueR,
-		float* RESTRICT zTorqueR);
+		float* RESTRICT xForceRigidBoundaryParticle,
+		float* RESTRICT yForceRigidBoundaryParticle,
+		float* RESTRICT zForceRigidBoundaryParticle);
 
 	void AccumulateRigidBodyPressureForces_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -178,6 +173,7 @@ namespace CPU01
 		const float* RESTRICT yPosB,
 		const float* RESTRICT zPosB,
 		const uint32_t* RESTRICT bodyIdB,
+		const uint32_t* RESTRICT rigidBoundaryParticleIdxB,
 		const float* RESTRICT psiB,
 		const float* RESTRICT pressureF,
 		const Sim::I_NeighborListSELL& neighborList,
@@ -185,15 +181,9 @@ namespace CPU01
 		float cubicSplineAlpha, float restDensity,
 		float massF, float pressGamma,
 		uint32_t N_F,
-		const float* RESTRICT xCMR,
-		const float* RESTRICT yCMR,
-		const float* RESTRICT zCMR,
-		float* RESTRICT xForceR,
-		float* RESTRICT yForceR,
-		float* RESTRICT zForceR,
-		float* RESTRICT xTorqueR,
-		float* RESTRICT yTorqueR,
-		float* RESTRICT zTorqueR);
+		float* RESTRICT xForceRigidBoundaryParticle,
+		float* RESTRICT yForceRigidBoundaryParticle,
+		float* RESTRICT zForceRigidBoundaryParticle);
 
 	void Integration(
 		const float* RESTRICT xVelPredF,

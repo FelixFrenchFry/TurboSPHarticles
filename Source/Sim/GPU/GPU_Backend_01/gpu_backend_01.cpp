@@ -952,6 +952,9 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_xTorqueR_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yTorqueR_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zTorqueR_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_xForceRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yForceRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zForceRigidBoundaryParticle_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_a00R_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_a01R_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_a02R_));
@@ -1188,6 +1191,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				N_rigidBodies_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data());
+			GPU01::Launch_ClearRigidBoundaryParticleForces(
+				N_rigidBoundaryParticles_, stream_,
+				d_xForceRigidBoundaryParticle_.Data(),
+				d_yForceRigidBoundaryParticle_.Data(),
+				d_zForceRigidBoundaryParticle_.Data());
 			GPU::StreamSync(stream_);
 			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		}
@@ -1220,6 +1228,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_bodyIdB_.Data(),
+				d_rigidBoundaryParticleIdxB_.Data(),
 				d_volB_.Data(),
 				d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data(),
@@ -1233,10 +1242,10 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				params.particleSizeInvF, particleSizeSquF,
 				params.kernelRadiusSqu, cubicSplineAlpha,
 				params.massF, params.viscosityB,
-				N_F_, N_rigidBodies_, stream_,
-				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
-				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data(),
-				d_xCMR_.Data(), d_yCMR_.Data(), d_zCMR_.Data());
+				N_F_, N_rigidBoundaryParticles_, stream_,
+				d_xForceRigidBoundaryParticle_.Data(),
+				d_yForceRigidBoundaryParticle_.Data(),
+				d_zForceRigidBoundaryParticle_.Data());
 			GPU::StreamSync(stream_);
 			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		}
@@ -1342,6 +1351,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_bodyIdB_.Data(),
+				d_rigidBoundaryParticleIdxB_.Data(),
 				d_psiB_.Data(),
 				d_pressureF_.Data(),
 				d_nbrCountFB_.Data(),
@@ -1355,10 +1365,27 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				params.kernelRadiusSqu, cubicSplineAlpha,
 				params.restDensity,
 				params.massF, params.pressGamma,
-				N_F_, N_rigidBodies_, stream_,
+				N_F_, N_rigidBoundaryParticles_, stream_,
+				d_xForceRigidBoundaryParticle_.Data(),
+				d_yForceRigidBoundaryParticle_.Data(),
+				d_zForceRigidBoundaryParticle_.Data());
+
+			// reduce rigid boundary particle forces into body force and torque
+			GPU01::Launch_ReduceRigidBoundaryParticleForces(
+				d_rigidBoundaryParticleBeginR_.Data(),
+				d_rigidBoundaryParticleCountR_.Data(),
+				d_xLocalRigidBoundaryParticle_.Data(),
+				d_yLocalRigidBoundaryParticle_.Data(),
+				d_zLocalRigidBoundaryParticle_.Data(),
+				d_a00R_.Data(), d_a01R_.Data(), d_a02R_.Data(),
+				d_a10R_.Data(), d_a11R_.Data(), d_a12R_.Data(),
+				d_a20R_.Data(), d_a21R_.Data(), d_a22R_.Data(),
+				d_xForceRigidBoundaryParticle_.Data(),
+				d_yForceRigidBoundaryParticle_.Data(),
+				d_zForceRigidBoundaryParticle_.Data(),
+				N_rigidBodies_, N_rigidBoundaryParticles_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
-				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data(),
-				d_xCMR_.Data(), d_yCMR_.Data(), d_zCMR_.Data());
+				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data());
 			GPU::StreamSync(stream_);
 			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		}

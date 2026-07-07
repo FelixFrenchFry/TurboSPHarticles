@@ -86,6 +86,8 @@ namespace Sim
 
 		void UpdateRigidBoundaryParticles();
 		void ClearRigidForcesAndAddGravity(const SimParams& params);
+		void ClearRigidBoundaryParticleForces();
+		void ReduceRigidBoundaryParticleForces();
 		void IntegrateRigidBodies(float timeStep);
 
 		// managers
@@ -143,6 +145,11 @@ namespace Sim
 		std::vector<float> xAngMomR_, yAngMomR_, zAngMomR_; // angular momentum
 		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated from rigid boundary particles
 		std::vector<float> xTorqueR_, yTorqueR_, zTorqueR_; // torque accumulated from rigid boundary particles
+
+		// force accumulated per rigid boundary particle before body reduction
+		std::vector<float> xForceRigidBoundaryParticle_;
+		std::vector<float> yForceRigidBoundaryParticle_;
+		std::vector<float> zForceRigidBoundaryParticle_;
 
 		// orientation matrix A, stored row-major
 		std::vector<float> a00R_, a01R_, a02R_;

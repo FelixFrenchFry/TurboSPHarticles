@@ -34,9 +34,9 @@
   "timeUnit": "ms",
   "byteUnit": "MB",
   "statGroupsEnabled": {
-    "particles": false,
-    "density": false,
-    "velocity": false
+    "particles": true,
+    "density": true,
+    "velocity": true
   },
 
   "exportEnabled": false,

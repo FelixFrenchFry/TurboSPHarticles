@@ -180,6 +180,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	xTorqueR_.assign(N_rigidBodies_, 0.0f);
 	yTorqueR_.assign(N_rigidBodies_, 0.0f);
 	zTorqueR_.assign(N_rigidBodies_, 0.0f);
+	xForceRigidBoundaryParticle_.assign(N_rigidBoundaryParticles_, 0.0f);
+	yForceRigidBoundaryParticle_.assign(N_rigidBoundaryParticles_, 0.0f);
+	zForceRigidBoundaryParticle_.assign(N_rigidBoundaryParticles_, 0.0f);
 
 	a00R_ = std::move(R.a00);
 	a01R_ = std::move(R.a01);
@@ -691,6 +694,9 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(xTorqueR_));
 		Add(usage, MemUsageOf_Vector(yTorqueR_));
 		Add(usage, MemUsageOf_Vector(zTorqueR_));
+		Add(usage, MemUsageOf_Vector(xForceRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_Vector(yForceRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_Vector(zForceRigidBoundaryParticle_));
 		Add(usage, MemUsageOf_Vector(a00R_));
 		Add(usage, MemUsageOf_Vector(a01R_));
 		Add(usage, MemUsageOf_Vector(a02R_));
@@ -1274,6 +1280,48 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 		xForceR_[bodyIdx] += mass * params.gravity.x;
 		yForceR_[bodyIdx] += mass * params.gravity.y;
 		zForceR_[bodyIdx] += mass * params.gravity.z;
+	}
+}
+
+void SimBackend_CPU01::ClearRigidBoundaryParticleForces()
+{
+	std::fill(xForceRigidBoundaryParticle_.begin(), xForceRigidBoundaryParticle_.end(), 0.0f);
+	std::fill(yForceRigidBoundaryParticle_.begin(), yForceRigidBoundaryParticle_.end(), 0.0f);
+	std::fill(zForceRigidBoundaryParticle_.begin(), zForceRigidBoundaryParticle_.end(), 0.0f);
+}
+
+void SimBackend_CPU01::ReduceRigidBoundaryParticleForces()
+{
+	// TODO: parallelize with TBB?
+	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
+	{
+		const uint32_t begin = rigidBoundaryParticleBeginR_[bodyIdx];
+		const uint32_t end = begin + rigidBoundaryParticleCountR_[bodyIdx];
+
+		for (uint32_t rigidBoundaryParticleIdx = begin; rigidBoundaryParticleIdx < end; rigidBoundaryParticleIdx++)
+		{
+			const float xForce = xForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+			const float yForce = yForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+			const float zForce = zForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+
+			const float lx = xLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+			const float ly = yLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+			const float lz = zLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+
+			const float rx = std::fmaf(a00R_[bodyIdx], lx,
+				std::fmaf(a01R_[bodyIdx], ly, a02R_[bodyIdx] * lz));
+			const float ry = std::fmaf(a10R_[bodyIdx], lx,
+				std::fmaf(a11R_[bodyIdx], ly, a12R_[bodyIdx] * lz));
+			const float rz = std::fmaf(a20R_[bodyIdx], lx,
+				std::fmaf(a21R_[bodyIdx], ly, a22R_[bodyIdx] * lz));
+
+			xForceR_[bodyIdx] += xForce;
+			yForceR_[bodyIdx] += yForce;
+			zForceR_[bodyIdx] += zForce;
+			xTorqueR_[bodyIdx] += ry * zForce - rz * yForce;
+			yTorqueR_[bodyIdx] += rz * xForce - rx * zForce;
+			zTorqueR_[bodyIdx] += rx * yForce - ry * xForce;
+		}
 	}
 }
 
