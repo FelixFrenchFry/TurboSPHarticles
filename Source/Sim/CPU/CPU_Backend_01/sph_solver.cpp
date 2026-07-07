@@ -79,7 +79,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
 	const float massF = params.massF;
 
-	if (rigidBodies_.N_ > 0)
+	if (N_R_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 		UpdateRigidBoundaryParticles();
@@ -120,6 +120,15 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT diagElemF = diagElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
+	float* RESTRICT xCMR = xCMR_.data();
+	float* RESTRICT yCMR = yCMR_.data();
+	float* RESTRICT zCMR = zCMR_.data();
+	float* RESTRICT xForceR = xForceR_.data();
+	float* RESTRICT yForceR = yForceR_.data();
+	float* RESTRICT zForceR = zForceR_.data();
+	float* RESTRICT xTorqueR = xTorqueR_.data();
+	float* RESTRICT yTorqueR = yTorqueR_.data();
+	float* RESTRICT zTorqueR = zTorqueR_.data();
 	I_NeighborListSELL& neighborList = *neighborList_;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
@@ -168,13 +177,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
-	if (rigidBodies_.N_ > 0)
+	if (N_R_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
-		rigidBodyMgr_.ClearForces(rigidBodies_);
-		rigidBodyMgr_.AddGravity(
-			rigidBodies_,
-			params.gravity.x, params.gravity.y, params.gravity.z);
+		ClearRigidForcesAndAddGravity(params);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 	}
 
@@ -196,7 +202,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
-	if (rigidBodies_.N_ > 0)
+	if (N_R_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
@@ -209,8 +215,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborList,
 			sizeInvF, sizeSquF, kernelRadiusSqu,
 			cubicSplineAlpha, massF, params.viscosityB, N_F_,
-			rigidBodyMgr_,
-			rigidBodies_);
+			xCMR, yCMR, zCMR,
+			xForceR, yForceR, zForceR,
+			xTorqueR, yTorqueR, zTorqueR);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 	}
 
@@ -290,7 +297,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
-	if (rigidBodies_.N_ > 0)
+	if (N_R_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
@@ -302,8 +309,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
 			massF, params.pressGamma, N_F_,
-			rigidBodyMgr_,
-			rigidBodies_);
+			xCMR, yCMR, zCMR,
+			xForceR, yForceR, zForceR,
+			xTorqueR, yTorqueR, zTorqueR);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 	}
 
@@ -333,10 +341,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 
-	if (rigidBodies_.N_ > 0)
+	if (N_R_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
-		rigidBodyMgr_.Integrate(rigidBodies_, timeStep);
+		IntegrateRigidBodies(timeStep);
 
 		UpdateRigidBoundaryParticles();
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_Update });
@@ -678,8 +686,15 @@ void CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float massF, const float viscosityB,
 	const uint32_t N_F,
-	const Sim::RigidBodyMgr& rigidBodyMgr,
-	Sync::RigidBodies& rigidBodies)
+	const float* RESTRICT xCMR,
+	const float* RESTRICT yCMR,
+	const float* RESTRICT zCMR,
+	float* RESTRICT xForceR,
+	float* RESTRICT yForceR,
+	float* RESTRICT zForceR,
+	float* RESTRICT xTorqueR,
+	float* RESTRICT yTorqueR,
+	float* RESTRICT zTorqueR)
 {
 	(void)N_F;
 
@@ -687,6 +702,7 @@ void CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 	const float particleSizeSquEps = 0.01f * particleSizeSquF;
 	const float viscosityFacB = 10.0f * viscosityB;
 
+	// TODO: parallelize with TBB?
 	for (uint32_t chunk = 0; chunk < numChunks; chunk++)
 	{
 		const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
@@ -727,15 +743,20 @@ void CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 				const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 				const float accCoeff = (volB[j] * dot) / (distSqu + particleSizeSquEps);
 				const float forceCoeff = -massF * viscosityFacB * accCoeff;
+				const float xForce = forceCoeff * xkg;
+				const float yForce = forceCoeff * ykg;
+				const float zForce = forceCoeff * zkg;
+				const float rx = xPosB[j] - xCMR[bodyIdx];
+				const float ry = yPosB[j] - yCMR[bodyIdx];
+				const float rz = zPosB[j] - zCMR[bodyIdx];
 
 				// opposite of the boundary viscosity/friction force applied to fluid particle i
-				rigidBodyMgr.AddForce(
-					rigidBodies,
-					bodyIdx,
-					xPosB[j], yPosB[j], zPosB[j],
-					forceCoeff * xkg,
-					forceCoeff * ykg,
-					forceCoeff * zkg);
+				xForceR[bodyIdx] += xForce;
+				yForceR[bodyIdx] += yForce;
+				zForceR[bodyIdx] += zForce;
+				xTorqueR[bodyIdx] += ry * zForce - rz * yForce;
+				yTorqueR[bodyIdx] += rz * xForce - rx * zForce;
+				zTorqueR[bodyIdx] += rx * yForce - ry * xForce;
 			}
 		}
 	}
@@ -1070,8 +1091,15 @@ void CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float pressGamma,
 	const uint32_t N_F,
-	const Sim::RigidBodyMgr& rigidBodyMgr,
-	Sync::RigidBodies& rigidBodies)
+	const float* RESTRICT xCMR,
+	const float* RESTRICT yCMR,
+	const float* RESTRICT zCMR,
+	float* RESTRICT xForceR,
+	float* RESTRICT yForceR,
+	float* RESTRICT zForceR,
+	float* RESTRICT xTorqueR,
+	float* RESTRICT yTorqueR,
+	float* RESTRICT zTorqueR)
 {
 	(void)N_F;
 
@@ -1111,15 +1139,20 @@ void CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 					xkg, ykg, zkg);
 
 				const float accCoeffB = accCoeffB_outer * psiB[j] * presi;
+				const float xForce = massF * accCoeffB * xkg;
+				const float yForce = massF * accCoeffB * ykg;
+				const float zForce = massF * accCoeffB * zkg;
+				const float rx = xPosB[j] - xCMR[bodyIdx];
+				const float ry = yPosB[j] - yCMR[bodyIdx];
+				const float rz = zPosB[j] - zCMR[bodyIdx];
 
 				// opposite of the boundary pressure force applied to fluid particle i
-				rigidBodyMgr.AddForce(
-					rigidBodies,
-					bodyIdx,
-					xPosB[j], yPosB[j], zPosB[j],
-					massF * accCoeffB * xkg,
-					massF * accCoeffB * ykg,
-					massF * accCoeffB * zkg);
+				xForceR[bodyIdx] += xForce;
+				yForceR[bodyIdx] += yForce;
+				zForceR[bodyIdx] += zForce;
+				xTorqueR[bodyIdx] += ry * zForce - rz * yForce;
+				yTorqueR[bodyIdx] += rz * xForce - rx * zForce;
+				zTorqueR[bodyIdx] += rx * yForce - ry * xForce;
 			}
 		}
 	}

@@ -1038,9 +1038,14 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		const uint32_t* d_permB = d_sortedParticleIdxB;
 
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, be_.d_reorderIdScratch_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_bodyIdB_, be_.d_reorderIdScratch_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_rigidBoundaryParticleIdxB_, be_.d_reorderIdScratch_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xVelB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yVelB_, d_reorderScratch, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zVelB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_volB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_psiB_, d_reorderScratch, be_.stream_);
 

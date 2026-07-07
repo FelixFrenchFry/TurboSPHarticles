@@ -32,7 +32,7 @@ namespace Export
 	// binary format helpers
 	static constexpr uint32_t kEndianLE = 0x01020304u;
 	static constexpr char kSimStateMagic[8] =
-		{ 'T', 'S', 'P', 'S', 'I', 'M', '\3', '\0' };
+		{ 'T', 'S', 'P', 'S', 'I', 'M', '\4', '\0' };
 	static constexpr char kExportSnapshotMagic[8] =
 		{ 'T', 'S', 'P', 'S', 'N', 'A', 'P', '\3' };
 
@@ -55,7 +55,7 @@ namespace Export
 		uint32_t NF;
 		uint32_t NB;
 		uint32_t NR;
-		uint32_t NS;
+		uint32_t NRigidBoundaryParticles;
 	};
 
 	struct BinHeaderSnap
@@ -614,25 +614,24 @@ namespace Export
 		[[maybe_unused]] const auto N = static_cast<size_t>(B.N_);
 
 		assert(B.id.size() == N);
-		assert(B.bodyId.size() == N && B.rigidSampleIdx.size() == N);
+		assert(B.bodyId.size() == N && B.rigidBoundaryParticleIdx.size() == N);
 		assert(B.xPos.size() == N && B.yPos.size() == N && B.zPos.size() == N);
 		assert(B.xVel.size() == N && B.yVel.size() == N && B.zVel.size() == N);
 		assert(B.volB.size() == N && B.psiB.size() == N);
 	}
 
-	static void CheckRigidBodiesConsistent(const Sync::RigidBodies& R)
+	static void CheckRigidBodyStateConsistent(const Sync::RigidBodies& R)
 	{
 		[[maybe_unused]] const auto N = static_cast<size_t>(R.N_);
-		[[maybe_unused]] const auto NS = static_cast<size_t>(R.sampleN_);
+		[[maybe_unused]] const auto N_rigidBoundaryParticles =
+			static_cast<size_t>(R.N_rigidBoundaryParticles_);
 
 		assert(R.id.size() == N);
-		assert(R.sampleBegin.size() == N && R.sampleCount.size() == N);
+		assert(R.rigidBoundaryParticleBegin.size() == N && R.rigidBoundaryParticleCount.size() == N);
 		assert(R.xCM.size() == N && R.yCM.size() == N && R.zCM.size() == N);
 		assert(R.xVel.size() == N && R.yVel.size() == N && R.zVel.size() == N);
 		assert(R.xOmega.size() == N && R.yOmega.size() == N && R.zOmega.size() == N);
 		assert(R.xAngMom.size() == N && R.yAngMom.size() == N && R.zAngMom.size() == N);
-		assert(R.xForce.size() == N && R.yForce.size() == N && R.zForce.size() == N);
-		assert(R.xTorque.size() == N && R.yTorque.size() == N && R.zTorque.size() == N);
 		assert(R.a00.size() == N && R.a01.size() == N && R.a02.size() == N);
 		assert(R.a10.size() == N && R.a11.size() == N && R.a12.size() == N);
 		assert(R.a20.size() == N && R.a21.size() == N && R.a22.size() == N);
@@ -640,14 +639,16 @@ namespace Export
 		assert(R.iBodyInv00.size() == N && R.iBodyInv01.size() == N && R.iBodyInv02.size() == N);
 		assert(R.iBodyInv10.size() == N && R.iBodyInv11.size() == N && R.iBodyInv12.size() == N);
 		assert(R.iBodyInv20.size() == N && R.iBodyInv21.size() == N && R.iBodyInv22.size() == N);
-		assert(R.xLocalB.size() == NS && R.yLocalB.size() == NS && R.zLocalB.size() == NS);
+		assert(R.xLocalRigidBoundaryParticle.size() == N_rigidBoundaryParticles &&
+			   R.yLocalRigidBoundaryParticle.size() == N_rigidBoundaryParticles &&
+			   R.zLocalRigidBoundaryParticle.size() == N_rigidBoundaryParticles);
 
 		for (uint32_t bodyIdx = 0; bodyIdx < R.N_; bodyIdx++)
 		{
-			[[maybe_unused]] const uint32_t sampleBegin = R.sampleBegin[bodyIdx];
-			[[maybe_unused]] const uint32_t sampleCount = R.sampleCount[bodyIdx];
-			assert(sampleBegin <= R.sampleN_);
-			assert(sampleCount <= R.sampleN_ - sampleBegin);
+			[[maybe_unused]] const uint32_t rigidBoundaryParticleBegin = R.rigidBoundaryParticleBegin[bodyIdx];
+			[[maybe_unused]] const uint32_t rigidBoundaryParticleCount = R.rigidBoundaryParticleCount[bodyIdx];
+			assert(rigidBoundaryParticleBegin <= R.N_rigidBoundaryParticles_);
+			assert(rigidBoundaryParticleCount <= R.N_rigidBoundaryParticles_ - rigidBoundaryParticleBegin);
 		}
 	}
 
@@ -667,7 +668,7 @@ namespace Export
 		// sanity check before writing
 		CheckFluidConsistent(state.fluidParticles);
 		CheckBoundaryConsistent(state.boundaryParticles);
-		CheckRigidBodiesConsistent(state.rigidBodies);
+		CheckRigidBodyStateConsistent(state.rigidBodies);
 
 		// open scope for writer
 		{
@@ -690,7 +691,7 @@ namespace Export
 			hdr.NF = state.fluidParticles.N_;
 			hdr.NB = state.boundaryParticles.N_;
 			hdr.NR = state.rigidBodies.N_;
-			hdr.NS = state.rigidBodies.sampleN_;
+			hdr.NRigidBoundaryParticles = state.rigidBodies.N_rigidBoundaryParticles_;
 
 			WritePod(ofs, hdr);
 
@@ -727,7 +728,7 @@ namespace Export
 
 				WriteVec(ofs, B.id);
 				WriteVec(ofs, B.bodyId);
-				WriteVec(ofs, B.rigidSampleIdx);
+				WriteVec(ofs, B.rigidBoundaryParticleIdx);
 				WriteVec(ofs, B.xPos);
 				WriteVec(ofs, B.yPos);
 				WriteVec(ofs, B.zPos);
@@ -745,8 +746,8 @@ namespace Export
 				const auto& R = state.rigidBodies;
 
 				WriteVec(ofs, R.id);
-				WriteVec(ofs, R.sampleBegin);
-				WriteVec(ofs, R.sampleCount);
+				WriteVec(ofs, R.rigidBoundaryParticleBegin);
+				WriteVec(ofs, R.rigidBoundaryParticleCount);
 
 				WriteVec(ofs, R.xCM);
 				WriteVec(ofs, R.yCM);
@@ -774,6 +775,9 @@ namespace Export
 				WriteVec(ofs, R.a21);
 				WriteVec(ofs, R.a22);
 
+				WriteVec(ofs, R.mass);
+				WriteVec(ofs, R.massInv);
+
 				WriteVec(ofs, R.iBodyInv00);
 				WriteVec(ofs, R.iBodyInv01);
 				WriteVec(ofs, R.iBodyInv02);
@@ -784,18 +788,9 @@ namespace Export
 				WriteVec(ofs, R.iBodyInv21);
 				WriteVec(ofs, R.iBodyInv22);
 
-				WriteVec(ofs, R.mass);
-				WriteVec(ofs, R.massInv);
-				WriteVec(ofs, R.xForce);
-				WriteVec(ofs, R.yForce);
-				WriteVec(ofs, R.zForce);
-				WriteVec(ofs, R.xTorque);
-				WriteVec(ofs, R.yTorque);
-				WriteVec(ofs, R.zTorque);
-
-				WriteVec(ofs, R.xLocalB);
-				WriteVec(ofs, R.yLocalB);
-				WriteVec(ofs, R.zLocalB);
+				WriteVec(ofs, R.xLocalRigidBoundaryParticle);
+				WriteVec(ofs, R.yLocalRigidBoundaryParticle);
+				WriteVec(ofs, R.zLocalRigidBoundaryParticle);
 			}
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
@@ -848,7 +843,7 @@ namespace Export
 		state.ResizeFluid(hdr.NF);
 		state.ResizeBoundary(hdr.NB);
 		state.ResizeRigidBodies(hdr.NR);
-		state.rigidBodies.resizeSamples(hdr.NS);
+		state.rigidBodies.resizeRigidBoundaryParticles(hdr.NRigidBoundaryParticles);
 
 		// fluid data (read order must match SaveUniversalSimState)
 		{
@@ -886,7 +881,7 @@ namespace Export
 
 			ReadVec(ifs, B.id);
 			ReadVec(ifs, B.bodyId);
-			ReadVec(ifs, B.rigidSampleIdx);
+			ReadVec(ifs, B.rigidBoundaryParticleIdx);
 			ReadVec(ifs, B.xPos);
 			ReadVec(ifs, B.yPos);
 			ReadVec(ifs, B.zPos);
@@ -907,8 +902,8 @@ namespace Export
 			auto& R = state.rigidBodies;
 
 			ReadVec(ifs, R.id);
-			ReadVec(ifs, R.sampleBegin);
-			ReadVec(ifs, R.sampleCount);
+			ReadVec(ifs, R.rigidBoundaryParticleBegin);
+			ReadVec(ifs, R.rigidBoundaryParticleCount);
 
 			ReadVec(ifs, R.xCM);
 			ReadVec(ifs, R.yCM);
@@ -936,6 +931,9 @@ namespace Export
 			ReadVec(ifs, R.a21);
 			ReadVec(ifs, R.a22);
 
+			ReadVec(ifs, R.mass);
+			ReadVec(ifs, R.massInv);
+
 			ReadVec(ifs, R.iBodyInv00);
 			ReadVec(ifs, R.iBodyInv01);
 			ReadVec(ifs, R.iBodyInv02);
@@ -946,21 +944,12 @@ namespace Export
 			ReadVec(ifs, R.iBodyInv21);
 			ReadVec(ifs, R.iBodyInv22);
 
-			ReadVec(ifs, R.mass);
-			ReadVec(ifs, R.massInv);
-			ReadVec(ifs, R.xForce);
-			ReadVec(ifs, R.yForce);
-			ReadVec(ifs, R.zForce);
-			ReadVec(ifs, R.xTorque);
-			ReadVec(ifs, R.yTorque);
-			ReadVec(ifs, R.zTorque);
-
-			ReadVec(ifs, R.xLocalB);
-			ReadVec(ifs, R.yLocalB);
-			ReadVec(ifs, R.zLocalB);
+			ReadVec(ifs, R.xLocalRigidBoundaryParticle);
+			ReadVec(ifs, R.yLocalRigidBoundaryParticle);
+			ReadVec(ifs, R.zLocalRigidBoundaryParticle);
 
 			R.N_ = hdr.NR;
-			R.sampleN_ = hdr.NS;
+			R.N_rigidBoundaryParticles_ = hdr.NRigidBoundaryParticles;
 		}
 
 		EnsureStreamOk(ifs, "reading", path);

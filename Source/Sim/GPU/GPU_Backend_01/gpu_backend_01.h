@@ -163,6 +163,8 @@ namespace Sim
 		double simTime_ = 0.0;
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
+		uint32_t N_R_ = 0;
+		uint32_t N_rigidBoundaryParticles_ = 0;
 		uint32_t N_solverIterCount_ = 0;
 
 		// --- [ backend-specific data structures for operating the simulation ]
@@ -180,9 +182,42 @@ namespace Sim
 
 		// boundary particles
 		DeviceBuffer<uint32_t> d_idB_;
+		DeviceBuffer<uint32_t> d_bodyIdB_;
+		DeviceBuffer<uint32_t> d_rigidBoundaryParticleIdxB_;
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
+		DeviceBuffer<float> d_xVelB_, d_yVelB_, d_zVelB_;
 		DeviceBuffer<float> d_volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		DeviceBuffer<float> d_psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
+
+		// rigid bodies
+		DeviceBuffer<uint32_t> d_idR_; // per-rigid-body ID
+		DeviceBuffer<uint32_t> d_rigidBoundaryParticleBeginR_; // first rigid boundary particle
+		DeviceBuffer<uint32_t> d_rigidBoundaryParticleCountR_; // number of rigid boundary particles
+
+		// body state (in world frame)
+		DeviceBuffer<float> d_xCMR_, d_yCMR_, d_zCMR_; // center of mass
+		DeviceBuffer<float> d_xVelR_, d_yVelR_, d_zVelR_; // linear velocity
+		DeviceBuffer<float> d_xOmegaR_, d_yOmegaR_, d_zOmegaR_; // angular velocity
+		DeviceBuffer<float> d_xAngMomR_, d_yAngMomR_, d_zAngMomR_; // angular momentum
+		DeviceBuffer<float> d_xForceR_, d_yForceR_, d_zForceR_; // force accumulated from rigid boundary particles
+		DeviceBuffer<float> d_xTorqueR_, d_yTorqueR_, d_zTorqueR_; // torque accumulated from rigid boundary particles
+
+		// orientation matrix A, stored row-major
+		DeviceBuffer<float> d_a00R_, d_a01R_, d_a02R_;
+		DeviceBuffer<float> d_a10R_, d_a11R_, d_a12R_;
+		DeviceBuffer<float> d_a20R_, d_a21R_, d_a22R_;
+
+		// mass
+		DeviceBuffer<float> d_massR_;
+		DeviceBuffer<float> d_massInvR_;
+
+		// inverse inertia in body frame, stored row-major
+		DeviceBuffer<float> d_iBodyInv00R_, d_iBodyInv01R_, d_iBodyInv02R_;
+		DeviceBuffer<float> d_iBodyInv10R_, d_iBodyInv11R_, d_iBodyInv12R_;
+		DeviceBuffer<float> d_iBodyInv20R_, d_iBodyInv21R_, d_iBodyInv22R_;
+
+		// local rigid boundary particle offsets from center of mass
+		DeviceBuffer<float> d_xLocalRigidBoundaryParticle_, d_yLocalRigidBoundaryParticle_, d_zLocalRigidBoundaryParticle_;
 
 		// neighbor list storage
 		// (compressed SELL32 for FF and FB neighbors)
@@ -235,6 +270,7 @@ namespace Sim
 		mutable std::vector<float> h_expZVelF_;
 		mutable std::vector<uint32_t> h_expIdF_;
 		mutable std::vector<uint32_t> h_expIdB_;
+		mutable std::vector<uint32_t> h_expBodyIdB_;
 		mutable std::vector<float> h_expXPosB_;
 		mutable std::vector<float> h_expYPosB_;
 		mutable std::vector<float> h_expZPosB_;
@@ -270,8 +306,14 @@ namespace Sim
 				.ops = { Bench::BenchOp::Pressure_Acceleration }
 			},
 			{
+				.ops = { Bench::BenchOp::Rigid_ForceAccumulation }
+			},
+			{
 				.ops = { Bench::BenchOp::VelocityUpdate,
 						   Bench::BenchOp::PositionUpdate }
+			},
+			{
+				.ops = { Bench::BenchOp::Rigid_Update }
 			},
 			{
 				.ops = { Bench::BenchOp::Statistics_Particles,
@@ -329,7 +371,10 @@ namespace Sim
 				force ||
 				(N_B_new != N_B_) ||
 				d_idB_.Size() != N_B_new ||
+				d_bodyIdB_.Size() != N_B_new ||
+				d_rigidBoundaryParticleIdxB_.Size() != N_B_new ||
 				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
+				d_xVelB_.Size() != N_B_new || d_yVelB_.Size() != N_B_new || d_zVelB_.Size() != N_B_new ||
 				d_volB_.Size() != N_B_new || d_psiB_.Size() != N_B_new;
 
 			// detect if (re)allocation of buffers is needed
@@ -352,7 +397,10 @@ namespace Sim
 
 			// boundary
 			d_idB_.Resize(N_B_);
+			d_bodyIdB_.Resize(N_B_);
+			d_rigidBoundaryParticleIdxB_.Resize(N_B_);
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
+			d_xVelB_.Resize(N_B_); d_yVelB_.Resize(N_B_); d_zVelB_.Resize(N_B_);
 			d_volB_.Resize(N_B_);
 			d_psiB_.Resize(N_B_);
 			d_reorderIdScratch_.Resize(std::max(N_F_, N_B_));
@@ -379,6 +427,67 @@ namespace Sim
 			N_delta16FB_ = 0;
 			N_abs32FF_ = 0;
 			N_abs32FB_ = 0;
+		}
+
+		void EnsureRigidCapacity(uint32_t N_R_new, uint32_t N_rigidBoundaryParticles_new, bool force = false)
+		{
+			const bool needBodies =
+				force ||
+				(N_R_new != N_R_) ||
+				d_idR_.Size() != N_R_new ||
+				d_rigidBoundaryParticleBeginR_.Size() != N_R_new ||
+				d_rigidBoundaryParticleCountR_.Size() != N_R_new ||
+				d_xCMR_.Size() != N_R_new || d_yCMR_.Size() != N_R_new || d_zCMR_.Size() != N_R_new ||
+				d_xVelR_.Size() != N_R_new || d_yVelR_.Size() != N_R_new || d_zVelR_.Size() != N_R_new ||
+				d_xOmegaR_.Size() != N_R_new || d_yOmegaR_.Size() != N_R_new || d_zOmegaR_.Size() != N_R_new ||
+				d_xAngMomR_.Size() != N_R_new || d_yAngMomR_.Size() != N_R_new || d_zAngMomR_.Size() != N_R_new ||
+				d_xForceR_.Size() != N_R_new || d_yForceR_.Size() != N_R_new || d_zForceR_.Size() != N_R_new ||
+				d_xTorqueR_.Size() != N_R_new || d_yTorqueR_.Size() != N_R_new || d_zTorqueR_.Size() != N_R_new ||
+				d_a00R_.Size() != N_R_new || d_a01R_.Size() != N_R_new || d_a02R_.Size() != N_R_new ||
+				d_a10R_.Size() != N_R_new || d_a11R_.Size() != N_R_new || d_a12R_.Size() != N_R_new ||
+				d_a20R_.Size() != N_R_new || d_a21R_.Size() != N_R_new || d_a22R_.Size() != N_R_new ||
+				d_massR_.Size() != N_R_new || d_massInvR_.Size() != N_R_new ||
+				d_iBodyInv00R_.Size() != N_R_new || d_iBodyInv01R_.Size() != N_R_new || d_iBodyInv02R_.Size() != N_R_new ||
+				d_iBodyInv10R_.Size() != N_R_new || d_iBodyInv11R_.Size() != N_R_new || d_iBodyInv12R_.Size() != N_R_new ||
+				d_iBodyInv20R_.Size() != N_R_new || d_iBodyInv21R_.Size() != N_R_new || d_iBodyInv22R_.Size() != N_R_new;
+
+			const bool needRigidBoundaryParticles =
+				force ||
+				(N_rigidBoundaryParticles_new != N_rigidBoundaryParticles_) ||
+				d_xLocalRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
+				d_yLocalRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new ||
+				d_zLocalRigidBoundaryParticle_.Size() != N_rigidBoundaryParticles_new;
+
+			if (!(needBodies || needRigidBoundaryParticles)) { return; }
+
+			N_R_ = N_R_new;
+			N_rigidBoundaryParticles_ = N_rigidBoundaryParticles_new;
+
+			d_idR_.Resize(N_R_);
+			d_rigidBoundaryParticleBeginR_.Resize(N_R_);
+			d_rigidBoundaryParticleCountR_.Resize(N_R_);
+
+			d_xCMR_.Resize(N_R_); d_yCMR_.Resize(N_R_); d_zCMR_.Resize(N_R_);
+			d_xVelR_.Resize(N_R_); d_yVelR_.Resize(N_R_); d_zVelR_.Resize(N_R_);
+			d_xOmegaR_.Resize(N_R_); d_yOmegaR_.Resize(N_R_); d_zOmegaR_.Resize(N_R_);
+			d_xAngMomR_.Resize(N_R_); d_yAngMomR_.Resize(N_R_); d_zAngMomR_.Resize(N_R_);
+			d_xForceR_.Resize(N_R_); d_yForceR_.Resize(N_R_); d_zForceR_.Resize(N_R_);
+			d_xTorqueR_.Resize(N_R_); d_yTorqueR_.Resize(N_R_); d_zTorqueR_.Resize(N_R_);
+
+			d_a00R_.Resize(N_R_); d_a01R_.Resize(N_R_); d_a02R_.Resize(N_R_);
+			d_a10R_.Resize(N_R_); d_a11R_.Resize(N_R_); d_a12R_.Resize(N_R_);
+			d_a20R_.Resize(N_R_); d_a21R_.Resize(N_R_); d_a22R_.Resize(N_R_);
+
+			d_massR_.Resize(N_R_);
+			d_massInvR_.Resize(N_R_);
+
+			d_iBodyInv00R_.Resize(N_R_); d_iBodyInv01R_.Resize(N_R_); d_iBodyInv02R_.Resize(N_R_);
+			d_iBodyInv10R_.Resize(N_R_); d_iBodyInv11R_.Resize(N_R_); d_iBodyInv12R_.Resize(N_R_);
+			d_iBodyInv20R_.Resize(N_R_); d_iBodyInv21R_.Resize(N_R_); d_iBodyInv22R_.Resize(N_R_);
+
+			d_xLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
+			d_yLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
+			d_zLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
 		}
 
 		// turns temporary count-query output into compressed SELL32 metadata

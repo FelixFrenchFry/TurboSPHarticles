@@ -59,9 +59,9 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.0,
-        "vLen": 1.0,
-        "wLen": 1.0
+        "uLen": 1.3,
+        "vLen": 1.3,
+        "wLen": 1.3
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
@@ -73,15 +73,15 @@
         "wLen": 1.0
       },
       "rigidBody": {
-        "origin": [ 0.2, 0.4, 0.4 ],
+        "origin": [ 0.5, 0.35, 0.5 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 0.6,
-        "vLen": 0.4,
-        "wLen": 0.2
+        "uLen": 0.3,
+        "vLen": 0.5,
+        "wLen": 0.3
       },
-      "rigidDensity": 300.0,
+      "rigidDensity": 200.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }

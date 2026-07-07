@@ -6,7 +6,7 @@
 #include <cstdint>
 
 // internal
-#include "Source/Sim/Core/rigid_bodies.h"
+#include "Source/Sim/Sync/state_sim.h"
 #include "neighbor_lists.h"
 
 #if defined(_MSC_VER)
@@ -160,8 +160,15 @@ namespace CPU01
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float massF, float viscosityB,
 		uint32_t N_F,
-		const Sim::RigidBodyMgr& rigidBodyMgr,
-		Sync::RigidBodies& rigidBodies);
+		const float* RESTRICT xCMR,
+		const float* RESTRICT yCMR,
+		const float* RESTRICT zCMR,
+		float* RESTRICT xForceR,
+		float* RESTRICT yForceR,
+		float* RESTRICT zForceR,
+		float* RESTRICT xTorqueR,
+		float* RESTRICT yTorqueR,
+		float* RESTRICT zTorqueR);
 
 	void AccumulateRigidBodyPressureForces_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -178,8 +185,15 @@ namespace CPU01
 		float cubicSplineAlpha, float restDensity,
 		float massF, float pressGamma,
 		uint32_t N_F,
-		const Sim::RigidBodyMgr& rigidBodyMgr,
-		Sync::RigidBodies& rigidBodies);
+		const float* RESTRICT xCMR,
+		const float* RESTRICT yCMR,
+		const float* RESTRICT zCMR,
+		float* RESTRICT xForceR,
+		float* RESTRICT yForceR,
+		float* RESTRICT zForceR,
+		float* RESTRICT xTorqueR,
+		float* RESTRICT yTorqueR,
+		float* RESTRICT zTorqueR);
 
 	void Integration(
 		const float* RESTRICT xVelPredF,

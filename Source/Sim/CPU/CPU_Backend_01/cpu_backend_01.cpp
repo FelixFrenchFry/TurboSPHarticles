@@ -24,6 +24,39 @@ using namespace Sim;
 
 // ---------------------------------------------------------------------------------------------------
 
+namespace
+{
+	constexpr float RigidOrthonormalEps = 1e-12f;
+
+	float Dot3(
+		const float ax, const float ay, const float az,
+		const float bx, const float by, const float bz)
+	{
+		return std::fmaf(ax, bx, std::fmaf(ay, by, az * bz));
+	}
+
+	float Length3(const float x, const float y, const float z)
+	{
+		return std::sqrt(Dot3(x, y, z, x, y, z));
+	}
+
+	void Normalize3(float& x, float& y, float& z)
+	{
+		const float len = Length3(x, y, z);
+		if (len <= RigidOrthonormalEps || !std::isfinite(len))
+		{
+			throw std::runtime_error("Degenerate CPU01 rigid body orientation.");
+		}
+
+		const float lenInv = 1.0f / len;
+		x *= lenInv;
+		y *= lenInv;
+		z *= lenInv;
+	}
+}
+
+// ---------------------------------------------------------------------------------------------------
+
 SimBackend_CPU01::SimBackend_CPU01(
 	Sim::SimParamsMgr& simParamsMgr,
 	Bench::BenchmarksTracker& benchmarksTracker,
@@ -74,15 +107,19 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 
 	auto& F = src.fluidParticles;
 	auto& B = src.boundaryParticles;
+	auto& R = src.rigidBodies;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
+	N_R_ = R.N_;
+	N_rigidBoundaryParticles_ = R.N_rigidBoundaryParticles_;
 	simStep_ = src.step;
 	simTime_ = src.time;
 	F.ensureParticleIdsPresent();
 	B.ensureParticleIdsPresent();
 	B.EnsureBoundaryKinematicsPresent();
 	B.EnsureBoundaryCoefficientsPresent(params.massB, params.restDensity);
-	src.rigidBodies.ensureRigidBodyIdsPresent();
+	R.ensureRigidBodyIdsPresent();
+	src.ValidateRigidBoundaryAttachments();
 
 	// transfer to backend fluid data structures
 	idF_ = std::move(F.id);
@@ -110,7 +147,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	// transfer to boundary data structures
 	idB_ = std::move(B.id);
 	bodyIdB_ = std::move(B.bodyId);
-	rigidSampleIdxB_ = std::move(B.rigidSampleIdx);
+	rigidBoundaryParticleIdxB_ = std::move(B.rigidBoundaryParticleIdx);
 	xPosB_ = std::move(B.xPos);
 	yPosB_ = std::move(B.yPos);
 	zPosB_ = std::move(B.zPos);
@@ -120,7 +157,56 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	volB_ = std::move(B.volB);
 	psiB_ = std::move(B.psiB);
 
-	rigidBodies_ = std::move(src.rigidBodies);
+	// transfer to rigid body data structures
+	idR_ = std::move(R.id);
+	rigidBoundaryParticleBeginR_ = std::move(R.rigidBoundaryParticleBegin);
+	rigidBoundaryParticleCountR_ = std::move(R.rigidBoundaryParticleCount);
+
+	xCMR_ = std::move(R.xCM);
+	yCMR_ = std::move(R.yCM);
+	zCMR_ = std::move(R.zCM);
+	xVelR_ = std::move(R.xVel);
+	yVelR_ = std::move(R.yVel);
+	zVelR_ = std::move(R.zVel);
+	xOmegaR_ = std::move(R.xOmega);
+	yOmegaR_ = std::move(R.yOmega);
+	zOmegaR_ = std::move(R.zOmega);
+	xAngMomR_ = std::move(R.xAngMom);
+	yAngMomR_ = std::move(R.yAngMom);
+	zAngMomR_ = std::move(R.zAngMom);
+	xForceR_.assign(N_R_, 0.0f);
+	yForceR_.assign(N_R_, 0.0f);
+	zForceR_.assign(N_R_, 0.0f);
+	xTorqueR_.assign(N_R_, 0.0f);
+	yTorqueR_.assign(N_R_, 0.0f);
+	zTorqueR_.assign(N_R_, 0.0f);
+
+	a00R_ = std::move(R.a00);
+	a01R_ = std::move(R.a01);
+	a02R_ = std::move(R.a02);
+	a10R_ = std::move(R.a10);
+	a11R_ = std::move(R.a11);
+	a12R_ = std::move(R.a12);
+	a20R_ = std::move(R.a20);
+	a21R_ = std::move(R.a21);
+	a22R_ = std::move(R.a22);
+
+	massR_ = std::move(R.mass);
+	massInvR_ = std::move(R.massInv);
+
+	iBodyInv00R_ = std::move(R.iBodyInv00);
+	iBodyInv01R_ = std::move(R.iBodyInv01);
+	iBodyInv02R_ = std::move(R.iBodyInv02);
+	iBodyInv10R_ = std::move(R.iBodyInv10);
+	iBodyInv11R_ = std::move(R.iBodyInv11);
+	iBodyInv12R_ = std::move(R.iBodyInv12);
+	iBodyInv20R_ = std::move(R.iBodyInv20);
+	iBodyInv21R_ = std::move(R.iBodyInv21);
+	iBodyInv22R_ = std::move(R.iBodyInv22);
+
+	xLocalRigidBoundaryParticle_ = std::move(R.xLocalRigidBoundaryParticle);
+	yLocalRigidBoundaryParticle_ = std::move(R.yLocalRigidBoundaryParticle);
+	zLocalRigidBoundaryParticle_ = std::move(R.zLocalRigidBoundaryParticle);
 
 	// init neighbor list sizes
 	neighborList_->Resize(N_F_, N_B_, params);
@@ -131,6 +217,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
+	auto& R = dst.rigidBodies;
 
 	dst.step = simStep_;
 	dst.time = simTime_;
@@ -138,6 +225,8 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	// make sure the destination data structures have enough capacity
 	dst.ResizeFluid(N_F_);
 	dst.ResizeBoundary(N_B_);
+	dst.ResizeRigidBodies(N_R_);
+	R.resizeRigidBoundaryParticles(N_rigidBoundaryParticles_);
 
 	// fluid particles
 	tbb::parallel_for(
@@ -183,7 +272,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 			{
 				B.id[i] = idB_[i];
 				B.bodyId[i] = bodyIdB_[i];
-				B.rigidSampleIdx[i] = rigidSampleIdxB_[i];
+				B.rigidBoundaryParticleIdx[i] = rigidBoundaryParticleIdxB_[i];
 				B.xPos[i] = xPosB_[i];
 				B.yPos[i] = yPosB_[i];
 				B.zPos[i] = zPosB_[i];
@@ -199,7 +288,52 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
-	dst.rigidBodies = rigidBodies_;
+	R.N_ = N_R_;
+	R.N_rigidBoundaryParticles_ = N_rigidBoundaryParticles_;
+
+	R.id = idR_;
+	R.rigidBoundaryParticleBegin = rigidBoundaryParticleBeginR_;
+	R.rigidBoundaryParticleCount = rigidBoundaryParticleCountR_;
+
+	R.xCM = xCMR_;
+	R.yCM = yCMR_;
+	R.zCM = zCMR_;
+	R.xVel = xVelR_;
+	R.yVel = yVelR_;
+	R.zVel = zVelR_;
+	R.xOmega = xOmegaR_;
+	R.yOmega = yOmegaR_;
+	R.zOmega = zOmegaR_;
+	R.xAngMom = xAngMomR_;
+	R.yAngMom = yAngMomR_;
+	R.zAngMom = zAngMomR_;
+
+	R.a00 = a00R_;
+	R.a01 = a01R_;
+	R.a02 = a02R_;
+	R.a10 = a10R_;
+	R.a11 = a11R_;
+	R.a12 = a12R_;
+	R.a20 = a20R_;
+	R.a21 = a21R_;
+	R.a22 = a22R_;
+
+	R.mass = massR_;
+	R.massInv = massInvR_;
+
+	R.iBodyInv00 = iBodyInv00R_;
+	R.iBodyInv01 = iBodyInv01R_;
+	R.iBodyInv02 = iBodyInv02R_;
+	R.iBodyInv10 = iBodyInv10R_;
+	R.iBodyInv11 = iBodyInv11R_;
+	R.iBodyInv12 = iBodyInv12R_;
+	R.iBodyInv20 = iBodyInv20R_;
+	R.iBodyInv21 = iBodyInv21R_;
+	R.iBodyInv22 = iBodyInv22R_;
+
+	R.xLocalRigidBoundaryParticle = xLocalRigidBoundaryParticle_;
+	R.yLocalRigidBoundaryParticle = yLocalRigidBoundaryParticle_;
+	R.zLocalRigidBoundaryParticle = zLocalRigidBoundaryParticle_;
 }
 
 void SimBackend_CPU01::PackExportSnapshot(
@@ -482,7 +616,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 
 		Add(usage, MemUsageOf_Vector(idB_));
 		Add(usage, MemUsageOf_Vector(bodyIdB_));
-		Add(usage, MemUsageOf_Vector(rigidSampleIdxB_));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryParticleIdxB_));
 		Add(usage, MemUsageOf_Vector(xPosB_));
 		Add(usage, MemUsageOf_Vector(yPosB_));
 		Add(usage, MemUsageOf_Vector(zPosB_));
@@ -536,6 +670,50 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(workBufferIdF_));
 		Add(usage, MemUsageOf_Vector(workBufferIdB_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
+		Add(usage, MemUsageOf_Vector(idR_));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryParticleBeginR_));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryParticleCountR_));
+		Add(usage, MemUsageOf_Vector(xCMR_));
+		Add(usage, MemUsageOf_Vector(yCMR_));
+		Add(usage, MemUsageOf_Vector(zCMR_));
+		Add(usage, MemUsageOf_Vector(xVelR_));
+		Add(usage, MemUsageOf_Vector(yVelR_));
+		Add(usage, MemUsageOf_Vector(zVelR_));
+		Add(usage, MemUsageOf_Vector(xOmegaR_));
+		Add(usage, MemUsageOf_Vector(yOmegaR_));
+		Add(usage, MemUsageOf_Vector(zOmegaR_));
+		Add(usage, MemUsageOf_Vector(xAngMomR_));
+		Add(usage, MemUsageOf_Vector(yAngMomR_));
+		Add(usage, MemUsageOf_Vector(zAngMomR_));
+		Add(usage, MemUsageOf_Vector(xForceR_));
+		Add(usage, MemUsageOf_Vector(yForceR_));
+		Add(usage, MemUsageOf_Vector(zForceR_));
+		Add(usage, MemUsageOf_Vector(xTorqueR_));
+		Add(usage, MemUsageOf_Vector(yTorqueR_));
+		Add(usage, MemUsageOf_Vector(zTorqueR_));
+		Add(usage, MemUsageOf_Vector(a00R_));
+		Add(usage, MemUsageOf_Vector(a01R_));
+		Add(usage, MemUsageOf_Vector(a02R_));
+		Add(usage, MemUsageOf_Vector(a10R_));
+		Add(usage, MemUsageOf_Vector(a11R_));
+		Add(usage, MemUsageOf_Vector(a12R_));
+		Add(usage, MemUsageOf_Vector(a20R_));
+		Add(usage, MemUsageOf_Vector(a21R_));
+		Add(usage, MemUsageOf_Vector(a22R_));
+		Add(usage, MemUsageOf_Vector(massR_));
+		Add(usage, MemUsageOf_Vector(massInvR_));
+		Add(usage, MemUsageOf_Vector(iBodyInv00R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv01R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv02R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv10R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv11R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv12R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv20R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv21R_));
+		Add(usage, MemUsageOf_Vector(iBodyInv22R_));
+		Add(usage, MemUsageOf_Vector(xLocalRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_Vector(yLocalRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_Vector(zLocalRigidBoundaryParticle_));
 
 		// finalize
 		Set(record, memSpace, MemBucket::Misc, usage);
@@ -1032,46 +1210,169 @@ void SimBackend_CPU01::UpdateRigidBoundaryParticles()
 			continue;
 		}
 
-		const uint32_t sampleIdx = rigidSampleIdxB_[i];
-		if (bodyIdx >= rigidBodies_.N_ || sampleIdx >= rigidBodies_.sampleN_)
+		const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB_[i];
+		if (bodyIdx >= N_R_ || rigidBoundaryParticleIdx >= N_rigidBoundaryParticles_)
 		{
 			throw std::runtime_error("Invalid CPU01 rigid boundary attachment.");
 		}
-		const uint32_t sampleBegin = rigidBodies_.sampleBegin[bodyIdx];
-		const uint32_t sampleCount = rigidBodies_.sampleCount[bodyIdx];
+		const uint32_t rigidBoundaryParticleBegin = rigidBoundaryParticleBeginR_[bodyIdx];
+		const uint32_t rigidBoundaryParticleCount = rigidBoundaryParticleCountR_[bodyIdx];
 
 		// TODO: gate behind debug compiler flag?
-		if (sampleBegin > rigidBodies_.sampleN_ || sampleCount > rigidBodies_.sampleN_ - sampleBegin)
+		if (rigidBoundaryParticleBegin > N_rigidBoundaryParticles_ ||
+			rigidBoundaryParticleCount > N_rigidBoundaryParticles_ - rigidBoundaryParticleBegin)
 		{
-			throw std::runtime_error("Invalid CPU01 rigid boundary sample range.");
+			throw std::runtime_error("Invalid CPU01 rigid boundary particle range.");
 		}
-		if (sampleIdx < sampleBegin || sampleIdx >= sampleBegin + sampleCount)
+		if (rigidBoundaryParticleIdx < rigidBoundaryParticleBegin || rigidBoundaryParticleIdx >= rigidBoundaryParticleBegin + rigidBoundaryParticleCount)
 		{
-			throw std::runtime_error("CPU01 rigid boundary sample belongs to a different body.");
+			throw std::runtime_error("CPU01 rigid boundary particle belongs to a different body.");
 		}
 
-		const float lx = rigidBodies_.xLocalB[sampleIdx];
-		const float ly = rigidBodies_.yLocalB[sampleIdx];
-		const float lz = rigidBodies_.zLocalB[sampleIdx];
+		const float lx = xLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+		const float ly = yLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+		const float lz = zLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
 
-		const float rx = std::fmaf(rigidBodies_.a00[bodyIdx], lx,
-			std::fmaf(rigidBodies_.a01[bodyIdx], ly, rigidBodies_.a02[bodyIdx] * lz));
-		const float ry = std::fmaf(rigidBodies_.a10[bodyIdx], lx,
-			std::fmaf(rigidBodies_.a11[bodyIdx], ly, rigidBodies_.a12[bodyIdx] * lz));
-		const float rz = std::fmaf(rigidBodies_.a20[bodyIdx], lx,
-			std::fmaf(rigidBodies_.a21[bodyIdx], ly, rigidBodies_.a22[bodyIdx] * lz));
+		const float rx = std::fmaf(a00R_[bodyIdx], lx,
+			std::fmaf(a01R_[bodyIdx], ly, a02R_[bodyIdx] * lz));
+		const float ry = std::fmaf(a10R_[bodyIdx], lx,
+			std::fmaf(a11R_[bodyIdx], ly, a12R_[bodyIdx] * lz));
+		const float rz = std::fmaf(a20R_[bodyIdx], lx,
+			std::fmaf(a21R_[bodyIdx], ly, a22R_[bodyIdx] * lz));
 
-		xPosB_[i] = rigidBodies_.xCM[bodyIdx] + rx;
-		yPosB_[i] = rigidBodies_.yCM[bodyIdx] + ry;
-		zPosB_[i] = rigidBodies_.zCM[bodyIdx] + rz;
+		xPosB_[i] = xCMR_[bodyIdx] + rx;
+		yPosB_[i] = yCMR_[bodyIdx] + ry;
+		zPosB_[i] = zCMR_[bodyIdx] + rz;
 
-		const float wx = rigidBodies_.xOmega[bodyIdx];
-		const float wy = rigidBodies_.yOmega[bodyIdx];
-		const float wz = rigidBodies_.zOmega[bodyIdx];
+		const float wx = xOmegaR_[bodyIdx];
+		const float wy = yOmegaR_[bodyIdx];
+		const float wz = zOmegaR_[bodyIdx];
 
-		xVelB_[i] = rigidBodies_.xVel[bodyIdx] + wy * rz - wz * ry;
-		yVelB_[i] = rigidBodies_.yVel[bodyIdx] + wz * rx - wx * rz;
-		zVelB_[i] = rigidBodies_.zVel[bodyIdx] + wx * ry - wy * rx;
+		xVelB_[i] = xVelR_[bodyIdx] + wy * rz - wz * ry;
+		yVelB_[i] = yVelR_[bodyIdx] + wz * rx - wx * rz;
+		zVelB_[i] = zVelR_[bodyIdx] + wx * ry - wy * rx;
+	}
+}
+
+void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
+{
+	std::fill(xForceR_.begin(), xForceR_.end(), 0.0f);
+	std::fill(yForceR_.begin(), yForceR_.end(), 0.0f);
+	std::fill(zForceR_.begin(), zForceR_.end(), 0.0f);
+	std::fill(xTorqueR_.begin(), xTorqueR_.end(), 0.0f);
+	std::fill(yTorqueR_.begin(), yTorqueR_.end(), 0.0f);
+	std::fill(zTorqueR_.begin(), zTorqueR_.end(), 0.0f);
+
+	// gravity acts at the center of mass
+	for (uint32_t bodyIdx = 0; bodyIdx < N_R_; bodyIdx++)
+	{
+		if (massInvR_[bodyIdx] <= 0.0f) { continue; }
+
+		const float mass = massR_[bodyIdx];
+		if (mass <= 0.0f) { continue; }
+
+		xForceR_[bodyIdx] += mass * params.gravity.x;
+		yForceR_[bodyIdx] += mass * params.gravity.y;
+		zForceR_[bodyIdx] += mass * params.gravity.z;
+	}
+}
+
+void SimBackend_CPU01::IntegrateRigidBodies(const float timeStep)
+{
+	// TODO: parallelize with TBB?
+	for (uint32_t bodyIdx = 0; bodyIdx < N_R_; bodyIdx++)
+	{
+		const float massInv = massInvR_[bodyIdx];
+
+		xVelR_[bodyIdx] += timeStep * xForceR_[bodyIdx] * massInv;
+		yVelR_[bodyIdx] += timeStep * yForceR_[bodyIdx] * massInv;
+		zVelR_[bodyIdx] += timeStep * zForceR_[bodyIdx] * massInv;
+
+		xCMR_[bodyIdx] += timeStep * xVelR_[bodyIdx];
+		yCMR_[bodyIdx] += timeStep * yVelR_[bodyIdx];
+		zCMR_[bodyIdx] += timeStep * zVelR_[bodyIdx];
+
+		xAngMomR_[bodyIdx] += timeStep * xTorqueR_[bodyIdx];
+		yAngMomR_[bodyIdx] += timeStep * yTorqueR_[bodyIdx];
+		zAngMomR_[bodyIdx] += timeStep * zTorqueR_[bodyIdx];
+
+		const float a00 = a00R_[bodyIdx], a01 = a01R_[bodyIdx], a02 = a02R_[bodyIdx];
+		const float a10 = a10R_[bodyIdx], a11 = a11R_[bodyIdx], a12 = a12R_[bodyIdx];
+		const float a20 = a20R_[bodyIdx], a21 = a21R_[bodyIdx], a22 = a22R_[bodyIdx];
+
+		const float b00 = iBodyInv00R_[bodyIdx], b01 = iBodyInv01R_[bodyIdx], b02 = iBodyInv02R_[bodyIdx];
+		const float b10 = iBodyInv10R_[bodyIdx], b11 = iBodyInv11R_[bodyIdx], b12 = iBodyInv12R_[bodyIdx];
+		const float b20 = iBodyInv20R_[bodyIdx], b21 = iBodyInv21R_[bodyIdx], b22 = iBodyInv22R_[bodyIdx];
+
+		const float t00 = a00 * b00 + a01 * b10 + a02 * b20;
+		const float t01 = a00 * b01 + a01 * b11 + a02 * b21;
+		const float t02 = a00 * b02 + a01 * b12 + a02 * b22;
+		const float t10 = a10 * b00 + a11 * b10 + a12 * b20;
+		const float t11 = a10 * b01 + a11 * b11 + a12 * b21;
+		const float t12 = a10 * b02 + a11 * b12 + a12 * b22;
+		const float t20 = a20 * b00 + a21 * b10 + a22 * b20;
+		const float t21 = a20 * b01 + a21 * b11 + a22 * b21;
+		const float t22 = a20 * b02 + a21 * b12 + a22 * b22;
+
+		const float i00 = t00 * a00 + t01 * a01 + t02 * a02;
+		const float i01 = t00 * a10 + t01 * a11 + t02 * a12;
+		const float i02 = t00 * a20 + t01 * a21 + t02 * a22;
+		const float i10 = t10 * a00 + t11 * a01 + t12 * a02;
+		const float i11 = t10 * a10 + t11 * a11 + t12 * a12;
+		const float i12 = t10 * a20 + t11 * a21 + t12 * a22;
+		const float i20 = t20 * a00 + t21 * a01 + t22 * a02;
+		const float i21 = t20 * a10 + t21 * a11 + t22 * a12;
+		const float i22 = t20 * a20 + t21 * a21 + t22 * a22;
+
+		const float lx = xAngMomR_[bodyIdx];
+		const float ly = yAngMomR_[bodyIdx];
+		const float lz = zAngMomR_[bodyIdx];
+		const float wx = std::fmaf(i00, lx, std::fmaf(i01, ly, i02 * lz));
+		const float wy = std::fmaf(i10, lx, std::fmaf(i11, ly, i12 * lz));
+		const float wz = std::fmaf(i20, lx, std::fmaf(i21, ly, i22 * lz));
+
+		xOmegaR_[bodyIdx] = wx;
+		yOmegaR_[bodyIdx] = wy;
+		zOmegaR_[bodyIdx] = wz;
+
+		a00R_[bodyIdx] += timeStep * (-wz * a10 + wy * a20);
+		a01R_[bodyIdx] += timeStep * (-wz * a11 + wy * a21);
+		a02R_[bodyIdx] += timeStep * (-wz * a12 + wy * a22);
+		a10R_[bodyIdx] += timeStep * ( wz * a00 - wx * a20);
+		a11R_[bodyIdx] += timeStep * ( wz * a01 - wx * a21);
+		a12R_[bodyIdx] += timeStep * ( wz * a02 - wx * a22);
+		a20R_[bodyIdx] += timeStep * (-wy * a00 + wx * a10);
+		a21R_[bodyIdx] += timeStep * (-wy * a01 + wx * a11);
+		a22R_[bodyIdx] += timeStep * (-wy * a02 + wx * a12);
+
+		// use Gram-Schmidt algo on orientation columns
+		float b1x = a00R_[bodyIdx];
+		float b1y = a10R_[bodyIdx];
+		float b1z = a20R_[bodyIdx];
+		Normalize3(b1x, b1y, b1z);
+
+		float b2x = a01R_[bodyIdx];
+		float b2y = a11R_[bodyIdx];
+		float b2z = a21R_[bodyIdx];
+		const float b1DotA2 = Dot3(b1x, b1y, b1z, b2x, b2y, b2z);
+		b2x -= b1DotA2 * b1x;
+		b2y -= b1DotA2 * b1y;
+		b2z -= b1DotA2 * b1z;
+		Normalize3(b2x, b2y, b2z);
+
+		float b3x = a02R_[bodyIdx];
+		float b3y = a12R_[bodyIdx];
+		float b3z = a22R_[bodyIdx];
+		const float b1DotA3 = Dot3(b1x, b1y, b1z, b3x, b3y, b3z);
+		const float b2DotA3 = Dot3(b2x, b2y, b2z, b3x, b3y, b3z);
+		b3x -= b1DotA3 * b1x + b2DotA3 * b2x;
+		b3y -= b1DotA3 * b1y + b2DotA3 * b2y;
+		b3z -= b1DotA3 * b1z + b2DotA3 * b2z;
+		Normalize3(b3x, b3y, b3z);
+
+		a00R_[bodyIdx] = b1x; a01R_[bodyIdx] = b2x; a02R_[bodyIdx] = b3x;
+		a10R_[bodyIdx] = b1y; a11R_[bodyIdx] = b2y; a12R_[bodyIdx] = b3y;
+		a20R_[bodyIdx] = b1z; a21R_[bodyIdx] = b2z; a22R_[bodyIdx] = b3z;
 	}
 }
 

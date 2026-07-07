@@ -24,7 +24,6 @@ namespace GPU01
 	__constant__ float c_restDensity;
 	__constant__ float c_restDensitySquInv;
 	__constant__ float c_massF;
-	__constant__ float c_massB;
 	__constant__ float c_pressGamma;
 	__constant__ float c_jacobiOmega;
 	__constant__ float c_viscosityF;
@@ -52,7 +51,6 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_restDensity, &params.restDensity, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInv, &restDensitySquInv, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_massF, &params.massF, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_massB, &params.massB, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_pressGamma, &params.pressGamma, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_jacobiOmega, &params.jacobiOmega, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_viscosityF, &params.viscosityF, sizeof(float)));
@@ -286,6 +284,9 @@ namespace GPU01
 		const float* __restrict__ xVelF,
 		const float* __restrict__ yVelF,
 		const float* __restrict__ zVelF,
+		const float* __restrict__ xVelB,
+		const float* __restrict__ yVelB,
+		const float* __restrict__ zVelB,
 		const float* __restrict__ densityF,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
@@ -385,6 +386,9 @@ namespace GPU01
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
+			const float dvx = vxi - xVelB[j];
+			const float dvy = vyi - yVelB[j];
+			const float dvz = vzi - zVelB[j];
 
 			// kernel gradient
 			float xkg = 0.0f;
@@ -394,7 +398,7 @@ namespace GPU01
 
 			// viscosity acc contribution from boundary neighbor j
 			const float accViscCoeff = volB[j]
-									 * fmaf(vxi, dx, fmaf(vyi, dy, vzi * dz))
+									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
 									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
 									 + 0.01f * c_sizeF * c_sizeF);
 
@@ -435,6 +439,9 @@ namespace GPU01
 		const float* __restrict__ xVelPredF,
 		const float* __restrict__ yVelPredF,
 		const float* __restrict__ zVelPredF,
+		const float* __restrict__ xVelB,
+		const float* __restrict__ yVelB,
+		const float* __restrict__ zVelB,
 		const float* __restrict__ densityF,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
@@ -535,6 +542,9 @@ namespace GPU01
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
+			const float dvpx = vpxi - xVelB[j];
+			const float dvpy = vpyi - yVelB[j];
+			const float dvpz = vpzi - zVelB[j];
 
 			// kernel gradient
 			float xkg = 0.0f;
@@ -543,9 +553,8 @@ namespace GPU01
 			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
 			// source term contribution from boundary neighbor
-			// TODO: subtract actual boundary velocity when adding non-static boundaries?
 			const float psiBj = psiB[j];
-			tmp_sourceTermB += psiBj * fmaf(vpxi, xkg, fmaf(vpyi, ykg, vpzi * zkg));
+			tmp_sourceTermB += psiBj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
 
 			xCTermB += psiBj * xkg;
 			yCTermB += psiBj * ykg;
@@ -923,6 +932,7 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* volB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
+		const float* xVelB, const float* yVelB, const float* zVelB,
 		const float* densityF,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
@@ -949,7 +959,10 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, volB, xVelF, yVelF, zVelF, densityF,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, volB,
+			xVelF, yVelF, zVelF,
+			xVelB, yVelB, zVelB,
+			densityF,
 			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
 			nbrChunkFormatFF, nbrChunkFormatFB,
@@ -966,6 +979,7 @@ namespace GPU01
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* psiB,
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
+		const float* xVelB, const float* yVelB, const float* zVelB,
 		const float* densityF,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
@@ -994,7 +1008,10 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, psiB, xVelPredF, yVelPredF, zVelPredF, densityF,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, psiB,
+			xVelPredF, yVelPredF, zVelPredF,
+			xVelB, yVelB, zVelB,
+			densityF,
 			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
 			nbrChunkFormatFF, nbrChunkFormatFB,

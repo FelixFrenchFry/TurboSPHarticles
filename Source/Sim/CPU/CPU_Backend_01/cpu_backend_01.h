@@ -10,7 +10,6 @@
 #include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Sim/Core/backend_sim.h"
 #include "Source/Sim/Core/parameters_sim.h"
-#include "Source/Sim/Core/rigid_bodies.h"
 #include "neighbor_lists.h"
 
 
@@ -86,11 +85,12 @@ namespace Sim
 		void ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 
 		void UpdateRigidBoundaryParticles();
+		void ClearRigidForcesAndAddGravity(const SimParams& params);
+		void IntegrateRigidBodies(float timeStep);
 
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;
 		Bench::BenchmarksTracker& benchmarksTracker_;
-		Sim::RigidBodyMgr rigidBodyMgr_;
 
 		// neighbor search
 		std::unique_ptr<I_NeighborSearch> neighborSearch_;
@@ -123,14 +123,45 @@ namespace Sim
 		// boundary particles
 		std::vector<uint32_t> idB_;
 		std::vector<uint32_t> bodyIdB_;
-		std::vector<uint32_t> rigidSampleIdxB_;
+		std::vector<uint32_t> rigidBoundaryParticleIdxB_;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> xVelB_, yVelB_, zVelB_;
 		std::vector<float> volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
 		// rigid bodies
-		Sync::RigidBodies rigidBodies_;
+		uint32_t N_R_ = 0;
+		uint32_t N_rigidBoundaryParticles_ = 0;
+		std::vector<uint32_t> idR_; // per-rigid-body ID
+		std::vector<uint32_t> rigidBoundaryParticleBeginR_; // first rigid boundary particle
+		std::vector<uint32_t> rigidBoundaryParticleCountR_; // number of rigid boundary particles
+
+		// body state (in world frame)
+		std::vector<float> xCMR_, yCMR_, zCMR_; // center of mass
+		std::vector<float> xVelR_, yVelR_, zVelR_; // linear velocity
+		std::vector<float> xOmegaR_, yOmegaR_, zOmegaR_; // angular velocity
+		std::vector<float> xAngMomR_, yAngMomR_, zAngMomR_; // angular momentum
+		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated from rigid boundary particles
+		std::vector<float> xTorqueR_, yTorqueR_, zTorqueR_; // torque accumulated from rigid boundary particles
+
+		// orientation matrix A, stored row-major
+		std::vector<float> a00R_, a01R_, a02R_;
+		std::vector<float> a10R_, a11R_, a12R_;
+		std::vector<float> a20R_, a21R_, a22R_;
+
+		// mass
+		std::vector<float> massR_;
+		std::vector<float> massInvR_;
+
+		// inverse inertia in body frame, stored row-major
+		std::vector<float> iBodyInv00R_, iBodyInv01R_, iBodyInv02R_;
+		std::vector<float> iBodyInv10R_, iBodyInv11R_, iBodyInv12R_;
+		std::vector<float> iBodyInv20R_, iBodyInv21R_, iBodyInv22R_;
+
+		// local rigid boundary particle offsets from center of mass
+		std::vector<float> xLocalRigidBoundaryParticle_;
+		std::vector<float> yLocalRigidBoundaryParticle_;
+		std::vector<float> zLocalRigidBoundaryParticle_;
 
 		// optional distributed integration filtering
 		bool useActiveFluidParticleLocalIdxs_ = false;

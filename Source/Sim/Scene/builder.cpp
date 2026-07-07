@@ -668,12 +668,12 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	auto& R = dst.rigidBodies;
 
 	const uint32_t bodyIdx = R.N_;
-	const uint32_t sampleBase = R.sampleN_;
+	const uint32_t rigidBoundaryParticleBase = R.N_rigidBoundaryParticles_;
 	const uint32_t N_base = B.N_;
 	const uint32_t N_add = N_keep;
 
 	dst.ResizeRigidBodies(bodyIdx + 1);
-	R.resizeSamples(sampleBase + N_add);
+	R.resizeRigidBoundaryParticles(rigidBoundaryParticleBase + N_add);
 	dst.ResizeBoundary(N_base + N_add);
 
 	const glm::vec3 center = box.origin
@@ -689,8 +689,8 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	R.xCM[bodyIdx] = center.x;
 	R.yCM[bodyIdx] = center.y;
 	R.zCM[bodyIdx] = center.z;
-	R.sampleBegin[bodyIdx] = sampleBase;
-	R.sampleCount[bodyIdx] = N_add;
+	R.rigidBoundaryParticleBegin[bodyIdx] = rigidBoundaryParticleBase;
+	R.rigidBoundaryParticleCount[bodyIdx] = N_add;
 	R.mass[bodyIdx] = bodyMass;
 	R.massInv[bodyIdx] = bodyMassInv;
 
@@ -714,7 +714,7 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
 
 	uint32_t idx = N_base;
-	uint32_t sampleIdx = sampleBase;
+	uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleBase;
 
 	for (uint32_t kw = 0; kw < N_w; kw++) // loop over depth
 	{
@@ -755,7 +755,7 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 
 				B.id[idx] = idx;
 				B.bodyId[idx] = bodyIdx;
-				B.rigidSampleIdx[idx] = sampleIdx;
+				B.rigidBoundaryParticleIdx[idx] = rigidBoundaryParticleIdx;
 				B.xPos[idx] = pos.x;
 				B.yPos[idx] = pos.y;
 				B.zPos[idx] = pos.z;
@@ -763,18 +763,18 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 				B.yVel[idx] = 0.0f;
 				B.zVel[idx] = 0.0f;
 
-				R.xLocalB[sampleIdx] = Dot(rel, box.uHat);
-				R.yLocalB[sampleIdx] = Dot(rel, box.vHat);
-				R.zLocalB[sampleIdx] = Dot(rel, box.wHat);
+				R.xLocalRigidBoundaryParticle[rigidBoundaryParticleIdx] = Dot(rel, box.uHat);
+				R.yLocalRigidBoundaryParticle[rigidBoundaryParticleIdx] = Dot(rel, box.vHat);
+				R.zLocalRigidBoundaryParticle[rigidBoundaryParticleIdx] = Dot(rel, box.wHat);
 
 				idx++;
-				sampleIdx++;
+				rigidBoundaryParticleIdx++;
 			}
 		}
 	}
 
 	assert(idx == (N_base + N_add));
-	assert(sampleIdx == (sampleBase + N_add));
+	assert(rigidBoundaryParticleIdx == (rigidBoundaryParticleBase + N_add));
 	ComputeBoundaryCoefficients(dst.boundaryParticles, params, N_base, N_base + N_add);
 
 	return bodyIdx;

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <limits>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 
@@ -16,7 +17,7 @@
 namespace Sync
 {
 	inline constexpr uint32_t InvalidRigidBodyId = std::numeric_limits<uint32_t>::max();
-	inline constexpr uint32_t InvalidRigidSampleIdx = std::numeric_limits<uint32_t>::max();
+	inline constexpr uint32_t InvalidRigidBoundaryParticleIdx = std::numeric_limits<uint32_t>::max();
 
 	// view into fluid particle data
 	// (non-owning, for read-only access)
@@ -47,7 +48,7 @@ namespace Sync
 		// fields
 		std::span<uint32_t> id;
 		std::span<uint32_t> bodyId;
-		std::span<uint32_t> rigidSampleIdx;
+		std::span<uint32_t> rigidBoundaryParticleIdx;
 		std::span<float> xPos, yPos, zPos;
 		std::span<float> xVel, yVel, zVel;
 		std::span<float> volB;
@@ -237,7 +238,7 @@ namespace Sync
 		uint32_t N_ = 0;
 		std::vector<uint32_t> id;
 		std::vector<uint32_t> bodyId;
-		std::vector<uint32_t> rigidSampleIdx;
+		std::vector<uint32_t> rigidBoundaryParticleIdx;
 
 		// positions
 		std::vector<float> xPos;
@@ -258,7 +259,7 @@ namespace Sync
 		{
 			id.reserve(N);
 			bodyId.reserve(N);
-			rigidSampleIdx.reserve(N);
+			rigidBoundaryParticleIdx.reserve(N);
 
 			xPos.reserve(N);
 			yPos.reserve(N);
@@ -279,7 +280,7 @@ namespace Sync
 
 			id.resize(N_);
 			bodyId.resize(N_, InvalidRigidBodyId);
-			rigidSampleIdx.resize(N_, InvalidRigidSampleIdx);
+			rigidBoundaryParticleIdx.resize(N_, InvalidRigidBoundaryParticleIdx);
 
 			xPos.resize(N_);
 			yPos.resize(N_);
@@ -299,7 +300,7 @@ namespace Sync
 		{
 			id.shrink_to_fit();
 			bodyId.shrink_to_fit();
-			rigidSampleIdx.shrink_to_fit();
+			rigidBoundaryParticleIdx.shrink_to_fit();
 
 			xPos.shrink_to_fit();
 			yPos.shrink_to_fit();
@@ -335,9 +336,9 @@ namespace Sync
 			{
 				bodyId.assign(N_, InvalidRigidBodyId);
 			}
-			if (rigidSampleIdx.size() != static_cast<uint32_t>(N_))
+			if (rigidBoundaryParticleIdx.size() != static_cast<uint32_t>(N_))
 			{
-				rigidSampleIdx.assign(N_, InvalidRigidSampleIdx);
+				rigidBoundaryParticleIdx.assign(N_, InvalidRigidBoundaryParticleIdx);
 			}
 			if (xVel.size() != static_cast<uint32_t>(N_))
 			{
@@ -378,7 +379,7 @@ namespace Sync
 
 				.id = std::span<uint32_t>(id),
 				.bodyId = std::span<uint32_t>(bodyId),
-				.rigidSampleIdx = std::span<uint32_t>(rigidSampleIdx),
+				.rigidBoundaryParticleIdx = std::span<uint32_t>(rigidBoundaryParticleIdx),
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
 				.zPos = std::span<float>(zPos),
@@ -403,18 +404,16 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		uint32_t sampleN_ = 0;
+		uint32_t N_rigidBoundaryParticles_ = 0;
 		std::vector<uint32_t> id; // per-rigid-body ID
-		std::vector<uint32_t> sampleBegin; // first rigid boundary sample
-		std::vector<uint32_t> sampleCount; // number of rigid boundary samples
+		std::vector<uint32_t> rigidBoundaryParticleBegin; // first rigid boundary particle
+		std::vector<uint32_t> rigidBoundaryParticleCount; // number of rigid boundary particles
 
 		// body state (in world frame)
 		std::vector<float> xCM, yCM, zCM; // center of mass
 		std::vector<float> xVel, yVel, zVel; // linear velocity
 		std::vector<float> xOmega, yOmega, zOmega; // angular velocity
 		std::vector<float> xAngMom, yAngMom, zAngMom; // angular momentum
-		std::vector<float> xForce, yForce, zForce; // force accumulated from rigid boundary samples
-		std::vector<float> xTorque, yTorque, zTorque; // torque accumulated from rigid boundary samples
 
 		// orientation matrix A, stored row-major
 		std::vector<float> a00, a01, a02;
@@ -430,21 +429,19 @@ namespace Sync
 		std::vector<float> iBodyInv10, iBodyInv11, iBodyInv12;
 		std::vector<float> iBodyInv20, iBodyInv21, iBodyInv22;
 
-		// local rigid boundary samples offset from center of mass
-		std::vector<float> xLocalB, yLocalB, zLocalB;
+		// local rigid boundary particle offsets from center of mass
+		std::vector<float> xLocalRigidBoundaryParticle, yLocalRigidBoundaryParticle, zLocalRigidBoundaryParticle;
 
 		void reserveAll(uint32_t N)
 		{
 			id.reserve(N);
-			sampleBegin.reserve(N);
-			sampleCount.reserve(N);
+			rigidBoundaryParticleBegin.reserve(N);
+			rigidBoundaryParticleCount.reserve(N);
 
 			xCM.reserve(N); yCM.reserve(N); zCM.reserve(N);
 			xVel.reserve(N); yVel.reserve(N); zVel.reserve(N);
 			xOmega.reserve(N); yOmega.reserve(N); zOmega.reserve(N);
 			xAngMom.reserve(N); yAngMom.reserve(N); zAngMom.reserve(N);
-			xForce.reserve(N); yForce.reserve(N); zForce.reserve(N);
-			xTorque.reserve(N); yTorque.reserve(N); zTorque.reserve(N);
 
 			a00.reserve(N); a01.reserve(N); a02.reserve(N);
 			a10.reserve(N); a11.reserve(N); a12.reserve(N);
@@ -462,15 +459,13 @@ namespace Sync
 			N_ = N;
 
 			id.resize(N_);
-			sampleBegin.resize(N_);
-			sampleCount.resize(N_);
+			rigidBoundaryParticleBegin.resize(N_);
+			rigidBoundaryParticleCount.resize(N_);
 
 			xCM.resize(N_); yCM.resize(N_); zCM.resize(N_);
 			xVel.resize(N_); yVel.resize(N_); zVel.resize(N_);
 			xOmega.resize(N_); yOmega.resize(N_); zOmega.resize(N_);
 			xAngMom.resize(N_); yAngMom.resize(N_); zAngMom.resize(N_);
-			xForce.resize(N_); yForce.resize(N_); zForce.resize(N_);
-			xTorque.resize(N_); yTorque.resize(N_); zTorque.resize(N_);
 
 			a00.resize(N_, 1.0f); a01.resize(N_); a02.resize(N_);
 			a10.resize(N_); a11.resize(N_, 1.0f); a12.resize(N_);
@@ -484,33 +479,31 @@ namespace Sync
 			iBodyInv20.resize(N_); iBodyInv21.resize(N_); iBodyInv22.resize(N_);
 		}
 
-		void reserveSamples(uint32_t N)
+		void reserveRigidBoundaryParticles(uint32_t N)
 		{
-			xLocalB.reserve(N);
-			yLocalB.reserve(N);
-			zLocalB.reserve(N);
+			xLocalRigidBoundaryParticle.reserve(N);
+			yLocalRigidBoundaryParticle.reserve(N);
+			zLocalRigidBoundaryParticle.reserve(N);
 		}
 
-		void resizeSamples(uint32_t N)
+		void resizeRigidBoundaryParticles(uint32_t N)
 		{
-			sampleN_ = N;
-			xLocalB.resize(sampleN_);
-			yLocalB.resize(sampleN_);
-			zLocalB.resize(sampleN_);
+			N_rigidBoundaryParticles_ = N;
+			xLocalRigidBoundaryParticle.resize(N_rigidBoundaryParticles_);
+			yLocalRigidBoundaryParticle.resize(N_rigidBoundaryParticles_);
+			zLocalRigidBoundaryParticle.resize(N_rigidBoundaryParticles_);
 		}
 
 		void shrinkToFitAll()
 		{
 			id.shrink_to_fit();
-			sampleBegin.shrink_to_fit();
-			sampleCount.shrink_to_fit();
+			rigidBoundaryParticleBegin.shrink_to_fit();
+			rigidBoundaryParticleCount.shrink_to_fit();
 
 			xCM.shrink_to_fit(); yCM.shrink_to_fit(); zCM.shrink_to_fit();
 			xVel.shrink_to_fit(); yVel.shrink_to_fit(); zVel.shrink_to_fit();
 			xOmega.shrink_to_fit(); yOmega.shrink_to_fit(); zOmega.shrink_to_fit();
 			xAngMom.shrink_to_fit(); yAngMom.shrink_to_fit(); zAngMom.shrink_to_fit();
-			xForce.shrink_to_fit(); yForce.shrink_to_fit(); zForce.shrink_to_fit();
-			xTorque.shrink_to_fit(); yTorque.shrink_to_fit(); zTorque.shrink_to_fit();
 
 			a00.shrink_to_fit(); a01.shrink_to_fit(); a02.shrink_to_fit();
 			a10.shrink_to_fit(); a11.shrink_to_fit(); a12.shrink_to_fit();
@@ -522,9 +515,9 @@ namespace Sync
 			iBodyInv10.shrink_to_fit(); iBodyInv11.shrink_to_fit(); iBodyInv12.shrink_to_fit();
 			iBodyInv20.shrink_to_fit(); iBodyInv21.shrink_to_fit(); iBodyInv22.shrink_to_fit();
 
-			xLocalB.shrink_to_fit();
-			yLocalB.shrink_to_fit();
-			zLocalB.shrink_to_fit();
+			xLocalRigidBoundaryParticle.shrink_to_fit();
+			yLocalRigidBoundaryParticle.shrink_to_fit();
+			zLocalRigidBoundaryParticle.shrink_to_fit();
 		}
 
 		void assignSequentialIds()
@@ -584,6 +577,83 @@ namespace Sync
 		{
 			const auto current = static_cast<uint32_t>(boundaryParticles.xPos.size());
 			boundaryParticles.reserveAll(current + add);
+		}
+
+		// validates rigid boundary ownership before backend hot loops perform updates
+		void ValidateRigidBoundaryAttachments() const
+		{
+			const auto& B = boundaryParticles;
+			const auto& R = rigidBodies;
+
+			if (B.bodyId.size() != static_cast<size_t>(B.N_) ||
+				B.rigidBoundaryParticleIdx.size() != static_cast<size_t>(B.N_))
+			{
+				throw std::runtime_error("Invalid rigid boundary attachment array size.");
+			}
+
+			if (R.rigidBoundaryParticleBegin.size() != static_cast<size_t>(R.N_) ||
+				R.rigidBoundaryParticleCount.size() != static_cast<size_t>(R.N_))
+			{
+				throw std::runtime_error("Invalid rigid body boundary range array size.");
+			}
+
+			if (R.xLocalRigidBoundaryParticle.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
+				R.yLocalRigidBoundaryParticle.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
+				R.zLocalRigidBoundaryParticle.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_))
+			{
+				throw std::runtime_error("Invalid rigid boundary particle local-offset array size.");
+			}
+
+			uint32_t nextRigidBoundaryParticleIdx = 0;
+			for (uint32_t bodyIdx = 0; bodyIdx < R.N_; bodyIdx++)
+			{
+				const uint32_t begin = R.rigidBoundaryParticleBegin[bodyIdx];
+				const uint32_t count = R.rigidBoundaryParticleCount[bodyIdx];
+				if (begin != nextRigidBoundaryParticleIdx)
+				{
+					throw std::runtime_error("Rigid body boundary particle ranges are not contiguous.");
+				}
+				if (begin > R.N_rigidBoundaryParticles_ ||
+					count > R.N_rigidBoundaryParticles_ - begin)
+				{
+					throw std::runtime_error("Invalid rigid body boundary particle range.");
+				}
+
+				nextRigidBoundaryParticleIdx = begin + count;
+			}
+
+			if (nextRigidBoundaryParticleIdx != R.N_rigidBoundaryParticles_)
+			{
+				throw std::runtime_error("Rigid body boundary particle ranges do not cover all local offsets.");
+			}
+
+			for (uint32_t i = 0; i < B.N_; i++)
+			{
+				const uint32_t bodyIdx = B.bodyId[i];
+				const uint32_t rigidBoundaryParticleIdx = B.rigidBoundaryParticleIdx[i];
+
+				if (bodyIdx == InvalidRigidBodyId)
+				{
+					if (rigidBoundaryParticleIdx != InvalidRigidBoundaryParticleIdx)
+					{
+						throw std::runtime_error("Static boundary particle has a rigid boundary particle index.");
+					}
+					continue;
+				}
+
+				if (bodyIdx >= R.N_ ||
+					rigidBoundaryParticleIdx >= R.N_rigidBoundaryParticles_)
+				{
+					throw std::runtime_error("Invalid rigid boundary attachment.");
+				}
+
+				const uint32_t begin = R.rigidBoundaryParticleBegin[bodyIdx];
+				const uint32_t end = begin + R.rigidBoundaryParticleCount[bodyIdx];
+				if (rigidBoundaryParticleIdx < begin || rigidBoundaryParticleIdx >= end)
+				{
+					throw std::runtime_error("Rigid boundary particle belongs to a different body.");
+				}
+			}
 		}
 
 		// getters for views into the particle data

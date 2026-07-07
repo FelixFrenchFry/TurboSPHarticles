@@ -305,6 +305,10 @@ if(ENABLE_VIS)
         IMGUI_IMPL_OPENGL_LOADER_GLAD
         TSP_CONFIG_DIR=\"${TSP_CONFIG_DIR}\"
     )
+    if(ENABLE_CUDA)
+        # final executables perform CUDA device linking
+        set_target_properties(TSP_V PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+    endif()
 endif()
 
 # --- [ distributed library (optional add-on) ] ---
