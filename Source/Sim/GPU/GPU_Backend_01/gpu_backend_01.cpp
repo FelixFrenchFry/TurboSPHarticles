@@ -127,7 +127,7 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	auto& R = src.rigidBodies;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
-	N_R_ = R.N_;
+	N_rigidBodies_ = R.N_;
 	N_rigidBoundaryParticles_ = R.N_rigidBoundaryParticles_;
 	simStep_ = src.step;
 	simTime_ = src.time;
@@ -139,11 +139,11 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	src.ValidateRigidBoundaryAttachments();
 
 	EnsureCapacity(N_F_, N_B_);
-	EnsureRigidCapacity(N_R_, N_rigidBoundaryParticles_);
+	EnsureRigidCapacity(N_rigidBodies_, N_rigidBoundaryParticles_);
 
 	const bool hasF = N_F_ > 0;
 	const bool hasB = N_B_ > 0;
-	const bool hasR = N_R_ > 0;
+	const bool hasRigidBodies = N_rigidBodies_ > 0;
 	const bool hasRigidBoundaryParticles = N_rigidBoundaryParticles_ > 0;
 
 	// copy fluid particle data to device
@@ -186,47 +186,47 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	}
 
 	// copy rigid body data to device
-	if (hasR)
+	if (hasRigidBodies)
 	{
-		GPU::Copy_HostToDevice(d_idR_.Data(), R.id.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_rigidBoundaryParticleBeginR_.Data(), R.rigidBoundaryParticleBegin.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_rigidBoundaryParticleCountR_.Data(), R.rigidBoundaryParticleCount.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_idR_.Data(), R.id.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_rigidBoundaryParticleBeginR_.Data(), R.rigidBoundaryParticleBegin.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_rigidBoundaryParticleCountR_.Data(), R.rigidBoundaryParticleCount.data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_HostToDevice(d_xCMR_.Data(), R.xCM.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_yCMR_.Data(), R.yCM.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_zCMR_.Data(), R.zCM.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_xVelR_.Data(), R.xVel.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_yVelR_.Data(), R.yVel.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_zVelR_.Data(), R.zVel.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_xOmegaR_.Data(), R.xOmega.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_yOmegaR_.Data(), R.yOmega.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_zOmegaR_.Data(), R.zOmega.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_xAngMomR_.Data(), R.xAngMom.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_yAngMomR_.Data(), R.yAngMom.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_zAngMomR_.Data(), R.zAngMom.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_xCMR_.Data(), R.xCM.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_yCMR_.Data(), R.yCM.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_zCMR_.Data(), R.zCM.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_xVelR_.Data(), R.xVel.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_yVelR_.Data(), R.yVel.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_zVelR_.Data(), R.zVel.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_xOmegaR_.Data(), R.xOmega.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_yOmegaR_.Data(), R.yOmega.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_zOmegaR_.Data(), R.zOmega.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_xAngMomR_.Data(), R.xAngMom.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_yAngMomR_.Data(), R.yAngMom.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_zAngMomR_.Data(), R.zAngMom.data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_HostToDevice(d_a00R_.Data(), R.a00.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a01R_.Data(), R.a01.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a02R_.Data(), R.a02.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a10R_.Data(), R.a10.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a11R_.Data(), R.a11.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a12R_.Data(), R.a12.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a20R_.Data(), R.a20.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a21R_.Data(), R.a21.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_a22R_.Data(), R.a22.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_a00R_.Data(), R.a00.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a01R_.Data(), R.a01.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a02R_.Data(), R.a02.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a10R_.Data(), R.a10.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a11R_.Data(), R.a11.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a12R_.Data(), R.a12.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a20R_.Data(), R.a20.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a21R_.Data(), R.a21.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_a22R_.Data(), R.a22.data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_HostToDevice(d_massR_.Data(), R.mass.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_massInvR_.Data(), R.massInv.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_massR_.Data(), R.mass.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_massInvR_.Data(), R.massInv.data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_HostToDevice(d_iBodyInv00R_.Data(), R.iBodyInv00.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv01R_.Data(), R.iBodyInv01.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv02R_.Data(), R.iBodyInv02.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv10R_.Data(), R.iBodyInv10.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv11R_.Data(), R.iBodyInv11.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv12R_.Data(), R.iBodyInv12.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv20R_.Data(), R.iBodyInv20.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv21R_.Data(), R.iBodyInv21.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_iBodyInv22R_.Data(), R.iBodyInv22.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv00R_.Data(), R.iBodyInv00.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv01R_.Data(), R.iBodyInv01.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv02R_.Data(), R.iBodyInv02.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv10R_.Data(), R.iBodyInv10.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv11R_.Data(), R.iBodyInv11.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv12R_.Data(), R.iBodyInv12.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv20R_.Data(), R.iBodyInv20.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv21R_.Data(), R.iBodyInv21.data(), N_rigidBodies_, stream_);
+		GPU::Copy_HostToDevice(d_iBodyInv22R_.Data(), R.iBodyInv22.data(), N_rigidBodies_, stream_);
 	}
 
 	if (hasRigidBoundaryParticles)
@@ -267,12 +267,12 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	// make sure the destination data structures have enough capacity
 	dst.ResizeFluid(N_F_);
 	dst.ResizeBoundary(N_B_);
-	dst.ResizeRigidBodies(N_R_);
+	dst.ResizeRigidBodies(N_rigidBodies_);
 	R.resizeRigidBoundaryParticles(N_rigidBoundaryParticles_);
 
 	const bool hasF = N_F_ > 0;
 	const bool hasB = N_B_ > 0;
-	const bool hasR = N_R_ > 0;
+	const bool hasRigidBodies = N_rigidBodies_ > 0;
 	const bool hasRigidBoundaryParticles = N_rigidBoundaryParticles_ > 0;
 
 	// copy fluid particle data into the host's universal state
@@ -316,47 +316,47 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	}
 
 	// copy rigid body data into the host's universal state
-	if (hasR)
+	if (hasRigidBodies)
 	{
-		GPU::Copy_DeviceToHost(R.id.data(), d_idR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.rigidBoundaryParticleBegin.data(), d_rigidBoundaryParticleBeginR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.rigidBoundaryParticleCount.data(), d_rigidBoundaryParticleCountR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.id.data(), d_idR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.rigidBoundaryParticleBegin.data(), d_rigidBoundaryParticleBeginR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.rigidBoundaryParticleCount.data(), d_rigidBoundaryParticleCountR_.Data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_DeviceToHost(R.xCM.data(), d_xCMR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.yCM.data(), d_yCMR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.zCM.data(), d_zCMR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.xVel.data(), d_xVelR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.yVel.data(), d_yVelR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.zVel.data(), d_zVelR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.xOmega.data(), d_xOmegaR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.yOmega.data(), d_yOmegaR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.zOmega.data(), d_zOmegaR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.xAngMom.data(), d_xAngMomR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.yAngMom.data(), d_yAngMomR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.zAngMom.data(), d_zAngMomR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.xCM.data(), d_xCMR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.yCM.data(), d_yCMR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.zCM.data(), d_zCMR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.xVel.data(), d_xVelR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.yVel.data(), d_yVelR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.zVel.data(), d_zVelR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.xOmega.data(), d_xOmegaR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.yOmega.data(), d_yOmegaR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.zOmega.data(), d_zOmegaR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.xAngMom.data(), d_xAngMomR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.yAngMom.data(), d_yAngMomR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.zAngMom.data(), d_zAngMomR_.Data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_DeviceToHost(R.a00.data(), d_a00R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a01.data(), d_a01R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a02.data(), d_a02R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a10.data(), d_a10R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a11.data(), d_a11R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a12.data(), d_a12R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a20.data(), d_a20R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a21.data(), d_a21R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.a22.data(), d_a22R_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.a00.data(), d_a00R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a01.data(), d_a01R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a02.data(), d_a02R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a10.data(), d_a10R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a11.data(), d_a11R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a12.data(), d_a12R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a20.data(), d_a20R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a21.data(), d_a21R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.a22.data(), d_a22R_.Data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_DeviceToHost(R.mass.data(), d_massR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.massInv.data(), d_massInvR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.mass.data(), d_massR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.massInv.data(), d_massInvR_.Data(), N_rigidBodies_, stream_);
 
-		GPU::Copy_DeviceToHost(R.iBodyInv00.data(), d_iBodyInv00R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv01.data(), d_iBodyInv01R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv02.data(), d_iBodyInv02R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv10.data(), d_iBodyInv10R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv11.data(), d_iBodyInv11R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv12.data(), d_iBodyInv12R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv20.data(), d_iBodyInv20R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv21.data(), d_iBodyInv21R_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.iBodyInv22.data(), d_iBodyInv22R_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv00.data(), d_iBodyInv00R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv01.data(), d_iBodyInv01R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv02.data(), d_iBodyInv02R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv10.data(), d_iBodyInv10R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv11.data(), d_iBodyInv11R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv12.data(), d_iBodyInv12R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv20.data(), d_iBodyInv20R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv21.data(), d_iBodyInv21R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(R.iBodyInv22.data(), d_iBodyInv22R_.Data(), N_rigidBodies_, stream_);
 	}
 
 	if (hasRigidBoundaryParticles)
@@ -370,7 +370,7 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
-	R.N_ = N_R_;
+	R.N_ = N_rigidBodies_;
 	R.N_rigidBoundaryParticles_ = N_rigidBoundaryParticles_;
 }
 
@@ -991,190 +991,13 @@ void SimBackend_GPU01::FillStatisticsRecord(
 	Set(record, StatMetric::NumF, static_cast<float>(NF));
 	Set(record, StatMetric::NumB, static_cast<float>(NB));
 
-	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
-
 	// --- [ particle counts ] -----------------------------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Particles });
 
-		float sumFF = 0.0f;
-		float nbrFF_p95 = 0.0f;
-		float nbrFF_p99 = 0.0f;
-		float minFF = std::numeric_limits<float>::max();
-		float maxFF = 0.0f;
-
-		float sumFB = 0.0f;
-		float nbrFB_p95 = 0.0f;
-		float nbrFB_p99 = 0.0f;
-		float minFB = std::numeric_limits<float>::max();
-		float maxFB = 0.0f;
-
-		if (NF > 0)
-		{
-			
-		}
-
-		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-		/*
-		if (NF > 0)
-		{
-			struct NeighStatsLocal
-			{
-				float sumFF;
-				float minFF;
-				float maxFF;
-				float sumFB;
-				float minFB;
-				float maxFB;
-			};
-
-			NeighStatsLocal globalNeigh = tbb::parallel_reduce(
-				tbb::blocked_range<uint32_t>(0, NF),
-				NeighStatsLocal
-				{
-					.sumFF = 0.0f,
-					.minFF = std::numeric_limits<float>::max(),
-					.maxFF = 0.0f,
-					.sumFB = 0.0f,
-					.minFB = std::numeric_limits<float>::max(),
-					.maxFB = 0.0f
-				},
-				[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
-				{
-					for (uint32_t i = r.begin(); i != r.end(); i++)
-					{
-						const float N_FF = static_cast<float>(neighborLists_->CountFF(i));
-						const float N_FB = static_cast<float>(neighborLists_->CountFB(i));
-
-						local.sumFF += N_FF;
-						if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
-						if (N_FF > local.maxFF) [[unlikely]] { local.maxFF = N_FF; }
-
-						local.sumFB += N_FB;
-						if (N_FB < local.minFB) [[unlikely]] { local.minFB = N_FB; }
-						if (N_FB > local.maxFB) [[unlikely]] { local.maxFB = N_FB; }
-					}
-					return local;
-				},
-				[](const NeighStatsLocal& a, const NeighStatsLocal& b) -> NeighStatsLocal
-				{
-					NeighStatsLocal r;
-
-					r.sumFF = a.sumFF + b.sumFF;
-					r.minFF = std::min(a.minFF, b.minFF);
-					r.maxFF = std::max(a.maxFF, b.maxFF);
-					r.sumFB = a.sumFB + b.sumFB;
-					r.minFB = std::min(a.minFB, b.minFB);
-					r.maxFB = std::max(a.maxFB, b.maxFB);
-
-					return r;
-				},
-				tbb::auto_partitioner{}
-			);
-
-			sumFF = globalNeigh.sumFF;
-			minFF = globalNeigh.minFF;
-			maxFF = globalNeigh.maxFF;
-			sumFB = globalNeigh.sumFB;
-			minFB = globalNeigh.minFB;
-			maxFB = globalNeigh.maxFB;
-		}
-		if (NF == 0) // reasonable defaults for empty sim
-		{
-			minFF = 0.0f;
-			minFB = 0.0f;
-		}
-
-		if (NF > 0) // determine percentiles
-		{
-			// reuse workBuffer_ for neighbor counts
-			workBuffer_.resize(NF);
-
-			// FF
-			for (uint32_t i = 0; i < NF; i++)
-			{
-				workBuffer_[i] = static_cast<float>(neighborLists_->CountFF(i));
-			}
-
-			{
-				// indices of the 95th and 99th percentiles
-				const size_t i95 = (95ull * (NF - 1)) / 100ull;
-				const size_t i99 = (99ull * (NF - 1)) / 100ull;
-
-				auto begin = workBuffer_.begin();
-				auto end = workBuffer_.end();
-				auto nth95 = begin + i95;
-				auto nth99 = begin + i99;
-
-				// select p95 within the full range
-				std::nth_element(begin, nth95, end);
-				nbrFF_p95 = *nth95;
-
-				if (i95 == i99) // handle same index edge case
-				{
-					nbrFF_p99 = *nth95;
-				}
-				else
-				{
-					// select p99 only within the upper part
-					std::nth_element(nth95, nth99, end);
-					nbrFF_p99 = *nth99;
-				}
-			}
-
-			// FB
-			for (uint32_t i = 0; i < NF; ++i)
-			{
-				workBuffer_[i] = static_cast<float>(neighborLists_->CountFB(i));
-			}
-
-			{
-				// indices of the 95th and 99th percentiles
-				const size_t i95 = (95ull * (NF - 1)) / 100ull;
-				const size_t i99 = (99ull * (NF - 1)) / 100ull;
-
-				auto begin = workBuffer_.begin();
-				auto end = workBuffer_.end();
-				auto nth95 = begin + i95;
-				auto nth99 = begin + i99;
-
-				// select p95 within the full range
-				std::nth_element(begin, nth95, end);
-				nbrFB_p95 = *nth95;
-
-				if (i95 == i99) // handle same index edge case
-				{
-					nbrFB_p99 = *nth95;
-				}
-				else
-				{
-					// select p99 only within the upper part
-					std::nth_element(nth95, nth99, end);
-					nbrFB_p99 = *nth99;
-				}
-			}
-		}
-		else // reasonable defaults for empty sim
-		{
-			nbrFF_p95 = nbrFF_p99 = 0.0f;
-			nbrFB_p95 = nbrFB_p99 = 0.0f;
-		}
-
-		Set(record, StatMetric::NumNbrFF_Avg, sumFF * invNF);
-		Set(record, StatMetric::NumNbrFF_P95, nbrFF_p95);
-		Set(record, StatMetric::NumNbrFF_P99, nbrFF_p99);
-		Set(record, StatMetric::NumNbrFF_Min, minFF);
-		Set(record, StatMetric::NumNbrFF_Max, maxFF);
-
-		Set(record, StatMetric::NumNbrFB_Avg, sumFB * invNF);
-		Set(record, StatMetric::NumNbrFB_P95, nbrFB_p95);
-		Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
-		Set(record, StatMetric::NumNbrFB_Min, minFB);
-		Set(record, StatMetric::NumNbrFB_Max, maxFB);
-		*/
+		// TODO: implement GPU neighbor-count stats from d_nbrCountFF_/d_nbrCountFB_
 
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Particles });
 	}
@@ -1253,7 +1076,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 	{
 		GPU01::ReloadConstants(params, N_F_, N_B_, stream_);
 
-		if (N_R_ > 0)
+		if (N_rigidBodies_ > 0)
 		{
 			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 			GPU01::Launch_UpdateRigidBoundaryParticles(
@@ -1266,7 +1089,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_a10R_.Data(), d_a11R_.Data(), d_a12R_.Data(),
 				d_a20R_.Data(), d_a21R_.Data(), d_a22R_.Data(),
 				d_xLocalRigidBoundaryParticle_.Data(), d_yLocalRigidBoundaryParticle_.Data(), d_zLocalRigidBoundaryParticle_.Data(),
-				N_B_, N_R_, N_rigidBoundaryParticles_, stream_,
+				N_B_, N_rigidBodies_, N_rigidBoundaryParticles_, stream_,
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data());
 			GPU::StreamSync(stream_);
@@ -1313,13 +1136,13 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 		// --- [ non-pressure accelerations ] -----------------------------------------------------------
 
-		if (N_R_ > 0)
+		if (N_rigidBodies_ > 0)
 		{
 			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 			GPU01::Launch_ClearRigidForcesAndAddGravity(
 				d_massR_.Data(), d_massInvR_.Data(),
 				params.gravity.x, params.gravity.y, params.gravity.z,
-				N_R_, stream_,
+				N_rigidBodies_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data());
 			GPU::StreamSync(stream_);
@@ -1330,10 +1153,10 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU01::Launch_NonPressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
-			d_volB_.Data(),
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 			d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data(),
 			d_densityF_.Data(),
+			d_volB_.Data(),
 			d_nbrCountFF_.Data(), d_nbrCountFB_.Data(),
 			d_nbrChunkOffsetsFF_.Data(), d_nbrChunkOffsetsFB_.Data(),
 			d_nbrChunkBaseIdxFF_.Data(), d_nbrChunkBaseIdxFB_.Data(),
@@ -1347,7 +1170,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
-		if (N_R_ > 0)
+		if (N_rigidBodies_ > 0)
 		{
 			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 			GPU01::Launch_AccumulateRigidBodyNonPressureForces(
@@ -1367,7 +1190,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				params.particleSizeInvF, particleSizeSquF,
 				params.kernelRadiusSqu, cubicSplineAlpha,
 				params.massF, params.viscosityB,
-				N_F_, N_R_, stream_,
+				N_F_, N_rigidBodies_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data(),
 				d_xCMR_.Data(), d_yCMR_.Data(), d_zCMR_.Data());
@@ -1469,7 +1292,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
-		if (N_R_ > 0)
+		if (N_rigidBodies_ > 0)
 		{
 			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 			GPU01::Launch_AccumulateRigidBodyPressureForces(
@@ -1489,7 +1312,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				params.kernelRadiusSqu, cubicSplineAlpha,
 				params.restDensity,
 				params.massF, params.pressGamma,
-				N_F_, N_R_, stream_,
+				N_F_, N_rigidBodies_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data(),
 				d_xCMR_.Data(), d_yCMR_.Data(), d_zCMR_.Data());
@@ -1510,11 +1333,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 
-		if (N_R_ > 0)
+		if (N_rigidBodies_ > 0)
 		{
 			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 			GPU01::Launch_IntegrateRigidBodies(
-				params.timeStep, N_R_, stream_,
+				params.timeStep, N_rigidBodies_, stream_,
 				d_xCMR_.Data(), d_yCMR_.Data(), d_zCMR_.Data(),
 				d_xVelR_.Data(), d_yVelR_.Data(), d_zVelR_.Data(),
 				d_xOmegaR_.Data(), d_yOmegaR_.Data(), d_zOmegaR_.Data(),
@@ -1538,7 +1361,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_a10R_.Data(), d_a11R_.Data(), d_a12R_.Data(),
 				d_a20R_.Data(), d_a21R_.Data(), d_a22R_.Data(),
 				d_xLocalRigidBoundaryParticle_.Data(), d_yLocalRigidBoundaryParticle_.Data(), d_zLocalRigidBoundaryParticle_.Data(),
-				N_B_, N_R_, N_rigidBoundaryParticles_, stream_,
+				N_B_, N_rigidBodies_, N_rigidBoundaryParticles_, stream_,
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data());
 			GPU::StreamSync(stream_);

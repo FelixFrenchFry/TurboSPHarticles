@@ -280,7 +280,6 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const float* __restrict__ volB,
 		const float* __restrict__ xVelF,
 		const float* __restrict__ yVelF,
 		const float* __restrict__ zVelF,
@@ -288,6 +287,7 @@ namespace GPU01
 		const float* __restrict__ yVelB,
 		const float* __restrict__ zVelB,
 		const float* __restrict__ densityF,
+		const float* __restrict__ volB,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
@@ -930,10 +930,10 @@ namespace GPU01
 	void Launch_NonPressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* volB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* xVelB, const float* yVelB, const float* zVelB,
 		const float* densityF,
+		const float* volB,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,
@@ -959,10 +959,10 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, volB,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
 			xVelF, yVelF, zVelF,
 			xVelB, yVelB, zVelB,
-			densityF,
+			densityF, volB,
 			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
 			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
 			nbrChunkFormatFF, nbrChunkFormatFB,

@@ -110,7 +110,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	auto& R = src.rigidBodies;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
-	N_R_ = R.N_;
+	N_rigidBodies_ = R.N_;
 	N_rigidBoundaryParticles_ = R.N_rigidBoundaryParticles_;
 	simStep_ = src.step;
 	simTime_ = src.time;
@@ -174,12 +174,12 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	xAngMomR_ = std::move(R.xAngMom);
 	yAngMomR_ = std::move(R.yAngMom);
 	zAngMomR_ = std::move(R.zAngMom);
-	xForceR_.assign(N_R_, 0.0f);
-	yForceR_.assign(N_R_, 0.0f);
-	zForceR_.assign(N_R_, 0.0f);
-	xTorqueR_.assign(N_R_, 0.0f);
-	yTorqueR_.assign(N_R_, 0.0f);
-	zTorqueR_.assign(N_R_, 0.0f);
+	xForceR_.assign(N_rigidBodies_, 0.0f);
+	yForceR_.assign(N_rigidBodies_, 0.0f);
+	zForceR_.assign(N_rigidBodies_, 0.0f);
+	xTorqueR_.assign(N_rigidBodies_, 0.0f);
+	yTorqueR_.assign(N_rigidBodies_, 0.0f);
+	zTorqueR_.assign(N_rigidBodies_, 0.0f);
 
 	a00R_ = std::move(R.a00);
 	a01R_ = std::move(R.a01);
@@ -225,7 +225,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	// make sure the destination data structures have enough capacity
 	dst.ResizeFluid(N_F_);
 	dst.ResizeBoundary(N_B_);
-	dst.ResizeRigidBodies(N_R_);
+	dst.ResizeRigidBodies(N_rigidBodies_);
 	R.resizeRigidBoundaryParticles(N_rigidBoundaryParticles_);
 
 	// fluid particles
@@ -288,7 +288,7 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	F.N_ = N_F_;
 	B.N_ = N_B_;
-	R.N_ = N_R_;
+	R.N_ = N_rigidBodies_;
 	R.N_rigidBoundaryParticles_ = N_rigidBoundaryParticles_;
 
 	R.id = idR_;
@@ -1211,7 +1211,7 @@ void SimBackend_CPU01::UpdateRigidBoundaryParticles()
 		}
 
 		const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB_[i];
-		if (bodyIdx >= N_R_ || rigidBoundaryParticleIdx >= N_rigidBoundaryParticles_)
+		if (bodyIdx >= N_rigidBodies_ || rigidBoundaryParticleIdx >= N_rigidBoundaryParticles_)
 		{
 			throw std::runtime_error("Invalid CPU01 rigid boundary attachment.");
 		}
@@ -1264,7 +1264,7 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 	std::fill(zTorqueR_.begin(), zTorqueR_.end(), 0.0f);
 
 	// gravity acts at the center of mass
-	for (uint32_t bodyIdx = 0; bodyIdx < N_R_; bodyIdx++)
+	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
 	{
 		if (massInvR_[bodyIdx] <= 0.0f) { continue; }
 
@@ -1280,7 +1280,7 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 void SimBackend_CPU01::IntegrateRigidBodies(const float timeStep)
 {
 	// TODO: parallelize with TBB?
-	for (uint32_t bodyIdx = 0; bodyIdx < N_R_; bodyIdx++)
+	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
 	{
 		const float massInv = massInvR_[bodyIdx];
 

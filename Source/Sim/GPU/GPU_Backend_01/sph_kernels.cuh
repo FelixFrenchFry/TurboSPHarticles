@@ -44,10 +44,10 @@ namespace GPU01
 	void Launch_NonPressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* volB,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* xVelB, const float* yVelB, const float* zVelB,
 		const float* densityF,
+		const float* volB,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
 		const uint64_t* nbrChunkOffsetsFF,

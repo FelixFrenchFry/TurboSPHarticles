@@ -79,7 +79,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
 	const float massF = params.massF;
 
-	if (N_R_ > 0)
+	if (N_rigidBodies_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 		UpdateRigidBoundaryParticles();
@@ -177,7 +177,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
-	if (N_R_ > 0)
+	if (N_rigidBodies_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		ClearRigidForcesAndAddGravity(params);
@@ -202,7 +202,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Viscosity_Acceleration, Bench::BenchOp::External_Acceleration });
 
-	if (N_R_ > 0)
+	if (N_rigidBodies_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
@@ -297,7 +297,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
 
-	if (N_R_ > 0)
+	if (N_rigidBodies_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
 		CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
@@ -341,7 +341,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench({ Bench::BenchOp::VelocityUpdate, Bench::BenchOp::PositionUpdate });
 
-	if (N_R_ > 0)
+	if (N_rigidBodies_ > 0)
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_Update });
 		IntegrateRigidBodies(timeStep);

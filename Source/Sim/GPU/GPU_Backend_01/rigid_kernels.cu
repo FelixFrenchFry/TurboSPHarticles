@@ -274,7 +274,7 @@ namespace GPU01
 		const float* __restrict__ xLocalRigidBoundaryParticle,
 		const float* __restrict__ yLocalRigidBoundaryParticle,
 		const float* __restrict__ zLocalRigidBoundaryParticle,
-		const uint32_t N_B, const uint32_t N_R, const uint32_t N_rigidBoundaryParticles,
+		const uint32_t N_B, const uint32_t N_rigidBodies, const uint32_t N_rigidBoundaryParticles,
 		// destinations
 		float* __restrict__ xPosB, float* __restrict__ yPosB, float* __restrict__ zPosB,
 		float* __restrict__ xVelB, float* __restrict__ yVelB, float* __restrict__ zVelB)
@@ -292,7 +292,7 @@ namespace GPU01
 		}
 
 		const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[i];
-		if (bodyIdx >= N_R || rigidBoundaryParticleIdx >= N_rigidBoundaryParticles)
+		if (bodyIdx >= N_rigidBodies || rigidBoundaryParticleIdx >= N_rigidBoundaryParticles)
 		{
 			xVelB[i] = 0.0f;
 			yVelB[i] = 0.0f;
@@ -337,13 +337,13 @@ namespace GPU01
 		const float* __restrict__ massR,
 		const float* __restrict__ massInvR,
 		const float xGravity, const float yGravity, const float zGravity,
-		const uint32_t N_R,
+		const uint32_t N_rigidBodies,
 		// destinations
 		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR,
 		float* __restrict__ xTorqueR, float* __restrict__ yTorqueR, float* __restrict__ zTorqueR)
 	{
 		const uint32_t bodyIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (bodyIdx >= N_R) { return; }
+		if (bodyIdx >= N_rigidBodies) { return; }
 
 		xForceR[bodyIdx] = 0.0f;
 		yForceR[bodyIdx] = 0.0f;
@@ -381,7 +381,7 @@ namespace GPU01
 		const float cubicSplineAlpha,
 		const float massF,
 		const float viscosityB,
-		const uint32_t N_F, const uint32_t N_R,
+		const uint32_t N_F, const uint32_t N_rigidBodies,
 		// destinations
 		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR,
 		float* __restrict__ xTorqueR, float* __restrict__ yTorqueR, float* __restrict__ zTorqueR,
@@ -413,7 +413,7 @@ namespace GPU01
 				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			const uint32_t bodyIdx = bodyIdB[j];
-			if (bodyIdx == InvalidRigidBodyId || bodyIdx >= N_R) { continue; }
+			if (bodyIdx == InvalidRigidBodyId || bodyIdx >= N_rigidBodies) { continue; }
 
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
@@ -468,7 +468,7 @@ namespace GPU01
 		const float restDensity,
 		const float massF,
 		const float pressGamma,
-		const uint32_t N_F, const uint32_t N_R,
+		const uint32_t N_F, const uint32_t N_rigidBodies,
 		// destinations
 		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR,
 		float* __restrict__ xTorqueR, float* __restrict__ yTorqueR, float* __restrict__ zTorqueR,
@@ -498,7 +498,7 @@ namespace GPU01
 				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
 
 			const uint32_t bodyIdx = bodyIdB[j];
-			if (bodyIdx == InvalidRigidBodyId || bodyIdx >= N_R) { continue; }
+			if (bodyIdx == InvalidRigidBodyId || bodyIdx >= N_rigidBodies) { continue; }
 
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
@@ -530,7 +530,7 @@ namespace GPU01
 	__global__
 	void K_IntegrateRigidBodies(
 		const float timeStep,
-		const uint32_t N_R,
+		const uint32_t N_rigidBodies,
 		// destinations
 		float* __restrict__ xCMR, float* __restrict__ yCMR, float* __restrict__ zCMR,
 		float* __restrict__ xVelR, float* __restrict__ yVelR, float* __restrict__ zVelR,
@@ -547,7 +547,7 @@ namespace GPU01
 		const float* __restrict__ iBodyInv20R, const float* __restrict__ iBodyInv21R, const float* __restrict__ iBodyInv22R)
 	{
 		const uint32_t bodyIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (bodyIdx >= N_R) { return; }
+		if (bodyIdx >= N_rigidBodies) { return; }
 
 		const float massInv = massInvR[bodyIdx];
 
@@ -630,7 +630,7 @@ namespace GPU01
 		const float* a10R, const float* a11R, const float* a12R,
 		const float* a20R, const float* a21R, const float* a22R,
 		const float* xLocalRigidBoundaryParticle, const float* yLocalRigidBoundaryParticle, const float* zLocalRigidBoundaryParticle,
-		const uint32_t N_B, const uint32_t N_R, const uint32_t N_rigidBoundaryParticles,
+		const uint32_t N_B, const uint32_t N_rigidBodies, const uint32_t N_rigidBoundaryParticles,
 		cudaStream_t stream,
 		// destinations
 		float* xPosB, float* yPosB, float* zPosB,
@@ -651,7 +651,7 @@ namespace GPU01
 			a10R, a11R, a12R,
 			a20R, a21R, a22R,
 			xLocalRigidBoundaryParticle, yLocalRigidBoundaryParticle, zLocalRigidBoundaryParticle,
-			N_B, N_R, N_rigidBoundaryParticles,
+			N_B, N_rigidBodies, N_rigidBoundaryParticles,
 			xPosB, yPosB, zPosB,
 			xVelB, yVelB, zVelB);
 
@@ -662,21 +662,21 @@ namespace GPU01
 		const float* massR,
 		const float* massInvR,
 		const float xGravity, const float yGravity, const float zGravity,
-		const uint32_t N_R,
+		const uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
 		float* xTorqueR, float* yTorqueR, float* zTorqueR)
 	{
-		if (N_R == 0) { return; }
+		if (N_rigidBodies == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_GRIDSIZE = (N_rigidBodies + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_ClearRigidForcesAndAddGravity<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			massR, massInvR,
 			xGravity, yGravity, zGravity,
-			N_R,
+			N_rigidBodies,
 			xForceR, yForceR, zForceR,
 			xTorqueR, yTorqueR, zTorqueR);
 
@@ -703,14 +703,14 @@ namespace GPU01
 		const float cubicSplineAlpha,
 		const float massF,
 		const float viscosityB,
-		const uint32_t N_F, const uint32_t N_R,
+		const uint32_t N_F, const uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
 		float* xTorqueR, float* yTorqueR, float* zTorqueR,
 		const float* xCMR, const float* yCMR, const float* zCMR)
 	{
-		if (N_F == 0 || N_R == 0) { return; }
+		if (N_F == 0 || N_rigidBodies == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
@@ -735,7 +735,7 @@ namespace GPU01
 			cubicSplineAlpha,
 			massF,
 			viscosityB,
-			N_F, N_R,
+			N_F, N_rigidBodies,
 			xForceR, yForceR, zForceR,
 			xTorqueR, yTorqueR, zTorqueR,
 			xCMR, yCMR, zCMR);
@@ -762,14 +762,14 @@ namespace GPU01
 		const float restDensity,
 		const float massF,
 		const float pressGamma,
-		const uint32_t N_F, const uint32_t N_R,
+		const uint32_t N_F, const uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
 		float* xTorqueR, float* yTorqueR, float* zTorqueR,
 		const float* xCMR, const float* yCMR, const float* zCMR)
 	{
-		if (N_F == 0 || N_R == 0) { return; }
+		if (N_F == 0 || N_rigidBodies == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
@@ -793,7 +793,7 @@ namespace GPU01
 			restDensity,
 			massF,
 			pressGamma,
-			N_F, N_R,
+			N_F, N_rigidBodies,
 			xForceR, yForceR, zForceR,
 			xTorqueR, yTorqueR, zTorqueR,
 			xCMR, yCMR, zCMR);
@@ -803,7 +803,7 @@ namespace GPU01
 
 	void Launch_IntegrateRigidBodies(
 		const float timeStep,
-		const uint32_t N_R,
+		const uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xCMR, float* yCMR, float* zCMR,
@@ -820,14 +820,14 @@ namespace GPU01
 		const float* iBodyInv10R, const float* iBodyInv11R, const float* iBodyInv12R,
 		const float* iBodyInv20R, const float* iBodyInv21R, const float* iBodyInv22R)
 	{
-		if (N_R == 0) { return; }
+		if (N_rigidBodies == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_GRIDSIZE = (N_rigidBodies + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_IntegrateRigidBodies<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			timeStep,
-			N_R,
+			N_rigidBodies,
 			xCMR, yCMR, zCMR,
 			xVelR, yVelR, zVelR,
 			xOmegaR, yOmegaR, zOmegaR,

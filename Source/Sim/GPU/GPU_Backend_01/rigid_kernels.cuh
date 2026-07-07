@@ -24,7 +24,7 @@ namespace GPU01
 		const float* xLocalRigidBoundaryParticle,
 		const float* yLocalRigidBoundaryParticle,
 		const float* zLocalRigidBoundaryParticle,
-		uint32_t N_B, uint32_t N_R, uint32_t N_rigidBoundaryParticles,
+		uint32_t N_B, uint32_t N_rigidBodies, uint32_t N_rigidBoundaryParticles,
 		cudaStream_t stream,
 		// destinations
 		float* xPosB, float* yPosB, float* zPosB,
@@ -34,7 +34,7 @@ namespace GPU01
 		const float* massR,
 		const float* massInvR,
 		float xGravity, float yGravity, float zGravity,
-		uint32_t N_R,
+		uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
@@ -60,7 +60,7 @@ namespace GPU01
 		float cubicSplineAlpha,
 		float massF,
 		float viscosityB,
-		uint32_t N_F, uint32_t N_R,
+		uint32_t N_F, uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
@@ -86,7 +86,7 @@ namespace GPU01
 		float restDensity,
 		float massF,
 		float pressGamma,
-		uint32_t N_F, uint32_t N_R,
+		uint32_t N_F, uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xForceR, float* yForceR, float* zForceR,
@@ -95,7 +95,7 @@ namespace GPU01
 
 	void Launch_IntegrateRigidBodies(
 		float timeStep,
-		uint32_t N_R,
+		uint32_t N_rigidBodies,
 		cudaStream_t stream,
 		// destinations
 		float* xCMR, float* yCMR, float* zCMR,

@@ -130,7 +130,7 @@ namespace Sim
 		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
 		// rigid bodies
-		uint32_t N_R_ = 0;
+		uint32_t N_rigidBodies_ = 0;
 		uint32_t N_rigidBoundaryParticles_ = 0;
 		std::vector<uint32_t> idR_; // per-rigid-body ID
 		std::vector<uint32_t> rigidBoundaryParticleBeginR_; // first rigid boundary particle

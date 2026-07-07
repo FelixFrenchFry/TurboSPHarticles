@@ -163,7 +163,7 @@ namespace Sim
 		double simTime_ = 0.0;
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
-		uint32_t N_R_ = 0;
+		uint32_t N_rigidBodies_ = 0;
 		uint32_t N_rigidBoundaryParticles_ = 0;
 		uint32_t N_solverIterCount_ = 0;
 
@@ -429,27 +429,27 @@ namespace Sim
 			N_abs32FB_ = 0;
 		}
 
-		void EnsureRigidCapacity(uint32_t N_R_new, uint32_t N_rigidBoundaryParticles_new, bool force = false)
+		void EnsureRigidCapacity(uint32_t N_rigidBodies_new, uint32_t N_rigidBoundaryParticles_new, bool force = false)
 		{
 			const bool needBodies =
 				force ||
-				(N_R_new != N_R_) ||
-				d_idR_.Size() != N_R_new ||
-				d_rigidBoundaryParticleBeginR_.Size() != N_R_new ||
-				d_rigidBoundaryParticleCountR_.Size() != N_R_new ||
-				d_xCMR_.Size() != N_R_new || d_yCMR_.Size() != N_R_new || d_zCMR_.Size() != N_R_new ||
-				d_xVelR_.Size() != N_R_new || d_yVelR_.Size() != N_R_new || d_zVelR_.Size() != N_R_new ||
-				d_xOmegaR_.Size() != N_R_new || d_yOmegaR_.Size() != N_R_new || d_zOmegaR_.Size() != N_R_new ||
-				d_xAngMomR_.Size() != N_R_new || d_yAngMomR_.Size() != N_R_new || d_zAngMomR_.Size() != N_R_new ||
-				d_xForceR_.Size() != N_R_new || d_yForceR_.Size() != N_R_new || d_zForceR_.Size() != N_R_new ||
-				d_xTorqueR_.Size() != N_R_new || d_yTorqueR_.Size() != N_R_new || d_zTorqueR_.Size() != N_R_new ||
-				d_a00R_.Size() != N_R_new || d_a01R_.Size() != N_R_new || d_a02R_.Size() != N_R_new ||
-				d_a10R_.Size() != N_R_new || d_a11R_.Size() != N_R_new || d_a12R_.Size() != N_R_new ||
-				d_a20R_.Size() != N_R_new || d_a21R_.Size() != N_R_new || d_a22R_.Size() != N_R_new ||
-				d_massR_.Size() != N_R_new || d_massInvR_.Size() != N_R_new ||
-				d_iBodyInv00R_.Size() != N_R_new || d_iBodyInv01R_.Size() != N_R_new || d_iBodyInv02R_.Size() != N_R_new ||
-				d_iBodyInv10R_.Size() != N_R_new || d_iBodyInv11R_.Size() != N_R_new || d_iBodyInv12R_.Size() != N_R_new ||
-				d_iBodyInv20R_.Size() != N_R_new || d_iBodyInv21R_.Size() != N_R_new || d_iBodyInv22R_.Size() != N_R_new;
+				(N_rigidBodies_new != N_rigidBodies_) ||
+				d_idR_.Size() != N_rigidBodies_new ||
+				d_rigidBoundaryParticleBeginR_.Size() != N_rigidBodies_new ||
+				d_rigidBoundaryParticleCountR_.Size() != N_rigidBodies_new ||
+				d_xCMR_.Size() != N_rigidBodies_new || d_yCMR_.Size() != N_rigidBodies_new || d_zCMR_.Size() != N_rigidBodies_new ||
+				d_xVelR_.Size() != N_rigidBodies_new || d_yVelR_.Size() != N_rigidBodies_new || d_zVelR_.Size() != N_rigidBodies_new ||
+				d_xOmegaR_.Size() != N_rigidBodies_new || d_yOmegaR_.Size() != N_rigidBodies_new || d_zOmegaR_.Size() != N_rigidBodies_new ||
+				d_xAngMomR_.Size() != N_rigidBodies_new || d_yAngMomR_.Size() != N_rigidBodies_new || d_zAngMomR_.Size() != N_rigidBodies_new ||
+				d_xForceR_.Size() != N_rigidBodies_new || d_yForceR_.Size() != N_rigidBodies_new || d_zForceR_.Size() != N_rigidBodies_new ||
+				d_xTorqueR_.Size() != N_rigidBodies_new || d_yTorqueR_.Size() != N_rigidBodies_new || d_zTorqueR_.Size() != N_rigidBodies_new ||
+				d_a00R_.Size() != N_rigidBodies_new || d_a01R_.Size() != N_rigidBodies_new || d_a02R_.Size() != N_rigidBodies_new ||
+				d_a10R_.Size() != N_rigidBodies_new || d_a11R_.Size() != N_rigidBodies_new || d_a12R_.Size() != N_rigidBodies_new ||
+				d_a20R_.Size() != N_rigidBodies_new || d_a21R_.Size() != N_rigidBodies_new || d_a22R_.Size() != N_rigidBodies_new ||
+				d_massR_.Size() != N_rigidBodies_new || d_massInvR_.Size() != N_rigidBodies_new ||
+				d_iBodyInv00R_.Size() != N_rigidBodies_new || d_iBodyInv01R_.Size() != N_rigidBodies_new || d_iBodyInv02R_.Size() != N_rigidBodies_new ||
+				d_iBodyInv10R_.Size() != N_rigidBodies_new || d_iBodyInv11R_.Size() != N_rigidBodies_new || d_iBodyInv12R_.Size() != N_rigidBodies_new ||
+				d_iBodyInv20R_.Size() != N_rigidBodies_new || d_iBodyInv21R_.Size() != N_rigidBodies_new || d_iBodyInv22R_.Size() != N_rigidBodies_new;
 
 			const bool needRigidBoundaryParticles =
 				force ||
@@ -460,30 +460,30 @@ namespace Sim
 
 			if (!(needBodies || needRigidBoundaryParticles)) { return; }
 
-			N_R_ = N_R_new;
+			N_rigidBodies_ = N_rigidBodies_new;
 			N_rigidBoundaryParticles_ = N_rigidBoundaryParticles_new;
 
-			d_idR_.Resize(N_R_);
-			d_rigidBoundaryParticleBeginR_.Resize(N_R_);
-			d_rigidBoundaryParticleCountR_.Resize(N_R_);
+			d_idR_.Resize(N_rigidBodies_);
+			d_rigidBoundaryParticleBeginR_.Resize(N_rigidBodies_);
+			d_rigidBoundaryParticleCountR_.Resize(N_rigidBodies_);
 
-			d_xCMR_.Resize(N_R_); d_yCMR_.Resize(N_R_); d_zCMR_.Resize(N_R_);
-			d_xVelR_.Resize(N_R_); d_yVelR_.Resize(N_R_); d_zVelR_.Resize(N_R_);
-			d_xOmegaR_.Resize(N_R_); d_yOmegaR_.Resize(N_R_); d_zOmegaR_.Resize(N_R_);
-			d_xAngMomR_.Resize(N_R_); d_yAngMomR_.Resize(N_R_); d_zAngMomR_.Resize(N_R_);
-			d_xForceR_.Resize(N_R_); d_yForceR_.Resize(N_R_); d_zForceR_.Resize(N_R_);
-			d_xTorqueR_.Resize(N_R_); d_yTorqueR_.Resize(N_R_); d_zTorqueR_.Resize(N_R_);
+			d_xCMR_.Resize(N_rigidBodies_); d_yCMR_.Resize(N_rigidBodies_); d_zCMR_.Resize(N_rigidBodies_);
+			d_xVelR_.Resize(N_rigidBodies_); d_yVelR_.Resize(N_rigidBodies_); d_zVelR_.Resize(N_rigidBodies_);
+			d_xOmegaR_.Resize(N_rigidBodies_); d_yOmegaR_.Resize(N_rigidBodies_); d_zOmegaR_.Resize(N_rigidBodies_);
+			d_xAngMomR_.Resize(N_rigidBodies_); d_yAngMomR_.Resize(N_rigidBodies_); d_zAngMomR_.Resize(N_rigidBodies_);
+			d_xForceR_.Resize(N_rigidBodies_); d_yForceR_.Resize(N_rigidBodies_); d_zForceR_.Resize(N_rigidBodies_);
+			d_xTorqueR_.Resize(N_rigidBodies_); d_yTorqueR_.Resize(N_rigidBodies_); d_zTorqueR_.Resize(N_rigidBodies_);
 
-			d_a00R_.Resize(N_R_); d_a01R_.Resize(N_R_); d_a02R_.Resize(N_R_);
-			d_a10R_.Resize(N_R_); d_a11R_.Resize(N_R_); d_a12R_.Resize(N_R_);
-			d_a20R_.Resize(N_R_); d_a21R_.Resize(N_R_); d_a22R_.Resize(N_R_);
+			d_a00R_.Resize(N_rigidBodies_); d_a01R_.Resize(N_rigidBodies_); d_a02R_.Resize(N_rigidBodies_);
+			d_a10R_.Resize(N_rigidBodies_); d_a11R_.Resize(N_rigidBodies_); d_a12R_.Resize(N_rigidBodies_);
+			d_a20R_.Resize(N_rigidBodies_); d_a21R_.Resize(N_rigidBodies_); d_a22R_.Resize(N_rigidBodies_);
 
-			d_massR_.Resize(N_R_);
-			d_massInvR_.Resize(N_R_);
+			d_massR_.Resize(N_rigidBodies_);
+			d_massInvR_.Resize(N_rigidBodies_);
 
-			d_iBodyInv00R_.Resize(N_R_); d_iBodyInv01R_.Resize(N_R_); d_iBodyInv02R_.Resize(N_R_);
-			d_iBodyInv10R_.Resize(N_R_); d_iBodyInv11R_.Resize(N_R_); d_iBodyInv12R_.Resize(N_R_);
-			d_iBodyInv20R_.Resize(N_R_); d_iBodyInv21R_.Resize(N_R_); d_iBodyInv22R_.Resize(N_R_);
+			d_iBodyInv00R_.Resize(N_rigidBodies_); d_iBodyInv01R_.Resize(N_rigidBodies_); d_iBodyInv02R_.Resize(N_rigidBodies_);
+			d_iBodyInv10R_.Resize(N_rigidBodies_); d_iBodyInv11R_.Resize(N_rigidBodies_); d_iBodyInv12R_.Resize(N_rigidBodies_);
+			d_iBodyInv20R_.Resize(N_rigidBodies_); d_iBodyInv21R_.Resize(N_rigidBodies_); d_iBodyInv22R_.Resize(N_rigidBodies_);
 
 			d_xLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
 			d_yLocalRigidBoundaryParticle_.Resize(N_rigidBoundaryParticles_);
