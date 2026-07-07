@@ -28,6 +28,27 @@ namespace GPU01
 		uint32_t maxFB = 0;
 	};
 
+	struct DensityStats
+	{
+		float sumRelErrRaw = 0.0f;
+		float sumRelErrPos = 0.0f;
+		float sumRelErrAbs = 0.0f;
+	};
+
+	struct VelocityStats
+	{
+		float velMagSum = 0.0f;
+		float velMagMin = 0.0f;
+		float velMagMax = 0.0f;
+	};
+
+	static constexpr uint32_t StatisticsReductionBlockSize = 256u;
+
+	inline uint32_t StatisticsReductionBlockCount(const uint32_t N_F)
+	{
+		return (N_F + StatisticsReductionBlockSize - 1u) / StatisticsReductionBlockSize;
+	}
+
 	void Launch_ComputeNeighborCountStats(
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
@@ -40,5 +61,26 @@ namespace GPU01
 		uint32_t* nbrCountHistChunkFB,
 		// destination
 		NeighborCountStats* stats);
+
+	void Launch_ComputeDensityStats(
+		const float* densityF,
+		float restDensity,
+		uint32_t N_F,
+		cudaStream_t stream,
+		// scratch
+		DensityStats* partialStats,
+		// destination
+		DensityStats* stats);
+
+	void Launch_ComputeVelocityStats(
+		const float* xVelF,
+		const float* yVelF,
+		const float* zVelF,
+		uint32_t N_F,
+		cudaStream_t stream,
+		// scratch
+		VelocityStats* partialStats,
+		// destination
+		VelocityStats* stats);
 
 } // namespace GPU01

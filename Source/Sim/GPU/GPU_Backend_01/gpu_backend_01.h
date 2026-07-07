@@ -266,6 +266,15 @@ namespace Sim
 		mutable DeviceBuffer<GPU01::NeighborCountStats> d_nbrCountStats_;
 		mutable GPU01::NeighborCountStats h_nbrCountStats_;
 
+		// scratch for density stats reduction, ceil(N_F / 256) entries -> one result
+		mutable DeviceBuffer<GPU01::DensityStats> d_densityStatsPartials_;
+		mutable DeviceBuffer<GPU01::DensityStats> d_densityStats_;
+		mutable GPU01::DensityStats h_densityStats_;
+		// scratch for velocity stats reduction, ceil(N_F / 256) entries -> one result
+		mutable DeviceBuffer<GPU01::VelocityStats> d_velocityStatsPartials_;
+		mutable DeviceBuffer<GPU01::VelocityStats> d_velocityStats_;
+		mutable GPU01::VelocityStats h_velocityStats_;
+
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)
 		mutable std::vector<uint16_t> h_expNbrCountFF_;

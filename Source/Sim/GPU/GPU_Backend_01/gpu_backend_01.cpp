@@ -983,6 +983,10 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistChunkFF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistChunkFB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountStats_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_densityStatsPartials_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_densityStats_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_velocityStatsPartials_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_velocityStats_));
 
 		Set(record, memSpaceVRAM, MemBucket::Misc, usage);
 	}
@@ -999,6 +1003,8 @@ void SimBackend_GPU01::FillStatisticsRecord(
 
 	Set(record, StatMetric::NumF, static_cast<float>(NF));
 	Set(record, StatMetric::NumB, static_cast<float>(NB));
+
+	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
 	// --- [ particle counts ] -----------------------------------------------------------------------
 
@@ -1031,8 +1037,6 @@ void SimBackend_GPU01::FillStatisticsRecord(
 		GPU::StreamSync(stream_);
 
 		// averages reuse totals from neighbor-list finalization
-		const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
-
 		Set(record, StatMetric::NumNbrFF_Avg, static_cast<float>(N_totalFF_) * invNF);
 		Set(record, StatMetric::NumNbrFF_P95, static_cast<float>(h_nbrCountStats_.p95FF));
 		Set(record, StatMetric::NumNbrFF_P99, static_cast<float>(h_nbrCountStats_.p99FF));
@@ -1046,6 +1050,72 @@ void SimBackend_GPU01::FillStatisticsRecord(
 		Set(record, StatMetric::NumNbrFB_Max, static_cast<float>(h_nbrCountStats_.maxFB));
 
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Particles });
+	}
+
+	// --- [ density stats ] -------------------------------------------------------------------------
+
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Density });
+
+		d_densityStats_.Resize(1);
+		if (NF > 0)
+		{
+			d_densityStatsPartials_.Resize(GPU01::StatisticsReductionBlockCount(NF));
+		}
+
+		GPU01::Launch_ComputeDensityStats(
+			d_densityF_.Data(),
+			simParams.restDensity,
+			NF,
+			stream_,
+			d_densityStatsPartials_.Data(),
+			d_densityStats_.Data());
+
+		GPU::Copy_DeviceToHost(&h_densityStats_, d_densityStats_.Data(), 1, stream_);
+		GPU::StreamSync(stream_);
+
+		Set(record, StatMetric::DensRelError_Raw_Avg, h_densityStats_.sumRelErrRaw * invNF);
+		Set(record, StatMetric::DensRelError_Pos_Avg, h_densityStats_.sumRelErrPos * invNF);
+		Set(record, StatMetric::DensRelError_Abs_Avg, h_densityStats_.sumRelErrAbs * invNF);
+
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Density });
+	}
+
+	// --- [ pressure stats ] ------------------------------------------------------------------------
+
+	Set(record, StatMetric::NumSolverIters, static_cast<float>(N_solverIterCount_));
+
+	// --- [ velocity stats ] ------------------------------------------------------------------------
+
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
+	{
+		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Velocity });
+
+		d_velocityStats_.Resize(1);
+		if (NF > 0)
+		{
+			d_velocityStatsPartials_.Resize(GPU01::StatisticsReductionBlockCount(NF));
+		}
+
+		GPU01::Launch_ComputeVelocityStats(
+			d_xVelF_.Data(),
+			d_yVelF_.Data(),
+			d_zVelF_.Data(),
+			NF,
+			stream_,
+			d_velocityStatsPartials_.Data(),
+			d_velocityStats_.Data());
+
+		GPU::Copy_DeviceToHost(&h_velocityStats_, d_velocityStats_.Data(), 1, stream_);
+		GPU::StreamSync(stream_);
+
+		Set(record, StatMetric::CFL_Number, h_velocityStats_.velMagMax * simParams.timeStep / simParams.particleSizeF);
+		Set(record, StatMetric::VelMag_Avg, h_velocityStats_.velMagSum * invNF);
+		Set(record, StatMetric::VelMag_Min, h_velocityStats_.velMagMin);
+		Set(record, StatMetric::VelMag_Max, h_velocityStats_.velMagMax);
+
+		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Velocity });
 	}
 }
 

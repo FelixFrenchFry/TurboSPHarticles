@@ -1061,7 +1061,8 @@ void SimBackend_CPU01::FillStatisticsRecord(
 	benchmarksTracker_.StopBench({
 		Bench::BenchOp::Statistics_Particles,
 		Bench::BenchOp::Statistics_Density,
-		Bench::BenchOp::Statistics_Velocity });
+		Bench::BenchOp::Statistics_Velocity
+	});
 }
 
 void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)
