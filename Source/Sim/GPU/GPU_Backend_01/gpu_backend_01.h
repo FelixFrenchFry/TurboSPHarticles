@@ -17,6 +17,7 @@
 #include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Sim/Core/backend_sim.h"
 #include "Source/Sim/Core/parameters_sim.h"
+#include "statistics_kernels.cuh"
 
 
 
@@ -251,6 +252,14 @@ namespace Sim
 		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
 		DeviceBuffer<uint32_t> d_reorderIdScratch_;
+
+		// reusable device scratch for particle statistics
+		mutable DeviceBuffer<uint32_t> d_nbrCountHistFF_;
+		mutable DeviceBuffer<uint32_t> d_nbrCountHistFB_;
+		mutable DeviceBuffer<uint32_t> d_nbrCountHistChunkFF_;
+		mutable DeviceBuffer<uint32_t> d_nbrCountHistChunkFB_;
+		mutable DeviceBuffer<GPU01::NeighborCountStats> d_nbrCountStats_;
+		mutable GPU01::NeighborCountStats h_nbrCountStats_;
 
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)

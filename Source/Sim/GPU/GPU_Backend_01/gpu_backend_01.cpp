@@ -15,6 +15,7 @@
 #include "neighbor_search.cuh"
 #include "rigid_kernels.cuh"
 #include "sph_kernels.cuh"
+#include "statistics_kernels.cuh"
 
 
 
@@ -974,6 +975,11 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_xLocalRigidBoundaryParticle_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yLocalRigidBoundaryParticle_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zLocalRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistFF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistFB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistChunkFF_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistChunkFB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountStats_));
 
 		Set(record, memSpaceVRAM, MemBucket::Misc, usage);
 	}
@@ -997,7 +1003,44 @@ void SimBackend_GPU01::FillStatisticsRecord(
 	{
 		benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Particles });
 
-		// TODO: implement GPU neighbor-count stats from d_nbrCountFF_/d_nbrCountFB_
+		// compute neighbor-count extrema and percentiles on device
+		d_nbrCountStats_.Resize(1);
+		if (NF > 0)
+		{
+			d_nbrCountHistFF_.Resize(GPU01::NbrCountHistogramBinCount);
+			d_nbrCountHistFB_.Resize(GPU01::NbrCountHistogramBinCount);
+			d_nbrCountHistChunkFF_.Resize(GPU01::NbrCountHistogramChunkCount);
+			d_nbrCountHistChunkFB_.Resize(GPU01::NbrCountHistogramChunkCount);
+		}
+
+		GPU01::Launch_ComputeNeighborCountStats(
+			d_nbrCountFF_.Data(),
+			d_nbrCountFB_.Data(),
+			NF,
+			stream_,
+			d_nbrCountHistFF_.Data(),
+			d_nbrCountHistFB_.Data(),
+			d_nbrCountHistChunkFF_.Data(),
+			d_nbrCountHistChunkFB_.Data(),
+			d_nbrCountStats_.Data());
+
+		GPU::Copy_DeviceToHost(&h_nbrCountStats_, d_nbrCountStats_.Data(), 1, stream_);
+		GPU::StreamSync(stream_);
+
+		// averages reuse totals from neighbor-list finalization
+		const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
+
+		Set(record, StatMetric::NumNbrFF_Avg, static_cast<float>(N_totalFF_) * invNF);
+		Set(record, StatMetric::NumNbrFF_P95, static_cast<float>(h_nbrCountStats_.p95FF));
+		Set(record, StatMetric::NumNbrFF_P99, static_cast<float>(h_nbrCountStats_.p99FF));
+		Set(record, StatMetric::NumNbrFF_Min, static_cast<float>(h_nbrCountStats_.minFF));
+		Set(record, StatMetric::NumNbrFF_Max, static_cast<float>(h_nbrCountStats_.maxFF));
+
+		Set(record, StatMetric::NumNbrFB_Avg, static_cast<float>(N_totalFB_) * invNF);
+		Set(record, StatMetric::NumNbrFB_P95, static_cast<float>(h_nbrCountStats_.p95FB));
+		Set(record, StatMetric::NumNbrFB_P99, static_cast<float>(h_nbrCountStats_.p99FB));
+		Set(record, StatMetric::NumNbrFB_Min, static_cast<float>(h_nbrCountStats_.minFB));
+		Set(record, StatMetric::NumNbrFB_Max, static_cast<float>(h_nbrCountStats_.maxFB));
 
 		benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Particles });
 	}
