@@ -472,9 +472,7 @@ namespace
 		if (workBuffers.migrationLocalStatusStamp >
 			std::numeric_limits<uint32_t>::max() - 2u)
 		{
-			std::fill(
-				workBuffers.migrationLocalStatusStamp_FromLocalIdx.begin(),
-				workBuffers.migrationLocalStatusStamp_FromLocalIdx.end(), 0);
+			std::ranges::fill(workBuffers.migrationLocalStatusStamp_FromLocalIdx, 0);
 			workBuffers.migrationLocalStatusStamp = 0;
 		}
 

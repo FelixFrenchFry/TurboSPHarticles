@@ -16,14 +16,14 @@ StatisticsTracker::StatisticsTracker(const Sim::SimParams& simParams)
 	, curRecCount_(0u)
 {
 	recLatest_ = {};
-	recLatest_.stats.fill(0.0f);
+	std::ranges::fill(recLatest_.stats, 0.0f);
 	ClearAllTime();
 }
 
 void StatisticsTracker::BeginStep()
 {
 	recLatest_ = {};
-	recLatest_.stats.fill(0.0f);
+	std::ranges::fill(recLatest_.stats, 0.0f);
 }
 
 void StatisticsTracker::EndStep(uint32_t simStep, double simTime)
@@ -111,7 +111,7 @@ float StatisticsTracker::GetStat_Max(StatMetric metric) const
 
 void StatisticsTracker::ClearAllTime()
 {
-	statsSum_allTime_.fill(0.0f);
-	statsMin_allTime_.fill(std::numeric_limits<float>::max());
-	statsMax_allTime_.fill(0.0f);
+	std::ranges::fill(statsSum_allTime_, 0.0f);
+	std::ranges::fill(statsMin_allTime_, std::numeric_limits<float>::max());
+	std::ranges::fill(statsMax_allTime_, 0.0f);
 }

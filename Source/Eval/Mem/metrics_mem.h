@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <algorithm>
 #include <array>
 #include <boost/container/small_vector.hpp>
 #include <cmath>
@@ -225,7 +226,7 @@ namespace Mem
 	}
 	inline void Clear(MemBucketRecord& record)
 	{
-		record.fill(MemUsage{});
+		std::ranges::fill(record, MemUsage{});
 	}
 	inline void Clear(MemSpaceRecord& record)
 	{

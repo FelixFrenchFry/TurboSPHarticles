@@ -16,14 +16,14 @@ BenchmarksTracker::BenchmarksTracker(const Sim::SimParams& simParams)
 	, curRecCount_(0u)
 {
 	recLatest_ = {};
-	recLatest_.time.fill(0ull);
+	std::ranges::fill(recLatest_.time, 0ull);
 	ClearAllTime();
 }
 
 void BenchmarksTracker::BeginStep()
 {
-	curStepNs_.fill(0);
-	curStepOcc_.fill(0);
+	std::ranges::fill(curStepNs_, 0);
+	std::ranges::fill(curStepOcc_, 0);
 }
 
 void BenchmarksTracker::EndStep(const uint32_t simStep, const double simTime)
@@ -193,16 +193,16 @@ void BenchmarksTracker::ClearRecordHistory()
 	recHistory_.clear();
 	curRecCount_ = 0;
 	recLatest_ = {};
-	recLatest_.time.fill(0);
-	curStepNs_.fill(0);
-	curStepOcc_.fill(0);
+	std::ranges::fill(recLatest_.time, 0);
+	std::ranges::fill(curStepNs_, 0);
+	std::ranges::fill(curStepOcc_, 0);
 	ClearAllTime();
 }
 
 void BenchmarksTracker::ClearAllTime()
 {
-	benchSum_allTime_.fill(0);
-	benchMin_allTime_.fill(std::numeric_limits<uint64_t>::max());
-	benchMax_allTime_.fill(0);
-	numOcc_allTime_.fill(0);
+	std::ranges::fill(benchSum_allTime_, 0);
+	std::ranges::fill(benchMin_allTime_, std::numeric_limits<uint64_t>::max());
+	std::ranges::fill(benchMax_allTime_, 0);
+	std::ranges::fill(numOcc_allTime_, 0);
 }

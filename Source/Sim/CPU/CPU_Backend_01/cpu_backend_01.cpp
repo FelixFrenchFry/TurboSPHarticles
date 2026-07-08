@@ -1256,12 +1256,12 @@ void SimBackend_CPU01::UpdateRigidBoundaryParticles()
 
 void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 {
-	std::fill(xForceR_.begin(), xForceR_.end(), 0.0f);
-	std::fill(yForceR_.begin(), yForceR_.end(), 0.0f);
-	std::fill(zForceR_.begin(), zForceR_.end(), 0.0f);
-	std::fill(xTorqueR_.begin(), xTorqueR_.end(), 0.0f);
-	std::fill(yTorqueR_.begin(), yTorqueR_.end(), 0.0f);
-	std::fill(zTorqueR_.begin(), zTorqueR_.end(), 0.0f);
+	std::ranges::fill(xForceR_, 0.0f);
+	std::ranges::fill(yForceR_, 0.0f);
+	std::ranges::fill(zForceR_, 0.0f);
+	std::ranges::fill(xTorqueR_, 0.0f);
+	std::ranges::fill(yTorqueR_, 0.0f);
+	std::ranges::fill(zTorqueR_, 0.0f);
 
 	// gravity acts at the center of mass
 	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
@@ -1279,9 +1279,9 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 
 void SimBackend_CPU01::ClearRigidBoundaryParticleForces()
 {
-	std::fill(xForceRigidBoundaryParticle_.begin(), xForceRigidBoundaryParticle_.end(), 0.0f);
-	std::fill(yForceRigidBoundaryParticle_.begin(), yForceRigidBoundaryParticle_.end(), 0.0f);
-	std::fill(zForceRigidBoundaryParticle_.begin(), zForceRigidBoundaryParticle_.end(), 0.0f);
+	std::ranges::fill(xForceRigidBoundaryParticle_, 0.0f);
+	std::ranges::fill(yForceRigidBoundaryParticle_, 0.0f);
+	std::ranges::fill(zForceRigidBoundaryParticle_, 0.0f);
 }
 
 void SimBackend_CPU01::ReduceRigidBoundaryParticleForces()
