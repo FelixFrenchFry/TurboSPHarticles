@@ -303,7 +303,7 @@ namespace Sim
 		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
 		{
 			{
-				.ops = { Bench::BenchOp::Data_Ordering }
+				.ops = { Bench::BenchOp::ParticleData_Reordering }
 			},
 			{
 				.ops = { Bench::BenchOp::Neighbors_Construction }
@@ -312,15 +312,13 @@ namespace Sim
 				.ops = { Bench::BenchOp::Neighbors_Query }
 			},
 			{
-				.ops = { Bench::BenchOp::Density_Solving }
+				.ops = { Bench::BenchOp::Density_Computation }
 			},
 			{
-				.ops = { Bench::BenchOp::Viscosity_Acceleration,
-						   Bench::BenchOp::External_Acceleration }
+				.ops = { Bench::BenchOp::NonPressure_Acceleration }
 			},
 			{
-				.ops = { Bench::BenchOp::Pressure_SourceTerm,
-						   Bench::BenchOp::Pressure_DiagonalElem }
+				.ops = { Bench::BenchOp::Pressure_SourceAndDiagonal }
 			},
 			{
 				.ops = { Bench::BenchOp::Pressure_JacobiSolver }
@@ -332,31 +330,22 @@ namespace Sim
 				.ops = { Bench::BenchOp::Rigid_ForceAccumulation }
 			},
 			{
-				.ops = { Bench::BenchOp::VelocityUpdate,
-						   Bench::BenchOp::PositionUpdate }
+				.ops = { Bench::BenchOp::Particle_Integration }
 			},
 			{
-				.ops = { Bench::BenchOp::Rigid_Update }
+				.ops = { Bench::BenchOp::Rigid_StateUpdate }
 			},
 			{
-				.ops = { Bench::BenchOp::Statistics_Particles,
-						   Bench::BenchOp::Statistics_Density,
-						   Bench::BenchOp::Statistics_Velocity}
-			},
-			{
-				.ops = { Bench::BenchOp::Snapshot_Export }
-			},
-			{
-				.ops = { Bench::BenchOp::Snapshot_Visual }
+				.ops = { Bench::BenchOp::Statistics_Computation }
 			},
 			{
 				.ops = { Bench::BenchOp::Serialization }
 			},
 			{
-				.ops = { Bench::BenchOp::Total_Sim }
+				.ops = { Bench::BenchOp::Visualization }
 			},
 			{
-				.ops = { Bench::BenchOp::Misc_Sim }
+				.ops = { Bench::BenchOp::Total }
 			}
 		};
 

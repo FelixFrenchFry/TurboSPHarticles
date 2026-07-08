@@ -587,19 +587,19 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		ImGui::EndTabBar();
 	}
 
-	// no percentage column for min/max views
-	const bool showPercent = !(benchTableView_ == BTV::Min ||
-							   benchTableView_ == BTV::Max);
+	// percentages are meaningful only when all rows use the same step set
+	const bool showPercent =
+		benchTableView_ == BTV::Latest ||
+		benchTableView_ == BTV::Avg_All;
 
 	// --- [ per-group timing and totals ] -----------------------------------------------------------
 
 	// timing per group (row)
 	std::vector<uint64_t> groupTimings(opGroups.size(), 0);
 
-	// sum of all groups except the one for BenchOp::Total_Sim
-	// (used as denominator for percentages)
-	uint64_t colTime = 0;
-	int totalSimRowIdx = -1;
+	// sum of displayed non-total rows, used to derive unaccounted time
+	uint64_t accountedTime = 0;
+	int totalRowIdx = -1;
 
 	for (uint32_t i = 0; i < opGroups.size(); i++)
 	{
@@ -611,16 +611,29 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 
 		//SPDLOG_ERROR("time: {}", t);
 
-		// detect BenchOp::Total_Sim row to exclude from percentage calculations
-		if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total_Sim)
+		// detect BenchOp::Total row to exclude from percentage calculations
+		if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total)
 		{
-			totalSimRowIdx = static_cast<int>(i);
+			totalRowIdx = static_cast<int>(i);
 		}
 		else
 		{
-			colTime += t;
+			accountedTime += t;
 		}
 	}
+
+	const uint64_t totalTime = totalRowIdx >= 0
+		? groupTimings[static_cast<std::size_t>(totalRowIdx)]
+		: accountedTime;
+	const bool showOther =
+		totalRowIdx >= 0 &&
+		(benchTableView_ == BTV::Latest ||
+		 benchTableView_ == BTV::Avg_All);
+
+	auto SaturatingSubtract = [](const uint64_t a, const uint64_t b)
+	{
+		return (a > b) ? (a - b) : 0ull;
+	};
 
 	// --- [ benchmark table ] -----------------------------------------------------------------------
 
@@ -644,21 +657,57 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		}
 		ImGui::TableHeadersRow();
 
-		// helper function for drawing each row
-		auto DrawOpGroupRow = [&](uint32_t rowIdx, bool isTotalSim) -> void
+		auto DrawPercentBar = [&](const uint64_t t, const bool isTotal) -> void
+		{
+			if (!isTotal && totalTime > 0)
+			{
+				const float pct = 100.0f * (static_cast<float>(t)
+								/ static_cast<float>(totalTime));
+				const float frac = pct / 100.0f;
+
+				char pctLabel[32];
+				std::snprintf(pctLabel, sizeof(pctLabel), "%.1f%%", pct);
+
+				ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(230, 150, 0, 255));
+				ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0.0f), pctLabel);
+				ImGui::PopStyleColor(1);
+			}
+			else
+			{
+				ImGui::Text("---");
+			}
+		};
+
+		auto DrawPlainTimingRow = [&](const char* label, const uint64_t t, const bool isTotal) -> void
+		{
+			ImGui::TableNextRow();
+
+			if (isTotal)
+			{
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(200, 50, 50, 255));
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(200, 50, 50, 255));
+			}
+
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted(label);
+
+			ImGui::TableSetColumnIndex(1);
+			TableTextRightAligned("%.2f", Bench::ConvertFromNs(benchTimeUnit_, t));
+
+			if (showPercent)
+			{
+				ImGui::TableSetColumnIndex(2);
+				DrawPercentBar(t, isTotal);
+			}
+		};
+
+		auto DrawOpGroupRow = [&](uint32_t rowIdx) -> void
 		{
 			const auto& group = opGroups[rowIdx];
 			const uint64_t t = groupTimings[rowIdx];
 			const double t_unit = Bench::ConvertFromNs(benchTimeUnit_, t);
 
 			ImGui::TableNextRow();
-
-			// highlight BenchOp::Total_Sim row
-			if (isTotalSim)
-			{
-				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(200, 50, 50, 255));
-				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(200, 50, 50, 255));
-			}
 
 			// column 0 with aliases
 			// (expandable to show full names vertically)
@@ -667,33 +716,25 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 
 			// stable ID for each row
 			ImGui::PushID(rowIdx);
-			if (isTotalSim)
-			{
-				// show as a regular row (no tree)
-				ImGui::TextUnformatted("total simulation time");
-			}
-			else
-			{
-				constexpr ImGuiTreeNodeFlags flags =
-					ImGuiTreeNodeFlags_SpanFullWidth |
-					ImGuiTreeNodeFlags_AllowItemOverlap |
-					ImGuiTreeNodeFlags_FramePadding;
+			constexpr ImGuiTreeNodeFlags flags =
+				ImGuiTreeNodeFlags_SpanFullWidth |
+				ImGuiTreeNodeFlags_AllowItemOverlap |
+				ImGuiTreeNodeFlags_FramePadding;
 
-				if (ImGui::TreeNodeEx("##group", flags, "%s", alias.c_str()))
+			if (ImGui::TreeNodeEx("##group", flags, "%s", alias.c_str()))
+			{
+				ImGui::Unindent(10.0f); // shift to the left by arrow/bullet spacing
+
+				// show full names (one per line)
+				for (uint32_t k = 0; k < group.ops.size(); k++)
 				{
-					ImGui::Unindent(10.0f); // shift to the left by arrow/bullet spacing
-
-					// show full names (one per line)
-					for (uint32_t k = 0; k < group.ops.size(); k++)
-					{
-						const auto op = group.ops[k];
-						const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-						ImGui::Text("- %s", def.name.data());
-					}
-
-					ImGui::Indent(10.0f); // restore indent
-					ImGui::TreePop();
+					const auto op = group.ops[k];
+					const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+					ImGui::Text("- %s", def.name.data());
 				}
+
+				ImGui::Indent(10.0f); // restore indent
+				ImGui::TreePop();
 			}
 			ImGui::PopID();
 
@@ -705,45 +746,35 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 			if (showPercent)
 			{
 				ImGui::TableSetColumnIndex(2);
-				if (!isTotalSim && colTime > 0)
-				{
-					const float pct = 100.0f * (static_cast<float>(t)
-									/ static_cast<float>(colTime));
-					const float frac = pct / 100.0f;
-
-					char pctLabel[32];
-					std::snprintf(pctLabel, sizeof(pctLabel), "%.1f%%", pct);
-
-					ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(230, 150, 0, 255));
-					ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0.0f), pctLabel);
-					ImGui::PopStyleColor(1);
-				}
-				else
-				{
-					ImGui::Text("---");
-				}
+				DrawPercentBar(t, false);
 			}
 		};
 
 		// draw all regular rows first
 		for (uint32_t i = 0; i < opGroups.size(); i++)
 		{
-			if (static_cast<int>(i) == totalSimRowIdx) { continue; }
+			if (static_cast<int>(i) == totalRowIdx) { continue; }
 
-			DrawOpGroupRow(i, false);
+			DrawOpGroupRow(i);
 		}
 
-		// draw BenchOp::Total_Sim row last (if present)
-		if (totalSimRowIdx >= 0)
+		// draw BenchOp::Total row last (if present)
+		if (totalRowIdx >= 0)
 		{
-			DrawOpGroupRow(totalSimRowIdx, true);
+			if (showOther)
+			{
+				DrawPlainTimingRow("other",
+					SaturatingSubtract(totalTime, accountedTime), false);
+			}
+
+			DrawPlainTimingRow("total", totalTime, true);
 		}
 
 		ImGui::EndTable();
 	}
 
 	// TODO: sparkline?
-	// sparkline for BenchOp::Total_Sim
+	// sparkline for BenchOp::Total
 
 	// --- [ display settings ] ----------------------------------------------------------------------
 

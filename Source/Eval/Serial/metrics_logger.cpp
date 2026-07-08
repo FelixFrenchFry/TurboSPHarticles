@@ -162,20 +162,20 @@ namespace Export
 			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Neighbors_Construction)]) * 1e-6;
 		const double queryMs =
 			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Neighbors_Query)]) * 1e-6;
-		const double totalSimMs =
-			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Total_Sim)]) * 1e-6;
-		const double rigidUpdateMs =
-			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Rigid_Update)]) * 1e-6;
-		const double rigidForceAccMs =
+		const double totalMs =
+			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Total)]) * 1e-6;
+		const double rigidStateUpdateMs =
+			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Rigid_StateUpdate)]) * 1e-6;
+		const double rigidForceAccumMs =
 			static_cast<double>(record.time[Bench::GetIdx(Bench::BenchOp::Rigid_ForceAccumulation)]) * 1e-6;
 
 		benchmarkMetricsCsv_ << record.simStep << ','
 							 << std::setprecision(17) << record.simTime << ','
 							 << std::setprecision(17) << constructionMs << ','
 							 << std::setprecision(17) << queryMs << ','
-							 << std::setprecision(17) << totalSimMs << ','
-							 << std::setprecision(17) << rigidUpdateMs << ','
-							 << std::setprecision(17) << rigidForceAccMs;
+							 << std::setprecision(17) << totalMs << ','
+							 << std::setprecision(17) << rigidStateUpdateMs << ','
+							 << std::setprecision(17) << rigidForceAccumMs;
 
 		benchmarkMetricsCsv_ << '\n';
 		benchmarkMetricsCsv_.flush();
@@ -446,8 +446,8 @@ namespace Export
 		if (!benchmarkMetricsCsv_.is_open()) { return; }
 
 		benchmarkMetricsCsv_
-			<< "simStep,simTime,construction_ms,query_ms,total_sim_ms,"
-			<< "rigid_update_ms,rigid_force_acc_ms\n";
+			<< "simStep,simTime,construction_ms,query_ms,total_ms,"
+			<< "rigid_state_update_ms,rigid_force_accum_ms\n";
 	}
 
 	void LoggingMgr::Disable()

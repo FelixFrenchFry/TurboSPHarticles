@@ -292,7 +292,7 @@ namespace Sim
         // sum of displayed non-total rows, used to derive unaccounted time
         uint64_t accountedNsLatest = 0;
         uint64_t accountedNsAvg = 0;
-        int totalSimIdx = -1;
+        int totalIdx = -1;
 
         auto SaturatingSubtract = [](const uint64_t a, const uint64_t b)
         {
@@ -323,9 +323,9 @@ namespace Sim
             groupLatest[i] = groupNsLatest;
             groupAvg[i] = groupNsAvg;
 
-            if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total_Sim)
+            if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total)
             {
-                totalSimIdx = static_cast<int>(i);
+                totalIdx = static_cast<int>(i);
             }
             else
             {
@@ -334,11 +334,11 @@ namespace Sim
             }
         }
 
-        const uint64_t totalSimLatestNs = totalSimIdx >= 0
-            ? groupLatest[static_cast<std::size_t>(totalSimIdx)]
+        const uint64_t totalLatestNs = totalIdx >= 0
+            ? groupLatest[static_cast<std::size_t>(totalIdx)]
             : accountedNsLatest;
-        const uint64_t totalSimAvgNs = totalSimIdx >= 0
-            ? groupAvg[static_cast<std::size_t>(totalSimIdx)]
+        const uint64_t totalAvgNs = totalIdx >= 0
+            ? groupAvg[static_cast<std::size_t>(totalIdx)]
             : accountedNsAvg;
 
         const char* unitStr = Bench::UnitLabel(unit);
@@ -358,10 +358,10 @@ namespace Sim
         lineCount++;
 
         auto PrintTimingRow =
-            [&](const char* alias,
+            [&](const char* name,
                 const uint64_t nsLatest,
                 const uint64_t nsAvg,
-                const bool isTotalSim)
+                const bool isTotal)
             {
                 const double t_latest = Bench::ConvertFromNs(unit, nsLatest);
                 const double t_avg = Bench::ConvertFromNs(unit, nsAvg);
@@ -369,24 +369,24 @@ namespace Sim
                 double pctLatest = 0.0;
                 double pctAvg = 0.0;
 
-                if (!isTotalSim)
+                if (!isTotal)
                 {
-                    if (totalSimLatestNs > 0)
+                    if (totalLatestNs > 0)
                     {
                         pctLatest = 100.0 * static_cast<double>(nsLatest)
-                            / static_cast<double>(totalSimLatestNs);
+                            / static_cast<double>(totalLatestNs);
                     }
-                    if (totalSimAvgNs > 0)
+                    if (totalAvgNs > 0)
                     {
                         pctAvg = 100.0 * static_cast<double>(nsAvg)
-                            / static_cast<double>(totalSimAvgNs);
+                            / static_cast<double>(totalAvgNs);
                     }
                 }
 
-                if (isTotalSim)
+                if (isTotal)
                 {
                     std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
-                        alias, t_latest, "---", t_avg, "---");
+                        name, t_latest, "---", t_avg, "---");
                 }
                 else
                 {
@@ -398,20 +398,20 @@ namespace Sim
 						"%.1f %%", pctAvg);
 
                     std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
-                        alias, t_latest, pctLatestLabel, t_avg, pctAvgLabel);
+                        name, t_latest, pctLatestLabel, t_avg, pctAvgLabel);
                 }
 
                 lineCount++;
             };
 
-        auto PrintRow = [&](const uint32_t i, const bool isTotalSim)
+        auto PrintRow = [&](const uint32_t i, const bool isTotal)
             {
                 const auto& group = opGroups[i];
 
-                std::string alias;
-                if (isTotalSim)
+                std::string name;
+                if (isTotal)
                 {
-                    alias = "total";
+                    name = "total";
                 }
                 else if (!group.ops.empty())
                 {
@@ -419,37 +419,37 @@ namespace Sim
                     {
                         const auto op = group.ops[k];
                         const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-                        if (k > 0) { alias += " + "; }
-                        alias += def.alias.data();
+                        if (k > 0) { name += " + "; }
+                        name.append(def.name.data(), def.name.size());
                     }
                 }
                 else
                 {
-                    alias = "<empty>";
+                    name = "<empty>";
                 }
 
-                PrintTimingRow(alias.c_str(), groupLatest[i], groupAvg[i], isTotalSim);
+                PrintTimingRow(name.c_str(), groupLatest[i], groupAvg[i], isTotal);
             };
 
         // regular rows
         for (uint32_t i = 0; i < opGroups.size(); i++)
         {
-            if (static_cast<int>(i) == totalSimIdx) { continue; }
+            if (static_cast<int>(i) == totalIdx) { continue; }
             PrintRow(i, false);
         }
 
-        // total simulation row last
-        if (totalSimIdx >= 0)
+        // total row last
+        if (totalIdx >= 0)
         {
             const uint64_t otherLatestNs =
-                SaturatingSubtract(totalSimLatestNs, accountedNsLatest);
+                SaturatingSubtract(totalLatestNs, accountedNsLatest);
             const uint64_t otherAvgNs =
-                SaturatingSubtract(totalSimAvgNs, accountedNsAvg);
+                SaturatingSubtract(totalAvgNs, accountedNsAvg);
 
             PrintTimingRow("other", otherLatestNs, otherAvgNs, false);
 			PrintCliSeparator();
             lineCount++;
-            PrintRow(static_cast<uint32_t>(totalSimIdx), true);
+            PrintRow(static_cast<uint32_t>(totalIdx), true);
         }
 
         // blank line separating table and progress line

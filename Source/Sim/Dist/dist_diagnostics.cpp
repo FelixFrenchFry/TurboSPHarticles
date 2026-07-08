@@ -461,9 +461,9 @@ namespace
 		return group.ops.size() == 1 && group.ops[0] == op;
 	}
 
-	bool IsTotalSimGroup(const Bench::BenchOpGroupDef& group)
+	bool IsTotalGroup(const Bench::BenchOpGroupDef& group)
 	{
-		return IsSingleBenchOpGroup(group, Bench::BenchOp::Total_Sim);
+		return IsSingleBenchOpGroup(group, Bench::BenchOp::Total);
 	}
 
 	bool IsDistBenchOp(const Bench::BenchOp op)
@@ -484,12 +484,12 @@ namespace
 		return false;
 	}
 
-	int FindTotalSimGroupIdx(
+	int FindTotalGroupIdx(
 		const std::vector<Bench::BenchOpGroupDef>& opGroups)
 	{
 		for (uint32_t i = 0; i < opGroups.size(); i++)
 		{
-			if (IsTotalSimGroup(opGroups[i]))
+			if (IsTotalGroup(opGroups[i]))
 			{
 				return static_cast<int>(i);
 			}
@@ -514,22 +514,22 @@ namespace
 		return groupTimeNs;
 	}
 
-	std::string BenchGroupAlias(const Bench::BenchOpGroupDef& group)
+	std::string BenchGroupName(const Bench::BenchOpGroupDef& group)
 	{
-		if (IsTotalSimGroup(group)) { return "total"; }
+		if (IsTotalGroup(group)) { return "total"; }
 		if (group.ops.empty()) { return "<empty>"; }
 
-		std::string alias{};
+		std::string name{};
 		for (std::size_t k = 0; k < group.ops.size(); k++)
 		{
 			const Bench::BenchOp op = group.ops[k];
 			const auto& def = Bench::Definitions[Bench::GetIdx(op)];
 
-			if (k > 0) { alias += " + "; }
-			alias += std::string(def.alias);
+			if (k > 0) { name += " + "; }
+			name.append(def.name.data(), def.name.size());
 		}
 
-		return alias;
+		return name;
 	}
 
 	struct DistBenchGroupSummary
@@ -584,7 +584,7 @@ namespace
 	{
 		std::vector<DistBenchGroupSummary> groups{};
 		DistBenchGroupSummary other{};
-		int totalSimIdx = -1;
+		int totalIdx = -1;
 		int latestCriticalRank = -1;
 		int avgCriticalRank = -1;
 	};
@@ -596,9 +596,9 @@ namespace
 		DistBenchTableSummary tableSummary{};
 		tableSummary.groups.reserve(opGroups.size());
 
-		tableSummary.totalSimIdx = FindTotalSimGroupIdx(opGroups);
+		tableSummary.totalIdx = FindTotalGroupIdx(opGroups);
 
-		if (tableSummary.totalSimIdx < 0)
+		if (tableSummary.totalIdx < 0)
 		{
 			for (const Bench::BenchOpGroupDef& group : opGroups)
 			{
@@ -608,7 +608,7 @@ namespace
 		}
 
 		const Bench::BenchOpGroupDef& totalGroup =
-			opGroups[static_cast<uint32_t>(tableSummary.totalSimIdx)];
+			opGroups[static_cast<uint32_t>(tableSummary.totalIdx)];
 		const DistRankBenchReport* latestTotalReport =
 			FindReportWithMaxBenchGroupTime(reports, totalGroup, false);
 		const DistRankBenchReport* avgTotalReport =
@@ -637,7 +637,7 @@ namespace
 					BenchGroupTimeNs(*avgTotalReport, group, true);
 			}
 
-			if (static_cast<int>(i) != tableSummary.totalSimIdx)
+			if (static_cast<int>(i) != tableSummary.totalIdx)
 			{
 				accountedLatestNs += groupSummary.latestNs;
 				accountedAvgNs += groupSummary.avgNs;
@@ -647,7 +647,7 @@ namespace
 		}
 
 		const DistBenchGroupSummary& totalSummary =
-			tableSummary.groups[static_cast<uint32_t>(tableSummary.totalSimIdx)];
+			tableSummary.groups[static_cast<uint32_t>(tableSummary.totalIdx)];
 		tableSummary.other.latestNs =
 			SaturatingSubtract(totalSummary.latestNs, accountedLatestNs);
 		tableSummary.other.avgNs =
@@ -661,10 +661,10 @@ namespace
 		int rank = 0;
 
 		uint64_t backendAvgNs = 0;
-		uint64_t distMigrAvgNs = 0;
-		uint64_t distClassAvgNs = 0;
-		uint64_t distHaloAvgNs = 0;
-		uint64_t distSyncAvgNs = 0;
+		uint64_t distParticleMigrationAvgNs = 0;
+		uint64_t distParticleClassAvgNs = 0;
+		uint64_t distHaloExchangeAvgNs = 0;
+		uint64_t distStateSyncAvgNs = 0;
 		uint64_t otherAvgNs = 0;
 	};
 
@@ -675,8 +675,8 @@ namespace
 		std::vector<DistRankTimingSummary> summaries{};
 		if (reports.empty() || opGroups.empty()) { return summaries; }
 
-		const int totalSimIdx = FindTotalSimGroupIdx(opGroups);
-		if (totalSimIdx < 0) { return summaries; }
+		const int totalIdx = FindTotalGroupIdx(opGroups);
+		if (totalIdx < 0) { return summaries; }
 
 		summaries.reserve(reports.size());
 
@@ -692,7 +692,7 @@ namespace
 				const Bench::BenchOpGroupDef& group = opGroups[i];
 				const uint64_t avgNs = BenchGroupTimeNs(report, group, true);
 
-				if (static_cast<int>(i) == totalSimIdx)
+				if (static_cast<int>(i) == totalIdx)
 				{
 					totalAvgNs = avgNs;
 					continue;
@@ -701,22 +701,22 @@ namespace
 				if (IsSingleBenchOpGroup(group,
 					Bench::BenchOp::Dist_ParticleMigration))
 				{
-					summary.distMigrAvgNs += avgNs;
+					summary.distParticleMigrationAvgNs += avgNs;
 				}
 				else if (IsSingleBenchOpGroup(group,
 					Bench::BenchOp::Dist_ParticleClass))
 				{
-					summary.distClassAvgNs += avgNs;
+					summary.distParticleClassAvgNs += avgNs;
 				}
 				else if (IsSingleBenchOpGroup(group,
 					Bench::BenchOp::Dist_HaloExchange))
 				{
-					summary.distHaloAvgNs += avgNs;
+					summary.distHaloExchangeAvgNs += avgNs;
 				}
 				else if (IsSingleBenchOpGroup(group,
 					Bench::BenchOp::Dist_StateSync))
 				{
-					summary.distSyncAvgNs += avgNs;
+					summary.distStateSyncAvgNs += avgNs;
 				}
 				else if (!IsDistBenchGroup(group))
 				{
@@ -726,10 +726,10 @@ namespace
 
 			const uint64_t displayedAvgNs =
 				summary.backendAvgNs +
-				summary.distMigrAvgNs +
-				summary.distClassAvgNs +
-				summary.distHaloAvgNs +
-				summary.distSyncAvgNs;
+				summary.distParticleMigrationAvgNs +
+				summary.distParticleClassAvgNs +
+				summary.distHaloExchangeAvgNs +
+				summary.distStateSyncAvgNs;
 			summary.otherAvgNs =
 				SaturatingSubtract(totalAvgNs, displayedAvgNs);
 
@@ -825,13 +825,13 @@ namespace
 		const DistBenchTableSummary tableSummary =
 			BuildCriticalRankBenchSummaries(reports, opGroups);
 
-		const uint64_t totalLatestNs = tableSummary.totalSimIdx >= 0
+		const uint64_t totalLatestNs = tableSummary.totalIdx >= 0
 			? tableSummary.groups[static_cast<uint64_t>(
-				tableSummary.totalSimIdx)].latestNs
+				tableSummary.totalIdx)].latestNs
 			: 0;
-		const uint64_t totalAvgNs = tableSummary.totalSimIdx >= 0
+		const uint64_t totalAvgNs = tableSummary.totalIdx >= 0
 			? tableSummary.groups[static_cast<uint64_t>(
-				tableSummary.totalSimIdx)].avgNs
+				tableSummary.totalIdx)].avgNs
 			: 0;
 
 		const char* unitStr = Bench::UnitLabel(unit);
@@ -847,9 +847,9 @@ namespace
 		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
 
 		auto PrintBenchRow =
-			[&](const char* alias,
+			[&](const char* name,
 				const DistBenchGroupSummary& summary,
-				const bool isTotalSim)
+				const bool isTotal)
 		{
 			const double latestTime =
 				Bench::ConvertFromNs(unit, summary.latestNs);
@@ -858,7 +858,7 @@ namespace
 
 			char pctLatestLabel[16];
 			char pctAvgLabel[16];
-			if (isTotalSim)
+			if (isTotal)
 			{
 				std::snprintf(pctLatestLabel, sizeof(pctLatestLabel), "%s", "---");
 				std::snprintf(pctAvgLabel, sizeof(pctAvgLabel), "%s", "---");
@@ -880,25 +880,25 @@ namespace
 
 			PrintLine(lineCount,
 				"%-33.33s | %11.2f  %8s | %10.2f  %8s",
-				alias, latestTime, pctLatestLabel,
+				name, latestTime, pctLatestLabel,
 				avgTime, pctAvgLabel);
 		};
 
 		for (uint32_t i = 0; i < opGroups.size(); i++)
 		{
-			if (static_cast<int>(i) == tableSummary.totalSimIdx) { continue; }
-			const std::string alias = BenchGroupAlias(opGroups[i]);
-			PrintBenchRow(alias.c_str(), tableSummary.groups[i], false);
+			if (static_cast<int>(i) == tableSummary.totalIdx) { continue; }
+			const std::string name = BenchGroupName(opGroups[i]);
+			PrintBenchRow(name.c_str(), tableSummary.groups[i], false);
 		}
 
-		if (tableSummary.totalSimIdx >= 0)
+		if (tableSummary.totalIdx >= 0)
 		{
 			PrintBenchRow("other", tableSummary.other, false);
 			PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
 			PrintBenchRow(
 				"total",
 				tableSummary.groups[static_cast<uint32_t>(
-					tableSummary.totalSimIdx)],
+					tableSummary.totalIdx)],
 				true);
 			PrintLine(lineCount,
 				"%-33.33s | %11d  %8s | %10d  %8s",
@@ -922,9 +922,9 @@ namespace
 		std::snprintf(unitLabel, sizeof(unitLabel), "[%s]", Bench::UnitLabel(unit));
 
 		PrintLine(lineCount,
-			"%-2s | %10s | %9s | %9s | %9s | %9s | %9s %4s",
-			"r", "backend", "distMigr", "distClass",
-			"distHalo", "distSync", "other", "avg");
+			"%-2s | %10s | %21s | %20s | %17s | %13s | %9s %4s",
+			"r", "backend", "distParticleMigration", "distParticleClassif",
+			"distHaloExchange", "distStateSync", "other", "avg");
 		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
@@ -933,13 +933,13 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(lineCount,
-				"%-2s | %10.2f | %9.2f | %9.2f | %9.2f | %9.2f | %9.2f %4s",
+				"%-2s | %10.2f | %21.2f | %20.2f | %17.2f | %13.2f | %9.2f %4s",
 				rankLabel,
 				Bench::ConvertFromNs(unit, summary.backendAvgNs),
-				Bench::ConvertFromNs(unit, summary.distMigrAvgNs),
-				Bench::ConvertFromNs(unit, summary.distClassAvgNs),
-				Bench::ConvertFromNs(unit, summary.distHaloAvgNs),
-				Bench::ConvertFromNs(unit, summary.distSyncAvgNs),
+				Bench::ConvertFromNs(unit, summary.distParticleMigrationAvgNs),
+				Bench::ConvertFromNs(unit, summary.distParticleClassAvgNs),
+				Bench::ConvertFromNs(unit, summary.distHaloExchangeAvgNs),
+				Bench::ConvertFromNs(unit, summary.distStateSyncAvgNs),
 				Bench::ConvertFromNs(unit, summary.otherAvgNs),
 				unitLabel);
 		}

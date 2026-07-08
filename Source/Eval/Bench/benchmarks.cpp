@@ -170,7 +170,8 @@ uint64_t BenchmarksTracker::GetBench_Min(const BenchOp op) const
 {
 	if (curRecCount_ == 0) { return 0; }
 
-	return benchMin_allTime_[GetIdx(op)];
+	const uint64_t minNs = benchMin_allTime_[GetIdx(op)];
+	return minNs == std::numeric_limits<uint64_t>::max() ? 0 : minNs;
 }
 
 uint64_t BenchmarksTracker::GetBench_Max(const BenchOp op) const

@@ -320,8 +320,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 			memoryTracker_.BeginStep();
 			statisticsTracker_.BeginStep();
 
-			// starting point of total sim benchmark
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Total_Sim });
+			// starting point of total benchmark
+			benchmarksTracker_.StartBench({ Bench::BenchOp::Total });
 
 			// perform the actual simulation step
 			simBackend_->ExecuteFullSimStep(params);
@@ -347,7 +347,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 			if (now - lastVisWall_ >= minInterval)
 			{
-				benchmarksTracker_.StartBench({ Bench::BenchOp::Snapshot_Visual });
+				benchmarksTracker_.StartBench({ Bench::BenchOp::Visualization });
 
 				// create visual snapshot and push to its mailbox
 				auto visSnap = std::make_shared<Sync::VisualSnapshot>();
@@ -361,7 +361,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 				visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
 
-				benchmarksTracker_.StopBench({ Bench::BenchOp::Snapshot_Visual });
+				benchmarksTracker_.StopBench({ Bench::BenchOp::Visualization });
 
 				lastVisWall_ = now;
 			}
@@ -457,8 +457,8 @@ void SimulationMgr::RunSim_Blocking()
 			memoryTracker_.BeginStep();
 			statisticsTracker_.BeginStep();
 
-			// starting point of total sim benchmark
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Total_Sim });
+			// starting point of total benchmark
+			benchmarksTracker_.StartBench({ Bench::BenchOp::Total });
 
 			// perform the actual simulation step
 			simBackend_->ExecuteFullSimStep(params);
@@ -552,13 +552,11 @@ void SimulationMgr::EndRunLogging()
 
 void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 {
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Snapshot_Export });
+	benchmarksTracker_.StartBench({ Bench::BenchOp::Serialization });
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Snapshot_Export });
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Serialization });
 	// write export snapshot to files
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
@@ -619,8 +617,8 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 	simBackend_->FillMemoryRecord(memoryTracker_.GetCurrentRecord(), simParams_);
 	memoryTracker_.EndStep(simStep_, simTime_);
 
-	// ending point of total sim benchmark, archive data and update aggregates
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Total_Sim });
+	// ending point of total benchmark, archive data and update aggregates
+	benchmarksTracker_.StopBench({ Bench::BenchOp::Total });
 	benchmarksTracker_.EndStep(simStep_, simTime_);
 }
 

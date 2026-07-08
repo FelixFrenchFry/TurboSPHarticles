@@ -660,9 +660,9 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 		{ .ops = { Bench::BenchOp::Dist_StateSync } }
 	};
 	auto distBenchInsertIt = curBenchOpGroups_.end();
-	for (auto it = curBenchOpGroups_.begin(); it != curBenchOpGroups_.end(); ++it)
+	for (auto it = curBenchOpGroups_.begin(); it != curBenchOpGroups_.end(); it++)
 	{
-		if (it->ops.size() == 1 && it->ops[0] == Bench::BenchOp::Serialization)
+		if (it->ops.size() == 1 && it->ops[0] == Bench::BenchOp::Visualization)
 		{
 			distBenchInsertIt = it;
 			distBenchInsertIt++;
@@ -671,9 +671,9 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	}
 	if (distBenchInsertIt == curBenchOpGroups_.end())
 	{
-		for (auto it = curBenchOpGroups_.begin(); it != curBenchOpGroups_.end(); ++it)
+		for (auto it = curBenchOpGroups_.begin(); it != curBenchOpGroups_.end(); it++)
 		{
-			if (it->ops.size() == 1 && it->ops[0] == Bench::BenchOp::Total_Sim)
+			if (it->ops.size() == 1 && it->ops[0] == Bench::BenchOp::Total)
 			{
 				distBenchInsertIt = it;
 				break;
@@ -883,8 +883,8 @@ void DistSimulationMgr::RunSim_Blocking()
 		lastParticleMigrationStats_ = {};
 		lastHaloExchangeStats_ = {};
 
-		// starting point of total sim benchmark
-		benchmarksTracker_->StartBench({ Bench::BenchOp::Total_Sim });
+		// starting point of total benchmark
+		benchmarksTracker_->StartBench({ Bench::BenchOp::Total });
 
 		// perform the actual distributed simulation step
 		const bool stepOk = ExecuteDistributedStep(params);
@@ -1314,7 +1314,7 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 {
 	DistSnapshotGatherStats stats{};
 
-	benchmarksTracker_->StartBench({ Bench::BenchOp::Snapshot_Export });
+	benchmarksTracker_->StartBench({ Bench::BenchOp::Serialization });
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
 	const bool gatherOk = GatherExportSnapshotToRoot(
@@ -1326,18 +1326,21 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 		simStep_,
 		simTime_,
 		&stats);
-	benchmarksTracker_->StopBench({ Bench::BenchOp::Snapshot_Export });
 
-	if (!gatherOk) { return false; }
+	if (!gatherOk)
+	{
+		benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
+		return false;
+	}
 
 	if (mpiContext_.IsRoot())
 	{
-		benchmarksTracker_->StartBench({ Bench::BenchOp::Serialization });
 		// write export snapshot to files
 		serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 		serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
-		benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
 	}
+
+	benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
 
 	return true;
 }
@@ -1447,8 +1450,8 @@ void DistSimulationMgr::FinalizeBenchMemMeasurements(
 	FillDistributedMemoryRecord(memoryTracker_->GetCurrentRecord());
 	memoryTracker_->EndStep(simStep_, simTime_);
 
-	// ending point of total sim benchmark, archive data and update aggregates
-	benchmarksTracker_->StopBench({ Bench::BenchOp::Total_Sim });
+	// ending point of total benchmark, archive data and update aggregates
+	benchmarksTracker_->StopBench({ Bench::BenchOp::Total });
 	benchmarksTracker_->EndStep(simStep_, simTime_);
 }
 
@@ -1480,9 +1483,9 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 	if (benchmarksTracker_)
 	{
 		report.totalStepLatestNs =
-			benchmarksTracker_->GetBench_Latest(Bench::BenchOp::Total_Sim);
+			benchmarksTracker_->GetBench_Latest(Bench::BenchOp::Total);
 		report.totalStepAvgNs =
-			benchmarksTracker_->GetBench_Avg_OverAll(Bench::BenchOp::Total_Sim);
+			benchmarksTracker_->GetBench_Avg_OverAll(Bench::BenchOp::Total);
 	}
 
 	if (memoryTracker_)
