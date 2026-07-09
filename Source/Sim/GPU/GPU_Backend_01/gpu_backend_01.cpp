@@ -1006,7 +1006,7 @@ void SimBackend_GPU01::FillStatisticsRecord(
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Computation });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Statistics_Computation);
 
 	// --- [ particle counts ] -----------------------------------------------------------------------
 
@@ -1108,7 +1108,7 @@ void SimBackend_GPU01::FillStatisticsRecord(
 		Set(record, StatMetric::VelMag_Max, h_velocityStats_.velMagMax);
 	}
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Computation });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Statistics_Computation);
 }
 
 void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench)
@@ -1132,34 +1132,34 @@ void SimBackend_GPU01::ExecuteNeighborSearch(const SimParams& params, bool bench
 
 	if (bench)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::ParticleData_Reordering });
+		benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	}
 	neighborSearch_->DataReOrder(params);
 	if (bench)
 	{
-		benchmarksTracker_.StopBench({ Bench::BenchOp::ParticleData_Reordering });
+		benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 	}
 
 	if (bench)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	}
 	neighborSearch_->Construct(params);
 	if (bench)
 	{
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 	}
 
 	if (bench)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
 	}
 	neighborSearch_->Query_Count(params);
 	FinalizeNeighborLists_Count();
 	neighborSearch_->Query_Fill(params);
 	if (bench)
 	{
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 	}
 }
 
@@ -1186,7 +1186,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 		if (N_rigidBodies_ > 0)
 		{
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_StateUpdate });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
 			GPU01::Launch_UpdateRigidBoundaryParticles(
 				d_bodyIdB_.Data(), d_rigidBoundaryParticleIdxB_.Data(),
 				d_rigidBoundaryParticleBeginR_.Data(), d_rigidBoundaryParticleCountR_.Data(),
@@ -1201,30 +1201,30 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data());
 			GPU::StreamSync(stream_);
-			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_StateUpdate });
+			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
 		}
 
 		// --- [ particle data re-ordering ] -----------------------------------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::ParticleData_Reordering });
+		benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 		neighborSearch_->DataReOrder(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::ParticleData_Reordering });
+		benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
 		// --- [ neighbor search ] ----------------------------------------------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 		neighborSearch_->Construct(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
 		neighborSearch_->Query_Count(params);
 		FinalizeNeighborLists_Count();
 		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 
 		// --- [ density computations ] -----------------------------------------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Computation });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Density_Computation);
 		GPU01::Launch_Density(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1240,13 +1240,13 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_densityF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Computation });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Density_Computation);
 
 		// --- [ non-pressure accelerations ] -----------------------------------------------------------
 
 		if (N_rigidBodies_ > 0)
 		{
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 			GPU01::Launch_ClearRigidForcesAndAddGravity(
 				d_massR_.Data(), d_massInvR_.Data(),
 				params.gravity.x, params.gravity.y, params.gravity.z,
@@ -1259,10 +1259,10 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_yForceRigidBoundaryParticle_.Data(),
 				d_zForceRigidBoundaryParticle_.Data());
 			GPU::StreamSync(stream_);
-			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		}
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::NonPressure_Acceleration });
+		benchmarksTracker_.StartBench(Bench::BenchOp::NonPressure_Acceleration);
 		GPU01::Launch_NonPressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1281,11 +1281,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::NonPressure_Acceleration });
+		benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
 
 		if (N_rigidBodies_ > 0)
 		{
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 			GPU01::Launch_AccumulateRigidBodyNonPressureForces(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1309,12 +1309,12 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_yForceRigidBoundaryParticle_.Data(),
 				d_zForceRigidBoundaryParticle_.Data());
 			GPU::StreamSync(stream_);
-			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		}
 
 		// --- [ source-term (density invariance) and diagonal elements ] -------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceAndDiagonal });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 		GPU01::Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1333,11 +1333,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_sourceTermF_.Data(), d_diagElemF_.Data(), d_pressureF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceAndDiagonal });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 
 		// --- [ relaxed jacobi solver for pressure ] ---------------------------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 		// rest solver-related variables
 		N_solverIterCount_ = 1;
@@ -1383,11 +1383,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 			N_solverIterCount_++;
 		} while (!TerminationConditionSatisfied(params));
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 		// --- [ finalize pressure acceleration for integration ] ---------------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_Acceleration);
 		GPU01::Launch_PressureAcceleration(
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1404,11 +1404,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 
 		if (N_rigidBodies_ > 0)
 		{
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 			GPU01::Launch_AccumulateRigidBodyPressureForces(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1449,12 +1449,12 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data());
 			GPU::StreamSync(stream_);
-			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		}
 
 		// --- [ velocity and position updates ] --------------------------------------------------------
 
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Particle_Integration });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Particle_Integration);
 		GPU01::Launch_Integration(
 			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
@@ -1463,11 +1463,11 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data());
 
 		GPU::StreamSync(stream_);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Particle_Integration });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Particle_Integration);
 
 		if (N_rigidBodies_ > 0)
 		{
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_StateUpdate });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
 			GPU01::Launch_IntegrateRigidBodies(
 				params.timeStep, N_rigidBodies_, stream_,
 				d_xCMR_.Data(), d_yCMR_.Data(), d_zCMR_.Data(),
@@ -1497,7 +1497,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data());
 			GPU::StreamSync(stream_);
-			benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_StateUpdate });
+			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
 		}
 	}
 

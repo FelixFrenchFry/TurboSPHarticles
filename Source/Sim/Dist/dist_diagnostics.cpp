@@ -441,29 +441,14 @@ namespace
 		return static_cast<double>(sum) / static_cast<double>(reports.size());
 	}
 
-	uint64_t MinOrZero(const uint64_t a, const uint64_t b)
-	{
-		if (a == 0) { return b; }
-		if (b == 0) { return a; }
-
-		return std::min(a, b);
-	}
-
 	uint64_t SaturatingSubtract(const uint64_t a, const uint64_t b)
 	{
 		return a > b ? a - b : 0;
 	}
 
-	bool IsSingleBenchOpGroup(
-		const Bench::BenchOpGroupDef& group,
-		const Bench::BenchOp op)
+	bool IsTotalOp(const Bench::BenchOp op)
 	{
-		return group.ops.size() == 1 && group.ops[0] == op;
-	}
-
-	bool IsTotalGroup(const Bench::BenchOpGroupDef& group)
-	{
-		return IsSingleBenchOpGroup(group, Bench::BenchOp::Total);
+		return op == Bench::BenchOp::Total;
 	}
 
 	bool IsDistBenchOp(const Bench::BenchOp op)
@@ -474,22 +459,11 @@ namespace
 			op == Bench::BenchOp::Dist_StateSync;
 	}
 
-	bool IsDistBenchGroup(const Bench::BenchOpGroupDef& group)
+	int FindTotalOpIdx(const Bench::BenchOpList& benchOps)
 	{
-		for (const Bench::BenchOp op : group.ops)
+		for (uint32_t i = 0; i < benchOps.size(); i++)
 		{
-			if (IsDistBenchOp(op)) { return true; }
-		}
-
-		return false;
-	}
-
-	int FindTotalGroupIdx(
-		const std::vector<Bench::BenchOpGroupDef>& opGroups)
-	{
-		for (uint32_t i = 0; i < opGroups.size(); i++)
-		{
-			if (IsTotalGroup(opGroups[i]))
+			if (IsTotalOp(benchOps[i]))
 			{
 				return static_cast<int>(i);
 			}
@@ -498,56 +472,39 @@ namespace
 		return -1;
 	}
 
-	uint64_t BenchGroupTimeNs(
+	uint64_t BenchOpTimeNs(
 		const DistRankBenchReport& report,
-		const Bench::BenchOpGroupDef& group,
+		const Bench::BenchOp op,
 		const bool useAvg)
 	{
-		uint64_t groupTimeNs = 0;
-		for (const Bench::BenchOp op : group.ops)
-		{
-			const uint8_t i = Bench::GetIdx(op);
-			const uint64_t opTimeNs = useAvg ? report.avgNs[i] : report.latestNs[i];
-			groupTimeNs = MinOrZero(groupTimeNs, opTimeNs);
-		}
-
-		return groupTimeNs;
+		const uint8_t i = Bench::GetIdx(op);
+		return useAvg ? report.avgNs[i] : report.latestNs[i];
 	}
 
-	std::string BenchGroupName(const Bench::BenchOpGroupDef& group)
+	std::string BenchOpName(const Bench::BenchOp op)
 	{
-		if (IsTotalGroup(group)) { return "total"; }
-		if (group.ops.empty()) { return "<empty>"; }
+		if (IsTotalOp(op)) { return "total"; }
 
-		std::string name{};
-		for (std::size_t k = 0; k < group.ops.size(); k++)
-		{
-			const Bench::BenchOp op = group.ops[k];
-			const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-
-			if (k > 0) { name += " + "; }
-			name.append(def.name.data(), def.name.size());
-		}
-
-		return name;
+		const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+		return std::string(def.name);
 	}
 
-	struct DistBenchGroupSummary
+	struct DistBenchOpSummary
 	{
 		uint64_t latestNs = 0;
 		uint64_t avgNs = 0;
 	};
 
-	DistBenchGroupSummary SummarizeBenchGroup(
+	DistBenchOpSummary SummarizeBenchOp(
 		const std::vector<DistRankBenchReport>& reports,
-		const Bench::BenchOpGroupDef& group)
+		const Bench::BenchOp op)
 	{
-		DistBenchGroupSummary summary{};
+		DistBenchOpSummary summary{};
 
 		for (const DistRankBenchReport& report : reports)
 		{
-			const uint64_t latestNs = BenchGroupTimeNs(report, group, false);
-			const uint64_t avgNs = BenchGroupTimeNs(report, group, true);
+			const uint64_t latestNs = BenchOpTimeNs(report, op, false);
+			const uint64_t avgNs = BenchOpTimeNs(report, op, true);
 
 			if (latestNs > summary.latestNs)
 			{
@@ -559,9 +516,9 @@ namespace
 		return summary;
 	}
 
-	const DistRankBenchReport* FindReportWithMaxBenchGroupTime(
+	const DistRankBenchReport* FindReportWithMaxBenchOpTime(
 		const std::vector<DistRankBenchReport>& reports,
-		const Bench::BenchOpGroupDef& group,
+		const Bench::BenchOp op,
 		const bool useAvg)
 	{
 		const DistRankBenchReport* bestReport = nullptr;
@@ -569,7 +526,7 @@ namespace
 
 		for (const DistRankBenchReport& report : reports)
 		{
-			const uint64_t timeNs = BenchGroupTimeNs(report, group, useAvg);
+			const uint64_t timeNs = BenchOpTimeNs(report, op, useAvg);
 			if (bestReport == nullptr || timeNs > bestNs)
 			{
 				bestReport = &report;
@@ -582,8 +539,8 @@ namespace
 
 	struct DistBenchTableSummary
 	{
-		std::vector<DistBenchGroupSummary> groups{};
-		DistBenchGroupSummary other{};
+		std::vector<DistBenchOpSummary> ops{};
+		DistBenchOpSummary other{};
 		int totalIdx = -1;
 		int latestCriticalRank = -1;
 		int avgCriticalRank = -1;
@@ -591,28 +548,28 @@ namespace
 
 	DistBenchTableSummary BuildCriticalRankBenchSummaries(
 		const std::vector<DistRankBenchReport>& reports,
-		const std::vector<Bench::BenchOpGroupDef>& opGroups)
+		const Bench::BenchOpList& benchOps)
 	{
 		DistBenchTableSummary tableSummary{};
-		tableSummary.groups.reserve(opGroups.size());
+		tableSummary.ops.reserve(benchOps.size());
 
-		tableSummary.totalIdx = FindTotalGroupIdx(opGroups);
+		tableSummary.totalIdx = FindTotalOpIdx(benchOps);
 
 		if (tableSummary.totalIdx < 0)
 		{
-			for (const Bench::BenchOpGroupDef& group : opGroups)
+			for (const Bench::BenchOp op : benchOps)
 			{
-				tableSummary.groups.push_back(SummarizeBenchGroup(reports, group));
+				tableSummary.ops.push_back(SummarizeBenchOp(reports, op));
 			}
 			return tableSummary;
 		}
 
-		const Bench::BenchOpGroupDef& totalGroup =
-			opGroups[static_cast<uint32_t>(tableSummary.totalIdx)];
+		const Bench::BenchOp totalOp =
+			benchOps[static_cast<std::size_t>(tableSummary.totalIdx)];
 		const DistRankBenchReport* latestTotalReport =
-			FindReportWithMaxBenchGroupTime(reports, totalGroup, false);
+			FindReportWithMaxBenchOpTime(reports, totalOp, false);
 		const DistRankBenchReport* avgTotalReport =
-			FindReportWithMaxBenchGroupTime(reports, totalGroup, true);
+			FindReportWithMaxBenchOpTime(reports, totalOp, true);
 		tableSummary.latestCriticalRank =
 			latestTotalReport != nullptr ? latestTotalReport->rank : -1;
 		tableSummary.avgCriticalRank =
@@ -621,33 +578,33 @@ namespace
 		uint64_t accountedLatestNs = 0;
 		uint64_t accountedAvgNs = 0;
 
-		for (uint32_t i = 0; i < opGroups.size(); i++)
+		for (uint32_t i = 0; i < benchOps.size(); i++)
 		{
-			const Bench::BenchOpGroupDef& group = opGroups[i];
-			DistBenchGroupSummary groupSummary{};
+			const Bench::BenchOp op = benchOps[i];
+			DistBenchOpSummary opSummary{};
 
 			if (latestTotalReport != nullptr)
 			{
-				groupSummary.latestNs =
-					BenchGroupTimeNs(*latestTotalReport, group, false);
+				opSummary.latestNs =
+					BenchOpTimeNs(*latestTotalReport, op, false);
 			}
 			if (avgTotalReport != nullptr)
 			{
-				groupSummary.avgNs =
-					BenchGroupTimeNs(*avgTotalReport, group, true);
+				opSummary.avgNs =
+					BenchOpTimeNs(*avgTotalReport, op, true);
 			}
 
 			if (static_cast<int>(i) != tableSummary.totalIdx)
 			{
-				accountedLatestNs += groupSummary.latestNs;
-				accountedAvgNs += groupSummary.avgNs;
+				accountedLatestNs += opSummary.latestNs;
+				accountedAvgNs += opSummary.avgNs;
 			}
 
-			tableSummary.groups.push_back(groupSummary);
+			tableSummary.ops.push_back(opSummary);
 		}
 
-		const DistBenchGroupSummary& totalSummary =
-			tableSummary.groups[static_cast<uint32_t>(tableSummary.totalIdx)];
+		const DistBenchOpSummary& totalSummary =
+			tableSummary.ops[static_cast<std::size_t>(tableSummary.totalIdx)];
 		tableSummary.other.latestNs =
 			SaturatingSubtract(totalSummary.latestNs, accountedLatestNs);
 		tableSummary.other.avgNs =
@@ -670,12 +627,12 @@ namespace
 
 	std::vector<DistRankTimingSummary> BuildRankTimingSummaries(
 		const std::vector<DistRankBenchReport>& reports,
-		const std::vector<Bench::BenchOpGroupDef>& opGroups)
+		const Bench::BenchOpList& benchOps)
 	{
 		std::vector<DistRankTimingSummary> summaries{};
-		if (reports.empty() || opGroups.empty()) { return summaries; }
+		if (reports.empty() || benchOps.empty()) { return summaries; }
 
-		const int totalIdx = FindTotalGroupIdx(opGroups);
+		const int totalIdx = FindTotalOpIdx(benchOps);
 		if (totalIdx < 0) { return summaries; }
 
 		summaries.reserve(reports.size());
@@ -687,10 +644,10 @@ namespace
 
 			uint64_t totalAvgNs = 0;
 
-			for (uint32_t i = 0; i < opGroups.size(); i++)
+			for (uint32_t i = 0; i < benchOps.size(); i++)
 			{
-				const Bench::BenchOpGroupDef& group = opGroups[i];
-				const uint64_t avgNs = BenchGroupTimeNs(report, group, true);
+				const Bench::BenchOp op = benchOps[i];
+				const uint64_t avgNs = BenchOpTimeNs(report, op, true);
 
 				if (static_cast<int>(i) == totalIdx)
 				{
@@ -698,27 +655,23 @@ namespace
 					continue;
 				}
 
-				if (IsSingleBenchOpGroup(group,
-					Bench::BenchOp::Dist_ParticleMigration))
+				if (op == Bench::BenchOp::Dist_ParticleMigration)
 				{
 					summary.distParticleMigrationAvgNs += avgNs;
 				}
-				else if (IsSingleBenchOpGroup(group,
-					Bench::BenchOp::Dist_ParticleClass))
+				else if (op == Bench::BenchOp::Dist_ParticleClass)
 				{
 					summary.distParticleClassAvgNs += avgNs;
 				}
-				else if (IsSingleBenchOpGroup(group,
-					Bench::BenchOp::Dist_HaloExchange))
+				else if (op == Bench::BenchOp::Dist_HaloExchange)
 				{
 					summary.distHaloExchangeAvgNs += avgNs;
 				}
-				else if (IsSingleBenchOpGroup(group,
-					Bench::BenchOp::Dist_StateSync))
+				else if (op == Bench::BenchOp::Dist_StateSync)
 				{
 					summary.distStateSyncAvgNs += avgNs;
 				}
-				else if (!IsDistBenchGroup(group))
+				else if (!IsDistBenchOp(op))
 				{
 					summary.backendAvgNs += avgNs;
 				}
@@ -817,20 +770,20 @@ namespace
 	void PrintBenchmarkSummaryTable(
 		int& lineCount,
 		const std::vector<DistRankBenchReport>& reports,
-		const std::vector<Bench::BenchOpGroupDef>& opGroups,
+		const Bench::BenchOpList& benchOps,
 		const Bench::TimeUnit unit)
 	{
-		if (reports.empty() || opGroups.empty()) { return; }
+		if (reports.empty() || benchOps.empty()) { return; }
 
 		const DistBenchTableSummary tableSummary =
-			BuildCriticalRankBenchSummaries(reports, opGroups);
+			BuildCriticalRankBenchSummaries(reports, benchOps);
 
 		const uint64_t totalLatestNs = tableSummary.totalIdx >= 0
-			? tableSummary.groups[static_cast<uint64_t>(
+			? tableSummary.ops[static_cast<std::size_t>(
 				tableSummary.totalIdx)].latestNs
 			: 0;
 		const uint64_t totalAvgNs = tableSummary.totalIdx >= 0
-			? tableSummary.groups[static_cast<uint64_t>(
+			? tableSummary.ops[static_cast<std::size_t>(
 				tableSummary.totalIdx)].avgNs
 			: 0;
 
@@ -848,7 +801,7 @@ namespace
 
 		auto PrintBenchRow =
 			[&](const char* name,
-				const DistBenchGroupSummary& summary,
+				const DistBenchOpSummary& summary,
 				const bool isTotal)
 		{
 			const double latestTime =
@@ -884,11 +837,11 @@ namespace
 				avgTime, pctAvgLabel);
 		};
 
-		for (uint32_t i = 0; i < opGroups.size(); i++)
+		for (uint32_t i = 0; i < benchOps.size(); i++)
 		{
 			if (static_cast<int>(i) == tableSummary.totalIdx) { continue; }
-			const std::string name = BenchGroupName(opGroups[i]);
-			PrintBenchRow(name.c_str(), tableSummary.groups[i], false);
+			const std::string name = BenchOpName(benchOps[i]);
+			PrintBenchRow(name.c_str(), tableSummary.ops[i], false);
 		}
 
 		if (tableSummary.totalIdx >= 0)
@@ -897,7 +850,7 @@ namespace
 			PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
 			PrintBenchRow(
 				"total",
-				tableSummary.groups[static_cast<uint32_t>(
+				tableSummary.ops[static_cast<std::size_t>(
 					tableSummary.totalIdx)],
 				true);
 			PrintLine(lineCount,
@@ -911,11 +864,11 @@ namespace
 	void PrintRankTimingTable(
 		int& lineCount,
 		const std::vector<DistRankBenchReport>& reports,
-		const std::vector<Bench::BenchOpGroupDef>& opGroups,
+		const Bench::BenchOpList& benchOps,
 		const Bench::TimeUnit unit)
 	{
 		const std::vector<DistRankTimingSummary> summaries =
-			BuildRankTimingSummaries(reports, opGroups);
+			BuildRankTimingSummaries(reports, benchOps);
 		if (summaries.empty()) { return; }
 
 		char unitLabel[8];
@@ -1075,7 +1028,7 @@ namespace
 		const std::vector<DistRankStepReport>& reports,
 		const std::vector<DistRankBenchReport>& benchReports,
 		const std::vector<DistSyncTimingReport>& syncTimingReports,
-		const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
+		const Bench::BenchOpList& benchOps,
 		const Sim::SimParams& params)
 	{
 		if (reports.empty()) { return; }
@@ -1153,11 +1106,11 @@ namespace
 		}
 
 		PrintLine(lineCount);
-		PrintBenchmarkSummaryTable(lineCount, benchReports, benchOpGroups, params.timeUnit);
+		PrintBenchmarkSummaryTable(lineCount, benchReports, benchOps, params.timeUnit);
 		if (static_cast<int>(benchReports.size()) <= DIST_DIAGNOSTICS_RANK_TABLE_LIMIT)
 		{
 			PrintLine(lineCount);
-			PrintRankTimingTable(lineCount, benchReports, benchOpGroups, params.timeUnit);
+			PrintRankTimingTable(lineCount, benchReports, benchOps, params.timeUnit);
 		}
 		PrintLine(lineCount);
 		int elH, elM, elS;
@@ -1284,7 +1237,7 @@ namespace Dist
 	void DistDiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
 		const MpiContext& mpiContext,
 		const Sim::SimParams& params,
-		const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
+		const Bench::BenchOpList& benchOps,
 		const DistRankStepReport& localStepReport,
 		const DistRankBenchReport& localBenchReport,
 		const DistSyncTimingReport& localDistSyncTimingReport)
@@ -1302,7 +1255,7 @@ namespace Dist
 		if (!mpiContext.IsRoot()) { return; }
 
 		PrintDashboard(
-			reports, benchReports, syncTimingReports, benchOpGroups, params);
+			reports, benchReports, syncTimingReports, benchOps, params);
 	}
 
 	void DistDiagnosticsMgr::PrintMemorySummary(

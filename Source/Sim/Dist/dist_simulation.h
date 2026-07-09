@@ -180,7 +180,7 @@ namespace Dist
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };
 		std::unique_ptr<Mem::MemoryTracker> memoryTracker_{ nullptr };
-		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
+		Bench::BenchOpList curBenchOps_;
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
 
 		// serialization management

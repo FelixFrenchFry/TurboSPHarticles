@@ -740,7 +740,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Statistics_Computation });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Statistics_Computation);
 
 	// --- [ particle counts ] -----------------------------------------------------------------------
 
@@ -1055,7 +1055,7 @@ void SimBackend_CPU01::FillStatisticsRecord(
 		Set(record, StatMetric::VelMag_Max, velMagMax);
 	}
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Statistics_Computation });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Statistics_Computation);
 }
 
 void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool bench)
@@ -1066,40 +1066,40 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 	// initial re-ordering of the data before the initial neighbor search
 	if (bench)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::ParticleData_Reordering });
+		benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	}
 	neighborSearch_->DataReOrder(params);
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	if (bench)
 	{
-		benchmarksTracker_.StopBench({ Bench::BenchOp::ParticleData_Reordering });
+		benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 	}
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborSearch_->Construct(params);
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	if (runCountQuery)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
 		neighborSearch_->Query_Count(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 	}
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList_->Finalize_Count();
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	if (runFillQuery)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
 		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 	}
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList_->Finalize_Fill();
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 }
 
 bool SimBackend_CPU01::TryGetLastParticleReOrder(

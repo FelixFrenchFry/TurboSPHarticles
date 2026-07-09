@@ -81,18 +81,18 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	if (N_rigidBodies_ > 0)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_StateUpdate });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
 		UpdateRigidBoundaryParticles();
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_StateUpdate });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
 	}
 
 	// --- [ particle data re-ordering ] -------------------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::ParticleData_Reordering });
+	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	neighborSearch_->DataReOrder(params);
 	ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
-	benchmarksTracker_.StopBench({ Bench::BenchOp::ParticleData_Reordering });
+	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
 	// restricted pointers for all the SoA particle properties
 	float* RESTRICT xPosF = xPosF_.data();
@@ -130,35 +130,35 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	// --- [ neighbor search ] -----------------------------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborSearch_->Construct(params);
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	if (runCountQuery)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
 		neighborSearch_->Query_Count(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 	}
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList.Finalize_Count();
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	if (runFillQuery)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
 		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Query });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 	}
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList.Finalize_Fill();
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Neighbors_Construction });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	// --- [ density computations ] ------------------------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Density_Computation });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Density_Computation);
 
 	CPU01::Density_ChunkedSELL(
 		xPosF, yPosF, zPosF,
@@ -168,19 +168,19 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, massF, N_F_,
 		densityF);
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Density_Computation });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Density_Computation);
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
 	if (N_rigidBodies_ > 0)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		ClearRigidForcesAndAddGravity(params);
 		ClearRigidBoundaryParticleForces();
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::NonPressure_Acceleration });
+	benchmarksTracker_.StartBench(Bench::BenchOp::NonPressure_Acceleration);
 
 	CPU01::NonPressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
@@ -196,11 +196,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
 		xVelPredF, yVelPredF, zVelPredF);
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::NonPressure_Acceleration });
+	benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
 
 	if (N_rigidBodies_ > 0)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
@@ -215,12 +215,12 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			xForceRigidBoundaryParticle,
 			yForceRigidBoundaryParticle,
 			zForceRigidBoundaryParticle);
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
 	// --- [ source-term (density invariance) and diagonal elements ] --------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_SourceAndDiagonal });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 
 	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 		xPosF, yPosF, zPosF,
@@ -235,11 +235,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		massF, params.pressGamma, params.jacobiOmega, N_F_,
 		sourceTermF, diagElemF, pressureF);
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_SourceAndDiagonal });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 
 	// --- [ relaxed Jacobi solver for pressure ] ----------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_JacobiSolver });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 	// rest solver-related variables
 	N_solverIterCount_ = 1;
@@ -276,11 +276,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		N_solverIterCount_++;
 	} while (!TerminationConditionSatisfied(params));
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_JacobiSolver });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 	// --- [ finalize pressure acceleration ] --------------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Pressure_Acceleration });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_Acceleration);
 
 	CPU01::PressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
@@ -292,11 +292,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		massF, params.pressGamma, N_F_, *affinityPart_,
 		xAccPressF, yAccPressF, zAccPressF);
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Pressure_Acceleration });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 
 	if (N_rigidBodies_ > 0)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
@@ -313,12 +313,12 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 		// reduce rigid boundary particle forces into body force and torque
 		ReduceRigidBoundaryParticleForces();
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_ForceAccumulation });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
 	// --- [ integrate velocity and position ] -------------------------------------------------------
 
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Particle_Integration });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Particle_Integration);
 
 	if (useActiveFluidParticleLocalIdxs_)
 	{
@@ -340,14 +340,14 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			xVelF, yVelF, zVelF);
 	}
 
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Particle_Integration });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Particle_Integration);
 
 	if (N_rigidBodies_ > 0)
 	{
-		benchmarksTracker_.StartBench({ Bench::BenchOp::Rigid_StateUpdate });
+		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
 		IntegrateRigidBodies(timeStep);
 		UpdateRigidBoundaryParticles();
-		benchmarksTracker_.StopBench({ Bench::BenchOp::Rigid_StateUpdate });
+		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
 	}
 }
 

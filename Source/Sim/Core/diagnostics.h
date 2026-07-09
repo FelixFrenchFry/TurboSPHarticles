@@ -33,7 +33,7 @@ namespace Sim
 
 		static void PrintLatestPerformanceSummaryAndProgress(
 			const Bench::BenchmarksTracker& benchmarksTracker,
-			const std::vector<Bench::BenchOpGroupDef>& opGroups,
+			const Bench::BenchOpList& benchOps,
 			Bench::TimeUnit unit,
 			uint32_t step,
 			int64_t maxSteps = -1);

@@ -182,7 +182,7 @@ namespace Sim
 
     void DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
         const Bench::BenchmarksTracker& benchmarksTracker,
-        const std::vector<Bench::BenchOpGroupDef>& opGroups,
+        const Bench::BenchOpList& benchOps,
         Bench::TimeUnit unit,
         uint32_t step,
         int64_t maxSteps)
@@ -285,9 +285,9 @@ namespace Sim
 
         int lineCount = 0;
 
-        // per-group timing
-        std::vector<uint64_t> groupLatest(opGroups.size(), 0);
-        std::vector<uint64_t> groupAvg(opGroups.size(), 0);
+        // per-operation timing
+        std::vector<uint64_t> opLatest(benchOps.size(), 0);
+        std::vector<uint64_t> opAvg(benchOps.size(), 0);
 
         // sum of displayed non-total rows, used to derive unaccounted time
         uint64_t accountedNsLatest = 0;
@@ -299,46 +299,31 @@ namespace Sim
             return a > b ? a - b : 0;
         };
 
-        for (uint32_t i = 0; i < opGroups.size(); i++)
+        for (uint32_t i = 0; i < benchOps.size(); i++)
         {
-            const auto& group = opGroups[i];
+            const Bench::BenchOp op = benchOps[i];
+            const uint64_t opNsLatest = benchmarksTracker.GetBench_Latest(op);
+            const uint64_t opNsAvg = benchmarksTracker.GetBench_Avg_OverAll(op);
 
-            auto MinOrZero = [](uint64_t a, uint64_t b)
-        	{
-                if (a == 0) { return b; }
-                if (b == 0) { return a; }
+            opLatest[i] = opNsLatest;
+            opAvg[i] = opNsAvg;
 
-                return std::min(a, b);
-        	};
-
-            uint64_t groupNsLatest = 0;
-            uint64_t groupNsAvg = 0;
-
-            for (auto op : group.ops)
-            {
-                groupNsLatest = MinOrZero(groupNsLatest, benchmarksTracker.GetBench_Latest(op));
-                groupNsAvg = MinOrZero(groupNsAvg, benchmarksTracker.GetBench_Avg_OverAll(op));
-            }
-
-            groupLatest[i] = groupNsLatest;
-            groupAvg[i] = groupNsAvg;
-
-            if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total)
+            if (op == Bench::BenchOp::Total)
             {
                 totalIdx = static_cast<int>(i);
             }
             else
             {
-                accountedNsLatest += groupNsLatest;
-                accountedNsAvg += groupNsAvg;
+                accountedNsLatest += opNsLatest;
+                accountedNsAvg += opNsAvg;
             }
         }
 
         const uint64_t totalLatestNs = totalIdx >= 0
-            ? groupLatest[static_cast<std::size_t>(totalIdx)]
+            ? opLatest[static_cast<std::size_t>(totalIdx)]
             : accountedNsLatest;
         const uint64_t totalAvgNs = totalIdx >= 0
-            ? groupAvg[static_cast<std::size_t>(totalIdx)]
+            ? opAvg[static_cast<std::size_t>(totalIdx)]
             : accountedNsAvg;
 
         const char* unitStr = Bench::UnitLabel(unit);
@@ -406,33 +391,15 @@ namespace Sim
 
         auto PrintRow = [&](const uint32_t i, const bool isTotal)
             {
-                const auto& group = opGroups[i];
+                const Bench::BenchOp op = benchOps[i];
+                const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+                const char* name = isTotal ? "total" : def.name.data();
 
-                std::string name;
-                if (isTotal)
-                {
-                    name = "total";
-                }
-                else if (!group.ops.empty())
-                {
-                    for (std::size_t k = 0; k < group.ops.size(); ++k)
-                    {
-                        const auto op = group.ops[k];
-                        const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-                        if (k > 0) { name += " + "; }
-                        name.append(def.name.data(), def.name.size());
-                    }
-                }
-                else
-                {
-                    name = "<empty>";
-                }
-
-                PrintTimingRow(name.c_str(), groupLatest[i], groupAvg[i], isTotal);
+                PrintTimingRow(name, opLatest[i], opAvg[i], isTotal);
             };
 
         // regular rows
-        for (uint32_t i = 0; i < opGroups.size(); i++)
+        for (uint32_t i = 0; i < benchOps.size(); i++)
         {
             if (static_cast<int>(i) == totalIdx) { continue; }
             PrintRow(i, false);

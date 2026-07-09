@@ -90,9 +90,8 @@ namespace Sim
 		// IISPH fluid solver step
 		virtual void Step_IISPH(const SimParams& params) = 0;
 
-		// provides the list defining how computation operations are benchmarked in groups and/or individually
-		// (backend-specific so that important cache-efficiency optimization can be applied)
-		virtual void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const = 0;
+		// provides the list defining which operations are shown in benchmark summaries
+		virtual void GetBenchOps(Bench::BenchOpList& out) const = 0;
 
 		// info
 		virtual uint32_t GetNumFluidParticles() const = 0;

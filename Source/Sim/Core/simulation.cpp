@@ -143,11 +143,11 @@ void SimulationMgr::SelectSimBackend(
 	// clear benchmarks from previous backend
 	benchmarksTracker_.ClearRecordHistory();
 
-	// get and validate the new backend's benchmark operation groups
-	simBackend_->GetBenchOpGroups(curBenchOpGroups_);
-	if (!Bench::ValidateOpGroups(curBenchOpGroups_))
+	// get and validate the new backend's benchmark operation order
+	simBackend_->GetBenchOps(curBenchOps_);
+	if (!Bench::ValidateOpList(curBenchOps_))
 	{
-		SPDLOG_ERROR("Invalid benchmark operation groups for sim backend ({})",
+		SPDLOG_ERROR("Invalid benchmark operation list for sim backend ({})",
 			static_cast<int>(version));
 		return;
 	}
@@ -321,7 +321,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 			statisticsTracker_.BeginStep();
 
 			// starting point of total benchmark
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Total });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Total);
 
 			// perform the actual simulation step
 			simBackend_->ExecuteFullSimStep(params);
@@ -347,7 +347,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 			if (now - lastVisWall_ >= minInterval)
 			{
-				benchmarksTracker_.StartBench({ Bench::BenchOp::Visualization });
+				benchmarksTracker_.StartBench(Bench::BenchOp::Visualization);
 
 				// create visual snapshot and push to its mailbox
 				auto visSnap = std::make_shared<Sync::VisualSnapshot>();
@@ -361,7 +361,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 				visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
 
-				benchmarksTracker_.StopBench({ Bench::BenchOp::Visualization });
+				benchmarksTracker_.StopBench(Bench::BenchOp::Visualization);
 
 				lastVisWall_ = now;
 			}
@@ -458,7 +458,7 @@ void SimulationMgr::RunSim_Blocking()
 			statisticsTracker_.BeginStep();
 
 			// starting point of total benchmark
-			benchmarksTracker_.StartBench({ Bench::BenchOp::Total });
+			benchmarksTracker_.StartBench(Bench::BenchOp::Total);
 
 			// perform the actual simulation step
 			simBackend_->ExecuteFullSimStep(params);
@@ -552,7 +552,7 @@ void SimulationMgr::EndRunLogging()
 
 void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 {
-	benchmarksTracker_.StartBench({ Bench::BenchOp::Serialization });
+	benchmarksTracker_.StartBench(Bench::BenchOp::Serialization);
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
@@ -560,7 +560,7 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 	// write export snapshot to files
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Serialization });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Serialization);
 }
 
 void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
@@ -618,7 +618,7 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 	memoryTracker_.EndStep(simStep_, simTime_);
 
 	// ending point of total benchmark, archive data and update aggregates
-	benchmarksTracker_.StopBench({ Bench::BenchOp::Total });
+	benchmarksTracker_.StopBench(Bench::BenchOp::Total);
 	benchmarksTracker_.EndStep(simStep_, simTime_);
 }
 
@@ -626,7 +626,7 @@ void SimulationMgr::DisplayPerformanceStats(
 	const SimParams& params) const
 {
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-		benchmarksTracker_, curBenchOpGroups_, params.timeUnit, simStep_, params.maxSteps);
+		benchmarksTracker_, curBenchOps_, params.timeUnit, simStep_, params.maxSteps);
 }
 
 void SimulationMgr::DisplayMemoryUsageStats(

@@ -80,29 +80,22 @@ void BenchmarksTracker::EndStep(const uint32_t simStep, const double simTime)
 	curRecCount_ += 1;
 }
 
-void BenchmarksTracker::StartBench(const std::initializer_list<BenchOp> ops)
+void BenchmarksTracker::StartBench(const BenchOp op)
 {
-	if (ops.size() == 0) { return; }
-
-	const BenchOp leader = *ops.begin();
-	const uint8_t i = GetIdx(leader);
+	const uint8_t i = GetIdx(op);
 
 	t0_single_[i] = Clock::now();
 }
 
-void BenchmarksTracker::StopBench(const std::initializer_list<BenchOp> ops)
+void BenchmarksTracker::StopBench(const BenchOp op)
 {
-	if (ops.size() == 0) { return; }
-
-	const BenchOp leader = *ops.begin();
-	const uint8_t i = GetIdx(leader);
+	const uint8_t i = GetIdx(op);
 
 	const auto t1 = Clock::now();
 	const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast
 		<std::chrono::nanoseconds>(t1 - t0_single_[i]).count());
 
-	// credit to all ops in the group
-	AddGroupTimingSample(ops, ns);
+	AddTimingSample(op, ns);
 }
 
 void BenchmarksTracker::AddTimingSample(const BenchOp op, const uint64_t ns)
@@ -111,16 +104,6 @@ void BenchmarksTracker::AddTimingSample(const BenchOp op, const uint64_t ns)
 
 	curStepNs_[i] += ns;
 	curStepOcc_[i] = 1;
-}
-
-void BenchmarksTracker::AddGroupTimingSample(const std::initializer_list<BenchOp> ops, const uint64_t ns)
-{
-	for (auto op : ops)
-	{
-		const uint8_t i = GetIdx(op);
-		curStepNs_[i] += ns;
-		curStepOcc_[i] = 1;
-	}
 }
 
 void BenchmarksTracker::PackBenchSnapshot(Sync::BenchSnapshot& snap) const

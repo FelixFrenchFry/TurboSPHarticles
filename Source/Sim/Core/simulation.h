@@ -85,7 +85,7 @@ namespace Sim
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
 		void SetMemMailbox(Sync::MemSnapMailbox* memSnapMailbox) { memSnapMailbox_ = memSnapMailbox; }
 		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox) { statSnapMailbox_ = statSnapMailbox; }
-		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const { out = curBenchOpGroups_; }
+		void GetBenchOps(Bench::BenchOpList& out) const { out = curBenchOps_; }
 
 		// metadata
 		uint32_t simStep_ = 0;
@@ -128,7 +128,7 @@ namespace Sim
 
 		// benchmark tracking
 		Bench::BenchmarksTracker& benchmarksTracker_;
-		std::vector<Bench::BenchOpGroupDef> curBenchOpGroups_;
+		Bench::BenchOpList curBenchOps_;
 
 		// memory tracking
 		Mem::MemoryTracker& memoryTracker_;

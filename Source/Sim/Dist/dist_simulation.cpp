@@ -638,7 +638,7 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	simBackend_.reset();
 	memoryTracker_.reset();
 	benchmarksTracker_.reset();
-	curBenchOpGroups_.clear();
+	curBenchOps_.clear();
 
 	// create new metric trackers and backend over rank-local data
 	benchmarksTracker_ = std::make_unique<Bench::BenchmarksTracker>(simParams_);
@@ -651,43 +651,43 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 		return;
 	}
 
-	simBackend_->GetBenchOpGroups(curBenchOpGroups_);
-	const std::vector<Bench::BenchOpGroupDef> distBenchOpGroups =
+	simBackend_->GetBenchOps(curBenchOps_);
+	const Bench::BenchOpList distBenchOps =
 	{
-		{ .ops = { Bench::BenchOp::Dist_ParticleMigration } },
-		{ .ops = { Bench::BenchOp::Dist_ParticleClass } },
-		{ .ops = { Bench::BenchOp::Dist_HaloExchange } },
-		{ .ops = { Bench::BenchOp::Dist_StateSync } }
+		Bench::BenchOp::Dist_ParticleMigration,
+		Bench::BenchOp::Dist_ParticleClass,
+		Bench::BenchOp::Dist_HaloExchange,
+		Bench::BenchOp::Dist_StateSync
 	};
-	auto distBenchInsertIt = curBenchOpGroups_.end();
-	for (auto it = curBenchOpGroups_.begin(); it != curBenchOpGroups_.end(); it++)
+	auto distBenchInsertIt = curBenchOps_.end();
+	for (auto it = curBenchOps_.begin(); it != curBenchOps_.end(); it++)
 	{
-		if (it->ops.size() == 1 && it->ops[0] == Bench::BenchOp::Visualization)
+		if (*it == Bench::BenchOp::Visualization)
 		{
 			distBenchInsertIt = it;
 			distBenchInsertIt++;
 			break;
 		}
 	}
-	if (distBenchInsertIt == curBenchOpGroups_.end())
+	if (distBenchInsertIt == curBenchOps_.end())
 	{
-		for (auto it = curBenchOpGroups_.begin(); it != curBenchOpGroups_.end(); it++)
+		for (auto it = curBenchOps_.begin(); it != curBenchOps_.end(); it++)
 		{
-			if (it->ops.size() == 1 && it->ops[0] == Bench::BenchOp::Total)
+			if (*it == Bench::BenchOp::Total)
 			{
 				distBenchInsertIt = it;
 				break;
 			}
 		}
 	}
-	curBenchOpGroups_.insert(distBenchInsertIt, distBenchOpGroups.begin(), distBenchOpGroups.end());
+	curBenchOps_.insert(distBenchInsertIt, distBenchOps.begin(), distBenchOps.end());
 
-	if (!Bench::ValidateOpGroups(curBenchOpGroups_))
+	if (!Bench::ValidateOpList(curBenchOps_))
 	{
-		SPDLOG_ERROR("[rank {}/{}] Invalid distributed benchmark operation groups "
+		SPDLOG_ERROR("[rank {}/{}] Invalid distributed benchmark operation list "
 			"for sim backend ({})",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
-		curBenchOpGroups_.clear();
+		curBenchOps_.clear();
 	}
 }
 
@@ -884,7 +884,7 @@ void DistSimulationMgr::RunSim_Blocking()
 		lastHaloExchangeStats_ = {};
 
 		// starting point of total benchmark
-		benchmarksTracker_->StartBench({ Bench::BenchOp::Total });
+		benchmarksTracker_->StartBench(Bench::BenchOp::Total);
 
 		// perform the actual distributed simulation step
 		const bool stepOk = ExecuteDistributedStep(params);
@@ -1314,7 +1314,7 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 {
 	DistSnapshotGatherStats stats{};
 
-	benchmarksTracker_->StartBench({ Bench::BenchOp::Serialization });
+	benchmarksTracker_->StartBench(Bench::BenchOp::Serialization);
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
 	const bool gatherOk = GatherExportSnapshotToRoot(
@@ -1329,7 +1329,7 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 
 	if (!gatherOk)
 	{
-		benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
+		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
 	}
 
@@ -1340,7 +1340,7 @@ bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
 		serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
 	}
 
-	benchmarksTracker_->StopBench({ Bench::BenchOp::Serialization });
+	benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 
 	return true;
 }
@@ -1451,7 +1451,7 @@ void DistSimulationMgr::FinalizeBenchMemMeasurements(
 	memoryTracker_->EndStep(simStep_, simTime_);
 
 	// ending point of total benchmark, archive data and update aggregates
-	benchmarksTracker_->StopBench({ Bench::BenchOp::Total });
+	benchmarksTracker_->StopBench(Bench::BenchOp::Total);
 	benchmarksTracker_->EndStep(simStep_, simTime_);
 }
 
@@ -1564,7 +1564,7 @@ void DistSimulationMgr::DisplayDistributedProgress(
 	if (simStep_ == 0) { return; }
 
 	DistDiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-		mpiContext_, params, curBenchOpGroups_,
+		mpiContext_, params, curBenchOps_,
 		BuildRankStepReport(params, exportedStep),
 		BuildRankBenchReport(),
 		distSyncTimingReport_);
@@ -1603,16 +1603,16 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 
 		if (localOk)
 		{
-			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_ParticleMigration });
+			benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticleMigration);
 			const bool migrationOk = MigrateOwnedFluidParticlesToOwnerRanks();
-			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_ParticleMigration });
+			benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticleMigration);
 			if (!migrationOk) { localOk = false; }
 		}
 		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		if (localOk)
 		{
-			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_ParticleClass });
+			benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticleClass);
 
 			// refresh inner/outer lists after migration and backend order changes
 			ClassifyOwnedFluidParticlesIntoInnerOuter(
@@ -1624,22 +1624,22 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				mpiContext_.Rank(), params.kernelRadius,
 				&boundaryParticleClassificationWorkBuffers_);
 
-			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_ParticleClass });
+			benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticleClass);
 		}
 		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		if (localOk)
 		{
-			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_HaloExchange });
+			benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloExchange);
 			const bool haloOk = ExchangeRankLocalHalos();
-			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_HaloExchange });
+			benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloExchange);
 			if (!haloOk) { localOk = false; }
 		}
 		if (localOk && !PullRankLocalStateIntoBackend()) { localOk = false; }
 
 		if (localOk)
 		{
-			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
+			benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
 			bool activeIdxOk = false;
 			{
 				[[maybe_unused]] const DistSyncTimingScope syncTimingScope(
@@ -1647,7 +1647,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				activeIdxOk =
 					simBackend_->SetActiveFluidParticleLocalIdxs(fluidParticleState_.particleLocalIdx_Owned);
 			}
-			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
+			benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 
 			if (!activeIdxOk)
 			{
@@ -1663,7 +1663,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 			const bool solverMayReOrderParticles = simBackend_->GetNumFluidParticles() > 0;
 			simBackend_->ExecuteFullSimStep(params);
 
-			benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
+			benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
 
 			// skip solver step if no fluid particles to avoid re-application of neighbor search particle re-order
 			{
@@ -1685,7 +1685,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				localSimState_.time = simTime_;
 			}
 
-			benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
+			benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 
 			if (localOk && !ValidateRankLocalParticleMetadata(
 				"after distributed solver step")) { localOk = false; }
@@ -1776,13 +1776,13 @@ bool DistSimulationMgr::PullRankLocalStateIntoBackend()
 	if (!simBackend_) { return false; }
 
 	// transfer rebuilt rank-local SoA state into backend-specific data structures
-	benchmarksTracker_->StartBench({ Bench::BenchOp::Dist_StateSync });
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
 	{
 		[[maybe_unused]] const DistSyncTimingScope syncTimingScope(
 			&distSyncTimingReport_, DistSyncTimingOp::Pull);
 		simBackend_->PullFromUniversalSimState(localSimState_, simParams_);
 	}
-	benchmarksTracker_->StopBench({ Bench::BenchOp::Dist_StateSync });
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 
 	return true;
 }

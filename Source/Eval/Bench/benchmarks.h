@@ -7,7 +7,6 @@
 // external
 #include <chrono>
 #include <deque>
-#include <initializer_list>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
@@ -30,14 +29,12 @@ namespace Bench
 		// pushes the record to history and aggregates step's bench data
 		void EndStep(uint32_t simStep, double simTime);
 
-		// timing start/stop for groups of single or multiple operations
-		void StartBench(std::initializer_list<Bench::BenchOp> ops);
-		void StopBench(std::initializer_list<Bench::BenchOp> ops);
+		// timing start/stop for one operation
+		void StartBench(BenchOp op);
+		void StopBench(BenchOp op);
 
 		// accumulate one timing sample into the current step's bench data
 		void AddTimingSample(BenchOp op, uint64_t ns);
-
-		void AddGroupTimingSample(std::initializer_list<BenchOp> ops, uint64_t ns);
 
 		void PackBenchSnapshot(Sync::BenchSnapshot& snap) const;
 

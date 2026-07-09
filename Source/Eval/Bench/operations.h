@@ -72,11 +72,6 @@ namespace Bench
 		std::string_view unit;  // unit hint
 	};
 
-	struct BenchOpGroupDef
-	{
-		std::vector<BenchOp> ops; // group members
-	};
-
 	constexpr inline std::array<BenchOpDef, static_cast<uint16_t>(BenchOp::Count)> Definitions =
 	{
 		{
@@ -207,23 +202,44 @@ namespace Bench
 
 	constexpr inline uint8_t GetIdx(BenchOp op) { return static_cast<uint8_t>(op); }
 
-	inline bool ValidateOpGroups(const std::vector<BenchOpGroupDef>& opGroups)
+	using BenchOpList = std::vector<BenchOp>;
+
+	inline BenchOpList MakeDefaultSimBenchOps()
+	{
+		return
+		{
+			BenchOp::ParticleData_Reordering,
+			BenchOp::Neighbors_Construction,
+			BenchOp::Neighbors_Query,
+			BenchOp::Density_Computation,
+			BenchOp::NonPressure_Acceleration,
+			BenchOp::Pressure_SourceAndDiagonal,
+			BenchOp::Pressure_JacobiSolver,
+			BenchOp::Pressure_Acceleration,
+			BenchOp::Rigid_ForceAccumulation,
+			BenchOp::Particle_Integration,
+			BenchOp::Rigid_StateUpdate,
+			BenchOp::Statistics_Computation,
+			BenchOp::Serialization,
+			BenchOp::Visualization,
+			BenchOp::Total
+		};
+	}
+
+	inline bool ValidateOpList(const BenchOpList& ops)
 	{
 		std::array<uint8_t, GetIdx(BenchOp::Count)> opIncluded{};
 
-		for (const auto& group : opGroups)
+		for (const BenchOp op : ops)
 		{
-			for (const auto& op : group.ops)
+			const uint8_t i = GetIdx(op);
+
+			if (opIncluded[i]) // duplicate
 			{
-				const uint8_t i = GetIdx(op);
-
-				if (opIncluded[i]) // duplicate
-				{
-					return false;
-				}
-
-				opIncluded[i] = 1;
+				return false;
 			}
+
+			opIncluded[i] = 1;
 		}
 
 		return true; // no duplicates

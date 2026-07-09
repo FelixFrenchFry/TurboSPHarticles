@@ -135,7 +135,7 @@ namespace Dist
 		static void PrintLatestPerformanceSummaryAndProgress(
 			const MpiContext& mpiContext,
 			const Sim::SimParams& params,
-			const std::vector<Bench::BenchOpGroupDef>& benchOpGroups,
+			const Bench::BenchOpList& benchOps,
 			const DistRankStepReport& localStepReport,
 			const DistRankBenchReport& localBenchReport,
 			const DistSyncTimingReport& localDistSyncTimingReport);

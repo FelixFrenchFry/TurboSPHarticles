@@ -136,10 +136,9 @@ namespace Sim
 
 		bool TerminationConditionSatisfied(const SimParams& params) const;
 
-		// provides the list defining how computation operations are benchmarked in groups and/or individually
-		// (backend-specific so that important cache-efficiency optimization can be applied)
-		void GetBenchOpGroups(std::vector<Bench::BenchOpGroupDef>& out) const override
-			{ out = benchOpGroups_; }
+		// provides the benchmark operation display order
+		void GetBenchOps(Bench::BenchOpList& out) const override
+			{ out = benchOps_; }
 
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
@@ -299,55 +298,8 @@ namespace Sim
 		mutable std::vector<float> h_expZPosB_;
 		mutable std::vector<uint8_t> h_expSurfaceFlagsScratch_;
 
-		// operation benchmarking groups
-		std::vector<Bench::BenchOpGroupDef> benchOpGroups_ =
-		{
-			{
-				.ops = { Bench::BenchOp::ParticleData_Reordering }
-			},
-			{
-				.ops = { Bench::BenchOp::Neighbors_Construction }
-			},
-			{
-				.ops = { Bench::BenchOp::Neighbors_Query }
-			},
-			{
-				.ops = { Bench::BenchOp::Density_Computation }
-			},
-			{
-				.ops = { Bench::BenchOp::NonPressure_Acceleration }
-			},
-			{
-				.ops = { Bench::BenchOp::Pressure_SourceAndDiagonal }
-			},
-			{
-				.ops = { Bench::BenchOp::Pressure_JacobiSolver }
-			},
-			{
-				.ops = { Bench::BenchOp::Pressure_Acceleration }
-			},
-			{
-				.ops = { Bench::BenchOp::Rigid_ForceAccumulation }
-			},
-			{
-				.ops = { Bench::BenchOp::Particle_Integration }
-			},
-			{
-				.ops = { Bench::BenchOp::Rigid_StateUpdate }
-			},
-			{
-				.ops = { Bench::BenchOp::Statistics_Computation }
-			},
-			{
-				.ops = { Bench::BenchOp::Serialization }
-			},
-			{
-				.ops = { Bench::BenchOp::Visualization }
-			},
-			{
-				.ops = { Bench::BenchOp::Total }
-			}
-		};
+		// operation benchmarking order
+		Bench::BenchOpList benchOps_ = Bench::MakeDefaultSimBenchOps();
 
 		// resizes all device buffers when particle counts change
 		// (does not preserve data)

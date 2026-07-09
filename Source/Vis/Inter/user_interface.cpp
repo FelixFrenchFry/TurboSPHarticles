@@ -134,9 +134,9 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 
 	if (ImGui::CollapsingHeader("Performance Benchmarks"))
 	{
-		std::vector<Bench::BenchOpGroupDef> opGroups;
-		simulationMgr.GetBenchOpGroups(opGroups);
-		BuildSection_PerformanceBenchmarks(simulationMgr, benchSnap, opGroups, simParams, visParams);
+		Bench::BenchOpList benchOps;
+		simulationMgr.GetBenchOps(benchOps);
+		BuildSection_PerformanceBenchmarks(simulationMgr, benchSnap, benchOps, simParams, visParams);
 	}
 
 	// show FPS
@@ -550,7 +550,7 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	const Sim::SimulationMgr& simulationMgr,
 	const Sync::BenchSnapshot* benchSnap,
-	const std::vector<Bench::BenchOpGroupDef>& opGroups,
+	const Bench::BenchOpList& benchOps,
 	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
 {
@@ -592,27 +592,26 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		benchTableView_ == BTV::Latest ||
 		benchTableView_ == BTV::Avg_All;
 
-	// --- [ per-group timing and totals ] -----------------------------------------------------------
+	// --- [ per-operation timing and totals ] -------------------------------------------------------
 
-	// timing per group (row)
-	std::vector<uint64_t> groupTimings(opGroups.size(), 0);
+	// timing per operation (row)
+	std::vector<uint64_t> opTimings(benchOps.size(), 0);
 
 	// sum of displayed non-total rows, used to derive unaccounted time
 	uint64_t accountedTime = 0;
 	int totalRowIdx = -1;
 
-	for (uint32_t i = 0; i < opGroups.size(); i++)
+	for (uint32_t i = 0; i < benchOps.size(); i++)
 	{
-		const auto& group = opGroups[i];
+		const Bench::BenchOp op = benchOps[i];
 
-		// pick representative timing for each group 
-		const uint64_t t = ReadOpGroup_Min(benchSnap, group);
-		groupTimings[i] = t;
+		const uint64_t t = ReadOpTiming(benchSnap, op);
+		opTimings[i] = t;
 
 		//SPDLOG_ERROR("time: {}", t);
 
 		// detect BenchOp::Total row to exclude from percentage calculations
-		if (group.ops.size() == 1 && group.ops[0] == Bench::BenchOp::Total)
+		if (op == Bench::BenchOp::Total)
 		{
 			totalRowIdx = static_cast<int>(i);
 		}
@@ -623,7 +622,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 	}
 
 	const uint64_t totalTime = totalRowIdx >= 0
-		? groupTimings[static_cast<std::size_t>(totalRowIdx)]
+		? opTimings[static_cast<std::size_t>(totalRowIdx)]
 		: accountedTime;
 	const bool showOther =
 		totalRowIdx >= 0 &&
@@ -646,7 +645,7 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		ImGuiTableFlags_SizingStretchProp))
 	{
 		// column headers
-		ImGui::TableSetupColumn("operation group",
+		ImGui::TableSetupColumn("operation",
 			ImGuiTableColumnFlags_WidthStretch, 0.65f);
 		ImGui::TableSetupColumn(Bench::UnitLabel(benchTimeUnit_),
 			ImGuiTableColumnFlags_WidthStretch, 0.20f);
@@ -701,42 +700,22 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 			}
 		};
 
-		auto DrawOpGroupRow = [&](uint32_t rowIdx) -> void
+		auto DrawOpRow = [&](uint32_t rowIdx) -> void
 		{
-			const auto& group = opGroups[rowIdx];
-			const uint64_t t = groupTimings[rowIdx];
+			const Bench::BenchOp op = benchOps[rowIdx];
+			const auto& def = Bench::Definitions[Bench::GetIdx(op)];
+			const uint64_t t = opTimings[rowIdx];
 			const double t_unit = Bench::ConvertFromNs(benchTimeUnit_, t);
 
 			ImGui::TableNextRow();
 
-			// column 0 with aliases
-			// (expandable to show full names vertically)
+			// column 0 with alias
 			ImGui::TableSetColumnIndex(0);
-			const std::string alias = MakeGroupAlias(group);
-
-			// stable ID for each row
-			ImGui::PushID(rowIdx);
-			constexpr ImGuiTreeNodeFlags flags =
-				ImGuiTreeNodeFlags_SpanFullWidth |
-				ImGuiTreeNodeFlags_AllowItemOverlap |
-				ImGuiTreeNodeFlags_FramePadding;
-
-			if (ImGui::TreeNodeEx("##group", flags, "%s", alias.c_str()))
+			ImGui::TextUnformatted(def.alias.data());
+			if (ImGui::IsItemHovered())
 			{
-				ImGui::Unindent(10.0f); // shift to the left by arrow/bullet spacing
-
-				// show full names (one per line)
-				for (uint32_t k = 0; k < group.ops.size(); k++)
-				{
-					const auto op = group.ops[k];
-					const auto& def = Bench::Definitions[Bench::GetIdx(op)];
-					ImGui::Text("- %s", def.name.data());
-				}
-
-				ImGui::Indent(10.0f); // restore indent
-				ImGui::TreePop();
+				ImGui::SetTooltip("%s", def.name.data());
 			}
-			ImGui::PopID();
 
 			// column 1 with timing in selected unit
 			ImGui::TableSetColumnIndex(1);
@@ -751,11 +730,11 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		};
 
 		// draw all regular rows first
-		for (uint32_t i = 0; i < opGroups.size(); i++)
+		for (uint32_t i = 0; i < benchOps.size(); i++)
 		{
 			if (static_cast<int>(i) == totalRowIdx) { continue; }
 
-			DrawOpGroupRow(i);
+			DrawOpRow(i);
 		}
 
 		// draw BenchOp::Total row last (if present)
@@ -1213,35 +1192,6 @@ inline uint64_t UserInterfaceMgr::ReadOpTiming(
 
 	SPDLOG_WARN("Invalid BenchTableView enum value");
 	return 0;
-}
-
-inline uint64_t UserInterfaceMgr::ReadOpGroup_Min(
-	const Sync::BenchSnapshot* snap, const Bench::BenchOpGroupDef& opGroup) const
-{
-	uint64_t res = std::numeric_limits<uint64_t>::max();
-
-	// pick one of the operation timings as a representative
-	// (they should all be the same value, but the groups are variably-sized)
-	for (const auto& op : opGroup.ops)
-	{
-		res = std::min(res, ReadOpTiming(snap, op));
-	}
-
-	return res;
-}
-
-inline std::string UserInterfaceMgr::MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup)
-{
-	std::string res;
-
-	// build comma-separated list of operation aliases
-	for (uint32_t i = 0; i < opGroup.ops.size(); i++)
-	{
-		if (i > 0) { res += ", "; }
-		res += Bench::Definitions[Bench::GetIdx(opGroup.ops[i])].alias;
-	}
-
-	return res;
 }
 
 void UserInterfaceMgr::TableTextRightAligned(const char* fmt, ...)

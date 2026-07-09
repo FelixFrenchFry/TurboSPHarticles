@@ -201,7 +201,7 @@ namespace Inter
 		void BuildSection_PerformanceBenchmarks(
 			const Sim::SimulationMgr& simulationMgr,
 			const Sync::BenchSnapshot* benchSnap,
-			const std::vector<Bench::BenchOpGroupDef>& opGroups,
+			const Bench::BenchOpList& benchOps,
 			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
 
@@ -225,9 +225,6 @@ namespace Inter
 		void ResetParamChanges(const Sim::SimParams& simParams);
 		inline float ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric) const;
 		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op) const;
-		inline uint64_t ReadOpGroup_Min(const Sync::BenchSnapshot* snap,
-										const Bench::BenchOpGroupDef& opGroup) const;
-		static inline std::string MakeGroupAlias(const Bench::BenchOpGroupDef& opGroup);
 		static void TableTextRightAligned(const char* fmt, ...);
 		static inline void FormatStatValue(const Stats::StatMetricDef& def, char* out, float x, uint64_t cap);
 
