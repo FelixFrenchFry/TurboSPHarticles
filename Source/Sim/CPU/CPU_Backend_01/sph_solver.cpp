@@ -1111,7 +1111,9 @@ void CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 			{
 				const uint32_t j = nbrFB.ReadNeighborIdx(lane, k);
 				const uint32_t bodyIdx = bodyIdB[j];
+
 				if (bodyIdx == Sync::InvalidRigidBodyId) { continue; }
+
 				const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[j];
 
 				const float dx = xi - xPosB[j];

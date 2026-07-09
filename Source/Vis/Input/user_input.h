@@ -31,8 +31,10 @@ namespace Input
 						  const Vis::FrameBufferConfig& frameBuffer, float dt);
 
 		// input capture flags return true if input event is consumed
-		bool OnKey(const Sim::SimParams& simParams, const Vis::CameraState& camera,
-			int key, int scancode, int action, int mods);
+		bool OnKey(const Sim::SimParams& simParams,
+				   const Vis::CameraState& camera,
+				   const Vis::RenderConfig& render,
+				   int key, int scancode, int action, int mods);
 		bool OnMouseButton(int button, int action, int mods);
 		bool OnCursorPos(double xPos, double yPos);
 		bool OnScroll(double xOff, double yOff);

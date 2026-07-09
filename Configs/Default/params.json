@@ -4,7 +4,7 @@
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
 
-  "maxSteps": -1,
+  "maxSteps": 2000,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,

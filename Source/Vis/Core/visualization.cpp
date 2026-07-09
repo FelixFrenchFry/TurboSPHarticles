@@ -302,7 +302,8 @@ void VisualizationMgr::OnKey(int key, int scancode, int action, int mods)
 	// TODO: UI gets first shot; if not handled, forward to input mgr
 	if (!userInterfaceMgr_.OnKey(key, scancode, action, mods))
 	{
-		userInputMgr_.OnKey(simParams_, visParams_.camera, key, scancode, action, mods);
+		userInputMgr_.OnKey(simParams_, visParams_.camera, visParams_.render,
+			key, scancode, action, mods);
 	}
 }
 

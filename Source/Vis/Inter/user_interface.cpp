@@ -251,7 +251,25 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 	if (ImGui::TreeNode("scene settings"))
 	{
 		ImGui::Spacing();
-		ImGui::SeparatorText("(Placeholder)");
+
+		bool showFluidParticles = visParams.render.showFluidParticles;
+		if (ImGui::Checkbox("show fluid particles", &showFluidParticles))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showFluidParticles = showFluidParticles
+				});
+		}
+
+		bool showRigidBoundaryParticles = visParams.render.showRigidBoundaryParticles;
+		if (ImGui::Checkbox("show rigid boundary particles",
+			&showRigidBoundaryParticles))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showRigidBoundaryParticles = showRigidBoundaryParticles
+				});
+		}
 
 		ImGui::TreePop();
 	}

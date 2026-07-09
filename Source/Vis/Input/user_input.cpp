@@ -113,7 +113,10 @@ void UserInputMgr::UpdateCamera(const Vis::CameraState& camera,
 		});
 }
 
-bool UserInputMgr::OnKey(const Sim::SimParams& simParams, const Vis::CameraState& camera, int key, int scancode, int action, int mods)
+bool UserInputMgr::OnKey(const Sim::SimParams& simParams,
+						 const Vis::CameraState& camera,
+						 const Vis::RenderConfig& render,
+						 int key, int scancode, int action, int mods)
 {
 	// ignore unknown keys
 	if (key < 0 || key >= static_cast<int>(keys_.size())) { return false; }
@@ -137,6 +140,26 @@ bool UserInputMgr::OnKey(const Sim::SimParams& simParams, const Vis::CameraState
 		case GLFW_KEY_RIGHT: // unpause sim for one step
 		{
 			simParamsMgr_.Set_SimRunNextStep(true);
+
+			return true;
+		}
+		case GLFW_KEY_1: // toggle fluid particle rendering
+		{
+			bool toggle = !render.showFluidParticles;
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showFluidParticles = toggle
+				});
+
+			return true;
+		}
+		case GLFW_KEY_2: // toggle rigid boundary particle rendering
+		{
+			bool toggle = !render.showRigidBoundaryParticles;
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showRigidBoundaryParticles = toggle
+				});
 
 			return true;
 		}
