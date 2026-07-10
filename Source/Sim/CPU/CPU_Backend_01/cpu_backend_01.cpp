@@ -53,6 +53,26 @@ namespace
 		y *= lenInv;
 		z *= lenInv;
 	}
+
+	struct RigidForceTorqueAccum
+	{
+		float xForce = 0.0f;
+		float yForce = 0.0f;
+		float zForce = 0.0f;
+		float xTorque = 0.0f;
+		float yTorque = 0.0f;
+		float zTorque = 0.0f;
+
+		void Add(const RigidForceTorqueAccum& rhs)
+		{
+			xForce += rhs.xForce;
+			yForce += rhs.yForce;
+			zForce += rhs.zForce;
+			xTorque += rhs.xTorque;
+			yTorque += rhs.yTorque;
+			zTorque += rhs.zTorque;
+		}
+	};
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -1286,36 +1306,64 @@ void SimBackend_CPU01::ClearRigidBoundaryParticleForces()
 
 void SimBackend_CPU01::ReduceRigidBoundaryParticleForces()
 {
-	// TODO: parallelize with TBB?
 	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
 	{
 		const uint32_t begin = rigidBoundaryParticleBeginR_[bodyIdx];
 		const uint32_t end = begin + rigidBoundaryParticleCountR_[bodyIdx];
 
-		for (uint32_t rigidBoundaryParticleIdx = begin; rigidBoundaryParticleIdx < end; rigidBoundaryParticleIdx++)
-		{
-			const float xForce = xForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-			const float yForce = yForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-			const float zForce = zForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+		const float a00 = a00R_[bodyIdx];
+		const float a01 = a01R_[bodyIdx];
+		const float a02 = a02R_[bodyIdx];
+		const float a10 = a10R_[bodyIdx];
+		const float a11 = a11R_[bodyIdx];
+		const float a12 = a12R_[bodyIdx];
+		const float a20 = a20R_[bodyIdx];
+		const float a21 = a21R_[bodyIdx];
+		const float a22 = a22R_[bodyIdx];
 
-			const float lx = xLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-			const float ly = yLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-			const float lz = zLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+		// reduce boundary-particle forces of one rigid body into body force and torque
+		const RigidForceTorqueAccum acc = tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(begin, end),
+			RigidForceTorqueAccum{},
+			[&](const tbb::blocked_range<uint32_t>& r, RigidForceTorqueAccum local) -> RigidForceTorqueAccum
+			{
+				for (uint32_t rigidBoundaryParticleIdx = r.begin(); rigidBoundaryParticleIdx != r.end(); rigidBoundaryParticleIdx++)
+				{
+					const float xForce = xForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+					const float yForce = yForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+					const float zForce = zForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
 
-			const float rx = std::fmaf(a00R_[bodyIdx], lx,
-				std::fmaf(a01R_[bodyIdx], ly, a02R_[bodyIdx] * lz));
-			const float ry = std::fmaf(a10R_[bodyIdx], lx,
-				std::fmaf(a11R_[bodyIdx], ly, a12R_[bodyIdx] * lz));
-			const float rz = std::fmaf(a20R_[bodyIdx], lx,
-				std::fmaf(a21R_[bodyIdx], ly, a22R_[bodyIdx] * lz));
+					const float lx = xLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+					const float ly = yLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+					const float lz = zLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
 
-			xForceR_[bodyIdx] += xForce;
-			yForceR_[bodyIdx] += yForce;
-			zForceR_[bodyIdx] += zForce;
-			xTorqueR_[bodyIdx] += ry * zForce - rz * yForce;
-			yTorqueR_[bodyIdx] += rz * xForce - rx * zForce;
-			zTorqueR_[bodyIdx] += rx * yForce - ry * xForce;
-		}
+					const float rx = std::fmaf(a00, lx, std::fmaf(a01, ly, a02 * lz));
+					const float ry = std::fmaf(a10, lx, std::fmaf(a11, ly, a12 * lz));
+					const float rz = std::fmaf(a20, lx, std::fmaf(a21, ly, a22 * lz));
+
+					local.xForce += xForce;
+					local.yForce += yForce;
+					local.zForce += zForce;
+					local.xTorque += ry * zForce - rz * yForce;
+					local.yTorque += rz * xForce - rx * zForce;
+					local.zTorque += rx * yForce - ry * xForce;
+				}
+
+				return local;
+			},
+			[](RigidForceTorqueAccum a, const RigidForceTorqueAccum& b) -> RigidForceTorqueAccum
+			{
+				a.Add(b);
+				return a;
+			}
+		);
+
+		xForceR_[bodyIdx] += acc.xForce;
+		yForceR_[bodyIdx] += acc.yForce;
+		zForceR_[bodyIdx] += acc.zForce;
+		xTorqueR_[bodyIdx] += acc.xTorque;
+		yTorqueR_[bodyIdx] += acc.yTorque;
+		zTorqueR_[bodyIdx] += acc.zTorque;
 	}
 }
 
