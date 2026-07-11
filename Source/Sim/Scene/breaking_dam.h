@@ -143,7 +143,7 @@ namespace Scene
 					const std::string t = it->get<std::string>();
 					if (t != "BreakingDam")
 					{
-						SPDLOG_WARN("BreakingDam entry has type='{}' (expected 'BreakingDam')", t);
+						SPDLOG_WARN("BreakingDam entry has type '{}' (expected 'BreakingDam').", t);
 					}
 				}
 

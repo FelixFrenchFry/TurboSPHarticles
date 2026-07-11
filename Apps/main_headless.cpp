@@ -79,11 +79,7 @@ int main(int argc, char** argv)
 		Sync::StatSnapMailbox statMailbox{};
 		simulationMgr.SetStatMailbox(&statMailbox);
 
-		if (!simulationMgr.Init())
-		{
-			SPDLOG_ERROR("Failed to initialize SimulationMgr");
-			return EXIT_FAILURE;
-		}
+		simulationMgr.Init();
 		simParamsMgr.Set_SimRunning(true);
 
 		// --- [ main loop ] -----------------------------------------------------------------------
@@ -104,12 +100,12 @@ int main(int argc, char** argv)
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR("Exception: {}", ex.what());
+		SPDLOG_ERROR("Fatal error: {}", ex.what());
 		return EXIT_FAILURE;
 	}
 	catch (...)
 	{
-		SPDLOG_ERROR("Exception: UNKNOWN");
+		SPDLOG_ERROR("Fatal error: Unknown exception.");
 		return EXIT_FAILURE;
 	}
 

@@ -93,18 +93,10 @@ int main(int argc, char** argv)
 		simulationMgr.SetStatMailbox(&statMailbox);
 		visualizationMgr.SetStatMailbox(&statMailbox);
 
-		if (!simulationMgr.Init())
-		{
-			SPDLOG_ERROR("Failed to initialize SimulationMgr");
-			return EXIT_FAILURE;
-		}
+		simulationMgr.Init();
 
 		auto tempVisParams = visParamsMgr.SnapshotParams().first;
-		if (!visualizationMgr.Init(tempVisParams.window))
-		{
-			SPDLOG_ERROR("Failed to initialize VisualizationMgr");
-			return EXIT_FAILURE;
-		}
+		visualizationMgr.Init(tempVisParams.window);
 
 		// --- [ main loop ] -----------------------------------------------------------------------
 
@@ -132,12 +124,12 @@ int main(int argc, char** argv)
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR("Exception: {}", ex.what());
+		SPDLOG_ERROR("Fatal error: {}", ex.what());
 		return EXIT_FAILURE;
 	}
 	catch (...)
 	{
-		SPDLOG_ERROR("Exception: UNKNOWN");
+		SPDLOG_ERROR("Fatal error: Unknown exception.");
 		return EXIT_FAILURE;
 	}
 

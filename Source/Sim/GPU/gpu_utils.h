@@ -41,9 +41,9 @@ namespace GPU
 		throw std::runtime_error(
 			std::string(what) + ": " + desc + " (" + name + ") at " +
 			loc.file_name() + ":" + std::to_string((int)loc.line()) +
-			" in " + loc.function_name());
+			" in " + loc.function_name() + ".");
 	#else
-		throw std::runtime_error(std::string(what) + ": " + desc + " (" + name + ")");
+		throw std::runtime_error(std::string(what) + ": " + desc + " (" + name + ").");
 	#endif
 	}
 
@@ -68,14 +68,14 @@ namespace GPU
 
 		if (!dstDevice)
 		{
-			throw std::runtime_error("GPU::Copy_HostToDevice() -> "
-				"null-pointer dstDevice, but nonzero element count");
+			throw std::runtime_error("GPU::Copy_HostToDevice received a null destination pointer "
+				"with a nonzero element count.");
 		}
 
 		if (!srcHost)
 		{
-			throw std::runtime_error("GPU::Copy_HostToDevice() -> "
-				"null-pointer srcHost, but nonzero element count");
+			throw std::runtime_error("GPU::Copy_HostToDevice received a null source pointer "
+				"with a nonzero element count.");
 		}
 
 		Check(cudaMemcpyAsync(dstDevice, srcHost, countElems * sizeof(T),
@@ -92,14 +92,14 @@ namespace GPU
 
 		if (!dstHost)
 		{
-			throw std::runtime_error("GPU::Copy_DeviceToHost() -> "
-				"null-pointer dstHost, but nonzero element count");
+			throw std::runtime_error("GPU::Copy_DeviceToHost received a null destination pointer "
+				"with a nonzero element count.");
 		}
 
 		if (!srcDevice)
 		{
-			throw std::runtime_error("GPU::Copy_DeviceToHost() -> "
-				"null-pointer srcDevice, but nonzero element count");
+			throw std::runtime_error("GPU::Copy_DeviceToHost received a null source pointer "
+				"with a nonzero element count.");
 		}
 
 		Check(cudaMemcpyAsync(dstHost, srcDevice, countElems * sizeof(T),
@@ -116,8 +116,8 @@ namespace GPU
 
 		if (!dstDevice)
 		{
-			throw std::runtime_error("GPU::MemsetBytes() -> "
-				"null-pointer dstDevice, but nonzero element count");
+			throw std::runtime_error("GPU::MemsetBytes received a null destination pointer "
+				"with a nonzero element count.");
 		}
 
 		Check(cudaMemsetAsync(dstDevice, value, countElems * sizeof(T), stream), 

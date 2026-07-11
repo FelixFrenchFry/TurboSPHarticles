@@ -333,5 +333,5 @@ void MpiContext::CheckMpiResult(const int result, const char* opName)
 	if (result == MPI_SUCCESS) { return; }
 
 	throw std::runtime_error(std::string(opName) + " failed with MPI error code " +
-		std::to_string(result));
+		std::to_string(result) + ".");
 }

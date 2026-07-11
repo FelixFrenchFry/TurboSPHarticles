@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cassert>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
+#include <string>
 
 // internal
 #include "Source/Sim/Sync/state_sim.h"
@@ -145,7 +147,7 @@ void RenderingMgr::UpdateColorMap(const std::vector<glm::vec4>& colorMap256)
 {
 	if (colorMap256.size() != 256)
 	{
-		SPDLOG_WARN("Failed to update colormap, got {} instead of expected 256 entries",
+		SPDLOG_WARN("Cannot update colormap: Expected 256 entries, got {}.",
 			colorMap256.size());
 		return;
 	}
@@ -210,45 +212,55 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 // creates the shader program for rendering sphere impostors
 void RenderingMgr::CreateSphereImpostorProgram()
 {
-	GLuint vertS = Compile(GL_VERTEX_SHADER, VS_sphereImpostor);
-	GLuint fragS = Compile(GL_FRAGMENT_SHADER, FS_sphereImpostor);
-
-	if (vertS == 0) { SPDLOG_ERROR("Failed to compile vertex shader (VS_sphereImpostor)"); }
-	if (fragS == 0) { SPDLOG_ERROR("Failed to compile fragment shader (FS_sphereImpostor)"); }
-
-	progSphereImpostors_ = Link(vertS, fragS);
-	if (!progSphereImpostors_)
+	GLuint vertS = 0;
+	GLuint fragS = 0;
+	try
 	{
-		SPDLOG_ERROR("Failed to create sphere impostor shader program");
-		throw std::runtime_error("Failed to create sphere impostor shader program");
+		vertS = Compile(GL_VERTEX_SHADER, VS_sphereImpostor, "VS_sphereImpostor");
+		fragS = Compile(GL_FRAGMENT_SHADER, FS_sphereImpostor, "FS_sphereImpostor");
+		progSphereImpostors_ = Link(vertS, fragS, "sphere impostor");
 	}
+	catch (...)
+	{
+		if (vertS != 0) { glDeleteShader(vertS); }
+		if (fragS != 0) { glDeleteShader(fragS); }
+		throw;
+	}
+
+	glDeleteShader(vertS);
+	glDeleteShader(fragS);
 }
 
 // creates the shader program for rendering lines
 void RenderingMgr::CreateLineProgram()
 {
-	GLuint vertS = Compile(GL_VERTEX_SHADER, VS_line);
-	GLuint fragS = Compile(GL_FRAGMENT_SHADER, FS_line);
-
-	if (vertS == 0) { SPDLOG_ERROR("Failed to compile vertex shader (VS_line)"); }
-	if (fragS == 0) { SPDLOG_ERROR("Failed to compile fragment shader (FS_line)"); }
-
-	progLines_ = Link(vertS, fragS);
-	if (!progLines_)
+	GLuint vertS = 0;
+	GLuint fragS = 0;
+	try
 	{
-		SPDLOG_ERROR("Failed to create line shader program");
-		throw std::runtime_error("Failed to create line shader program");
+		vertS = Compile(GL_VERTEX_SHADER, VS_line, "VS_line");
+		fragS = Compile(GL_FRAGMENT_SHADER, FS_line, "FS_line");
+		progLines_ = Link(vertS, fragS, "line");
 	}
+	catch (...)
+	{
+		if (vertS != 0) { glDeleteShader(vertS); }
+		if (fragS != 0) { glDeleteShader(fragS); }
+		throw;
+	}
+
+	glDeleteShader(vertS);
+	glDeleteShader(fragS);
 
 	uniColorLoc_ = glGetUniformLocation(progLines_, "uColor");
 	if (uniColorLoc_ < 0)
 	{
-		SPDLOG_WARN("Failed to find uniform location for 'uColor' in line shader");
+		SPDLOG_WARN("Failed to find uniform location for 'uColor' in line shader.");
 	}
 }
 
 // compiles a shader of given type from source and returns its ID
-GLuint RenderingMgr::Compile(GLenum type, const char* src)
+GLuint RenderingMgr::Compile(GLenum type, const char* src, const char* shaderName)
 {
 	GLuint res = glCreateShader(type);
 	GLint ok = 0;
@@ -266,15 +278,15 @@ GLuint RenderingMgr::Compile(GLenum type, const char* src)
 		glGetShaderInfoLog(res, len, nullptr, log.data());
 		glDeleteShader(res);
 
-		SPDLOG_ERROR("Shader compile error: {}", log);
-		return 0;
+		throw std::runtime_error(
+			std::string("Failed to compile shader '") + shaderName + "': " + log);
 	}
 
 	return res;
 }
 
 // links a shader program given compiled vertex and fragment shaders and returns its ID
-GLuint RenderingMgr::Link(GLuint vertS, GLuint fragS)
+GLuint RenderingMgr::Link(GLuint vertS, GLuint fragS, const char* programName)
 {
 	GLuint res = glCreateProgram();
 	GLint ok = 0;
@@ -293,15 +305,13 @@ GLuint RenderingMgr::Link(GLuint vertS, GLuint fragS)
 		glGetProgramInfoLog(res, len, nullptr, log.data());
 		glDeleteProgram(res);
 
-		SPDLOG_ERROR("Program link error: {}", log);
-		return 0;
+		throw std::runtime_error(
+			std::string("Failed to link shader program '") + programName + "': " + log);
 	}
 
-	// cleanup
+	// detach shaders before the caller releases them
 	glDetachShader(res, vertS);
 	glDetachShader(res, fragS);
-	glDeleteShader(vertS);
-	glDeleteShader(fragS);
 
 	return res;
 }
@@ -459,7 +469,8 @@ static void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
 {
 	if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) { return; } // too noisy
 
-	SPDLOG_WARN("GL debug type=0x{:x}, severity=0x{:x}, msg={}", type, severity, message);
+	SPDLOG_WARN("OpenGL debug message (type=0x{:x}, severity=0x{:x}): {}.",
+		type, severity, message);
 }
 
 void RenderingMgr::EnsureInstanceCapacity(uint32_t N_required)
@@ -495,8 +506,7 @@ void RenderingMgr::EnsureInstanceCapacity(uint32_t N_required)
 		glMapNamedBufferRange(vboInstances_, 0, newSize, mapFlags));
 	if (!mappedBase_)
 	{
-		SPDLOG_ERROR("Failed to map instance buffer");
-		throw std::runtime_error("Failed to map instance buffer");
+		throw std::runtime_error("Failed to map instance buffer.");
 	}
 
 	mappedSize_ = newSize;

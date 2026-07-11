@@ -79,13 +79,12 @@ namespace Export
 
 		if (!CreateNextRunDirectory())
 		{
-			SPDLOG_ERROR("Failed to initialize run logging directory");
 			return false;
 		}
 
 		if (!WriteRunMeta(configProfile, paramsFile, scenariosFile, simParams))
 		{
-			SPDLOG_ERROR("Failed to write run metadata for '{}'",
+			SPDLOG_ERROR("Failed to write run metadata for '{}'.",
 				runDir_.string());
 			Disable();
 			return false;
@@ -93,7 +92,7 @@ namespace Export
 
 		if (!OpenMemoryMetricsCsv())
 		{
-			SPDLOG_ERROR("Failed to open memory metrics CSV for '{}'",
+			SPDLOG_ERROR("Failed to open memory metrics CSV for '{}'.",
 				runDir_.string());
 			Disable();
 			return false;
@@ -101,7 +100,7 @@ namespace Export
 
 		if (!OpenBenchmarkMetricsCsv())
 		{
-			SPDLOG_ERROR("Failed to open benchmark metrics CSV for '{}'",
+			SPDLOG_ERROR("Failed to open benchmark metrics CSV for '{}'.",
 				runDir_.string());
 			Disable();
 			return false;
@@ -110,7 +109,7 @@ namespace Export
 		WriteMemoryMetricsHeader();
 		if (!memoryMetricsCsv_.good())
 		{
-			SPDLOG_ERROR("Failed to write memory metrics CSV header for '{}'",
+			SPDLOG_ERROR("Failed to write memory metrics CSV header for '{}'.",
 				runDir_.string());
 			Disable();
 			return false;
@@ -119,7 +118,7 @@ namespace Export
 		WriteBenchmarkMetricsHeader();
 		if (!benchmarkMetricsCsv_.good())
 		{
-			SPDLOG_ERROR("Failed to write benchmark metrics CSV header for '{}'",
+			SPDLOG_ERROR("Failed to write benchmark metrics CSV header for '{}'.",
 				runDir_.string());
 			Disable();
 			return false;
@@ -182,7 +181,7 @@ namespace Export
 
 		if (!benchmarkMetricsCsv_.good())
 		{
-			SPDLOG_ERROR("Failed while appending benchmark metrics to '{}'",
+			SPDLOG_ERROR("Failed while appending benchmark metrics to '{}'.",
 				(runDir_ / "benchmark_metrics.csv").string());
 			Disable();
 		}
@@ -223,7 +222,7 @@ namespace Export
 
 		if (!memoryMetricsCsv_.good())
 		{
-			SPDLOG_ERROR("Failed while appending memory metrics to '{}'",
+			SPDLOG_ERROR("Failed while appending memory metrics to '{}'.",
 				(runDir_ / "memory_metrics.csv").string());
 			Disable();
 		}
@@ -237,7 +236,7 @@ namespace Export
 		fs::create_directories(loggingOptions_.baseDir, ec);
 		if (ec)
 		{
-			SPDLOG_ERROR("Failed to create Logs base directory '{}': {}",
+			SPDLOG_ERROR("Failed to create Logs base directory '{}': {}.",
 				loggingOptions_.baseDir.string(), ec.message());
 			return false;
 		}
@@ -247,7 +246,7 @@ namespace Export
 		{
 			if (ec)
 			{
-				SPDLOG_ERROR("Failed to iterate Logs directory '{}': {}",
+				SPDLOG_ERROR("Failed to iterate Logs directory '{}': {}.",
 					loggingOptions_.baseDir.string(), ec.message());
 				return false;
 			}
@@ -288,7 +287,7 @@ namespace Export
 
 			if (ec)
 			{
-				SPDLOG_ERROR("Failed to create run directory '{}': {}",
+				SPDLOG_ERROR("Failed to create run directory '{}': {}.",
 					candidate.string(), ec.message());
 				return false;
 			}

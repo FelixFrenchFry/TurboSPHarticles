@@ -6,9 +6,6 @@
 
 // external
 #include <cmath>
-#include <cstdio>
-#include <filesystem>
-#include <fstream>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -128,39 +125,9 @@ namespace Base
 
     // --- [ json ] -------------------------------------------------------------------------------
 
-    inline bool LoadJsonObjectFromFile(
+    bool LoadJsonObjectFromFile(
         const std::string& fileName,
-        nlohmann::json& out)
-    {
-        namespace fs = std::filesystem;
-
-        // use TSP_CONFIG_DIR from the build system as base path
-        fs::path base(TSP_CONFIG_DIR);
-        fs::path full = base / fileName;
-        std::string path = full.string();
-
-        std::ifstream in(path);
-        if (!in)
-        {
-            std::fprintf(stderr, "Failed to open JSON file: %s\n",
-                path.c_str());
-            return false;
-        }
-
-        try
-        {
-            in >> out;
-        }
-        catch (const std::exception& e)
-        {
-            std::fprintf(stderr, "Failed to parse JSON %s: %s\n",
-                path.c_str(), e.what());
-            return false;
-        }
-
-        // return JSON object
-        return true;
-    }
+        nlohmann::json& out);
 
     // --- [ misc ] -------------------------------------------------------------------------------
 

@@ -143,7 +143,7 @@ const Decomp_AABB_Uniform::AABBRankSubdomain& Decomp_AABB_Uniform::Subdomain(
 {
 	if (rank < 0 || rank >= static_cast<int>(rankSubdomains_.size()))
 	{
-		throw std::out_of_range("Invalid Decomp_AABB_Uniform rank.");
+		throw std::runtime_error("Invalid Decomp_AABB_Uniform rank.");
 	}
 
 	return rankSubdomains_[rank];

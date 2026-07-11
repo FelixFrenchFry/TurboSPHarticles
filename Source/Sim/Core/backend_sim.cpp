@@ -34,7 +34,7 @@ namespace Sim
 		#endif
 		}
 
-		throw std::runtime_error("Unsupported sim backend version requested");
+		throw std::runtime_error("Unsupported sim backend version requested.");
 	}
 
 } // namespace Sim

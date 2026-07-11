@@ -7,6 +7,7 @@
 #include <GLFW/glfw3.h>
 #include <random>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -30,12 +31,11 @@ VisualizationMgr::VisualizationMgr(Sim::SimulationMgr& simulationMgr,
 {
 }
 
-bool VisualizationMgr::Init(const WindowConfig& windowConfig)
+void VisualizationMgr::Init(const WindowConfig& windowConfig)
 {
 	if (!glfwInit())
 	{
-		SPDLOG_ERROR("Failed to initialize GLFW");
-		return false;
+		throw std::runtime_error("Failed to initialize GLFW.");
 	}
 
 	// initial snapshot
@@ -55,18 +55,21 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 							   visParams_.window.title,
 							   nullptr, nullptr);
 
-	// TODO: choose window position properly
-	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-	const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-	glm::ivec2 monitorSize{ mode->width, mode->height };
-	glfwSetWindowPos(window_, monitorSize.x / 2 - visParams_.window.size.x / 2 + std::max(0, monitorSize.x - 2800),
-							  monitorSize.y / 2 - visParams_.window.size.y / 2);
-
 	if (!window_)
 	{
-		SPDLOG_ERROR("Failed to create GLFW window");
 		glfwTerminate();
-		return false;
+		throw std::runtime_error("Failed to create GLFW window.");
+	}
+
+	// TODO: choose window position properly
+	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+	const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+	if (mode)
+	{
+		const glm::ivec2 monitorSize{ mode->width, mode->height };
+		glfwSetWindowPos(window_,
+			monitorSize.x / 2 - visParams_.window.size.x / 2 + std::max(0, monitorSize.x - 2800),
+			monitorSize.y / 2 - visParams_.window.size.y / 2);
 	}
 
 	glfwMakeContextCurrent(window_);
@@ -75,10 +78,10 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 	// TODO: use gladLoadGL() instead ?
 	if (!gladLoadGLLoader(GLADloadproc(glfwGetProcAddress)))
 	{
-		SPDLOG_ERROR("Failed to initialize GLAD");
 		glfwDestroyWindow(window_);
+		window_ = nullptr;
 		glfwTerminate();
-		return false;
+		throw std::runtime_error("Failed to initialize GLAD.");
 	}
 
 	// set GL functions and states
@@ -127,7 +130,6 @@ bool VisualizationMgr::Init(const WindowConfig& windowConfig)
 	// TODO: outsource to renderingMgr
 	glViewport(0, 0, fbWidth, fbHeight);
 
-	return true;
 }
 
 void VisualizationMgr::Shutdown()
@@ -281,7 +283,7 @@ void VisualizationMgr::OnWindowContentScale(float xScale, float yScale)
 {
 	if (!Base::Float_AlmostEqual(xScale, yScale))
 	{
-		SPDLOG_WARN("Difference between x/y scale when determining dpi");
+		SPDLOG_WARN("X and Y scales differ while determining DPI.");
 	}
 
 	float dpiScale = xScale >= yScale ? xScale : yScale;
@@ -375,7 +377,7 @@ void VisualizationMgr::SyncVisSimState()
 {
 	if (!visualSnapMailbox_)
 	{
-		SPDLOG_ERROR("Failed to sync vis sim state (no mailbox set)");
+		SPDLOG_ERROR("Failed to synchronize visual simulation state (no mailbox set).");
 		return;
 	}
 
@@ -400,7 +402,7 @@ void VisualizationMgr::SyncVisSimState()
 	{
 		if (scalarDataF_[back_].size() != posF_[back_].size())
 		{
-			SPDLOG_WARN("Failed color coding (scalar count ({}) != position count ({}))",
+			SPDLOG_WARN("Scalar count {} does not match position count {} for color coding.",
 				scalarDataF_[back_].size(), posF_[back_].size());
 
 			// fix by resizing and filling with zeros
@@ -439,7 +441,7 @@ void VisualizationMgr::SyncBenchSnap()
 {
 	if (!benchSnapMailbox_)
 	{
-		SPDLOG_ERROR("Failed to sync bench snap (no mailbox set)");
+		SPDLOG_ERROR("Failed to synchronize benchmark snapshot (no mailbox set).");
 		return;
 	}
 
@@ -455,7 +457,7 @@ void VisualizationMgr::SyncStatSnap()
 {
 	if (!statSnapMailbox_)
 	{
-		SPDLOG_ERROR("Failed to sync stat snap (no mailbox set)");
+		SPDLOG_ERROR("Failed to synchronize statistics snapshot (no mailbox set).");
 		return;
 	}
 

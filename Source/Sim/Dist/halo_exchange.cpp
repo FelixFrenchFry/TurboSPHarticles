@@ -31,7 +31,7 @@ namespace
 
 		if (valueCount > maxCount)
 		{
-			throw std::runtime_error("halo exchange payload byte size exceeds uint64_t range.");
+			throw std::runtime_error("Halo exchange payload byte size exceeds uint64_t range.");
 		}
 
 		return valueCount * sizeof(T);
@@ -466,7 +466,7 @@ int HaloParticleBufferF::CheckedBufferCount() const
 {
 	if (Size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 	{
-		throw std::runtime_error("halo fluid buffer count exceeds MPI int count range.");
+		throw std::runtime_error("Halo fluid buffer count exceeds MPI int count range.");
 	}
 
 	return static_cast<int>(Size());
@@ -617,7 +617,7 @@ int HaloParticleBufferB::CheckedBufferCount() const
 {
 	if (Size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 	{
-		throw std::runtime_error("halo boundary buffer count exceeds MPI int count range.");
+		throw std::runtime_error("Halo boundary buffer count exceeds MPI int count range.");
 	}
 
 	return static_cast<int>(Size());

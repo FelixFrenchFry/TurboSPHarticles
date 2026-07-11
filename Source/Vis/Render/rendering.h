@@ -94,8 +94,8 @@ namespace Render
 		// helpers
 		void CreateSphereImpostorProgram();
 		void CreateLineProgram();
-		GLuint Compile(GLenum type, const char* src);
-		GLuint Link(GLuint vertS, GLuint fragS);
+		GLuint Compile(GLenum type, const char* src, const char* shaderName);
+		GLuint Link(GLuint vertS, GLuint fragS, const char* programName);
 
 		void CreateSphereImpostorVAOandBuffers();
 		void CreateLineVAOandBuffers();

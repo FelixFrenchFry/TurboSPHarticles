@@ -37,7 +37,7 @@ namespace Sim
 					  Export::SerializationMgr& serializationMgr);
 
 		// initialize sub-systems
-		bool Init();
+		void Init();
 
 		// destroy sub-systems and free up resources
 		void Shutdown();

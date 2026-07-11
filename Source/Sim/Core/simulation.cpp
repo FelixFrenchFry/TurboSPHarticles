@@ -5,6 +5,7 @@
 #include <iostream>
 #include <mutex>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 
 // internal
 #include "Source/Eval/Serial/serialization.h"
@@ -35,7 +36,7 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 	// nothing to do
 }
 
-bool SimulationMgr::Init()
+void SimulationMgr::Init()
 {
 	// initial snapshot
 	SyncParameters(true);
@@ -59,7 +60,6 @@ bool SimulationMgr::Init()
 	DiagnosticsMgr::PrintSimParams(simParams_);
 	DiagnosticsMgr::PrintSimSetup(*this, simParams_);
 
-	return true;
 }
 
 void SimulationMgr::Shutdown()
@@ -101,9 +101,8 @@ void SimulationMgr::SelectSimScenario(
 	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, profile);
 	if (!simScenario_)
 	{
-		SPDLOG_ERROR("Failed to create sim scenario ({})",
-			static_cast<int>(type));
-		return;
+		throw std::runtime_error("Failed to create simulation scenario " +
+			std::to_string(static_cast<int>(type)) + ".");
 	}
 }
 
@@ -112,7 +111,7 @@ void SimulationMgr::SelectSimBackend(
 {
 	if (running_.load(std::memory_order_acquire))
 	{
-		SPDLOG_ERROR("Stop the simulation before switching backend");
+		SPDLOG_ERROR("Stop the simulation before switching backend.");
 		return;
 	}
 
@@ -128,9 +127,8 @@ void SimulationMgr::SelectSimBackend(
 	simBackend_ = MakeSimBackend(version, simParamsMgr_, benchmarksTracker_, simParams_);
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("Failed to create sim backend ({})",
-			static_cast<int>(version));
-		return;
+		throw std::runtime_error("Failed to create simulation backend " +
+			std::to_string(static_cast<int>(version)) + ".");
 	}
 
 	{
@@ -147,9 +145,8 @@ void SimulationMgr::SelectSimBackend(
 	simBackend_->GetBenchOps(curBenchOps_);
 	if (!Bench::ValidateOpList(curBenchOps_))
 	{
-		SPDLOG_ERROR("Invalid benchmark operation list for sim backend ({})",
-			static_cast<int>(version));
-		return;
+		throw std::runtime_error("Invalid benchmark operation list for simulation backend " +
+			std::to_string(static_cast<int>(version)) + ".");
 	}
 }
 
@@ -157,13 +154,13 @@ void SimulationMgr::ReBuildInitialSimState()
 {
 	if (!simScenario_)
 	{
-		SPDLOG_ERROR("Failed to re-build initial sim state (no scenario selected)");
-		return;
+		throw std::runtime_error(
+			"Failed to re-build initial simulation state without a selected scenario.");
 	}
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("Failed to re-build initial sim state (no backend selected)");
-		return;
+		throw std::runtime_error(
+			"Failed to re-build initial simulation state without a selected backend.");
 	}
 
 	// TODO: make sure simulation is stopped first to fix bug
@@ -204,17 +201,17 @@ void SimulationMgr::Launch_Async()
 {
 	if (!initialized_.load(std::memory_order_acquire))
 	{
-		SPDLOG_ERROR("Failed to launch async SimulationMgr (not initialized)");
+		SPDLOG_ERROR("Failed to launch async SimulationMgr (not initialized).");
 		return;
 	}
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("Failed to launch async SimulationMgr (no backend selected)");
+		SPDLOG_ERROR("Failed to launch async SimulationMgr (no backend selected).");
 		return;
 	}
 	if (running_.exchange(true))
 	{
-		SPDLOG_ERROR("Failed to launch async SimulationMgr (already running)");
+		SPDLOG_ERROR("Failed to launch async SimulationMgr (already running).");
 		return;
 	}
 
@@ -223,7 +220,24 @@ void SimulationMgr::Launch_Async()
 	// launch the controller thread
 	controllerThread_ = std::jthread([this](const std::stop_token& stopToken)
 		{
-			RunSim_Async(stopToken);
+			try
+			{
+				RunSim_Async(stopToken);
+			}
+			catch (const std::exception& ex)
+			{
+				SPDLOG_ERROR("Simulation thread failed: {}", ex.what());
+				simParamsMgr_.Set_SimRunning(false);
+				EndRunLogging();
+			}
+			catch (...)
+			{
+				SPDLOG_ERROR("Simulation thread failed: Unknown exception.");
+				simParamsMgr_.Set_SimRunning(false);
+				EndRunLogging();
+			}
+
+			running_.store(false, std::memory_order_release);
 		});
 }
 
@@ -231,17 +245,17 @@ void SimulationMgr::Launch_Blocking()
 {
 	if (!initialized_.load(std::memory_order_acquire))
 	{
-		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (not initialized)");
+		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (not initialized).");
 		return;
 	}
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (no backend selected)");
+		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (no backend selected).");
 		return;
 	}
 	if (running_.exchange(true))
 	{
-		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (already running)");
+		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (already running).");
 		return;
 	}
 

@@ -738,8 +738,7 @@ void SimBackend_GPU01::FillScalarData(
 		}
 	}
 	
-	SPDLOG_ERROR("Unsupported scalar data mode in backend GPU01");
-	snap.scalarDataF.clear();
+	throw std::runtime_error("Unsupported scalar data mode in GPU01.");
 }
 
 void SimBackend_GPU01::FillMemoryRecord(

@@ -274,13 +274,13 @@ App::ThreadBudget App::ResolveThreadBudget(
 	else if (maxThreadsSim == 0)
 	{
 		SPDLOG_WARN("Invalid 'maxThreadsSim' value 0 (must be -1 or > 0). "
-			"Falling back to default simulation thread budget {}",
+			"Falling back to default simulation thread budget {}.",
 			N_simThreadsDefault);
 	}
 	else if (maxThreadsSim < -1)
 	{
 		SPDLOG_WARN("Invalid 'maxThreadsSim' value {} (must be -1 or > 0). "
-			"Falling back to default simulation thread budget {}",
+			"Falling back to default simulation thread budget {}.",
 			maxThreadsSim, N_simThreadsDefault);
 	}
 	else

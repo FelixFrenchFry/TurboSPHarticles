@@ -71,7 +71,6 @@ int main(int argc, char** argv)
 
 		if (!distSimulationMgr.Init(profile, simOverrides, false))
 		{
-			SPDLOG_ERROR_MPI("Failed to initialize DistSimulationMgr", mpiContext);
 			return EXIT_FAILURE;
 		}
 		Dist::DistDiagnosticsMgr::PrintSimParams(
@@ -99,12 +98,12 @@ int main(int argc, char** argv)
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR("Exception: {}", ex.what());
+		SPDLOG_ERROR("Fatal error: {}", ex.what());
 		return EXIT_FAILURE;
 	}
 	catch (...)
 	{
-		SPDLOG_ERROR("Exception: UNKNOWN");
+		SPDLOG_ERROR("Fatal error: Unknown exception.");
 		return EXIT_FAILURE;
 	}
 

@@ -88,7 +88,7 @@ namespace
 
 		if (valueCount > maxCount)
 		{
-			throw std::runtime_error("particle migration payload byte size exceeds uint64_t range.");
+			throw std::runtime_error("Particle migration payload byte size exceeds uint64_t range.");
 		}
 
 		return valueCount * sizeof(T);
@@ -389,7 +389,7 @@ int MigratingParticleBufferF::CheckedBufferCount() const
 {
 	if (Size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 	{
-		throw std::runtime_error("particle migration buffer count exceeds MPI int count range.");
+		throw std::runtime_error("Particle migration buffer count exceeds MPI int count range.");
 	}
 
 	return static_cast<int>(Size());

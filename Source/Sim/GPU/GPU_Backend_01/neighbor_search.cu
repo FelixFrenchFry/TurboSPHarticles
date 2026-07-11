@@ -2,6 +2,7 @@
 
 // external
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -708,7 +709,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 
 	if (N_F == 0 && N_B == 0)
 	{
-		std::cerr << "Warning: No construction possible (empty simulation)\n";
+		std::cerr << "Warning: Cannot construct neighbor search for an empty simulation.\n";
 
 		N_NonEmptyCellsF_ = 0;
 		N_NonEmptyCellsB_ = 0;

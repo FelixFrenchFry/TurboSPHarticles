@@ -513,7 +513,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	if (N_F == 0 && N_B == 0)
 	{
-		SPDLOG_WARN("No construction possible (empty simulation)");
+		SPDLOG_WARN("Cannot construct neighbor search for an empty simulation.");
 		cellOrigX_ = 0;
 		cellOrigY_ = 0;
 		cellOrigZ_ = 0;
@@ -1320,7 +1320,7 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	static constexpr uint32_t MaxAxisCells = (1u << 21);
 	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)
 	{
-		SPDLOG_ERROR("Compact CLL cell frame exceeds 21-bit axis limit [{}, {}, {}]",
+		SPDLOG_ERROR("Compact CLL cell frame exceeds the 21-bit axis limit [{}, {}, {}].",
 			N_DimX_, N_DimY_, N_DimZ_);
 		assert(false);
 		cellFrameValid_ = false;

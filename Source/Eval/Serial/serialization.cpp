@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -144,8 +145,8 @@ namespace Export
 	{
 		if (!s.good())
 		{
-			SPDLOG_ERROR("I/O error while {}: {}", what, path);
-			throw std::runtime_error("I/O error");
+			throw std::runtime_error(
+				std::string("I/O error while ") + what + " '" + path + "'.");
 		}
 	}
 
@@ -228,7 +229,7 @@ namespace Export
 		std::string error;
 		if (!TryAtomicReplace(tmp, dst, error))
 		{
-			throw std::runtime_error("Atomic replace failed: " + error);
+			throw std::runtime_error("Atomic replace failed: " + error + ".");
 		}
 	}
 
@@ -494,7 +495,7 @@ namespace Export
 
 	using XdmfGridWriter = void(*)(std::ofstream&, const ExportSnapshotBinInfo&);
 
-	static bool WriteXdmfCollectionFile(
+	static void WriteXdmfCollectionFile(
 		const std::filesystem::path& path,
 		const char* name,
 		const std::vector<ExportSnapshotBinInfo>& infos,
@@ -514,8 +515,8 @@ namespace Export
 		std::ofstream ofs(writePath, std::ios::out | std::ios::trunc);
 		if (!ofs)
 		{
-			SPDLOG_ERROR("Failed to open XDMF file for write: {}", writePath.string());
-			return false;
+			throw std::runtime_error(
+				"Failed to open XDMF file for write '" + writePath.string() + "'.");
 		}
 
 		const auto removeTempFile = [&]()
@@ -542,18 +543,18 @@ namespace Export
 		ofs << "</Xdmf>\n";
 		if (!ofs.good())
 		{
-			SPDLOG_ERROR("I/O error while writing XDMF file: {}", writePath.string());
 			ofs.close();
 			removeTempFile();
-			return false;
+			throw std::runtime_error(
+				"I/O error while writing XDMF file '" + writePath.string() + "'.");
 		}
 
 		ofs.close();
 		if (!ofs)
 		{
-			SPDLOG_ERROR("I/O error while closing XDMF file: {}", writePath.string());
 			removeTempFile();
-			return false;
+			throw std::runtime_error(
+				"I/O error while closing XDMF file '" + writePath.string() + "'.");
 		}
 
 		if (saveOptions.atomicWrite)
@@ -561,15 +562,11 @@ namespace Export
 			std::string error;
 			if (!TryAtomicReplace(writePath, path, error))
 			{
-				SPDLOG_ERROR("Failed to replace XDMF file '{}': {}",
-					path.string(), error);
-
 				removeTempFile();
-				return false;
+				throw std::runtime_error("Failed to replace XDMF file '" +
+					path.string() + "': " + error + ".");
 			}
 		}
-
-		return true;
 	}
 
 	static bool HasStaticBoundary(const std::vector<ExportSnapshotBinInfo>& infos)
@@ -675,8 +672,8 @@ namespace Export
 			std::ofstream ofs(tmpPath, std::ios::binary | std::ios::out | std::ios::trunc);
 			if (!ofs)
 			{
-				SPDLOG_ERROR("Failed to open file for write: {}", tmpPath.string());
-				return;
+				throw std::runtime_error(
+					"Failed to open file for write '" + tmpPath.string() + "'.");
 			}
 
 			// header
@@ -809,8 +806,7 @@ namespace Export
 		std::ifstream ifs(path, std::ios::binary | std::ios::in);
 		if (!ifs)
 		{
-			SPDLOG_ERROR("Failed to open file for read: {}", path);
-			return;
+			throw std::runtime_error("Failed to open file for read '" + path + "'.");
 		}
 
 		// header
@@ -820,19 +816,17 @@ namespace Export
 		// basic validation
 		if (std::memcmp(hdr.magic, kSimStateMagic, sizeof(hdr.magic)) != 0)
 		{
-			SPDLOG_ERROR("Invalid sim state file magic: {}", path);
-			return;
+			throw std::runtime_error("Invalid simulation state file magic in '" + path + "'.");
 		}
 		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
 		{
-			SPDLOG_ERROR("Endianness mismatch (file is LE, host must be LE): {}", path);
-			return;
+			throw std::runtime_error("Endianness mismatch in '" + path +
+				"': File and host must be little-endian.");
 		}
 		if (hdr.headerBytes != sizeof(BinHeaderSim))
 		{
-			SPDLOG_ERROR("Unexpected sim header size ({}): {}",
-				hdr.headerBytes, path);
-			return;
+			throw std::runtime_error("Unexpected simulation state header size in '" +
+				path + "'.");
 		}
 
 		// metadata
@@ -970,9 +964,8 @@ namespace Export
 		std::filesystem::create_directories(saveOptions_.baseDir / dir, ec);
 		if (ec)
 		{
-			SPDLOG_ERROR("Failed to create export directory '{}': {}",
-				saveOptions_.baseDir.string(), ec.message());
-			return;
+			throw std::runtime_error("Failed to create export directory '" +
+				(saveOptions_.baseDir / dir).string() + "': " + ec.message() + ".");
 		}
 
 		// make sure data for every particle is present
@@ -1005,9 +998,8 @@ namespace Export
 			std::ofstream ofs(tmpPath, std::ios::binary | std::ios::out | std::ios::trunc);
 			if (!ofs)
 			{
-				SPDLOG_ERROR("Failed to open snapshot file for write: {}",
-					tmpPath.string());
-				return;
+				throw std::runtime_error("Failed to open snapshot file for write '" +
+					tmpPath.string() + "'.");
 			}
 
 			// arrays are written in the same order as referenced by the XDMF file:
@@ -1072,9 +1064,8 @@ namespace Export
 		std::filesystem::create_directories(dirPath, ec);
 		if (ec)
 		{
-			SPDLOG_ERROR("Failed to create export directory '{}': {}",
-				saveOptions_.baseDir.string(), ec.message());
-			return;
+			throw std::runtime_error("Failed to create export directory '" +
+				dirPath.string() + "': " + ec.message() + ".");
 		}
 
 		const std::filesystem::path fluidXdmfPath =
@@ -1103,26 +1094,19 @@ namespace Export
 			CollectExportSnapshotBinInfos(dirPath);
 		if (infos.empty())
 		{
-			SPDLOG_WARN("No export snapshot binary files found in '{}'",
-				dirPath.string());
-			return;
+			throw std::runtime_error("No export snapshot binary files found in '" +
+				dirPath.string() + "'.");
 		}
 
-		if (!WriteXdmfCollectionFile(
-			fluidXdmfPath, "FluidSurface", infos, WriteFluidSurfaceGrid, saveOptions_))
-		{
-			return;
-		}
+		WriteXdmfCollectionFile(
+			fluidXdmfPath, "FluidSurface", infos, WriteFluidSurfaceGrid, saveOptions_);
 
 		std::error_code removeEc;
 		if (HasStaticBoundary(infos))
 		{
-			if (!WriteXdmfCollectionFile(
+			WriteXdmfCollectionFile(
 				staticBoundaryXdmfPath, "StaticBoundary", infos,
-				WriteStaticBoundaryGrid, saveOptions_))
-			{
-				return;
-			}
+				WriteStaticBoundaryGrid, saveOptions_);
 		}
 		else
 		{
@@ -1131,12 +1115,9 @@ namespace Export
 
 		if (HasRigidBoundary(infos))
 		{
-			if (!WriteXdmfCollectionFile(
+			WriteXdmfCollectionFile(
 				rigidBoundaryXdmfPath, "RigidBoundary", infos,
-				WriteRigidBoundaryGrid, saveOptions_))
-			{
-				return;
-			}
+				WriteRigidBoundaryGrid, saveOptions_);
 		}
 		else
 		{

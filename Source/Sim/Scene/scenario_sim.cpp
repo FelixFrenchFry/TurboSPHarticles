@@ -50,7 +50,7 @@ namespace Scene
 			return std::make_unique<RigidCubeScene>(scenarioMgr, cfg);
 		}
 		default:
-			throw std::runtime_error("Unsupported sim scenario type requested.");
+			throw std::runtime_error("Unsupported simulation scenario type requested.");
 		}
 	}
 

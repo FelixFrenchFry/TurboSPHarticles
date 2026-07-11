@@ -181,7 +181,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'backendVersion' in JSON");
+				SPDLOG_WARN("Invalid 'backendVersion' value in JSON.");
 				EndWrite();
 				return false;
 			}
@@ -196,7 +196,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'scenarioType' in JSON");
+				SPDLOG_WARN("Invalid 'scenarioType' value in JSON.");
 			}
 		}
 
@@ -209,7 +209,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'neighborSearchMethod' in JSON");
+				SPDLOG_WARN("Invalid 'neighborSearchMethod' value in JSON.");
 				EndWrite();
 				return false;
 			}
@@ -224,7 +224,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'neighborListStorage' in JSON");
+				SPDLOG_WARN("Invalid 'neighborListStorage' value in JSON.");
 				EndWrite();
 				return false;
 			}
@@ -239,7 +239,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		{
 			if (!it->is_number_integer())
 			{
-				SPDLOG_WARN("Invalid 'maxThreadsSim' in JSON (must be -1 or > 0)");
+				SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (must be -1 or > 0).");
 			}
 			else
 			{
@@ -250,11 +250,11 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				}
 				else if (maxThreadsSim == 0)
 				{
-					SPDLOG_WARN("Invalid 'maxThreadsSim' in JSON (0 is not allowed)");
+					SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (0 is not allowed).");
 				}
 				else
 				{
-					SPDLOG_WARN("Invalid 'maxThreadsSim' in JSON (must be -1 or > 0)");
+					SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (must be -1 or > 0).");
 				}
 			}
 		}
@@ -396,7 +396,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'solverTerminationCond' in JSON");
+				SPDLOG_WARN("Invalid 'solverTerminationCond' value in JSON.");
 			}
 		}
 
@@ -416,7 +416,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		}
 		else
 		{
-			SPDLOG_WARN("Invalid 'gridCellSizeRatio' in JSON (must be > 0)");
+			SPDLOG_WARN("Invalid 'gridCellSizeRatio' value in JSON (must be > 0).");
 		}
 
 		EndWrite();
@@ -501,7 +501,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'timeUnit' in JSON");
+				SPDLOG_WARN("Invalid 'timeUnit' value in JSON.");
 			}
 		}
 
@@ -533,7 +533,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'byteUnit' in JSON");
+				SPDLOG_WARN("Invalid 'byteUnit' value in JSON.");
 			}
 		}
 
@@ -577,7 +577,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	if (!AssertParamDerivationCorrectness())
 	{
-		SPDLOG_ERROR("Derivation of simulation parameters is incorrect");
+		SPDLOG_ERROR("Derived simulation parameters are invalid.");
 		return false;
 	}
 
@@ -629,7 +629,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 		const size_t iEq = rawOverride.find('=');
 		if (iEq == std::string::npos)
 		{
-			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': expected key=value",
+			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': Expected key=value.",
 				rawOverride);
 			return false;
 		}
@@ -639,7 +639,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 
 		if (path.empty())
 		{
-			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': missing key", rawOverride);
+			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': Missing key.", rawOverride);
 			return false;
 		}
 
@@ -667,7 +667,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 			const std::string key = path.substr(begin, end - begin);
 			if (key.empty())
 			{
-				SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': malformed key path",
+				SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': Malformed key path.",
 					rawOverride);
 				return false;
 			}
@@ -682,7 +682,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 			if (!next.is_object() && !next.is_null())
 			{
 				SPDLOG_ERROR(
-					"Invalid '-sim/--sim' override '{}': key path collides with non-object",
+					"Invalid '-sim/--sim' override '{}': Key path collides with a non-object.",
 					rawOverride);
 				return false;
 			}
@@ -746,7 +746,7 @@ void SimParamsMgr::Set_TimeStep(
 {
 	if (!(timeStep > 0.0f))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'timeStep' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'timeStep' must be > 0.");
 		return;
 	}
 
@@ -772,7 +772,7 @@ void SimParamsMgr::Set_ParticleSize(
 {
 	if (!(particleSize > 0.0f))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'particleSize' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'particleSize' must be > 0.");
 		return;
 	}
 
@@ -841,7 +841,7 @@ void SimParamsMgr::Set_KernelSuppRatio(
 {
 	if (!Base::ApproxEqu(kernelSuppRatio, CubicSplineKernelSuppRatio))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelSuppRatio' must be {} for hardcoded cubic-spline kernels",
+		SPDLOG_ERROR("Parameter change cancelled: 'kernelSuppRatio' must be {} for hardcoded cubic-spline kernels.",
 			CubicSplineKernelSuppRatio);
 		return;
 	}
@@ -871,14 +871,14 @@ void SimParamsMgr::Set_KernelRadius(
 {
 	if (!(kernelRadius > 0.0f))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'kernelRadius' must be > 0.");
 		return;
 	}
 
 	const float kernelSuppRatio = kernelRadius / params_.particleSizeF;
 	if (!Base::ApproxEqu(kernelSuppRatio, CubicSplineKernelSuppRatio))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'kernelRadius' must match hardcoded cubic spline support radius {}h",
+		SPDLOG_ERROR("Parameter change cancelled: 'kernelRadius' must match hardcoded cubic-spline support radius {}h.",
 			CubicSplineKernelSuppRatio);
 		return;
 	}
@@ -908,7 +908,7 @@ void SimParamsMgr::Set_RestDensity(
 {
 	if (!(restDensity > 0.0f))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'restDensity' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'restDensity' must be > 0.");
 		return;
 	}
 
@@ -940,7 +940,7 @@ void SimParamsMgr::Set_Mass(
 {
 	if (!(mass > 0.0f))
 	{
-		SPDLOG_ERROR("Param change cancelled, 'mass' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'mass' must be > 0.");
 		return;
 	}
 
@@ -957,7 +957,7 @@ void SimParamsMgr::Set_Mass(
 	}
 	else
 	{
-		SPDLOG_WARN("Change of 'mass' not implemented for this type");
+		SPDLOG_WARN("Changing 'mass' is not implemented for this particle type.");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -1013,7 +1013,7 @@ void SimParamsMgr::Set_Viscosity(
 	}
 	else
 	{
-		SPDLOG_WARN("Change of 'viscosity' not implemented for this type");
+		SPDLOG_WARN("Changing 'viscosity' is not implemented for this particle type.");
 	}
 
 	if (!changed) { return; } // nothing to change
@@ -1132,7 +1132,7 @@ void SimParamsMgr::Set_MinSolverIters(
 {
 	if (minSolverIters <= 0)
 	{
-		SPDLOG_ERROR("Param change cancelled, 'minSolverIters' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'minSolverIters' must be > 0.");
 		return;
 	}
 
@@ -1158,7 +1158,7 @@ void SimParamsMgr::Set_MaxSolverIters(
 {
 	if (maxSolverIters <= 0)
 	{
-		SPDLOG_ERROR("Param change cancelled, 'maxSolverIters' must be > 0");
+		SPDLOG_ERROR("Parameter change cancelled: 'maxSolverIters' must be > 0.");
 		return;
 	}
 

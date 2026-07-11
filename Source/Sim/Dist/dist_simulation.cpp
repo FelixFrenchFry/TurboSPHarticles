@@ -627,7 +627,7 @@ void DistSimulationMgr::SelectSimScenario(
 	simScenario_ = Scene::MakeSimScenario(scenarioMgr_, type, profile);
 	if (!simScenario_)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to create sim scenario ({})",
+		SPDLOG_ERROR("[rank {}/{}] Failed to create sim scenario ({}).",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(type));
 		return;
 	}
@@ -646,7 +646,7 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	simBackend_ = Sim::MakeSimBackend(version, simParamsMgr_, *benchmarksTracker_, simParams_);
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to create sim backend ({})",
+		SPDLOG_ERROR("[rank {}/{}] Failed to create sim backend ({}).",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
 		return;
 	}
@@ -685,7 +685,7 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	if (!Bench::ValidateOpList(curBenchOps_))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid distributed benchmark operation list "
-			"for sim backend ({})",
+			"for sim backend ({}).",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
 		curBenchOps_.clear();
 	}
@@ -699,13 +699,13 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 	{
 		if (!simScenario_)
 		{
-			SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state (no scenario selected)",
+			SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state (no scenario selected).",
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
 		if (!domainDecomp_)
 		{
-			SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state (no domain decomp)",
+			SPDLOG_ERROR("[rank {}/{}] Failed to re-build initial sim state (no domain decomp).",
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
@@ -792,25 +792,25 @@ void DistSimulationMgr::RunSim_Blocking()
 
 	if (!initialized_.load(std::memory_order_acquire))
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (not initialized)",
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (not initialized).",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
 	if (!simBackend_)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no backend selected)",
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no backend selected).",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
 	if (!benchmarksTracker_)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no benchmark tracker)",
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no benchmark tracker).",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
 	if (!memoryTracker_)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no memory tracker)",
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (no memory tracker).",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
@@ -818,7 +818,7 @@ void DistSimulationMgr::RunSim_Blocking()
 
 	if (running_.exchange(true))
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (already running)",
+		SPDLOG_ERROR("[rank {}/{}] Failed to launch blocking DistSimulationMgr (already running).",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
@@ -1830,7 +1830,7 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata(const char* phaseName)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Invalid rank-local particle metadata {} "
-			"(fluid={}, boundary={})",
+			"(fluid={}, boundary={}).",
 			mpiContext_.Rank(), mpiContext_.Size(), phaseName,
 			fluidMetadataValid ? "valid" : fluidFailMsg,
 			boundaryMetadataValid ? "valid" : boundaryFailMsg);

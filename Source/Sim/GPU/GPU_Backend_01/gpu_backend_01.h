@@ -58,7 +58,7 @@ namespace Sim
 			if (n)
 			{
 				cudaError_t err = cudaMalloc(reinterpret_cast<void**>(&ptr_), n * sizeof(T));
-				if (err != cudaSuccess) throw std::runtime_error("cudaMalloc failed");
+				if (err != cudaSuccess) throw std::runtime_error("cudaMalloc failed.");
 			}
 
 			size_ = n;

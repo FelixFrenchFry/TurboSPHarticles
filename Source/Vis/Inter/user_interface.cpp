@@ -11,6 +11,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -39,8 +40,8 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 
 	if (!window || !glslVersion)
 	{
-		SPDLOG_ERROR("Failed to init, window or glslVersion is null");
-		return;
+		throw std::runtime_error(
+			"Cannot initialize user interface without a window and GLSL version.");
 	}
 
 	window_ = window;
@@ -1055,7 +1056,7 @@ void UserInterfaceMgr::RebuildFonts(float dpiScale)
 	);
 	if (!font)
 	{
-		SPDLOG_ERROR("Failed to load custom compressed font from header file");
+		SPDLOG_ERROR("Failed to load custom compressed font from header file.");
 		io.Fonts->AddFontDefault();
 	}
 
@@ -1174,7 +1175,8 @@ inline float UserInterfaceMgr::ReadStatData(
 {
 	if (!snap)
 	{
-		SPDLOG_ERROR("Failed to read stat data (no snap provided)");
+		SPDLOG_ERROR("Cannot read statistics data without a snapshot.");
+		return 0.0f;
 	}
 	const uint16_t i = Stats::GetIdx(metric);
 
@@ -1186,7 +1188,7 @@ inline float UserInterfaceMgr::ReadStatData(
 	case StatTableView::Max: { return snap->max[i]; }
 	}
 
-	SPDLOG_WARN("Invalid StatTableView enum value");
+	SPDLOG_WARN("Invalid StatTableView value.");
 	return 0;
 }
 
@@ -1195,7 +1197,8 @@ inline uint64_t UserInterfaceMgr::ReadOpTiming(
 {
 	if (!snap)
 	{
-		SPDLOG_ERROR("Failed to read operation timing (no snap provided)");
+		SPDLOG_ERROR("Cannot read operation timing without a snapshot.");
+		return 0;
 	}
 	const uint16_t i = Bench::GetIdx(op);
 
@@ -1208,7 +1211,7 @@ inline uint64_t UserInterfaceMgr::ReadOpTiming(
 	case BenchTableView::Max: { return snap->max[i]; }
 	}
 
-	SPDLOG_WARN("Invalid BenchTableView enum value");
+	SPDLOG_WARN("Invalid BenchTableView value.");
 	return 0;
 }
 

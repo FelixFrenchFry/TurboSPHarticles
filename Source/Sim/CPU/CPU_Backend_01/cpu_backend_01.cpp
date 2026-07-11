@@ -590,8 +590,7 @@ void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,
 		}
 	}
 
-	SPDLOG_ERROR("Unsupported scalar data mode in backend CPU01");
-	snap.scalarDataF.clear();
+	throw std::runtime_error("Unsupported scalar data mode in CPU01.");
 }
 
 void SimBackend_CPU01::FillMemoryRecord(
@@ -1144,7 +1143,7 @@ bool SimBackend_CPU01::SetActiveFluidParticleLocalIdxs(
 	{
 		if (localIdx < 0 || static_cast<uint32_t>(localIdx) >= N_F_)
 		{
-			SPDLOG_ERROR("Invalid active fluid particle local index ({})", localIdx);
+			SPDLOG_ERROR("Invalid active fluid particle local index {}.", localIdx);
 			useActiveFluidParticleLocalIdxs_ = false;
 			activeFluidParticleLocalIdxs_.clear();
 			return false;
@@ -1153,7 +1152,7 @@ bool SimBackend_CPU01::SetActiveFluidParticleLocalIdxs(
 		const uint32_t localIdxU = static_cast<uint32_t>(localIdx);
 		if (activeIdxUsed[localIdxU] != 0)
 		{
-			SPDLOG_ERROR("Duplicate active fluid particle local index ({})", localIdx);
+			SPDLOG_ERROR("Duplicate active fluid particle local index {}.", localIdx);
 			useActiveFluidParticleLocalIdxs_ = false;
 			activeFluidParticleLocalIdxs_.clear();
 			return false;
