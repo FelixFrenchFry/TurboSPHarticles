@@ -584,6 +584,7 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	snap.N_F = N_F_;
 	snap.N_B = N_B_;
+	snap.N_R = N_rigidBodies_;
 	snap.simStep = simStep_;
 
 	if (N_F_ == 0) // empty sim
@@ -625,6 +626,7 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	}
 
 	snap.posB.resize(N_B_);
+	snap.volB.resize(N_B_);
 	snap.bodyIdB.resize(N_B_);
 
 	if (N_B_ > 0)
@@ -644,6 +646,7 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 		GPU::Copy_DeviceToHost(h_xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(h_yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(h_zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(snap.volB.data(), d_volB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(h_bodyIdB.data(), d_bodyIdB_.Data(), N_B_, stream_);
 
 		// wait for all boundary copies to finish
@@ -662,6 +665,42 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 			},
 			tbb::auto_partitioner{}
 		);
+	}
+
+	snap.centerOfMassR.resize(N_rigidBodies_);
+	snap.orientationR.resize(N_rigidBodies_);
+	if (N_rigidBodies_ > 0)
+	{
+		std::vector<float> h_xCMR(N_rigidBodies_), h_yCMR(N_rigidBodies_), h_zCMR(N_rigidBodies_);
+		std::vector<float> h_a00R(N_rigidBodies_), h_a01R(N_rigidBodies_), h_a02R(N_rigidBodies_);
+		std::vector<float> h_a10R(N_rigidBodies_), h_a11R(N_rigidBodies_), h_a12R(N_rigidBodies_);
+		std::vector<float> h_a20R(N_rigidBodies_), h_a21R(N_rigidBodies_), h_a22R(N_rigidBodies_);
+
+		GPU::Copy_DeviceToHost(h_xCMR.data(), d_xCMR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_yCMR.data(), d_yCMR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_zCMR.data(), d_zCMR_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a00R.data(), d_a00R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a01R.data(), d_a01R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a02R.data(), d_a02R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a10R.data(), d_a10R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a11R.data(), d_a11R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a12R.data(), d_a12R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a20R.data(), d_a20R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a21R.data(), d_a21R_.Data(), N_rigidBodies_, stream_);
+		GPU::Copy_DeviceToHost(h_a22R.data(), d_a22R_.Data(), N_rigidBodies_, stream_);
+		GPU::StreamSync(stream_);
+
+		for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
+		{
+			snap.centerOfMassR[bodyIdx] =
+				{ h_xCMR[bodyIdx], h_yCMR[bodyIdx], h_zCMR[bodyIdx] };
+			snap.orientationR[bodyIdx][0] =
+				{ h_a00R[bodyIdx], h_a10R[bodyIdx], h_a20R[bodyIdx] };
+			snap.orientationR[bodyIdx][1] =
+				{ h_a01R[bodyIdx], h_a11R[bodyIdx], h_a21R[bodyIdx] };
+			snap.orientationR[bodyIdx][2] =
+				{ h_a02R[bodyIdx], h_a12R[bodyIdx], h_a22R[bodyIdx] };
+		}
 	}
 }
 

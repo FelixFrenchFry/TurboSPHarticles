@@ -71,13 +71,18 @@ namespace Vis
 			.clearColor         = {0.15f, 0.15f, 0.15f, 1.0f},
 			.baseColor          = {0.2f, 0.4f, 1.0f},
 			.rigidBoundaryColor = {0.7f, 0.7f, 0.7f},
+			.centerOfMassXAxisColor = {250.0f / 255.0f, 0.0f, 50.0f / 255.0f},
+			.centerOfMassYAxisColor = {40.0f / 255.0f, 180.0f / 255.0f, 80.0f / 255.0f},
+			.centerOfMassZAxisColor = {40.0f / 255.0f, 80.0f / 255.0f, 180.0f / 255.0f},
 			.lineColor          = {1.0f, 1.0f, 1.0f},
 			.alpha              = 1.0f,
+			.centerOfMassXRayAlpha = 0.5f,
 			.scalarMin          = 0.0f,
 			.scalarMax          = 1.0f,
 			.useScalar          = false,
 			.showFluidParticles = true,
 			.showRigidBoundaryParticles = true,
+			.showRigidBodyCentersOfMass = false,
 			.rigidBoundaryRadiusScale   = 1.0f,
 			.lineWidth          = 0.02f
 		};
@@ -117,12 +122,17 @@ namespace Vis
 		std::optional<glm::vec3> lightDirVS;
 		std::optional<glm::vec3> baseColor;
 		std::optional<glm::vec3> rigidBoundaryColor;
+		std::optional<glm::vec3> centerOfMassXAxisColor;
+		std::optional<glm::vec3> centerOfMassYAxisColor;
+		std::optional<glm::vec3> centerOfMassZAxisColor;
 		std::optional<float> alpha;
+		std::optional<float> centerOfMassXRayAlpha;
 		std::optional<float> scalarMin;
 		std::optional<float> scalarMax;
 		std::optional<bool> useScalar;
 		std::optional<bool> showFluidParticles;
 		std::optional<bool> showRigidBoundaryParticles;
+		std::optional<bool> showRigidBodyCentersOfMass;
 		std::optional<float> rigidBoundaryRadiusScale;
 	};
 

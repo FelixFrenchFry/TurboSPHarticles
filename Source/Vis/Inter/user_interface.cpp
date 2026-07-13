@@ -272,6 +272,17 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 				});
 		}
 
+		bool showRigidBodyCentersOfMass =
+			visParams.render.showRigidBodyCentersOfMass;
+		if (ImGui::Checkbox("show rigid body centers of mass",
+			&showRigidBodyCentersOfMass))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showRigidBodyCentersOfMass = showRigidBodyCentersOfMass
+				});
+		}
+
 		ImGui::TreePop();
 	}
 	ImGui::Spacing();

@@ -163,6 +163,16 @@ bool UserInputMgr::OnKey(const Sim::SimParams& simParams,
 
 			return true;
 		}
+		case GLFW_KEY_3: // toggle rigid body center-of-mass rendering
+		{
+			bool toggle = !render.showRigidBodyCentersOfMass;
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showRigidBodyCentersOfMass = toggle
+				});
+
+			return true;
+		}
 		case GLFW_KEY_R: // reset camera to default
 		{
 			visParamsMgr_.SetParam(Vis::CameraPatch

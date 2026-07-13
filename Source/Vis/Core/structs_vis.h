@@ -6,6 +6,7 @@
 
 // external
 #include <span>
+#include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
@@ -28,9 +29,15 @@ namespace Vis
 		std::span<const float> scalarDataF; // data according to color coding mode
 		Base::ColorCodingMode scalarModeF;  // color coding mode
 
+		// data for rigid body vis
+		uint32_t N_R;                              // number of rigid bodies
+		std::span<const glm::vec3> centerOfMassR;
+		std::span<const glm::mat3> orientationR;
+
 		// data for boundary particles and boundary structures vis
 		uint32_t N_B;                       // number of boundary particles
 		std::span<const glm::vec3> posB;    // positions of all boundary particles
+		std::span<const float> volB;        // contribution volumes of all boundary particles
 		std::span<const uint32_t> bodyIdB;  // rigid body ownership for boundary particles
 		std::span<const Scene::OBB> boxesB; // OBBs of boundary structures
 	};
@@ -77,13 +84,18 @@ namespace Vis
 		glm::vec4 clearColor;           // background color RGBA
 		glm::vec3 baseColor;            // base sphere impostor color RGB
 		glm::vec3 rigidBoundaryColor;   // rigid boundary particle color RGB
+		glm::vec3 centerOfMassXAxisColor; // center-of-mass local X-axis color RGB
+		glm::vec3 centerOfMassYAxisColor; // center-of-mass local Y-axis color RGB
+		glm::vec3 centerOfMassZAxisColor; // center-of-mass local Z-axis color RGB
 		glm::vec3 lineColor;            // wireframe color RGB
 		float alpha;
+		float centerOfMassXRayAlpha;
 		float scalarMin;
 		float scalarMax;
 		bool useScalar;
 		bool showFluidParticles;
 		bool showRigidBoundaryParticles;
+		bool showRigidBodyCentersOfMass;
 		float rigidBoundaryRadiusScale;
 
 		float lineWidth;

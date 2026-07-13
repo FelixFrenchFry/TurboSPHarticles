@@ -496,6 +496,7 @@ void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	snap.simStep = simStep_;
 	snap.N_F = N_F_;
 	snap.N_B = N_B_;
+	snap.N_R = N_rigidBodies_;
 
 	if (N_F_ == 0)
 	{
@@ -524,6 +525,7 @@ void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	}
 
 	snap.posB.resize(N_B_);
+	snap.volB.resize(N_B_);
 	snap.bodyIdB.resize(N_B_);
 
 	// pack boundary positions into the visual snapshot's data structures
@@ -534,11 +536,26 @@ void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
 				snap.posB[i] = glm::vec3{ xPosB_[i], yPosB_[i], zPosB_[i] };
+				snap.volB[i] = volB_[i];
 				snap.bodyIdB[i] = bodyIdB_[i];
 			}
 		},
 		tbb::auto_partitioner{}
 	);
+
+	snap.centerOfMassR.resize(N_rigidBodies_);
+	snap.orientationR.resize(N_rigidBodies_);
+	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
+	{
+		snap.centerOfMassR[bodyIdx] =
+			{ xCMR_[bodyIdx], yCMR_[bodyIdx], zCMR_[bodyIdx] };
+		snap.orientationR[bodyIdx][0] =
+			{ a00R_[bodyIdx], a10R_[bodyIdx], a20R_[bodyIdx] };
+		snap.orientationR[bodyIdx][1] =
+			{ a01R_[bodyIdx], a11R_[bodyIdx], a21R_[bodyIdx] };
+		snap.orientationR[bodyIdx][2] =
+			{ a02R_[bodyIdx], a12R_[bodyIdx], a22R_[bodyIdx] };
+	}
 }
 
 void SimBackend_CPU01::FillScalarData(Sync::VisualSnapshot& snap,

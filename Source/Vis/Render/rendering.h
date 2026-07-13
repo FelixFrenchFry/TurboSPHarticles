@@ -48,6 +48,10 @@ namespace Render
 							 const Sim::SimParams& simParams,
 							 const Vis::VisParams& visParams);
 
+		// upload rigid body center-of-mass marker transforms
+		void UpdateCentersOfMass(const Vis::VisualSnapView& view,
+								 const Sim::SimParams& simParams);
+
 		// upload latest render-specific sim state to the GPU instance buffers
 		void UpdateWireframes(const Vis::VisualSnapView& view,
 							  const Vis::VisParams& params);
@@ -71,6 +75,16 @@ namespace Render
 		GLuint progSphereImpostors_ = 0;	// impostor sphere shader program
 		GLuint texColorMap_ = 0;			// color lookup-table
 
+		// addresses of GL objects (cuboids -> rigid body centers of mass)
+		GLuint vaoCenterOfMass_ = 0;
+		GLuint vboCenterOfMassCube_ = 0;
+		GLuint vboCenterOfMassInstances_ = 0;
+		GLuint progCenterOfMass_ = 0;
+		GLint uniCenterOfMassXAxisColorLoc_ = -1;
+		GLint uniCenterOfMassYAxisColorLoc_ = -1;
+		GLint uniCenterOfMassZAxisColorLoc_ = -1;
+		GLint uniCenterOfMassAlphaLoc_ = -1;
+
 		// addresses of GL objects (lines -> wireframes)
 		GLuint vaoLines_ = 0;
 		GLuint vboLines_ = 0;
@@ -89,18 +103,22 @@ namespace Render
 		// draw state
 		uint32_t N_fluidImpostorInstances_ = 0;
 		uint32_t N_rigidBoundaryImpostorInstances_ = 0;
+		uint32_t N_centerOfMassInstances_ = 0;
 		uint64_t N_lineVertices_ = 0;
 
 		// helpers
 		void CreateSphereImpostorProgram();
+		void CreateCenterOfMassProgram();
 		void CreateLineProgram();
 		GLuint Compile(GLenum type, const char* src, const char* shaderName);
 		GLuint Link(GLuint vertS, GLuint fragS, const char* programName);
 
 		void CreateSphereImpostorVAOandBuffers();
+		void CreateCenterOfMassVAOandBuffers();
 		void CreateLineVAOandBuffers();
 
 		void DestroySphereImpostorVAOandBuffers();
+		void DestroyCenterOfMassVAOandBuffers();
 		void DestroyLineVAOandBuffers();
 
 		void UpdateParamsUBO(const Vis::RenderConfig& render);

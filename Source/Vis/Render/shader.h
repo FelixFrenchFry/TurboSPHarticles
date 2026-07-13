@@ -166,6 +166,47 @@ namespace Render
 	}
 	)GLSL";
 
+	static const char* VS_centerOfMassMarker = R"GLSL(#version 450 core
+
+	layout(location = 0) in vec3 aPos;
+	layout(location = 1) in mat4 aModel;
+
+	flat out int vAxis;
+
+	layout(std140, binding = 1) uniform Camera
+	{
+		mat4 uViewMat;
+		mat4 uProjMat;
+		mat4 uViewProjMat;
+		vec4 uCamPos;
+	};
+
+	void main()
+	{
+		vAxis = gl_InstanceID % 3;
+		gl_Position = uViewProjMat * aModel * vec4(aPos, 1.0);
+	}
+	)GLSL";
+
+	static const char* FS_centerOfMassMarker = R"GLSL(#version 450 core
+
+	layout(location = 0) out vec4 FragColor;
+
+	flat in int vAxis;
+
+	uniform vec3 uXAxisColor;
+	uniform vec3 uYAxisColor;
+	uniform vec3 uZAxisColor;
+	uniform float uAlpha;
+
+	void main()
+	{
+		vec3 color = vAxis == 0 ? uXAxisColor :
+			(vAxis == 1 ? uYAxisColor : uZAxisColor);
+		FragColor = vec4(color, uAlpha);
+	}
+	)GLSL";
+
 	static const char* VS_line = R"GLSL(#version 450 core
 	
 	layout(location = 0) in vec3 aPos;

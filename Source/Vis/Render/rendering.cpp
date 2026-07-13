@@ -9,6 +9,8 @@
 
 // internal
 #include "Source/Sim/Sync/state_sim.h"
+#include "center_of_mass_marker.h"
+#include "particle_radius.h"
 #include "rendering.h"
 #include "shader.h"
 
@@ -30,10 +32,12 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 
 	// create shader programs
 	CreateSphereImpostorProgram();
+	CreateCenterOfMassProgram();
 	CreateLineProgram();
 
 	// create VAOs and buffers
 	CreateSphereImpostorVAOandBuffers();
+	CreateCenterOfMassVAOandBuffers();
 	CreateLineVAOandBuffers();
 
 	// default grayscale colormap
@@ -58,6 +62,12 @@ void RenderingMgr::Shutdown()
 		progSphereImpostors_ = 0;
 	}
 
+	if (progCenterOfMass_)
+	{
+		glDeleteProgram(progCenterOfMass_);
+		progCenterOfMass_ = 0;
+	}
+
 	if (progLines_)
 	{
 		glDeleteProgram(progLines_);
@@ -65,6 +75,7 @@ void RenderingMgr::Shutdown()
 	}
 
 	DestroySphereImpostorVAOandBuffers();
+	DestroyCenterOfMassVAOandBuffers();
 	DestroyLineVAOandBuffers();
 }
 
@@ -95,9 +106,7 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
 	const float fluidRad = simParams.particleSizeF * 0.5f;
-	const float rigidRad =
-		simParams.particleSizeB * 0.5f *
-		std::max(visParams.render.rigidBoundaryRadiusScale, 0.0f);
+	const bool hasVolB = view.volB.size() == view.N_B;
 	const bool hasScalar = (view.scalarModeF != Base::ColorCodingMode::None) &&
 							(view.scalarDataF.size() == view.N_F);
 
@@ -118,13 +127,50 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 			if (view.bodyIdB[i] == Sync::InvalidRigidBodyId) { continue; }
 
 			const glm::vec3 pos = view.posB[i];
-			out[dst].posAndRad = glm::vec4(pos, rigidRad);
+			const float volume = hasVolB ? view.volB[i] : 0.0f;
+			const float radius = ComputeRigidBoundaryRenderRadius(
+				volume,
+				simParams.particleSizeB,
+				visParams.render.rigidBoundaryRadiusScale);
+			out[dst].posAndRad = glm::vec4(pos, radius);
 			out[dst].scalar = 0.0f;
 			dst++;
 		}
 	}
 
 	// no need to flush, because buffer persistently mapped
+}
+
+void RenderingMgr::UpdateCentersOfMass(
+	const Vis::VisualSnapView& view,
+	const Sim::SimParams& simParams)
+{
+	N_centerOfMassInstances_ = 0;
+	if (view.centerOfMassR.size() != view.N_R ||
+		view.orientationR.size() != view.N_R)
+	{
+		return;
+	}
+
+	std::vector<glm::mat4> transforms;
+	transforms.reserve(static_cast<size_t>(view.N_R) * 3);
+	for (uint32_t bodyIdx = 0; bodyIdx < view.N_R; bodyIdx++)
+	{
+		const auto bodyTransforms = BuildCenterOfMassMarkerTransforms(
+			view.centerOfMassR[bodyIdx],
+			view.orientationR[bodyIdx],
+			simParams.particleSizeF);
+		transforms.insert(
+			transforms.end(), bodyTransforms.begin(), bodyTransforms.end());
+	}
+
+	N_centerOfMassInstances_ = static_cast<uint32_t>(transforms.size());
+	if (N_centerOfMassInstances_ == 0) { return; }
+
+	const GLsizeiptr bytes =
+		static_cast<GLsizeiptr>(transforms.size() * sizeof(glm::mat4));
+	glNamedBufferData(
+		vboCenterOfMassInstances_, bytes, transforms.data(), GL_DYNAMIC_DRAW);
 }
 
 void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::VisParams& params)
@@ -196,6 +242,33 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
 	}
 
+	if (render.showRigidBodyCentersOfMass && N_centerOfMassInstances_ > 0)
+	{
+		glUseProgram(progCenterOfMass_);
+		glBindVertexArray(vaoCenterOfMass_);
+
+		glUniform3fv(uniCenterOfMassXAxisColorLoc_,
+			1, &render.centerOfMassXAxisColor.x);
+		glUniform3fv(uniCenterOfMassYAxisColorLoc_,
+			1, &render.centerOfMassYAxisColor.x);
+		glUniform3fv(uniCenterOfMassZAxisColorLoc_,
+			1, &render.centerOfMassZAxisColor.x);
+
+		// draw a faint x-ray pass so centers inside closed bodies remain visible
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_FALSE);
+		glUniform1f(uniCenterOfMassAlphaLoc_, render.centerOfMassXRayAlpha);
+		glDrawArraysInstanced(
+			GL_TRIANGLES, 0, 36, static_cast<GLsizei>(N_centerOfMassInstances_));
+
+		// draw visible marker surfaces normally against the scene depth buffer
+		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glUniform1f(uniCenterOfMassAlphaLoc_, 1.0f);
+		glDrawArraysInstanced(
+			GL_TRIANGLES, 0, 36, static_cast<GLsizei>(N_centerOfMassInstances_));
+	}
+
 	if (N_lineVertices_ > 0)
 	{
 		// bind state and bind color uniform
@@ -229,6 +302,47 @@ void RenderingMgr::CreateSphereImpostorProgram()
 
 	glDeleteShader(vertS);
 	glDeleteShader(fragS);
+}
+
+// creates the shader program for rendering rigid body centers of mass
+void RenderingMgr::CreateCenterOfMassProgram()
+{
+	GLuint vertS = 0;
+	GLuint fragS = 0;
+	try
+	{
+		vertS = Compile(
+			GL_VERTEX_SHADER, VS_centerOfMassMarker, "VS_centerOfMassMarker");
+		fragS = Compile(
+			GL_FRAGMENT_SHADER, FS_centerOfMassMarker, "FS_centerOfMassMarker");
+		progCenterOfMass_ = Link(vertS, fragS, "center of mass marker");
+	}
+	catch (...)
+	{
+		if (vertS != 0) { glDeleteShader(vertS); }
+		if (fragS != 0) { glDeleteShader(fragS); }
+		throw;
+	}
+
+	glDeleteShader(vertS);
+	glDeleteShader(fragS);
+
+	uniCenterOfMassXAxisColorLoc_ = glGetUniformLocation(
+		progCenterOfMass_, "uXAxisColor");
+	uniCenterOfMassYAxisColorLoc_ = glGetUniformLocation(
+		progCenterOfMass_, "uYAxisColor");
+	uniCenterOfMassZAxisColorLoc_ = glGetUniformLocation(
+		progCenterOfMass_, "uZAxisColor");
+	uniCenterOfMassAlphaLoc_ = glGetUniformLocation(
+		progCenterOfMass_, "uAlpha");
+	if (uniCenterOfMassXAxisColorLoc_ < 0 ||
+		uniCenterOfMassYAxisColorLoc_ < 0 ||
+		uniCenterOfMassZAxisColorLoc_ < 0 ||
+		uniCenterOfMassAlphaLoc_ < 0)
+	{
+		SPDLOG_WARN(
+			"Failed to find center-of-mass marker uniform locations.");
+	}
 }
 
 // creates the shader program for rendering lines
@@ -425,6 +539,55 @@ void RenderingMgr::CreateSphereImpostorVAOandBuffers()
 	// glGenQueries(1, &timerQuery_);
 }
 
+void RenderingMgr::CreateCenterOfMassVAOandBuffers()
+{
+	constexpr float H = 0.5f;
+	const glm::vec3 cubeVertices[36]
+	{
+		{-H, -H, +H}, {+H, -H, +H}, {+H, +H, +H},
+		{-H, -H, +H}, {+H, +H, +H}, {-H, +H, +H},
+		{+H, -H, -H}, {-H, -H, -H}, {-H, +H, -H},
+		{+H, -H, -H}, {-H, +H, -H}, {+H, +H, -H},
+		{-H, -H, -H}, {-H, -H, +H}, {-H, +H, +H},
+		{-H, -H, -H}, {-H, +H, +H}, {-H, +H, -H},
+		{+H, -H, +H}, {+H, -H, -H}, {+H, +H, -H},
+		{+H, -H, +H}, {+H, +H, -H}, {+H, +H, +H},
+		{-H, +H, +H}, {+H, +H, +H}, {+H, +H, -H},
+		{-H, +H, +H}, {+H, +H, -H}, {-H, +H, -H},
+		{-H, -H, -H}, {+H, -H, -H}, {+H, -H, +H},
+		{-H, -H, -H}, {+H, -H, +H}, {-H, -H, +H},
+	};
+
+	glCreateVertexArrays(1, &vaoCenterOfMass_);
+	glCreateBuffers(1, &vboCenterOfMassCube_);
+	glNamedBufferStorage(
+		vboCenterOfMassCube_, sizeof(cubeVertices), cubeVertices, 0);
+	glVertexArrayVertexBuffer(
+		vaoCenterOfMass_, 0, vboCenterOfMassCube_, 0, sizeof(glm::vec3));
+
+	glEnableVertexArrayAttrib(vaoCenterOfMass_, 0);
+	glVertexArrayAttribFormat(vaoCenterOfMass_, 0, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vaoCenterOfMass_, 0, 0);
+
+	glCreateBuffers(1, &vboCenterOfMassInstances_);
+	glVertexArrayVertexBuffer(
+		vaoCenterOfMass_, 1, vboCenterOfMassInstances_, 0, sizeof(glm::mat4));
+
+	for (GLuint column = 0; column < 4; column++)
+	{
+		const GLuint location = 1 + column;
+		glEnableVertexArrayAttrib(vaoCenterOfMass_, location);
+		glVertexArrayAttribFormat(
+			vaoCenterOfMass_,
+			location,
+			4,
+			GL_FLOAT,
+			GL_FALSE,
+			static_cast<GLuint>(column * sizeof(glm::vec4)));
+		glVertexArrayAttribBinding(vaoCenterOfMass_, location, 1);
+	}
+	glVertexArrayBindingDivisor(vaoCenterOfMass_, 1, 1);
+}
 void RenderingMgr::CreateLineVAOandBuffers()
 {
 	// create VAO and VBO for rendering lines
@@ -455,6 +618,25 @@ void RenderingMgr::DestroySphereImpostorVAOandBuffers()
 	if (vboInstances_) { glDeleteBuffers(1, &vboInstances_); vboInstances_ = 0; }
 	if (vboQuad_) { glDeleteBuffers(1, &vboQuad_); vboQuad_ = 0; }
 	if (vao_) { glDeleteVertexArrays(1, &vao_); vao_ = 0; }
+}
+
+void RenderingMgr::DestroyCenterOfMassVAOandBuffers()
+{
+	if (vboCenterOfMassInstances_)
+	{
+		glDeleteBuffers(1, &vboCenterOfMassInstances_);
+		vboCenterOfMassInstances_ = 0;
+	}
+	if (vboCenterOfMassCube_)
+	{
+		glDeleteBuffers(1, &vboCenterOfMassCube_);
+		vboCenterOfMassCube_ = 0;
+	}
+	if (vaoCenterOfMass_)
+	{
+		glDeleteVertexArrays(1, &vaoCenterOfMass_);
+		vaoCenterOfMass_ = 0;
+	}
 }
 
 void RenderingMgr::DestroyLineVAOandBuffers()

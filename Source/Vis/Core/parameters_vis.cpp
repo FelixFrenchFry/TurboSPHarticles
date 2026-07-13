@@ -128,12 +128,17 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	Base::MarkIfChanged(patch.lightDirVS, params_.render.lightDirVS, changed);
 	Base::MarkIfChanged(patch.baseColor, params_.render.baseColor, changed);
 	Base::MarkIfChanged(patch.rigidBoundaryColor, params_.render.rigidBoundaryColor, changed);
+	Base::MarkIfChanged(patch.centerOfMassXAxisColor, params_.render.centerOfMassXAxisColor, changed);
+	Base::MarkIfChanged(patch.centerOfMassYAxisColor, params_.render.centerOfMassYAxisColor, changed);
+	Base::MarkIfChanged(patch.centerOfMassZAxisColor, params_.render.centerOfMassZAxisColor, changed);
 	Base::MarkIfChanged(patch.alpha, params_.render.alpha, changed);
+	Base::MarkIfChanged(patch.centerOfMassXRayAlpha, params_.render.centerOfMassXRayAlpha, changed);
 	Base::MarkIfChanged(patch.scalarMin, params_.render.scalarMin, changed);
 	Base::MarkIfChanged(patch.scalarMax, params_.render.scalarMax, changed);
 	Base::MarkIfChanged(patch.useScalar, params_.render.useScalar, changed);
 	Base::MarkIfChanged(patch.showFluidParticles, params_.render.showFluidParticles, changed);
 	Base::MarkIfChanged(patch.showRigidBoundaryParticles, params_.render.showRigidBoundaryParticles, changed);
+	Base::MarkIfChanged(patch.showRigidBodyCentersOfMass, params_.render.showRigidBodyCentersOfMass, changed);
 	Base::MarkIfChanged(patch.rigidBoundaryRadiusScale, params_.render.rigidBoundaryRadiusScale, changed);
 
 	if (!changed) { return; } // nothing to change
@@ -143,12 +148,17 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (patch.lightDirVS) { params_.render.lightDirVS = *patch.lightDirVS; }
 	if (patch.baseColor) { params_.render.baseColor = *patch.baseColor; }
 	if (patch.rigidBoundaryColor) { params_.render.rigidBoundaryColor = *patch.rigidBoundaryColor; }
+	if (patch.centerOfMassXAxisColor) { params_.render.centerOfMassXAxisColor = *patch.centerOfMassXAxisColor; }
+	if (patch.centerOfMassYAxisColor) { params_.render.centerOfMassYAxisColor = *patch.centerOfMassYAxisColor; }
+	if (patch.centerOfMassZAxisColor) { params_.render.centerOfMassZAxisColor = *patch.centerOfMassZAxisColor; }
 	if (patch.alpha) { params_.render.alpha = *patch.alpha; }
+	if (patch.centerOfMassXRayAlpha) { params_.render.centerOfMassXRayAlpha = *patch.centerOfMassXRayAlpha; }
 	if (patch.scalarMin) { params_.render.scalarMin = *patch.scalarMin; }
 	if (patch.scalarMax) { params_.render.scalarMax = *patch.scalarMax; }
 	if (patch.useScalar) { params_.render.useScalar = *patch.useScalar; }
 	if (patch.showFluidParticles) { params_.render.showFluidParticles = *patch.showFluidParticles; }
 	if (patch.showRigidBoundaryParticles) { params_.render.showRigidBoundaryParticles = *patch.showRigidBoundaryParticles; }
+	if (patch.showRigidBodyCentersOfMass) { params_.render.showRigidBodyCentersOfMass = *patch.showRigidBodyCentersOfMass; }
 	if (patch.rigidBoundaryRadiusScale) { params_.render.rigidBoundaryRadiusScale = *patch.rigidBoundaryRadiusScale; }
 	EndWrite();
 }

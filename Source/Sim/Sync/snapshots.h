@@ -7,6 +7,7 @@
 // external
 #include <array>
 #include <cstdint>
+#include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <vector>
 
@@ -106,9 +107,15 @@ namespace Sync
 		std::vector<float> scalarDataF;     // data according to color coding mode
 		Base::ColorCodingMode scalarModeF;  // color coding mode
 
+		// data for rigid body vis
+		uint32_t N_R;                       // number of rigid bodies
+		std::vector<glm::vec3> centerOfMassR;
+		std::vector<glm::mat3> orientationR;
+
 		// data for boundary particles and boundary structures vis
 		uint32_t N_B;                       // number of boundary particles
 		std::vector<glm::vec3> posB;        // positions of all boundary particles
+		std::vector<float> volB;            // contribution volumes of all boundary particles
 		std::vector<uint32_t> bodyIdB;      // rigid body ownership for boundary particles
 		std::vector<Scene::OBB> boxesB;     // OBBs of boundary structures
 	};

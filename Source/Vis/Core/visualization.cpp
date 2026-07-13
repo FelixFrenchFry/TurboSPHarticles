@@ -392,7 +392,10 @@ void VisualizationMgr::SyncVisSimState()
 	// move snapshot data into back buffers
 	posF_[back_].swap(snap->posF);
 	scalarDataF_[back_].swap(snap->scalarDataF);
+	centerOfMassR_[back_].swap(snap->centerOfMassR);
+	orientationR_[back_].swap(snap->orientationR);
 	posB_[back_].swap(snap->posB);
+	volB_[back_].swap(snap->volB);
 	bodyIdB_[back_].swap(snap->bodyIdB);
 	boxesB_[back_].swap(snap->boxesB);
 	scalarMode_ = snap->scalarModeF;
@@ -423,8 +426,14 @@ void VisualizationMgr::SyncVisSimState()
 		? std::span<const float>()
 		: std::span<const float>(scalarDataF_[front_].data(), scalarDataF_[front_].size());
 	view_.scalarModeF = scalarMode_;
+	view_.N_R = static_cast<uint32_t>(centerOfMassR_[front_].size());
+	view_.centerOfMassR = std::span<const glm::vec3>(
+		centerOfMassR_[front_].data(), centerOfMassR_[front_].size());
+	view_.orientationR = std::span<const glm::mat3>(
+		orientationR_[front_].data(), orientationR_[front_].size());
 	view_.N_B = static_cast<uint32_t>(posB_[front_].size());
 	view_.posB = std::span<const glm::vec3>(posB_[front_].data(), posB_[front_].size());
+	view_.volB = std::span<const float>(volB_[front_].data(), volB_[front_].size());
 	view_.bodyIdB = std::span<const uint32_t>(bodyIdB_[front_].data(), bodyIdB_[front_].size());
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
 
@@ -434,6 +443,7 @@ void VisualizationMgr::SyncVisSimState()
 
 	// push to GPU to let renderer use the new data
 	renderingMgr_.UpdateParticles(view_, simParams, visParams);
+	renderingMgr_.UpdateCentersOfMass(view_, simParams);
 	renderingMgr_.UpdateWireframes(view_, visParams);
 }
 
