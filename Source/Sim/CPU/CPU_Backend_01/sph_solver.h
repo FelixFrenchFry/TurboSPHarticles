@@ -161,9 +161,9 @@ namespace CPU01
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float massF, float viscosityB,
 		uint32_t N_F,
-		float* RESTRICT xForceRigidBoundaryParticle,
-		float* RESTRICT yForceRigidBoundaryParticle,
-		float* RESTRICT zForceRigidBoundaryParticle);
+		float* RESTRICT xForceRBP,
+		float* RESTRICT yForceRBP,
+		float* RESTRICT zForceRBP);
 
 	void AccumulateRigidBodyPressureForces_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -181,9 +181,9 @@ namespace CPU01
 		float cubicSplineAlpha, float restDensity,
 		float massF, float pressGamma,
 		uint32_t N_F,
-		float* RESTRICT xForceRigidBoundaryParticle,
-		float* RESTRICT yForceRigidBoundaryParticle,
-		float* RESTRICT zForceRigidBoundaryParticle);
+		float* RESTRICT xForceRBP,
+		float* RESTRICT yForceRBP,
+		float* RESTRICT zForceRBP);
 
 	void Integration(
 		const float* RESTRICT xVelPredF,

@@ -763,9 +763,9 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 				B.yVel[idx] = 0.0f;
 				B.zVel[idx] = 0.0f;
 
-				R.xLocalRigidBoundaryParticle[rigidBoundaryParticleIdx] = Dot(rel, box.uHat);
-				R.yLocalRigidBoundaryParticle[rigidBoundaryParticleIdx] = Dot(rel, box.vHat);
-				R.zLocalRigidBoundaryParticle[rigidBoundaryParticleIdx] = Dot(rel, box.wHat);
+				R.xRelPosRBP[rigidBoundaryParticleIdx] = Dot(rel, box.uHat);
+				R.yRelPosRBP[rigidBoundaryParticleIdx] = Dot(rel, box.vHat);
+				R.zRelPosRBP[rigidBoundaryParticleIdx] = Dot(rel, box.wHat);
 
 				idx++;
 				rigidBoundaryParticleIdx++;

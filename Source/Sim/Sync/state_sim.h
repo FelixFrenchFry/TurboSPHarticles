@@ -429,8 +429,7 @@ namespace Sync
 		std::vector<float> iBodyInv10, iBodyInv11, iBodyInv12;
 		std::vector<float> iBodyInv20, iBodyInv21, iBodyInv22;
 
-		// local rigid boundary particle offsets from center of mass
-		std::vector<float> xLocalRigidBoundaryParticle, yLocalRigidBoundaryParticle, zLocalRigidBoundaryParticle;
+		std::vector<float> xRelPosRBP, yRelPosRBP, zRelPosRBP; // body-relative position of each rigid boundary particle
 
 		void reserveAll(uint32_t N)
 		{
@@ -481,17 +480,17 @@ namespace Sync
 
 		void reserveRigidBoundaryParticles(uint32_t N)
 		{
-			xLocalRigidBoundaryParticle.reserve(N);
-			yLocalRigidBoundaryParticle.reserve(N);
-			zLocalRigidBoundaryParticle.reserve(N);
+			xRelPosRBP.reserve(N);
+			yRelPosRBP.reserve(N);
+			zRelPosRBP.reserve(N);
 		}
 
 		void resizeRigidBoundaryParticles(uint32_t N)
 		{
 			N_rigidBoundaryParticles_ = N;
-			xLocalRigidBoundaryParticle.resize(N_rigidBoundaryParticles_);
-			yLocalRigidBoundaryParticle.resize(N_rigidBoundaryParticles_);
-			zLocalRigidBoundaryParticle.resize(N_rigidBoundaryParticles_);
+			xRelPosRBP.resize(N_rigidBoundaryParticles_);
+			yRelPosRBP.resize(N_rigidBoundaryParticles_);
+			zRelPosRBP.resize(N_rigidBoundaryParticles_);
 		}
 
 		void shrinkToFitAll()
@@ -515,9 +514,9 @@ namespace Sync
 			iBodyInv10.shrink_to_fit(); iBodyInv11.shrink_to_fit(); iBodyInv12.shrink_to_fit();
 			iBodyInv20.shrink_to_fit(); iBodyInv21.shrink_to_fit(); iBodyInv22.shrink_to_fit();
 
-			xLocalRigidBoundaryParticle.shrink_to_fit();
-			yLocalRigidBoundaryParticle.shrink_to_fit();
-			zLocalRigidBoundaryParticle.shrink_to_fit();
+			xRelPosRBP.shrink_to_fit();
+			yRelPosRBP.shrink_to_fit();
+			zRelPosRBP.shrink_to_fit();
 		}
 
 		void assignSequentialIds()
@@ -597,11 +596,11 @@ namespace Sync
 				throw std::runtime_error("Invalid rigid body boundary range array size.");
 			}
 
-			if (R.xLocalRigidBoundaryParticle.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
-				R.yLocalRigidBoundaryParticle.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
-				R.zLocalRigidBoundaryParticle.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_))
+			if (R.xRelPosRBP.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
+				R.yRelPosRBP.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
+				R.zRelPosRBP.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_))
 			{
-				throw std::runtime_error("Invalid rigid boundary particle local-offset array size.");
+				throw std::runtime_error("Invalid rigid boundary particle relative-position array size.");
 			}
 
 			uint32_t nextRigidBoundaryParticleIdx = 0;

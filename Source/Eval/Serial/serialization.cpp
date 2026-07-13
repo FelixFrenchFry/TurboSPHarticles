@@ -636,9 +636,9 @@ namespace Export
 		assert(R.iBodyInv00.size() == N && R.iBodyInv01.size() == N && R.iBodyInv02.size() == N);
 		assert(R.iBodyInv10.size() == N && R.iBodyInv11.size() == N && R.iBodyInv12.size() == N);
 		assert(R.iBodyInv20.size() == N && R.iBodyInv21.size() == N && R.iBodyInv22.size() == N);
-		assert(R.xLocalRigidBoundaryParticle.size() == N_rigidBoundaryParticles &&
-			   R.yLocalRigidBoundaryParticle.size() == N_rigidBoundaryParticles &&
-			   R.zLocalRigidBoundaryParticle.size() == N_rigidBoundaryParticles);
+		assert(R.xRelPosRBP.size() == N_rigidBoundaryParticles &&
+			   R.yRelPosRBP.size() == N_rigidBoundaryParticles &&
+			   R.zRelPosRBP.size() == N_rigidBoundaryParticles);
 
 		for (uint32_t bodyIdx = 0; bodyIdx < R.N_; bodyIdx++)
 		{
@@ -785,9 +785,9 @@ namespace Export
 				WriteVec(ofs, R.iBodyInv21);
 				WriteVec(ofs, R.iBodyInv22);
 
-				WriteVec(ofs, R.xLocalRigidBoundaryParticle);
-				WriteVec(ofs, R.yLocalRigidBoundaryParticle);
-				WriteVec(ofs, R.zLocalRigidBoundaryParticle);
+				WriteVec(ofs, R.xRelPosRBP);
+				WriteVec(ofs, R.yRelPosRBP);
+				WriteVec(ofs, R.zRelPosRBP);
 			}
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
@@ -938,9 +938,9 @@ namespace Export
 			ReadVec(ifs, R.iBodyInv21);
 			ReadVec(ifs, R.iBodyInv22);
 
-			ReadVec(ifs, R.xLocalRigidBoundaryParticle);
-			ReadVec(ifs, R.yLocalRigidBoundaryParticle);
-			ReadVec(ifs, R.zLocalRigidBoundaryParticle);
+			ReadVec(ifs, R.xRelPosRBP);
+			ReadVec(ifs, R.yRelPosRBP);
+			ReadVec(ifs, R.zRelPosRBP);
 
 			R.N_ = hdr.NR;
 			R.N_rigidBoundaryParticles_ = hdr.NRigidBoundaryParticles;

@@ -146,9 +146,9 @@ namespace Sim
 		std::vector<float> xTorqueR_, yTorqueR_, zTorqueR_; // torque accumulated from rigid boundary particles
 
 		// force accumulated per rigid boundary particle before body reduction
-		std::vector<float> xForceRigidBoundaryParticle_;
-		std::vector<float> yForceRigidBoundaryParticle_;
-		std::vector<float> zForceRigidBoundaryParticle_;
+		std::vector<float> xForceRBP_;
+		std::vector<float> yForceRBP_;
+		std::vector<float> zForceRBP_;
 
 		// orientation matrix A, stored row-major
 		std::vector<float> a00R_, a01R_, a02R_;
@@ -164,10 +164,10 @@ namespace Sim
 		std::vector<float> iBodyInv10R_, iBodyInv11R_, iBodyInv12R_;
 		std::vector<float> iBodyInv20R_, iBodyInv21R_, iBodyInv22R_;
 
-		// local rigid boundary particle offsets from center of mass
-		std::vector<float> xLocalRigidBoundaryParticle_;
-		std::vector<float> yLocalRigidBoundaryParticle_;
-		std::vector<float> zLocalRigidBoundaryParticle_;
+		// body-relative rigid boundary particle positions
+		std::vector<float> xRelPosRBP_;
+		std::vector<float> yRelPosRBP_;
+		std::vector<float> zRelPosRBP_;
 
 		// optional distributed integration filtering
 		bool useActiveFluidParticleLocalIdxs_ = false;

@@ -232,9 +232,9 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 
 	if (hasRigidBoundaryParticles)
 	{
-		GPU::Copy_HostToDevice(d_xLocalRigidBoundaryParticle_.Data(), R.xLocalRigidBoundaryParticle.data(), N_rigidBoundaryParticles_, stream_);
-		GPU::Copy_HostToDevice(d_yLocalRigidBoundaryParticle_.Data(), R.yLocalRigidBoundaryParticle.data(), N_rigidBoundaryParticles_, stream_);
-		GPU::Copy_HostToDevice(d_zLocalRigidBoundaryParticle_.Data(), R.zLocalRigidBoundaryParticle.data(), N_rigidBoundaryParticles_, stream_);
+		GPU::Copy_HostToDevice(d_xRelPosRBP_.Data(), R.xRelPosRBP.data(), N_rigidBoundaryParticles_, stream_);
+		GPU::Copy_HostToDevice(d_yRelPosRBP_.Data(), R.yRelPosRBP.data(), N_rigidBoundaryParticles_, stream_);
+		GPU::Copy_HostToDevice(d_zRelPosRBP_.Data(), R.zRelPosRBP.data(), N_rigidBoundaryParticles_, stream_);
 	}
 
 	// reset neighbor counts for the next construction step
@@ -362,9 +362,9 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 
 	if (hasRigidBoundaryParticles)
 	{
-		GPU::Copy_DeviceToHost(R.xLocalRigidBoundaryParticle.data(), d_xLocalRigidBoundaryParticle_.Data(), N_rigidBoundaryParticles_, stream_);
-		GPU::Copy_DeviceToHost(R.yLocalRigidBoundaryParticle.data(), d_yLocalRigidBoundaryParticle_.Data(), N_rigidBoundaryParticles_, stream_);
-		GPU::Copy_DeviceToHost(R.zLocalRigidBoundaryParticle.data(), d_zLocalRigidBoundaryParticle_.Data(), N_rigidBoundaryParticles_, stream_);
+		GPU::Copy_DeviceToHost(R.xRelPosRBP.data(), d_xRelPosRBP_.Data(), N_rigidBoundaryParticles_, stream_);
+		GPU::Copy_DeviceToHost(R.yRelPosRBP.data(), d_yRelPosRBP_.Data(), N_rigidBoundaryParticles_, stream_);
+		GPU::Copy_DeviceToHost(R.zRelPosRBP.data(), d_zRelPosRBP_.Data(), N_rigidBoundaryParticles_, stream_);
 	}
 
 	GPU::StreamSync(stream_);
@@ -951,9 +951,9 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_xTorqueR_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yTorqueR_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_zTorqueR_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_xForceRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_yForceRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_zForceRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_xForceRBP_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yForceRBP_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zForceRBP_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_a00R_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_a01R_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_a02R_));
@@ -974,9 +974,9 @@ void SimBackend_GPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_DeviceBuffer(d_iBodyInv20R_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_iBodyInv21R_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_iBodyInv22R_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_xLocalRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_yLocalRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_zLocalRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_xRelPosRBP_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_yRelPosRBP_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_zRelPosRBP_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistFF_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistFB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_nbrCountHistChunkFF_));
@@ -1195,7 +1195,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_a00R_.Data(), d_a01R_.Data(), d_a02R_.Data(),
 				d_a10R_.Data(), d_a11R_.Data(), d_a12R_.Data(),
 				d_a20R_.Data(), d_a21R_.Data(), d_a22R_.Data(),
-				d_xLocalRigidBoundaryParticle_.Data(), d_yLocalRigidBoundaryParticle_.Data(), d_zLocalRigidBoundaryParticle_.Data(),
+				d_xRelPosRBP_.Data(), d_yRelPosRBP_.Data(), d_zRelPosRBP_.Data(),
 				N_B_, N_rigidBodies_, N_rigidBoundaryParticles_, stream_,
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data());
@@ -1254,9 +1254,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data());
 			GPU01::Launch_ClearRigidBoundaryParticleForces(
 				N_rigidBoundaryParticles_, stream_,
-				d_xForceRigidBoundaryParticle_.Data(),
-				d_yForceRigidBoundaryParticle_.Data(),
-				d_zForceRigidBoundaryParticle_.Data());
+				d_xForceRBP_.Data(),
+				d_yForceRBP_.Data(),
+				d_zForceRBP_.Data());
 			GPU::StreamSync(stream_);
 			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		}
@@ -1304,9 +1304,9 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				params.kernelRadiusSqu, cubicSplineAlpha,
 				params.massF, params.viscosityB,
 				N_F_, N_rigidBoundaryParticles_, stream_,
-				d_xForceRigidBoundaryParticle_.Data(),
-				d_yForceRigidBoundaryParticle_.Data(),
-				d_zForceRigidBoundaryParticle_.Data());
+				d_xForceRBP_.Data(),
+				d_yForceRBP_.Data(),
+				d_zForceRBP_.Data());
 			GPU::StreamSync(stream_);
 			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		}
@@ -1427,23 +1427,23 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				params.restDensity,
 				params.massF, params.pressGamma,
 				N_F_, N_rigidBoundaryParticles_, stream_,
-				d_xForceRigidBoundaryParticle_.Data(),
-				d_yForceRigidBoundaryParticle_.Data(),
-				d_zForceRigidBoundaryParticle_.Data());
+				d_xForceRBP_.Data(),
+				d_yForceRBP_.Data(),
+				d_zForceRBP_.Data());
 
 			// reduce rigid boundary particle forces into body force and torque
 			GPU01::Launch_ReduceRigidBoundaryParticleForces(
 				d_rigidBoundaryParticleBeginR_.Data(),
 				d_rigidBoundaryParticleCountR_.Data(),
-				d_xLocalRigidBoundaryParticle_.Data(),
-				d_yLocalRigidBoundaryParticle_.Data(),
-				d_zLocalRigidBoundaryParticle_.Data(),
+				d_xRelPosRBP_.Data(),
+				d_yRelPosRBP_.Data(),
+				d_zRelPosRBP_.Data(),
 				d_a00R_.Data(), d_a01R_.Data(), d_a02R_.Data(),
 				d_a10R_.Data(), d_a11R_.Data(), d_a12R_.Data(),
 				d_a20R_.Data(), d_a21R_.Data(), d_a22R_.Data(),
-				d_xForceRigidBoundaryParticle_.Data(),
-				d_yForceRigidBoundaryParticle_.Data(),
-				d_zForceRigidBoundaryParticle_.Data(),
+				d_xForceRBP_.Data(),
+				d_yForceRBP_.Data(),
+				d_zForceRBP_.Data(),
 				N_rigidBodies_, N_rigidBoundaryParticles_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data(),
 				d_xTorqueR_.Data(), d_yTorqueR_.Data(), d_zTorqueR_.Data());
@@ -1491,7 +1491,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 				d_a00R_.Data(), d_a01R_.Data(), d_a02R_.Data(),
 				d_a10R_.Data(), d_a11R_.Data(), d_a12R_.Data(),
 				d_a20R_.Data(), d_a21R_.Data(), d_a22R_.Data(),
-				d_xLocalRigidBoundaryParticle_.Data(), d_yLocalRigidBoundaryParticle_.Data(), d_zLocalRigidBoundaryParticle_.Data(),
+				d_xRelPosRBP_.Data(), d_yRelPosRBP_.Data(), d_zRelPosRBP_.Data(),
 				N_B_, N_rigidBodies_, N_rigidBoundaryParticles_, stream_,
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 				d_xVelB_.Data(), d_yVelB_.Data(), d_zVelB_.Data());

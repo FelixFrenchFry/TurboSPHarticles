@@ -200,9 +200,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	xTorqueR_.assign(N_rigidBodies_, 0.0f);
 	yTorqueR_.assign(N_rigidBodies_, 0.0f);
 	zTorqueR_.assign(N_rigidBodies_, 0.0f);
-	xForceRigidBoundaryParticle_.assign(N_rigidBoundaryParticles_, 0.0f);
-	yForceRigidBoundaryParticle_.assign(N_rigidBoundaryParticles_, 0.0f);
-	zForceRigidBoundaryParticle_.assign(N_rigidBoundaryParticles_, 0.0f);
+	xForceRBP_.assign(N_rigidBoundaryParticles_, 0.0f);
+	yForceRBP_.assign(N_rigidBoundaryParticles_, 0.0f);
+	zForceRBP_.assign(N_rigidBoundaryParticles_, 0.0f);
 
 	a00R_ = std::move(R.a00);
 	a01R_ = std::move(R.a01);
@@ -227,9 +227,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	iBodyInv21R_ = std::move(R.iBodyInv21);
 	iBodyInv22R_ = std::move(R.iBodyInv22);
 
-	xLocalRigidBoundaryParticle_ = std::move(R.xLocalRigidBoundaryParticle);
-	yLocalRigidBoundaryParticle_ = std::move(R.yLocalRigidBoundaryParticle);
-	zLocalRigidBoundaryParticle_ = std::move(R.zLocalRigidBoundaryParticle);
+	xRelPosRBP_ = std::move(R.xRelPosRBP);
+	yRelPosRBP_ = std::move(R.yRelPosRBP);
+	zRelPosRBP_ = std::move(R.zRelPosRBP);
 
 	// init neighbor list sizes
 	neighborList_->Resize(N_F_, N_B_, params);
@@ -354,9 +354,9 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	R.iBodyInv21 = iBodyInv21R_;
 	R.iBodyInv22 = iBodyInv22R_;
 
-	R.xLocalRigidBoundaryParticle = xLocalRigidBoundaryParticle_;
-	R.yLocalRigidBoundaryParticle = yLocalRigidBoundaryParticle_;
-	R.zLocalRigidBoundaryParticle = zLocalRigidBoundaryParticle_;
+	R.xRelPosRBP = xRelPosRBP_;
+	R.yRelPosRBP = yRelPosRBP_;
+	R.zRelPosRBP = zRelPosRBP_;
 }
 
 void SimBackend_CPU01::PackExportSnapshot(
@@ -713,9 +713,9 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(xTorqueR_));
 		Add(usage, MemUsageOf_Vector(yTorqueR_));
 		Add(usage, MemUsageOf_Vector(zTorqueR_));
-		Add(usage, MemUsageOf_Vector(xForceRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_Vector(yForceRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_Vector(zForceRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_Vector(xForceRBP_));
+		Add(usage, MemUsageOf_Vector(yForceRBP_));
+		Add(usage, MemUsageOf_Vector(zForceRBP_));
 		Add(usage, MemUsageOf_Vector(a00R_));
 		Add(usage, MemUsageOf_Vector(a01R_));
 		Add(usage, MemUsageOf_Vector(a02R_));
@@ -736,9 +736,9 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(iBodyInv20R_));
 		Add(usage, MemUsageOf_Vector(iBodyInv21R_));
 		Add(usage, MemUsageOf_Vector(iBodyInv22R_));
-		Add(usage, MemUsageOf_Vector(xLocalRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_Vector(yLocalRigidBoundaryParticle_));
-		Add(usage, MemUsageOf_Vector(zLocalRigidBoundaryParticle_));
+		Add(usage, MemUsageOf_Vector(xRelPosRBP_));
+		Add(usage, MemUsageOf_Vector(yRelPosRBP_));
+		Add(usage, MemUsageOf_Vector(zRelPosRBP_));
 
 		// finalize
 		Set(record, memSpace, MemBucket::Misc, usage);
@@ -1248,9 +1248,9 @@ void SimBackend_CPU01::UpdateRigidBoundaryParticles()
 			throw std::runtime_error("CPU01 rigid boundary particle belongs to a different body.");
 		}
 
-		const float lx = xLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-		const float ly = yLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-		const float lz = zLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+		const float lx = xRelPosRBP_[rigidBoundaryParticleIdx];
+		const float ly = yRelPosRBP_[rigidBoundaryParticleIdx];
+		const float lz = zRelPosRBP_[rigidBoundaryParticleIdx];
 
 		const float rx = std::fmaf(a00R_[bodyIdx], lx,
 			std::fmaf(a01R_[bodyIdx], ly, a02R_[bodyIdx] * lz));
@@ -1298,9 +1298,9 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 
 void SimBackend_CPU01::ClearRigidBoundaryParticleForces()
 {
-	std::ranges::fill(xForceRigidBoundaryParticle_, 0.0f);
-	std::ranges::fill(yForceRigidBoundaryParticle_, 0.0f);
-	std::ranges::fill(zForceRigidBoundaryParticle_, 0.0f);
+	std::ranges::fill(xForceRBP_, 0.0f);
+	std::ranges::fill(yForceRBP_, 0.0f);
+	std::ranges::fill(zForceRBP_, 0.0f);
 }
 
 void SimBackend_CPU01::ReduceRigidBoundaryParticleForces()
@@ -1328,13 +1328,13 @@ void SimBackend_CPU01::ReduceRigidBoundaryParticleForces()
 			{
 				for (uint32_t rigidBoundaryParticleIdx = r.begin(); rigidBoundaryParticleIdx != r.end(); rigidBoundaryParticleIdx++)
 				{
-					const float xForce = xForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-					const float yForce = yForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-					const float zForce = zForceRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+					const float xForce = xForceRBP_[rigidBoundaryParticleIdx];
+					const float yForce = yForceRBP_[rigidBoundaryParticleIdx];
+					const float zForce = zForceRBP_[rigidBoundaryParticleIdx];
 
-					const float lx = xLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-					const float ly = yLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
-					const float lz = zLocalRigidBoundaryParticle_[rigidBoundaryParticleIdx];
+					const float lx = xRelPosRBP_[rigidBoundaryParticleIdx];
+					const float ly = yRelPosRBP_[rigidBoundaryParticleIdx];
+					const float lz = zRelPosRBP_[rigidBoundaryParticleIdx];
 
 					const float rx = std::fmaf(a00, lx, std::fmaf(a01, ly, a02 * lz));
 					const float ry = std::fmaf(a10, lx, std::fmaf(a11, ly, a12 * lz));

@@ -121,9 +121,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT diagElemF = diagElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
-	float* RESTRICT xForceRigidBoundaryParticle = xForceRigidBoundaryParticle_.data();
-	float* RESTRICT yForceRigidBoundaryParticle = yForceRigidBoundaryParticle_.data();
-	float* RESTRICT zForceRigidBoundaryParticle = zForceRigidBoundaryParticle_.data();
+	float* RESTRICT xForceRBP = xForceRBP_.data();
+	float* RESTRICT yForceRBP = yForceRBP_.data();
+	float* RESTRICT zForceRBP = zForceRBP_.data();
 	I_NeighborListSELL& neighborList = *neighborList_;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
@@ -212,9 +212,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborList,
 			sizeInvF, sizeSquF, kernelRadiusSqu,
 			cubicSplineAlpha, massF, params.viscosityB, N_F_,
-			xForceRigidBoundaryParticle,
-			yForceRigidBoundaryParticle,
-			zForceRigidBoundaryParticle);
+			xForceRBP,
+			yForceRBP,
+			zForceRBP);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
@@ -307,9 +307,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
 			massF, params.pressGamma, N_F_,
-			xForceRigidBoundaryParticle,
-			yForceRigidBoundaryParticle,
-			zForceRigidBoundaryParticle);
+			xForceRBP,
+			yForceRBP,
+			zForceRBP);
 
 		// reduce rigid boundary particle forces into body force and torque
 		ReduceRigidBoundaryParticleForces();
@@ -687,9 +687,9 @@ void CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float massF, const float viscosityB,
 	const uint32_t N_F,
-	float* RESTRICT xForceRigidBoundaryParticle,
-	float* RESTRICT yForceRigidBoundaryParticle,
-	float* RESTRICT zForceRigidBoundaryParticle)
+	float* RESTRICT xForceRBP,
+	float* RESTRICT yForceRBP,
+	float* RESTRICT zForceRBP)
 {
 	(void)N_F;
 
@@ -744,9 +744,9 @@ void CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
 				const float zForce = forceCoeff * zkg;
 
 				// opposite of the boundary viscosity/friction force applied to fluid particle i
-				xForceRigidBoundaryParticle[rigidBoundaryParticleIdx] += xForce;
-				yForceRigidBoundaryParticle[rigidBoundaryParticleIdx] += yForce;
-				zForceRigidBoundaryParticle[rigidBoundaryParticleIdx] += zForce;
+				xForceRBP[rigidBoundaryParticleIdx] += xForce;
+				yForceRBP[rigidBoundaryParticleIdx] += yForce;
+				zForceRBP[rigidBoundaryParticleIdx] += zForce;
 			}
 		}
 	}
@@ -1082,9 +1082,9 @@ void CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float pressGamma,
 	const uint32_t N_F,
-	float* RESTRICT xForceRigidBoundaryParticle,
-	float* RESTRICT yForceRigidBoundaryParticle,
-	float* RESTRICT zForceRigidBoundaryParticle)
+	float* RESTRICT xForceRBP,
+	float* RESTRICT yForceRBP,
+	float* RESTRICT zForceRBP)
 {
 	(void)N_F;
 
@@ -1132,9 +1132,9 @@ void CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
 				const float zForce = massF * accCoeffB * zkg;
 
 				// opposite of the boundary pressure force applied to fluid particle i
-				xForceRigidBoundaryParticle[rigidBoundaryParticleIdx] += xForce;
-				yForceRigidBoundaryParticle[rigidBoundaryParticleIdx] += yForce;
-				zForceRigidBoundaryParticle[rigidBoundaryParticleIdx] += zForce;
+				xForceRBP[rigidBoundaryParticleIdx] += xForce;
+				yForceRBP[rigidBoundaryParticleIdx] += yForce;
+				zForceRBP[rigidBoundaryParticleIdx] += zForce;
 			}
 		}
 	}
