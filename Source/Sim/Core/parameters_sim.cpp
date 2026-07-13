@@ -101,6 +101,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				if (s == "ConvergingDam") { out = Base::ScenarioType::ConvergingDam; return true; }
 				if (s == "BigDroplet") { out = Base::ScenarioType::BigDroplet; return true; }
 				if (s == "RigidCube") { out = Base::ScenarioType::RigidCube; return true; }
+				if (s == "SampledMesh") { out = Base::ScenarioType::SampledMesh; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -861,7 +862,7 @@ void SimParamsMgr::Set_ParticleSize(
 	}
 	else
 	{
-		SPDLOG_WARN("Change of 'particleSize' not implemented for this type");
+		SPDLOG_WARN("Changing 'particleSize' is not implemented for this particle type.");
 	}
 
 	if (!changed) { return; } // nothing to change

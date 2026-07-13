@@ -615,9 +615,10 @@ void DistSimulationMgr::SelectSimScenario(
 	const Base::ScenarioType type,
 	const std::string& profile)
 {
-	if (type == Base::ScenarioType::RigidCube)
+	if (type == Base::ScenarioType::RigidCube ||
+		type == Base::ScenarioType::SampledMesh)
 	{
-		SPDLOG_ERROR("[rank {}/{}] RigidCube scenario is currently supported only by non-distributed backends.",
+		SPDLOG_ERROR("[rank {}/{}] Rigid-body scenarios are currently supported only by non-distributed backends.",
 			mpiContext_.Rank(), mpiContext_.Size());
 		simScenario_.reset();
 		return;
@@ -1091,9 +1092,10 @@ bool DistSimulationMgr::BuildGlobalSimState()
 			mpiContext_.Rank(), mpiContext_.Size());
 		return false;
 	}
-	if (simParams_.scenarioType == Base::ScenarioType::RigidCube)
+	if (simParams_.scenarioType == Base::ScenarioType::RigidCube ||
+		simParams_.scenarioType == Base::ScenarioType::SampledMesh)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to build global sim state: RigidCube scenario is currently supported only by non-distributed backends.",
+		SPDLOG_ERROR("[rank {}/{}] Failed to build global sim state: rigid-body scenarios are currently supported only by non-distributed backends.",
 			mpiContext_.Rank(), mpiContext_.Size());
 		return false;
 	}

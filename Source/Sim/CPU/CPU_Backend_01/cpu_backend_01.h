@@ -139,16 +139,11 @@ namespace Sim
 
 		// body state (in world frame)
 		std::vector<float> xCMR_, yCMR_, zCMR_; // center of mass
-		std::vector<float> xVelR_, yVelR_, zVelR_; // linear velocity
-		std::vector<float> xOmegaR_, yOmegaR_, zOmegaR_; // angular velocity
-		std::vector<float> xAngMomR_, yAngMomR_, zAngMomR_; // angular momentum
-		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated from rigid boundary particles
-		std::vector<float> xTorqueR_, yTorqueR_, zTorqueR_; // torque accumulated from rigid boundary particles
-
-		// force accumulated per rigid boundary particle before body reduction
-		std::vector<float> xForceRBP_;
-		std::vector<float> yForceRBP_;
-		std::vector<float> zForceRBP_;
+		std::vector<float> xVelR_, yVelR_, zVelR_; // linear velocity (time rate of change of center of mass)
+		std::vector<float> xOmegaR_, yOmegaR_, zOmegaR_; // angular velocity (time rate of change of orientation)
+		std::vector<float> xAngMomR_, yAngMomR_, zAngMomR_; // angular momentum (angular velocity * mass distribution)
+		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated from rigid boundary particles (time rate of change of linear momentum)
+		std::vector<float> xTorqueR_, yTorqueR_, zTorqueR_; // torque accumulated from rigid boundary particles (time rate of change of angular momentum)
 
 		// orientation matrix A, stored row-major
 		std::vector<float> a00R_, a01R_, a02R_;
@@ -164,10 +159,9 @@ namespace Sim
 		std::vector<float> iBodyInv10R_, iBodyInv11R_, iBodyInv12R_;
 		std::vector<float> iBodyInv20R_, iBodyInv21R_, iBodyInv22R_;
 
-		// body-relative rigid boundary particle positions
-		std::vector<float> xRelPosRBP_;
-		std::vector<float> yRelPosRBP_;
-		std::vector<float> zRelPosRBP_;
+		// properties stored per rigid boundary particle
+		std::vector<float> xRelPosRBP_, yRelPosRBP_, zRelPosRBP_; // positions relative to the rigid body center of mass
+		std::vector<float> xForceRBP_, yForceRBP_, zForceRBP_; // force accumulated before reduction
 
 		// optional distributed integration filtering
 		bool useActiveFluidParticleLocalIdxs_ = false;

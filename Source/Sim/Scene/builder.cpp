@@ -927,6 +927,57 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	return bodyIdx;
 }
 
+glm::mat3 ScenarioMgr::MakeOrientation_FromEulerAngles(
+	const float yawDeg,
+	const float pitchDeg,
+	const float rollDeg) const
+{
+	if (!std::isfinite(yawDeg) ||
+		!std::isfinite(pitchDeg) ||
+		!std::isfinite(rollDeg))
+	{
+		throw std::runtime_error("Rigid body Euler angles must be finite.");
+	}
+
+	constexpr float DEG_TO_RAD = std::numbers::pi_v<float> / 180.0f;
+	const float yaw = yawDeg * DEG_TO_RAD;
+	const float pitch = pitchDeg * DEG_TO_RAD;
+	const float roll = rollDeg * DEG_TO_RAD;
+
+	const float cosYaw = std::cos(yaw);
+	const float sinYaw = std::sin(yaw);
+	const float cosPitch = std::cos(pitch);
+	const float sinPitch = std::sin(pitch);
+	const float cosRoll = std::cos(roll);
+	const float sinRoll = std::sin(roll);
+
+	// yaw around world Y
+	const glm::mat3 yawRotation
+	{
+		{ cosYaw, 0.0f, -sinYaw },
+		{ 0.0f, 1.0f, 0.0f },
+		{ sinYaw, 0.0f, cosYaw },
+	};
+
+	// pitch around local Z
+	const glm::mat3 pitchRotation
+	{
+		{ cosPitch, sinPitch, 0.0f },
+		{ -sinPitch, cosPitch, 0.0f },
+		{ 0.0f, 0.0f, 1.0f },
+	};
+
+	// roll around local X
+	const glm::mat3 rollRotation
+	{
+		{ 1.0f, 0.0f, 0.0f },
+		{ 0.0f, cosRoll, sinRoll },
+		{ 0.0f, -sinRoll, cosRoll },
+	};
+
+	return yawRotation * pitchRotation * rollRotation;
+}
+
 OBB ScenarioMgr::MakeOBB_FromAxes(glm::vec3 origin,
 								  glm::vec3 uDir, float uLen,
 								  glm::vec3 vDir, float vLen,

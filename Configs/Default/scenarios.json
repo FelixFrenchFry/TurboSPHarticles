@@ -59,29 +59,61 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 4.0,
-        "vLen": 4.0,
-        "wLen": 4.0
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 4.0,
-        "vLen": 0.5,
-        "wLen": 4.0
+        "uLen": 0.8,
+        "vLen": 0.2,
+        "wLen": 0.8
       },
       "rigidBody": {
-        "origin": [ 1.0, 0.5, 1.0 ],
+        "origin": [ 0.5, 0.25, 0.5 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 0.2,
+        "vLen": 0.4,
+        "wLen": 0.2
+      },
+      "rigidDensity": 200.0,
+      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+      "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+    },
+    "SampledMesh": {
+      "type": "SampledMesh",
+      "model": "ToyJetski",
+      "modelTargetExtent": 2.0,
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
         "uLen": 2.0,
-        "vLen": 1.0,
-        "wLen": 2.0
+        "vLen": 2.0,
+        "wLen": 1.2
       },
-      "rigidDensity": 500.0,
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 2.0,
+        "vLen": 0.3,
+        "wLen": 1.2
+      },
+      "rigidBody": {
+        "centerOfMass": [ 1.0, 0.6, 0.6 ],
+        "yawDeg": 0.0,
+        "pitchDeg": 0.0,
+        "rollDeg": 0.0
+      },
+      "rigidDensity": 400.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }

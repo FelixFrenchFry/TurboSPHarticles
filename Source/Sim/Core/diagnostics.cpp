@@ -146,9 +146,9 @@ namespace Sim
         printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "gridCellSizeRatio", params.gridCellSizeRatio);
         printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterFrac [F / B]",
 			params.jitterFracF, params.jitterFracB);
-        printf("%-*s = [ %" PRId64 " / %" PRId64 " ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterSeed [F / B]",
+		printf("%-*s = [ %" PRId64 " / %" PRId64 " ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterSeed [F / B]",
 			params.jitterSeedF, params.jitterSeedB);
-        printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "boundaryLayers", params.boundaryLayers);
+		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "boundaryLayers", params.boundaryLayers);
 		printf("%-*s = [ %.3f / %.3f / %.3f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling ratio [min/max/probe]",
 			params.surfaceSamplingMinDistanceRatio,
@@ -166,7 +166,7 @@ namespace Sim
 		printf("%-*s = %" PRIu64 "\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling seed", params.surfaceSamplingSeed);
 
-        printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
+		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
 		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportInterval", params.exportInterval);

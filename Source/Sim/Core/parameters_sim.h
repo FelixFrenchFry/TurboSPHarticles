@@ -112,7 +112,7 @@ namespace Sim
 		uint64_t surfaceSamplingSeed = 42; // RNG seed
 
 		// threading
-		int64_t maxThreadsSim   = -1; // -1 = use default budget
+		int64_t maxThreadsSim = -1; // -1 = use default budget
 
 		// benchmarks
 		uint32_t maxBenchRecs = 1'000'000;

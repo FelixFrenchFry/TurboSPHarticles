@@ -1302,10 +1302,9 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 	// gravity acts at the center of mass
 	for (uint32_t bodyIdx = 0; bodyIdx < N_rigidBodies_; bodyIdx++)
 	{
-		if (massInvR_[bodyIdx] <= 0.0f) { continue; }
-
 		const float mass = massR_[bodyIdx];
-		if (mass <= 0.0f) { continue; }
+		const float massInv = massInvR_[bodyIdx];
+		if (mass <= 0.0f || massInv <= 0.0f) { continue; }
 
 		xForceR_[bodyIdx] += mass * params.gravity.x;
 		yForceR_[bodyIdx] += mass * params.gravity.y;

@@ -10,6 +10,7 @@
 #include "converging_dam.h"
 #include "big_droplet.h"
 #include "rigid_cube.h"
+#include "sampled_mesh.h"
 
 
 
@@ -48,6 +49,13 @@ namespace Scene
 			cfg = LoadRigidCubeConfigFromProfile(profile, scenarioMgr);
 
 			return std::make_unique<RigidCubeScene>(scenarioMgr, cfg);
+		}
+		case Base::ScenarioType::SampledMesh:
+		{
+			SampledMeshConfig cfg;
+			cfg = LoadSampledMeshConfigFromProfile(profile, scenarioMgr);
+
+			return std::make_unique<SampledMeshScene>(scenarioMgr, cfg);
 		}
 		default:
 			throw std::runtime_error("Unsupported simulation scenario type requested.");

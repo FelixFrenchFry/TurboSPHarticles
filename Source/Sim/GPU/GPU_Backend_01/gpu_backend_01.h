@@ -202,11 +202,6 @@ namespace Sim
 		DeviceBuffer<float> d_xForceR_, d_yForceR_, d_zForceR_; // force accumulated from rigid boundary particles
 		DeviceBuffer<float> d_xTorqueR_, d_yTorqueR_, d_zTorqueR_; // torque accumulated from rigid boundary particles
 
-		// force accumulated per rigid boundary particle before body reduction
-		DeviceBuffer<float> d_xForceRBP_;
-		DeviceBuffer<float> d_yForceRBP_;
-		DeviceBuffer<float> d_zForceRBP_;
-
 		// orientation matrix A, stored row-major
 		DeviceBuffer<float> d_a00R_, d_a01R_, d_a02R_;
 		DeviceBuffer<float> d_a10R_, d_a11R_, d_a12R_;
@@ -221,8 +216,9 @@ namespace Sim
 		DeviceBuffer<float> d_iBodyInv10R_, d_iBodyInv11R_, d_iBodyInv12R_;
 		DeviceBuffer<float> d_iBodyInv20R_, d_iBodyInv21R_, d_iBodyInv22R_;
 
-		// body-relative rigid boundary particle positions
-		DeviceBuffer<float> d_xRelPosRBP_, d_yRelPosRBP_, d_zRelPosRBP_;
+		// rigid boundary particle data
+		DeviceBuffer<float> d_xRelPosRBP_, d_yRelPosRBP_, d_zRelPosRBP_; // body-relative position of each rigid boundary particle
+		DeviceBuffer<float> d_xForceRBP_, d_yForceRBP_, d_zForceRBP_; // force accumulated before body reduction
 
 		// neighbor list storage
 		// (compressed SELL32 for FF and FB neighbors)

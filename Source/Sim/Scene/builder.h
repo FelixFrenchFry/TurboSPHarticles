@@ -95,6 +95,12 @@ namespace Scene
 			Sync::UniversalSimState& dst,
 			const Sim::SimParams& params);
 
+		// builds a local-to-world orientation from yaw, pitch, and roll angles
+		glm::mat3 MakeOrientation_FromEulerAngles(
+			float yawDeg,
+			float pitchDeg,
+			float rollDeg) const;
+
 		OBB MakeOBB_FromAxes(glm::vec3 origin,
 							 glm::vec3 uDir, float uLen,
 							 glm::vec3 vDir, float vLen,
