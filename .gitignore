@@ -37,6 +37,9 @@ build.ninja
 *.gcov
 # MSVC
 *.obj
+!Assets/Models/
+!Assets/Models/Meshes/
+!Assets/Models/Meshes/*.obj
 *.lib
 *.exp
 *.dll
