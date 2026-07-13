@@ -27,6 +27,13 @@
   "jitterSeedB": 67,
   "boundaryLayers": 2,
 
+  "surfaceSamplingMinDistanceRatio": 0.8,
+  "surfaceSamplingMaxDistanceRatio": 1.0,
+  "surfaceSamplingCoverageProbeSpacingRatio": 0.2,
+  "surfaceSamplingCandidateMultiplier": 8,
+  "surfaceSamplingMaxTrialsPerCell": 10,
+  "surfaceSamplingSeed": 67,
+
   "maxThreadsSim": -1,
   "maxBenchRecs": 1000000,
   "maxStatRecs": 1000000,

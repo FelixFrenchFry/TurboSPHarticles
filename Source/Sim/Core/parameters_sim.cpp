@@ -1,11 +1,13 @@
 // parameters_sim.cpp
 
 // external
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <numbers>
 #include <spdlog/spdlog.h>
 #include <thread>
@@ -458,6 +460,76 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		Set_BoundaryLayers(it->get<uint32_t>(), verbose);
 	}
 
+	// --- [ surface sampling ] ----------------------------------------------------------------------
+
+	{
+		float minDistanceRatio = params_.surfaceSamplingMinDistanceRatio;
+		float maxDistanceRatio = params_.surfaceSamplingMaxDistanceRatio;
+		float coverageProbeSpacingRatio = params_.surfaceSamplingCoverageProbeSpacingRatio;
+		uint32_t candidateMultiplier = params_.surfaceSamplingCandidateMultiplier;
+		uint32_t maxTrialsPerCell = params_.surfaceSamplingMaxTrialsPerCell;
+		uint64_t seed = params_.surfaceSamplingSeed;
+
+
+		if (auto it = j.find("surfaceSamplingMinDistanceRatio"); it != j.end())
+		{
+			minDistanceRatio = it->get<float>();
+		}
+		if (auto it = j.find("surfaceSamplingMaxDistanceRatio"); it != j.end())
+		{
+			maxDistanceRatio = it->get<float>();
+		}
+		if (auto it = j.find("surfaceSamplingCoverageProbeSpacingRatio"); it != j.end())
+		{
+			coverageProbeSpacingRatio = it->get<float>();
+		}
+		if (auto it = j.find("surfaceSamplingCandidateMultiplier"); it != j.end())
+		{
+			candidateMultiplier = it->get<uint32_t>();
+		}
+		if (auto it = j.find("surfaceSamplingMaxTrialsPerCell"); it != j.end())
+		{
+			maxTrialsPerCell = it->get<uint32_t>();
+		}
+		if (auto it = j.find("surfaceSamplingSeed"); it != j.end())
+		{
+			seed = it->get<uint64_t>();
+		}
+		else if (j.find("jitterSeedB") != j.end())
+		{
+			// preserve the sampler seed used by existing parameter profiles
+			seed = static_cast<uint64_t>(params_.jitterSeedB);
+		}
+
+
+		if (!SurfaceSamplingDistanceRatiosValid_(
+			minDistanceRatio,
+			maxDistanceRatio,
+			coverageProbeSpacingRatio,
+			params_.particleSizeF,
+			params_.particleSizeB))
+		{
+			SPDLOG_WARN("Invalid surface sampling distance ratios in JSON.");
+			return false;
+		}
+		if (candidateMultiplier == 0 || maxTrialsPerCell == 0)
+		{
+			SPDLOG_WARN("Surface sampling candidate multiplier and trials per cell must both be > 0.");
+			return false;
+		}
+
+		BeginWrite();
+		params_.surfaceSamplingMinDistanceRatio = minDistanceRatio;
+		params_.surfaceSamplingMaxDistanceRatio = maxDistanceRatio;
+		params_.surfaceSamplingCoverageProbeSpacingRatio = coverageProbeSpacingRatio;
+		params_.surfaceSamplingCandidateMultiplier = candidateMultiplier;
+		params_.surfaceSamplingMaxTrialsPerCell = maxTrialsPerCell;
+		params_.surfaceSamplingSeed = seed;
+
+		UpdateSurfaceSamplingDistances_();
+		EndWrite();
+	}
+
 	// --- [ statistics, benchmarks, and exports ] ---------------------------------------------------
 
 	// TODO: implement setters for maxStatRecs/maxBenchRecs?
@@ -831,6 +903,7 @@ void SimParamsMgr::Set_ParticleSize(
 											* particleSize;
 		params_.kernelRadius = params_.kernelSuppRatio * params_.particleSizeF;
 		params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
+		UpdateSurfaceSamplingDistances_();
 	}
 
 	EndWrite();
@@ -1199,6 +1272,60 @@ void SimParamsMgr::Set_BoundaryLayers(
 	EndWrite();
 }
 
+void SimParamsMgr::Set_SurfaceSamplingDistanceRatios(
+	const float minDistanceRatio,
+	const float maxDistanceRatio,
+	const float coverageProbeSpacingRatio,
+	const bool verbose)
+{
+	if (!SurfaceSamplingDistanceRatiosValid_(
+		minDistanceRatio,
+		maxDistanceRatio,
+		coverageProbeSpacingRatio,
+		params_.particleSizeF,
+		params_.particleSizeB))
+	{
+		SPDLOG_ERROR(
+			"Parameter change cancelled: Surface sampling ratios must be finite and > 0, "
+			"with maxDistanceRatio >= minDistanceRatio + coverageProbeSpacingRatio "
+			"and maxDistanceRatio * particleSizeB <= particleSizeF.");
+		return;
+	}
+
+	bool changed = false;
+	Base::MarkIfChanged(
+		minDistanceRatio,
+		params_.surfaceSamplingMinDistanceRatio,
+		changed);
+	Base::MarkIfChanged(
+		maxDistanceRatio,
+		params_.surfaceSamplingMaxDistanceRatio,
+		changed);
+	Base::MarkIfChanged(
+		coverageProbeSpacingRatio,
+		params_.surfaceSamplingCoverageProbeSpacingRatio,
+		changed);
+	if (!changed) { return; }
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed surface sampling distance ratios from [{}, {}, {}] to [{}, {}, {}].",
+			params_.surfaceSamplingMinDistanceRatio,
+			params_.surfaceSamplingMaxDistanceRatio,
+			params_.surfaceSamplingCoverageProbeSpacingRatio,
+			minDistanceRatio,
+			maxDistanceRatio,
+			coverageProbeSpacingRatio);
+	}
+
+	BeginWrite();
+	params_.surfaceSamplingMinDistanceRatio = minDistanceRatio;
+	params_.surfaceSamplingMaxDistanceRatio = maxDistanceRatio;
+	params_.surfaceSamplingCoverageProbeSpacingRatio = coverageProbeSpacingRatio;
+	UpdateSurfaceSamplingDistances_();
+	EndWrite();
+}
+
 void SimParamsMgr::UpdateNeighborCountHeuristics_()
 {
 	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
@@ -1213,6 +1340,46 @@ void SimParamsMgr::UpdateNeighborCountHeuristics_()
 		params_.kernelSuppRatio, Base::ParticleType::Fluid);
 	params_.expctdAvgNbrCountHardMax_FB = HeuristicExpectedAvgNeighborCount_HardMax(
 		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+}
+
+void SimParamsMgr::UpdateSurfaceSamplingDistances_()
+{
+	params_.surfaceSamplingMinDistance =
+		params_.surfaceSamplingMinDistanceRatio * params_.particleSizeB;
+	params_.surfaceSamplingMaxDistance =
+		params_.surfaceSamplingMaxDistanceRatio * params_.particleSizeB;
+	params_.surfaceSamplingCoverageProbeSpacing =
+		params_.surfaceSamplingCoverageProbeSpacingRatio * params_.particleSizeB;
+}
+
+bool SimParamsMgr::SurfaceSamplingDistanceRatiosValid_(
+	const float minDistanceRatio,
+	const float maxDistanceRatio,
+	const float coverageProbeSpacingRatio,
+	const float particleSizeF,
+	const float particleSizeB)
+{
+	if (!std::isfinite(minDistanceRatio) || minDistanceRatio <= 0.0f ||
+		!std::isfinite(maxDistanceRatio) || maxDistanceRatio <= 0.0f ||
+		!std::isfinite(coverageProbeSpacingRatio) || coverageProbeSpacingRatio <= 0.0f)
+	{
+		return false;
+	}
+
+	const float ratioEpsilon = 32.0f * std::numeric_limits<float>::epsilon() *
+		std::max(
+			maxDistanceRatio,
+			minDistanceRatio + coverageProbeSpacingRatio);
+	if (maxDistanceRatio + ratioEpsilon <
+		minDistanceRatio + coverageProbeSpacingRatio)
+	{
+		return false;
+	}
+
+	const float maxDistance = maxDistanceRatio * particleSizeB;
+	const float distanceEpsilon = 32.0f * std::numeric_limits<float>::epsilon() *
+		std::max(maxDistance, particleSizeF);
+	return maxDistance <= particleSizeF + distanceEpsilon;
 }
 
 bool SimParamsMgr::AssertParamDerivationCorrectness() const
@@ -1294,6 +1461,14 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		return par.viscosityB >= 0.0f;
 	});
+	ok &= Check("surfaceSamplingCandidateMultiplier == 0", true, [&]()
+	{
+		return par.surfaceSamplingCandidateMultiplier > 0;
+	});
+	ok &= Check("surfaceSamplingMaxTrialsPerCell == 0", true, [&]()
+	{
+		return par.surfaceSamplingMaxTrialsPerCell > 0;
+	});
 
 	// relationships
 	ok &= Check("particleSizeInvF != 1 / particleSizeF", true, [&]()
@@ -1319,6 +1494,31 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 									* par.particleSizeB
 									* par.particleSizeB;
 		return Base::ApproxEqu(par.massB, expect);
+	});
+	ok &= Check("surface sampling distance ratios invalid", true, [&]()
+	{
+		return SurfaceSamplingDistanceRatiosValid_(
+			par.surfaceSamplingMinDistanceRatio,
+			par.surfaceSamplingMaxDistanceRatio,
+			par.surfaceSamplingCoverageProbeSpacingRatio,
+			par.particleSizeF,
+			par.particleSizeB);
+	});
+	ok &= Check("surfaceSamplingMinDistance derivation mismatch", true, [&]()
+	{
+		const float expect = par.surfaceSamplingMinDistanceRatio * par.particleSizeB;
+		return Base::ApproxEqu(par.surfaceSamplingMinDistance, expect);
+	});
+	ok &= Check("surfaceSamplingMaxDistance derivation mismatch", true, [&]()
+	{
+		const float expect = par.surfaceSamplingMaxDistanceRatio * par.particleSizeB;
+		return Base::ApproxEqu(par.surfaceSamplingMaxDistance, expect);
+	});
+	ok &= Check("surfaceSamplingCoverageProbeSpacing derivation mismatch", true, [&]()
+	{
+		const float expect =
+			par.surfaceSamplingCoverageProbeSpacingRatio * par.particleSizeB;
+		return Base::ApproxEqu(par.surfaceSamplingCoverageProbeSpacing, expect);
 	});
 	ok &= Check("kernelSuppRatio != cubic spline support ratio", true, [&]()
 	{

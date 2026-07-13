@@ -149,6 +149,23 @@ namespace Sim
         printf("%-*s = [ %" PRId64 " / %" PRId64 " ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterSeed [F / B]",
 			params.jitterSeedF, params.jitterSeedB);
         printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "boundaryLayers", params.boundaryLayers);
+		printf("%-*s = [ %.3f / %.3f / %.3f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling ratio [min/max/probe]",
+			params.surfaceSamplingMinDistanceRatio,
+			params.surfaceSamplingMaxDistanceRatio,
+			params.surfaceSamplingCoverageProbeSpacingRatio);
+		printf("%-*s = [ %.6f / %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling dist [min/max/probe]",
+			params.surfaceSamplingMinDistance,
+			params.surfaceSamplingMaxDistance,
+			params.surfaceSamplingCoverageProbeSpacing);
+		printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling candidates / trials",
+			params.surfaceSamplingCandidateMultiplier,
+			params.surfaceSamplingMaxTrialsPerCell);
+		printf("%-*s = %" PRIu64 "\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling seed", params.surfaceSamplingSeed);
+
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
 		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());

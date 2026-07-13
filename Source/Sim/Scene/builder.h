@@ -8,12 +8,15 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <string_view>
+#include <vector>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
+#include "Source/Sim/Scene/Geometry/surface_sampling.h"
 #include "Source/Sim/Sync/state_sim.h"
 
 
@@ -81,6 +84,16 @@ namespace Scene
 										   Sync::UniversalSimState& dst,
 										   const Sim::SimParams& params,
 										   float rigidDensity);
+
+		// appends body-local surface samples to the existing rigid boundary state
+		uint32_t BuildRigidBody_FromSurfaceSamples(
+			const std::vector<SurfaceSample>& bodyLocalSamples,
+			const glm::vec3& centerOfMass,
+			const glm::mat3& orientation,
+			float mass,
+			const glm::mat3& bodyInertiaInv,
+			Sync::UniversalSimState& dst,
+			const Sim::SimParams& params);
 
 		OBB MakeOBB_FromAxes(glm::vec3 origin,
 							 glm::vec3 uDir, float uLen,

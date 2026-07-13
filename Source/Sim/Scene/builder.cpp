@@ -5,9 +5,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <glm/geometric.hpp>
+#include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
+#include <limits>
 #include <numbers>
 #include <random>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 #include <tbb/blocked_range.h>
@@ -82,6 +86,38 @@ namespace
 		const glm::vec3& b)
 	{
 		return a.x * b.x + a.y * b.y + a.z * b.z;
+	}
+
+	bool IsFinite(const glm::vec3& value)
+	{
+		return std::isfinite(value.x) &&
+			std::isfinite(value.y) &&
+			std::isfinite(value.z);
+	}
+
+	bool IsFinite(const glm::mat3& value)
+	{
+		for (uint32_t column = 0; column < 3; column++)
+		{
+			if (!IsFinite(value[column])) { return false; }
+		}
+		return true;
+	}
+
+	bool IsRotationMatrix(const glm::mat3& orientation)
+	{
+		constexpr float tolerance = 1e-4f;
+		const glm::vec3 xAxis = orientation[0];
+		const glm::vec3 yAxis = orientation[1];
+		const glm::vec3 zAxis = orientation[2];
+
+		return std::abs(glm::dot(xAxis, xAxis) - 1.0f) <= tolerance &&
+			std::abs(glm::dot(yAxis, yAxis) - 1.0f) <= tolerance &&
+			std::abs(glm::dot(zAxis, zAxis) - 1.0f) <= tolerance &&
+			std::abs(glm::dot(xAxis, yAxis)) <= tolerance &&
+			std::abs(glm::dot(xAxis, zAxis)) <= tolerance &&
+			std::abs(glm::dot(yAxis, zAxis)) <= tolerance &&
+			std::abs(glm::dot(glm::cross(xAxis, yAxis), zAxis) - 1.0f) <= tolerance;
 	}
 
 } // namespace anonymous
@@ -777,6 +813,117 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	assert(rigidBoundaryParticleIdx == (rigidBoundaryParticleBase + N_add));
 	ComputeBoundaryCoefficients(dst.boundaryParticles, params, N_base, N_base + N_add);
 
+	return bodyIdx;
+}
+
+uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
+	const std::vector<SurfaceSample>& bodyLocalSamples,
+	const glm::vec3& centerOfMass,
+	const glm::mat3& orientation,
+	const float mass,
+	const glm::mat3& bodyInertiaInv,
+	Sync::UniversalSimState& dst,
+	const Sim::SimParams& params)
+{
+	// validate supplied samples and rigid body properties
+	if (bodyLocalSamples.empty()) { return Sync::InvalidRigidBodyId; }
+	if (bodyLocalSamples.size() > std::numeric_limits<uint32_t>::max())
+	{
+		throw std::runtime_error("Rigid surface sample count exceeds uint32 limits.");
+	}
+	if (!IsFinite(centerOfMass) || !IsFinite(orientation) || !IsRotationMatrix(orientation) ||
+		!IsFinite(bodyInertiaInv) ||
+		!std::isfinite(mass) || mass < 0.0f)
+	{
+		throw std::runtime_error("Rigid surface body properties are invalid.");
+	}
+
+	for (const SurfaceSample& sample : bodyLocalSamples)
+	{
+		if (!IsFinite(sample.pos))
+		{
+			throw std::runtime_error("Rigid surface contains a non-finite sample position.");
+		}
+	}
+
+	// validate state growth before resizing any arrays
+	auto& B = dst.boundaryParticles;
+	auto& R = dst.rigidBodies;
+	const uint32_t N_add = static_cast<uint32_t>(bodyLocalSamples.size());
+	if (R.N_ == std::numeric_limits<uint32_t>::max() ||
+		N_add > std::numeric_limits<uint32_t>::max() - B.N_ ||
+		N_add > std::numeric_limits<uint32_t>::max() - R.N_rigidBoundaryParticles_)
+	{
+		throw std::runtime_error("Rigid surface state exceeds uint32 limits.");
+	}
+
+	const uint32_t bodyIdx = R.N_;
+	const uint32_t rigidBoundaryParticleBase = R.N_rigidBoundaryParticles_;
+	const uint32_t N_base = B.N_;
+
+	// append the rigid body and its local boundary particle range
+	dst.ResizeRigidBodies(bodyIdx + 1);
+	R.resizeRigidBoundaryParticles(rigidBoundaryParticleBase + N_add);
+	dst.ResizeBoundary(N_base + N_add);
+
+	R.id[bodyIdx] = bodyIdx;
+	R.rigidBoundaryParticleBegin[bodyIdx] = rigidBoundaryParticleBase;
+	R.rigidBoundaryParticleCount[bodyIdx] = N_add;
+	R.xCM[bodyIdx] = centerOfMass.x;
+	R.yCM[bodyIdx] = centerOfMass.y;
+	R.zCM[bodyIdx] = centerOfMass.z;
+
+	// store local-to-world orientation in row-major solver layout
+	R.a00[bodyIdx] = orientation[0][0];
+	R.a01[bodyIdx] = orientation[1][0];
+	R.a02[bodyIdx] = orientation[2][0];
+	R.a10[bodyIdx] = orientation[0][1];
+	R.a11[bodyIdx] = orientation[1][1];
+	R.a12[bodyIdx] = orientation[2][1];
+	R.a20[bodyIdx] = orientation[0][2];
+	R.a21[bodyIdx] = orientation[1][2];
+	R.a22[bodyIdx] = orientation[2][2];
+
+	R.mass[bodyIdx] = mass;
+	R.massInv[bodyIdx] = mass > 0.0f ? 1.0f / mass : 0.0f;
+
+	// store inverse inertia in body frame
+	R.iBodyInv00[bodyIdx] = bodyInertiaInv[0][0];
+	R.iBodyInv01[bodyIdx] = bodyInertiaInv[1][0];
+	R.iBodyInv02[bodyIdx] = bodyInertiaInv[2][0];
+	R.iBodyInv10[bodyIdx] = bodyInertiaInv[0][1];
+	R.iBodyInv11[bodyIdx] = bodyInertiaInv[1][1];
+	R.iBodyInv12[bodyIdx] = bodyInertiaInv[2][1];
+	R.iBodyInv20[bodyIdx] = bodyInertiaInv[0][2];
+	R.iBodyInv21[bodyIdx] = bodyInertiaInv[1][2];
+	R.iBodyInv22[bodyIdx] = bodyInertiaInv[2][2];
+
+	// append boundary ownership, positions, and body-local offsets
+	for (uint32_t localIdx = 0; localIdx < N_add; localIdx++)
+	{
+		const uint32_t idx = N_base + localIdx;
+		const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleBase + localIdx;
+		// transform body-local samples into their initial world positions
+		const glm::vec3 localPos = bodyLocalSamples[localIdx].pos;
+		const glm::vec3 worldPos = centerOfMass + orientation * localPos;
+
+		B.id[idx] = idx;
+		B.bodyId[idx] = bodyIdx;
+		B.rigidBoundaryParticleIdx[idx] = rigidBoundaryParticleIdx;
+		B.xPos[idx] = worldPos.x;
+		B.yPos[idx] = worldPos.y;
+		B.zPos[idx] = worldPos.z;
+		B.xVel[idx] = 0.0f;
+		B.yVel[idx] = 0.0f;
+		B.zVel[idx] = 0.0f;
+
+		R.xRelPosRBP[rigidBoundaryParticleIdx] = localPos.x;
+		R.yRelPosRBP[rigidBoundaryParticleIdx] = localPos.y;
+		R.zRelPosRBP[rigidBoundaryParticleIdx] = localPos.z;
+	}
+
+	// derive per-particle volume and pseudo-mass from the sampled surface
+	ComputeBoundaryCoefficients(B, params, N_base, N_base + N_add);
 	return bodyIdx;
 }
 

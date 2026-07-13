@@ -96,6 +96,21 @@ namespace Sim
 		int64_t jitterSeedB     = 42; // RNG seed for jitter
 		uint32_t boundaryLayers = 2;
 
+		// surface sampling spacing
+		float surfaceSamplingMinDistanceRatio = 0.8f; // minimum accepted sample spacing / particleSizeB
+		float surfaceSamplingMaxDistanceRatio = 1.0f; // maximum surface-to-sample gap / particleSizeB
+		float surfaceSamplingCoverageProbeSpacingRatio = 0.2f; // coverage probe spacing / particleSizeB
+
+		// resolved surface sampling distances
+		float surfaceSamplingMinDistance = 0.008f; // minimum accepted sample spacing
+		float surfaceSamplingMaxDistance = 0.01f; // maximum surface-to-sample gap
+		float surfaceSamplingCoverageProbeSpacing = 0.002f; // spacing of coverage probes
+
+		// candidate generation
+		uint32_t surfaceSamplingCandidateMultiplier = 8; // candidate pool size multiplier
+		uint32_t surfaceSamplingMaxTrialsPerCell = 10; // max candidate trials per spatial cell
+		uint64_t surfaceSamplingSeed = 42; // RNG seed
+
 		// threading
 		int64_t maxThreadsSim   = -1; // -1 = use default budget
 
@@ -156,6 +171,11 @@ namespace Sim
 		void Set_MinSolverIters(uint32_t minSolverIters, bool verbose = false);
 		void Set_MaxSolverIters(uint32_t maxSolverIters, bool verbose = false);
 		void Set_BoundaryLayers(uint32_t boundaryLayers, bool verbose = false);
+		void Set_SurfaceSamplingDistanceRatios(
+			float minDistanceRatio,
+			float maxDistanceRatio,
+			float coverageProbeSpacingRatio,
+			bool verbose = false);
 
 		// helpers
 		bool AssertParamDerivationCorrectness() const;
@@ -172,6 +192,13 @@ namespace Sim
 		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
 
 		void UpdateNeighborCountHeuristics_();
+		void UpdateSurfaceSamplingDistances_();
+		static bool SurfaceSamplingDistanceRatiosValid_(
+			float minDistanceRatio,
+			float maxDistanceRatio,
+			float coverageProbeSpacingRatio,
+			float particleSizeF,
+			float particleSizeB);
 		inline void BeginWrite(); // mark beginning of write operation
 		inline void EndWrite(); // mark end of write operation
 	};
