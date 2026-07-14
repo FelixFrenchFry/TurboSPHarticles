@@ -70,21 +70,6 @@
         "watertight": true
       }
     },
-    "JunkShip": {
-      "file": "junk_ship.obj",
-      "sourceToCanonical": {
-        "uDir": [1.0, 0.0, 0.0],
-        "vDir": [0.0, 0.0, -1.0],
-        "wDir": [0.0, 1.0, 0.0]
-      },
-      "metadata": {
-        "vertexCount": 65603,
-        "triangleCount": 130958,
-        "sourceExtent": [6096.8171, 2815.3289, 6248.867499999999],
-        "enclosedVolume": 10213364861.726734,
-        "watertight": true
-      }
-    },
     "TransportShip": {
       "file": "transport_ship.obj",
       "sourceToCanonical": {
@@ -245,16 +230,6 @@
         "watertight": true
       }
     },
-    "BlueWhale": {
-      "file": "blue_whale.obj",
-      "metadata": {
-        "vertexCount": 49826,
-        "triangleCount": 99648,
-        "sourceExtent": [885.3164, 2401.1895, 995.9090000000001],
-        "enclosedVolume": 200555270.01139528,
-        "watertight": true
-      }
-    },
     "HammerShark": {
       "file": "hammer_shark.obj",
       "sourceToCanonical": {
@@ -312,21 +287,6 @@
         "triangleCount": 14672,
         "sourceExtent": [82.2459, 177.5041, 152.1661],
         "enclosedVolume": 210674.30120600958,
-        "watertight": true
-      }
-    },
-    "WhaleShark": {
-      "file": "whale_shark.obj",
-      "sourceToCanonical": {
-        "uDir": [-1.0, 0.0, 0.0],
-        "vDir": [0.0, 0.0, 1.0],
-        "wDir": [0.0, 1.0, 0.0]
-      },
-      "metadata": {
-        "vertexCount": 20066,
-        "triangleCount": 40128,
-        "sourceExtent": [952.1524, 353.0762, 309.13870000000003],
-        "enclosedVolume": 9289788.892844766,
         "watertight": true
       }
     }
