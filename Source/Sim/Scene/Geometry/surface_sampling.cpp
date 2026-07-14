@@ -2,11 +2,9 @@
 
 // external
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <glm/geometric.hpp>
-#include <iostream>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -434,13 +432,7 @@ namespace Scene
 		storage_(std::make_unique<Storage>())
 		, params_(params)
 	{
-		// temporary sampling timing
-		const auto t0 = std::chrono::steady_clock::now();
 		PreprocessMesh(mesh);
-		const auto t1 = std::chrono::steady_clock::now();
-		std::cout << "[surface sampling] PreprocessMesh: "
-			<< std::chrono::duration<double, std::milli>(t1 - t0).count()
-			<< " ms" << std::endl;
 	}
 
 	SurfaceSampler::~SurfaceSampler() = default;
@@ -711,64 +703,14 @@ namespace Scene
 		storage_->candidates.clear();
 		storage_->probes.clear();
 		storage_->samples.clear();
-		const auto tSampleStart = std::chrono::steady_clock::now();
-		auto tStageStart = tSampleStart;
-		double sampleTotalMs = 0.0;
-		double stageTimeMs = 0.0;
-
 		// generate and select the initial Poisson sample set
 		GeneratePoissonCandidates();
-		auto tStageEnd = std::chrono::steady_clock::now();
-		stageTimeMs = std::chrono::duration<double, std::milli>(
-			tStageEnd - tStageStart).count();
-		sampleTotalMs += stageTimeMs;
-		std::cout << "[surface sampling] GeneratePoissonCandidates: "
-			<< stageTimeMs
-			<< " ms" << std::endl;
-		tStageStart = tStageEnd;
-
 		SelectPoissonSamples();
-		tStageEnd = std::chrono::steady_clock::now();
-		stageTimeMs = std::chrono::duration<double, std::milli>(
-			tStageEnd - tStageStart).count();
-		sampleTotalMs += stageTimeMs;
-		std::cout << "[surface sampling] SelectPoissonSamples: "
-			<< stageTimeMs
-			<< " ms" << std::endl;
-		tStageStart = tStageEnd;
 
 		// detect and repair remaining surface coverage gaps
 		GenerateCoverageProbes();
-		tStageEnd = std::chrono::steady_clock::now();
-		stageTimeMs = std::chrono::duration<double, std::milli>(
-			tStageEnd - tStageStart).count();
-		sampleTotalMs += stageTimeMs;
-		std::cout << "[surface sampling] GenerateCoverageProbes: "
-			<< stageTimeMs
-			<< " ms" << std::endl;
-		tStageStart = tStageEnd;
-
 		RepairCoverage();
-		tStageEnd = std::chrono::steady_clock::now();
-		stageTimeMs = std::chrono::duration<double, std::milli>(
-			tStageEnd - tStageStart).count();
-		sampleTotalMs += stageTimeMs;
-		std::cout << "[surface sampling] RepairCoverage: "
-			<< stageTimeMs
-			<< " ms" << std::endl;
-		tStageStart = tStageEnd;
-
 		ValidateSamples();
-		tStageEnd = std::chrono::steady_clock::now();
-		stageTimeMs = std::chrono::duration<double, std::milli>(
-			tStageEnd - tStageStart).count();
-		sampleTotalMs += stageTimeMs;
-		std::cout << "[surface sampling] ValidateSamples: "
-			<< stageTimeMs
-			<< " ms" << std::endl;
-		std::cout << "[surface sampling] Sample total: "
-			<< sampleTotalMs
-			<< " ms" << std::endl;
 
 		SurfaceSamplingResult result;
 		result.stats = storage_->stats;

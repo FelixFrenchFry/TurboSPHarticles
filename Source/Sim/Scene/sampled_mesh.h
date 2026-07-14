@@ -139,6 +139,7 @@ namespace Scene
 				vertex -= properties.centerOfMass;
 			}
 
+			SPDLOG_INFO("Sampling model surfaces...");
 			SurfaceSampler sampler(mesh, params);
 			const SurfaceSamplingResult sampling = sampler.Sample();
 			const uint32_t bodyIdx = scenarioMgr_.BuildRigidBody_FromSurfaceSamples(
