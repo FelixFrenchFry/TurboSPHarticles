@@ -55,6 +55,21 @@
         "watertight": true
       }
     },
+    "FerryShip": {
+      "file": "ferry_ship.obj",
+      "sourceToCanonical": {
+        "uDir": [1.0, 0.0, 0.0],
+        "vDir": [0.0, 0.0, -1.0],
+        "wDir": [0.0, 1.0, 0.0]
+      },
+      "metadata": {
+        "vertexCount": 53130,
+        "triangleCount": 103928,
+        "sourceExtent": [9399.9996, 1846.5917, 2891.0256],
+        "enclosedVolume": 19147865555.75886,
+        "watertight": true
+      }
+    },
     "FrigateShip": {
       "file": "frigate_ship.obj",
       "sourceToCanonical": {
@@ -145,6 +160,36 @@
         "watertight": true
       }
     },
+    "HydroPlane": {
+      "file": "hydro_plane.obj",
+      "sourceToCanonical": {
+        "uDir": [0.0, 0.0, 1.0],
+        "vDir": [1.0, 0.0, 0.0],
+        "wDir": [0.0, 1.0, 0.0]
+      },
+      "metadata": {
+        "vertexCount": 16768,
+        "triangleCount": 33468,
+        "sourceExtent": [91.3743, 170.9075, 43.0705],
+        "enclosedVolume": 124938.31246360349,
+        "watertight": true
+      }
+    },
+    "ScrapBoat": {
+      "file": "scrap_boat.obj",
+      "sourceToCanonical": {
+        "uDir": [0.0, 0.0, -1.0],
+        "vDir": [-1.0, 0.0, 0.0],
+        "wDir": [0.0, 1.0, 0.0]
+      },
+      "metadata": {
+        "vertexCount": 33494,
+        "triangleCount": 66936,
+        "sourceExtent": [250.9456, 481.91769999999997, 180.6176],
+        "enclosedVolume": 12106424.7912155,
+        "watertight": true
+      }
+    },
     "ToyBoat": {
       "file": "toy_boat.obj",
       "sourceToCanonical": {
@@ -157,6 +202,21 @@
         "triangleCount": 6966,
         "sourceExtent": [98.980099, 254.0000125014, 72.8118396],
         "enclosedVolume": 734989.5476918041,
+        "watertight": true
+      }
+    },
+    "TugBoat": {
+      "file": "tug_boat.obj",
+      "sourceToCanonical": {
+        "uDir": [-1.0, 0.0, 0.0],
+        "vDir": [0.0, 0.0, 1.0],
+        "wDir": [0.0, 1.0, 0.0]
+      },
+      "metadata": {
+        "vertexCount": 97281,
+        "triangleCount": 192382,
+        "sourceExtent": [6321.0769, 1563.6504, 2683.4403],
+        "enclosedVolume": 8801784680.957703,
         "watertight": true
       }
     },
@@ -287,6 +347,21 @@
         "triangleCount": 14672,
         "sourceExtent": [82.2459, 177.5041, 152.1661],
         "enclosedVolume": 210674.30120600958,
+        "watertight": true
+      }
+    },
+    "SquidFish": {
+      "file": "squid_fish.obj",
+      "sourceToCanonical": {
+        "uDir": [0.0, 0.0, 1.0],
+        "vDir": [1.0, 0.0, 0.0],
+        "wDir": [0.0, 1.0, 0.0]
+      },
+      "metadata": {
+        "vertexCount": 49730,
+        "triangleCount": 99456,
+        "sourceExtent": [22.6005, 60.3329, 17.2761],
+        "enclosedVolume": 1260.2863022653426,
         "watertight": true
       }
     }
