@@ -38,6 +38,8 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 
 void SimulationMgr::Init()
 {
+	const auto initializationStart = std::chrono::steady_clock::now();
+
 	// initial snapshot
 	SyncParameters(true);
 
@@ -56,6 +58,10 @@ void SimulationMgr::Init()
 	// updated snapshot
 	initialized_.store(true, std::memory_order_release);
 	SyncParameters(true);
+
+	const double initializationTimeS = std::chrono::duration<double>(
+		std::chrono::steady_clock::now() - initializationStart).count();
+	SPDLOG_INFO("Initialization finished after {:.2f}s", initializationTimeS);
 
 	DiagnosticsMgr::PrintSimParams(simParams_);
 	DiagnosticsMgr::PrintSimSetup(*this, simParams_);
