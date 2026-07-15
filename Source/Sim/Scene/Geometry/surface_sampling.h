@@ -60,9 +60,7 @@ namespace Scene
 	private: // --------------------------------------------------------------------------------------
 
 		void PreprocessMesh(const TriangleSurfaceMesh& mesh);
-		void GeneratePoissonCandidates();
 		void SelectPoissonSamples();
-		void GenerateCoverageProbes();
 		void RepairCoverage();
 		void ValidateSamples();
 

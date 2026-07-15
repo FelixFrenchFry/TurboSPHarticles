@@ -21,6 +21,9 @@
 
 namespace
 {
+	// bounds temporary candidate and coverage probe buffers
+	constexpr uint32_t N_samplingBatch = 262144u;
+
 	// preprocessed triangle geometry shared by all sampling stages
 	struct TriangleData
 	{
@@ -137,7 +140,7 @@ namespace
 
 		void Reserve(const uint32_t N)
 		{
-			cellBuckets_.reserve(static_cast<uint64_t>(N) * 2ull);
+			cellBuckets_.reserve(N);
 		}
 
 		void Insert(const uint32_t sampleIdx)
@@ -202,9 +205,6 @@ namespace Scene
 	{
 		double surfaceArea = 0.0;
 		std::vector<TriangleData> triangles;
-		std::vector<SurfaceSample> candidates;
-		std::vector<SurfaceSample> probes;
-		std::vector<uint32_t> probeBegin; // first coverage probe for each triangle
 		std::vector<SurfaceSample> samples;
 		SurfaceSamplingStats stats;
 	};
@@ -350,19 +350,19 @@ namespace Scene
 
 	}
 
-	void SurfaceSampler::GeneratePoissonCandidates()
+	void SurfaceSampler::SelectPoissonSamples()
 	{
 		const auto& triangles = storage_->triangles;
 		const double surfaceArea = storage_->surfaceArea;
 		const Sim::SimParams& params = params_;
-		auto& candidates = storage_->candidates;
+		auto& samples = storage_->samples;
 		uint32_t& candidateCount = storage_->stats.candidateCount;
 
-		// area-weighted candidates with uniform barycentric positions
-		const double estimatedSampleCount = std::ceil(
+		// derive candidate and estimated sample counts from surface area
+		const double estimatedSampleCountD = std::ceil(
 			surfaceArea /
 			(static_cast<double>(params.surfaceSamplingMinDistance) * static_cast<double>(params.surfaceSamplingMinDistance)));
-		const double candidateCountD = estimatedSampleCount * params.surfaceSamplingCandidateMultiplier;
+		const double candidateCountD = estimatedSampleCountD * params.surfaceSamplingCandidateMultiplier;
 		if (!std::isfinite(candidateCountD) ||
 			candidateCountD > std::numeric_limits<uint32_t>::max())
 		{
@@ -370,59 +370,108 @@ namespace Scene
 		}
 
 		candidateCount = std::max<uint32_t>(1, static_cast<uint32_t>(candidateCountD));
-		candidates.resize(candidateCount);
-		std::vector<double> areaTargets(candidateCount);
-		std::vector<float> barycentricScales(candidateCount);
-		std::vector<float> barycentricOffsets(candidateCount);
+		const uint32_t estimatedSampleCount = std::max<uint32_t>(
+			1,
+			static_cast<uint32_t>(estimatedSampleCountD));
 
-		// generate random inputs serially to preserve the seeded candidate stream
+		// reserve persistent selection state from estimated sample count
+		samples.reserve(estimatedSampleCount);
+		SampleSpatialHash spatialHash(params.surfaceSamplingMinDistance, samples);
+		spatialHash.Reserve(estimatedSampleCount);
+		std::unordered_map<CellCoord, uint32_t, CellCoordHash> trialsPerCell;
+		trialsPerCell.reserve(estimatedSampleCount);
+		const float cellSizeInv = 1.0f / params.surfaceSamplingMinDistance;
+
+		// generate and select candidate batches in stable global order
+		const uint32_t N_candidateBatch = std::min(N_samplingBatch, candidateCount);
+		std::vector<SurfaceSample> candidates(N_candidateBatch);
+		std::vector<double> areaTargets(N_candidateBatch);
+		std::vector<float> barycentricScales(N_candidateBatch);
+		std::vector<float> barycentricOffsets(N_candidateBatch);
 		std::mt19937_64 rng(params.surfaceSamplingSeed);
-		for (uint32_t candidateIdx = 0; candidateIdx < candidateCount; candidateIdx++)
+
+		for (uint32_t candidateBegin = 0; candidateBegin < candidateCount;)
 		{
-			areaTargets[candidateIdx] = Random01(rng) * surfaceArea;
-			barycentricScales[candidateIdx] = std::sqrt(
-				static_cast<float>(Random01(rng)));
-			barycentricOffsets[candidateIdx] = static_cast<float>(Random01(rng));
+			const uint32_t N_batch = std::min(
+				N_candidateBatch,
+				candidateCount - candidateBegin);
+
+			// generate random inputs serially to preserve the seeded candidate stream
+			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
+			{
+				areaTargets[batchIdx] = Random01(rng) * surfaceArea;
+				barycentricScales[batchIdx] = std::sqrt(
+					static_cast<float>(Random01(rng)));
+				barycentricOffsets[batchIdx] = static_cast<float>(Random01(rng));
+			}
+
+			// resolve candidates independently into preallocated slots
+			tbb::parallel_for(
+				tbb::blocked_range<uint32_t>(0, N_batch),
+				[&](const tbb::blocked_range<uint32_t>& r)
+				{
+					for (uint32_t batchIdx = r.begin(); batchIdx != r.end(); batchIdx++)
+					{
+						// choose a triangle proportional to its surface area
+						const auto triangleIt = std::lower_bound(
+							triangles.begin(),
+							triangles.end(),
+							areaTargets[batchIdx],
+							[](const TriangleData& triangle, const double target)
+							{
+								return triangle.cumulativeArea < target;
+							});
+						const uint32_t triangleIdx = triangleIt == triangles.end()
+							? static_cast<uint32_t>(triangles.size() - 1)
+							: static_cast<uint32_t>(triangleIt - triangles.begin());
+
+						// sample a uniform position on the selected triangle
+						const float b1 = barycentricScales[batchIdx] *
+							(1.0f - barycentricOffsets[batchIdx]);
+						const glm::vec3 barycentric
+						{
+							1.0f - barycentricScales[batchIdx],
+							b1,
+							barycentricScales[batchIdx] - b1,
+						};
+						candidates[batchIdx] = MakeSurfacePoint(
+							triangles[triangleIdx],
+							triangleIdx,
+							barycentric);
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+
+			// select candidates with a minimum surface distance
+			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
+			{
+				const SurfaceSample& candidate = candidates[batchIdx];
+				const CellCoord cell = MakeCellCoord(candidate.pos, cellSizeInv);
+				uint32_t& trialCount = trialsPerCell[cell];
+				if (trialCount >= params.surfaceSamplingMaxTrialsPerCell) { continue; }
+				trialCount++;
+
+				const bool hasDistanceConflict = spatialHash.AnyNearby(
+					candidate.pos,
+					params.surfaceSamplingMinDistance,
+					[&](const uint32_t sampleIdx)
+					{
+						return SurfaceDistance(
+							candidate,
+							samples[sampleIdx]) < params.surfaceSamplingMinDistance;
+					});
+				if (hasDistanceConflict) { continue; }
+
+				const uint32_t sampleIdx = static_cast<uint32_t>(samples.size());
+				samples.push_back(candidate);
+				spatialHash.Insert(sampleIdx);
+			}
+
+			candidateBegin += N_batch;
 		}
 
-		// resolve candidates independently into preallocated slots
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, candidateCount),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t candidateIdx = r.begin(); candidateIdx != r.end(); candidateIdx++)
-				{
-					// choose a triangle proportional to its surface area
-					const auto triangleIt = std::lower_bound(
-						triangles.begin(),
-						triangles.end(),
-						areaTargets[candidateIdx],
-						[](const TriangleData& triangle, const double target)
-						{
-							return triangle.cumulativeArea < target;
-						});
-					const uint32_t triangleIdx = triangleIt == triangles.end()
-						? static_cast<uint32_t>(triangles.size() - 1)
-						: static_cast<uint32_t>(triangleIt - triangles.begin());
-
-					// sample a uniform position on the selected triangle
-					const float b1 = barycentricScales[candidateIdx] *
-						(1.0f - barycentricOffsets[candidateIdx]);
-					const glm::vec3 barycentric
-					{
-						1.0f - barycentricScales[candidateIdx],
-						b1,
-						barycentricScales[candidateIdx] - b1,
-					};
-					candidates[candidateIdx] = MakeSurfacePoint(
-						triangles[triangleIdx],
-						triangleIdx,
-						barycentric);
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
+		storage_->stats.initialSampleCount = static_cast<uint32_t>(samples.size());
 	}
 
 	SurfaceSampler::SurfaceSampler(
@@ -437,65 +486,16 @@ namespace Scene
 
 	SurfaceSampler::~SurfaceSampler() = default;
 
-	void SurfaceSampler::SelectPoissonSamples()
-	{
-		const Sim::SimParams& params = params_;
-		const auto& candidates = storage_->candidates;
-		auto& samples = storage_->samples;
-
-		// select candidates with a minimum surface distance
-		samples.reserve(candidates.size());
-		SampleSpatialHash spatialHash(params.surfaceSamplingMinDistance, samples);
-		spatialHash.Reserve(static_cast<uint32_t>(candidates.size()));
-
-		const float cellSizeInv = 1.0f / params.surfaceSamplingMinDistance;
-
-		// bound candidate attempts per spatial cell
-		std::unordered_map<CellCoord, uint32_t, CellCoordHash> trialsPerCell;
-		trialsPerCell.reserve(candidates.size());
-
-		for (const SurfaceSample& candidate : candidates)
-		{
-			const CellCoord cell = MakeCellCoord(candidate.pos, cellSizeInv);
-			uint32_t& trialCount = trialsPerCell[cell];
-			if (trialCount >= params.surfaceSamplingMaxTrialsPerCell) { continue; }
-			trialCount++;
-
-			// reject candidates inside an existing Poisson disk
-			const bool hasDistanceConflict = spatialHash.AnyNearby(
-				candidate.pos,
-				params.surfaceSamplingMinDistance,
-				[&](const uint32_t sampleIdx)
-				{
-					return SurfaceDistance(
-						candidate,
-						samples[sampleIdx]) < params.surfaceSamplingMinDistance;
-				});
-			if (hasDistanceConflict) { continue; }
-
-			const uint32_t sampleIdx = static_cast<uint32_t>(samples.size());
-			samples.push_back(candidate);
-			spatialHash.Insert(sampleIdx);
-		}
-
-		storage_->stats.initialSampleCount = static_cast<uint32_t>(samples.size());
-	}
-
-	void SurfaceSampler::GenerateCoverageProbes()
+	void SurfaceSampler::RepairCoverage()
 	{
 		const auto& triangles = storage_->triangles;
 		const Sim::SimParams& params = params_;
-		auto& probes = storage_->probes;
+		auto& samples = storage_->samples;
 
-		// barycentric lattices cover triangle vertices, edges, and interiors
-		// first pass counts probes and validates allocation limits
+		// count barycentric coverage probes and validate allocation limits
 		uint64_t probeCount = 0;
-		storage_->probeBegin.resize(triangles.size());
-		for (uint32_t triangleIdx = 0;
-			triangleIdx < static_cast<uint32_t>(triangles.size());
-			triangleIdx++)
+		for (const TriangleData& triangle : triangles)
 		{
-			const TriangleData& triangle = triangles[triangleIdx];
 			const double subdivisionCountD = std::ceil(
 				static_cast<double>(triangle.longestEdge) /
 				static_cast<double>(params.surfaceSamplingCoverageProbeSpacing));
@@ -520,69 +520,19 @@ namespace Scene
 			{
 				throw std::runtime_error("Surface coverage probe count exceeds uint32 limits.");
 			}
-			storage_->probeBegin[triangleIdx] = static_cast<uint32_t>(probeCount);
 			probeCount += triangleProbeCount;
 		}
+		storage_->stats.coverageProbeCount = static_cast<uint32_t>(probeCount);
 
-		probes.resize(static_cast<uint32_t>(probeCount));
-
-		// second pass generates probes in stable triangle and lattice order
-		const auto& probeBegin = storage_->probeBegin;
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, static_cast<uint32_t>(triangles.size())),
-			[&](const tbb::blocked_range<uint32_t>& r)
-			{
-				for (uint32_t triangleIdx = r.begin(); triangleIdx != r.end(); triangleIdx++)
-				{
-					const TriangleData& triangle = triangles[triangleIdx];
-					const uint32_t subdivisionCount = std::max<uint32_t>(
-						1,
-						static_cast<uint32_t>(std::ceil(
-							triangle.longestEdge / params.surfaceSamplingCoverageProbeSpacing)));
-					const float subdivisionCountInv = 1.0f / static_cast<float>(subdivisionCount);
-					uint32_t probeIdx = probeBegin[triangleIdx];
-
-					for (uint32_t i = 0; i <= subdivisionCount; i++)
-					{
-						for (uint32_t j = 0; j <= subdivisionCount - i; j++)
-						{
-							const uint32_t k = subdivisionCount - i - j;
-							const glm::vec3 barycentric
-							{
-								static_cast<float>(i) * subdivisionCountInv,
-								static_cast<float>(j) * subdivisionCountInv,
-								static_cast<float>(k) * subdivisionCountInv,
-							};
-							probes[probeIdx] = MakeSurfacePoint(
-								triangle,
-								triangleIdx,
-								barycentric);
-							probeIdx++;
-						}
-					}
-				}
-			},
-			tbb::auto_partitioner{}
-		);
-
-		storage_->stats.coverageProbeCount = static_cast<uint32_t>(probes.size());
-	}
-
-	void SurfaceSampler::RepairCoverage()
-	{
-		const auto& probes = storage_->probes;
-		const Sim::SimParams& params = params_;
-		auto& samples = storage_->samples;
-
-		// fill uncovered probes while preserving the minimum sample distance
-		// rebuild the spatial hash from the initially accepted samples
-		SampleSpatialHash spatialHash(params.surfaceSamplingMinDistance, samples);
-		const uint64_t maxSampleCount = static_cast<uint64_t>(samples.size()) + probes.size();
+		const uint64_t maxSampleCount = static_cast<uint64_t>(samples.size()) + probeCount;
 		if (maxSampleCount > std::numeric_limits<uint32_t>::max())
 		{
 			throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
 		}
-		spatialHash.Reserve(static_cast<uint32_t>(maxSampleCount));
+
+		// rebuild the spatial hash from the initially accepted samples
+		SampleSpatialHash spatialHash(params.surfaceSamplingMinDistance, samples);
+		spatialHash.Reserve(static_cast<uint32_t>(samples.size()));
 		for (uint32_t sampleIdx = 0; sampleIdx < static_cast<uint32_t>(samples.size()); sampleIdx++)
 		{
 			spatialHash.Insert(sampleIdx);
@@ -595,68 +545,109 @@ namespace Scene
 		uint32_t& repairCount = storage_->stats.coverageRepairCount;
 		repairCount = 0;
 
-		const uint32_t N_probes = static_cast<uint32_t>(probes.size());
-		constexpr uint32_t N_probeBatch = 65536u; // bound temporary coverage flags
+		// generate and repair coverage probes in bounded batches
+		const uint32_t N_probeBatch = std::min(
+			N_samplingBatch,
+			static_cast<uint32_t>(probeCount));
+		std::vector<SurfaceSample> probes;
+		probes.reserve(N_probeBatch);
 		std::vector<uint8_t> needsRepair(N_probeBatch, 0u);
 
-		for (uint32_t probeBegin = 0; probeBegin < N_probes;)
-		{
-			const uint32_t N_batch = std::min(
-				N_probeBatch,
-				N_probes - probeBegin);
-
-			// query one probe batch in parallel against the read-only sample hash
-			tbb::parallel_for(
-				tbb::blocked_range<uint32_t>(0, N_batch),
-				[&](const tbb::blocked_range<uint32_t>& r)
-				{
-					for (uint32_t batchIdx = r.begin(); batchIdx != r.end(); batchIdx++)
-					{
-						const SurfaceSample& probe = probes[probeBegin + batchIdx];
-						const bool isCovered = spatialHash.AnyNearby(
-							probe.pos,
-							probeTargetDistance,
-							[&](const uint32_t sampleIdx)
-							{
-								return SurfaceDistance(
-									probe,
-									samples[sampleIdx]) <= probeTargetDistance;
-							});
-						needsRepair[batchIdx] = static_cast<uint8_t>(!isCovered);
-					}
-				},
-				tbb::auto_partitioner{}
-			);
-
-			// recheck and insert repairs in stable probe order
-			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
+		const auto repairProbeBatch = [&]()
 			{
-				if (needsRepair[batchIdx] == 0u) { continue; }
+				const uint32_t N_batch = static_cast<uint32_t>(probes.size());
+				if (N_batch == 0) { return; }
 
-				const SurfaceSample& probe = probes[probeBegin + batchIdx];
-				const bool isCovered = spatialHash.AnyNearby(
-					probe.pos,
-					probeTargetDistance,
-					[&](const uint32_t sampleIdx)
+				// query one probe batch in parallel against the read-only sample hash
+				tbb::parallel_for(
+					tbb::blocked_range<uint32_t>(0, N_batch),
+					[&](const tbb::blocked_range<uint32_t>& r)
 					{
-						return SurfaceDistance(
-							probe,
-							samples[sampleIdx]) <= probeTargetDistance;
-					});
-				if (isCovered) { continue; }
-				if (samples.size() >= std::numeric_limits<uint32_t>::max())
+						for (uint32_t batchIdx = r.begin(); batchIdx != r.end(); batchIdx++)
+						{
+							const SurfaceSample& probe = probes[batchIdx];
+							const bool isCovered = spatialHash.AnyNearby(
+								probe.pos,
+								probeTargetDistance,
+								[&](const uint32_t sampleIdx)
+								{
+									return SurfaceDistance(
+										probe,
+										samples[sampleIdx]) <= probeTargetDistance;
+								});
+							needsRepair[batchIdx] = static_cast<uint8_t>(!isCovered);
+						}
+					},
+					tbb::auto_partitioner{}
+				);
+
+				// recheck and insert repairs in stable probe order
+				for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
 				{
-					throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
+					if (needsRepair[batchIdx] == 0u) { continue; }
+
+					const SurfaceSample& probe = probes[batchIdx];
+					const bool isCovered = spatialHash.AnyNearby(
+						probe.pos,
+						probeTargetDistance,
+						[&](const uint32_t sampleIdx)
+						{
+							return SurfaceDistance(
+								probe,
+								samples[sampleIdx]) <= probeTargetDistance;
+						});
+					if (isCovered) { continue; }
+					if (samples.size() >= std::numeric_limits<uint32_t>::max())
+					{
+						throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
+					}
+
+					const uint32_t sampleIdx = static_cast<uint32_t>(samples.size());
+					samples.push_back(probe);
+					spatialHash.Insert(sampleIdx);
+					repairCount++;
 				}
 
-				const uint32_t sampleIdx = static_cast<uint32_t>(samples.size());
-				samples.push_back(probe);
-				spatialHash.Insert(sampleIdx);
-				repairCount++;
-			}
+				probes.clear();
+			};
 
-			probeBegin += N_batch;
+		// generate probes in stable triangle and barycentric lattice order
+		for (uint32_t triangleIdx = 0;
+			triangleIdx < static_cast<uint32_t>(triangles.size());
+			triangleIdx++)
+		{
+			const TriangleData& triangle = triangles[triangleIdx];
+			const uint32_t subdivisionCount = std::max<uint32_t>(
+				1,
+				static_cast<uint32_t>(std::ceil(
+					triangle.longestEdge / params.surfaceSamplingCoverageProbeSpacing)));
+			const float subdivisionCountInv = 1.0f / static_cast<float>(subdivisionCount);
+
+			for (uint32_t i = 0; i <= subdivisionCount; i++)
+			{
+				for (uint32_t j = 0; j <= subdivisionCount - i; j++)
+				{
+					const uint32_t k = subdivisionCount - i - j;
+					const glm::vec3 barycentric
+					{
+						static_cast<float>(i) * subdivisionCountInv,
+						static_cast<float>(j) * subdivisionCountInv,
+						static_cast<float>(k) * subdivisionCountInv,
+					};
+					probes.push_back(MakeSurfacePoint(
+						triangle,
+						triangleIdx,
+						barycentric));
+
+					if (probes.size() == N_probeBatch)
+					{
+						repairProbeBatch();
+					}
+				}
+			}
 		}
+
+		repairProbeBatch();
 	}
 
 	void SurfaceSampler::ValidateSamples()
@@ -700,15 +691,11 @@ namespace Scene
 	{
 		storage_->stats = {};
 		storage_->stats.surfaceArea = static_cast<float>(storage_->surfaceArea);
-		storage_->candidates.clear();
-		storage_->probes.clear();
 		storage_->samples.clear();
 		// generate and select the initial Poisson sample set
-		GeneratePoissonCandidates();
 		SelectPoissonSamples();
 
 		// detect and repair remaining surface coverage gaps
-		GenerateCoverageProbes();
 		RepairCoverage();
 		ValidateSamples();
 
