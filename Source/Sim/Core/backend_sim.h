@@ -18,6 +18,20 @@
 
 
 
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+namespace Sync
+{
+	class VisualFrameMailboxCUDA;
+
+	enum class VisualPackResultCUDA : uint8_t
+	{
+		Unsupported,
+		Skipped,
+		Published,
+	};
+} // namespace Sync
+#endif
+
 namespace Sim
 {
 	// forward declarations
@@ -48,6 +62,18 @@ namespace Sim
 		// (implementation is backend-specific for better performance)
 		virtual void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params) const = 0;
 		virtual void PackVisualSnapshot(Sync::VisualSnapshot& snap) const = 0;
+
+		// additional CUDA-OpenGL interop for visualization (if the backend supports it)
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		virtual Sync::VisualPackResultCUDA TryPackVisualSnapshotCUDA(
+			Sync::VisualFrameMailboxCUDA& visualFrameMailboxCUDA,
+			std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap) const
+		{
+			(void)visualFrameMailboxCUDA;
+			(void)auxiliarySnap;
+			return Sync::VisualPackResultCUDA::Unsupported;
+		}
+	#endif
 
 		// computes & fills in the scalar data based on different color coding modes
 		// (backend-specific so that possible transformations can be applied efficiently)

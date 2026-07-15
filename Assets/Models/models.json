@@ -85,6 +85,21 @@
         "watertight": true
       }
     },
+    "TitanicShip": {
+      "file": "titanic_ship.obj",
+      "sourceToCanonical": {
+        "uDir": [0.0, 0.0, -1.0],
+        "vDir": [-1.0, 0.0, 0.0],
+        "wDir": [0.0, 1.0, 0.0]
+      },
+      "metadata": {
+        "vertexCount": 25948,
+        "triangleCount": 51900,
+        "sourceExtent": [1.776078, 16.510339000000002, 3.150246],
+        "enclosedVolume": 41.102559251359146,
+        "watertight": true
+      }
+    },
     "TransportShip": {
       "file": "transport_ship.obj",
       "sourceToCanonical": {

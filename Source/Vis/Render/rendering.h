@@ -5,26 +5,42 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <vector>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+	#include <cuda_runtime_api.h>
+#endif
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Vis/Core/parameters_vis.h"
 
+
+
 // forward declarations
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+struct cudaGraphicsResource;
 
-
+namespace Sync
+{
+	class VisualFrameMailboxCUDA;
+	struct VisualFrameReadCUDA;
+} // namespace Sync
+#endif
 
 namespace Render
 {
 	// 32 bytes per rendered particle instance
 	struct InstanceData
 	{
-		glm::vec4 posAndRad; // (x, y, z, radius)
-		float scalar; // scalar value for color coding
-		float pad[3]; // padding to multiple of 16 bytes
+		float x;
+		float y;
+		float z;
+		float radius;
+		float scalar;
+		float pad[3];
 	};
 	static_assert(sizeof(InstanceData) == 32, "Instance must be 32 bytes");
 
@@ -48,6 +64,16 @@ namespace Render
 							 const Sim::SimParams& simParams,
 							 const Vis::VisParams& visParams);
 
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		void SetVisualMailboxCUDA(Sync::VisualFrameMailboxCUDA* visualMailboxCUDA)
+			{ visualFrameMailboxCUDA_ = visualMailboxCUDA; }
+
+		bool UpdateParticlesCUDA(
+			const Sync::VisualFrameReadCUDA& frame,
+			const Sim::SimParams& simParams,
+			const Vis::VisParams& visParams);
+	#endif
+
 		// upload rigid body center-of-mass marker transforms
 		void UpdateCentersOfMass(const Vis::VisualSnapView& view,
 								 const Sim::SimParams& simParams);
@@ -69,11 +95,11 @@ namespace Render
 		Vis::VisParamsMgr& visParamsMgr_;
 
 		// addresses of GL objects (sphere impostors -> particles)
-		GLuint vao_ = 0;					// vertex array object
-		GLuint vboQuad_ = 0;				// quad for impostor sphere instances
-		GLuint vboInstances_ = 0;			// instance data
-		GLuint progSphereImpostors_ = 0;	// impostor sphere shader program
-		GLuint texColorMap_ = 0;			// color lookup-table
+		GLuint vao_ = 0;                    // vertex array object
+		GLuint vboQuad_ = 0;                // quad for impostor sphere instances
+		GLuint vboInstances_ = 0;           // instance data
+		GLuint progSphereImpostors_ = 0;    // impostor sphere shader program
+		GLuint texColorMap_ = 0;            // color lookup-table
 
 		// addresses of GL objects (cuboids -> rigid body centers of mass)
 		GLuint vaoCenterOfMass_ = 0;
@@ -106,6 +132,16 @@ namespace Render
 		uint32_t N_centerOfMassInstances_ = 0;
 		uint64_t N_lineVertices_ = 0;
 
+		// additional CUDA-OpenGL interop resources
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		Sync::VisualFrameMailboxCUDA* visualFrameMailboxCUDA_{ nullptr };
+		cudaGraphicsResource* instanceResourceCUDA_{ nullptr };
+		cudaStream_t renderStreamCUDA_{ nullptr };
+		GLuint vboInstancesCUDA_ = 0;
+		uint32_t capacityCUDA_ = 0;
+		bool interopReadyCUDA_ = false;
+	#endif
+
 		// helpers
 		void CreateSphereImpostorProgram();
 		void CreateCenterOfMassProgram();
@@ -130,6 +166,14 @@ namespace Render
 
 		// debug callback
 		void EnableDebugOutput();
+
+		// additional CUDA-OpenGL interop helpers
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		void InitParticleInteropCUDA();
+		void ShutdownParticleInteropCUDA() noexcept;
+		bool EnsureInstanceCapacityCUDA(uint32_t N_required);
+		bool HandleErrorCUDA(cudaError_t error, const char* operation);
+	#endif
 	};
 
 } // namespace Render

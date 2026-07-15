@@ -70,14 +70,15 @@ namespace Sim
 		// helpers
 		void SetConfigProfile(std::string profile);
 
-		void HandleExportSnapshot(const SimParams& params) const;
+		void WriteExportSnapshot(const SimParams& params) const;
+		void PublishVisualSnapshot();
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;
-		void BeginRunLogging(const SimParams& params);
-		void EndRunLogging();
-		void AppendLatestBenchmarkMetricsLog() const;
 		void AppendInitialMemoryMetricsLog(const SimParams& params) const;
 		void AppendLatestMemoryMetricsLog() const;
+		void AppendLatestBenchmarkMetricsLog() const;
+		void BeginRunLogging(const SimParams& params);
+		void EndRunLogging();
 		void DisplayPerformanceStats(const SimParams& params) const;
 		void DisplayMemoryUsageStats(const SimParams& params, bool force = false) const;
 

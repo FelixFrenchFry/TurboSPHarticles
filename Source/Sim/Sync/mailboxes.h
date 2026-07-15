@@ -10,6 +10,9 @@
 
 // internal
 #include "snapshots.h"
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+	#include "mailboxes_cuda.h"
+#endif
 
 
 
@@ -35,10 +38,20 @@ namespace Sync
 			return true;
 		}
 
+		// access to the additional mailbox for CUDA-device buffer snapshot
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		VisualFrameMailboxCUDA& GetFrameMailboxCUDA() noexcept { return visualFrameMailboxCUDA_; }
+	#endif
+
 	private: // ------------------------------------------------------------------------------------
 
 		// latest snapshot of the vis-specific simulation state
 		std::shared_ptr<VisualSnapshot> latestSnap_{ nullptr };
+
+		// additional mailbox for CUDA-device buffer snapshot
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		VisualFrameMailboxCUDA visualFrameMailboxCUDA_{};
+	#endif
 	};
 
 	// single-producer, single-consumer, lock-free mailbox for operation benchmark snapshots

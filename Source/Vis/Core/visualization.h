@@ -47,7 +47,12 @@ namespace Vis
 		void RequestStop();
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox)
-			{ visualSnapMailbox_ = visualSnapMailbox; }
+		{
+			visualSnapMailbox_ = visualSnapMailbox;
+		#ifdef TURBOSPHARTICLES_WITH_CUDA
+			renderingMgr_.SetVisualMailboxCUDA(&visualSnapMailbox_->GetFrameMailboxCUDA());
+		#endif
+		}
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox)
 			{ benchSnapMailbox_ = benchSnapMailbox; }
 		void SetMemMailbox(Sync::MemSnapMailbox* memSnapMailbox)

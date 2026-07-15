@@ -137,6 +137,9 @@ endif()
 
 if(ENABLE_VIS)
     file(GLOB_RECURSE SRC_VIS CONFIGURE_DEPENDS "Source/Vis/*.cpp")
+    if(ENABLE_CUDA)
+        file(GLOB_RECURSE SRC_VIS_CUDA CONFIGURE_DEPENDS "Source/Vis/*.cu")
+    endif()
 endif()
 
 if(ENABLE_MPI)
@@ -289,6 +292,7 @@ endif()
 if(ENABLE_VIS)
     add_library(TSP_V STATIC
         ${SRC_VIS}
+        $<$<BOOL:${ENABLE_CUDA}>:${SRC_VIS_CUDA}>
     )
     target_link_libraries(TSP_V PUBLIC
         TSP_H # build on top of the headless base
@@ -307,7 +311,13 @@ if(ENABLE_VIS)
     )
     if(ENABLE_CUDA)
         # final executables perform CUDA device linking
-        set_target_properties(TSP_V PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+        set_target_properties(TSP_V PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+            CUDA_RESOLVE_DEVICE_SYMBOLS OFF
+            POSITION_INDEPENDENT_CODE ON
+            CUDA_ARCHITECTURES "${TSP_CUDA_ARCHITECTURE}"
+        )
+        set_property(TARGET TSP_V PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
     endif()
 endif()
 

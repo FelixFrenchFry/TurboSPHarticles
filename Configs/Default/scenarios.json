@@ -87,8 +87,8 @@
     },
     "SampledMesh": {
       "type": "SampledMesh",
-      "model": "ToyJetski",
-      "modelTargetExtent": 2.0,
+      "model": "HouseBoat",
+      "modelTargetExtent": 1.8,
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
@@ -96,7 +96,7 @@
         "wDir": [ 0.0, 0.0, 1.0 ],
         "uLen": 2.0,
         "vLen": 2.0,
-        "wLen": 1.2
+        "wLen": 1.5
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
@@ -104,16 +104,16 @@
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
         "uLen": 2.0,
-        "vLen": 0.3,
-        "wLen": 1.2
+        "vLen": 0.35,
+        "wLen": 1.5
       },
       "rigidBody": {
-        "centerOfMass": [ 1.0, 0.6, 0.6 ],
+        "centerOfMass": [ 0.9, 0.75, 0.75 ],
         "yawDeg": 0.0,
         "pitchDeg": 0.0,
         "rollDeg": 0.0
       },
-      "rigidDensity": 400.0,
+      "rigidDensity": 350.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }

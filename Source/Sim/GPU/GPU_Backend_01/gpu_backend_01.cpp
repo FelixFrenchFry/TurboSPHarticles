@@ -11,11 +11,13 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "Source/Sim/GPU/gpu_utils.h"
+#include "Source/Sim/Sync/mailboxes_cuda.h"
 #include "gpu_backend_01.h"
 #include "neighbor_search.cuh"
 #include "rigid_kernels.cuh"
 #include "sph_kernels.cuh"
 #include "statistics_kernels.cuh"
+#include "snapshot_kernels.cuh"
 
 
 
@@ -667,6 +669,57 @@ void SimBackend_GPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 		);
 	}
 
+	PackVisualRigidState(snap);
+}
+
+Sync::VisualPackResultCUDA SimBackend_GPU01::TryPackVisualSnapshotCUDA(
+	Sync::VisualFrameMailboxCUDA& visualFrameMailboxCUDA,
+	std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap) const
+{
+	// acquire reusable CUDA mailbox slot for particle data
+	Sync::VisualFrameWriteCUDA write{};
+	if (!visualFrameMailboxCUDA.TryAcquireWrite(
+		N_F_, N_rigidBoundaryParticles_, write))
+	{
+		return visualFrameMailboxCUDA.IsEnabled()
+			? Sync::VisualPackResultCUDA::Skipped
+			: Sync::VisualPackResultCUDA::Unsupported;
+	}
+
+	// pack fluid and rigid boundary particles into CUDA-device buffers
+	try
+	{
+		GPU01::Launch_PackVisualSnapshotCUDA(
+			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
+			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
+			d_densityF_.Data(), d_pressureF_.Data(),
+			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(), d_volB_.Data(),
+			d_rigidBoundaryParticleIdxB_.Data(), auxiliarySnap->scalarModeF,
+			N_F_, N_B_, N_rigidBoundaryParticles_, stream_,
+			write.fluid, write.rigid);
+
+		// pack remaining rigid body state into auxiliary host snapshot
+		auxiliarySnap->N_F = 0;
+		auxiliarySnap->N_B = 0;
+		auxiliarySnap->N_R = N_rigidBodies_;
+		PackVisualRigidState(*auxiliarySnap);
+	}
+	catch (const std::exception& ex)
+	{
+		visualFrameMailboxCUDA.Disable(ex.what());
+		return Sync::VisualPackResultCUDA::Unsupported;
+	}
+
+	// publish packed frame to visualization thread
+	if (!visualFrameMailboxCUDA.Publish(write, stream_, std::move(auxiliarySnap)))
+	{
+		return Sync::VisualPackResultCUDA::Unsupported;
+	}
+	return Sync::VisualPackResultCUDA::Published;
+}
+
+void SimBackend_GPU01::PackVisualRigidState(Sync::VisualSnapshot& snap) const
+{
 	snap.centerOfMassR.resize(N_rigidBodies_);
 	snap.orientationR.resize(N_rigidBodies_);
 	if (N_rigidBodies_ > 0)

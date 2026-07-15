@@ -285,19 +285,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
 
-	{
-		// create visual snapshot and push to its mailbox
-		auto visSnap = std::make_shared<Sync::VisualSnapshot>();
-		simBackend_->PackVisualSnapshot(*visSnap);
-
-		// pack misc data into snapshot that is not handled by the backend
-		visSnap->simStep = simStep_;
-		visSnap->boxesB = simScenario_->GetBoundaryBoxes();
-		// TODO: add this to vis params instead?
-		//visSnap->scalarModeF = Base::ColorCodingMode::VelocityMag;
-
-		visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
-	}
+	PublishVisualSnapshot();
 
 	// vis throttle starting point
 	lastVisWall_ = std::chrono::steady_clock::now();
@@ -305,7 +293,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
-		HandleExportSnapshot(paramsInit);
+		WriteExportSnapshot(paramsInit);
 	}
 
 	AppendInitialMemoryMetricsLog(paramsInit);
@@ -369,17 +357,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 			{
 				benchmarksTracker_.StartBench(Bench::BenchOp::Visualization);
 
-				// create visual snapshot and push to its mailbox
-				auto visSnap = std::make_shared<Sync::VisualSnapshot>();
-				simBackend_->PackVisualSnapshot(*visSnap);
-
-				// pack misc data into snapshot that is not handled by the backend
-				visSnap->simStep = simStep_;
-				visSnap->boxesB = simScenario_->GetBoundaryBoxes();
-				// TODO: add this to vis params instead?
-				//visSnap->scalarModeF = Base::ColorCodingMode::VelocityMag;
-
-				visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
+				PublishVisualSnapshot();
 
 				benchmarksTracker_.StopBench(Bench::BenchOp::Visualization);
 
@@ -389,7 +367,12 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 		// pack and serialize export snapshot at given frequency
 		if (simStep_ % params.exportInterval == 0 &&
-			params.exportEnabled) { HandleExportSnapshot(params); }
+			params.exportEnabled)
+		{
+			benchmarksTracker_.StartBench(Bench::BenchOp::Serialization);
+			WriteExportSnapshot(params);
+			benchmarksTracker_.StopBench(Bench::BenchOp::Serialization);
+		}
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
@@ -443,7 +426,7 @@ void SimulationMgr::RunSim_Blocking()
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
-		HandleExportSnapshot(paramsInit);
+		WriteExportSnapshot(paramsInit);
 	}
 
 	AppendInitialMemoryMetricsLog(paramsInit);
@@ -493,7 +476,12 @@ void SimulationMgr::RunSim_Blocking()
 
 		// pack and serialize export snapshot at given frequency
 		if (simStep_ % params.exportInterval == 0 &&
-			params.exportEnabled) { HandleExportSnapshot(params); }
+			params.exportEnabled)
+		{
+			benchmarksTracker_.StartBench(Bench::BenchOp::Serialization);
+			WriteExportSnapshot(params);
+			benchmarksTracker_.StopBench(Bench::BenchOp::Serialization);
+		}
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
 		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
@@ -560,19 +548,8 @@ void SimulationMgr::SetConfigProfile(std::string profile)
 	scenariosFile_ = configProfile_ + "/scenarios.json";
 }
 
-void SimulationMgr::BeginRunLogging(const SimParams& params)
+void SimulationMgr::WriteExportSnapshot(const SimParams& params) const
 {
-	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params);
-}
-
-void SimulationMgr::EndRunLogging()
-{
-	loggingMgr_.EndRun();
-}
-
-void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
-{
-	benchmarksTracker_.StartBench(Bench::BenchOp::Serialization);
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
@@ -580,7 +557,45 @@ void SimulationMgr::HandleExportSnapshot(const SimParams& params) const
 	// write export snapshot to files
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
-	benchmarksTracker_.StopBench(Bench::BenchOp::Serialization);
+}
+
+void SimulationMgr::PublishVisualSnapshot()
+{
+	// create visual snapshot and push pack misc data that is not handled by the backend
+	// (if CUDA path is taken, the particle data buffers are not filled)
+	auto visSnap = std::make_shared<Sync::VisualSnapshot>();
+	visSnap->simStep = simStep_;
+	visSnap->boxesB = simScenario_->GetBoundaryBoxes();
+	// TODO: visSnap->scalarModeF = Base::ColorCodingMode::VelocityMag;
+
+	// optionally pack particle data into CUDA-device buffers for OpenGL without going through the host
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+	auto& visualFrameMailboxCUDA = visualSnapMailbox_->GetFrameMailboxCUDA();
+	const auto result = simBackend_->TryPackVisualSnapshotCUDA(visualFrameMailboxCUDA, visSnap);
+	if (result != Sync::VisualPackResultCUDA::Unsupported) { return; } // skip host snapshot if successful
+#endif
+
+	// fallback to host snapshot packing if CUDA path is unavailable or unsupported
+	simBackend_->PackVisualSnapshot(*visSnap);
+	visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
+}
+
+void SimulationMgr::HandleBenchMemStatSnapshots() const
+{
+	// create bench snapshot and push to its mailbox
+	auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
+	benchmarksTracker_.PackBenchSnapshot(*benchSnap);
+	benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
+
+	// create mem snapshot and push to its mailbox
+	auto memSnap = std::make_shared<Sync::MemSnapshot>();
+	memoryTracker_.PackMemSnapshot(*memSnap);
+	memSnapMailbox_->StoreSnapshot(std::move(memSnap));
+
+	// create stat snapshot and push to its mailbox
+	auto statSnap = std::make_shared<Sync::StatSnapshot>();
+	statisticsTracker_.PackStatSnapshot(*statSnap);
+	statSnapMailbox_->StoreSnapshot(std::move(statSnap));
 }
 
 void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
@@ -609,24 +624,6 @@ void SimulationMgr::AppendLatestBenchmarkMetricsLog() const
 	loggingMgr_.AppendBenchmarkRecord(benchmarksTracker_.GetCurrentRecord());
 }
 
-void SimulationMgr::HandleBenchMemStatSnapshots() const
-{
-	// create bench snapshot and push to its mailbox
-	auto benchSnap = std::make_shared<Sync::BenchSnapshot>();
-	benchmarksTracker_.PackBenchSnapshot(*benchSnap);
-	benchSnapMailbox_->StoreSnapshot(std::move(benchSnap));
-
-	// create mem snapshot and push to its mailbox
-	auto memSnap = std::make_shared<Sync::MemSnapshot>();
-	memoryTracker_.PackMemSnapshot(*memSnap);
-	memSnapMailbox_->StoreSnapshot(std::move(memSnap));
-
-	// create stat snapshot and push to its mailbox
-	auto statSnap = std::make_shared<Sync::StatSnapshot>();
-	statisticsTracker_.PackStatSnapshot(*statSnap);
-	statSnapMailbox_->StoreSnapshot(std::move(statSnap));
-}
-
 void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 {
 	// record statistics, archive data and update aggregates
@@ -640,6 +637,16 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 	// ending point of total benchmark, archive data and update aggregates
 	benchmarksTracker_.StopBench(Bench::BenchOp::Total);
 	benchmarksTracker_.EndStep(simStep_, simTime_);
+}
+
+void SimulationMgr::BeginRunLogging(const SimParams& params)
+{
+	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params);
+}
+
+void SimulationMgr::EndRunLogging()
+{
+	loggingMgr_.EndRun();
 }
 
 void SimulationMgr::DisplayPerformanceStats(

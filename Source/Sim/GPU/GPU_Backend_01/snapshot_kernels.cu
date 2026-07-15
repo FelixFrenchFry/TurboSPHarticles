@@ -1,0 +1,125 @@
+// snapshot_kernels.cu
+
+// external
+#include <cuda_runtime.h>
+#include <cmath>
+
+// internal
+#include "Source/Sim/GPU/gpu_utils.h"
+#include "snapshot_kernels.cuh"
+
+
+
+namespace GPU01
+{
+	namespace
+	{
+		constexpr uint32_t InvalidRigidBoundaryParticleIdx = 0xffffffffu;
+
+		__global__
+		void K_PackFluidVisualSamples(
+			const float* __restrict__ xPos,
+			const float* __restrict__ yPos,
+			const float* __restrict__ zPos,
+			const float* __restrict__ xVel,
+			const float* __restrict__ yVel,
+			const float* __restrict__ zVel,
+			const float* __restrict__ density,
+			const float* __restrict__ pressure,
+			const Base::ColorCodingMode scalarMode,
+			const uint32_t N,
+			Sync::VisualParticleSample* __restrict__ dst)
+		{
+			const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+			if (i >= N) { return; }
+
+			// compute scalar value used for fluid color coding
+			float scalar = 0.0f;
+			switch (scalarMode)
+			{
+			case Base::ColorCodingMode::VelocityMag:
+				{
+					const float vx = xVel[i];
+					const float vy = yVel[i];
+					const float vz = zVel[i];
+					scalar = sqrtf(vx * vx + vy * vy + vz * vz);
+					break;
+				}
+			case Base::ColorCodingMode::Density:
+				scalar = density[i];
+				break;
+			case Base::ColorCodingMode::Pressure:
+				scalar = pressure[i];
+				break;
+			case Base::ColorCodingMode::None:
+			default:
+				break;
+			}
+
+			// pack fluid particle into visual sample
+			dst[i] = Sync::VisualParticleSample{ xPos[i], yPos[i], zPos[i], scalar };
+		}
+
+		__global__
+		void K_PackRigidVisualSamples(
+			const float* __restrict__ xPos,
+			const float* __restrict__ yPos,
+			const float* __restrict__ zPos,
+			const float* __restrict__ volume,
+			const uint32_t* __restrict__ rigidBoundaryParticleIdx,
+			const uint32_t N_B,
+			const uint32_t N_RBP,
+			Sync::VisualParticleSample* __restrict__ dst)
+		{
+			const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+			if (i >= N_B) { return; }
+
+			// map boundary particle to packed rigid boundary particle index
+			const uint32_t dstIdx = rigidBoundaryParticleIdx[i];
+			if (dstIdx == InvalidRigidBoundaryParticleIdx || dstIdx >= N_RBP) { return; }
+
+			// pack rigid boundary particle into visual sample
+			dst[dstIdx] = Sync::VisualParticleSample{ xPos[i], yPos[i], zPos[i], volume[i] };
+		}
+
+	} // namespace anonymous
+
+	void Launch_PackVisualSnapshotCUDA(
+		const float* xPosF, const float* yPosF, const float* zPosF,
+		const float* xVelF, const float* yVelF, const float* zVelF,
+		const float* densityF, const float* pressureF,
+		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* volB,
+		const uint32_t* rigidBoundaryParticleIdxB,
+		const Base::ColorCodingMode scalarMode,
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_RBP,
+		cudaStream_t stream,
+		// destinations
+		Sync::VisualParticleSample* fluidDst,
+		Sync::VisualParticleSample* rigidDst)
+	{
+		const uint32_t N_BLOCKSIZE = 256;
+
+		// pack fluid particles into visual samples
+		if (N_F > 0)
+		{
+			const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+			K_PackFluidVisualSamples<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+				xPosF, yPosF, zPosF, xVelF, yVelF, zVelF, densityF, pressureF,
+				scalarMode, N_F, fluidDst);
+			GPU::CheckLastKernel("K_PackFluidVisualSamples()");
+		}
+
+		// clear and pack rigid boundary particles into visual samples
+		if (N_RBP > 0 && N_B > 0)
+		{
+			GPU::MemsetZero(rigidDst, N_RBP, stream);
+			const uint32_t N_GRIDSIZE = (N_B + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+			K_PackRigidVisualSamples<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+				xPosB, yPosB, zPosB, volB, rigidBoundaryParticleIdxB,
+				N_B, N_RBP, rigidDst);
+			GPU::CheckLastKernel("K_PackRigidVisualSamples()");
+		}
+	}
+
+} // namespace GPU01

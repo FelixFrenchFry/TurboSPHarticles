@@ -112,6 +112,9 @@ namespace Sim
 		// (implementation is backend-specific for better performance)
 		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params) const override;
 		void PackVisualSnapshot(Sync::VisualSnapshot& snap) const override;
+		Sync::VisualPackResultCUDA TryPackVisualSnapshotCUDA(
+			Sync::VisualFrameMailboxCUDA& visualFrameMailboxCUDA,
+			std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap) const override;
 
 		// fills in the scalar data based on given different color coding modes
 		// (backend-specific such that possible transformations can be applied efficiently)
@@ -167,7 +170,7 @@ namespace Sim
 		uint32_t N_rigidBoundaryParticles_ = 0;
 		uint32_t N_solverIterCount_ = 0;
 
-		// --- [ backend-specific data structures for operating the simulation ]
+		// --- [ backend-specific data structures for operating the simulation ] ---
 
 		// fluid particles
 		DeviceBuffer<uint32_t> d_idF_;
@@ -296,6 +299,9 @@ namespace Sim
 
 		// operation benchmarking order
 		Bench::BenchOpList benchOps_ = Bench::MakeDefaultSimBenchOps();
+
+		// pack rigid body state metadata into host snapshot (for both CUDA-OpenGL interop path and otherwise)
+		void PackVisualRigidState(Sync::VisualSnapshot& snap) const;
 
 		// resizes all device buffers when particle counts change
 		// (does not preserve data)

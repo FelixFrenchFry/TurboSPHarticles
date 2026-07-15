@@ -381,11 +381,34 @@ void VisualizationMgr::SyncVisSimState()
 		return;
 	}
 
-	// try to fetch latest snapshot
+	bool hasFrameCUDA = false;
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		Sync::VisualFrameReadCUDA frameCUDA{};
+		if (visualSnapMailbox_->GetFrameMailboxCUDA().TryFetchLatest(frameCUDA))
+		{
+			hasFrameCUDA = true;
+		}
+	#endif
+
+	// try the host mailbox when no CUDA frame is available
 	std::shared_ptr<Sync::VisualSnapshot> snap;
-	if (!visualSnapMailbox_->TryFetchLatestSnapshot(snap))
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		if (hasFrameCUDA) { snap = frameCUDA.auxiliarySnap; }
+	#endif
+	if (!hasFrameCUDA && !visualSnapMailbox_->TryFetchLatestSnapshot(snap))
 	{
 		// no new snapshot available
+		return;
+	}
+	if (!snap)
+	{
+		SPDLOG_ERROR("Failed to synchronize visual simulation state (empty snapshot).");
+		#ifdef TURBOSPHARTICLES_WITH_CUDA
+			if (hasFrameCUDA)
+			{
+				renderingMgr_.UpdateParticlesCUDA(frameCUDA, simParams_, visParams_);
+			}
+		#endif
 		return;
 	}
 
@@ -442,7 +465,16 @@ void VisualizationMgr::SyncVisSimState()
 	const auto visParams = visParams_;
 
 	// push to GPU to let renderer use the new data
-	renderingMgr_.UpdateParticles(view_, simParams, visParams);
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		if (hasFrameCUDA)
+		{
+			renderingMgr_.UpdateParticlesCUDA(frameCUDA, simParams, visParams);
+		}
+		else
+	#endif
+	{
+		renderingMgr_.UpdateParticles(view_, simParams, visParams);
+	}
 	renderingMgr_.UpdateCentersOfMass(view_, simParams);
 	renderingMgr_.UpdateWireframes(view_, visParams);
 }

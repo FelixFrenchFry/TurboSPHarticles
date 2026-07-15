@@ -99,7 +99,7 @@ namespace Dist
 		bool GatherOwnedGlobalSimStateOnRoot(const char* phaseName) const;
 
 		// gathers and serializes an export snapshot on the root rank
-		bool HandleExportSnapshot(const Sim::SimParams& params) const;
+		bool WriteExportSnapshot(const Sim::SimParams& params) const;
 
 		// builds rank-local startup diagnostics gathered by the root rank
 		DistStartupRankReport BuildStartupRankReport() const;

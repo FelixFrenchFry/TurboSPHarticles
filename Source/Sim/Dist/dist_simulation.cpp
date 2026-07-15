@@ -847,7 +847,7 @@ void DistSimulationMgr::RunSim_Blocking()
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
-		if (!HandleExportSnapshot(paramsInit)) { runOk = false; }
+		if (!WriteExportSnapshot(paramsInit)) { runOk = false; }
 	}
 
 	AppendInitialMemoryMetricsLog(paramsInit);
@@ -915,7 +915,7 @@ void DistSimulationMgr::RunSim_Blocking()
 			params.exportEnabled)
 		{
 			exportedStep = true;
-			if (!HandleExportSnapshot(params)) { runOk = false; }
+			if (!WriteExportSnapshot(params)) { runOk = false; }
 		}
 
 		// evaluate the benchmarks and memory usage for this step
@@ -1312,7 +1312,7 @@ bool DistSimulationMgr::GatherOwnedGlobalSimStateOnRoot(const char* phaseName) c
 	return true;
 }
 
-bool DistSimulationMgr::HandleExportSnapshot(const Sim::SimParams& params) const
+bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params) const
 {
 	DistSnapshotGatherStats stats{};
 

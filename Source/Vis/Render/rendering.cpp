@@ -2,21 +2,86 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <cassert>
+#include <cmath>
+#include <exception>
+#include <glad/glad.h>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+	#include <cuda_gl_interop.h>
+#endif
 
 // internal
 #include "Source/Sim/Sync/state_sim.h"
-#include "center_of_mass_marker.h"
-#include "particle_radius.h"
 #include "rendering.h"
 #include "shader.h"
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+	#include "Source/Sim/Sync/mailboxes_cuda.h"
+	#include "cuda_interop.cuh"
+#endif
 
 
 
 using namespace Render;
+
+namespace
+{
+	static constexpr float CENTER_OF_MASS_MARKER_LENGTH_RATIO = 2.5f;
+	static constexpr float CENTER_OF_MASS_MARKER_THICKNESS_RATIO = 0.25f;
+
+	// builds one oriented marker box for each rigid body axis
+	std::array<glm::mat4, 3> BuildCenterOfMassMarkerTransforms(
+		const glm::vec3& centerOfMass,
+		const glm::mat3& orientation,
+		const float particleSizeF)
+	{
+		// size marker boxes relative to fluid particle diameter
+		const float size = std::max(particleSizeF, 0.0f);
+		const float length = CENTER_OF_MASS_MARKER_LENGTH_RATIO * size;
+		const float thickness = CENTER_OF_MASS_MARKER_THICKNESS_RATIO * size;
+		const std::array<glm::vec3, 3> dimensions
+		{
+			glm::vec3{ length, thickness, thickness },
+			glm::vec3{ thickness, length, thickness },
+			glm::vec3{ thickness, thickness, length },
+		};
+
+		// orient and place each marker box at the rigid body center of mass
+		std::array<glm::mat4, 3> transforms{};
+		for (uint32_t axis = 0; axis < transforms.size(); axis++)
+		{
+			glm::mat4 transform{ 1.0f };
+			transform[0] = glm::vec4(orientation[0] * dimensions[axis].x, 0.0f);
+			transform[1] = glm::vec4(orientation[1] * dimensions[axis].y, 0.0f);
+			transform[2] = glm::vec4(orientation[2] * dimensions[axis].z, 0.0f);
+			transform[3] = glm::vec4(centerOfMass, 1.0f);
+			transforms[axis] = transform;
+		}
+		return transforms;
+	}
+
+	// computes rigid boundary particle radius from represented volume
+	float ComputeRigidBoundaryRenderRadius(
+		const float volume,
+		const float particleSizeB,
+		const float radiusScale)
+	{
+		// use nominal particle radius if volume cannot produce a valid radius
+		const float nonNegativeScale = std::max(radiusScale, 0.0f);
+		const float fallbackRadius = particleSizeB * 0.5f * nonNegativeScale;
+		if (!std::isfinite(volume) || volume <= 0.0f)
+		{
+			return fallbackRadius;
+		}
+
+		const float radius = 0.5f * std::cbrt(volume) * nonNegativeScale;
+		return std::isfinite(radius) ? radius : fallbackRadius;
+	}
+
+} // anonymous
 
 RenderingMgr::RenderingMgr(Sim::SimParamsMgr& simParamsMgr,
 						   Vis::VisParamsMgr& visParamsMgr)
@@ -39,6 +104,9 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 	CreateSphereImpostorVAOandBuffers();
 	CreateCenterOfMassVAOandBuffers();
 	CreateLineVAOandBuffers();
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		InitParticleInteropCUDA();
+	#endif
 
 	// default grayscale colormap
 	std::vector<glm::vec4> lut(256);
@@ -56,6 +124,10 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 
 void RenderingMgr::Shutdown()
 {
+	#ifdef TURBOSPHARTICLES_WITH_CUDA
+		ShutdownParticleInteropCUDA();
+	#endif
+
 	if (progSphereImpostors_)
 	{
 		glDeleteProgram(progSphereImpostors_);
@@ -78,6 +150,80 @@ void RenderingMgr::Shutdown()
 	DestroyCenterOfMassVAOandBuffers();
 	DestroyLineVAOandBuffers();
 }
+
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+void RenderingMgr::InitParticleInteropCUDA()
+{
+	if (!visualFrameMailboxCUDA_) { return; }
+
+	// get current CUDA device and devices used by the OpenGL context
+	int deviceCUDA = -1;
+	if (!HandleErrorCUDA(cudaGetDevice(&deviceCUDA), "cudaGetDevice()")) { return; }
+
+	std::array<int, 8> glDevicesCUDA{};
+	unsigned int N_glDevices = 0;
+	if (!HandleErrorCUDA(
+		cudaGLGetDevices(
+			&N_glDevices,
+			glDevicesCUDA.data(),
+			static_cast<unsigned int>(glDevicesCUDA.size()),
+			cudaGLDeviceListAll),
+		"cudaGLGetDevices()"))
+	{
+		return;
+	}
+
+	// make sure current CUDA device is associated with the OpenGL context
+	if (std::find(
+		glDevicesCUDA.begin(),
+		glDevicesCUDA.begin() + N_glDevices,
+		deviceCUDA) == glDevicesCUDA.begin() + N_glDevices)
+	{
+		SPDLOG_WARN(
+			"CUDA visual fast path unavailable: simulation device {} is not associated "
+			"with the current OpenGL context.", deviceCUDA);
+		return;
+	}
+
+	// create CUDA rendering stream and enable the interop mailbox
+	if (!HandleErrorCUDA(
+		cudaStreamCreateWithFlags(&renderStreamCUDA_, cudaStreamNonBlocking),
+		"cudaStreamCreateWithFlags() for rendering"))
+	{
+		return;
+	}
+
+	interopReadyCUDA_ = true;
+	visualFrameMailboxCUDA_->Enable(deviceCUDA);
+}
+
+void RenderingMgr::ShutdownParticleInteropCUDA() noexcept
+{
+	interopReadyCUDA_ = false;
+
+	// unregister CUDA access to the OpenGL instance buffer
+	if (instanceResourceCUDA_)
+	{
+		cudaGraphicsUnregisterResource(instanceResourceCUDA_);
+		instanceResourceCUDA_ = nullptr;
+	}
+
+	// destroy CUDA rendering stream
+	if (renderStreamCUDA_)
+	{
+		cudaStreamDestroy(renderStreamCUDA_);
+		renderStreamCUDA_ = nullptr;
+	}
+
+	// delete OpenGL instance buffer
+	if (vboInstancesCUDA_)
+	{
+		glDeleteBuffers(1, &vboInstancesCUDA_);
+		vboInstancesCUDA_ = 0;
+	}
+	capacityCUDA_ = 0;
+}
+#endif
 
 void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 								   const Sim::SimParams& simParams,
@@ -103,6 +249,7 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 	if (N_total == 0) { return; }
 
 	EnsureInstanceCapacity(N_total);
+	glVertexArrayVertexBuffer(vao_, 1, vboInstances_, 0, sizeof(InstanceData));
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
 	const float fluidRad = simParams.particleSizeF * 0.5f;
@@ -114,8 +261,10 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 	for (uint32_t i = 0; i < N_fluidImpostorInstances_; i++)
 	{
 		const glm::vec3 pos = view.posF[i];
-		out[i].posAndRad = glm::vec4(pos, fluidRad);
-		out[i].scalar = hasScalar ? view.scalarDataF[i] : 0.0f;
+		out[i] = InstanceData{
+			pos.x, pos.y, pos.z, fluidRad,
+			hasScalar ? view.scalarDataF[i] : 0.0f,
+			{ 0.0f, 0.0f, 0.0f } };
 	}
 
 	// append rigid boundary instance data
@@ -132,14 +281,124 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 				volume,
 				simParams.particleSizeB,
 				visParams.render.rigidBoundaryRadiusScale);
-			out[dst].posAndRad = glm::vec4(pos, radius);
-			out[dst].scalar = 0.0f;
+			out[dst] = InstanceData{
+				pos.x, pos.y, pos.z, radius, 0.0f,
+				{ 0.0f, 0.0f, 0.0f } };
 			dst++;
 		}
 	}
 
 	// no need to flush, because buffer persistently mapped
 }
+
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+bool RenderingMgr::UpdateParticlesCUDA(
+	const Sync::VisualFrameReadCUDA& frame,
+	const Sim::SimParams& simParams,
+	const Vis::VisParams& visParams)
+{
+	N_fluidImpostorInstances_ = frame.N_F;
+	N_rigidBoundaryImpostorInstances_ = frame.N_RBP;
+
+	const uint32_t N_total =
+		N_fluidImpostorInstances_ + N_rigidBoundaryImpostorInstances_;
+
+	if (!interopReadyCUDA_ || !visualFrameMailboxCUDA_)
+	{
+		N_fluidImpostorInstances_ = 0;
+		N_rigidBoundaryImpostorInstances_ = 0;
+		return false;
+	}
+
+	// wait for the simulation stream to finish packing the frame
+	bool success = HandleErrorCUDA(
+		cudaStreamWaitEvent(renderStreamCUDA_, frame.ready, 0),
+		"cudaStreamWaitEvent() for visual snapshot");
+
+	// ensure capacity for fluid and rigid boundary particle instances
+	if (success && N_total > 0)
+	{
+		success = EnsureInstanceCapacityCUDA(N_total);
+	}
+
+	// map CUDA-OpenGL instance buffer
+	bool mapped = false;
+	InstanceData* out = nullptr;
+	if (success && N_total > 0)
+	{
+		mapped = HandleErrorCUDA(
+			cudaGraphicsMapResources(
+				1, &instanceResourceCUDA_, renderStreamCUDA_),
+			"cudaGraphicsMapResources() for particle instances");
+		success = mapped;
+	}
+
+	if (success && N_total > 0)
+	{
+		size_t mappedBytes = 0;
+		success = HandleErrorCUDA(
+			cudaGraphicsResourceGetMappedPointer(
+				reinterpret_cast<void**>(&out),
+				&mappedBytes,
+				instanceResourceCUDA_),
+			"cudaGraphicsResourceGetMappedPointer() for particle instances");
+		if (success && mappedBytes < static_cast<size_t>(N_total) * sizeof(InstanceData))
+		{
+			interopReadyCUDA_ = false;
+			visualFrameMailboxCUDA_->Disable("mapped OpenGL instance buffer is too small");
+			success = false;
+		}
+	}
+
+	const float fluidRad = simParams.particleSizeF * 0.5f;
+
+	// write fluid particles instance data first and append rigid boundary instance data
+	if (success && N_total > 0)
+	{
+		try
+		{
+			Launch_PackVisualInstancesCUDA(
+				frame.fluid, frame.rigid,
+				fluidRad,
+				simParams.particleSizeB,
+				visParams.render.rigidBoundaryRadiusScale,
+				frame.N_F, frame.N_RBP, renderStreamCUDA_, out);
+		}
+		catch (const std::exception& ex)
+		{
+			interopReadyCUDA_ = false;
+			visualFrameMailboxCUDA_->Disable(ex.what());
+			success = false;
+		}
+	}
+
+	// return instance buffer to OpenGL and release mailbox slot
+	if (mapped)
+	{
+		const bool unmapped = HandleErrorCUDA(
+			cudaGraphicsUnmapResources(
+				1, &instanceResourceCUDA_, renderStreamCUDA_),
+			"cudaGraphicsUnmapResources() for particle instances");
+		success = success && unmapped;
+	}
+
+	const bool released = visualFrameMailboxCUDA_->ReleaseRead(frame, renderStreamCUDA_);
+	if (!success || !released)
+	{
+		N_fluidImpostorInstances_ = 0;
+		N_rigidBoundaryImpostorInstances_ = 0;
+		return false;
+	}
+
+	// bind CUDA instance buffer for particle rendering
+	if (N_total > 0)
+	{
+		glVertexArrayVertexBuffer(
+			vao_, 1, vboInstancesCUDA_, 0, sizeof(InstanceData));
+	}
+	return true;
+}
+#endif
 
 void RenderingMgr::UpdateCentersOfMass(
 	const Vis::VisualSnapView& view,
@@ -675,13 +934,19 @@ void RenderingMgr::EnsureInstanceCapacity(uint32_t N_required)
 		GL_MAP_PERSISTENT_BIT |
 		GL_MAP_COHERENT_BIT;
 
-	// unmap and delete old buffer if existing
+	// immutable buffer storage cannot be allocated twice on the same object
 	if (mappedBase_)
 	{
 		glUnmapNamedBuffer(vboInstances_);
 		mappedBase_ = nullptr;
 		mappedSize_ = 0;
 	}
+	if (vboInstances_)
+	{
+		glDeleteBuffers(1, &vboInstances_);
+		vboInstances_ = 0;
+	}
+	glCreateBuffers(1, &vboInstances_);
 
 	glNamedBufferStorage(vboInstances_, newSize, nullptr, storageFlags);
 	mappedBase_ = static_cast<unsigned char*>(
@@ -697,6 +962,76 @@ void RenderingMgr::EnsureInstanceCapacity(uint32_t N_required)
 	// re-bind instance VBO to index 1
 	glVertexArrayVertexBuffer(vao_, 1, vboInstances_, 0, sizeof(InstanceData));
 }
+
+#ifdef TURBOSPHARTICLES_WITH_CUDA
+bool RenderingMgr::EnsureInstanceCapacityCUDA(const uint32_t N_required)
+{
+	if (N_required <= capacityCUDA_) { return true; }
+
+	// grow capacity to next power of two
+	uint64_t newCap = capacityCUDA_ ? capacityCUDA_ : 1024;
+	while (newCap < N_required) { newCap *= 2; }
+	uint64_t newSize = newCap * sizeof(InstanceData);
+
+	// unregister and delete old buffer if existing
+	if (instanceResourceCUDA_)
+	{
+		if (!HandleErrorCUDA(
+			cudaGraphicsUnregisterResource(instanceResourceCUDA_),
+			"cudaGraphicsUnregisterResource() while growing particle instances"))
+		{
+			return false;
+		}
+		instanceResourceCUDA_ = nullptr;
+	}
+	if (vboInstancesCUDA_)
+	{
+		glDeleteBuffers(1, &vboInstancesCUDA_);
+		vboInstancesCUDA_ = 0;
+	}
+
+	// create OpenGL instance buffer and register it with CUDA
+	glCreateBuffers(1, &vboInstancesCUDA_);
+	glNamedBufferData(
+		vboInstancesCUDA_,
+		static_cast<GLsizeiptr>(newSize),
+		nullptr,
+		GL_DYNAMIC_DRAW);
+
+	if (!HandleErrorCUDA(
+		cudaGraphicsGLRegisterBuffer(
+			&instanceResourceCUDA_,
+			vboInstancesCUDA_,
+			cudaGraphicsRegisterFlagsWriteDiscard),
+		"cudaGraphicsGLRegisterBuffer() for particle instances"))
+	{
+		glDeleteBuffers(1, &vboInstancesCUDA_);
+		vboInstancesCUDA_ = 0;
+		return false;
+	}
+
+	capacityCUDA_ = static_cast<uint32_t>(newCap);
+	return true;
+}
+
+bool RenderingMgr::HandleErrorCUDA(
+	const cudaError_t error,
+	const char* operation)
+{
+	if (error == cudaSuccess) { return true; }
+
+	SPDLOG_WARN(
+		"{} failed: {} ({}).",
+		operation,
+		cudaGetErrorString(error),
+		cudaGetErrorName(error));
+
+	// disable CUDA fast path after first interop error
+	interopReadyCUDA_ = false;
+	if (visualFrameMailboxCUDA_) { visualFrameMailboxCUDA_->Disable(operation); }
+	return false;
+}
+#endif
 
 void RenderingMgr::BuildWireframeEdgesFromOBB(const Scene::OBB& box, std::vector<glm::vec3>& dst)
 {
