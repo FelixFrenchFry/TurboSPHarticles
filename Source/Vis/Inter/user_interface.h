@@ -7,6 +7,7 @@
 // external
 #include <imgui.h>
 #include <string>
+#include <vector>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
@@ -182,6 +183,9 @@ namespace Inter
 			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
 
+		void BuildSection_VisualizationSettings(
+			const Vis::VisParams& visParams);
+
 		void BuildSection_SimulationControl(
 			const Sim::SimulationMgr& simulationMgr,
 			const Sim::SimParams& simParams,
@@ -203,6 +207,13 @@ namespace Inter
 			const Sync::BenchSnapshot* benchSnap,
 			const Bench::BenchOpList& benchOps,
 			const Sim::SimParams& simParams,
+			const Vis::VisParams& visParams);
+
+		// visualization setting elements
+		void BuildColorMapElement(
+			const char* label,
+			Base::ColorMap colorMap,
+			const std::vector<glm::vec4>& colorMapValues,
 			const Vis::VisParams& visParams);
 
 		// parameter section elements for parameter changes

@@ -78,8 +78,9 @@ namespace Vis
 			.alpha              = 1.0f,
 			.centerOfMassXRayAlpha = 0.5f,
 			.scalarMin          = 0.0f,
-			.scalarMax          = 1.0f,
-			.useScalar          = false,
+			.scalarMax          = 3.0f,
+			.colorMap           = Base::ColorMap::Turbo,
+			.scalarModeF        = Base::ColorCodingMode::VelocityMag,
 			.showFluidParticles = true,
 			.showRigidBoundaryParticles = true,
 			.showRigidBodyCentersOfMass = false,
@@ -129,7 +130,8 @@ namespace Vis
 		std::optional<float> centerOfMassXRayAlpha;
 		std::optional<float> scalarMin;
 		std::optional<float> scalarMax;
-		std::optional<bool> useScalar;
+		std::optional<Base::ColorMap> colorMap;
+		std::optional<Base::ColorCodingMode> scalarModeF;
 		std::optional<bool> showFluidParticles;
 		std::optional<bool> showRigidBoundaryParticles;
 		std::optional<bool> showRigidBodyCentersOfMass;

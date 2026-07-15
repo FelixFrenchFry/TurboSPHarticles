@@ -148,4 +148,10 @@ namespace Base
 		Pressure            // 3
 	};
 
+	enum class ColorMap : uint8_t
+	{
+		Turbo,              // 0
+		Blues               // 1
+	};
+
 } // namespace Base

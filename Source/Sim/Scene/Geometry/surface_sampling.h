@@ -59,6 +59,9 @@ namespace Scene
 
 	private: // --------------------------------------------------------------------------------------
 
+		// bounds temporary candidate and coverage probe buffers
+		static constexpr uint32_t N_samplingBatch = 1000000u;
+
 		void PreprocessMesh(const TriangleSurfaceMesh& mesh);
 		void SelectPoissonSamples();
 		void RepairCoverage();

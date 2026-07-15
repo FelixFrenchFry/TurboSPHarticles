@@ -135,7 +135,8 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	Base::MarkIfChanged(patch.centerOfMassXRayAlpha, params_.render.centerOfMassXRayAlpha, changed);
 	Base::MarkIfChanged(patch.scalarMin, params_.render.scalarMin, changed);
 	Base::MarkIfChanged(patch.scalarMax, params_.render.scalarMax, changed);
-	Base::MarkIfChanged(patch.useScalar, params_.render.useScalar, changed);
+	Base::MarkIfChanged(patch.colorMap, params_.render.colorMap, changed);
+	Base::MarkIfChanged(patch.scalarModeF, params_.render.scalarModeF, changed);
 	Base::MarkIfChanged(patch.showFluidParticles, params_.render.showFluidParticles, changed);
 	Base::MarkIfChanged(patch.showRigidBoundaryParticles, params_.render.showRigidBoundaryParticles, changed);
 	Base::MarkIfChanged(patch.showRigidBodyCentersOfMass, params_.render.showRigidBodyCentersOfMass, changed);
@@ -155,7 +156,8 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (patch.centerOfMassXRayAlpha) { params_.render.centerOfMassXRayAlpha = *patch.centerOfMassXRayAlpha; }
 	if (patch.scalarMin) { params_.render.scalarMin = *patch.scalarMin; }
 	if (patch.scalarMax) { params_.render.scalarMax = *patch.scalarMax; }
-	if (patch.useScalar) { params_.render.useScalar = *patch.useScalar; }
+	if (patch.colorMap) { params_.render.colorMap = *patch.colorMap; }
+	if (patch.scalarModeF) { params_.render.scalarModeF = *patch.scalarModeF; }
 	if (patch.showFluidParticles) { params_.render.showFluidParticles = *patch.showFluidParticles; }
 	if (patch.showRigidBoundaryParticles) { params_.render.showRigidBoundaryParticles = *patch.showRigidBoundaryParticles; }
 	if (patch.showRigidBodyCentersOfMass) { params_.render.showRigidBodyCentersOfMass = *patch.showRigidBodyCentersOfMass; }

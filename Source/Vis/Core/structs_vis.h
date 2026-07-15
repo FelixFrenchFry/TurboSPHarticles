@@ -92,7 +92,8 @@ namespace Vis
 		float centerOfMassXRayAlpha;
 		float scalarMin;
 		float scalarMax;
-		bool useScalar;
+		Base::ColorMap colorMap;
+		Base::ColorCodingMode scalarModeF;
 		bool showFluidParticles;
 		bool showRigidBoundaryParticles;
 		bool showRigidBodyCentersOfMass;

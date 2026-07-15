@@ -566,7 +566,7 @@ void SimulationMgr::PublishVisualSnapshot()
 	auto visSnap = std::make_shared<Sync::VisualSnapshot>();
 	visSnap->simStep = simStep_;
 	visSnap->boxesB = simScenario_->GetBoundaryBoxes();
-	// TODO: visSnap->scalarModeF = Base::ColorCodingMode::VelocityMag;
+	visSnap->scalarModeF = visualScalarMode_.load(std::memory_order_acquire);
 
 	// optionally pack particle data into CUDA-device buffers for OpenGL without going through the host
 #ifdef TURBOSPHARTICLES_WITH_CUDA

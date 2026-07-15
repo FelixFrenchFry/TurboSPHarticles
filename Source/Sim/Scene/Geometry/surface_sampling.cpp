@@ -21,9 +21,6 @@
 
 namespace
 {
-	// bounds temporary candidate and coverage probe buffers
-	constexpr uint32_t N_samplingBatch = 262144u;
-
 	// preprocessed triangle geometry shared by all sampling stages
 	struct TriangleData
 	{

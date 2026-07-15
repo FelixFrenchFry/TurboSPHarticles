@@ -16,6 +16,7 @@
 // internal
 #include "Source/Base/helpers.h"
 #include "Source/Vis/Assets/iosevka_compressed.h"
+#include "Source/Vis/Render/rendering.h"
 #include "user_interface.h"
 
 
@@ -126,6 +127,11 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 	if (ImGui::CollapsingHeader("Simulation Parameters"))
 	{
 		BuildSection_SimulationParameters(simulationMgr, simParams, visParams);
+	}
+
+	if (ImGui::CollapsingHeader("Visualization Settings", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		BuildSection_VisualizationSettings(visParams);
 	}
 
 	if (ImGui::CollapsingHeader("Simulation Statistics"))
@@ -286,6 +292,129 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 		ImGui::TreePop();
 	}
 	ImGui::Spacing();
+}
+
+void UserInterfaceMgr::BuildSection_VisualizationSettings(
+	const Vis::VisParams& visParams)
+{
+	ImGui::Spacing();
+
+	if (ImGui::TreeNode("color coding"))
+	{
+		// select fluid particle color coding mode
+		bool none = visParams.render.scalarModeF == Base::ColorCodingMode::None;
+		if (ImGui::Checkbox("##checkbox_scalarModeNone", &none) && none)
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.scalarModeF = Base::ColorCodingMode::None
+				});
+		}
+		ImGui::SameLine();
+
+		// adjust fluid particle opacity
+		float alpha = visParams.render.alpha;
+		ImGui::SetNextItemWidth(170.0f);
+		if (ImGui::InputFloat(" none##input_alpha",
+			&alpha, 0.1f, 0.1f, "%.2f"))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.alpha = std::clamp(alpha, 0.0f, 1.0f)
+				});
+		}
+
+		bool velocityMag =
+			visParams.render.scalarModeF == Base::ColorCodingMode::VelocityMag;
+		if (ImGui::Checkbox("##checkbox_scalarModeVelocityMag", &velocityMag))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.scalarModeF = velocityMag
+						? Base::ColorCodingMode::VelocityMag
+						: Base::ColorCodingMode::None
+				});
+		}
+		ImGui::SameLine();
+
+		// adjust upper velocity magnitude mapped to the color map
+		float scalarMax = visParams.render.scalarMax;
+		ImGui::SetNextItemWidth(170.0f);
+		if (ImGui::InputFloat(" velocity mag##input_scalarMax",
+			&scalarMax, 0.1f, 1.0f, "%.2f"))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.scalarMax = std::max(scalarMax, 0.01f)
+				});
+		}
+
+		ImGui::TreePop();
+	}
+
+	if (ImGui::TreeNode("color gradient"))
+	{
+		static const auto colorMapTurbo = Render::RenderingMgr::BuildColorMap_Turbo();
+		static const auto colorMapBlues = Render::RenderingMgr::BuildColorMap_Blues();
+
+		// select color map and show its gradient
+		BuildColorMapElement("turbo", Base::ColorMap::Turbo,
+			colorMapTurbo, visParams);
+		BuildColorMapElement("blues", Base::ColorMap::Blues,
+			colorMapBlues, visParams);
+
+		ImGui::TreePop();
+	}
+	ImGui::Spacing();
+}
+
+void UserInterfaceMgr::BuildColorMapElement(
+	const char* label,
+	Base::ColorMap colorMap,
+	const std::vector<glm::vec4>& colorMapValues,
+	const Vis::VisParams& visParams)
+{
+	ImGui::PushID(label);
+
+	bool selected = visParams.render.colorMap == colorMap;
+	if (ImGui::Checkbox("##checkbox", &selected) && selected)
+	{
+		visParamsMgr_.SetParam(Vis::RenderPatch
+			{
+				.colorMap = colorMap
+			});
+	}
+	ImGui::SameLine();
+
+	// draw color map preview from its lookup-table entries
+	const ImVec2 previewMin = ImGui::GetCursorScreenPos();
+	const ImVec2 previewSize{ 225.0f, ImGui::GetFrameHeight() };
+	ImGui::Dummy(previewSize);
+	if (colorMapValues.size() > 1)
+	{
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		for (uint32_t i = 0; i < colorMapValues.size() - 1; i++)
+		{
+			const float x0 = previewMin.x + previewSize.x *
+				static_cast<float>(i) / static_cast<float>(colorMapValues.size() - 1);
+			const float x1 = previewMin.x + previewSize.x *
+				static_cast<float>(i + 1) / static_cast<float>(colorMapValues.size() - 1);
+			const auto& color0 = colorMapValues[i];
+			const auto& color1 = colorMapValues[i + 1];
+			const ImU32 colorLeft = ImGui::ColorConvertFloat4ToU32(
+				ImVec4{ color0.r, color0.g, color0.b, color0.a });
+			const ImU32 colorRight = ImGui::ColorConvertFloat4ToU32(
+				ImVec4{ color1.r, color1.g, color1.b, color1.a });
+			drawList->AddRectFilledMultiColor(
+				ImVec2{ x0, previewMin.y },
+				ImVec2{ x1, previewMin.y + previewSize.y },
+				colorLeft, colorRight, colorRight, colorLeft);
+		}
+	}
+
+	ImGui::SameLine();
+	ImGui::Text(" %s", label);
+	ImGui::PopID();
 }
 
 void UserInterfaceMgr::BuildSection_SimulationControl(
