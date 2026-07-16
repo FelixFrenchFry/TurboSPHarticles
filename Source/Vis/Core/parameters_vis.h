@@ -67,25 +67,25 @@ namespace Vis
 
 		RenderConfig render
 		{
-			.lightDirVS         = {0.3f, 0.6f, 0.6f},
-			.clearColor         = {0.15f, 0.15f, 0.15f, 1.0f},
-			.baseColor          = {0.2f, 0.4f, 1.0f},
-			.rigidBoundaryColor = {0.7f, 0.7f, 0.7f},
+			.lightDirVS             = {0.3f, 0.6f, 0.6f},
+			.clearColor             = {0.2f, 0.2f, 0.2f, 1.0f},
+			.baseColor              = {0.2f, 0.4f, 1.0f},
+			.rigidBoundaryColor     = {0.65f, 0.65f, 0.65f},
 			.centerOfMassXAxisColor = {250.0f / 255.0f, 0.0f, 50.0f / 255.0f},
 			.centerOfMassYAxisColor = {40.0f / 255.0f, 180.0f / 255.0f, 80.0f / 255.0f},
 			.centerOfMassZAxisColor = {40.0f / 255.0f, 80.0f / 255.0f, 180.0f / 255.0f},
-			.lineColor          = {1.0f, 1.0f, 1.0f},
-			.alpha              = 1.0f,
-			.centerOfMassXRayAlpha = 0.5f,
-			.scalarMin          = 0.0f,
-			.scalarMax          = 3.0f,
-			.colorMap           = Base::ColorMap::Blues,
-			.scalarModeF        = Base::ColorCodingMode::VelocityMag,
-			.showFluidParticles = true,
+			.lineColor              = {1.0f, 1.0f, 1.0f},
+			.alpha                  = 1.0f,
+			.centerOfMassXRayAlpha  = 0.5f,
+			.scalarMin              = 0.0f,
+			.scalarMax              = 3.0f,
+			.colorMap               = Base::ColorMap::Blues,
+			.scalarModeF            = Base::ColorCodingMode::VelocityMag,
+			.showFluidParticles     = true,
 			.showRigidBoundaryParticles = true,
 			.showRigidBodyCentersOfMass = false,
-			.rigidBoundaryRadiusScale   = 1.0f,
-			.lineWidth          = 0.02f
+			.rigidBoundaryRadiusScale = 1.0f,
+			.lineWidth              = 0.02f
 		};
 	};
 
