@@ -16,6 +16,7 @@
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Vis/Core/parameters_vis.h"
+#include "color_maps.h"
 
 
 
@@ -82,10 +83,16 @@ namespace Render
 		void UpdateWireframes(const Vis::VisualSnapView& view,
 							  const Vis::VisParams& params);
 
-		// upload a new 256-entry RGBA colormap (assumed to be sRGB)
-		void UpdateColorMap(const std::vector<glm::vec4>& colorMap256);
-		static std::vector<glm::vec4> BuildColorMap_Turbo();
-		static std::vector<glm::vec4> BuildColorMap_Blues();
+		// upload a new 256-entry RGB color map (assumed to be sRGB)
+		void UpdateColorMap(const ColorMapData& colorMap);
+		static const ColorMapData& GetColorMap_Turbo();
+		static const ColorMapData& GetColorMap_Viridis();
+		static const ColorMapData& GetColorMap_Inferno();
+		static const ColorMapData& GetColorMap_Fast();
+		static const ColorMapData& GetColorMap_Coolwarm();
+		static const ColorMapData& GetColorMap_Blues();
+		static const ColorMapData& GetColorMap_Aurora();
+		static const ColorMapData& GetColorMap_Earth();
 
 		// draw the particles in the current frame (as imposter spheres)
 		void Render(const Vis::RenderConfig& render, const Vis::CameraState& cam);
@@ -102,7 +109,7 @@ namespace Render
 		GLuint vboInstances_ = 0;           // instance data
 		GLuint progSphereImpostors_ = 0;    // impostor sphere shader program
 		GLuint texColorMap_ = 0;            // color lookup-table
-		Base::ColorMap colorMap_ = Base::ColorMap::Turbo; // currently uploaded color map
+		Base::ColorMap colorMap_ = Base::ColorMap::Blues; // currently uploaded color map
 
 		// addresses of GL objects (cuboids -> rigid body centers of mass)
 		GLuint vaoCenterOfMass_ = 0;

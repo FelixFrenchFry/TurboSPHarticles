@@ -7,12 +7,12 @@
 // external
 #include <imgui.h>
 #include <string>
-#include <vector>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Core/simulation.h"
 #include "Source/Vis/Core/parameters_vis.h"
+#include "Source/Vis/Render/color_maps.h"
 
 // forward declarations
 struct GLFWwindow;
@@ -213,7 +213,7 @@ namespace Inter
 		void BuildColorMapElement(
 			const char* label,
 			Base::ColorMap colorMap,
-			const std::vector<glm::vec4>& colorMapValues,
+			const Render::ColorMapData& colorMapValues,
 			const Vis::VisParams& visParams);
 
 		// parameter section elements for parameter changes

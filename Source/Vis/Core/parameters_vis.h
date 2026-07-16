@@ -79,7 +79,7 @@ namespace Vis
 			.centerOfMassXRayAlpha = 0.5f,
 			.scalarMin          = 0.0f,
 			.scalarMax          = 3.0f,
-			.colorMap           = Base::ColorMap::Turbo,
+			.colorMap           = Base::ColorMap::Blues,
 			.scalarModeF        = Base::ColorCodingMode::VelocityMag,
 			.showFluidParticles = true,
 			.showRigidBoundaryParticles = true,

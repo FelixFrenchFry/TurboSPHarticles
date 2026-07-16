@@ -3,7 +3,6 @@
 // external
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <exception>
 #include <glad/glad.h>
@@ -109,7 +108,7 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 	#endif
 
 	// upload default color map for scalar particle data
-	UpdateColorMap(BuildColorMap_Turbo());
+	UpdateColorMap(GetColorMap_Blues());
 
 	// enable alpha blending for transparency
 	glEnable(GL_BLEND);
@@ -442,82 +441,51 @@ void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::
 	glNamedBufferData(vboLines_, bytes, lineVertices.data(), GL_DYNAMIC_DRAW);
 }
 
-void RenderingMgr::UpdateColorMap(const std::vector<glm::vec4>& colorMap256)
+void RenderingMgr::UpdateColorMap(const ColorMapData& colorMap)
 {
-	if (colorMap256.size() != 256)
-	{
-		SPDLOG_WARN("Cannot update colormap: Expected 256 entries, got {}.",
-			colorMap256.size());
-		return;
-	}
-
-	glTextureSubImage1D(texColorMap_, 0, 0, 256, GL_RGBA, GL_FLOAT,
-		colorMap256.data());
+	glTextureSubImage1D(texColorMap_, 0, 0, 256, GL_RGB, GL_UNSIGNED_BYTE,
+		colorMap.data());
 }
 
-// builds Google's Turbo color map from its polynomial approximation
-std::vector<glm::vec4> RenderingMgr::BuildColorMap_Turbo()
+// provide the color map lookup tables to rendering and the user interface
+const ColorMapData& RenderingMgr::GetColorMap_Turbo()
 {
-	const glm::vec4 red4{ 0.13572138f, 4.61539260f, -42.66032258f, 132.13108234f };
-	const glm::vec4 green4{ 0.09140261f, 2.19418839f, 4.84296658f, -14.18503333f };
-	const glm::vec4 blue4{ 0.10667330f, 12.64194608f, -60.58204836f, 110.36276771f };
-	const glm::vec2 red2{ -152.94239396f, 59.28637943f };
-	const glm::vec2 green2{ 4.27729857f, 2.82956604f };
-	const glm::vec2 blue2{ -89.90310912f, 27.34824973f };
-
-	// evaluate the polynomial at each color lookup-table entry
-	std::vector<glm::vec4> colorMap(256);
-	for (uint32_t i = 0; i < colorMap.size(); i++)
-	{
-		const float x = static_cast<float>(i) /
-			static_cast<float>(colorMap.size() - 1);
-		const float x2 = x * x;
-		const glm::vec4 x4{ 1.0f, x, x2, x2 * x };
-		const glm::vec2 x2High{ x2 * x2, x2 * x2 * x };
-		const glm::vec3 color
-		{
-			glm::dot(x4, red4) + glm::dot(x2High, red2),
-			glm::dot(x4, green4) + glm::dot(x2High, green2),
-			glm::dot(x4, blue4) + glm::dot(x2High, blue2)
-		};
-		colorMap[i] = glm::vec4(glm::clamp(color, 0.0f, 1.0f), 1.0f);
-	}
-	return colorMap;
+	return Color::Turbo;
 }
 
-// builds Matplotlib's Blues color map from its control colors
-std::vector<glm::vec4> RenderingMgr::BuildColorMap_Blues()
+const ColorMapData& RenderingMgr::GetColorMap_Viridis()
 {
-	const std::array<glm::vec3, 9> controlColors
-	{
-		glm::vec3{ 8.0f, 48.0f, 107.0f } / 255.0f,
-		glm::vec3{ 8.0f, 81.0f, 156.0f } / 255.0f,
-		glm::vec3{ 33.0f, 113.0f, 181.0f } / 255.0f,
-		glm::vec3{ 66.0f, 146.0f, 198.0f } / 255.0f,
-		glm::vec3{ 107.0f, 174.0f, 214.0f } / 255.0f,
-		glm::vec3{ 158.0f, 202.0f, 225.0f } / 255.0f,
-		glm::vec3{ 198.0f, 219.0f, 239.0f } / 255.0f,
-		glm::vec3{ 222.0f, 235.0f, 247.0f } / 255.0f,
-		glm::vec3{ 247.0f, 251.0f, 255.0f } / 255.0f
-	};
+	return Color::Viridis;
+}
 
-	// interpolate the control colors at each color lookup-table entry
-	std::vector<glm::vec4> colorMap(256);
-	for (uint32_t i = 0; i < colorMap.size(); i++)
-	{
-		const float x = static_cast<float>(i) /
-			static_cast<float>(colorMap.size() - 1);
-		const float controlPosition = x *
-			static_cast<float>(controlColors.size() - 1);
-		const uint32_t lowerIdx = std::min(
-			static_cast<uint32_t>(controlPosition),
-			static_cast<uint32_t>(controlColors.size() - 2));
-		const float blend = controlPosition - static_cast<float>(lowerIdx);
-		const glm::vec3 color = controlColors[lowerIdx] + blend *
-			(controlColors[lowerIdx + 1] - controlColors[lowerIdx]);
-		colorMap[i] = glm::vec4(color, 1.0f);
-	}
-	return colorMap;
+const ColorMapData& RenderingMgr::GetColorMap_Inferno()
+{
+	return Color::Inferno;
+}
+
+const ColorMapData& RenderingMgr::GetColorMap_Fast()
+{
+	return Color::Fast;
+}
+
+const ColorMapData& RenderingMgr::GetColorMap_Coolwarm()
+{
+	return Color::Coolwarm;
+}
+
+const ColorMapData& RenderingMgr::GetColorMap_Blues()
+{
+	return Color::Blues;
+}
+
+const ColorMapData& RenderingMgr::GetColorMap_Aurora()
+{
+	return Color::Aurora;
+}
+
+const ColorMapData& RenderingMgr::GetColorMap_Earth()
+{
+	return Color::Earth;
 }
 
 void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraState& cam)
@@ -528,10 +496,28 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 		switch (render.colorMap)
 		{
 		case Base::ColorMap::Turbo:
-			UpdateColorMap(BuildColorMap_Turbo());
+			UpdateColorMap(GetColorMap_Turbo());
+			break;
+		case Base::ColorMap::Viridis:
+			UpdateColorMap(GetColorMap_Viridis());
+			break;
+		case Base::ColorMap::Inferno:
+			UpdateColorMap(GetColorMap_Inferno());
+			break;
+		case Base::ColorMap::Fast:
+			UpdateColorMap(GetColorMap_Fast());
+			break;
+		case Base::ColorMap::Coolwarm:
+			UpdateColorMap(GetColorMap_Coolwarm());
 			break;
 		case Base::ColorMap::Blues:
-			UpdateColorMap(BuildColorMap_Blues());
+			UpdateColorMap(GetColorMap_Blues());
+			break;
+		case Base::ColorMap::Aurora:
+			UpdateColorMap(GetColorMap_Aurora());
+			break;
+		case Base::ColorMap::Earth:
+			UpdateColorMap(GetColorMap_Earth());
 			break;
 		}
 		colorMap_ = render.colorMap;

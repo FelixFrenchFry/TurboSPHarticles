@@ -151,7 +151,13 @@ namespace Base
 	enum class ColorMap : uint8_t
 	{
 		Turbo,              // 0
-		Blues               // 1
+		Viridis,            // 1
+		Inferno,            // 2
+		Fast,               // 3
+		Coolwarm,           // 4
+		Blues,              // 5
+		Aurora,             // 6
+		Earth               // 7
 	};
 
 } // namespace Base

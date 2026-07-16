@@ -129,7 +129,7 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 		BuildSection_SimulationParameters(simulationMgr, simParams, visParams);
 	}
 
-	if (ImGui::CollapsingHeader("Visualization Settings", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader("Visualization Settings"))
 	{
 		BuildSection_VisualizationSettings(visParams);
 	}
@@ -354,14 +354,32 @@ void UserInterfaceMgr::BuildSection_VisualizationSettings(
 
 	if (ImGui::TreeNode("color gradient"))
 	{
-		static const auto colorMapTurbo = Render::RenderingMgr::BuildColorMap_Turbo();
-		static const auto colorMapBlues = Render::RenderingMgr::BuildColorMap_Blues();
+		const auto& colorMapTurbo = Render::RenderingMgr::GetColorMap_Turbo();
+		const auto& colorMapViridis = Render::RenderingMgr::GetColorMap_Viridis();
+		const auto& colorMapInferno = Render::RenderingMgr::GetColorMap_Inferno();
+		const auto& colorMapFast = Render::RenderingMgr::GetColorMap_Fast();
+		const auto& colorMapCoolwarm = Render::RenderingMgr::GetColorMap_Coolwarm();
+		const auto& colorMapBlues = Render::RenderingMgr::GetColorMap_Blues();
+		const auto& colorMapAurora = Render::RenderingMgr::GetColorMap_Aurora();
+		const auto& colorMapEarth = Render::RenderingMgr::GetColorMap_Earth();
 
 		// select color map and show its gradient
 		BuildColorMapElement("turbo", Base::ColorMap::Turbo,
 			colorMapTurbo, visParams);
+		BuildColorMapElement("viridis", Base::ColorMap::Viridis,
+			colorMapViridis, visParams);
+		BuildColorMapElement("inferno", Base::ColorMap::Inferno,
+			colorMapInferno, visParams);
+		BuildColorMapElement("fast", Base::ColorMap::Fast,
+			colorMapFast, visParams);
+		BuildColorMapElement("coolwarm", Base::ColorMap::Coolwarm,
+			colorMapCoolwarm, visParams);
 		BuildColorMapElement("blues", Base::ColorMap::Blues,
 			colorMapBlues, visParams);
+		BuildColorMapElement("aurora", Base::ColorMap::Aurora,
+			colorMapAurora, visParams);
+		BuildColorMapElement("earth", Base::ColorMap::Earth,
+			colorMapEarth, visParams);
 
 		ImGui::TreePop();
 	}
@@ -371,7 +389,7 @@ void UserInterfaceMgr::BuildSection_VisualizationSettings(
 void UserInterfaceMgr::BuildColorMapElement(
 	const char* label,
 	Base::ColorMap colorMap,
-	const std::vector<glm::vec4>& colorMapValues,
+	const Render::ColorMapData& colorMapValues,
 	const Vis::VisParams& visParams)
 {
 	ImGui::PushID(label);
@@ -390,26 +408,21 @@ void UserInterfaceMgr::BuildColorMapElement(
 	const ImVec2 previewMin = ImGui::GetCursorScreenPos();
 	const ImVec2 previewSize{ 225.0f, ImGui::GetFrameHeight() };
 	ImGui::Dummy(previewSize);
-	if (colorMapValues.size() > 1)
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	for (uint32_t i = 0; i < colorMapValues.size() - 1; i++)
 	{
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		for (uint32_t i = 0; i < colorMapValues.size() - 1; i++)
-		{
-			const float x0 = previewMin.x + previewSize.x *
-				static_cast<float>(i) / static_cast<float>(colorMapValues.size() - 1);
-			const float x1 = previewMin.x + previewSize.x *
-				static_cast<float>(i + 1) / static_cast<float>(colorMapValues.size() - 1);
-			const auto& color0 = colorMapValues[i];
-			const auto& color1 = colorMapValues[i + 1];
-			const ImU32 colorLeft = ImGui::ColorConvertFloat4ToU32(
-				ImVec4{ color0.r, color0.g, color0.b, color0.a });
-			const ImU32 colorRight = ImGui::ColorConvertFloat4ToU32(
-				ImVec4{ color1.r, color1.g, color1.b, color1.a });
-			drawList->AddRectFilledMultiColor(
-				ImVec2{ x0, previewMin.y },
-				ImVec2{ x1, previewMin.y + previewSize.y },
-				colorLeft, colorRight, colorRight, colorLeft);
-		}
+		const float x0 = previewMin.x + previewSize.x *
+			static_cast<float>(i) / static_cast<float>(colorMapValues.size() - 1);
+		const float x1 = previewMin.x + previewSize.x *
+			static_cast<float>(i + 1) / static_cast<float>(colorMapValues.size() - 1);
+		const auto& color0 = colorMapValues[i];
+		const auto& color1 = colorMapValues[i + 1];
+		const ImU32 colorLeft = IM_COL32(color0.r, color0.g, color0.b, 255);
+		const ImU32 colorRight = IM_COL32(color1.r, color1.g, color1.b, 255);
+		drawList->AddRectFilledMultiColor(
+			ImVec2{ x0, previewMin.y },
+			ImVec2{ x1, previewMin.y + previewSize.y },
+			colorLeft, colorRight, colorRight, colorLeft);
 	}
 
 	ImGui::SameLine();
