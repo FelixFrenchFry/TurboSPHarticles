@@ -14,8 +14,6 @@ namespace GPU01
 {
 	namespace
 	{
-		constexpr uint32_t InvalidRigidBoundaryParticleIdx = 0xffffffffu;
-
 		__global__
 		void K_PackFluidVisualSamples(
 			const float* __restrict__ xPos,
@@ -66,20 +64,14 @@ namespace GPU01
 			const float* __restrict__ yPos,
 			const float* __restrict__ zPos,
 			const float* __restrict__ volume,
-			const uint32_t* __restrict__ rigidBoundaryParticleIdx,
-			const uint32_t N_B,
-			const uint32_t N_RBP,
+			const uint32_t N,
 			Sync::VisualParticleSample* __restrict__ dst)
 		{
 			const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-			if (i >= N_B) { return; }
+			if (i >= N) { return; }
 
-			// map boundary particle to packed rigid boundary particle index
-			const uint32_t dstIdx = rigidBoundaryParticleIdx[i];
-			if (dstIdx == InvalidRigidBoundaryParticleIdx || dstIdx >= N_RBP) { return; }
-
-			// pack rigid boundary particle into visual sample
-			dst[dstIdx] = Sync::VisualParticleSample{ xPos[i], yPos[i], zPos[i], volume[i] };
+			// pack rigid particle into visual sample
+			dst[i] = Sync::VisualParticleSample{ xPos[i], yPos[i], zPos[i], volume[i] };
 		}
 
 	} // namespace anonymous
@@ -88,11 +80,10 @@ namespace GPU01
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xVelF, const float* yVelF, const float* zVelF,
 		const float* densityF, const float* pressureF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* volB,
-		const uint32_t* rigidBoundaryParticleIdxB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
+		const float* volR,
 		const Base::ColorCodingMode scalarMode,
-		const uint32_t N_F, const uint32_t N_B, const uint32_t N_RBP,
+		const uint32_t N_F, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		Sync::VisualParticleSample* fluidDst,
@@ -110,14 +101,12 @@ namespace GPU01
 			GPU::CheckLastKernel("K_PackFluidVisualSamples()");
 		}
 
-		// clear and pack rigid boundary particles into visual samples
-		if (N_RBP > 0 && N_B > 0)
+		// pack rigid particles into visual samples
+		if (N_R > 0)
 		{
-			GPU::MemsetZero(rigidDst, N_RBP, stream);
-			const uint32_t N_GRIDSIZE = (N_B + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 			K_PackRigidVisualSamples<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-				xPosB, yPosB, zPosB, volB, rigidBoundaryParticleIdxB,
-				N_B, N_RBP, rigidDst);
+				xPosR, yPosR, zPosR, volR, N_R, rigidDst);
 			GPU::CheckLastKernel("K_PackRigidVisualSamples()");
 		}
 	}

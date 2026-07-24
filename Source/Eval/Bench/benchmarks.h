@@ -6,6 +6,7 @@
 
 // external
 #include <chrono>
+#include <cstdint>
 #include <deque>
 
 // internal
@@ -27,7 +28,7 @@ namespace Bench
 		void BeginStep();
 
 		// pushes the record to history and aggregates step's bench data
-		void EndStep(uint32_t simStep, double simTime);
+		void EndStep(uint64_t simStep, double simTime);
 
 		// timing start/stop for one operation
 		void StartBench(BenchOp op);

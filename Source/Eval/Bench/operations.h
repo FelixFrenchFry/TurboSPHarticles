@@ -249,7 +249,7 @@ namespace Bench
 	struct BenchRecordStep
 	{
 		// metadata
-		uint32_t simStep = 0;
+		uint64_t simStep = 0;
 		double simTime = 0.0;
 
 		// operation timings

@@ -1,6 +1,4 @@
 // snapshots.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -24,12 +22,8 @@ namespace Sync
 {
 	// data structure for serializing the simulation state,
 	// (including a minimal subset of the data required to reconstruct the full state, enabling lossless save & load)
-	// TODO: how to deal with simulation method-specific data?
-	// TODO: how to deal with backend-specific data?
 	struct SerialSnapshot
 	{
-		// TODO: implement properly
-
 		// positions
 		std::vector<float> xPos;
 		std::vector<float> yPos;
@@ -73,10 +67,10 @@ namespace Sync
 	struct ExportSnapshot
 	{
 		// metadata
-		uint32_t simStep;
+		uint64_t simStep;
 		double simTime;
 
-		// data for fluid particles export
+		// data for fluid particle export
 		uint32_t N_F;
 		std::vector<uint32_t> idF;
 		std::vector<float> xPosF;
@@ -84,14 +78,22 @@ namespace Sync
 		std::vector<float> zPosF;
 		std::vector<float> velMagF;
 
-		// data for boundary particles export
+		// data for boundary particle export
 		uint32_t N_B;
 		std::vector<uint32_t> idB;
-		std::vector<uint32_t> bodyIdB;
 		std::vector<float> xPosB;
 		std::vector<float> yPosB;
 		std::vector<float> zPosB;
 		std::vector<float> volB;
+
+		// data for rigid particle export
+		uint32_t N_R;
+		std::vector<uint32_t> idR;
+		std::vector<uint32_t> bodyIdR;
+		std::vector<float> xPosR;
+		std::vector<float> yPosR;
+		std::vector<float> zPosR;
+		std::vector<float> volR;
 	};
 
 	// data structure for visualizing parts of the simulation state interactively
@@ -99,7 +101,7 @@ namespace Sync
 	struct VisualSnapshot
 	{
 		// metadata
-		uint32_t simStep;                   // simulation step at this snapshot
+		uint64_t simStep;                   // simulation step at this snapshot
 
 		// data for fluid particle vis
 		uint32_t N_F;                       // number of fluid particles
@@ -107,23 +109,27 @@ namespace Sync
 		std::vector<float> scalarDataF;     // data according to color coding mode
 		Base::ColorCodingMode scalarModeF;  // color coding mode
 
-		// data for rigid body vis
-		uint32_t N_R;                       // number of rigid bodies
-		std::vector<glm::vec3> centerOfMassR;
-		std::vector<glm::mat3> orientationR;
-
-		// data for boundary particles and boundary structures vis
+		// data for boundary structures vis
 		uint32_t N_B;                       // number of boundary particles
 		std::vector<glm::vec3> posB;        // positions of all boundary particles
 		std::vector<float> volB;            // contribution volumes of all boundary particles
-		std::vector<uint32_t> bodyIdB;      // rigid body ownership for boundary particles
 		std::vector<Scene::OBB> boxesB;     // OBBs of boundary structures
+
+		// data for rigid particle vis
+		uint32_t N_R;                       // number of rigid particles
+		std::vector<glm::vec3> posR;        // positions of all rigid particles
+		std::vector<float> volR;            // contribution volumes of all rigid particles
+
+		// data for rigid body vis
+		uint32_t N_RB;                      // number of rigid bodies
+		std::vector<glm::vec3> centerOfMassRB;
+		std::vector<glm::mat3> orientationRB;
 	};
 
 	struct BenchSnapshot
 	{
 		// metadata
-		uint32_t simStep;
+		uint64_t simStep;
 		double simTime;
 
 		// per-operation timings
@@ -137,7 +143,7 @@ namespace Sync
 	struct MemSnapshot
 	{
 		// metadata
-		uint32_t simStep;
+		uint64_t simStep;
 		double simTime;
 
 		// per-space / per-bucket memory usage
@@ -148,7 +154,7 @@ namespace Sync
 	struct StatSnapshot
 	{
 		// metadata
-		uint32_t simStep;
+		uint64_t simStep;
 		double simTime;
 
 		// per-metric stat data

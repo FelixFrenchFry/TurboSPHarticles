@@ -1,6 +1,7 @@
 // mailboxes_cuda.h
 
 #pragma once
+
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 
 // external
@@ -38,7 +39,7 @@ namespace Sync
 		const VisualParticleSample* fluid = nullptr;
 		const VisualParticleSample* rigid = nullptr;
 		uint32_t N_F = 0;
-		uint32_t N_RBP = 0;
+		uint32_t N_R = 0;
 		cudaEvent_t ready = nullptr;
 		std::shared_ptr<VisualSnapshot> auxiliarySnap{};
 	};
@@ -60,7 +61,7 @@ namespace Sync
 
 		bool TryAcquireWrite(
 			uint32_t N_F,
-			uint32_t N_RBP,
+			uint32_t N_R,
 			VisualFrameWriteCUDA& dst);
 
 		bool Publish(

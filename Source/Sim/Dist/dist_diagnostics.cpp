@@ -34,12 +34,12 @@ namespace
 		"--------------------------------------------------------------------------------";
 
 	using steady_clock = std::chrono::steady_clock;
-	using Sample = std::pair<uint32_t, steady_clock::time_point>;
+	using Sample = std::pair<uint64_t, steady_clock::time_point>;
 
 	struct ProgressState
 	{
 		bool initialized = false;
-		uint32_t lastStep = 0;
+		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
 		std::deque<Sample> history{};
 		int lastNumLines = 0;
@@ -1044,7 +1044,7 @@ namespace
 			state.lastStep = 0;
 		}
 
-		const uint32_t step = reports.front().step;
+		const uint64_t step = reports.front().step;
 		if (step <= state.lastStep) { return; }
 		state.lastStep = step;
 
@@ -1063,7 +1063,7 @@ namespace
 			const auto& newest = state.history.back();
 			const double dt =
 				std::chrono::duration<double>(newest.second - oldest.second).count();
-			const uint32_t ds = newest.first - oldest.first;
+			const uint64_t ds = newest.first - oldest.first;
 
 			if (dt > 1e-14 && ds > 0)
 			{
@@ -1077,11 +1077,12 @@ namespace
 
 		const int64_t maxSteps = reports.front().maxSteps;
 		const bool hasTotal = maxSteps > 0;
+		const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
 		double percent = 0.0;
 		if (hasTotal)
 		{
 			const double progress = std::min(1.0, std::max(0.0,
-				static_cast<double>(step) / static_cast<double>(maxSteps)));
+				static_cast<double>(step) / static_cast<double>(maxStepsU)));
 			percent = progress * 100.0;
 		}
 
@@ -1118,14 +1119,14 @@ namespace
 		if (hasTotal)
 		{
 			PrintLine(lineCount,
-				"%02d:%02d:%02d elapsed | %u/%lld steps (%.1f %%) | %.3f steps/s (recently)",
+				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s (recently)",
 				elH, elM, elS,
-				step, static_cast<long long>(maxSteps), percent, stepsPerSec);
+				step, maxSteps, percent, stepsPerSec);
 		}
 		else
 		{
 			PrintLine(lineCount,
-				"%02d:%02d:%02d elapsed | %u steps | %.3f steps/s (recently)",
+				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s (recently)",
 				elH, elM, elS, step, stepsPerSec);
 		}
 

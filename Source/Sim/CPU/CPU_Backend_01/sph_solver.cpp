@@ -79,13 +79,6 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
 	const float massF = params.massF;
 
-	if (N_rigidBodies_ > 0)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
-		UpdateRigidBoundaryParticles();
-		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
-	}
-
 	// --- [ particle data re-ordering ] -------------------------------------------------------------
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
@@ -101,29 +94,32 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	float* RESTRICT xPosB = xPosB_.data();
 	float* RESTRICT yPosB = yPosB_.data();
 	float* RESTRICT zPosB = zPosB_.data();
-	uint32_t* RESTRICT bodyIdB = bodyIdB_.data();
-	uint32_t* RESTRICT rigidBoundaryParticleIdxB = rigidBoundaryParticleIdxB_.data();
-	float* RESTRICT volB = volB_.data();
-	float* RESTRICT psiB = psiB_.data();
+	float* RESTRICT xPosR = xPosR_.data();
+	float* RESTRICT yPosR = yPosR_.data();
+	float* RESTRICT zPosR = zPosR_.data();
 	float* RESTRICT xVelF = xVelF_.data();
 	float* RESTRICT yVelF = yVelF_.data();
 	float* RESTRICT zVelF = zVelF_.data();
-	float* RESTRICT xVelB = xVelB_.data();
-	float* RESTRICT yVelB = yVelB_.data();
-	float* RESTRICT zVelB = zVelB_.data();
+	float* RESTRICT xVelR = xVelR_.data();
+	float* RESTRICT yVelR = yVelR_.data();
+	float* RESTRICT zVelR = zVelR_.data();
 	float* RESTRICT xVelPredF = xVelPredF_.data();
 	float* RESTRICT yVelPredF = yVelPredF_.data();
 	float* RESTRICT zVelPredF = zVelPredF_.data();
 	float* RESTRICT xAccPressF = xAccPressF_.data();
 	float* RESTRICT yAccPressF = yAccPressF_.data();
 	float* RESTRICT zAccPressF = zAccPressF_.data();
+	float* RESTRICT xForceR = xForceR_.data();
+	float* RESTRICT yForceR = yForceR_.data();
+	float* RESTRICT zForceR = zForceR_.data();
 	float* RESTRICT sourceTermF = sourceTermF_.data();
 	float* RESTRICT diagElemF = diagElemF_.data();
 	float* RESTRICT pressureF = pressureF_.data();
 	float* RESTRICT densityF = densityF_.data();
-	float* RESTRICT xForceRBP = xForceRBP_.data();
-	float* RESTRICT yForceRBP = yForceRBP_.data();
-	float* RESTRICT zForceRBP = zForceRBP_.data();
+	float* RESTRICT volB = volB_.data();
+	float* RESTRICT volR = volR_.data();
+	float* RESTRICT psiB = psiB_.data();
+	float* RESTRICT psiR = psiR_.data();
 	I_NeighborListSELL& neighborList = *neighborList_;
 	const bool runCountQuery = neighborList.RunCountQuery();
 	const bool runFillQuery = neighborList.RunFillQuery();
@@ -163,7 +159,8 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	CPU01::Density_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
-		psiB,
+		xPosR, yPosR, zPosR,
+		psiB, psiR,
 		neighborList,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, massF, N_F_,
 		densityF);
@@ -172,11 +169,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
-	if (N_rigidBodies_ > 0)
+	if (N_RB_ > 0)
 	{
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		ClearRigidForcesAndAddGravity(params);
-		ClearRigidBoundaryParticleForces();
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
@@ -185,10 +181,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	CPU01::NonPressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
-		volB,
+		xPosR, yPosR, zPosR,
 		xVelF, yVelF, zVelF,
-		xVelB, yVelB, zVelB,
+		xVelR, yVelR, zVelR,
 		densityF,
+		volB, volR,
 		neighborList,
 		timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
 		cubicSplineAlpha, params.restDensity, massF,
@@ -198,23 +195,19 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
 
-	if (N_rigidBodies_ > 0)
+	if (N_RB_ > 0)
 	{
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
-		CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
+		CPU01::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			bodyIdB,
-			rigidBoundaryParticleIdxB,
-			volB,
+			xPosR, yPosR, zPosR,
 			xVelF, yVelF, zVelF,
-			xVelB, yVelB, zVelB,
+			xVelR, yVelR, zVelR,
+			volR,
 			neighborList,
 			sizeInvF, sizeSquF, kernelRadiusSqu,
-			cubicSplineAlpha, massF, params.viscosityB, N_F_,
-			xForceRBP,
-			yForceRBP,
-			zForceRBP);
+			cubicSplineAlpha, massF, params.viscosityB, N_R_,
+			xForceR, yForceR, zForceR);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
@@ -225,10 +218,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
-		psiB,
+		xPosR, yPosR, zPosR,
 		xVelPredF, yVelPredF, zVelPredF,
-		xVelB, yVelB, zVelB,
+		xVelR, yVelR, zVelR,
 		densityF,
+		psiB, psiR,
 		neighborList,
 		timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 		params.restDensity, restDensitySquInv,
@@ -253,8 +247,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		CPU01::PressureAcceleration_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
-			psiB,
+			xPosR, yPosR, zPosR,
 			pressureF,
+			psiB, psiR,
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
 			massF, params.pressGamma, N_F_, *affinityPart_,
@@ -264,9 +259,10 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 		CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 			xPosF, yPosF, zPosF,
 			xPosB, yPosB, zPosB,
-			psiB,
+			xPosR, yPosR, zPosR,
 			xAccPressF, yAccPressF, zAccPressF,
 			sourceTermF, diagElemF,
+			psiB, psiR,
 			neighborList,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensity, massF, params.jacobiOmega, N_F_,
@@ -285,8 +281,9 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	CPU01::PressureAcceleration_ChunkedSELL(
 		xPosF, yPosF, zPosF,
 		xPosB, yPosB, zPosB,
-		psiB,
+		xPosR, yPosR, zPosR,
 		pressureF,
+		psiB, psiR,
 		neighborList,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
 		massF, params.pressGamma, N_F_, *affinityPart_,
@@ -294,25 +291,21 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 
-	if (N_rigidBodies_ > 0)
+	if (N_RB_ > 0)
 	{
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
-		CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
+		CPU01::AccumulateRigidParticlePressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			bodyIdB,
-			rigidBoundaryParticleIdxB,
-			psiB,
+			xPosR, yPosR, zPosR,
 			pressureF,
+			psiR,
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-			massF, params.pressGamma, N_F_,
-			xForceRBP,
-			yForceRBP,
-			zForceRBP);
+			massF, params.pressGamma, N_R_,
+			xForceR, yForceR, zForceR);
 
-		// reduce rigid boundary particle forces into body force and torque
-		ReduceRigidBoundaryParticleForces();
+		// reduce rigid particle forces into body force and torque
+		ReduceRigidParticleForces();
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
@@ -342,11 +335,11 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Particle_Integration);
 
-	if (N_rigidBodies_ > 0)
+	if (N_RB_ > 0)
 	{
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
 		IntegrateRigidBodies(timeStep);
-		UpdateRigidBoundaryParticles();
+		UpdateRigidParticles();
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
 	}
 }
@@ -406,7 +399,11 @@ void CPU01::Density_ChunkedSELL(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT psiB,
+	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float massF,
@@ -427,6 +424,7 @@ void CPU01::Density_ChunkedSELL(
 			{
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 
@@ -439,6 +437,7 @@ void CPU01::Density_ChunkedSELL(
 
 				CPU::Float32xSIMD tmp_densityF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_densityB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_densityR = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
@@ -487,7 +486,31 @@ void CPU01::Density_ChunkedSELL(
 					}
 				}
 
-				const CPU::Float32xSIMD density = massFV * tmp_densityF + tmp_densityB;
+				// contributions from rigid neighbors
+				{
+					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
+
+					for (uint32_t k = 0; k < nbrFR.pitch; k++)
+					{
+						// one SELL column, storing neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFR);
+						const CPU::UInt32xSIMD idxJ = nbrFR.LoadNeighborIdx32xSIMD(k);
+
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosR, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosR, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosR, idxJ);
+
+						const CPU::Float32xSIMD kw = CPU::ZeroMaskedFloat32xSIMD(
+							CPU::KernelWeight_CubicSpline_SIMD(
+								dx, dy, dz, particleSizeInvF,
+								kernelRadiusSqu, cubicSplineAlpha), mask);
+						const CPU::Float32xSIMD psiRj = CPU::GatherFloat32xSIMD(psiR, idxJ);
+						// padded lanes gathered valid indices but contribute zero
+						tmp_densityR = xsimd::fma(psiRj, kw, tmp_densityR);
+					}
+				}
+
+				const CPU::Float32xSIMD density = massFV * tmp_densityF + tmp_densityB + tmp_densityR;
 				// final chunk, maybe containing fewer than CPU::N_SIMD_WIDTH particles
 				CPU::StoreFloat32xSIMDPartial(densityF, begin, end, density);
 			}
@@ -503,14 +526,18 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const float* RESTRICT volB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT xVelF,
 	const float* RESTRICT yVelF,
 	const float* RESTRICT zVelF,
-	const float* RESTRICT xVelB,
-	const float* RESTRICT yVelB,
-	const float* RESTRICT zVelB,
+	const float* RESTRICT xVelR,
+	const float* RESTRICT yVelR,
+	const float* RESTRICT zVelR,
 	const float* RESTRICT densityF,
+	const float* RESTRICT volB,
+	const float* RESTRICT volR,
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF, const float kernelRadiusSqu,
@@ -545,6 +572,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 			{
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 
@@ -564,6 +592,9 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_xAccViscB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_yAccViscB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_zAccViscB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_xAccViscR = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_yAccViscR = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_zAccViscR = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
@@ -627,9 +658,9 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32xSIMD dvx = vxi - CPU::GatherFloat32xSIMD(xVelB, idxJ);
-						const CPU::Float32xSIMD dvy = vyi - CPU::GatherFloat32xSIMD(yVelB, idxJ);
-						const CPU::Float32xSIMD dvz = vzi - CPU::GatherFloat32xSIMD(zVelB, idxJ);
+						const CPU::Float32xSIMD dvx = vxi - CPU::ZeroFloat32xSIMD();
+						const CPU::Float32xSIMD dvy = vyi - CPU::ZeroFloat32xSIMD();
+						const CPU::Float32xSIMD dvz = vzi - CPU::ZeroFloat32xSIMD();
 						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
 							xsimd::fma(dvy, dy, dvz * dz));
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
@@ -646,12 +677,51 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 					}
 				}
 
+				// contributions from rigid neighbors
+				{
+					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
+
+					for (uint32_t k = 0; k < nbrFR.pitch; k++)
+					{
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFR);
+						const CPU::UInt32xSIMD idxJ = nbrFR.LoadNeighborIdx32xSIMD(k);
+
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosR, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosR, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosR, idxJ);
+
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
+							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							cubicSplineAlpha, xkg, ykg, zkg);
+
+						const CPU::Float32xSIMD dvx = vxi - CPU::GatherFloat32xSIMD(xVelR, idxJ);
+						const CPU::Float32xSIMD dvy = vyi - CPU::GatherFloat32xSIMD(yVelR, idxJ);
+						const CPU::Float32xSIMD dvz = vzi - CPU::GatherFloat32xSIMD(zVelR, idxJ);
+						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
+							xsimd::fma(dvy, dy, dvz * dz));
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD volRj = CPU::GatherFloat32xSIMD(volR, idxJ);
+						const CPU::Float32xSIMD accCoeff =
+							(volRj * dot) / (distSqu + particleSizeSquEps);
+						const CPU::Float32xSIMD accCoeffMasked =
+							CPU::ZeroMaskedFloat32xSIMD(accCoeff, mask);
+
+						tmp_xAccViscR = xsimd::fma(accCoeffMasked, xkg, tmp_xAccViscR);
+						tmp_yAccViscR = xsimd::fma(accCoeffMasked, ykg, tmp_yAccViscR);
+						tmp_zAccViscR = xsimd::fma(accCoeffMasked, zkg, tmp_zAccViscR);
+					}
+				}
+
 				const CPU::Float32xSIMD xAccNonPressF =
-					tmp_xAccViscF * viscosityFacF + tmp_xAccViscB * viscosityFacB + xGravityV;
+					tmp_xAccViscF * viscosityFacF + (tmp_xAccViscB + tmp_xAccViscR) * viscosityFacB + xGravityV;
 				const CPU::Float32xSIMD yAccNonPressF =
-					tmp_yAccViscF * viscosityFacF + tmp_yAccViscB * viscosityFacB + yGravityV;
+					tmp_yAccViscF * viscosityFacF + (tmp_yAccViscB + tmp_yAccViscR) * viscosityFacB + yGravityV;
 				const CPU::Float32xSIMD zAccNonPressF =
-					tmp_zAccViscF * viscosityFacF + tmp_zAccViscB * viscosityFacB + zGravityV;
+					tmp_zAccViscF * viscosityFacF + (tmp_zAccViscB + tmp_zAccViscR) * viscosityFacB + zGravityV;
 
 				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
 				CPU::StoreFloat32xSIMDPartial(
@@ -666,90 +736,76 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 	);
 }
 
-void CPU01::AccumulateRigidBodyNonPressureForces_ChunkedSELL(
+void CPU01::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
-	const float* RESTRICT xPosB,
-	const float* RESTRICT yPosB,
-	const float* RESTRICT zPosB,
-	const uint32_t* RESTRICT bodyIdB,
-	const uint32_t* RESTRICT rigidBoundaryParticleIdxB,
-	const float* RESTRICT volB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT xVelF,
 	const float* RESTRICT yVelF,
 	const float* RESTRICT zVelF,
-	const float* RESTRICT xVelB,
-	const float* RESTRICT yVelB,
-	const float* RESTRICT zVelB,
+	const float* RESTRICT xVelR,
+	const float* RESTRICT yVelR,
+	const float* RESTRICT zVelR,
+	const float* RESTRICT volR,
 	const I_NeighborListSELL& neighborList,
 	const float particleSizeInvF, const float particleSizeSquF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float massF, const float viscosityB,
-	const uint32_t N_F,
-	float* RESTRICT xForceRBP,
-	float* RESTRICT yForceRBP,
-	float* RESTRICT zForceRBP)
+	const uint32_t N_R,
+	// destinations
+	float* RESTRICT xForceR,
+	float* RESTRICT yForceR,
+	float* RESTRICT zForceR)
 {
-	(void)N_F;
-
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
 	const float particleSizeSquEps = 0.01f * particleSizeSquF;
 	const float viscosityFacB = 10.0f * viscosityB;
 
-	// TODO: parallelize with TBB?
-	for (uint32_t chunk = 0; chunk < numChunks; chunk++)
-	{
-		const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-		const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
-		const uint32_t begin = nbrFF.begin;
-		const uint32_t end = nbrFF.end;
-
-		for (uint32_t i = begin; i != end; i++)
+	// accumulate one force per rigid particle without atomics
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_R),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			const uint32_t lane = i - begin;
-			const float xi = xPosF[i];
-			const float yi = yPosF[i];
-			const float zi = zPosF[i];
-			const float vxi = xVelF[i];
-			const float vyi = yVelF[i];
-			const float vzi = zVelF[i];
-
-			for (uint32_t k = 0; k < nbrFB.counts[i]; k++)
+			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				const uint32_t j = nbrFB.ReadNeighborIdx(lane, k);
-				const uint32_t bodyIdx = bodyIdB[j];
-				if (bodyIdx == Sync::InvalidRigidBodyId) { continue; }
-				const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[j];
+				float xForce = 0.0f;
+				float yForce = 0.0f;
+				float zForce = 0.0f;
+				const NeighborSpan nbrRF = neighborList.RF(i);
+				for (uint32_t k = 0; k < nbrRF.count; k++)
+				{
+					const uint32_t j = nbrRF.data[k];
 
-				const float dx = xi - xPosB[j];
-				const float dy = yi - yPosB[j];
-				const float dz = zi - zPosB[j];
-				const float dvx = vxi - xVelB[j];
-				const float dvy = vyi - yVelB[j];
-				const float dvz = vzi - zVelB[j];
+					const float dx = xPosF[j] - xPosR[i];
+					const float dy = yPosF[j] - yPosR[i];
+					const float dz = zPosF[j] - zPosR[i];
+					const float dvx = xVelF[j] - xVelR[i];
+					const float dvy = yVelF[j] - yVelR[i];
+					const float dvz = zVelF[j] - zVelR[i];
 
-				float xkg, ykg, zkg;
-				KernelGradient_CubicSpline(
-					dx, dy, dz,
-					particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-					xkg, ykg, zkg);
+					float xkg, ykg, zkg;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+						cubicSplineAlpha, xkg, ykg, zkg);
 
-				const float dot = std::fmaf(dvx, dx, std::fmaf(dvy, dy, dvz * dz));
-				const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-				const float accCoeff = (volB[j] * dot) / (distSqu + particleSizeSquEps);
-				const float forceCoeff = -massF * viscosityFacB * accCoeff;
-				const float xForce = forceCoeff * xkg;
-				const float yForce = forceCoeff * ykg;
-				const float zForce = forceCoeff * zkg;
+					const float dot = std::fmaf(dvx, dx, std::fmaf(dvy, dy, dvz * dz));
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+					const float accCoeff = (volR[i] * dot) / (distSqu + particleSizeSquEps);
+					const float forceCoeff = -massF * viscosityFacB * accCoeff;
 
-				// opposite of the boundary viscosity/friction force applied to fluid particle i
-				xForceRBP[rigidBoundaryParticleIdx] += xForce;
-				yForceRBP[rigidBoundaryParticleIdx] += yForce;
-				zForceRBP[rigidBoundaryParticleIdx] += zForce;
+					xForce += forceCoeff * xkg;
+					yForce += forceCoeff * ykg;
+					zForce += forceCoeff * zkg;
+				}
+				xForceR[i] = xForce;
+				yForceR[i] = yForce;
+				zForceR[i] = zForce;
 			}
-		}
-	}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
@@ -759,14 +815,18 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const float* RESTRICT psiB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT xVelPredF,
 	const float* RESTRICT yVelPredF,
 	const float* RESTRICT zVelPredF,
-	const float* RESTRICT xVelB,
-	const float* RESTRICT yVelB,
-	const float* RESTRICT zVelB,
+	const float* RESTRICT xVelR,
+	const float* RESTRICT yVelR,
+	const float* RESTRICT zVelR,
 	const float* RESTRICT densityF,
+	const float* RESTRICT psiB,
+	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
@@ -800,6 +860,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 			{
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
@@ -821,6 +882,10 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				CPU::Float32xSIMD xCTermB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD yCTermB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD zCTermB = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD tmp_SourceTermR = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD xCTermR = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD yCTermR = CPU::ZeroFloat32xSIMD();
+				CPU::Float32xSIMD zCTermR = CPU::ZeroFloat32xSIMD();
 
 				// contributions from fluid neighbors
 				{
@@ -882,14 +947,13 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
-						const CPU::Float32xSIMD dvpx = vpxi - CPU::GatherFloat32xSIMD(xVelB, idxJ);
-						const CPU::Float32xSIMD dvpy = vpyi - CPU::GatherFloat32xSIMD(yVelB, idxJ);
-						const CPU::Float32xSIMD dvpz = vpzi - CPU::GatherFloat32xSIMD(zVelB, idxJ);
+						const CPU::Float32xSIMD dvpx = vpxi - CPU::ZeroFloat32xSIMD();
+						const CPU::Float32xSIMD dvpy = vpyi - CPU::ZeroFloat32xSIMD();
+						const CPU::Float32xSIMD dvpz = vpzi - CPU::ZeroFloat32xSIMD();
 						const CPU::Float32xSIMD sourceTerm =
 							xsimd::fma(dvpx, xkg, xsimd::fma(dvpy, ykg, dvpz * zkg));
 						const CPU::Float32xSIMD psiBj = CPU::GatherFloat32xSIMD(psiB, idxJ);
-						const CPU::Float32xSIMD psiBjMasked =
-							CPU::ZeroMaskedFloat32xSIMD(psiBj, mask);
+						const CPU::Float32xSIMD psiBjMasked = CPU::ZeroMaskedFloat32xSIMD(psiBj, mask);
 
 						// padded lanes gathered valid indices but contribute zero
 						tmp_SourceTermB = xsimd::fma(psiBjMasked, sourceTerm, tmp_SourceTermB);
@@ -899,15 +963,52 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 					}
 				}
 
+				// contributions from rigid neighbors
+				{
+					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
+
+					for (uint32_t k = 0; k < nbrFR.pitch; k++)
+					{
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFR);
+						const CPU::UInt32xSIMD idxJ = nbrFR.LoadNeighborIdx32xSIMD(k);
+
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosR, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosR, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosR, idxJ);
+
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
+							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							cubicSplineAlpha, xkg, ykg, zkg);
+
+						const CPU::Float32xSIMD dvpx = vpxi - CPU::GatherFloat32xSIMD(xVelR, idxJ);
+						const CPU::Float32xSIMD dvpy = vpyi - CPU::GatherFloat32xSIMD(yVelR, idxJ);
+						const CPU::Float32xSIMD dvpz = vpzi - CPU::GatherFloat32xSIMD(zVelR, idxJ);
+						const CPU::Float32xSIMD sourceTerm =
+							xsimd::fma(dvpx, xkg, xsimd::fma(dvpy, ykg, dvpz * zkg));
+						const CPU::Float32xSIMD psiRj = CPU::GatherFloat32xSIMD(psiR, idxJ);
+						const CPU::Float32xSIMD psiRjMasked = CPU::ZeroMaskedFloat32xSIMD(psiRj, mask);
+
+						// padded lanes gathered valid indices but contribute zero
+						tmp_SourceTermR = xsimd::fma(psiRjMasked, sourceTerm, tmp_SourceTermR);
+						xCTermR = xsimd::fma(psiRjMasked, xkg, xCTermR);
+						yCTermR = xsimd::fma(psiRjMasked, ykg, yCTermR);
+						zCTermR = xsimd::fma(psiRjMasked, zkg, zCTermR);
+					}
+				}
+
 				tmp_SourceTermF *= massFV;
 
 				const CPU::Float32xSIMD fin_sourceTermF =
 					restDensityV - CPU::GatherFloat32xSIMD(densityF, idxI)
-					- timeStepV * (tmp_SourceTermF + tmp_SourceTermB);
+					- timeStepV * (tmp_SourceTermF + tmp_SourceTermB + tmp_SourceTermR);
 
-				const CPU::Float32xSIMD xCTerm = xCTermF * cTermFacF + xCTermB * cTermFacB;
-				const CPU::Float32xSIMD yCTerm = yCTermF * cTermFacF + yCTermB * cTermFacB;
-				const CPU::Float32xSIMD zCTerm = zCTermF * cTermFacF + zCTermB * cTermFacB;
+				const CPU::Float32xSIMD xCTerm = xCTermF * cTermFacF + (xCTermB + xCTermR) * cTermFacB;
+				const CPU::Float32xSIMD yCTerm = yCTermF * cTermFacF + (yCTermB + yCTermR) * cTermFacB;
+				const CPU::Float32xSIMD zCTerm = zCTermF * cTermFacF + (zCTermB + zCTermR) * cTermFacB;
 
 				// part A of diagonal element
 				const CPU::Float32xSIMD tmp_DiagElemA = massFV *
@@ -917,8 +1018,8 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				const CPU::Float32xSIMD tmp_DiagElemB = massFV * diagBFac * gradSquSumF;
 				// part C of diagonal element
 				const CPU::Float32xSIMD tmp_DiagElemC =
-					xsimd::fma(xCTerm, xCTermB,
-						xsimd::fma(yCTerm, yCTermB, zCTerm * zCTermB));
+					xsimd::fma(xCTerm, xCTermB + xCTermR,
+						xsimd::fma(yCTerm, yCTermB + yCTermR, zCTerm * (zCTermB + zCTermR)));
 
 				const CPU::Float32xSIMD fin_diagElemF =
 					timeStepSquV * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);
@@ -944,8 +1045,12 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const float* RESTRICT psiB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT pressureF,
+	const float* RESTRICT psiB,
+	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensity,
@@ -974,6 +1079,7 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 			{
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
@@ -1013,8 +1119,7 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD presj = CPU::GatherFloat32xSIMD(pressureF, idxJ);
 						const CPU::Float32xSIMD accCoeffF =
 							accCoeffF_outer + massFV * presj * densiInvSquV;
-						const CPU::Float32xSIMD accCoeffFMasked =
-							CPU::ZeroMaskedFloat32xSIMD(accCoeffF, mask);
+						const CPU::Float32xSIMD accCoeffFMasked = CPU::ZeroMaskedFloat32xSIMD(accCoeffF, mask);
 
 						// padded lanes gathered valid indices but contribute zero
 						tmp_xAccPressF = xsimd::fma(accCoeffFMasked, xkg, tmp_xAccPressF);
@@ -1046,8 +1151,39 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 
 						const CPU::Float32xSIMD psiBj = CPU::GatherFloat32xSIMD(psiB, idxJ);
 						const CPU::Float32xSIMD accCoeffB = accCoeffB_outer * psiBj * presi;
-						const CPU::Float32xSIMD accCoeffBMasked =
-							CPU::ZeroMaskedFloat32xSIMD(accCoeffB, mask);
+						const CPU::Float32xSIMD accCoeffBMasked = CPU::ZeroMaskedFloat32xSIMD(accCoeffB, mask);
+
+						// padded lanes gathered valid indices but contribute zero
+						tmp_xAccPressF = xsimd::fma(accCoeffBMasked, xkg, tmp_xAccPressF);
+						tmp_yAccPressF = xsimd::fma(accCoeffBMasked, ykg, tmp_yAccPressF);
+						tmp_zAccPressF = xsimd::fma(accCoeffBMasked, zkg, tmp_zAccPressF);
+					}
+				}
+
+				// contributions from rigid neighbors
+				{
+					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
+
+					for (uint32_t k = 0; k < nbrFR.pitch; k++)
+					{
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFR);
+						const CPU::UInt32xSIMD idxJ = nbrFR.LoadNeighborIdx32xSIMD(k);
+
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosR, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosR, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosR, idxJ);
+
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
+							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							cubicSplineAlpha, xkg, ykg, zkg);
+
+						const CPU::Float32xSIMD psiRj = CPU::GatherFloat32xSIMD(psiR, idxJ);
+						const CPU::Float32xSIMD accCoeffB = accCoeffB_outer * psiRj * presi;
+						const CPU::Float32xSIMD accCoeffBMasked = CPU::ZeroMaskedFloat32xSIMD(accCoeffB, mask);
 
 						// padded lanes gathered valid indices but contribute zero
 						tmp_xAccPressF = xsimd::fma(accCoeffBMasked, xkg, tmp_xAccPressF);
@@ -1066,78 +1202,65 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 	);
 }
 
-void CPU01::AccumulateRigidBodyPressureForces_ChunkedSELL(
+void CPU01::AccumulateRigidParticlePressureForces_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
 	const float* RESTRICT zPosF,
-	const float* RESTRICT xPosB,
-	const float* RESTRICT yPosB,
-	const float* RESTRICT zPosB,
-	const uint32_t* RESTRICT bodyIdB,
-	const uint32_t* RESTRICT rigidBoundaryParticleIdxB,
-	const float* RESTRICT psiB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT pressureF,
+	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float pressGamma,
-	const uint32_t N_F,
-	float* RESTRICT xForceRBP,
-	float* RESTRICT yForceRBP,
-	float* RESTRICT zForceRBP)
+	const uint32_t N_R,
+	// destinations
+	float* RESTRICT xForceR,
+	float* RESTRICT yForceR,
+	float* RESTRICT zForceR)
 {
-	(void)N_F;
-
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
 	const float densiInvSqu = 1.0f / (restDensity * restDensity);
 	const float accCoeffB_outer = 2.0f * pressGamma * densiInvSqu;
 
-	for (uint32_t chunk = 0; chunk < numChunks; chunk++)
-	{
-		const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
-		const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
-		const uint32_t begin = nbrFF.begin;
-		const uint32_t end = nbrFF.end;
-
-		for (uint32_t i = begin; i != end; i++)
+	// accumulate the opposite pressure force from the RF neighbor relation
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_R),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			const uint32_t lane = i - begin;
-			const float xi = xPosF[i];
-			const float yi = yPosF[i];
-			const float zi = zPosF[i];
-			const float presi = pressureF[i];
-
-			for (uint32_t k = 0; k < nbrFB.counts[i]; k++)
+			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				const uint32_t j = nbrFB.ReadNeighborIdx(lane, k);
-				const uint32_t bodyIdx = bodyIdB[j];
+				float xForce = 0.0f;
+				float yForce = 0.0f;
+				float zForce = 0.0f;
+				const NeighborSpan nbrRF = neighborList.RF(i);
+				for (uint32_t k = 0; k < nbrRF.count; k++)
+				{
+					const uint32_t j = nbrRF.data[k];
 
-				if (bodyIdx == Sync::InvalidRigidBodyId) { continue; }
+					const float dx = xPosF[j] - xPosR[i];
+					const float dy = yPosF[j] - yPosR[i];
+					const float dz = zPosF[j] - zPosR[i];
 
-				const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[j];
+					float xkg, ykg, zkg;
+					KernelGradient_CubicSpline(
+						dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+						cubicSplineAlpha, xkg, ykg, zkg);
 
-				const float dx = xi - xPosB[j];
-				const float dy = yi - yPosB[j];
-				const float dz = zi - zPosB[j];
+					const float forceCoeff = massF * accCoeffB_outer * psiR[i] * pressureF[j];
 
-				float xkg, ykg, zkg;
-				KernelGradient_CubicSpline(
-					dx, dy, dz,
-					particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-					xkg, ykg, zkg);
-
-				const float accCoeffB = accCoeffB_outer * psiB[j] * presi;
-				const float xForce = massF * accCoeffB * xkg;
-				const float yForce = massF * accCoeffB * ykg;
-				const float zForce = massF * accCoeffB * zkg;
-
-				// opposite of the boundary pressure force applied to fluid particle i
-				xForceRBP[rigidBoundaryParticleIdx] += xForce;
-				yForceRBP[rigidBoundaryParticleIdx] += yForce;
-				zForceRBP[rigidBoundaryParticleIdx] += zForce;
+					xForce += forceCoeff * xkg;
+					yForce += forceCoeff * ykg;
+					zForce += forceCoeff * zkg;
+				}
+				xForceR[i] += xForce;
+				yForceR[i] += yForce;
+				zForceR[i] += zForce;
 			}
-		}
-	}
+		},
+		tbb::auto_partitioner{}
+	);
 }
 
 void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
@@ -1147,12 +1270,16 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT xPosB,
 	const float* RESTRICT yPosB,
 	const float* RESTRICT zPosB,
-	const float* RESTRICT psiB,
+	const float* RESTRICT xPosR,
+	const float* RESTRICT yPosR,
+	const float* RESTRICT zPosR,
 	const float* RESTRICT xAccPressF,
 	const float* RESTRICT yAccPressF,
 	const float* RESTRICT zAccPressF,
 	const float* RESTRICT sourceTermF,
 	const float* RESTRICT diagElemF,
+	const float* RESTRICT psiB,
+	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
@@ -1204,6 +1331,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 			{
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
+				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = nbrFF.end;
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
@@ -1285,8 +1413,39 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 					}
 				}
 
-				const CPU::Float32xSIMD sysVecElemF =
-					timeStepSquV * (tmp_SysVecElemF + tmp_SysVecElemB);
+				// contributions from rigid neighbors
+				{
+					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
+
+					for (uint32_t k = 0; k < nbrFR.pitch; k++)
+					{
+						// one SELL column stores neighbor k for all SIMD lanes
+						const CPU::Mask32xSIMD mask = CPU::MaskKLessThanCounts32xSIMD(k, countFR);
+						const CPU::UInt32xSIMD idxJ = nbrFR.LoadNeighborIdx32xSIMD(k);
+
+						const CPU::Float32xSIMD dx = xi - CPU::GatherFloat32xSIMD(xPosR, idxJ);
+						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosR, idxJ);
+						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosR, idxJ);
+
+						CPU::Float32xSIMD xkg;
+						CPU::Float32xSIMD ykg;
+						CPU::Float32xSIMD zkg;
+						CPU::KernelGradient_CubicSpline_SIMD(
+							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							cubicSplineAlpha, xkg, ykg, zkg);
+
+						// TODO: subtract actual rigid pressure acc when adding non-static boundaries?
+						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
+							axi, xkg, CPU::FmaFloat32xSIMD(ayi, ykg, azi * zkg));
+						const CPU::Float32xSIMD psiRj = CPU::GatherFloat32xSIMD(psiR, idxJ);
+						const CPU::Float32xSIMD sysVecElemWeighted = psiRj * sysVecElem;
+
+						// padded lanes gathered valid indices but contribute zero
+						tmp_SysVecElemB += CPU::AndMaskedFloat32xSIMD(sysVecElemWeighted, mask);
+					}
+				}
+
+				const CPU::Float32xSIMD sysVecElemF = timeStepSquV * (tmp_SysVecElemF + tmp_SysVecElemB);
 				const CPU::Float32xSIMD sourceTerm = CPU::GatherFloat32xSIMD(sourceTermF, idxI);
 				const CPU::Float32xSIMD diagElem = CPU::GatherFloat32xSIMD(diagElemF, idxI);
 				const CPU::Float32xSIMD solverResidual = sourceTerm - sysVecElemF;

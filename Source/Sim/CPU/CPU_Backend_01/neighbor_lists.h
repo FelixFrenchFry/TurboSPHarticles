@@ -18,6 +18,7 @@
 // TODO: make these used the params based on heuristic expected values?
 static constexpr uint32_t N_perScratchInlineFF = 64;
 static constexpr uint32_t N_perScratchInlineFB = 48;
+static constexpr uint32_t N_perScratchInlineFR = 48;
 
 namespace Sim
 {
@@ -123,13 +124,17 @@ namespace Sim
 
 		virtual ChunkedSELLNeighborSpan_Read FFChunk(uint32_t chunk) const noexcept = 0;
 		virtual ChunkedSELLNeighborSpan_Read FBChunk(uint32_t chunk) const noexcept = 0;
+		virtual ChunkedSELLNeighborSpan_Read FRChunk(uint32_t chunk) const noexcept = 0;
 		virtual ChunkedSELLNeighborSpan_Write FFChunkWrite(uint32_t chunk) noexcept = 0;
 		virtual ChunkedSELLNeighborSpan_Write FBChunkWrite(uint32_t chunk) noexcept = 0;
+		virtual ChunkedSELLNeighborSpan_Write FRChunkWrite(uint32_t chunk) noexcept = 0;
 
 		virtual void FinishFFChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) = 0;
 		virtual void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) = 0;
+		virtual void FinishFRChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) = 0;
 
 		virtual bool NeedsChunkNeighborIdxRange() const noexcept { return false; }
+
 		virtual void SetChunkNeighborIdxRangeFF(uint32_t chunk, uint32_t minRef, uint32_t maxRef)
 		{
 			(void)chunk;
@@ -137,6 +142,12 @@ namespace Sim
 			(void)maxRef;
 		}
 		virtual void SetChunkNeighborIdxRangeFB(uint32_t chunk, uint32_t minRef, uint32_t maxRef)
+		{
+			(void)chunk;
+			(void)minRef;
+			(void)maxRef;
+		}
+		virtual void SetChunkNeighborIdxRangeFR(uint32_t chunk, uint32_t minRef, uint32_t maxRef)
 		{
 			(void)chunk;
 			(void)minRef;
@@ -153,7 +164,9 @@ namespace Sim
 	{
 	public: // -------------------------------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
+		void Resize(
+			uint32_t N_F, uint32_t N_B, uint32_t N_R,
+			const SimParams& params) override;
 
 		void Finalize_Count() override;
 
@@ -161,18 +174,33 @@ namespace Sim
 
 		void SetNbrCountFF(uint32_t i, uint32_t count) override;
 		void SetNbrCountFB(uint32_t i, uint32_t count) override;
+		void SetNbrCountFR(uint32_t i, uint32_t count) override;
+		void SetNbrCountRF(uint32_t i, uint32_t count) override;
+		void SetNbrCountRB(uint32_t i, uint32_t count) override;
+		void SetNbrCountRR(uint32_t i, uint32_t count) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t count) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
+		NeighborSpan FR(uint32_t i) const override;
+		NeighborSpan RF(uint32_t i) const override;
+		NeighborSpan RB(uint32_t i) const override;
+		NeighborSpan RR(uint32_t i) const override;
 
 		uint32_t CountFF(uint32_t i) const override;
 		uint32_t CountFB(uint32_t i) const override;
+		uint32_t CountFR(uint32_t i) const override;
+		uint32_t CountRF(uint32_t i) const override;
+		uint32_t CountRB(uint32_t i) const override;
+		uint32_t CountRR(uint32_t i) const override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
-			const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 		bool RunCountQuery() const override { return true; }
 		bool RunFillQuery() const override { return true; }
@@ -180,26 +208,46 @@ namespace Sim
 		uint32_t ChunkNumTotal() const noexcept override;
 		ChunkedSELLNeighborSpan_Read FFChunk(uint32_t chunk) const noexcept override;
 		ChunkedSELLNeighborSpan_Read FBChunk(uint32_t chunk) const noexcept override;
+		ChunkedSELLNeighborSpan_Read FRChunk(uint32_t chunk) const noexcept override;
 		ChunkedSELLNeighborSpan_Write FFChunkWrite(uint32_t chunk) noexcept override;
 		ChunkedSELLNeighborSpan_Write FBChunkWrite(uint32_t chunk) noexcept override;
+		ChunkedSELLNeighborSpan_Write FRChunkWrite(uint32_t chunk) noexcept override;
 		void FinishFFChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 		void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
+		void FinishFRChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 
 	private: // ------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
+		uint32_t N_R_ = 0;
 
 		// explicit chunked SELL neighbor storage
+		// (for fluid source particles)
 		std::vector<SELLNeighborCount> nbrCountFF_; // per-particle neighbor count
 		std::vector<SELLNeighborCount> nbrCountFB_;
+		std::vector<SELLNeighborCount> nbrCountFR_;
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFB_;
+		std::vector<SELLNeighborCount> nbrChunkMaxCountFR_;
 		std::vector<uint64_t> nbrChunkOffsetsFF_; // per-chunk starting index for neighbor stored in nbrListFF_
 		std::vector<uint64_t> nbrChunkOffsetsFB_;
+		std::vector<uint64_t> nbrChunkOffsetsFR_;
 		std::vector<uint32_t> nbrListFF_; // actual neighbor indices, concatenated for all chunks
 		std::vector<uint32_t> nbrListFB_;
+		std::vector<uint32_t> nbrListFR_;
+
+		// CSR neighbor storage for rigid source particles
+		std::vector<SELLNeighborCount> nbrCountRF_;
+		std::vector<SELLNeighborCount> nbrCountRB_;
+		std::vector<SELLNeighborCount> nbrCountRR_;
+		std::vector<uint64_t> nbrOffsetsRF_;
+		std::vector<uint64_t> nbrOffsetsRB_;
+		std::vector<uint64_t> nbrOffsetsRR_;
+		std::vector<uint32_t> nbrListRF_;
+		std::vector<uint32_t> nbrListRB_;
+		std::vector<uint32_t> nbrListRR_;
 
 		// thread-local neighbor scratch for contiguous access
 		// TODO: still needed despite chunked SELL storage?
@@ -207,6 +255,8 @@ namespace Sim
 			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFR>> nbrScratchFR_;
 
 		// misc
 		static constexpr uint32_t chunkWidth = CPU::N_SIMD_WIDTH;
@@ -233,7 +283,7 @@ namespace Sim
 	};
 
 	// ---------------------------------------------------------------------------------------------
-	// --- [ chunked SELL neighbor list, adaptive compression ] -----------------------------------
+	// --- [ chunked SELL neighbor list, adaptive compression ] ------------------------------------
 	// ---------------------------------------------------------------------------------------------
 
 	class NeighborLists_ChunkedSELL_AdaptCompress_CPU01 final
@@ -241,7 +291,9 @@ namespace Sim
 	{
 	public: // -------------------------------------------------------------------------------------
 
-		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
+		void Resize(
+			uint32_t N_F, uint32_t N_B, uint32_t N_R,
+			const SimParams& params) override;
 
 		void Finalize_Count() override;
 
@@ -249,18 +301,33 @@ namespace Sim
 
 		void SetNbrCountFF(uint32_t i, uint32_t count) override;
 		void SetNbrCountFB(uint32_t i, uint32_t count) override;
+		void SetNbrCountFR(uint32_t i, uint32_t count) override;
+		void SetNbrCountRF(uint32_t i, uint32_t count) override;
+		void SetNbrCountRB(uint32_t i, uint32_t count) override;
+		void SetNbrCountRR(uint32_t i, uint32_t count) override;
 
 		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
 		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t count) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
+		NeighborSpan FR(uint32_t i) const override;
+		NeighborSpan RF(uint32_t i) const override;
+		NeighborSpan RB(uint32_t i) const override;
+		NeighborSpan RR(uint32_t i) const override;
 
 		uint32_t CountFF(uint32_t i) const override;
 		uint32_t CountFB(uint32_t i) const override;
+		uint32_t CountFR(uint32_t i) const override;
+		uint32_t CountRF(uint32_t i) const override;
+		uint32_t CountRB(uint32_t i) const override;
+		uint32_t CountRR(uint32_t i) const override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
-			const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 		bool RunCountQuery() const override { return true; }
 		bool RunFillQuery() const override { return true; }
@@ -268,48 +335,77 @@ namespace Sim
 		uint32_t ChunkNumTotal() const noexcept override;
 		ChunkedSELLNeighborSpan_Read FFChunk(uint32_t chunk) const noexcept override;
 		ChunkedSELLNeighborSpan_Read FBChunk(uint32_t chunk) const noexcept override;
+		ChunkedSELLNeighborSpan_Read FRChunk(uint32_t chunk) const noexcept override;
 		ChunkedSELLNeighborSpan_Write FFChunkWrite(uint32_t chunk) noexcept override;
 		ChunkedSELLNeighborSpan_Write FBChunkWrite(uint32_t chunk) noexcept override;
+		ChunkedSELLNeighborSpan_Write FRChunkWrite(uint32_t chunk) noexcept override;
 		void FinishFFChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 		void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
+		void FinishFRChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 
 		bool NeedsChunkNeighborIdxRange() const noexcept override { return true; }
 		void SetChunkNeighborIdxRangeFF(uint32_t chunk, uint32_t minRef, uint32_t maxRef) override;
 		void SetChunkNeighborIdxRangeFB(uint32_t chunk, uint32_t minRef, uint32_t maxRef) override;
+		void SetChunkNeighborIdxRangeFR(uint32_t chunk, uint32_t minRef, uint32_t maxRef) override;
 
 	private: // ------------------------------------------------------------------------------------
 
 		// metadata
 		uint32_t N_F_ = 0;
 		uint32_t N_B_ = 0;
+		uint32_t N_R_ = 0;
 
 		// compressed chunked SELL neighbor storage
+		// (for fluid source particles)
 		std::vector<SELLNeighborCount> nbrCountFF_; // per-particle neighbor count
 		std::vector<SELLNeighborCount> nbrCountFB_;
+		std::vector<SELLNeighborCount> nbrCountFR_;
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFB_;
+		std::vector<SELLNeighborCount> nbrChunkMaxCountFR_;
 		std::vector<uint32_t> nbrChunkMinRefFF_; // per-chunk min neighbor index from the count-query
 		std::vector<uint32_t> nbrChunkMinRefFB_;
+		std::vector<uint32_t> nbrChunkMinRefFR_;
 		std::vector<uint32_t> nbrChunkMaxRefFF_; // per-chunk max neighbor index from the count-query
 		std::vector<uint32_t> nbrChunkMaxRefFB_;
+		std::vector<uint32_t> nbrChunkMaxRefFR_;
 		std::vector<uint32_t> nbrChunkBaseIdxFF_; // per-chunk base index used for delta storage
 		std::vector<uint32_t> nbrChunkBaseIdxFB_;
+		std::vector<uint32_t> nbrChunkBaseIdxFR_;
 		std::vector<SELLChunkFormat> nbrChunkFormatFF_; // per-chunk storage format
 		std::vector<SELLChunkFormat> nbrChunkFormatFB_;
+		std::vector<SELLChunkFormat> nbrChunkFormatFR_;
 		std::vector<uint64_t> nbrChunkOffsetsFF_; // per-chunk starting index into the selected format buffer
 		std::vector<uint64_t> nbrChunkOffsetsFB_;
+		std::vector<uint64_t> nbrChunkOffsetsFR_;
 		std::vector<uint8_t> nbrListDelta8FF_;
 		std::vector<uint8_t> nbrListDelta8FB_;
+		std::vector<uint8_t> nbrListDelta8FR_;
 		std::vector<uint16_t> nbrListDelta16FF_;
 		std::vector<uint16_t> nbrListDelta16FB_;
+		std::vector<uint16_t> nbrListDelta16FR_;
 		std::vector<uint32_t> nbrListAbs32FF_;
 		std::vector<uint32_t> nbrListAbs32FB_;
+		std::vector<uint32_t> nbrListAbs32FR_;
+
+		// CSR neighbor storage for rigid source particles
+		std::vector<SELLNeighborCount> nbrCountRF_;
+		std::vector<SELLNeighborCount> nbrCountRB_;
+		std::vector<SELLNeighborCount> nbrCountRR_;
+		std::vector<uint64_t> nbrOffsetsRF_;
+		std::vector<uint64_t> nbrOffsetsRB_;
+		std::vector<uint64_t> nbrOffsetsRR_;
+		std::vector<uint32_t> nbrListRF_;
+		std::vector<uint32_t> nbrListRB_;
+		std::vector<uint32_t> nbrListRR_;
 
 		// thread-local neighbor scratch for contiguous access
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
+			uint32_t, N_perScratchInlineFR>> nbrScratchFR_;
 
 		// misc
 		static constexpr uint32_t chunkWidth = CPU::N_SIMD_WIDTH;
@@ -321,14 +417,15 @@ namespace Sim
 		static uint32_t ChunkBegin(uint32_t chunk) noexcept;
 		static uint32_t ChunkEnd(uint32_t chunk, uint32_t N_F) noexcept;
 		static uint32_t ChunkNumTotal(uint32_t N_F) noexcept;
-		static SELLChunkFormat ChooseChunkFormat(
-			uint32_t pitch, uint32_t minRef, uint32_t maxRef) noexcept;
+		static SELLChunkFormat ChooseChunkFormat(uint32_t pitch, uint32_t minRef, uint32_t maxRef) noexcept;
 		static uint64_t ChunkStorageSize(uint32_t pitch) noexcept;
 
 		ChunkedSELLNeighborSpan_Read MakeReadSpanFF(uint32_t chunk) const noexcept;
 		ChunkedSELLNeighborSpan_Read MakeReadSpanFB(uint32_t chunk) const noexcept;
+		ChunkedSELLNeighborSpan_Read MakeReadSpanFR(uint32_t chunk) const noexcept;
 		ChunkedSELLNeighborSpan_Write MakeWriteSpanFF(uint32_t chunk) noexcept;
 		ChunkedSELLNeighborSpan_Write MakeWriteSpanFB(uint32_t chunk) noexcept;
+		ChunkedSELLNeighborSpan_Write MakeWriteSpanFR(uint32_t chunk) noexcept;
 
 		void BuildChunkMaxCount(
 			const std::vector<SELLNeighborCount>& nbrCounts,

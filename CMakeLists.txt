@@ -167,10 +167,27 @@ target_compile_options(Project_Warnings INTERFACE
     >
 )
 
+# git revision information
+set(TSP_GIT_COMMIT_HASH "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}"
+            rev-parse --short=12 HEAD
+        RESULT_VARIABLE TSP_GIT_REVISION_RESULT
+        OUTPUT_VARIABLE TSP_GIT_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(TSP_GIT_REVISION_RESULT EQUAL 0 AND NOT TSP_GIT_REVISION STREQUAL "")
+        set(TSP_GIT_COMMIT_HASH "${TSP_GIT_REVISION}")
+    endif()
+endif()
+
 # platform defines
 add_library(Project_Defines INTERFACE)
 target_compile_definitions(Project_Defines INTERFACE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE>
+    TSP_GIT_COMMIT_HASH=\"${TSP_GIT_COMMIT_HASH}\"
     TSP_BUILD_TYPE=\"$<CONFIG>\"
     TSP_CXX_COMPILER_ID=\"${CMAKE_CXX_COMPILER_ID}\"
     TSP_CXX_COMPILER_VERSION=\"${CMAKE_CXX_COMPILER_VERSION}\"

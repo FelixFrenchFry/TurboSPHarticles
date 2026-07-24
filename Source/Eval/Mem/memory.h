@@ -5,6 +5,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <deque>
 
 // internal
@@ -26,7 +27,7 @@ namespace Mem
 		void BeginStep();
 
 		// pushes the record to history and aggregates step's memory usage
-		void EndStep(uint32_t simStep, double simTime);
+		void EndStep(uint64_t simStep, double simTime);
 
 		void PackMemSnapshot(Sync::MemSnapshot& snap) const;
 

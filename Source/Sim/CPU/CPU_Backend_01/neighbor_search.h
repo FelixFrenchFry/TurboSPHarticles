@@ -43,8 +43,7 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage>
-			GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 	private: // ------------------------------------------------------------------------------------
 		
@@ -81,8 +80,7 @@ namespace Sim
 			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage>
-			GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 		// TODO: implement query with BigMin-LitMax and ternary search and caching of results?
 
@@ -118,6 +116,7 @@ namespace Sim
 		{
 			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> fluidRanges;
 			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> boundaryRanges;
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> rigidRanges;
 		};
 		mutable tbb::enumerable_thread_specific<QueryMetaScratch> queryMetaScratch_;
 
@@ -134,6 +133,12 @@ namespace Sim
 		std::vector<uint32_t> particleOrderB_;
 		std::vector<uint32_t> cellTableB_;
 
+		std::vector<uint64_t> uniqueCellIdR_;
+		std::vector<uint32_t> cellStartIdxR_;
+		std::vector<uint64_t> cellIdR_;
+		std::vector<uint32_t> particleOrderR_;
+		std::vector<uint32_t> cellTableR_;
+
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 
@@ -143,11 +148,13 @@ namespace Sim
 		void GatherCellQueryRanges(
 			int cx, int cy, int cz,
 			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const;
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const;
 		void GatherChunkQueryRanges(
 			uint32_t begin, uint32_t end,
 			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const;
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
+			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const;
 		inline uint64_t MapToCellId(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToDenseCellIdx(int cx, int cy, int cz) const noexcept;

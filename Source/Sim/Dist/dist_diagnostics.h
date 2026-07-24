@@ -56,7 +56,7 @@ namespace Dist
 	{
 		int rank = 0;
 
-		uint32_t step = 0;
+		uint64_t step = 0;
 		int64_t maxSteps = -1;
 
 		uint32_t ownedFluidParticleCount = 0;
@@ -101,7 +101,7 @@ namespace Dist
 	struct DistRankBenchReport
 	{
 		int rank = 0;
-		uint32_t step = 0;
+		uint64_t step = 0;
 
 		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> latestNs{};
 		std::array<uint64_t, Bench::GetIdx(Bench::BenchOp::Count)> avgNs{};

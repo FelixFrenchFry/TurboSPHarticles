@@ -48,7 +48,7 @@ namespace Render
 
 		const auto sample = src[i];
 
-		// compute rigid boundary particle radius
+		// compute rigid particle radius
 		const float nonNegativeScale = fmaxf(radiusScale, 0.0f);
 		float radius = particleSizeB * 0.5f * nonNegativeScale;
 		if (isfinite(sample.value) && sample.value > 0.0f)
@@ -57,7 +57,7 @@ namespace Render
 			if (isfinite(computed)) { radius = computed; }
 		}
 
-		// pack rigid boundary particle into OpenGL instance data
+		// pack rigid particle into OpenGL instance data
 		dst[dstOffset + i] = InstanceData{
 			sample.x, sample.y, sample.z, radius, 0.0f,
 			{ 0.0f, 0.0f, 0.0f } };
@@ -69,7 +69,7 @@ namespace Render
 		const float fluidRadius,
 		const float particleSizeB,
 		const float rigidRadiusScale,
-		const uint32_t N_F, const uint32_t N_RBP,
+		const uint32_t N_F, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		InstanceData* dst)
@@ -85,12 +85,12 @@ namespace Render
 			GPU::CheckLastKernel("K_PackFluidInstancesCUDA()");
 		}
 
-		// append rigid boundary particles to OpenGL instance data
-		if (N_RBP > 0)
+		// append rigid particles to OpenGL instance data
+		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_RBP + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 			K_PackRigidInstancesCUDA<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-				rigid, particleSizeB, rigidRadiusScale, N_RBP, N_F, dst);
+				rigid, particleSizeB, rigidRadiusScale, N_R, N_F, dst);
 			GPU::CheckLastKernel("K_PackRigidInstancesCUDA()");
 		}
 	}

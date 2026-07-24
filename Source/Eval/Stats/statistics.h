@@ -4,6 +4,7 @@
 
 // external
 #include <array>
+#include <cstdint>
 #include <deque>
 
 // internal
@@ -25,7 +26,7 @@ namespace Stats
 		void BeginStep();
 
 		// pushes the record to history and aggregates step's stat data
-		void EndStep(uint32_t simStep, double simTime);
+		void EndStep(uint64_t simStep, double simTime);
 
 		void PackStatSnapshot(Sync::StatSnapshot& snap) const;
 

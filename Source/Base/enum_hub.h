@@ -11,8 +11,9 @@ namespace Base
 {
 	enum class ParticleType : uint8_t
 	{
-		Fluid,              // 0
-		Boundary            // 1
+		Fluid,              // 0 fluid particles
+		Boundary,           // 1 static boundary particles
+		Rigid               // 2 rigid boundary particles
 	};
 
 	enum class BackendVersion : uint8_t

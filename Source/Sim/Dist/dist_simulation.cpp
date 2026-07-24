@@ -177,14 +177,17 @@ namespace
 		return total;
 	}
 
-	constexpr std::array<Mem::MemBucket, 7> BACKEND_MEM_BUCKETS =
+	constexpr std::array<Mem::MemBucket, 10> BACKEND_MEM_BUCKETS =
 	{
 		Mem::MemBucket::ParticlePropertiesF,
 		Mem::MemBucket::ParticlePropertiesB,
+		Mem::MemBucket::ParticlePropertiesR,
 		Mem::MemBucket::Neighbors_SearchDataStructF,
 		Mem::MemBucket::Neighbors_SearchDataStructB,
+		Mem::MemBucket::Neighbors_SearchDataStructR,
 		Mem::MemBucket::Neighbors_ListStorageF,
 		Mem::MemBucket::Neighbors_ListStorageB,
+		Mem::MemBucket::Neighbors_ListStorageR,
 		Mem::MemBucket::Misc
 	};
 
@@ -248,6 +251,22 @@ namespace
 		return usage;
 	}
 
+	Mem::MemUsage MemoryUsageOfRigidParticles(
+		const Sync::RigidParticles& rigidParticles)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.id));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.bodyId));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.xRelPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.yRelPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.zRelPos));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.volR));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(rigidParticles.psiR));
+
+		return usage;
+	}
+
 	Mem::MemUsage MemoryUsageOfUniversalSimState(
 		const Sync::UniversalSimState& state)
 	{
@@ -255,6 +274,7 @@ namespace
 
 		Mem::Add(usage, MemoryUsageOfFluidParticles(state.fluidParticles));
 		Mem::Add(usage, MemoryUsageOfBoundaryParticles(state.boundaryParticles));
+		Mem::Add(usage, MemoryUsageOfRigidParticles(state.rigidParticles));
 
 		return usage;
 	}
@@ -270,11 +290,16 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.velMagF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idB));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.bodyIdB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.volB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idR));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.bodyIdR));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosR));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosR));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosR));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.volR));
 
 		return usage;
 	}
@@ -868,7 +893,7 @@ void DistSimulationMgr::RunSim_Blocking()
 		if (!keepRunning) { break; }
 
 		// explicit maximum number of steps reached
-		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
+		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
 			paramsInit.maxSteps > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet
@@ -1109,7 +1134,7 @@ bool DistSimulationMgr::BuildGlobalSimState()
 	simScenario_->Build(globalSimState_, simParams_);
 	globalSimState_.fluidParticles.ensureParticleIdsPresent();
 	globalSimState_.boundaryParticles.ensureParticleIdsPresent();
-	globalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
+	globalSimState_.boundaryParticles.ensureBoundaryCoefficientsPresent(
 		simParams_.massB, simParams_.restDensity);
 	globalSimState_.ShrinkToFitAll();
 

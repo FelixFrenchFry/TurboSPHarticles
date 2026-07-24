@@ -96,8 +96,10 @@ namespace
 	{
 		size_t chunkMinRefFF = 0;
 		size_t chunkMinRefFB = 0;
+		size_t chunkMinRefFR = 0;
 		size_t chunkMaxRefFF = 0;
 		size_t chunkMaxRefFB = 0;
+		size_t chunkMaxRefFR = 0;
 		size_t chunkOffsetsScratch = 0;
 		size_t totalBytes = 0;
 	};
@@ -128,8 +130,10 @@ namespace
 
 		layout.chunkMinRefFF = ReserveScratchElems<uint32_t>(cursor, N_chunks);
 		layout.chunkMinRefFB = ReserveScratchElems<uint32_t>(cursor, N_chunks);
+		layout.chunkMinRefFR = ReserveScratchElems<uint32_t>(cursor, N_chunks);
 		layout.chunkMaxRefFF = ReserveScratchElems<uint32_t>(cursor, N_chunks);
 		layout.chunkMaxRefFB = ReserveScratchElems<uint32_t>(cursor, N_chunks);
+		layout.chunkMaxRefFR = ReserveScratchElems<uint32_t>(cursor, N_chunks);
 		layout.chunkOffsetsScratch = ReserveScratchElems<uint64_t>(
 			cursor, static_cast<size_t>(N_chunks) + 1ull);
 		layout.totalBytes = cursor;
@@ -319,248 +323,155 @@ namespace
 			thrust::device_pointer_cast(d_src.Data()));
 	}
 
-} // anonymous
+} // namespace anonymous
 
 void SimBackend_GPU01::FinalizeNeighborLists_Count()
 {
-	if (N_F_ == 0) // nothing to do for empty sim
-	{
-		N_totalFF_ = 0;
-		N_totalFB_ = 0;
-		N_packedFF_ = 0;
-		N_packedFB_ = 0;
-		N_delta8FF_ = 0;
-		N_delta8FB_ = 0;
-		N_delta16FF_ = 0;
-		N_delta16FB_ = 0;
-		N_abs32FF_ = 0;
-		N_abs32FB_ = 0;
-
-		if (d_nbrChunkOffsetsFF_.Size() != 1) { d_nbrChunkOffsetsFF_.Resize(1); }
-		if (d_nbrChunkOffsetsFB_.Size() != 1) { d_nbrChunkOffsetsFB_.Resize(1); }
-
-		const uint64_t zero = 0;
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFF_.Data(), &zero, 1, stream_);
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFB_.Data(), &zero, 1, stream_);
-		GPU::StreamSync(stream_);
-
-		return;
-	}
-
+	const uint32_t N_chunks = SellChunkNumTotal(N_F_);
 	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(N_F_);
 	EnsureNsSharedScratchCapacity(scratchLayout.totalBytes);
 	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFF);
 	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFB);
+	uint32_t* const d_nbrChunkMinRefFR = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFR);
 	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFF);
 	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFB);
-	uint64_t* const d_nbrChunkOffsetsScratch = ScratchPtr<uint64_t>(
-		d_nsSharedScratch_, scratchLayout.chunkOffsetsScratch);
+	uint32_t* const d_nbrChunkMaxRefFR = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFR);
+	uint64_t* const d_nbrChunkOffsetsScratch = ScratchPtr<uint64_t>(d_nsSharedScratch_, scratchLayout.chunkOffsetsScratch);
 
-	const uint32_t N_chunks = SellChunkNumTotal(N_F_);
-	const uint32_t N_BLOCKSIZE = 256;
-	const uint32_t N_GRIDSIZE = (N_chunks + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-	K_BuildSellChunkMaxCount<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-		d_nbrCountFF_.Data(), N_F_, d_nbrChunkMaxCountFF_.Data());
-	GPU::CheckLastKernel("K_BuildSellChunkMaxCount(FF)");
-
-	K_BuildSellChunkMaxCount<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-		d_nbrCountFB_.Data(), N_F_, d_nbrChunkMaxCountFB_.Data());
-	GPU::CheckLastKernel("K_BuildSellChunkMaxCount(FB)");
-
-	GPU::MemsetZero(d_nbrChunkOffsetsFF_.Data(), static_cast<size_t>(N_chunks) + 1ull, stream_);
-	GPU::MemsetZero(d_nbrChunkOffsetsFB_.Data(), static_cast<size_t>(N_chunks) + 1ull, stream_);
-	GPU::MemsetZero(d_nbrChunkOffsetsScratch, static_cast<size_t>(N_chunks) + 1ull, stream_);
-
-	K_BuildSellChunkCompressionMeta<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-		d_nbrChunkMaxCountFF_.Data(),
-		d_nbrChunkMinRefFF,
-		d_nbrChunkMaxRefFF,
-		N_chunks,
-		d_nbrChunkBaseIdxFF_.Data(),
-		d_nbrChunkFormatFF_.Data());
-	GPU::CheckLastKernel("K_BuildSellChunkCompressionMeta(FF)");
-
-	auto scanAndSelectOffsets =
-		[&](const uint16_t* d_chunkMaxCount,
-			const uint8_t* d_chunkFormat,
-			uint64_t* d_chunkOffsets,
-			uint64_t& h_totalDelta8,
-			uint64_t& h_totalDelta16,
-			uint64_t& h_totalAbs32)
+	const uint64_t zero = 0;
+	if (N_F_ == 0)
 	{
-		const uint64_t zero = 0;
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
-
-		thrust::transform_inclusive_scan(
-			thrust::cuda::par.on(stream_),
-			thrust::make_zip_iterator(thrust::make_tuple(
-				thrust::device_pointer_cast(d_chunkMaxCount),
-				thrust::device_pointer_cast(d_chunkFormat))),
-			thrust::make_zip_iterator(thrust::make_tuple(
-				thrust::device_pointer_cast(d_chunkMaxCount + N_chunks),
-				thrust::device_pointer_cast(d_chunkFormat + N_chunks))),
-			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
-			SellChunkPitchIfFormat(static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8)),
-			thrust::plus<uint64_t>{}
-		);
-		K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-			d_nbrChunkOffsetsScratch,
-			d_chunkFormat,
-			static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8),
-			N_chunks,
-			d_chunkOffsets);
-		GPU::CheckLastKernel("K_SelectChunkOffsetsByFormat(Delta8)");
-		GPU::Copy_DeviceToHost(&h_totalDelta8,
-			d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
-
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
-		thrust::transform_inclusive_scan(
-			thrust::cuda::par.on(stream_),
-			thrust::make_zip_iterator(thrust::make_tuple(
-				thrust::device_pointer_cast(d_chunkMaxCount),
-				thrust::device_pointer_cast(d_chunkFormat))),
-			thrust::make_zip_iterator(thrust::make_tuple(
-				thrust::device_pointer_cast(d_chunkMaxCount + N_chunks),
-				thrust::device_pointer_cast(d_chunkFormat + N_chunks))),
-			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
-			SellChunkPitchIfFormat(static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta16)),
-			thrust::plus<uint64_t>{}
-		);
-		K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-			d_nbrChunkOffsetsScratch,
-			d_chunkFormat,
-			static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta16),
-			N_chunks,
-			d_chunkOffsets);
-		GPU::CheckLastKernel("K_SelectChunkOffsetsByFormat(Delta16)");
-		GPU::Copy_DeviceToHost(&h_totalDelta16,
-			d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
-
-		GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
-		thrust::transform_inclusive_scan(
-			thrust::cuda::par.on(stream_),
-			thrust::make_zip_iterator(thrust::make_tuple(
-				thrust::device_pointer_cast(d_chunkMaxCount),
-				thrust::device_pointer_cast(d_chunkFormat))),
-			thrust::make_zip_iterator(thrust::make_tuple(
-				thrust::device_pointer_cast(d_chunkMaxCount + N_chunks),
-				thrust::device_pointer_cast(d_chunkFormat + N_chunks))),
-			thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
-			SellChunkPitchIfFormat(static_cast<uint8_t>(GPU01::NbrChunkFormat::Abs32)),
-			thrust::plus<uint64_t>{}
-		);
-		K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-			d_nbrChunkOffsetsScratch,
-			d_chunkFormat,
-			static_cast<uint8_t>(GPU01::NbrChunkFormat::Abs32),
-			N_chunks,
-			d_chunkOffsets);
-		GPU::CheckLastKernel("K_SelectChunkOffsetsByFormat(Abs32)");
-		GPU::Copy_DeviceToHost(&h_totalAbs32,
-			d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
-	};
-
-	uint64_t h_delta8FF = 0;
-	uint64_t h_delta16FF = 0;
-	uint64_t h_abs32FF = 0;
-	uint64_t h_delta8FB = 0;
-	uint64_t h_delta16FB = 0;
-	uint64_t h_abs32FB = 0;
-
-	scanAndSelectOffsets(
-		d_nbrChunkMaxCountFF_.Data(),
-		d_nbrChunkFormatFF_.Data(),
-		d_nbrChunkOffsetsFF_.Data(),
-		h_delta8FF, h_delta16FF, h_abs32FF);
-
-	K_BuildSellChunkCompressionMeta<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
-		d_nbrChunkMaxCountFB_.Data(),
-		d_nbrChunkMinRefFB,
-		d_nbrChunkMaxRefFB,
-		N_chunks,
-		d_nbrChunkBaseIdxFB_.Data(),
-		d_nbrChunkFormatFB_.Data());
-	GPU::CheckLastKernel("K_BuildSellChunkCompressionMeta(FB)");
-
-	scanAndSelectOffsets(
-		d_nbrChunkMaxCountFB_.Data(),
-		d_nbrChunkFormatFB_.Data(),
-		d_nbrChunkOffsetsFB_.Data(),
-		h_delta8FB, h_delta16FB, h_abs32FB);
-
-	// actual total neighbor counts remain the sum of per-particle counts
-	N_totalFF_ = thrust::transform_reduce(
-		thrust::cuda::par.on(stream_),
-		thrust::device_pointer_cast(d_nbrCountFF_.Data()),
-		thrust::device_pointer_cast(d_nbrCountFF_.Data() + N_F_),
-		ToU64{},
-		uint64_t{ 0 },
-		thrust::plus<uint64_t>{}
-	);
-
-	N_totalFB_ = thrust::transform_reduce(
-		thrust::cuda::par.on(stream_),
-		thrust::device_pointer_cast(d_nbrCountFB_.Data()),
-		thrust::device_pointer_cast(d_nbrCountFB_.Data() + N_F_),
-		ToU64{},
-		uint64_t{ 0 },
-		thrust::plus<uint64_t>{}
-	);
-
-	GPU::StreamSync(stream_);
-
-	N_delta8FF_ = h_delta8FF;
-	N_delta8FB_ = h_delta8FB;
-	N_delta16FF_ = h_delta16FF;
-	N_delta16FB_ = h_delta16FB;
-	N_abs32FF_ = h_abs32FF;
-	N_abs32FB_ = h_abs32FB;
-
-	N_packedFF_ = N_delta8FF_ * sizeof(uint8_t)
-				+ N_delta16FF_ * sizeof(uint16_t)
-				+ N_abs32FF_ * sizeof(uint32_t);
-	N_packedFB_ = N_delta8FB_ * sizeof(uint8_t)
-				+ N_delta16FB_ * sizeof(uint16_t)
-				+ N_abs32FB_ * sizeof(uint32_t);
-
-	if (N_delta8FF_ > d_nbrListDelta8FF_.Size())
-	{
-		const uint64_t capTarget = N_delta8FF_
-								 + Base::ExtraPercent(N_delta8FF_, extraAllocCapacityPct_);
-		d_nbrListDelta8FF_.Resize(capTarget);
+		N_totalFF_ = N_totalFB_ = N_totalFR_ = 0;
+		N_packedFF_ = N_packedFB_ = N_packedFR_ = 0;
+		N_delta8FF_ = N_delta8FB_ = N_delta8FR_ = 0;
+		N_delta16FF_ = N_delta16FB_ = N_delta16FR_ = 0;
+		N_abs32FF_ = N_abs32FB_ = N_abs32FR_ = 0;
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFF_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFB_.Data(), &zero, 1, stream_);
+		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFR_.Data(), &zero, 1, stream_);
 	}
-	if (N_delta16FF_ > d_nbrListDelta16FF_.Size())
+	else
 	{
-		const uint64_t capTarget = N_delta16FF_
-								 + Base::ExtraPercent(N_delta16FF_, extraAllocCapacityPct_);
-		d_nbrListDelta16FF_.Resize(capTarget);
-	}
-	if (N_abs32FF_ > d_nbrListAbs32FF_.Size())
-	{
-		const uint64_t capTarget = N_abs32FF_
-								 + Base::ExtraPercent(N_abs32FF_, extraAllocCapacityPct_);
-		d_nbrListAbs32FF_.Resize(capTarget);
-	}
-	if (N_delta8FB_ > d_nbrListDelta8FB_.Size())
-	{
-		const uint64_t capTarget = N_delta8FB_
-								 + Base::ExtraPercent(N_delta8FB_, extraAllocCapacityPct_);
-		d_nbrListDelta8FB_.Resize(capTarget);
-	}
-	if (N_delta16FB_ > d_nbrListDelta16FB_.Size())
-	{
-		const uint64_t capTarget = N_delta16FB_
-								 + Base::ExtraPercent(N_delta16FB_, extraAllocCapacityPct_);
-		d_nbrListDelta16FB_.Resize(capTarget);
-	}
-	if (N_abs32FB_ > d_nbrListAbs32FB_.Size())
-	{
-		const uint64_t capTarget = N_abs32FB_
-								 + Base::ExtraPercent(N_abs32FB_, extraAllocCapacityPct_);
-		d_nbrListAbs32FB_.Resize(capTarget);
+		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_GRIDSIZE = (N_chunks + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+
+		auto finalizeSell = [&](
+			const char* label,
+			const auto& d_nbrCount,
+			auto& d_nbrChunkMaxCount,
+			const uint32_t* d_nbrChunkMinRef,
+			const uint32_t* d_nbrChunkMaxRef,
+			auto& d_nbrChunkBaseIdx,
+			auto& d_nbrChunkFormat,
+			auto& d_nbrChunkOffsets,
+			auto& d_nbrListDelta8,
+			auto& d_nbrListDelta16,
+			auto& d_nbrListAbs32,
+			uint64_t& N_total,
+			uint64_t& N_packed,
+			uint64_t& N_delta8,
+			uint64_t& N_delta16,
+			uint64_t& N_abs32)
+		{
+			K_BuildSellChunkMaxCount<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
+				d_nbrCount.Data(), N_F_, d_nbrChunkMaxCount.Data());
+			GPU::CheckLastKernel(label);
+
+			K_BuildSellChunkCompressionMeta<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
+				d_nbrChunkMaxCount.Data(), d_nbrChunkMinRef, d_nbrChunkMaxRef, N_chunks,
+				d_nbrChunkBaseIdx.Data(), d_nbrChunkFormat.Data());
+			GPU::CheckLastKernel(label);
+
+			uint64_t totals[3]{};
+			for (uint8_t format = 0; format < 3; format++)
+			{
+				GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
+				thrust::transform_inclusive_scan(
+					thrust::cuda::par.on(stream_),
+					thrust::make_zip_iterator(thrust::make_tuple(
+						thrust::device_pointer_cast(d_nbrChunkMaxCount.Data()),
+						thrust::device_pointer_cast(d_nbrChunkFormat.Data()))),
+					thrust::make_zip_iterator(thrust::make_tuple(
+						thrust::device_pointer_cast(d_nbrChunkMaxCount.Data() + N_chunks),
+						thrust::device_pointer_cast(d_nbrChunkFormat.Data() + N_chunks))),
+					thrust::device_pointer_cast(d_nbrChunkOffsetsScratch + 1),
+					SellChunkPitchIfFormat(format), thrust::plus<uint64_t>{});
+				K_SelectChunkOffsetsByFormat<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream_>>>(
+					d_nbrChunkOffsetsScratch, d_nbrChunkFormat.Data(), format,
+					N_chunks, d_nbrChunkOffsets.Data());
+				GPU::Copy_DeviceToHost(&totals[format],
+					d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
+			}
+
+			N_total = thrust::transform_reduce(
+				thrust::cuda::par.on(stream_),
+				thrust::device_pointer_cast(d_nbrCount.Data()),
+				thrust::device_pointer_cast(d_nbrCount.Data() + N_F_),
+				ToU64{}, uint64_t{ 0 }, thrust::plus<uint64_t>{});
+			GPU::StreamSync(stream_);
+
+			N_delta8 = totals[static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8)];
+			N_delta16 = totals[static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta16)];
+			N_abs32 = totals[static_cast<uint8_t>(GPU01::NbrChunkFormat::Abs32)];
+			N_packed = N_delta8 * sizeof(uint8_t)
+				+ N_delta16 * sizeof(uint16_t) + N_abs32 * sizeof(uint32_t);
+
+			auto grow = [&](auto& buffer, const uint64_t required)
+			{
+				if (required <= buffer.Size()) { return; }
+				buffer.Resize(required + Base::ExtraPercent(required, extraAllocCapacityPct_));
+			};
+			grow(d_nbrListDelta8, N_delta8);
+			grow(d_nbrListDelta16, N_delta16);
+			grow(d_nbrListAbs32, N_abs32);
+		};
+
+		finalizeSell("Finalize SELL32 FF", d_nbrCountFF_, d_nbrChunkMaxCountFF_,
+			d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
+			d_nbrChunkBaseIdxFF_, d_nbrChunkFormatFF_, d_nbrChunkOffsetsFF_,
+			d_nbrListDelta8FF_, d_nbrListDelta16FF_, d_nbrListAbs32FF_,
+			N_totalFF_, N_packedFF_, N_delta8FF_, N_delta16FF_, N_abs32FF_);
+		finalizeSell("Finalize SELL32 FB", d_nbrCountFB_, d_nbrChunkMaxCountFB_,
+			d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB,
+			d_nbrChunkBaseIdxFB_, d_nbrChunkFormatFB_, d_nbrChunkOffsetsFB_,
+			d_nbrListDelta8FB_, d_nbrListDelta16FB_, d_nbrListAbs32FB_,
+			N_totalFB_, N_packedFB_, N_delta8FB_, N_delta16FB_, N_abs32FB_);
+		finalizeSell("Finalize SELL32 FR", d_nbrCountFR_, d_nbrChunkMaxCountFR_,
+			d_nbrChunkMinRefFR, d_nbrChunkMaxRefFR,
+			d_nbrChunkBaseIdxFR_, d_nbrChunkFormatFR_, d_nbrChunkOffsetsFR_,
+			d_nbrListDelta8FR_, d_nbrListDelta16FR_, d_nbrListAbs32FR_,
+			N_totalFR_, N_packedFR_, N_delta8FR_, N_delta16FR_, N_abs32FR_);
 	}
 
+	// build CSR offsets and storage for rigid source neighbors
+	const auto finalizeCSR = [&](auto& d_nbrCount, auto& d_nbrOffsets,
+		auto& d_nbrList, uint64_t& N_total)
+		{
+			GPU::Copy_HostToDevice(d_nbrOffsets.Data(), &zero, 1, stream_);
+			if (N_R_ == 0)
+			{
+				N_total = 0;
+				return;
+			}
+
+			thrust::transform_inclusive_scan(
+				thrust::cuda::par.on(stream_),
+				thrust::device_pointer_cast(d_nbrCount.Data()),
+				thrust::device_pointer_cast(d_nbrCount.Data() + N_R_),
+				thrust::device_pointer_cast(d_nbrOffsets.Data() + 1),
+				ToU64{}, thrust::plus<uint64_t>{});
+			GPU::Copy_DeviceToHost(&N_total, d_nbrOffsets.Data() + N_R_, 1, stream_);
+			GPU::StreamSync(stream_);
+			if (N_total > d_nbrList.Size())
+			{
+				d_nbrList.Resize(
+					N_total + Base::ExtraPercent(N_total, extraAllocCapacityPct_));
+			}
+		};
+
+	finalizeCSR(d_nbrCountRF_, d_nbrOffsetsRF_, d_nbrListRF_, N_totalRF_);
+	finalizeCSR(d_nbrCountRB_, d_nbrOffsetsRB_, d_nbrListRB_, N_totalRB_);
+	finalizeCSR(d_nbrCountRR_, d_nbrOffsetsRR_, d_nbrListRR_, N_totalRR_);
 	GPU::StreamSync(stream_);
 }
 
@@ -580,7 +491,7 @@ void NS_BruteForce_GPU01::Construct(
 	const SimParams& params)
 {
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, 0.0f, 1u,
+		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, 0.0f, 1u,
 		0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
@@ -590,7 +501,6 @@ void NS_BruteForce_GPU01::Construct(
 void NS_BruteForce_GPU01::Query_Count(
 	const SimParams& params)
 {
-	(void)params;
 
 	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(be_.N_F_);
 	be_.EnsureNsSharedScratchCapacity(scratchLayout.totalBytes);
@@ -598,26 +508,49 @@ void NS_BruteForce_GPU01::Query_Count(
 		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFF);
 	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFB);
+	uint32_t* const d_nbrChunkMinRefFR = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFR);
 	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFF);
 	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFB);
+	uint32_t* const d_nbrChunkMaxRefFR = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFR);
 
 	const uint32_t N_chunks = SellChunkNumTotal(be_.N_F_);
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountFR_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountRF_.Data(), be_.N_R_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountRB_.Data(), be_.N_R_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountRR_.Data(), be_.N_R_, be_.stream_);
 	GPU::MemsetBytes(d_nbrChunkMinRefFF, 0xff, N_chunks, be_.stream_);
 	GPU::MemsetBytes(d_nbrChunkMinRefFB, 0xff, N_chunks, be_.stream_);
+	GPU::MemsetBytes(d_nbrChunkMinRefFR, 0xff, N_chunks, be_.stream_);
 	GPU::MemsetZero(d_nbrChunkMaxRefFF, N_chunks, be_.stream_);
 	GPU::MemsetZero(d_nbrChunkMaxRefFB, N_chunks, be_.stream_);
+	GPU::MemsetZero(d_nbrChunkMaxRefFR, N_chunks, be_.stream_);
 
-	GPU01::Launch_BruteForce_Query_Count(
+	if (be_.N_F_ > 0)
+	{
+		GPU01::Launch_BruteForce_Query_Count(
+			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+			be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+			be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(), be_.d_nbrCountFR_.Data(),
+			d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
+			d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB,
+			d_nbrChunkMinRefFR, d_nbrChunkMaxRefFR);
+	}
+
+	GPU01::Launch_BruteForce_Query_Count_RF_RB_RR(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		be_.N_F_, be_.N_B_, be_.stream_,
-		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(),
-		d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
-		d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB);
+		be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+		be_.d_bodyIdR_.Data(),
+		be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+		be_.d_nbrCountRF_.Data(), be_.d_nbrCountRB_.Data(), be_.d_nbrCountRR_.Data());
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -625,24 +558,43 @@ void NS_BruteForce_GPU01::Query_Count(
 void NS_BruteForce_GPU01::Query_Fill(
 	const SimParams& params)
 {
+	(void)params;
+
 	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
 
-	GPU01::Launch_BruteForce_Query_Fill(
+	if (be_.N_F_ > 0)
+	{
+		GPU01::Launch_BruteForce_Query_Fill(
+			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+			be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+			be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
+			be_.d_nbrChunkMaxCountFR_.Data(),
+			be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
+			be_.d_nbrChunkOffsetsFR_.Data(),
+			be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
+			be_.d_nbrChunkBaseIdxFR_.Data(),
+			be_.d_nbrChunkFormatFF_.Data(), be_.d_nbrChunkFormatFB_.Data(),
+			be_.d_nbrChunkFormatFR_.Data(),
+			be_.d_nbrListDelta8FF_.Data(), be_.d_nbrListDelta8FB_.Data(),
+			be_.d_nbrListDelta8FR_.Data(),
+			be_.d_nbrListDelta16FF_.Data(), be_.d_nbrListDelta16FB_.Data(),
+			be_.d_nbrListDelta16FR_.Data(),
+			be_.d_nbrListAbs32FF_.Data(), be_.d_nbrListAbs32FB_.Data(),
+			be_.d_nbrListAbs32FR_.Data(),
+			be_.d_nbrOverflowFlag_.Data());
+	}
+
+	GPU01::Launch_BruteForce_Query_Fill_RF_RB_RR(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		be_.N_F_, be_.N_B_, be_.stream_,
-		be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
-		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
-		be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
-		be_.d_nbrChunkFormatFF_.Data(), be_.d_nbrChunkFormatFB_.Data(),
-		be_.d_nbrListDelta8FF_.Data(),
-		be_.d_nbrListDelta8FB_.Data(),
-		be_.d_nbrListDelta16FF_.Data(),
-		be_.d_nbrListDelta16FB_.Data(),
-		be_.d_nbrListAbs32FF_.Data(),
-		be_.d_nbrListAbs32FB_.Data(),
-		be_.d_nbrOverflowFlag_.Data());
+		be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+		be_.d_bodyIdR_.Data(),
+		be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+		be_.d_nbrOffsetsRF_.Data(), be_.d_nbrOffsetsRB_.Data(), be_.d_nbrOffsetsRR_.Data(),
+		be_.d_nbrListRF_.Data(), be_.d_nbrListRB_.Data(), be_.d_nbrListRR_.Data());
 
 	#if defined(_DEBUG)
 	CheckNbrListErrorFlag(be_.d_nbrOverflowFlag_, be_.stream_,
@@ -660,17 +612,16 @@ void NS_BruteForce_GPU01::DataReOrder(
 	// no re-ordering in brute force implementation
 }
 
-std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_GPU01::GetMemUsage(
+Mem::ParticleClassMemUsage NS_BruteForce_GPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	(void)params;
 
 	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
 
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
 
-	return { usageF, usageB };
+	return { usageF, {}, {} };
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -684,6 +635,7 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	cellQueryReach_ = 1;
 	N_NonEmptyCellsF_ = 0;
 	N_NonEmptyCellsB_ = 0;
+	N_NonEmptyCellsR_ = 0;
 	N_NonEmptyCellsAny_ = 0;
 	N_queryCellSlots_ = 0;
 	particlesMatchCurrentCellOrder_ = false;
@@ -692,10 +644,13 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	d_uniqueCellIdF_.Release();
 	d_cellStartIdxF_.Release();
 	d_sortedParticleIdxF_.Release();
-
 	d_uniqueCellIdB_.Release();
 	d_cellStartIdxB_.Release();
-
+	d_uniqueCellIdR_.Release();
+	d_cellStartIdxR_.Release();
+	d_sortedParticleIdxR_.Release();
+	d_cellIdR_.Release();
+	d_cellMarkerR_.Release();
 	d_uniqueCellIdAny_.Release();
 	d_cellRefFByAny_.Release();
 	d_cellRefBByAny_.Release();
@@ -706,13 +661,15 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
+	const uint32_t N_R = be_.N_R_;
 
-	if (N_F == 0 && N_B == 0)
+	if (N_F == 0 && N_B == 0 && N_R == 0)
 	{
 		std::cerr << "Warning: Cannot construct neighbor search for an empty simulation.\n";
 
 		N_NonEmptyCellsF_ = 0;
 		N_NonEmptyCellsB_ = 0;
+		N_NonEmptyCellsR_ = 0;
 		N_NonEmptyCellsAny_ = 0;
 		N_queryCellSlots_ = 0;
 		particlesMatchCurrentCellOrder_ = false;
@@ -721,10 +678,13 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		d_uniqueCellIdF_.Release();
 		d_cellStartIdxF_.Release();
 		d_sortedParticleIdxF_.Release();
-
 		d_uniqueCellIdB_.Release();
 		d_cellStartIdxB_.Release();
-
+		d_uniqueCellIdR_.Release();
+		d_cellStartIdxR_.Release();
+		d_sortedParticleIdxR_.Release();
+		d_cellIdR_.Release();
+		d_cellMarkerR_.Release();
 		d_uniqueCellIdAny_.Release();
 		d_cellRefFByAny_.Release();
 		d_cellRefBByAny_.Release();
@@ -734,8 +694,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	}
 
 	cellSize_ = params.kernelRadius * params.gridCellSizeRatio;
-	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f)
-				 ? 0.0f : (1.0f / cellSize_);
+	cellSizeInv_ = Base::ApproxEqu(cellSize_, 0.0f) ? 0.0f : (1.0f / cellSize_);
 	const float querySpanCells = Base::ApproxEqu(cellSize_, 0.0f)
 		? 0.0f : (params.kernelRadius / cellSize_);
 	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
@@ -743,22 +702,19 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	EnsureStorageAllocation();
-	const NS_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(N_F, N_B);
+	const NS_CompactSharedScratchLayout scratchLayout = BuildCompactSharedScratchLayout(N_F, N_B);
 	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
 	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
-	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
+	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
 
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_,
+		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
 		0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
 	// if DataReOrder() already computed and permuted the per-particle cell IDs for this step,
 	// then they can be reused directly here and no re-computation is needed
-	const bool canReuseCellIds =
-		particlesMatchCurrentCellOrder_ && cellIdsAvailableForReuse_;
+	const bool canReuseCellIds = particlesMatchCurrentCellOrder_ && cellIdsAvailableForReuse_;
 
 	if (!canReuseCellIds)
 	{
@@ -803,13 +759,25 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 		}
 	}
 
+	// build rigid particle cell keys without changing body-contiguous particle storage
+	if (N_R > 0)
+	{
+		GPU01::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+			N_R, be_.stream_, d_cellIdR_.Data(), d_sortedParticleIdxR_.Data());
+		thrust::sort_by_key(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_cellIdR_.Data()),
+			thrust::device_pointer_cast(d_cellIdR_.Data() + N_R),
+			thrust::device_pointer_cast(d_sortedParticleIdxR_.Data()));
+	}
+
 	// --- [ build compact cell list and fill in cell start indices ] --------------------------------
 
 	if (N_F > 0) // fluid
 	{
 		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_, d_sortedParticleIdxF_.Data(),
-			d_cellIdF,
-			N_F, N_NonEmptyCellsF_);
+			d_cellIdF, N_F, N_NonEmptyCellsF_);
 	}
 	else
 	{
@@ -819,12 +787,21 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	if (N_B > 0) // boundary
 	{
 		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_, d_sortedParticleIdxB,
-			d_cellIdB,
-			N_B, N_NonEmptyCellsB_);
+			d_cellIdB, N_B, N_NonEmptyCellsB_);
 	}
 	else
 	{
 		N_NonEmptyCellsB_ = 0;
+	}
+
+	if (N_R > 0) // rigid
+	{
+		BuildCompactCellList(d_uniqueCellIdR_, d_cellStartIdxR_, d_cellMarkerR_.Data(),
+			d_cellIdR_.Data(), N_R, N_NonEmptyCellsR_);
+	}
+	else
+	{
+		N_NonEmptyCellsR_ = 0;
 	}
 
 	BuildMergedCompactCellLookup();
@@ -852,31 +829,60 @@ void NS_CellLinkedList_Compact_GPU01::Query_Count(const SimParams& params)
 		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFF);
 	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFB);
+	uint32_t* const d_nbrChunkMinRefFR = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFR);
 	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFF);
 	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFB);
+	uint32_t* const d_nbrChunkMaxRefFR = ScratchPtr<uint32_t>(
+		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFR);
 
 	// reset per-particle counts before count-query
 	const uint32_t N_chunks = SellChunkNumTotal(be_.N_F_);
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountFR_.Data(), be_.N_F_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountRF_.Data(), be_.N_R_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountRB_.Data(), be_.N_R_, be_.stream_);
+	GPU::MemsetZero(be_.d_nbrCountRR_.Data(), be_.N_R_, be_.stream_);
 	GPU::MemsetBytes(d_nbrChunkMinRefFF, 0xff, N_chunks, be_.stream_);
 	GPU::MemsetBytes(d_nbrChunkMinRefFB, 0xff, N_chunks, be_.stream_);
+	GPU::MemsetBytes(d_nbrChunkMinRefFR, 0xff, N_chunks, be_.stream_);
 	GPU::MemsetZero(d_nbrChunkMaxRefFF, N_chunks, be_.stream_);
 	GPU::MemsetZero(d_nbrChunkMaxRefFB, N_chunks, be_.stream_);
+	GPU::MemsetZero(d_nbrChunkMaxRefFR, N_chunks, be_.stream_);
 
-	GPU01::Launch_CellLinkedList_Compact_Query_Count(
+	if (be_.N_F_ > 0)
+	{
+		GPU01::Launch_CellLinkedList_Compact_Query_Count(
+			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+			d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
+			d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+			d_sortedParticleIdxF_.Data(),
+			d_queryCellRefAnyByCellF_.Data(),
+			d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
+			N_NonEmptyCellsR_,
+			N_queryCellSlots_, be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+			be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(), be_.d_nbrCountFR_.Data(),
+			d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
+			d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB,
+			d_nbrChunkMinRefFR, d_nbrChunkMaxRefFR);
+	}
+
+	GPU01::Launch_CellLinkedList_Compact_Query_Count_RF_RB_RR(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
-		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
-		d_sortedParticleIdxF_.Data(),
-		d_queryCellRefAnyByCellF_.Data(), N_queryCellSlots_,
-		be_.N_F_, be_.N_B_, be_.stream_,
-		be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(),
-		d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
-		d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB);
+		be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+		be_.d_bodyIdR_.Data(),
+		d_uniqueCellIdF_.Data(), d_cellStartIdxF_.Data(),
+		d_uniqueCellIdB_.Data(), d_cellStartIdxB_.Data(),
+		d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsB_, N_NonEmptyCellsR_,
+		be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+		be_.d_nbrCountRF_.Data(), be_.d_nbrCountRB_.Data(), be_.d_nbrCountRR_.Data());
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -894,25 +900,48 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 	// reset overflow before filling packed SELL32 lists
 	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
 
-	GPU01::Launch_CellLinkedList_Compact_Query_Fill(
+	if (be_.N_F_ > 0)
+	{
+		GPU01::Launch_CellLinkedList_Compact_Query_Fill(
+			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+			d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
+			d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+			d_sortedParticleIdxF_.Data(),
+			d_queryCellRefAnyByCellF_.Data(),
+			d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
+			N_NonEmptyCellsR_,
+			N_queryCellSlots_, be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+			be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
+			be_.d_nbrChunkMaxCountFR_.Data(),
+			be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
+			be_.d_nbrChunkOffsetsFR_.Data(),
+			be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
+			be_.d_nbrChunkBaseIdxFR_.Data(),
+			be_.d_nbrChunkFormatFF_.Data(), be_.d_nbrChunkFormatFB_.Data(),
+			be_.d_nbrChunkFormatFR_.Data(),
+			be_.d_nbrListDelta8FF_.Data(), be_.d_nbrListDelta8FB_.Data(),
+			be_.d_nbrListDelta8FR_.Data(),
+			be_.d_nbrListDelta16FF_.Data(), be_.d_nbrListDelta16FB_.Data(),
+			be_.d_nbrListDelta16FR_.Data(),
+			be_.d_nbrListAbs32FF_.Data(), be_.d_nbrListAbs32FB_.Data(),
+			be_.d_nbrListAbs32FR_.Data(),
+			be_.d_nbrOverflowFlag_.Data());
+	}
+
+	GPU01::Launch_CellLinkedList_Compact_Query_Fill_RF_RB_RR(
 		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
-		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
-		d_sortedParticleIdxF_.Data(),
-		d_queryCellRefAnyByCellF_.Data(), N_queryCellSlots_,
-		be_.N_F_, be_.N_B_, be_.stream_,
-		be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
-		be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
-		be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
-		be_.d_nbrChunkFormatFF_.Data(), be_.d_nbrChunkFormatFB_.Data(),
-		be_.d_nbrListDelta8FF_.Data(),
-		be_.d_nbrListDelta8FB_.Data(),
-		be_.d_nbrListDelta16FF_.Data(),
-		be_.d_nbrListDelta16FB_.Data(),
-		be_.d_nbrListAbs32FF_.Data(),
-		be_.d_nbrListAbs32FB_.Data(),
-		be_.d_nbrOverflowFlag_.Data());
+		be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+		be_.d_bodyIdR_.Data(),
+		d_uniqueCellIdF_.Data(), d_cellStartIdxF_.Data(),
+		d_uniqueCellIdB_.Data(), d_cellStartIdxB_.Data(),
+		d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
+		N_NonEmptyCellsF_, N_NonEmptyCellsB_, N_NonEmptyCellsR_,
+		be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
+		be_.d_nbrOffsetsRF_.Data(), be_.d_nbrOffsetsRB_.Data(), be_.d_nbrOffsetsRR_.Data(),
+		be_.d_nbrListRF_.Data(), be_.d_nbrListRB_.Data(), be_.d_nbrListRR_.Data());
 
 	#if defined(_DEBUG)
 	CheckNbrListErrorFlag(be_.d_nbrOverflowFlag_, be_.stream_,
@@ -948,15 +977,13 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 
 	EnsureStorageAllocation();
-	const NS_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(N_F, N_B);
+	const NS_CompactSharedScratchLayout scratchLayout = BuildCompactSharedScratchLayout(N_F, N_B);
 	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
 	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
-	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
+	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
 
 	GPU01::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, params.kernelRadius, cellSize_, cellQueryReach_,
+		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
 		0.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
 
@@ -1039,14 +1066,9 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		const uint32_t* d_permB = d_sortedParticleIdxB;
 
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, be_.d_reorderIdScratch_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_bodyIdB_, be_.d_reorderIdScratch_, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_rigidBoundaryParticleIdxB_, be_.d_reorderIdScratch_, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xVelB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yVelB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zVelB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_volB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_psiB_, d_reorderScratch, be_.stream_);
 
@@ -1066,20 +1088,30 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemUsage(
+Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	(void)params;
 
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
+	Mem::MemUsage usageR{};
 
+	// fluid
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellStartIdxF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_sortedParticleIdxF_));
 
+	// boundary
 	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_uniqueCellIdB_));
 	Mem::Add(usageB, MemUsageOf_DeviceBuffer(d_cellStartIdxB_));
+	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_uniqueCellIdR_));
+
+	// rigid
+	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellStartIdxR_));
+	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_sortedParticleIdxR_));
+	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellIdR_));
+	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellMarkerR_));
 
 	// shared merged lookup metadata is accounted in the fluid-side bucket to avoid double-counting
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
@@ -1090,13 +1122,14 @@ std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_GPU01::GetMemU
 
 	// shared scan scratch is accounted in the fluid-side bucket to avoid double-counting
 
-	return { usageF, usageB };
+	return { usageF, usageB, usageR };
 }
 
 void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
+	const uint32_t N_R = be_.N_R_;
 
 	if (N_F > 0)
 	{
@@ -1115,6 +1148,15 @@ void NS_CellLinkedList_Compact_GPU01::EnsureStorageAllocation()
 		// TODO: use heuristic instead of allocating worst-case size?
 		if (d_uniqueCellIdB_.Size() < N_B) { d_uniqueCellIdB_.Resize(N_B); }
 		if (d_cellStartIdxB_.Size() < N_B + 1) { d_cellStartIdxB_.Resize(N_B + 1); }
+	}
+
+	if (N_R > 0)
+	{
+		if (d_uniqueCellIdR_.Size() < N_R) { d_uniqueCellIdR_.Resize(N_R); }
+		if (d_cellStartIdxR_.Size() < N_R + 1) { d_cellStartIdxR_.Resize(N_R + 1); }
+		if (d_sortedParticleIdxR_.Size() < N_R) { d_sortedParticleIdxR_.Resize(N_R); }
+		if (d_cellIdR_.Size() < N_R) { d_cellIdR_.Resize(N_R); }
+		if (d_cellMarkerR_.Size() < N_R) { d_cellMarkerR_.Resize(N_R); }
 	}
 
 	const uint32_t N_ANY_MAX = N_F + N_B;

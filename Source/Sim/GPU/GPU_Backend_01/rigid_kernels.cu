@@ -13,8 +13,6 @@
 
 namespace GPU01
 {
-	static constexpr uint32_t N_SellWidth = 32u;
-	static constexpr uint32_t InvalidRigidBodyId = 0xffffffffu;
 	static constexpr float RigidOrthonormalEps = 1e-12f;
 
 	__device__ __forceinline__
@@ -42,40 +40,40 @@ namespace GPU01
 	__device__ __forceinline__
 	void ReOrthonormalizeBody(
 		const uint32_t bodyIdx,
-		float* __restrict__ a00R, float* __restrict__ a01R, float* __restrict__ a02R,
-		float* __restrict__ a10R, float* __restrict__ a11R, float* __restrict__ a12R,
-		float* __restrict__ a20R, float* __restrict__ a21R, float* __restrict__ a22R)
+		float* __restrict__ a00RB, float* __restrict__ a01RB, float* __restrict__ a02RB,
+		float* __restrict__ a10RB, float* __restrict__ a11RB, float* __restrict__ a12RB,
+		float* __restrict__ a20RB, float* __restrict__ a21RB, float* __restrict__ a22RB)
 	{
 		// use Gram-Schmidt algo on orientation columns
-		float b1x = a00R[bodyIdx];
-		float b1y = a10R[bodyIdx];
-		float b1z = a20R[bodyIdx];
+		float b1x = a00RB[bodyIdx];
+		float b1y = a10RB[bodyIdx];
+		float b1z = a20RB[bodyIdx];
 		if (!Normalize3(b1x, b1y, b1z))
 		{
-			a00R[bodyIdx] = 1.0f; a01R[bodyIdx] = 0.0f; a02R[bodyIdx] = 0.0f;
-			a10R[bodyIdx] = 0.0f; a11R[bodyIdx] = 1.0f; a12R[bodyIdx] = 0.0f;
-			a20R[bodyIdx] = 0.0f; a21R[bodyIdx] = 0.0f; a22R[bodyIdx] = 1.0f;
+			a00RB[bodyIdx] = 1.0f; a01RB[bodyIdx] = 0.0f; a02RB[bodyIdx] = 0.0f;
+			a10RB[bodyIdx] = 0.0f; a11RB[bodyIdx] = 1.0f; a12RB[bodyIdx] = 0.0f;
+			a20RB[bodyIdx] = 0.0f; a21RB[bodyIdx] = 0.0f; a22RB[bodyIdx] = 1.0f;
 			return;
 		}
 
-		float b2x = a01R[bodyIdx];
-		float b2y = a11R[bodyIdx];
-		float b2z = a21R[bodyIdx];
+		float b2x = a01RB[bodyIdx];
+		float b2y = a11RB[bodyIdx];
+		float b2z = a21RB[bodyIdx];
 		const float b1DotA2 = Dot3(b1x, b1y, b1z, b2x, b2y, b2z);
 		b2x -= b1DotA2 * b1x;
 		b2y -= b1DotA2 * b1y;
 		b2z -= b1DotA2 * b1z;
 		if (!Normalize3(b2x, b2y, b2z))
 		{
-			a00R[bodyIdx] = 1.0f; a01R[bodyIdx] = 0.0f; a02R[bodyIdx] = 0.0f;
-			a10R[bodyIdx] = 0.0f; a11R[bodyIdx] = 1.0f; a12R[bodyIdx] = 0.0f;
-			a20R[bodyIdx] = 0.0f; a21R[bodyIdx] = 0.0f; a22R[bodyIdx] = 1.0f;
+			a00RB[bodyIdx] = 1.0f; a01RB[bodyIdx] = 0.0f; a02RB[bodyIdx] = 0.0f;
+			a10RB[bodyIdx] = 0.0f; a11RB[bodyIdx] = 1.0f; a12RB[bodyIdx] = 0.0f;
+			a20RB[bodyIdx] = 0.0f; a21RB[bodyIdx] = 0.0f; a22RB[bodyIdx] = 1.0f;
 			return;
 		}
 
-		float b3x = a02R[bodyIdx];
-		float b3y = a12R[bodyIdx];
-		float b3z = a22R[bodyIdx];
+		float b3x = a02RB[bodyIdx];
+		float b3y = a12RB[bodyIdx];
+		float b3z = a22RB[bodyIdx];
 		const float b1DotA3 = Dot3(b1x, b1y, b1z, b3x, b3y, b3z);
 		const float b2DotA3 = Dot3(b2x, b2y, b2z, b3x, b3y, b3z);
 		b3x -= b1DotA3 * b1x + b2DotA3 * b2x;
@@ -83,37 +81,37 @@ namespace GPU01
 		b3z -= b1DotA3 * b1z + b2DotA3 * b2z;
 		if (!Normalize3(b3x, b3y, b3z))
 		{
-			a00R[bodyIdx] = 1.0f; a01R[bodyIdx] = 0.0f; a02R[bodyIdx] = 0.0f;
-			a10R[bodyIdx] = 0.0f; a11R[bodyIdx] = 1.0f; a12R[bodyIdx] = 0.0f;
-			a20R[bodyIdx] = 0.0f; a21R[bodyIdx] = 0.0f; a22R[bodyIdx] = 1.0f;
+			a00RB[bodyIdx] = 1.0f; a01RB[bodyIdx] = 0.0f; a02RB[bodyIdx] = 0.0f;
+			a10RB[bodyIdx] = 0.0f; a11RB[bodyIdx] = 1.0f; a12RB[bodyIdx] = 0.0f;
+			a20RB[bodyIdx] = 0.0f; a21RB[bodyIdx] = 0.0f; a22RB[bodyIdx] = 1.0f;
 			return;
 		}
 
-		a00R[bodyIdx] = b1x; a01R[bodyIdx] = b2x; a02R[bodyIdx] = b3x;
-		a10R[bodyIdx] = b1y; a11R[bodyIdx] = b2y; a12R[bodyIdx] = b3y;
-		a20R[bodyIdx] = b1z; a21R[bodyIdx] = b2z; a22R[bodyIdx] = b3z;
+		a00RB[bodyIdx] = b1x; a01RB[bodyIdx] = b2x; a02RB[bodyIdx] = b3x;
+		a10RB[bodyIdx] = b1y; a11RB[bodyIdx] = b2y; a12RB[bodyIdx] = b3y;
+		a20RB[bodyIdx] = b1z; a21RB[bodyIdx] = b2z; a22RB[bodyIdx] = b3z;
 	}
 
 	__device__ __forceinline__
 	void ComputeWorldInertiaInv(
 		const uint32_t bodyIdx,
-		const float* __restrict__ a00R, const float* __restrict__ a01R, const float* __restrict__ a02R,
-		const float* __restrict__ a10R, const float* __restrict__ a11R, const float* __restrict__ a12R,
-		const float* __restrict__ a20R, const float* __restrict__ a21R, const float* __restrict__ a22R,
-		const float* __restrict__ iBodyInv00R, const float* __restrict__ iBodyInv01R, const float* __restrict__ iBodyInv02R,
-		const float* __restrict__ iBodyInv10R, const float* __restrict__ iBodyInv11R, const float* __restrict__ iBodyInv12R,
-		const float* __restrict__ iBodyInv20R, const float* __restrict__ iBodyInv21R, const float* __restrict__ iBodyInv22R,
+		const float* __restrict__ a00RB, const float* __restrict__ a01RB, const float* __restrict__ a02RB,
+		const float* __restrict__ a10RB, const float* __restrict__ a11RB, const float* __restrict__ a12RB,
+		const float* __restrict__ a20RB, const float* __restrict__ a21RB, const float* __restrict__ a22RB,
+		const float* __restrict__ iBodyInv00RB, const float* __restrict__ iBodyInv01RB, const float* __restrict__ iBodyInv02RB,
+		const float* __restrict__ iBodyInv10RB, const float* __restrict__ iBodyInv11RB, const float* __restrict__ iBodyInv12RB,
+		const float* __restrict__ iBodyInv20RB, const float* __restrict__ iBodyInv21RB, const float* __restrict__ iBodyInv22RB,
 		float& i00, float& i01, float& i02,
 		float& i10, float& i11, float& i12,
 		float& i20, float& i21, float& i22)
 	{
-		const float a00 = a00R[bodyIdx], a01 = a01R[bodyIdx], a02 = a02R[bodyIdx];
-		const float a10 = a10R[bodyIdx], a11 = a11R[bodyIdx], a12 = a12R[bodyIdx];
-		const float a20 = a20R[bodyIdx], a21 = a21R[bodyIdx], a22 = a22R[bodyIdx];
+		const float a00 = a00RB[bodyIdx], a01 = a01RB[bodyIdx], a02 = a02RB[bodyIdx];
+		const float a10 = a10RB[bodyIdx], a11 = a11RB[bodyIdx], a12 = a12RB[bodyIdx];
+		const float a20 = a20RB[bodyIdx], a21 = a21RB[bodyIdx], a22 = a22RB[bodyIdx];
 
-		const float b00 = iBodyInv00R[bodyIdx], b01 = iBodyInv01R[bodyIdx], b02 = iBodyInv02R[bodyIdx];
-		const float b10 = iBodyInv10R[bodyIdx], b11 = iBodyInv11R[bodyIdx], b12 = iBodyInv12R[bodyIdx];
-		const float b20 = iBodyInv20R[bodyIdx], b21 = iBodyInv21R[bodyIdx], b22 = iBodyInv22R[bodyIdx];
+		const float b00 = iBodyInv00RB[bodyIdx], b01 = iBodyInv01RB[bodyIdx], b02 = iBodyInv02RB[bodyIdx];
+		const float b10 = iBodyInv10RB[bodyIdx], b11 = iBodyInv11RB[bodyIdx], b12 = iBodyInv12RB[bodyIdx];
+		const float b20 = iBodyInv20RB[bodyIdx], b21 = iBodyInv21RB[bodyIdx], b22 = iBodyInv22RB[bodyIdx];
 
 		const float t00 = a00 * b00 + a01 * b10 + a02 * b20;
 		const float t01 = a00 * b01 + a01 * b11 + a02 * b21;
@@ -134,19 +132,6 @@ namespace GPU01
 		i20 = t20 * a00 + t21 * a01 + t22 * a02;
 		i21 = t20 * a10 + t21 * a11 + t22 * a12;
 		i22 = t20 * a20 + t21 * a21 + t22 * a22;
-	}
-
-	__device__ __forceinline__
-	void AddForceToRigidBoundaryParticle(
-		const uint32_t rigidBoundaryParticleIdx,
-		const float xForce, const float yForce, const float zForce,
-		float* __restrict__ xForceRBP,
-		float* __restrict__ yForceRBP,
-		float* __restrict__ zForceRBP)
-	{
-		atomicAdd(xForceRBP + rigidBoundaryParticleIdx, xForce);
-		atomicAdd(yForceRBP + rigidBoundaryParticleIdx, yForce);
-		atomicAdd(zForceRBP + rigidBoundaryParticleIdx, zForce);
 	}
 
 	__device__ __forceinline__
@@ -179,392 +164,217 @@ namespace GPU01
 		gz = commonFac * dz;
 	}
 
-	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor_Delta8(
-		const uint64_t chunkBase,
-		const uint32_t chunkBaseIdx,
-		const uint32_t lane,
-		const uint32_t k,
-		const uint8_t* __restrict__ nbrListDelta8)
-	{
-		return chunkBaseIdx + static_cast<uint32_t>(
-			nbrListDelta8[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane]);
-	}
-
-	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor_Delta16(
-		const uint64_t chunkBase,
-		const uint32_t chunkBaseIdx,
-		const uint32_t lane,
-		const uint32_t k,
-		const uint16_t* __restrict__ nbrListDelta16)
-	{
-		return chunkBaseIdx + static_cast<uint32_t>(
-			nbrListDelta16[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane]);
-	}
-
-	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor_Abs32(
-		const uint64_t chunkBase,
-		const uint32_t lane,
-		const uint32_t k,
-		const uint32_t* __restrict__ nbrListAbs32)
-	{
-		return nbrListAbs32[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane];
-	}
-
-	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor(
-		const uint64_t chunkBase,
-		const uint32_t chunkBaseIdx,
-		const uint8_t chunkFormat,
-		const uint32_t lane,
-		const uint32_t k,
-		const uint8_t* __restrict__ nbrListDelta8,
-		const uint16_t* __restrict__ nbrListDelta16,
-		const uint32_t* __restrict__ nbrListAbs32)
-	{
-		if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta8))
-		{
-			return Sell32ReadNeighbor_Delta8(
-				chunkBase, chunkBaseIdx, lane, k, nbrListDelta8);
-		}
-
-		if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16))
-		{
-			return Sell32ReadNeighbor_Delta16(
-				chunkBase, chunkBaseIdx, lane, k, nbrListDelta16);
-		}
-
-		return Sell32ReadNeighbor_Abs32(
-			chunkBase, lane, k, nbrListAbs32);
-	}
-
 	// ------------------------------------------------------------------------------------------------
 	// --- [ kernels launched by host ] ---------------------------------------------------------------
 	// ------------------------------------------------------------------------------------------------
 
 	__global__
-	void K_UpdateRigidBoundaryParticles(
-		const uint32_t* __restrict__ bodyIdB,
-		const uint32_t* __restrict__ rigidBoundaryParticleIdxB,
-		const uint32_t* __restrict__ rigidBoundaryParticleBeginR,
-		const uint32_t* __restrict__ rigidBoundaryParticleCountR,
-		const float* __restrict__ xCMR, const float* __restrict__ yCMR, const float* __restrict__ zCMR,
-		const float* __restrict__ xVelR, const float* __restrict__ yVelR, const float* __restrict__ zVelR,
-		const float* __restrict__ xOmegaR, const float* __restrict__ yOmegaR, const float* __restrict__ zOmegaR,
-		const float* __restrict__ a00R, const float* __restrict__ a01R, const float* __restrict__ a02R,
-		const float* __restrict__ a10R, const float* __restrict__ a11R, const float* __restrict__ a12R,
-		const float* __restrict__ a20R, const float* __restrict__ a21R, const float* __restrict__ a22R,
-		const float* __restrict__ xRelPosRBP,
-		const float* __restrict__ yRelPosRBP,
-		const float* __restrict__ zRelPosRBP,
-		const uint32_t N_B, const uint32_t N_rigidBodies, const uint32_t N_rigidBoundaryParticles,
+	void K_UpdateRigidParticles(
+		const uint32_t* __restrict__ bodyIdR,
+		const float* __restrict__ xRelPosR, const float* __restrict__ yRelPosR, const float* __restrict__ zRelPosR,
+		const float* __restrict__ xCMRB, const float* __restrict__ yCMRB, const float* __restrict__ zCMRB,
+		const float* __restrict__ xVelRB, const float* __restrict__ yVelRB, const float* __restrict__ zVelRB,
+		const float* __restrict__ xOmegaRB, const float* __restrict__ yOmegaRB, const float* __restrict__ zOmegaRB,
+		const float* __restrict__ a00RB, const float* __restrict__ a01RB, const float* __restrict__ a02RB,
+		const float* __restrict__ a10RB, const float* __restrict__ a11RB, const float* __restrict__ a12RB,
+		const float* __restrict__ a20RB, const float* __restrict__ a21RB, const float* __restrict__ a22RB,
+		const uint32_t N_R, const uint32_t N_RB,
 		// destinations
-		float* __restrict__ xPosB, float* __restrict__ yPosB, float* __restrict__ zPosB,
-		float* __restrict__ xVelB, float* __restrict__ yVelB, float* __restrict__ zVelB)
+		float* __restrict__ xPosR, float* __restrict__ yPosR, float* __restrict__ zPosR,
+		float* __restrict__ xVelR, float* __restrict__ yVelR, float* __restrict__ zVelR)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_B) { return; }
+		if (i >= N_R) { return; }
 
-		const uint32_t bodyIdx = bodyIdB[i];
-		if (bodyIdx == InvalidRigidBodyId)
-		{
-			xVelB[i] = 0.0f;
-			yVelB[i] = 0.0f;
-			zVelB[i] = 0.0f;
-			return;
-		}
+		const uint32_t bodyIdx = bodyIdR[i];
+		if (bodyIdx >= N_RB) { return; }
 
-		const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[i];
-		if (bodyIdx >= N_rigidBodies || rigidBoundaryParticleIdx >= N_rigidBoundaryParticles)
-		{
-			xVelB[i] = 0.0f;
-			yVelB[i] = 0.0f;
-			zVelB[i] = 0.0f;
-			return;
-		}
+		const float lx = xRelPosR[i];
+		const float ly = yRelPosR[i];
+		const float lz = zRelPosR[i];
+		const float rx = fmaf(a00RB[bodyIdx], lx, fmaf(a01RB[bodyIdx], ly, a02RB[bodyIdx] * lz));
+		const float ry = fmaf(a10RB[bodyIdx], lx, fmaf(a11RB[bodyIdx], ly, a12RB[bodyIdx] * lz));
+		const float rz = fmaf(a20RB[bodyIdx], lx, fmaf(a21RB[bodyIdx], ly, a22RB[bodyIdx] * lz));
 
-		const uint32_t rigidBoundaryParticleBegin = rigidBoundaryParticleBeginR[bodyIdx];
-		const uint32_t rigidBoundaryParticleCount = rigidBoundaryParticleCountR[bodyIdx];
-		if (rigidBoundaryParticleBegin > N_rigidBoundaryParticles || rigidBoundaryParticleCount > N_rigidBoundaryParticles - rigidBoundaryParticleBegin ||
-			rigidBoundaryParticleIdx < rigidBoundaryParticleBegin || rigidBoundaryParticleIdx >= rigidBoundaryParticleBegin + rigidBoundaryParticleCount)
-		{
-			xVelB[i] = 0.0f;
-			yVelB[i] = 0.0f;
-			zVelB[i] = 0.0f;
-			return;
-		}
+		xPosR[i] = xCMRB[bodyIdx] + rx;
+		yPosR[i] = yCMRB[bodyIdx] + ry;
+		zPosR[i] = zCMRB[bodyIdx] + rz;
 
-		const float lx = xRelPosRBP[rigidBoundaryParticleIdx];
-		const float ly = yRelPosRBP[rigidBoundaryParticleIdx];
-		const float lz = zRelPosRBP[rigidBoundaryParticleIdx];
-
-		const float rx = fmaf(a00R[bodyIdx], lx, fmaf(a01R[bodyIdx], ly, a02R[bodyIdx] * lz));
-		const float ry = fmaf(a10R[bodyIdx], lx, fmaf(a11R[bodyIdx], ly, a12R[bodyIdx] * lz));
-		const float rz = fmaf(a20R[bodyIdx], lx, fmaf(a21R[bodyIdx], ly, a22R[bodyIdx] * lz));
-
-		xPosB[i] = xCMR[bodyIdx] + rx;
-		yPosB[i] = yCMR[bodyIdx] + ry;
-		zPosB[i] = zCMR[bodyIdx] + rz;
-
-		const float wx = xOmegaR[bodyIdx];
-		const float wy = yOmegaR[bodyIdx];
-		const float wz = zOmegaR[bodyIdx];
-
-		xVelB[i] = xVelR[bodyIdx] + wy * rz - wz * ry;
-		yVelB[i] = yVelR[bodyIdx] + wz * rx - wx * rz;
-		zVelB[i] = zVelR[bodyIdx] + wx * ry - wy * rx;
+		const float wx = xOmegaRB[bodyIdx];
+		const float wy = yOmegaRB[bodyIdx];
+		const float wz = zOmegaRB[bodyIdx];
+		xVelR[i] = xVelRB[bodyIdx] + wy * rz - wz * ry;
+		yVelR[i] = yVelRB[bodyIdx] + wz * rx - wx * rz;
+		zVelR[i] = zVelRB[bodyIdx] + wx * ry - wy * rx;
 	}
 
 	__global__
 	void K_ClearRigidForcesAndAddGravity(
-		const float* __restrict__ massR,
-		const float* __restrict__ massInvR,
+		const float* __restrict__ massRB,
+		const float* __restrict__ massInvRB,
 		const float xGravity, const float yGravity, const float zGravity,
-		const uint32_t N_rigidBodies,
+		const uint32_t N_RB,
 		// destinations
-		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR,
-		float* __restrict__ xTorqueR, float* __restrict__ yTorqueR, float* __restrict__ zTorqueR)
+		float* __restrict__ xForceRB, float* __restrict__ yForceRB, float* __restrict__ zForceRB,
+		float* __restrict__ xTorqueRB, float* __restrict__ yTorqueRB, float* __restrict__ zTorqueRB)
 	{
 		const uint32_t bodyIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (bodyIdx >= N_rigidBodies) { return; }
+		if (bodyIdx >= N_RB) { return; }
 
-		xForceR[bodyIdx] = 0.0f;
-		yForceR[bodyIdx] = 0.0f;
-		zForceR[bodyIdx] = 0.0f;
-		xTorqueR[bodyIdx] = 0.0f;
-		yTorqueR[bodyIdx] = 0.0f;
-		zTorqueR[bodyIdx] = 0.0f;
+		xForceRB[bodyIdx] = 0.0f;
+		yForceRB[bodyIdx] = 0.0f;
+		zForceRB[bodyIdx] = 0.0f;
+		xTorqueRB[bodyIdx] = 0.0f;
+		yTorqueRB[bodyIdx] = 0.0f;
+		zTorqueRB[bodyIdx] = 0.0f;
 
-		if (massInvR[bodyIdx] <= 0.0f || massR[bodyIdx] <= 0.0f) { return; }
+		if (massInvRB[bodyIdx] <= 0.0f || massRB[bodyIdx] <= 0.0f) { return; }
 
-		const float mass = massR[bodyIdx];
-		xForceR[bodyIdx] = mass * xGravity;
-		yForceR[bodyIdx] = mass * yGravity;
-		zForceR[bodyIdx] = mass * zGravity;
+		const float mass = massRB[bodyIdx];
+		xForceRB[bodyIdx] = mass * xGravity;
+		yForceRB[bodyIdx] = mass * yGravity;
+		zForceRB[bodyIdx] = mass * zGravity;
 	}
 
 	__global__
-	void K_ClearRigidBoundaryParticleForces(
-		const uint32_t N_rigidBoundaryParticles,
-		// destinations
-		float* __restrict__ xForceRBP,
-		float* __restrict__ yForceRBP,
-		float* __restrict__ zForceRBP)
-	{
-		const uint32_t rigidBoundaryParticleIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (rigidBoundaryParticleIdx >= N_rigidBoundaryParticles) { return; }
-
-		xForceRBP[rigidBoundaryParticleIdx] = 0.0f;
-		yForceRBP[rigidBoundaryParticleIdx] = 0.0f;
-		zForceRBP[rigidBoundaryParticleIdx] = 0.0f;
-	}
-
-	__global__
-	void K_AccumulateRigidBodyNonPressureForces(
+	void K_AccumulateRigidParticleNonPressureForces(
 		const float* __restrict__ xPosF, const float* __restrict__ yPosF, const float* __restrict__ zPosF,
-		const float* __restrict__ xPosB, const float* __restrict__ yPosB, const float* __restrict__ zPosB,
-		const uint32_t* __restrict__ bodyIdB,
-		const uint32_t* __restrict__ rigidBoundaryParticleIdxB,
-		const float* __restrict__ volB,
+		const float* __restrict__ xPosR, const float* __restrict__ yPosR, const float* __restrict__ zPosR,
 		const float* __restrict__ xVelF, const float* __restrict__ yVelF, const float* __restrict__ zVelF,
-		const float* __restrict__ xVelB, const float* __restrict__ yVelB, const float* __restrict__ zVelB,
-		const uint16_t* __restrict__ nbrCountFB,
-		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
-		const uint8_t* __restrict__ nbrChunkFormatFB,
-		const uint8_t* __restrict__ nbrListDelta8FB,
-		const uint16_t* __restrict__ nbrListDelta16FB,
-		const uint32_t* __restrict__ nbrListAbs32FB,
+		const float* __restrict__ xVelR, const float* __restrict__ yVelR, const float* __restrict__ zVelR,
+		const float* __restrict__ volR,
+		const uint16_t* __restrict__ nbrCountRF,
+		const uint64_t* __restrict__ nbrOffsetsRF,
+		const uint32_t* __restrict__ nbrListRF,
 		const float particleSizeInvF,
 		const float particleSizeSquF,
 		const float kernelRadiusSqu,
 		const float cubicSplineAlpha,
 		const float massF,
 		const float viscosityB,
-		const uint32_t N_F, const uint32_t N_rigidBoundaryParticles,
+		const uint32_t N_R,
 		// destinations
-		float* __restrict__ xForceRBP,
-		float* __restrict__ yForceRBP,
-		float* __restrict__ zForceRBP)
+		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
+		if (i >= N_R) { return; }
 
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
-		const float vxi = xVelF[i];
-		const float vyi = yVelF[i];
-		const float vzi = zVelF[i];
-
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
-		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
-		const uint8_t formatFB = nbrChunkFormatFB[chunk];
-		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
-		const float particleSizeSquEps = 0.01f * particleSizeSquF;
-		const float viscosityFacB = 10.0f * viscosityB;
-
-		for (uint32_t k = 0; k < countFB; k++)
+		float xForce = 0.0f;
+		float yForce = 0.0f;
+		float zForce = 0.0f;
+		const uint64_t begin = nbrOffsetsRF[i];
+		const uint32_t count = nbrCountRF[i];
+		for (uint32_t k = 0; k < count; k++)
 		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+			const uint32_t j = nbrListRF[begin + k];
 
-			const uint32_t bodyIdx = bodyIdB[j];
-			if (bodyIdx == InvalidRigidBodyId) { continue; }
+			const float dx = xPosF[j] - xPosR[i];
+			const float dy = yPosF[j] - yPosR[i];
+			const float dz = zPosF[j] - zPosR[i];
 
-			const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[j];
-			#ifndef NDEBUG
-			if (rigidBoundaryParticleIdx >= N_rigidBoundaryParticles) { continue; }
-			#endif
+			const float dvx = xVelF[j] - xVelR[i];
+			const float dvy = yVelF[j] - yVelR[i];
+			const float dvz = zVelF[j] - zVelR[i];
 
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-			const float dvx = vxi - xVelB[j];
-			const float dvy = vyi - yVelB[j];
-			const float dvz = vzi - zVelB[j];
-
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
+			float xkg = 0.0f, ykg = 0.0f, zkg = 0.0f;
 			KernelGradient_CubicSpline(
-				dx, dy, dz,
-				particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-				xkg, ykg, zkg);
+				dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+				cubicSplineAlpha, xkg, ykg, zkg);
 
 			const float dot = fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz));
 			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
-			const float accCoeff = (volB[j] * dot) / (distSqu + particleSizeSquEps);
-			const float forceCoeff = -massF * viscosityFacB * accCoeff;
+			const float accCoeff = volR[i] * dot / (distSqu + 0.01f * particleSizeSquF);
+			const float forceCoeff = -massF * 10.0f * viscosityB * accCoeff;
 
-			// opposite of the boundary viscosity/friction force applied to fluid particle i
-			AddForceToRigidBoundaryParticle(
-				rigidBoundaryParticleIdx,
-				forceCoeff * xkg,
-				forceCoeff * ykg,
-				forceCoeff * zkg,
-				xForceRBP,
-				yForceRBP,
-				zForceRBP);
+			xForce = fmaf(forceCoeff, xkg, xForce);
+			yForce = fmaf(forceCoeff, ykg, yForce);
+			zForce = fmaf(forceCoeff, zkg, zForce);
 		}
+		xForceR[i] = xForce;
+		yForceR[i] = yForce;
+		zForceR[i] = zForce;
 	}
 
 	__global__
-	void K_AccumulateRigidBodyPressureForces(
+	void K_AccumulateRigidParticlePressureForces(
 		const float* __restrict__ xPosF, const float* __restrict__ yPosF, const float* __restrict__ zPosF,
-		const float* __restrict__ xPosB, const float* __restrict__ yPosB, const float* __restrict__ zPosB,
-		const uint32_t* __restrict__ bodyIdB,
-		const uint32_t* __restrict__ rigidBoundaryParticleIdxB,
-		const float* __restrict__ psiB,
+		const float* __restrict__ xPosR, const float* __restrict__ yPosR, const float* __restrict__ zPosR,
 		const float* __restrict__ pressureF,
-		const uint16_t* __restrict__ nbrCountFB,
-		const uint64_t* __restrict__ nbrChunkOffsetsFB,
-		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
-		const uint8_t* __restrict__ nbrChunkFormatFB,
-		const uint8_t* __restrict__ nbrListDelta8FB,
-		const uint16_t* __restrict__ nbrListDelta16FB,
-		const uint32_t* __restrict__ nbrListAbs32FB,
+		const float* __restrict__ psiR,
+		const uint16_t* __restrict__ nbrCountRF,
+		const uint64_t* __restrict__ nbrOffsetsRF,
+		const uint32_t* __restrict__ nbrListRF,
 		const float particleSizeInvF,
 		const float kernelRadiusSqu,
 		const float cubicSplineAlpha,
 		const float restDensity,
 		const float massF,
 		const float pressGamma,
-		const uint32_t N_F, const uint32_t N_rigidBoundaryParticles,
+		const uint32_t N_R,
 		// destinations
-		float* __restrict__ xForceRBP,
-		float* __restrict__ yForceRBP,
-		float* __restrict__ zForceRBP)
+		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
+		if (i >= N_R) { return; }
 
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
-		const float presi = pressureF[i];
-
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
-		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
-		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
-		const uint8_t formatFB = nbrChunkFormatFB[chunk];
-		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
-		const float densiInvSqu = 1.0f / (restDensity * restDensity);
-		const float accCoeffB_outer = 2.0f * pressGamma * densiInvSqu;
-
-		for (uint32_t k = 0; k < countFB; k++)
+		float xForce = 0.0f;
+		float yForce = 0.0f;
+		float zForce = 0.0f;
+		const float densityInvSqu = 1.0f / (restDensity * restDensity);
+		const uint64_t begin = nbrOffsetsRF[i];
+		const uint32_t count = nbrCountRF[i];
+		for (uint32_t k = 0; k < count; k++)
 		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+			const uint32_t j = nbrListRF[begin + k];
 
-			const uint32_t bodyIdx = bodyIdB[j];
-			if (bodyIdx == InvalidRigidBodyId) { continue; }
+			const float dx = xPosF[j] - xPosR[i];
+			const float dy = yPosF[j] - yPosR[i];
+			const float dz = zPosF[j] - zPosR[i];
 
-			const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleIdxB[j];
-			#ifndef NDEBUG
-			if (rigidBoundaryParticleIdx >= N_rigidBoundaryParticles) { continue; }
-			#endif
-
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
+			float xkg = 0.0f, ykg = 0.0f, zkg = 0.0f;
 			KernelGradient_CubicSpline(
-				dx, dy, dz,
-				particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-				xkg, ykg, zkg);
+				dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+				cubicSplineAlpha, xkg, ykg, zkg);
 
-			const float accCoeffB = accCoeffB_outer * psiB[j] * presi;
+			const float forceCoeff = massF * pressGamma * 2.0f
+				* psiR[i] * pressureF[j] * densityInvSqu;
 
-			// opposite of the boundary pressure force applied to fluid particle i
-			AddForceToRigidBoundaryParticle(
-				rigidBoundaryParticleIdx,
-				massF * accCoeffB * xkg,
-				massF * accCoeffB * ykg,
-				massF * accCoeffB * zkg,
-				xForceRBP,
-				yForceRBP,
-				zForceRBP);
+			xForce = fmaf(forceCoeff, xkg, xForce);
+			yForce = fmaf(forceCoeff, ykg, yForce);
+			zForce = fmaf(forceCoeff, zkg, zForce);
 		}
+		xForceR[i] += xForce;
+		yForceR[i] += yForce;
+		zForceR[i] += zForce;
 	}
 
 	__global__
-	void K_ReduceRigidBoundaryParticleForces(
-		const uint32_t* __restrict__ rigidBoundaryParticleBeginR,
-		const uint32_t* __restrict__ rigidBoundaryParticleCountR,
-		const float* __restrict__ xRelPosRBP,
-		const float* __restrict__ yRelPosRBP,
-		const float* __restrict__ zRelPosRBP,
-		const float* __restrict__ a00R, const float* __restrict__ a01R, const float* __restrict__ a02R,
-		const float* __restrict__ a10R, const float* __restrict__ a11R, const float* __restrict__ a12R,
-		const float* __restrict__ a20R, const float* __restrict__ a21R, const float* __restrict__ a22R,
-		const float* __restrict__ xForceRBP,
-		const float* __restrict__ yForceRBP,
-		const float* __restrict__ zForceRBP,
-		const uint32_t N_rigidBodies,
-		const uint32_t N_rigidBoundaryParticles,
+	void K_ReduceRigidParticleForces(
+		const uint32_t* __restrict__ rigidParticleBeginRB,
+		const uint32_t* __restrict__ rigidParticleCountRB,
+		const float* __restrict__ xRelPosR,
+		const float* __restrict__ yRelPosR,
+		const float* __restrict__ zRelPosR,
+		const float* __restrict__ xForceR,
+		const float* __restrict__ yForceR,
+		const float* __restrict__ zForceR,
+		const float* __restrict__ a00RB, const float* __restrict__ a01RB, const float* __restrict__ a02RB,
+		const float* __restrict__ a10RB, const float* __restrict__ a11RB, const float* __restrict__ a12RB,
+		const float* __restrict__ a20RB, const float* __restrict__ a21RB, const float* __restrict__ a22RB,
+		const uint32_t N_RB,
+		const uint32_t N_R,
 		// destinations
-		float* __restrict__ xForceR, float* __restrict__ yForceR, float* __restrict__ zForceR,
-		float* __restrict__ xTorqueR, float* __restrict__ yTorqueR, float* __restrict__ zTorqueR)
+		float* __restrict__ xForceRB, float* __restrict__ yForceRB, float* __restrict__ zForceRB,
+		float* __restrict__ xTorqueRB, float* __restrict__ yTorqueRB, float* __restrict__ zTorqueRB)
 	{
 		const uint32_t bodyIdx = blockIdx.x;
 		const uint32_t tid = threadIdx.x;
-		if (bodyIdx >= N_rigidBodies) { return; }
+		if (bodyIdx >= N_RB) { return; }
 
-		const uint32_t begin = rigidBoundaryParticleBeginR[bodyIdx];
-		const uint32_t count = rigidBoundaryParticleCountR[bodyIdx];
+		const uint32_t begin = rigidParticleBeginRB[bodyIdx];
+		const uint32_t count = rigidParticleCountRB[bodyIdx];
 		#ifndef NDEBUG
-		if (begin > N_rigidBoundaryParticles || count > N_rigidBoundaryParticles - begin) { return; }
+		if (begin > N_R || count > N_R - begin) { return; }
 		#endif
 		const uint32_t end = begin + count;
 
@@ -575,21 +385,21 @@ namespace GPU01
 		float sumYTorque = 0.0f;
 		float sumZTorque = 0.0f;
 
-		for (uint32_t rigidBoundaryParticleIdx = begin + tid;
-			 rigidBoundaryParticleIdx < end;
-			 rigidBoundaryParticleIdx += blockDim.x)
+		for (uint32_t i = begin + tid;
+			 i < end;
+			 i += blockDim.x)
 		{
-			const float xForce = xForceRBP[rigidBoundaryParticleIdx];
-			const float yForce = yForceRBP[rigidBoundaryParticleIdx];
-			const float zForce = zForceRBP[rigidBoundaryParticleIdx];
+			const float lx = xRelPosR[i];
+			const float ly = yRelPosR[i];
+			const float lz = zRelPosR[i];
 
-			const float lx = xRelPosRBP[rigidBoundaryParticleIdx];
-			const float ly = yRelPosRBP[rigidBoundaryParticleIdx];
-			const float lz = zRelPosRBP[rigidBoundaryParticleIdx];
+			const float xForce = xForceR[i];
+			const float yForce = yForceR[i];
+			const float zForce = zForceR[i];
 
-			const float rx = fmaf(a00R[bodyIdx], lx, fmaf(a01R[bodyIdx], ly, a02R[bodyIdx] * lz));
-			const float ry = fmaf(a10R[bodyIdx], lx, fmaf(a11R[bodyIdx], ly, a12R[bodyIdx] * lz));
-			const float rz = fmaf(a20R[bodyIdx], lx, fmaf(a21R[bodyIdx], ly, a22R[bodyIdx] * lz));
+			const float rx = fmaf(a00RB[bodyIdx], lx, fmaf(a01RB[bodyIdx], ly, a02RB[bodyIdx] * lz));
+			const float ry = fmaf(a10RB[bodyIdx], lx, fmaf(a11RB[bodyIdx], ly, a12RB[bodyIdx] * lz));
+			const float rz = fmaf(a20RB[bodyIdx], lx, fmaf(a21RB[bodyIdx], ly, a22RB[bodyIdx] * lz));
 
 			sumXForce += xForce;
 			sumYForce += yForce;
@@ -631,96 +441,96 @@ namespace GPU01
 
 		if (tid == 0u)
 		{
-			xForceR[bodyIdx] += sXForce[0];
-			yForceR[bodyIdx] += sYForce[0];
-			zForceR[bodyIdx] += sZForce[0];
-			xTorqueR[bodyIdx] += sXTorque[0];
-			yTorqueR[bodyIdx] += sYTorque[0];
-			zTorqueR[bodyIdx] += sZTorque[0];
+			xForceRB[bodyIdx] += sXForce[0];
+			yForceRB[bodyIdx] += sYForce[0];
+			zForceRB[bodyIdx] += sZForce[0];
+			xTorqueRB[bodyIdx] += sXTorque[0];
+			yTorqueRB[bodyIdx] += sYTorque[0];
+			zTorqueRB[bodyIdx] += sZTorque[0];
 		}
 	}
 
 	__global__
 	void K_IntegrateRigidBodies(
 		const float timeStep,
-		const uint32_t N_rigidBodies,
+		const uint32_t N_RB,
 		// destinations
-		float* __restrict__ xCMR, float* __restrict__ yCMR, float* __restrict__ zCMR,
-		float* __restrict__ xVelR, float* __restrict__ yVelR, float* __restrict__ zVelR,
-		float* __restrict__ xOmegaR, float* __restrict__ yOmegaR, float* __restrict__ zOmegaR,
-		float* __restrict__ xAngMomR, float* __restrict__ yAngMomR, float* __restrict__ zAngMomR,
-		const float* __restrict__ xForceR, const float* __restrict__ yForceR, const float* __restrict__ zForceR,
-		const float* __restrict__ xTorqueR, const float* __restrict__ yTorqueR, const float* __restrict__ zTorqueR,
-		float* __restrict__ a00R, float* __restrict__ a01R, float* __restrict__ a02R,
-		float* __restrict__ a10R, float* __restrict__ a11R, float* __restrict__ a12R,
-		float* __restrict__ a20R, float* __restrict__ a21R, float* __restrict__ a22R,
-		const float* __restrict__ massInvR,
-		const float* __restrict__ iBodyInv00R, const float* __restrict__ iBodyInv01R, const float* __restrict__ iBodyInv02R,
-		const float* __restrict__ iBodyInv10R, const float* __restrict__ iBodyInv11R, const float* __restrict__ iBodyInv12R,
-		const float* __restrict__ iBodyInv20R, const float* __restrict__ iBodyInv21R, const float* __restrict__ iBodyInv22R)
+		float* __restrict__ xCMRB, float* __restrict__ yCMRB, float* __restrict__ zCMRB,
+		float* __restrict__ xVelRB, float* __restrict__ yVelRB, float* __restrict__ zVelRB,
+		float* __restrict__ xOmegaRB, float* __restrict__ yOmegaRB, float* __restrict__ zOmegaRB,
+		float* __restrict__ xAngMomRB, float* __restrict__ yAngMomRB, float* __restrict__ zAngMomRB,
+		const float* __restrict__ xForceRB, const float* __restrict__ yForceRB, const float* __restrict__ zForceRB,
+		const float* __restrict__ xTorqueRB, const float* __restrict__ yTorqueRB, const float* __restrict__ zTorqueRB,
+		float* __restrict__ a00RB, float* __restrict__ a01RB, float* __restrict__ a02RB,
+		float* __restrict__ a10RB, float* __restrict__ a11RB, float* __restrict__ a12RB,
+		float* __restrict__ a20RB, float* __restrict__ a21RB, float* __restrict__ a22RB,
+		const float* __restrict__ massInvRB,
+		const float* __restrict__ iBodyInv00RB, const float* __restrict__ iBodyInv01RB, const float* __restrict__ iBodyInv02RB,
+		const float* __restrict__ iBodyInv10RB, const float* __restrict__ iBodyInv11RB, const float* __restrict__ iBodyInv12RB,
+		const float* __restrict__ iBodyInv20RB, const float* __restrict__ iBodyInv21RB, const float* __restrict__ iBodyInv22RB)
 	{
 		const uint32_t bodyIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (bodyIdx >= N_rigidBodies) { return; }
+		if (bodyIdx >= N_RB) { return; }
 
-		const float massInv = massInvR[bodyIdx];
+		const float massInv = massInvRB[bodyIdx];
 
-		xVelR[bodyIdx] += timeStep * xForceR[bodyIdx] * massInv;
-		yVelR[bodyIdx] += timeStep * yForceR[bodyIdx] * massInv;
-		zVelR[bodyIdx] += timeStep * zForceR[bodyIdx] * massInv;
+		xVelRB[bodyIdx] += timeStep * xForceRB[bodyIdx] * massInv;
+		yVelRB[bodyIdx] += timeStep * yForceRB[bodyIdx] * massInv;
+		zVelRB[bodyIdx] += timeStep * zForceRB[bodyIdx] * massInv;
 
-		xCMR[bodyIdx] += timeStep * xVelR[bodyIdx];
-		yCMR[bodyIdx] += timeStep * yVelR[bodyIdx];
-		zCMR[bodyIdx] += timeStep * zVelR[bodyIdx];
+		xCMRB[bodyIdx] += timeStep * xVelRB[bodyIdx];
+		yCMRB[bodyIdx] += timeStep * yVelRB[bodyIdx];
+		zCMRB[bodyIdx] += timeStep * zVelRB[bodyIdx];
 
-		xAngMomR[bodyIdx] += timeStep * xTorqueR[bodyIdx];
-		yAngMomR[bodyIdx] += timeStep * yTorqueR[bodyIdx];
-		zAngMomR[bodyIdx] += timeStep * zTorqueR[bodyIdx];
+		xAngMomRB[bodyIdx] += timeStep * xTorqueRB[bodyIdx];
+		yAngMomRB[bodyIdx] += timeStep * yTorqueRB[bodyIdx];
+		zAngMomRB[bodyIdx] += timeStep * zTorqueRB[bodyIdx];
 
 		float i00, i01, i02;
 		float i10, i11, i12;
 		float i20, i21, i22;
 		ComputeWorldInertiaInv(
 			bodyIdx,
-			a00R, a01R, a02R,
-			a10R, a11R, a12R,
-			a20R, a21R, a22R,
-			iBodyInv00R, iBodyInv01R, iBodyInv02R,
-			iBodyInv10R, iBodyInv11R, iBodyInv12R,
-			iBodyInv20R, iBodyInv21R, iBodyInv22R,
+			a00RB, a01RB, a02RB,
+			a10RB, a11RB, a12RB,
+			a20RB, a21RB, a22RB,
+			iBodyInv00RB, iBodyInv01RB, iBodyInv02RB,
+			iBodyInv10RB, iBodyInv11RB, iBodyInv12RB,
+			iBodyInv20RB, iBodyInv21RB, iBodyInv22RB,
 			i00, i01, i02,
 			i10, i11, i12,
 			i20, i21, i22);
 
-		const float lx = xAngMomR[bodyIdx];
-		const float ly = yAngMomR[bodyIdx];
-		const float lz = zAngMomR[bodyIdx];
+		const float lx = xAngMomRB[bodyIdx];
+		const float ly = yAngMomRB[bodyIdx];
+		const float lz = zAngMomRB[bodyIdx];
 		const float wx = fmaf(i00, lx, fmaf(i01, ly, i02 * lz));
 		const float wy = fmaf(i10, lx, fmaf(i11, ly, i12 * lz));
 		const float wz = fmaf(i20, lx, fmaf(i21, ly, i22 * lz));
 
-		xOmegaR[bodyIdx] = wx;
-		yOmegaR[bodyIdx] = wy;
-		zOmegaR[bodyIdx] = wz;
+		xOmegaRB[bodyIdx] = wx;
+		yOmegaRB[bodyIdx] = wy;
+		zOmegaRB[bodyIdx] = wz;
 
-		const float a00 = a00R[bodyIdx], a01 = a01R[bodyIdx], a02 = a02R[bodyIdx];
-		const float a10 = a10R[bodyIdx], a11 = a11R[bodyIdx], a12 = a12R[bodyIdx];
-		const float a20 = a20R[bodyIdx], a21 = a21R[bodyIdx], a22 = a22R[bodyIdx];
+		const float a00 = a00RB[bodyIdx], a01 = a01RB[bodyIdx], a02 = a02RB[bodyIdx];
+		const float a10 = a10RB[bodyIdx], a11 = a11RB[bodyIdx], a12 = a12RB[bodyIdx];
+		const float a20 = a20RB[bodyIdx], a21 = a21RB[bodyIdx], a22 = a22RB[bodyIdx];
 
-		a00R[bodyIdx] += timeStep * (-wz * a10 + wy * a20);
-		a01R[bodyIdx] += timeStep * (-wz * a11 + wy * a21);
-		a02R[bodyIdx] += timeStep * (-wz * a12 + wy * a22);
-		a10R[bodyIdx] += timeStep * ( wz * a00 - wx * a20);
-		a11R[bodyIdx] += timeStep * ( wz * a01 - wx * a21);
-		a12R[bodyIdx] += timeStep * ( wz * a02 - wx * a22);
-		a20R[bodyIdx] += timeStep * (-wy * a00 + wx * a10);
-		a21R[bodyIdx] += timeStep * (-wy * a01 + wx * a11);
-		a22R[bodyIdx] += timeStep * (-wy * a02 + wx * a12);
+		a00RB[bodyIdx] += timeStep * (-wz * a10 + wy * a20);
+		a01RB[bodyIdx] += timeStep * (-wz * a11 + wy * a21);
+		a02RB[bodyIdx] += timeStep * (-wz * a12 + wy * a22);
+		a10RB[bodyIdx] += timeStep * ( wz * a00 - wx * a20);
+		a11RB[bodyIdx] += timeStep * ( wz * a01 - wx * a21);
+		a12RB[bodyIdx] += timeStep * ( wz * a02 - wx * a22);
+		a20RB[bodyIdx] += timeStep * (-wy * a00 + wx * a10);
+		a21RB[bodyIdx] += timeStep * (-wy * a01 + wx * a11);
+		a22RB[bodyIdx] += timeStep * (-wy * a02 + wx * a12);
 
 		ReOrthonormalizeBody(
 			bodyIdx,
-			a00R, a01R, a02R,
-			a10R, a11R, a12R,
-			a20R, a21R, a22R);
+			a00RB, a01RB, a02RB,
+			a10RB, a11RB, a12RB,
+			a20RB, a21RB, a22RB);
 	}
 
 } // namespace GPU01
@@ -731,300 +541,206 @@ namespace GPU01
 
 namespace GPU01
 {
-	void Launch_UpdateRigidBoundaryParticles(
-		const uint32_t* bodyIdB,
-		const uint32_t* rigidBoundaryParticleIdxB,
-		const uint32_t* rigidBoundaryParticleBeginR,
-		const uint32_t* rigidBoundaryParticleCountR,
-		const float* xCMR, const float* yCMR, const float* zCMR,
-		const float* xVelR, const float* yVelR, const float* zVelR,
-		const float* xOmegaR, const float* yOmegaR, const float* zOmegaR,
-		const float* a00R, const float* a01R, const float* a02R,
-		const float* a10R, const float* a11R, const float* a12R,
-		const float* a20R, const float* a21R, const float* a22R,
-		const float* xRelPosRBP, const float* yRelPosRBP, const float* zRelPosRBP,
-		const uint32_t N_B, const uint32_t N_rigidBodies, const uint32_t N_rigidBoundaryParticles,
-		cudaStream_t stream,
+	void Launch_UpdateRigidParticles(
+		const uint32_t* bodyIdR,
+		const float* xRelPosR, const float* yRelPosR, const float* zRelPosR,
+		const float* xCMRB, const float* yCMRB, const float* zCMRB,
+		const float* xVelRB, const float* yVelRB, const float* zVelRB,
+		const float* xOmegaRB, const float* yOmegaRB, const float* zOmegaRB,
+		const float* a00RB, const float* a01RB, const float* a02RB,
+		const float* a10RB, const float* a11RB, const float* a12RB,
+		const float* a20RB, const float* a21RB, const float* a22RB,
+		const uint32_t N_R, const uint32_t N_RB, cudaStream_t stream,
 		// destinations
-		float* xPosB, float* yPosB, float* zPosB,
-		float* xVelB, float* yVelB, float* zVelB)
+		float* xPosR, float* yPosR, float* zPosR,
+		float* xVelR, float* yVelR, float* zVelR)
 	{
-		if (N_B == 0) { return; }
+		if (N_R == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_B + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		K_UpdateRigidParticles<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			bodyIdR, xRelPosR, yRelPosR, zRelPosR,
+			xCMRB, yCMRB, zCMRB, xVelRB, yVelRB, zVelRB, xOmegaRB, yOmegaRB, zOmegaRB,
+			a00RB, a01RB, a02RB, a10RB, a11RB, a12RB, a20RB, a21RB, a22RB,
+			N_R, N_RB,
+			xPosR, yPosR, zPosR, xVelR, yVelR, zVelR);
 
-		K_UpdateRigidBoundaryParticles<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			bodyIdB, rigidBoundaryParticleIdxB,
-			rigidBoundaryParticleBeginR, rigidBoundaryParticleCountR,
-			xCMR, yCMR, zCMR,
-			xVelR, yVelR, zVelR,
-			xOmegaR, yOmegaR, zOmegaR,
-			a00R, a01R, a02R,
-			a10R, a11R, a12R,
-			a20R, a21R, a22R,
-			xRelPosRBP, yRelPosRBP, zRelPosRBP,
-			N_B, N_rigidBodies, N_rigidBoundaryParticles,
-			xPosB, yPosB, zPosB,
-			xVelB, yVelB, zVelB);
-
-		GPU::CheckLastKernel("K_UpdateRigidBoundaryParticles()");
+		GPU::CheckLastKernel("K_UpdateRigidParticles()");
 	}
 
 	void Launch_ClearRigidForcesAndAddGravity(
-		const float* massR,
-		const float* massInvR,
+		const float* massRB,
+		const float* massInvRB,
 		const float xGravity, const float yGravity, const float zGravity,
-		const uint32_t N_rigidBodies,
+		const uint32_t N_RB,
 		cudaStream_t stream,
 		// destinations
-		float* xForceR, float* yForceR, float* zForceR,
-		float* xTorqueR, float* yTorqueR, float* zTorqueR)
+		float* xForceRB, float* yForceRB, float* zForceRB,
+		float* xTorqueRB, float* yTorqueRB, float* zTorqueRB)
 	{
-		if (N_rigidBodies == 0) { return; }
+		if (N_RB == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_rigidBodies + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_GRIDSIZE = (N_RB + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_ClearRigidForcesAndAddGravity<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			massR, massInvR,
+			massRB, massInvRB,
 			xGravity, yGravity, zGravity,
-			N_rigidBodies,
-			xForceR, yForceR, zForceR,
-			xTorqueR, yTorqueR, zTorqueR);
+			N_RB,
+			xForceRB, yForceRB, zForceRB,
+			xTorqueRB, yTorqueRB, zTorqueRB);
 
 		GPU::CheckLastKernel("K_ClearRigidForcesAndAddGravity()");
 	}
 
-	void Launch_ClearRigidBoundaryParticleForces(
-		const uint32_t N_rigidBoundaryParticles,
-		cudaStream_t stream,
-		// destinations
-		float* xForceRBP,
-		float* yForceRBP,
-		float* zForceRBP)
-	{
-		if (N_rigidBoundaryParticles == 0) { return; }
-
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_rigidBoundaryParticles + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_ClearRigidBoundaryParticleForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			N_rigidBoundaryParticles,
-			xForceRBP,
-			yForceRBP,
-			zForceRBP);
-
-		GPU::CheckLastKernel("K_ClearRigidBoundaryParticleForces()");
-	}
-
-	void Launch_AccumulateRigidBodyNonPressureForces(
+	void Launch_AccumulateRigidParticleNonPressureForces(
 		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* bodyIdB,
-		const uint32_t* rigidBoundaryParticleIdxB,
-		const float* volB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
 		const float* xVelF, const float* yVelF, const float* zVelF,
-		const float* xVelB, const float* yVelB, const float* zVelB,
-		const uint16_t* nbrCountFB,
-		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrChunkBaseIdxFB,
-		const uint8_t* nbrChunkFormatFB,
-		const uint8_t* nbrListDelta8FB,
-		const uint16_t* nbrListDelta16FB,
-		const uint32_t* nbrListAbs32FB,
+		const float* xVelR, const float* yVelR, const float* zVelR,
+		const float* volR,
+		const uint16_t* nbrCountRF,
+		const uint64_t* nbrOffsetsRF,
+		const uint32_t* nbrListRF,
 		const float particleSizeInvF,
 		const float particleSizeSquF,
 		const float kernelRadiusSqu,
 		const float cubicSplineAlpha,
 		const float massF,
 		const float viscosityB,
-		const uint32_t N_F, const uint32_t N_rigidBoundaryParticles,
+		const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
-		float* xForceRBP,
-		float* yForceRBP,
-		float* zForceRBP)
+		float* xForceR, float* yForceR, float* zForceR)
 	{
-		if (N_F == 0 || N_rigidBoundaryParticles == 0) { return; }
-
+		if (N_R == 0) { return; }
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_AccumulateRigidBodyNonPressureForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			bodyIdB,
-			rigidBoundaryParticleIdxB,
-			volB,
-			xVelF, yVelF, zVelF,
-			xVelB, yVelB, zVelB,
-			nbrCountFB,
-			nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFB,
-			nbrChunkFormatFB,
-			nbrListDelta8FB,
-			nbrListDelta16FB,
-			nbrListAbs32FB,
-			particleSizeInvF,
-			particleSizeSquF,
-			kernelRadiusSqu,
-			cubicSplineAlpha,
-			massF,
-			viscosityB,
-			N_F, N_rigidBoundaryParticles,
-			xForceRBP,
-			yForceRBP,
-			zForceRBP);
-
-		GPU::CheckLastKernel("K_AccumulateRigidBodyNonPressureForces()");
+		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		K_AccumulateRigidParticleNonPressureForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR,
+			xVelF, yVelF, zVelF, xVelR, yVelR, zVelR, volR,
+			nbrCountRF, nbrOffsetsRF, nbrListRF,
+			particleSizeInvF, particleSizeSquF, kernelRadiusSqu, cubicSplineAlpha,
+			massF, viscosityB, N_R, xForceR, yForceR, zForceR);
+		GPU::CheckLastKernel("K_AccumulateRigidParticleNonPressureForces()");
 	}
 
-	void Launch_AccumulateRigidBodyPressureForces(
+	void Launch_AccumulateRigidParticlePressureForces(
 		const float* xPosF, const float* yPosF, const float* zPosF,
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t* bodyIdB,
-		const uint32_t* rigidBoundaryParticleIdxB,
-		const float* psiB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
 		const float* pressureF,
-		const uint16_t* nbrCountFB,
-		const uint64_t* nbrChunkOffsetsFB,
-		const uint32_t* nbrChunkBaseIdxFB,
-		const uint8_t* nbrChunkFormatFB,
-		const uint8_t* nbrListDelta8FB,
-		const uint16_t* nbrListDelta16FB,
-		const uint32_t* nbrListAbs32FB,
+		const float* psiR,
+		const uint16_t* nbrCountRF,
+		const uint64_t* nbrOffsetsRF,
+		const uint32_t* nbrListRF,
 		const float particleSizeInvF,
 		const float kernelRadiusSqu,
 		const float cubicSplineAlpha,
 		const float restDensity,
 		const float massF,
 		const float pressGamma,
-		const uint32_t N_F, const uint32_t N_rigidBoundaryParticles,
+		const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
-		float* xForceRBP,
-		float* yForceRBP,
-		float* zForceRBP)
+		float* xForceR, float* yForceR, float* zForceR)
 	{
-		if (N_F == 0 || N_rigidBoundaryParticles == 0) { return; }
-
+		if (N_R == 0) { return; }
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-
-		K_AccumulateRigidBodyPressureForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			bodyIdB,
-			rigidBoundaryParticleIdxB,
-			psiB,
-			pressureF,
-			nbrCountFB,
-			nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFB,
-			nbrChunkFormatFB,
-			nbrListDelta8FB,
-			nbrListDelta16FB,
-			nbrListAbs32FB,
-			particleSizeInvF,
-			kernelRadiusSqu,
-			cubicSplineAlpha,
-			restDensity,
-			massF,
-			pressGamma,
-			N_F, N_rigidBoundaryParticles,
-			xForceRBP,
-			yForceRBP,
-			zForceRBP);
-
-		GPU::CheckLastKernel("K_AccumulateRigidBodyPressureForces()");
+		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		K_AccumulateRigidParticlePressureForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR, pressureF, psiR,
+			nbrCountRF, nbrOffsetsRF, nbrListRF,
+			particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+			restDensity, massF, pressGamma, N_R, xForceR, yForceR, zForceR);
+		GPU::CheckLastKernel("K_AccumulateRigidParticlePressureForces()");
 	}
 
-	void Launch_ReduceRigidBoundaryParticleForces(
-		const uint32_t* rigidBoundaryParticleBeginR,
-		const uint32_t* rigidBoundaryParticleCountR,
-		const float* xRelPosRBP,
-		const float* yRelPosRBP,
-		const float* zRelPosRBP,
-		const float* a00R, const float* a01R, const float* a02R,
-		const float* a10R, const float* a11R, const float* a12R,
-		const float* a20R, const float* a21R, const float* a22R,
-		const float* xForceRBP,
-		const float* yForceRBP,
-		const float* zForceRBP,
-		const uint32_t N_rigidBodies,
-		const uint32_t N_rigidBoundaryParticles,
+	void Launch_ReduceRigidParticleForces(
+		const uint32_t* rigidParticleBeginRB,
+		const uint32_t* rigidParticleCountRB,
+		const float* xRelPosR,
+		const float* yRelPosR,
+		const float* zRelPosR,
+		const float* xForceR,
+		const float* yForceR,
+		const float* zForceR,
+		const float* a00RB, const float* a01RB, const float* a02RB,
+		const float* a10RB, const float* a11RB, const float* a12RB,
+		const float* a20RB, const float* a21RB, const float* a22RB,
+		const uint32_t N_RB,
+		const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
-		float* xForceR, float* yForceR, float* zForceR,
-		float* xTorqueR, float* yTorqueR, float* zTorqueR)
+		float* xForceRB, float* yForceRB, float* zForceRB,
+		float* xTorqueRB, float* yTorqueRB, float* zTorqueRB)
 	{
-		if (N_rigidBodies == 0 || N_rigidBoundaryParticles == 0) { return; }
+		if (N_RB == 0 || N_R == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = N_rigidBodies;
+		const uint32_t N_GRIDSIZE = N_RB;
 		const uint32_t sharedBytes = 6u * N_BLOCKSIZE * static_cast<uint32_t>(sizeof(float));
 
-		K_ReduceRigidBoundaryParticleForces<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
-			rigidBoundaryParticleBeginR,
-			rigidBoundaryParticleCountR,
-			xRelPosRBP,
-			yRelPosRBP,
-			zRelPosRBP,
-			a00R, a01R, a02R,
-			a10R, a11R, a12R,
-			a20R, a21R, a22R,
-			xForceRBP,
-			yForceRBP,
-			zForceRBP,
-			N_rigidBodies,
-			N_rigidBoundaryParticles,
-			xForceR, yForceR, zForceR,
-			xTorqueR, yTorqueR, zTorqueR);
+		K_ReduceRigidParticleForces<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
+			rigidParticleBeginRB,
+			rigidParticleCountRB,
+			xRelPosR,
+			yRelPosR,
+			zRelPosR,
+			xForceR,
+			yForceR,
+			zForceR,
+			a00RB, a01RB, a02RB,
+			a10RB, a11RB, a12RB,
+			a20RB, a21RB, a22RB,
+			N_RB,
+			N_R,
+			xForceRB, yForceRB, zForceRB,
+			xTorqueRB, yTorqueRB, zTorqueRB);
 
-		GPU::CheckLastKernel("K_ReduceRigidBoundaryParticleForces()");
+		GPU::CheckLastKernel("K_ReduceRigidParticleForces()");
 	}
 
 	void Launch_IntegrateRigidBodies(
 		const float timeStep,
-		const uint32_t N_rigidBodies,
+		const uint32_t N_RB,
 		cudaStream_t stream,
 		// destinations
-		float* xCMR, float* yCMR, float* zCMR,
-		float* xVelR, float* yVelR, float* zVelR,
-		float* xOmegaR, float* yOmegaR, float* zOmegaR,
-		float* xAngMomR, float* yAngMomR, float* zAngMomR,
-		const float* xForceR, const float* yForceR, const float* zForceR,
-		const float* xTorqueR, const float* yTorqueR, const float* zTorqueR,
-		float* a00R, float* a01R, float* a02R,
-		float* a10R, float* a11R, float* a12R,
-		float* a20R, float* a21R, float* a22R,
-		const float* massInvR,
-		const float* iBodyInv00R, const float* iBodyInv01R, const float* iBodyInv02R,
-		const float* iBodyInv10R, const float* iBodyInv11R, const float* iBodyInv12R,
-		const float* iBodyInv20R, const float* iBodyInv21R, const float* iBodyInv22R)
+		float* xCMRB, float* yCMRB, float* zCMRB,
+		float* xVelRB, float* yVelRB, float* zVelRB,
+		float* xOmegaRB, float* yOmegaRB, float* zOmegaRB,
+		float* xAngMomRB, float* yAngMomRB, float* zAngMomRB,
+		const float* xForceRB, const float* yForceRB, const float* zForceRB,
+		const float* xTorqueRB, const float* yTorqueRB, const float* zTorqueRB,
+		float* a00RB, float* a01RB, float* a02RB,
+		float* a10RB, float* a11RB, float* a12RB,
+		float* a20RB, float* a21RB, float* a22RB,
+		const float* massInvRB,
+		const float* iBodyInv00RB, const float* iBodyInv01RB, const float* iBodyInv02RB,
+		const float* iBodyInv10RB, const float* iBodyInv11RB, const float* iBodyInv12RB,
+		const float* iBodyInv20RB, const float* iBodyInv21RB, const float* iBodyInv22RB)
 	{
-		if (N_rigidBodies == 0) { return; }
+		if (N_RB == 0) { return; }
 
 		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_rigidBodies + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_GRIDSIZE = (N_RB + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_IntegrateRigidBodies<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
 			timeStep,
-			N_rigidBodies,
-			xCMR, yCMR, zCMR,
-			xVelR, yVelR, zVelR,
-			xOmegaR, yOmegaR, zOmegaR,
-			xAngMomR, yAngMomR, zAngMomR,
-			xForceR, yForceR, zForceR,
-			xTorqueR, yTorqueR, zTorqueR,
-			a00R, a01R, a02R,
-			a10R, a11R, a12R,
-			a20R, a21R, a22R,
-			massInvR,
-			iBodyInv00R, iBodyInv01R, iBodyInv02R,
-			iBodyInv10R, iBodyInv11R, iBodyInv12R,
-			iBodyInv20R, iBodyInv21R, iBodyInv22R);
+			N_RB,
+			xCMRB, yCMRB, zCMRB,
+			xVelRB, yVelRB, zVelRB,
+			xOmegaRB, yOmegaRB, zOmegaRB,
+			xAngMomRB, yAngMomRB, zAngMomRB,
+			xForceRB, yForceRB, zForceRB,
+			xTorqueRB, yTorqueRB, zTorqueRB,
+			a00RB, a01RB, a02RB,
+			a10RB, a11RB, a12RB,
+			a20RB, a21RB, a22RB,
+			massInvRB,
+			iBodyInv00RB, iBodyInv01RB, iBodyInv02RB,
+			iBodyInv10RB, iBodyInv11RB, iBodyInv12RB,
+			iBodyInv20RB, iBodyInv21RB, iBodyInv22RB);
 
 		GPU::CheckLastKernel("K_IntegrateRigidBodies()");
 	}

@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <vector>
 #include <tbb/partitioner.h>
 
@@ -78,15 +79,15 @@ namespace Sim
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
+		uint32_t GetNumRigidParticles() const override { return N_R_; }
 
 	private: // --------------------------------------------------------------------------------------
 
 		void ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 
-		void UpdateRigidBoundaryParticles();
+		void UpdateRigidParticles();
 		void ClearRigidForcesAndAddGravity(const SimParams& params);
-		void ClearRigidBoundaryParticleForces();
-		void ReduceRigidBoundaryParticleForces();
+		void ReduceRigidParticleForces();
 		void IntegrateRigidBodies(float timeStep);
 
 		// managers
@@ -100,10 +101,13 @@ namespace Sim
 		friend class NS_CellLinkedList_Compact_CPU01;
 
 		// metadata
-		uint32_t simStep_ = 0;
+		uint64_t simStep_ = 0;
 		double simTime_ = 0.0;
-		uint32_t N_F_ = 0;
-		uint32_t N_B_ = 0;
+		uint32_t N_F_ = 0; // number of fluid particles
+		uint32_t N_B_ = 0; // number of boundary particles
+		uint32_t N_R_ = 0; // number of rigid particles
+		uint32_t N_RB_ = 0; // number of rigid bodies
+		uint32_t N_solverIterCount_ = 0;
 
 		// persistent parallelization partitioner for TBB
 		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;
@@ -123,52 +127,52 @@ namespace Sim
 
 		// boundary particles
 		std::vector<uint32_t> idB_;
-		std::vector<uint32_t> bodyIdB_;
-		std::vector<uint32_t> rigidBoundaryParticleIdxB_;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
-		std::vector<float> xVelB_, yVelB_, zVelB_;
 		std::vector<float> volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
-		// rigid bodies
-		uint32_t N_rigidBodies_ = 0;
-		uint32_t N_rigidBoundaryParticles_ = 0;
-		std::vector<uint32_t> idR_; // per-rigid-body ID
-		std::vector<uint32_t> rigidBoundaryParticleBeginR_; // first rigid boundary particle
-		std::vector<uint32_t> rigidBoundaryParticleCountR_; // number of rigid boundary particles
+		// rigid particles
+		std::vector<uint32_t> idR_;
+		std::vector<uint32_t> bodyIdR_;
+		std::vector<float> xPosR_, yPosR_, zPosR_;
+		std::vector<float> xRelPosR_, yRelPosR_, zRelPosR_;
+		std::vector<float> xVelR_, yVelR_, zVelR_;
+		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated before body reduction
+		std::vector<float> volR_; // non-uniform volumes for non-uniform rigid particle spacing
+		std::vector<float> psiR_; // non-uniform pseudo-masses for non-uniform rigid particle spacing
+
+		// rigid bodies (using RB suffix to mark rigid body data structures)
+		std::vector<uint32_t> idRB_;
+		std::vector<uint32_t> rigidParticleBeginRB_; // first rigid particle
+		std::vector<uint32_t> rigidParticleCountRB_; // number of rigid particles
 
 		// body state (in world frame)
-		std::vector<float> xCMR_, yCMR_, zCMR_; // center of mass
-		std::vector<float> xVelR_, yVelR_, zVelR_; // linear velocity (time rate of change of center of mass)
-		std::vector<float> xOmegaR_, yOmegaR_, zOmegaR_; // angular velocity (time rate of change of orientation)
-		std::vector<float> xAngMomR_, yAngMomR_, zAngMomR_; // angular momentum (angular velocity * mass distribution)
-		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated from rigid boundary particles (time rate of change of linear momentum)
-		std::vector<float> xTorqueR_, yTorqueR_, zTorqueR_; // torque accumulated from rigid boundary particles (time rate of change of angular momentum)
+		std::vector<float> xCMRB_, yCMRB_, zCMRB_; // center of mass
+		std::vector<float> xVelRB_, yVelRB_, zVelRB_; // linear velocity (time rate of change of center of mass)
+		std::vector<float> xOmegaRB_, yOmegaRB_, zOmegaRB_; // angular velocity (time rate of change of orientation)
+		std::vector<float> xAngMomRB_, yAngMomRB_, zAngMomRB_; // angular momentum (angular velocity * mass distribution)
+		std::vector<float> xForceRB_, yForceRB_, zForceRB_; // force accumulated from rigid particles (time rate of change of linear momentum)
+		std::vector<float> xTorqueRB_, yTorqueRB_, zTorqueRB_; // torque accumulated from rigid particles (time rate of change of angular momentum)
 
 		// orientation matrix A, stored row-major
-		std::vector<float> a00R_, a01R_, a02R_;
-		std::vector<float> a10R_, a11R_, a12R_;
-		std::vector<float> a20R_, a21R_, a22R_;
+		std::vector<float> a00RB_, a01RB_, a02RB_;
+		std::vector<float> a10RB_, a11RB_, a12RB_;
+		std::vector<float> a20RB_, a21RB_, a22RB_;
 
 		// mass
-		std::vector<float> massR_;
-		std::vector<float> massInvR_;
+		std::vector<float> massRB_;
+		std::vector<float> massInvRB_;
 
 		// inverse inertia in body frame, stored row-major
-		std::vector<float> iBodyInv00R_, iBodyInv01R_, iBodyInv02R_;
-		std::vector<float> iBodyInv10R_, iBodyInv11R_, iBodyInv12R_;
-		std::vector<float> iBodyInv20R_, iBodyInv21R_, iBodyInv22R_;
-
-		// properties stored per rigid boundary particle
-		std::vector<float> xRelPosRBP_, yRelPosRBP_, zRelPosRBP_; // positions relative to the rigid body center of mass
-		std::vector<float> xForceRBP_, yForceRBP_, zForceRBP_; // force accumulated before reduction
+		std::vector<float> iBodyInv00RB_, iBodyInv01RB_, iBodyInv02RB_;
+		std::vector<float> iBodyInv10RB_, iBodyInv11RB_, iBodyInv12RB_;
+		std::vector<float> iBodyInv20RB_, iBodyInv21RB_, iBodyInv22RB_;
 
 		// optional distributed integration filtering
 		bool useActiveFluidParticleLocalIdxs_ = false;
 		std::vector<uint32_t> activeFluidParticleLocalIdxs_;
 
 		// misc data
-		uint32_t N_solverIterCount_;
 		float avgRelDensityErrorF_raw_;
 		float avgRelDensityErrorF_pos_;
 		float avgRelDensityErrorF_abs_;

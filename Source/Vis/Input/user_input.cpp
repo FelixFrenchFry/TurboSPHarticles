@@ -153,12 +153,12 @@ bool UserInputMgr::OnKey(const Sim::SimParams& simParams,
 
 			return true;
 		}
-		case GLFW_KEY_2: // toggle rigid boundary particle rendering
+		case GLFW_KEY_2: // toggle rigid particle rendering
 		{
-			bool toggle = !render.showRigidBoundaryParticles;
+			bool toggle = !render.showRigidParticles;
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
-					.showRigidBoundaryParticles = toggle
+					.showRigidParticles = toggle
 				});
 
 			return true;

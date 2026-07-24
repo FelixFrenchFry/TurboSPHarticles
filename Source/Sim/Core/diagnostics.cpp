@@ -69,7 +69,10 @@ namespace Sim
 		PrintCliSectionHeader("build configuration");
 		PrintCliSeparator();
 
-		printf("%-30s = %s\n", "build type", BuildConfig::buildType);
+		printf("%-30s = %s\n", "git revision",
+            BuildConfig::gitCommitHash);
+		printf("%-30s = %s\n", "build type",
+            BuildConfig::buildType);
 		printf("%-30s = %s %s\n", "compiler",
 			BuildConfig::cxxCompilerId,
 			BuildConfig::cxxCompilerVersion);
@@ -192,31 +195,33 @@ namespace Sim
 				params.neighborListMethod));
 
         // particle counts
-        printf("%-30s = [ %u / %u ]\n", "particles [F / B]",
+        printf("%-30s = [ %u / %u / %u ]\n", "particles [F / B / R]",
             simMgr.simBackend_->GetNumFluidParticles(),
-            simMgr.simBackend_->GetNumBoundaryParticles());
+            simMgr.simBackend_->GetNumBoundaryParticles(),
+            simMgr.simBackend_->GetNumRigidParticles());
     }
 
     void DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
         const Bench::BenchmarksTracker& benchmarksTracker,
         const Bench::BenchOpList& benchOps,
         Bench::TimeUnit unit,
-        uint32_t step,
+        uint64_t step,
         int64_t maxSteps)
     {
         using steady_clock = std::chrono::steady_clock;
 
         // static state for progress, benchmarks, and in-place redraw
         static bool initialized = false;
-        static uint32_t lastStep = 0;
+        static uint64_t lastStep = 0;
         static steady_clock::time_point startSteady;
 
         // history for moving-average steps/s over last few samples
-        using Sample = std::pair<uint32_t, steady_clock::time_point>;
+        using Sample = std::pair<uint64_t, steady_clock::time_point>;
         static std::deque<Sample> history;
         static int lastNumLines = 0;
 
         const bool hasTotal = (maxSteps > 0);
+        const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
         const auto now = steady_clock::now();
 
         // re-initialize at start or when step == 0
@@ -248,7 +253,7 @@ namespace Sim
             const auto& oldest = history.front();
             const auto& newest = history.back();
             double dt = std::chrono::duration<double>(newest.second - oldest.second).count();
-            uint32_t ds = newest.first - oldest.first;
+            uint64_t ds = newest.first - oldest.first;
 
             if (dt > 1e-14 && ds > 0)
             {
@@ -264,9 +269,9 @@ namespace Sim
 
         // remaining time based on moving-average speed (only if total steps known)
         double remainingS = 0.0;
-        if (hasTotal && stepsPerSec > 1e-14 && step < maxSteps)
+        if (hasTotal && stepsPerSec > 1e-14 && step < maxStepsU)
         {
-            remainingS = static_cast<double>(maxSteps - step) / stepsPerSec;
+            remainingS = static_cast<double>(maxStepsU - step) / stepsPerSec;
         }
 
         auto fmt_hms = [](double seconds, int& h, int& m, int& s)
@@ -290,7 +295,7 @@ namespace Sim
         if (hasTotal)
         {
             double progress = std::min(1.0, std::max(0.0,
-                static_cast<double>(step) / static_cast<double>(maxSteps)));
+                static_cast<double>(step) / static_cast<double>(maxStepsU)));
             percent = progress * 100.0;
         }
 
@@ -425,10 +430,8 @@ namespace Sim
         // total row last
         if (totalIdx >= 0)
         {
-            const uint64_t otherLatestNs =
-                SaturatingSubtract(totalLatestNs, accountedNsLatest);
-            const uint64_t otherAvgNs =
-                SaturatingSubtract(totalAvgNs, accountedNsAvg);
+            const uint64_t otherLatestNs = SaturatingSubtract(totalLatestNs, accountedNsLatest);
+            const uint64_t otherAvgNs = SaturatingSubtract(totalAvgNs, accountedNsAvg);
 
             PrintTimingRow("other", otherLatestNs, otherAvgNs, false);
 			PrintCliSeparator();
@@ -448,10 +451,10 @@ namespace Sim
         {
             snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld/%lld steps (%.1f %%) | %.3f steps/s (recently)",
+                "%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s (recently)",
                 elH, elM, elS,
-                static_cast<long long>(step),
-                static_cast<long long>(maxSteps),
+                step,
+                maxSteps,
                 percent,
                 stepsPerSec
             );
@@ -460,9 +463,9 @@ namespace Sim
         {
             snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %lld steps | %.3f steps/s (recently)",
+                "%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s (recently)",
                 elH, elM, elS,
-                static_cast<long long>(step),
+                step,
                 stepsPerSec
             );
         }
@@ -539,19 +542,20 @@ namespace Sim
 							name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
 					};
 
-				auto PrintMemPair = [&](const char* name,
-										const Mem::MemBucket bucketF,
-										const Mem::MemBucket bucketB)
+				auto PrintParticleClassMem = [&](const char* name,
+											 const Mem::MemBucket bucketF,
+											 const Mem::MemBucket bucketB,
+											 const Mem::MemBucket bucketR)
 					{
 						const uint64_t maxUsedBytesF = GetMemBytes(bucketF, false);
 						const uint64_t maxUsedBytesB = GetMemBytes(bucketB, false);
+						const uint64_t maxUsedBytesR = GetMemBytes(bucketR, false);
 						const uint64_t maxAllocBytesF = GetMemBytes(bucketF, true);
 						const uint64_t maxAllocBytesB = GetMemBytes(bucketB, true);
+						const uint64_t maxAllocBytesR = GetMemBytes(bucketR, true);
 
-						const uint64_t maxUsedBytes =
-							maxUsedBytesF + maxUsedBytesB;
-						const uint64_t maxAllocBytes =
-							maxAllocBytesF + maxAllocBytesB;
+						const uint64_t maxUsedBytes = maxUsedBytesF + maxUsedBytesB + maxUsedBytesR;
+						const uint64_t maxAllocBytes = maxAllocBytesF + maxAllocBytesB + maxAllocBytesR;
 
 						char pctUsedLabel[16];
 						char pctAllocLabel[16];
@@ -578,20 +582,22 @@ namespace Sim
 							std::snprintf(pctAllocLabel, sizeof(pctAllocLabel), "---");
 						}
 
-						PrintMemRow(name, maxUsedBytes, pctUsedLabel,
-							maxAllocBytes, pctAllocLabel);
+						PrintMemRow(name, maxUsedBytes, pctUsedLabel, maxAllocBytes, pctAllocLabel);
 					};
 
-				// combine fluid and boundary buckets for concise CLI output
-				PrintMemPair("particle properties",
+				// combine particle class buckets for concise CLI output
+				PrintParticleClassMem("particle properties",
 					Mem::MemBucket::ParticlePropertiesF,
-					Mem::MemBucket::ParticlePropertiesB);
-				PrintMemPair("neighbor search data struct",
+					Mem::MemBucket::ParticlePropertiesB,
+					Mem::MemBucket::ParticlePropertiesR);
+				PrintParticleClassMem("neighbor search data struct",
 					Mem::MemBucket::Neighbors_SearchDataStructF,
-					Mem::MemBucket::Neighbors_SearchDataStructB);
-				PrintMemPair("neighbor list storage",
+					Mem::MemBucket::Neighbors_SearchDataStructB,
+					Mem::MemBucket::Neighbors_SearchDataStructR);
+				PrintParticleClassMem("neighbor list storage",
 					Mem::MemBucket::Neighbors_ListStorageF,
-					Mem::MemBucket::Neighbors_ListStorageB);
+					Mem::MemBucket::Neighbors_ListStorageB,
+					Mem::MemBucket::Neighbors_ListStorageR);
 				PrintMemRow("misc",
 					GetMemBytes(Mem::MemBucket::Misc, false),
 					"---",

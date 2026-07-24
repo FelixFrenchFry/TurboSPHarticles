@@ -347,6 +347,7 @@ namespace Export
 
 		meta["buildConfig"] =
 		{
+			{ "gitCommitHash", Sim::BuildConfig::gitCommitHash },
 			{ "buildType", Sim::BuildConfig::buildType },
 			{ "compilerId", Sim::BuildConfig::cxxCompilerId },
 			{ "compilerVersion", Sim::BuildConfig::cxxCompilerVersion },

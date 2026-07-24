@@ -90,7 +90,7 @@ namespace Sim
 		void GetBenchOps(Bench::BenchOpList& out) const { out = curBenchOps_; }
 
 		// metadata
-		uint32_t simStep_ = 0;
+		uint64_t simStep_ = 0;
 		double simTime_ = 0.0;
 
 	private: // --------------------------------------------------------------------------------------

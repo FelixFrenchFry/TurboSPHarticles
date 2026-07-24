@@ -124,10 +124,11 @@ namespace
 		uint32_t N_DimZ = 0;
 	};
 
-	// TODO: parallelize?
+	// TODO: parallelize this with TBB?
 	inline SceneAABB ComputeSceneAABB_Combined(
 		const float* xPosF, const float* yPosF, const float* zPosF, uint32_t N_F,
-		const float* xPosB, const float* yPosB, const float* zPosB, uint32_t N_B)
+		const float* xPosB, const float* yPosB, const float* zPosB, uint32_t N_B,
+		const float* xPosR, const float* yPosR, const float* zPosR, uint32_t N_R)
 	{
 		SceneAABB sceneAABB{};
 
@@ -150,6 +151,20 @@ namespace
 			const float x = xPosB[i];
 			const float y = yPosB[i];
 			const float z = zPosB[i];
+
+			sceneAABB.minX = std::min(sceneAABB.minX, x);
+			sceneAABB.minY = std::min(sceneAABB.minY, y);
+			sceneAABB.minZ = std::min(sceneAABB.minZ, z);
+			sceneAABB.maxX = std::max(sceneAABB.maxX, x);
+			sceneAABB.maxY = std::max(sceneAABB.maxY, y);
+			sceneAABB.maxZ = std::max(sceneAABB.maxZ, z);
+		}
+
+		for (uint32_t i = 0; i < N_R; i++)
+		{
+			const float x = xPosR[i];
+			const float y = yPosR[i];
+			const float z = zPosR[i];
 
 			sceneAABB.minX = std::min(sceneAABB.minX, x);
 			sceneAABB.minY = std::min(sceneAABB.minY, y);
@@ -185,7 +200,7 @@ namespace
 		return frame;
 	}
 
-	// TODO: parallelize this?
+	// TODO: parallelize this with TBB?
 	void BuildCompactCellTable(
 		const std::vector<uint64_t>& cellId,
 		std::vector<uint64_t>& uniqueCellId,
@@ -226,7 +241,7 @@ namespace
 		cellStartIdx[N_Cells] = N;
 	}
 
-} // unnamed
+} // namespace anonymous
 
 // -------------------------------------------------------------------------------------------------
 // --- [ brute force implementation ] --------------------------------------------------------------
@@ -244,15 +259,12 @@ void NS_BruteForce_CPU01::Construct(
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
 }
 
-void NS_BruteForce_CPU01::Query_Count(
-	const SimParams& params)
+void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
-
-	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
-	if (N_F == 0) { return; }
+	const uint32_t N_R = be_.N_R_;
 
 	const float* RESTRICT xPosF = be_.xPosF_.data();
 	const float* RESTRICT yPosF = be_.yPosF_.data();
@@ -260,11 +272,14 @@ void NS_BruteForce_CPU01::Query_Count(
 	const float* RESTRICT xPosB = be_.xPosB_.data();
 	const float* RESTRICT yPosB = be_.yPosB_.data();
 	const float* RESTRICT zPosB = be_.zPosB_.data();
+	const float* RESTRICT xPosR = be_.xPosR_.data();
+	const float* RESTRICT yPosR = be_.yPosR_.data();
+	const float* RESTRICT zPosR = be_.zPosR_.data();
+	const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
+	// count FF, FB, and FR neighbors of each fluid particle
 	const uint32_t numChunks = be_.neighborList_->ChunkNumTotal();
-	const bool trackChunkNeighborIdxRange =
-		be_.neighborList_->NeedsChunkNeighborIdxRange();
-
+	const bool trackChunkNeighborIdxRange = be_.neighborList_->NeedsChunkNeighborIdxRange();
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, numChunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -275,10 +290,13 @@ void NS_BruteForce_CPU01::Query_Count(
 				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
 				uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
 				uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
+				uint32_t cntFR[CPU::N_SIMD_WIDTH]{};
 				uint32_t minRefFF = std::numeric_limits<uint32_t>::max();
 				uint32_t minRefFB = std::numeric_limits<uint32_t>::max();
+				uint32_t minRefFR = std::numeric_limits<uint32_t>::max();
 				uint32_t maxRefFF = 0;
 				uint32_t maxRefFB = 0;
+				uint32_t maxRefFR = 0;
 
 				for (uint32_t i = begin; i < end; i++)
 				{
@@ -293,14 +311,11 @@ void NS_BruteForce_CPU01::Query_Count(
 						const float dx = xi - xPosF[j];
 						const float dy = yi - yPosF[j];
 						const float dz = zi - zPosF[j];
-
-						// squared distance between particles i and j
 						const float distSqu = dx * dx + dy * dy + dz * dz;
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
 							cntFF[lane]++;
-
 							if (trackChunkNeighborIdxRange)
 							{
 								minRefFF = std::min(minRefFF, j);
@@ -315,14 +330,11 @@ void NS_BruteForce_CPU01::Query_Count(
 						const float dx = xi - xPosB[j];
 						const float dy = yi - yPosB[j];
 						const float dz = zi - zPosB[j];
-
-						// squared distance between particles i and j
 						const float distSqu = dx * dx + dy * dy + dz * dz;
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
 							cntFB[lane]++;
-
 							if (trackChunkNeighborIdxRange)
 							{
 								minRefFB = std::min(minRefFB, j);
@@ -330,48 +342,129 @@ void NS_BruteForce_CPU01::Query_Count(
 							}
 						}
 					}
+
+					// check all rigid particles j
+					for (uint32_t j = 0; j < N_R; j++)
+					{
+						const float dx = xi - xPosR[j];
+						const float dy = yi - yPosR[j];
+						const float dz = zi - zPosR[j];
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							cntFR[lane]++;
+							if (trackChunkNeighborIdxRange)
+							{
+								minRefFR = std::min(minRefFR, j);
+								maxRefFR = std::max(maxRefFR, j);
+							}
+						}
+					}
 				}
 
-				// commit final neighbor counts to backend storage
 				for (uint32_t lane = 0; lane < end - begin; lane++)
 				{
 					const uint32_t i = begin + lane;
 					be_.neighborList_->SetNbrCountFF(i, cntFF[lane]);
 					be_.neighborList_->SetNbrCountFB(i, cntFB[lane]);
+					be_.neighborList_->SetNbrCountFR(i, cntFR[lane]);
 				}
-
 				if (trackChunkNeighborIdxRange)
 				{
-					be_.neighborList_->SetChunkNeighborIdxRangeFF(
-						chunk, minRefFF, maxRefFF);
-					be_.neighborList_->SetChunkNeighborIdxRangeFB(
-						chunk, minRefFB, maxRefFB);
+					be_.neighborList_->SetChunkNeighborIdxRangeFF(chunk, minRefFF, maxRefFF);
+					be_.neighborList_->SetChunkNeighborIdxRangeFB(chunk, minRefFB, maxRefFB);
+					be_.neighborList_->SetChunkNeighborIdxRangeFR(chunk, minRefFR, maxRefFR);
 				}
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// count RF, RB, and RR neighbors of each rigid particle
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_R),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				uint32_t countRF = 0;
+				uint32_t countRB = 0;
+				uint32_t countRR = 0;
+
+				// check all fluid particles j
+				for (uint32_t j = 0; j < N_F; j++)
+				{
+					const float dx = xPosR[i] - xPosF[j];
+					const float dy = yPosR[i] - yPosF[j];
+					const float dz = zPosR[i] - zPosF[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						countRF++;
+					}
+				}
+
+				// check all boundary particles j
+				for (uint32_t j = 0; j < N_B; j++)
+				{
+					const float dx = xPosR[i] - xPosB[j];
+					const float dy = yPosR[i] - yPosB[j];
+					const float dz = zPosR[i] - zPosB[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						countRB++;
+					}
+				}
+
+				// check all rigid particles j
+				for (uint32_t j = 0; j < N_R; j++)
+				{
+					// skip particles of the same rigid body
+					if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
+
+					const float dx = xPosR[i] - xPosR[j];
+					const float dy = yPosR[i] - yPosR[j];
+					const float dz = zPosR[i] - zPosR[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						countRR++;
+					}
+				}
+
+				be_.neighborList_->SetNbrCountRF(i, countRF);
+				be_.neighborList_->SetNbrCountRB(i, countRB);
+				be_.neighborList_->SetNbrCountRR(i, countRR);
 			}
 		},
 		tbb::auto_partitioner{}
 	);
 }
 
-void NS_BruteForce_CPU01::Query_Fill(
-	const SimParams& params)
+void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 {
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
-
-	// local references for fewer pointer indirections
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
-	if (N_F == 0) { return; }
-
+	const uint32_t N_R = be_.N_R_;
 	const float* RESTRICT xPosF = be_.xPosF_.data();
 	const float* RESTRICT yPosF = be_.yPosF_.data();
 	const float* RESTRICT zPosF = be_.zPosF_.data();
 	const float* RESTRICT xPosB = be_.xPosB_.data();
 	const float* RESTRICT yPosB = be_.yPosB_.data();
 	const float* RESTRICT zPosB = be_.zPosB_.data();
+	const float* RESTRICT xPosR = be_.xPosR_.data();
+	const float* RESTRICT yPosR = be_.yPosR_.data();
+	const float* RESTRICT zPosR = be_.zPosR_.data();
+	const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
+	// fill FF, FB, and FR neighbors of each fluid particle
 	const uint32_t numChunks = be_.neighborList_->ChunkNumTotal();
-
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, numChunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -382,10 +475,10 @@ void NS_BruteForce_CPU01::Query_Fill(
 				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
 				uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 				uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
-				ChunkedSELLNeighborSpan_Write chunkFF =
-					be_.neighborList_->FFChunkWrite(chunk);
-				ChunkedSELLNeighborSpan_Write chunkFB =
-					be_.neighborList_->FBChunkWrite(chunk);
+				uint32_t writtenFR[CPU::N_SIMD_WIDTH]{};
+				ChunkedSELLNeighborSpan_Write chunkFF = be_.neighborList_->FFChunkWrite(chunk);
+				ChunkedSELLNeighborSpan_Write chunkFB = be_.neighborList_->FBChunkWrite(chunk);
+				ChunkedSELLNeighborSpan_Write chunkFR = be_.neighborList_->FRChunkWrite(chunk);
 
 				for (uint32_t i = begin; i < end; i++)
 				{
@@ -400,8 +493,6 @@ void NS_BruteForce_CPU01::Query_Fill(
 						const float dx = xi - xPosF[j];
 						const float dy = yi - yPosF[j];
 						const float dz = zi - zPosF[j];
-
-						// squared distance between particles i and j
 						const float distSqu = dx * dx + dy * dy + dz * dz;
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
@@ -426,8 +517,6 @@ void NS_BruteForce_CPU01::Query_Fill(
 						const float dx = xi - xPosB[j];
 						const float dy = yi - yPosB[j];
 						const float dz = zi - zPosB[j];
-
-						// squared distance between particles i and j
 						const float distSqu = dx * dx + dy * dy + dz * dz;
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
@@ -445,10 +534,101 @@ void NS_BruteForce_CPU01::Query_Fill(
 							chunkFB.StoreNeighbor(lane, k, j);
 						}
 					}
+
+					// check all rigid particles j
+					for (uint32_t j = 0; j < N_R; j++)
+					{
+						const float dx = xi - xPosR[j];
+						const float dy = yi - yPosR[j];
+						const float dz = zi - zPosR[j];
+						const float distSqu = dx * dx + dy * dy + dz * dz;
+
+						if (distSqu <= kernelRadiusSqu) [[unlikely]]
+						{
+							const uint32_t k = writtenFR[lane]++;
+
+							#if defined(_DEBUG)
+							if (k >= chunkFR.pitch) [[unlikely]]
+							{
+								throw std::runtime_error(
+									"Brute-force SELL FR fill exceeded chunk pitch.");
+							}
+							#endif
+
+							chunkFR.StoreNeighbor(lane, k, j);
+						}
+					}
 				}
 
 				be_.neighborList_->FinishFFChunkWrite(chunk, writtenFF);
 				be_.neighborList_->FinishFBChunkWrite(chunk, writtenFB);
+				be_.neighborList_->FinishFRChunkWrite(chunk, writtenFR);
+			}
+		},
+		tbb::auto_partitioner{}
+	);
+
+	// fill RF, RB, and RR neighbors of each rigid particle
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_R),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			std::vector<uint32_t> neighbors;
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// check all fluid particles j
+				neighbors.clear();
+				for (uint32_t j = 0; j < N_F; j++)
+				{
+					const float dx = xPosR[i] - xPosF[j];
+					const float dy = yPosR[i] - yPosF[j];
+					const float dz = zPosR[i] - zPosF[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						neighbors.push_back(j);
+					}
+				}
+				be_.neighborList_->SetNbrListRF(
+					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
+
+				// check all boundary particles j
+				neighbors.clear();
+				for (uint32_t j = 0; j < N_B; j++)
+				{
+					const float dx = xPosR[i] - xPosB[j];
+					const float dy = yPosR[i] - yPosB[j];
+					const float dz = zPosR[i] - zPosB[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						neighbors.push_back(j);
+					}
+				}
+				be_.neighborList_->SetNbrListRB(
+					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
+
+				// check all rigid particles j
+				neighbors.clear();
+				for (uint32_t j = 0; j < N_R; j++)
+				{
+					// skip particles of the same rigid body
+					if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
+
+					const float dx = xPosR[i] - xPosR[j];
+					const float dy = yPosR[i] - yPosR[j];
+					const float dz = zPosR[i] - zPosR[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
+
+					if (distSqu <= kernelRadiusSqu) [[unlikely]]
+					{
+						neighbors.push_back(j);
+					}
+				}
+				be_.neighborList_->SetNbrListRR(
+					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 			}
 		},
 		tbb::auto_partitioner{}
@@ -463,15 +643,12 @@ void NS_BruteForce_CPU01::DataReOrder(
 	// no re-ordering in brute force implementation
 }
 
-std::pair<Mem::MemUsage, Mem::MemUsage> NS_BruteForce_CPU01::GetMemUsage(
+Mem::ParticleClassMemUsage NS_BruteForce_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	(void)params;
 
-	Mem::MemUsage usageF{};
-	Mem::MemUsage usageB{};
-
-	return { usageF, usageB };
+	return {};
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -504,14 +681,21 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellIdB_.clear();
 	particleOrderB_.clear();
 	cellTableB_.clear();
+
+	uniqueCellIdR_.clear();
+	cellStartIdxR_.clear();
+	cellIdR_.clear();
+	particleOrderR_.clear();
+	cellTableR_.clear();
 }
 
 void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
+	const uint32_t N_R = be_.N_R_;
 
-	if (N_F == 0 && N_B == 0)
+	if (N_F == 0 && N_B == 0 && N_R == 0)
 	{
 		SPDLOG_WARN("Cannot construct neighbor search for an empty simulation.");
 		cellOrigX_ = 0;
@@ -534,6 +718,12 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellIdB_.clear();
 		particleOrderB_.clear();
 		cellTableB_.clear();
+
+		uniqueCellIdR_.clear();
+		cellStartIdxR_.clear();
+		cellIdR_.clear();
+		particleOrderR_.clear();
+		cellTableR_.clear();
 
 		return;
 	}
@@ -614,6 +804,35 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellIdsMatchCurrentParticleOrder_ = true;
 	}
 
+	// rigid particles keep their body-contiguous order, so only the cell keys are sorted
+	cellIdR_.resize(N_R);
+	particleOrderR_.resize(N_R);
+	if (N_R > 0)
+	{
+		tbb::parallel_for(tbb::blocked_range<uint32_t>(0, N_R),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const int cx = FloorToInt(be_.xPosR_[i] * cellSizeInv_);
+					const int cy = FloorToInt(be_.yPosR_[i] * cellSizeInv_);
+					const int cz = FloorToInt(be_.zPosR_[i] * cellSizeInv_);
+					cellIdR_[i] = MapToCellId(cx, cy, cz);
+					particleOrderR_[i] = i;
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+		tbb::parallel_sort(particleOrderR_.begin(), particleOrderR_.end(),
+			[&](const uint32_t a, const uint32_t b)
+			{
+				if (cellIdR_[a] != cellIdR_[b]) { return cellIdR_[a] < cellIdR_[b]; }
+				return a < b;
+			});
+		std::vector<uint64_t> cellIdScratchR;
+		ApplyPermutation(particleOrderR_, cellIdR_, cellIdScratchR);
+	}
+
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
 
 	// fluid
@@ -621,6 +840,9 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 	// boundary
 	BuildCompactCellTable(cellIdB_, uniqueCellIdB_, cellStartIdxB_);
+
+	// rigid
+	BuildCompactCellTable(cellIdR_, uniqueCellIdR_, cellStartIdxR_);
 
 	BuildDenseCellTables();
 }
@@ -635,6 +857,7 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 
 	cellTableF_.assign(static_cast<size_t>(tableSize), EMPTY_32);
 	cellTableB_.assign(static_cast<size_t>(tableSize), EMPTY_32);
+	cellTableR_.assign(static_cast<size_t>(tableSize), EMPTY_32);
 
 	const auto buildTable = [&](const std::vector<uint32_t>& cellStartIdx,
 		const std::vector<float>& xPos,
@@ -668,6 +891,19 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 
 	buildTable(cellStartIdxF_, be_.xPosF_, be_.yPosF_, be_.zPosF_, cellTableF_);
 	buildTable(cellStartIdxB_, be_.xPosB_, be_.yPosB_, be_.zPosB_, cellTableB_);
+
+	// rigid ranges index the sorted permutation instead of reordering rigid particle data
+	const uint32_t N_CellsR = cellStartIdxR_.empty()
+		? 0u : static_cast<uint32_t>(cellStartIdxR_.size() - 1u);
+	for (uint32_t c = 0; c < N_CellsR; c++)
+	{
+		const uint32_t begin = cellStartIdxR_[c];
+		const uint32_t rigidParticleIdx = particleOrderR_[begin];
+		const int cx = FloorToInt(be_.xPosR_[rigidParticleIdx] * cellSizeInv_);
+		const int cy = FloorToInt(be_.yPosR_[rigidParticleIdx] * cellSizeInv_);
+		const int cz = FloorToInt(be_.zPosR_[rigidParticleIdx] * cellSizeInv_);
+		cellTableR_[MapToDenseCellIdx(cx, cy, cz)] = c;
+	}
 }
 
 void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
@@ -675,7 +911,8 @@ void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
 	const int cy,
 	const int cz,
 	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const
 {
 	const int cellQueryReach = static_cast<int>(cellQueryReach_);
 
@@ -727,6 +964,17 @@ void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
 						appendUnique(boundaryRanges, ActiveCellRange{ sB_nbr, eB_nbr });
 					}
 				}
+
+				const uint32_t cR_nbr = cellTableR_[tableIdx];
+				if (cR_nbr != EMPTY_32)
+				{
+					const uint32_t sR_nbr = cellStartIdxR_[cR_nbr];
+					const uint32_t eR_nbr = cellStartIdxR_[cR_nbr + 1];
+					if (sR_nbr < eR_nbr)
+					{
+						appendUnique(rigidRanges, ActiveCellRange{ sR_nbr, eR_nbr });
+					}
+				}
 			}
 		}
 	}
@@ -736,10 +984,12 @@ void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
 	const uint32_t begin,
 	const uint32_t end,
 	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges) const
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
+	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const
 {
 	fluidRanges.clear();
 	boundaryRanges.clear();
+	rigidRanges.clear();
 
 	int cellX[CPU::N_SIMD_WIDTH]{};
 	int cellY[CPU::N_SIMD_WIDTH]{};
@@ -775,7 +1025,7 @@ void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
 
 		if (alreadyVisited) { continue; }
 
-		GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges);
+		GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
 	}
 }
 
@@ -784,7 +1034,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 	{
 		const float kernelRadiusSqu = params.kernelRadiusSqu;
 		const uint32_t N_F = be_.N_F_;
-		if (N_F == 0) { return; }
+		const uint32_t N_R = be_.N_R_;
+		if (N_F == 0 && N_R == 0) { return; }
 
 		// local references for fewer pointer indirections
 		const float* RESTRICT xPosF = be_.xPosF_.data();
@@ -793,8 +1044,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 		const float* RESTRICT xPosB = be_.xPosB_.data();
 		const float* RESTRICT yPosB = be_.yPosB_.data();
 		const float* RESTRICT zPosB = be_.zPosB_.data();
+		const float* RESTRICT xPosR = be_.xPosR_.data();
+		const float* RESTRICT yPosR = be_.yPosR_.data();
+		const float* RESTRICT zPosR = be_.zPosR_.data();
+		const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
-		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
+		const uint32_t numChunks = (N_F == 0u)
+			? 0u : ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
 		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
 		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 		const bool trackChunkNeighborIdxRange =
@@ -807,6 +1063,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 				auto& queryMetaScratch = queryMetaScratch_.local();
 				auto& fluidRanges = queryMetaScratch.fluidRanges;
 				auto& boundaryRanges = queryMetaScratch.boundaryRanges;
+				auto& rigidRanges = queryMetaScratch.rigidRanges;
 
 				for (uint32_t chunk = range.begin(); chunk != range.end(); chunk++)
 				{
@@ -819,12 +1076,15 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
 					uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
+					uint32_t cntFR[CPU::N_SIMD_WIDTH]{};
 					uint32_t minRefFF = std::numeric_limits<uint32_t>::max();
 					uint32_t minRefFB = std::numeric_limits<uint32_t>::max();
+					uint32_t minRefFR = std::numeric_limits<uint32_t>::max();
 					uint32_t maxRefFF = 0;
 					uint32_t maxRefFB = 0;
+					uint32_t maxRefFR = 0;
 
-					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges);
+					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
 					// fluid neighbors
 					for (const ActiveCellRange& cellRange : fluidRanges)
@@ -884,12 +1144,41 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 						}
 					}
 
+					// rigid neighbors
+					for (const ActiveCellRange& cellRange : rigidRanges)
+					{
+						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
+						{
+							const uint32_t l = particleOrderR_[sortedIdx];
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosR[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosR[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosR[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
+							if (trackChunkNeighborIdxRange && mask != 0u)
+							{
+								minRefFR = std::min(minRefFR, l);
+								maxRefFR = std::max(maxRefFR, l);
+							}
+							for (uint32_t lane = 0; lane < end - begin; lane++)
+							{
+								if ((mask & (1u << lane)) != 0u) { cntFR[lane]++; }
+							}
+						}
+					}
+
 					// commit final neighbor counts to backend storage
 					for (uint32_t lane = 0; lane < end - begin; lane++)
 					{
 						const uint32_t i = begin + lane;
 						be_.neighborList_->SetNbrCountFF(i, cntFF[lane]);
 						be_.neighborList_->SetNbrCountFB(i, cntFB[lane]);
+						be_.neighborList_->SetNbrCountFR(i, cntFR[lane]);
 					}
 
 					if (trackChunkNeighborIdxRange)
@@ -898,13 +1187,77 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 							chunk, minRefFF, maxRefFF);
 						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFB(
 							chunk, minRefFB, maxRefFB);
+						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFR(
+							chunk, minRefFR, maxRefFR);
 					}
 				}
 			},
 			tbb::auto_partitioner{}
 		);
-	}
 
+		// rigid source queries preserve rigid particle order
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_R),
+			[&](const tbb::blocked_range<uint32_t>& range)
+			{
+				auto& queryMetaScratch = queryMetaScratch_.local();
+				for (uint32_t i = range.begin(); i != range.end(); i++)
+				{
+					auto& fluidRanges = queryMetaScratch.fluidRanges;
+					auto& boundaryRanges = queryMetaScratch.boundaryRanges;
+					auto& rigidRanges = queryMetaScratch.rigidRanges;
+					fluidRanges.clear(); boundaryRanges.clear(); rigidRanges.clear();
+					const int cx = FloorToInt(xPosR[i] * cellSizeInv_);
+					const int cy = FloorToInt(yPosR[i] * cellSizeInv_);
+					const int cz = FloorToInt(zPosR[i] * cellSizeInv_);
+					GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+					uint32_t countRF = 0;
+					uint32_t countRB = 0;
+					uint32_t countRR = 0;
+
+					for (const ActiveCellRange& cellRange : fluidRanges)
+					{
+						for (uint32_t j = cellRange.begin; j < cellRange.end; j++)
+						{
+							const float dx = xPosR[i] - xPosF[j];
+							const float dy = yPosR[i] - yPosF[j];
+							const float dz = zPosR[i] - zPosF[j];
+							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { countRF++; }
+						}
+					}
+
+					for (const ActiveCellRange& cellRange : boundaryRanges)
+					{
+						for (uint32_t j = cellRange.begin; j < cellRange.end; j++)
+						{
+							const float dx = xPosR[i] - xPosB[j];
+							const float dy = yPosR[i] - yPosB[j];
+							const float dz = zPosR[i] - zPosB[j];
+							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { countRB++; }
+						}
+					}
+
+					for (const ActiveCellRange& cellRange : rigidRanges)
+					{
+						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
+						{
+							const uint32_t j = particleOrderR_[sortedIdx];
+							if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
+							const float dx = xPosR[i] - xPosR[j];
+							const float dy = yPosR[i] - yPosR[j];
+							const float dz = zPosR[i] - zPosR[j];
+							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { countRR++; }
+						}
+					}
+
+					be_.neighborList_->SetNbrCountRF(i, countRF);
+					be_.neighborList_->SetNbrCountRB(i, countRB);
+					be_.neighborList_->SetNbrCountRR(i, countRR);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+	}
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
@@ -912,7 +1265,8 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 	{
 		const float kernelRadiusSqu = params.kernelRadiusSqu;
 		const uint32_t N_F = be_.N_F_;
-		if (N_F == 0) { return; }
+		const uint32_t N_R = be_.N_R_;
+		if (N_F == 0 && N_R == 0) { return; }
 
 		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 
@@ -923,8 +1277,13 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 		const float* RESTRICT xPosB = be_.xPosB_.data();
 		const float* RESTRICT yPosB = be_.yPosB_.data();
 		const float* RESTRICT zPosB = be_.zPosB_.data();
+		const float* RESTRICT xPosR = be_.xPosR_.data();
+		const float* RESTRICT yPosR = be_.yPosR_.data();
+		const float* RESTRICT zPosR = be_.zPosR_.data();
+		const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
-		const uint32_t numChunks = ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
+		const uint32_t numChunks = (N_F == 0u)
+			? 0u : ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
 		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
 
 		tbb::parallel_for(
@@ -934,6 +1293,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 				auto& queryMetaScratch = queryMetaScratch_.local();
 				auto& fluidRanges = queryMetaScratch.fluidRanges;
 				auto& boundaryRanges = queryMetaScratch.boundaryRanges;
+				auto& rigidRanges = queryMetaScratch.rigidRanges;
 
 				for (uint32_t chunk = range.begin(); chunk != range.end(); chunk++)
 				{
@@ -946,12 +1306,15 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
 					uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
+					uint32_t writtenFR[CPU::N_SIMD_WIDTH]{};
 					ChunkedSELLNeighborSpan_Write chunkFF =
 						chunkedSELLNeighborList->FFChunkWrite(chunk);
 					ChunkedSELLNeighborSpan_Write chunkFB =
 						chunkedSELLNeighborList->FBChunkWrite(chunk);
+					ChunkedSELLNeighborSpan_Write chunkFR =
+						chunkedSELLNeighborList->FRChunkWrite(chunk);
 
-					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges);
+					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
 					// fluid neighbors
 					for (const ActiveCellRange& cellRange : fluidRanges)
@@ -1015,14 +1378,105 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 						}
 					}
 
+					// rigid neighbors
+					for (const ActiveCellRange& cellRange : rigidRanges)
+					{
+						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
+						{
+							const uint32_t l = particleOrderR_[sortedIdx];
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosR[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosR[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosR[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
+							for (uint32_t lane = 0; lane < end - begin; lane++)
+							{
+								if ((mask & (1u << lane)) == 0u) { continue; }
+								chunkFR.StoreNeighbor(lane, writtenFR[lane], l);
+								writtenFR[lane]++;
+							}
+						}
+					}
+
 					chunkedSELLNeighborList->FinishFFChunkWrite(chunk, writtenFF);
 					chunkedSELLNeighborList->FinishFBChunkWrite(chunk, writtenFB);
+					chunkedSELLNeighborList->FinishFRChunkWrite(chunk, writtenFR);
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// fill rigid source neighbors without changing rigid particle order
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_R),
+			[&](const tbb::blocked_range<uint32_t>& range)
+			{
+				auto& queryMetaScratch = queryMetaScratch_.local();
+				std::vector<uint32_t> neighbors;
+				for (uint32_t i = range.begin(); i != range.end(); i++)
+				{
+					auto& fluidRanges = queryMetaScratch.fluidRanges;
+					auto& boundaryRanges = queryMetaScratch.boundaryRanges;
+					auto& rigidRanges = queryMetaScratch.rigidRanges;
+					fluidRanges.clear(); boundaryRanges.clear(); rigidRanges.clear();
+					const int cx = FloorToInt(xPosR[i] * cellSizeInv_);
+					const int cy = FloorToInt(yPosR[i] * cellSizeInv_);
+					const int cz = FloorToInt(zPosR[i] * cellSizeInv_);
+					GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+
+					neighbors.clear();
+					for (const ActiveCellRange& cellRange : fluidRanges)
+					{
+						for (uint32_t j = cellRange.begin; j < cellRange.end; j++)
+						{
+							const float dx = xPosR[i] - xPosF[j];
+							const float dy = yPosR[i] - yPosF[j];
+							const float dz = zPosR[i] - zPosF[j];
+							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { neighbors.push_back(j); }
+						}
+					}
+					be_.neighborList_->SetNbrListRF(
+						i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
+
+					neighbors.clear();
+					for (const ActiveCellRange& cellRange : boundaryRanges)
+					{
+						for (uint32_t j = cellRange.begin; j < cellRange.end; j++)
+						{
+							const float dx = xPosR[i] - xPosB[j];
+							const float dy = yPosR[i] - yPosB[j];
+							const float dz = zPosR[i] - zPosB[j];
+							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { neighbors.push_back(j); }
+						}
+					}
+					be_.neighborList_->SetNbrListRB(
+						i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
+
+					neighbors.clear();
+					for (const ActiveCellRange& cellRange : rigidRanges)
+					{
+						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
+						{
+							const uint32_t j = particleOrderR_[sortedIdx];
+							if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
+							const float dx = xPosR[i] - xPosR[j];
+							const float dy = yPosR[i] - yPosR[j];
+							const float dz = zPosR[i] - zPosR[j];
+							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { neighbors.push_back(j); }
+						}
+					}
+					be_.neighborList_->SetNbrListRR(
+						i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 	}
-
 }
 
 void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
@@ -1145,14 +1599,9 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		std::vector<uint64_t> cellIdScratchB;
 		ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB);
 		ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
-		ApplyPermutation(particleOrderB_, be_.bodyIdB_, be_.workBufferIdB_);
-		ApplyPermutation(particleOrderB_, be_.rigidBoundaryParticleIdxB_, be_.workBufferIdB_);
 		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.xVelB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.yVelB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.zVelB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.volB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
 	}
@@ -1171,32 +1620,43 @@ bool NS_CellLinkedList_Compact_CPU01::TryGetLastParticleReOrder(
 	return true;
 }
 
-std::pair<Mem::MemUsage, Mem::MemUsage> NS_CellLinkedList_Compact_CPU01::GetMemUsage(
+Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	const SimParams& params) const
 {
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
+	Mem::MemUsage usageR{};
 
+	// F
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellTableF_));
 
+	// B
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellTableB_));
 
-	return { usageF, usageB };
+	// R
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(uniqueCellIdR_));
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellStartIdxR_));
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdR_));
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(particleOrderR_));
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellTableR_));
+
+	return { usageF, usageB, usageR };
 }
 
 void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
-	if (N_F == 0 && N_B == 0)
+	const uint32_t N_R = be_.N_R_;
+	if (N_F == 0 && N_B == 0 && N_R == 0)
 	{
 		cellOrigX_ = 0;
 		cellOrigY_ = 0;
@@ -1205,99 +1665,47 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 		N_DimY_ = 0;
 		N_DimZ_ = 0;
 		cellFrameValid_ = false;
-
 		return;
 	}
 
 	bool rebuildFrame = !cellFrameValid_;
-
-	// check whether the current occupied cell box still fits into the
-	// reusable frame with the current query pad on all sides
 	if (!rebuildFrame)
 	{
 		const int margin = static_cast<int>(cellQueryReach_);
-		const int xMaxFrame = cellOrigX_ + static_cast<int>(N_DimX_) - 1;
-		const int yMaxFrame = cellOrigY_ + static_cast<int>(N_DimY_) - 1;
-		const int zMaxFrame = cellOrigZ_ + static_cast<int>(N_DimZ_) - 1;
-
 		const int xMinInner = cellOrigX_ + margin;
 		const int yMinInner = cellOrigY_ + margin;
 		const int zMinInner = cellOrigZ_ + margin;
-		const int xMaxInner = xMaxFrame - margin;
-		const int yMaxInner = yMaxFrame - margin;
-		const int zMaxInner = zMaxFrame - margin;
+		const int xMaxInner = cellOrigX_ + static_cast<int>(N_DimX_) - 1 - margin;
+		const int yMaxInner = cellOrigY_ + static_cast<int>(N_DimY_) - 1 - margin;
+		const int zMaxInner = cellOrigZ_ + static_cast<int>(N_DimZ_) - 1 - margin;
 
-		if (xMinInner > xMaxInner || yMinInner > yMaxInner || zMinInner > zMaxInner)
-		{
-			rebuildFrame = true;
-		}
-		else
-		{
-			const bool fluidExceeded = tbb::parallel_reduce(
-				tbb::blocked_range<uint32_t>(0, N_F),
-				false,
-				[&](const tbb::blocked_range<uint32_t>& r, bool localExceeded) -> bool
-				{
-					if (localExceeded) { return true; }
-
-					for (uint32_t i = r.begin(); i != r.end(); i++)
-					{
-						const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-						const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-						const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
-
-						if (cx < xMinInner || cx > xMaxInner ||
-							cy < yMinInner || cy > yMaxInner ||
-							cz < zMinInner || cz > zMaxInner)
-						{
-							localExceeded = true;
-							break;
-						}
-					}
-
-					return localExceeded;
-				},
-				[](bool a, bool b) -> bool { return a || b; },
-				tbb::auto_partitioner{}
-			);
-
-			if (fluidExceeded)
+		const auto particlesExceeded = [&](const std::vector<float>& xPos,
+			const std::vector<float>& yPos, const std::vector<float>& zPos) -> bool
 			{
-				rebuildFrame = true;
-			}
-			else
-			{
-				const bool boundaryExceeded = tbb::parallel_reduce(
-					tbb::blocked_range<uint32_t>(0, N_B),
-					false,
-					[&](const tbb::blocked_range<uint32_t>& r, bool localExceeded) -> bool
+				return tbb::parallel_reduce(
+					tbb::blocked_range<uint32_t>(0, static_cast<uint32_t>(xPos.size())), false,
+					[&](const tbb::blocked_range<uint32_t>& r, bool exceeded) -> bool
 					{
-						if (localExceeded) { return true; }
-
-						for (uint32_t i = r.begin(); i != r.end(); i++)
+						for (uint32_t i = r.begin(); i != r.end() && !exceeded; i++)
 						{
-							const int cx = FloorToInt(be_.xPosB_[i] * cellSizeInv_);
-							const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
-							const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
-
-							if (cx < xMinInner || cx > xMaxInner ||
+							const int cx = FloorToInt(xPos[i] * cellSizeInv_);
+							const int cy = FloorToInt(yPos[i] * cellSizeInv_);
+							const int cz = FloorToInt(zPos[i] * cellSizeInv_);
+							exceeded = cx < xMinInner || cx > xMaxInner ||
 								cy < yMinInner || cy > yMaxInner ||
-								cz < zMinInner || cz > zMaxInner)
-							{
-								localExceeded = true;
-								break;
-							}
+								cz < zMinInner || cz > zMaxInner;
 						}
-
-						return localExceeded;
+						return exceeded;
 					},
-					[](bool a, bool b) -> bool { return a || b; },
+					[](const bool a, const bool b) -> bool { return a || b; },
 					tbb::auto_partitioner{}
 				);
+			};
 
-				rebuildFrame = boundaryExceeded;
-			}
-		}
+		rebuildFrame = xMinInner > xMaxInner || yMinInner > yMaxInner || zMinInner > zMaxInner ||
+			particlesExceeded(be_.xPosF_, be_.yPosF_, be_.zPosF_) ||
+			particlesExceeded(be_.xPosB_, be_.yPosB_, be_.zPosB_) ||
+			particlesExceeded(be_.xPosR_, be_.yPosR_, be_.zPosR_);
 	}
 
 	if (!rebuildFrame) { return; }
@@ -1305,14 +1713,14 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	// rebuild cell frame from current occupied cell AABB
 	const SceneAABB sceneAABB = ComputeSceneAABB_Combined(
 		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), N_F,
-		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B);
+		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B,
+		be_.xPosR_.data(), be_.yPosR_.data(), be_.zPosR_.data(), N_R);
 	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
 
 	const int margin = static_cast<int>(cellQueryReach_ + N_CellFrameRebuildMargin_);
 	cellOrigX_ = cellFrame.cellOrigX - margin;
 	cellOrigY_ = cellFrame.cellOrigY - margin;
 	cellOrigZ_ = cellFrame.cellOrigZ - margin;
-
 	N_DimX_ = cellFrame.N_DimX + static_cast<uint32_t>(2 * margin);
 	N_DimY_ = cellFrame.N_DimY + static_cast<uint32_t>(2 * margin);
 	N_DimZ_ = cellFrame.N_DimZ + static_cast<uint32_t>(2 * margin);
@@ -1324,7 +1732,6 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 			N_DimX_, N_DimY_, N_DimZ_);
 		assert(false);
 		cellFrameValid_ = false;
-
 		return;
 	}
 
@@ -1389,4 +1796,3 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::SpreadBitsWithGaps_21to63(uint3
 
 	return x;
 }
-

@@ -1,6 +1,4 @@
 // state_sim.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -17,7 +15,6 @@
 namespace Sync
 {
 	inline constexpr uint32_t InvalidRigidBodyId = std::numeric_limits<uint32_t>::max();
-	inline constexpr uint32_t InvalidRigidBoundaryParticleIdx = std::numeric_limits<uint32_t>::max();
 
 	// view into fluid particle data
 	// (non-owning, for read-only access)
@@ -47,12 +44,24 @@ namespace Sync
 
 		// fields
 		std::span<uint32_t> id;
-		std::span<uint32_t> bodyId;
-		std::span<uint32_t> rigidBoundaryParticleIdx;
 		std::span<float> xPos, yPos, zPos;
-		std::span<float> xVel, yVel, zVel;
 		std::span<float> volB;
 		std::span<float> psiB;
+	};
+
+	// view into rigid particle data
+	// (non-owning, for read-only access)
+	struct RigidView
+	{
+		// metadata
+		uint32_t N_ = 0;
+
+		// fields
+		std::span<uint32_t> id;
+		std::span<uint32_t> bodyId;
+		std::span<float> xRelPos, yRelPos, zRelPos;
+		std::span<float> volR;
+		std::span<float> psiR;
 	};
 
 	// backend-agnostic representation of fluid particles
@@ -237,18 +246,11 @@ namespace Sync
 		// metadata
 		uint32_t N_ = 0;
 		std::vector<uint32_t> id;
-		std::vector<uint32_t> bodyId;
-		std::vector<uint32_t> rigidBoundaryParticleIdx;
 
 		// positions
 		std::vector<float> xPos;
 		std::vector<float> yPos;
 		std::vector<float> zPos;
-
-		// velocities
-		std::vector<float> xVel;
-		std::vector<float> yVel;
-		std::vector<float> zVel;
 
 		// boundary contribution coefficients
 		std::vector<float> volB;
@@ -258,16 +260,10 @@ namespace Sync
 		void reserveAll(uint32_t N)
 		{
 			id.reserve(N);
-			bodyId.reserve(N);
-			rigidBoundaryParticleIdx.reserve(N);
 
 			xPos.reserve(N);
 			yPos.reserve(N);
 			zPos.reserve(N);
-
-			xVel.reserve(N);
-			yVel.reserve(N);
-			zVel.reserve(N);
 
 			volB.reserve(N);
 			psiB.reserve(N);
@@ -279,16 +275,10 @@ namespace Sync
 			N_ = N;
 
 			id.resize(N_);
-			bodyId.resize(N_, InvalidRigidBodyId);
-			rigidBoundaryParticleIdx.resize(N_, InvalidRigidBoundaryParticleIdx);
 
 			xPos.resize(N_);
 			yPos.resize(N_);
 			zPos.resize(N_);
-
-			xVel.resize(N_);
-			yVel.resize(N_);
-			zVel.resize(N_);
 
 			volB.resize(N_);
 			psiB.resize(N_);
@@ -299,16 +289,10 @@ namespace Sync
 		void shrinkToFitAll()
 		{
 			id.shrink_to_fit();
-			bodyId.shrink_to_fit();
-			rigidBoundaryParticleIdx.shrink_to_fit();
 
 			xPos.shrink_to_fit();
 			yPos.shrink_to_fit();
 			zPos.shrink_to_fit();
-
-			xVel.shrink_to_fit();
-			yVel.shrink_to_fit();
-			zVel.shrink_to_fit();
 
 			volB.shrink_to_fit();
 			psiB.shrink_to_fit();
@@ -330,31 +314,7 @@ namespace Sync
 			assignSequentialIds();
 		}
 
-		void EnsureBoundaryKinematicsPresent()
-		{
-			if (bodyId.size() != static_cast<uint32_t>(N_))
-			{
-				bodyId.assign(N_, InvalidRigidBodyId);
-			}
-			if (rigidBoundaryParticleIdx.size() != static_cast<uint32_t>(N_))
-			{
-				rigidBoundaryParticleIdx.assign(N_, InvalidRigidBoundaryParticleIdx);
-			}
-			if (xVel.size() != static_cast<uint32_t>(N_))
-			{
-				xVel.assign(N_, 0.0f);
-			}
-			if (yVel.size() != static_cast<uint32_t>(N_))
-			{
-				yVel.assign(N_, 0.0f);
-			}
-			if (zVel.size() != static_cast<uint32_t>(N_))
-			{
-				zVel.assign(N_, 0.0f);
-			}
-		}
-
-		void EnsureBoundaryCoefficientsPresent(float defaultPsiB, float restDensity)
+		void ensureBoundaryCoefficientsPresent(float defaultPsiB, float restDensity)
 		{
 			const float defaultVolB = (restDensity > 0.0f)
 				? (defaultPsiB / restDensity)
@@ -378,14 +338,9 @@ namespace Sync
 				.N_ = N_,
 
 				.id = std::span<uint32_t>(id),
-				.bodyId = std::span<uint32_t>(bodyId),
-				.rigidBoundaryParticleIdx = std::span<uint32_t>(rigidBoundaryParticleIdx),
 				.xPos = std::span<float>(xPos),
 				.yPos = std::span<float>(yPos),
 				.zPos = std::span<float>(zPos),
-				.xVel = std::span<float>(xVel),
-				.yVel = std::span<float>(yVel),
-				.zVel = std::span<float>(zVel),
 				.volB = std::span<float>(volB),
 				.psiB = std::span<float>(psiB),
 			};
@@ -398,16 +353,134 @@ namespace Sync
 		}
 	};
 
+	// backend-agnostic representation of rigid particles
+	// (owned, for read/write access)
+	struct RigidParticles
+	{
+		// metadata
+		uint32_t N_ = 0;
+		std::vector<uint32_t> id;
+		std::vector<uint32_t> bodyId;
+
+		// positions relative to the rigid body center of mass
+		std::vector<float> xRelPos;
+		std::vector<float> yRelPos;
+		std::vector<float> zRelPos;
+
+		// boundary contribution coefficients
+		std::vector<float> volR;
+		std::vector<float> psiR;
+
+		// reserves capacity for all vectors consistently
+		void reserveAll(uint32_t N)
+		{
+			id.reserve(N);
+			bodyId.reserve(N);
+
+			xRelPos.reserve(N);
+			yRelPos.reserve(N);
+			zRelPos.reserve(N);
+
+			volR.reserve(N);
+			psiR.reserve(N);
+		}
+
+		// resizes all vectors consistently
+		void resizeAll(uint32_t N)
+		{
+			N_ = N;
+
+			id.resize(N_);
+			bodyId.resize(N_, InvalidRigidBodyId);
+
+			xRelPos.resize(N_);
+			yRelPos.resize(N_);
+			zRelPos.resize(N_);
+
+			volR.resize(N_);
+			psiR.resize(N_);
+		}
+
+		// compacts all vectors so capacity matches size
+		// (useful after staged scenario construction with repeated growth)
+		void shrinkToFitAll()
+		{
+			id.shrink_to_fit();
+			bodyId.shrink_to_fit();
+
+			xRelPos.shrink_to_fit();
+			yRelPos.shrink_to_fit();
+			zRelPos.shrink_to_fit();
+
+			volR.shrink_to_fit();
+			psiR.shrink_to_fit();
+		}
+
+		void assignSequentialIds()
+		{
+			id.resize(N_);
+			for (uint32_t i = 0; i < N_; i++)
+			{
+				id[i] = i;
+			}
+		}
+
+		void ensureParticleIdsPresent()
+		{
+			if (id.size() == static_cast<size_t>(N_)) { return; }
+
+			assignSequentialIds();
+		}
+
+		void ensureRigidCoefficientsPresent(float defaultPsiR, float restDensity)
+		{
+			const float defaultVolR = (restDensity > 0.0f)
+				? (defaultPsiR / restDensity)
+				: 0.0f;
+
+			if (volR.size() != static_cast<uint32_t>(N_))
+			{
+				volR.assign(N_, defaultVolR);
+			}
+			if (psiR.size() != static_cast<uint32_t>(N_))
+			{
+				psiR.assign(N_, defaultPsiR);
+			}
+		}
+
+		// builds and returns a mutable view into the data
+		RigidView view()
+		{
+			return RigidView
+			{
+				.N_ = N_,
+
+				.id = std::span<uint32_t>(id),
+				.bodyId = std::span<uint32_t>(bodyId),
+				.xRelPos = std::span<float>(xRelPos),
+				.yRelPos = std::span<float>(yRelPos),
+				.zRelPos = std::span<float>(zRelPos),
+				.volR = std::span<float>(volR),
+				.psiR = std::span<float>(psiR),
+			};
+		}
+
+		// const view reuses same layout
+		RigidView constView() const
+		{
+			return const_cast<RigidParticles*>(this)->view();
+		}
+	};
+
 	// backend-agnostic representation of rigid bodies
 	// (owned, for read/write access)
 	struct RigidBodies
 	{
 		// metadata
 		uint32_t N_ = 0;
-		uint32_t N_rigidBoundaryParticles_ = 0;
 		std::vector<uint32_t> id; // per-rigid-body ID
-		std::vector<uint32_t> rigidBoundaryParticleBegin; // first rigid boundary particle
-		std::vector<uint32_t> rigidBoundaryParticleCount; // number of rigid boundary particles
+		std::vector<uint32_t> rigidParticleBegin; // first rigid particle
+		std::vector<uint32_t> rigidParticleCount; // number of rigid particles
 
 		// body state (in world frame)
 		std::vector<float> xCM, yCM, zCM; // center of mass
@@ -429,13 +502,11 @@ namespace Sync
 		std::vector<float> iBodyInv10, iBodyInv11, iBodyInv12;
 		std::vector<float> iBodyInv20, iBodyInv21, iBodyInv22;
 
-		std::vector<float> xRelPosRBP, yRelPosRBP, zRelPosRBP; // body-relative position of each rigid boundary particle
-
 		void reserveAll(uint32_t N)
 		{
 			id.reserve(N);
-			rigidBoundaryParticleBegin.reserve(N);
-			rigidBoundaryParticleCount.reserve(N);
+			rigidParticleBegin.reserve(N);
+			rigidParticleCount.reserve(N);
 
 			xCM.reserve(N); yCM.reserve(N); zCM.reserve(N);
 			xVel.reserve(N); yVel.reserve(N); zVel.reserve(N);
@@ -458,8 +529,8 @@ namespace Sync
 			N_ = N;
 
 			id.resize(N_);
-			rigidBoundaryParticleBegin.resize(N_);
-			rigidBoundaryParticleCount.resize(N_);
+			rigidParticleBegin.resize(N_);
+			rigidParticleCount.resize(N_);
 
 			xCM.resize(N_); yCM.resize(N_); zCM.resize(N_);
 			xVel.resize(N_); yVel.resize(N_); zVel.resize(N_);
@@ -478,26 +549,11 @@ namespace Sync
 			iBodyInv20.resize(N_); iBodyInv21.resize(N_); iBodyInv22.resize(N_);
 		}
 
-		void reserveRigidBoundaryParticles(uint32_t N)
-		{
-			xRelPosRBP.reserve(N);
-			yRelPosRBP.reserve(N);
-			zRelPosRBP.reserve(N);
-		}
-
-		void resizeRigidBoundaryParticles(uint32_t N)
-		{
-			N_rigidBoundaryParticles_ = N;
-			xRelPosRBP.resize(N_rigidBoundaryParticles_);
-			yRelPosRBP.resize(N_rigidBoundaryParticles_);
-			zRelPosRBP.resize(N_rigidBoundaryParticles_);
-		}
-
 		void shrinkToFitAll()
 		{
 			id.shrink_to_fit();
-			rigidBoundaryParticleBegin.shrink_to_fit();
-			rigidBoundaryParticleCount.shrink_to_fit();
+			rigidParticleBegin.shrink_to_fit();
+			rigidParticleCount.shrink_to_fit();
 
 			xCM.shrink_to_fit(); yCM.shrink_to_fit(); zCM.shrink_to_fit();
 			xVel.shrink_to_fit(); yVel.shrink_to_fit(); zVel.shrink_to_fit();
@@ -513,10 +569,6 @@ namespace Sync
 			iBodyInv00.shrink_to_fit(); iBodyInv01.shrink_to_fit(); iBodyInv02.shrink_to_fit();
 			iBodyInv10.shrink_to_fit(); iBodyInv11.shrink_to_fit(); iBodyInv12.shrink_to_fit();
 			iBodyInv20.shrink_to_fit(); iBodyInv21.shrink_to_fit(); iBodyInv22.shrink_to_fit();
-
-			xRelPosRBP.shrink_to_fit();
-			yRelPosRBP.shrink_to_fit();
-			zRelPosRBP.shrink_to_fit();
 		}
 
 		void assignSequentialIds()
@@ -544,25 +596,29 @@ namespace Sync
 	struct UniversalSimState
 	{
 		// simulation metadata
-		uint32_t step = 0;			// simulation step at this state
+		uint64_t step = 0;			// simulation step at this state
 		double time = 0.0;			// simulation time in seconds
 
 		// particle data
 		FluidParticles fluidParticles;
 		BoundaryParticles boundaryParticles;
+		RigidParticles rigidParticles;
 		RigidBodies rigidBodies;
 
 		// convenience methods for reserve/resizing
 		void ReserveFluid(uint32_t N) { fluidParticles.reserveAll(N); }
 		void ReserveBoundary(uint32_t N) { boundaryParticles.reserveAll(N); }
+		void ReserveRigid(uint32_t N) { rigidParticles.reserveAll(N); }
 		void ReserveRigidBodies(uint32_t N) { rigidBodies.reserveAll(N); }
 		void ResizeFluid(uint32_t N) { fluidParticles.resizeAll(N); }
 		void ResizeBoundary(uint32_t N) { boundaryParticles.resizeAll(N); }
+		void ResizeRigid(uint32_t N) { rigidParticles.resizeAll(N); }
 		void ResizeRigidBodies(uint32_t N) { rigidBodies.resizeAll(N); }
 		void ShrinkToFitAll()
 		{
 			fluidParticles.shrinkToFitAll();
 			boundaryParticles.shrinkToFitAll();
+			rigidParticles.shrinkToFitAll();
 			rigidBodies.shrinkToFitAll();
 		}
 
@@ -578,80 +634,63 @@ namespace Sync
 			boundaryParticles.reserveAll(current + add);
 		}
 
-		// validates rigid boundary ownership before backend hot loops perform updates
-		void ValidateRigidBoundaryAttachments() const
+		void ReserveRigidAdditional(uint32_t add)
 		{
-			const auto& B = boundaryParticles;
-			const auto& R = rigidBodies;
+			const auto current = static_cast<uint32_t>(rigidParticles.xRelPos.size());
+			rigidParticles.reserveAll(current + add);
+		}
 
-			if (B.bodyId.size() != static_cast<size_t>(B.N_) ||
-				B.rigidBoundaryParticleIdx.size() != static_cast<size_t>(B.N_))
+		// validates rigid particle ownership before backend hot loops perform updates
+		void ValidateRigidAttachments() const
+		{
+			const auto& R = rigidParticles;
+			const auto& bodies = rigidBodies;
+
+			if (R.id.size() != static_cast<size_t>(R.N_) ||
+				R.bodyId.size() != static_cast<size_t>(R.N_) ||
+				R.xRelPos.size() != static_cast<size_t>(R.N_) ||
+				R.yRelPos.size() != static_cast<size_t>(R.N_) ||
+				R.zRelPos.size() != static_cast<size_t>(R.N_) ||
+				R.volR.size() != static_cast<size_t>(R.N_) ||
+				R.psiR.size() != static_cast<size_t>(R.N_))
 			{
-				throw std::runtime_error("Invalid rigid boundary attachment array size.");
+				throw std::runtime_error("Invalid rigid particle array size.");
 			}
 
-			if (R.rigidBoundaryParticleBegin.size() != static_cast<size_t>(R.N_) ||
-				R.rigidBoundaryParticleCount.size() != static_cast<size_t>(R.N_))
+			if (bodies.rigidParticleBegin.size() != static_cast<size_t>(bodies.N_) ||
+				bodies.rigidParticleCount.size() != static_cast<size_t>(bodies.N_))
 			{
-				throw std::runtime_error("Invalid rigid body boundary range array size.");
+				throw std::runtime_error("Invalid rigid body particle range array size.");
 			}
 
-			if (R.xRelPosRBP.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
-				R.yRelPosRBP.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_) ||
-				R.zRelPosRBP.size() != static_cast<size_t>(R.N_rigidBoundaryParticles_))
+			uint32_t nextRigidParticleIdx = 0;
+			for (uint32_t bodyIdx = 0; bodyIdx < bodies.N_; bodyIdx++)
 			{
-				throw std::runtime_error("Invalid rigid boundary particle relative-position array size.");
-			}
-
-			uint32_t nextRigidBoundaryParticleIdx = 0;
-			for (uint32_t bodyIdx = 0; bodyIdx < R.N_; bodyIdx++)
-			{
-				const uint32_t begin = R.rigidBoundaryParticleBegin[bodyIdx];
-				const uint32_t count = R.rigidBoundaryParticleCount[bodyIdx];
-				if (begin != nextRigidBoundaryParticleIdx)
+				const uint32_t begin = bodies.rigidParticleBegin[bodyIdx];
+				const uint32_t count = bodies.rigidParticleCount[bodyIdx];
+				if (begin != nextRigidParticleIdx)
 				{
-					throw std::runtime_error("Rigid body boundary particle ranges are not contiguous.");
+					throw std::runtime_error("Rigid body particle ranges are not contiguous.");
 				}
-				if (begin > R.N_rigidBoundaryParticles_ ||
-					count > R.N_rigidBoundaryParticles_ - begin)
+				if (begin > R.N_ || count > R.N_ - begin)
 				{
-					throw std::runtime_error("Invalid rigid body boundary particle range.");
+					throw std::runtime_error("Invalid rigid body particle range.");
 				}
 
-				nextRigidBoundaryParticleIdx = begin + count;
-			}
-
-			if (nextRigidBoundaryParticleIdx != R.N_rigidBoundaryParticles_)
-			{
-				throw std::runtime_error("Rigid body boundary particle ranges do not cover all local offsets.");
-			}
-
-			for (uint32_t i = 0; i < B.N_; i++)
-			{
-				const uint32_t bodyIdx = B.bodyId[i];
-				const uint32_t rigidBoundaryParticleIdx = B.rigidBoundaryParticleIdx[i];
-
-				if (bodyIdx == InvalidRigidBodyId)
+				for (uint32_t rigidParticleIdx = begin; rigidParticleIdx < begin + count; rigidParticleIdx++)
 				{
-					if (rigidBoundaryParticleIdx != InvalidRigidBoundaryParticleIdx)
+					if (R.bodyId[rigidParticleIdx] != bodyIdx)
 					{
-						throw std::runtime_error("Static boundary particle has a rigid boundary particle index.");
+						throw std::runtime_error("Rigid particle belongs to a different body.");
 					}
-					continue;
 				}
 
-				if (bodyIdx >= R.N_ ||
-					rigidBoundaryParticleIdx >= R.N_rigidBoundaryParticles_)
-				{
-					throw std::runtime_error("Invalid rigid boundary attachment.");
-				}
+				nextRigidParticleIdx = begin + count;
+			}
 
-				const uint32_t begin = R.rigidBoundaryParticleBegin[bodyIdx];
-				const uint32_t end = begin + R.rigidBoundaryParticleCount[bodyIdx];
-				if (rigidBoundaryParticleIdx < begin || rigidBoundaryParticleIdx >= end)
-				{
-					throw std::runtime_error("Rigid boundary particle belongs to a different body.");
-				}
+			if (nextRigidParticleIdx != R.N_)
+			{
+				throw std::runtime_error("Rigid body particle ranges do not cover all rigid particles.");
 			}
 		}
 
@@ -659,6 +698,7 @@ namespace Sync
 		// NOTE: do not call resize() while holding a view
 		FluidView GetFluidView() { return fluidParticles.view(); }
 		BoundaryView GetBoundaryView() { return boundaryParticles.view(); }
+		RigidView GetRigidView() { return rigidParticles.view(); }
 
 		// TODO: add snapshot of used simulation parameters?
 	};

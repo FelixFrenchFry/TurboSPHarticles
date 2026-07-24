@@ -62,8 +62,8 @@ namespace
 		return transforms;
 	}
 
-	// computes rigid boundary particle radius from represented volume
-	float ComputeRigidBoundaryRenderRadius(
+	// computes rigid particle radius from represented volume
+	float ComputeRigidParticleRenderRadius(
 		const float volume,
 		const float particleSizeB,
 		const float radiusScale)
@@ -80,7 +80,7 @@ namespace
 		return std::isfinite(radius) ? radius : fallbackRadius;
 	}
 
-} // anonymous
+} // namespace anonymous
 
 RenderingMgr::RenderingMgr(Sim::SimParamsMgr& simParamsMgr,
 						   Vis::VisParamsMgr& visParamsMgr)
@@ -223,22 +223,9 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 								   const Vis::VisParams& visParams)
 {
 	N_fluidImpostorInstances_ = view.N_F;
-	N_rigidBoundaryImpostorInstances_ = 0;
+	N_rigidImpostorInstances_ = view.N_R;
 
-	const bool hasBodyIdB = view.bodyIdB.size() == view.N_B;
-	if (hasBodyIdB)
-	{
-		for (uint32_t i = 0; i < view.N_B; i++)
-		{
-			if (view.bodyIdB[i] != Sync::InvalidRigidBodyId)
-			{
-				N_rigidBoundaryImpostorInstances_++;
-			}
-		}
-	}
-
-	const uint32_t N_total =
-		N_fluidImpostorInstances_ + N_rigidBoundaryImpostorInstances_;
+	const uint32_t N_total = N_fluidImpostorInstances_ + N_rigidImpostorInstances_;
 	if (N_total == 0) { return; }
 
 	EnsureInstanceCapacity(N_total);
@@ -246,7 +233,7 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 
 	auto* out = reinterpret_cast<InstanceData*>(mappedBase_);
 	const float fluidRad = simParams.particleSizeF * 0.5f;
-	const bool hasVolB = view.volB.size() == view.N_B;
+	const bool hasVolR = view.volR.size() == view.N_R;
 	const bool hasScalar = (view.scalarModeF != Base::ColorCodingMode::None) &&
 							(view.scalarDataF.size() == view.N_F);
 
@@ -260,25 +247,20 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 			{ 0.0f, 0.0f, 0.0f } };
 	}
 
-	// append rigid boundary instance data
+	// append rigid particle instance data
 	uint32_t dst = N_fluidImpostorInstances_;
-	if (hasBodyIdB)
+	for (uint32_t i = 0; i < view.N_R; i++)
 	{
-		for (uint32_t i = 0; i < view.N_B; i++)
-		{
-			if (view.bodyIdB[i] == Sync::InvalidRigidBodyId) { continue; }
-
-			const glm::vec3 pos = view.posB[i];
-			const float volume = hasVolB ? view.volB[i] : 0.0f;
-			const float radius = ComputeRigidBoundaryRenderRadius(
-				volume,
-				simParams.particleSizeB,
-				visParams.render.rigidBoundaryRadiusScale);
-			out[dst] = InstanceData{
-				pos.x, pos.y, pos.z, radius, 0.0f,
-				{ 0.0f, 0.0f, 0.0f } };
-			dst++;
-		}
+		const glm::vec3 pos = view.posR[i];
+		const float volume = hasVolR ? view.volR[i] : 0.0f;
+		const float radius = ComputeRigidParticleRenderRadius(
+			volume,
+			simParams.particleSizeB,
+			visParams.render.rigidParticleRadiusScale);
+		out[dst] = InstanceData{
+			pos.x, pos.y, pos.z, radius, 0.0f,
+			{ 0.0f, 0.0f, 0.0f } };
+		dst++;
 	}
 
 	// no need to flush, because buffer persistently mapped
@@ -291,15 +273,14 @@ bool RenderingMgr::UpdateParticlesCUDA(
 	const Vis::VisParams& visParams)
 {
 	N_fluidImpostorInstances_ = frame.N_F;
-	N_rigidBoundaryImpostorInstances_ = frame.N_RBP;
+	N_rigidImpostorInstances_ = frame.N_R;
 
-	const uint32_t N_total =
-		N_fluidImpostorInstances_ + N_rigidBoundaryImpostorInstances_;
+	const uint32_t N_total = N_fluidImpostorInstances_ + N_rigidImpostorInstances_;
 
 	if (!interopReadyCUDA_ || !visualFrameMailboxCUDA_)
 	{
 		N_fluidImpostorInstances_ = 0;
-		N_rigidBoundaryImpostorInstances_ = 0;
+		N_rigidImpostorInstances_ = 0;
 		return false;
 	}
 
@@ -308,7 +289,7 @@ bool RenderingMgr::UpdateParticlesCUDA(
 		cudaStreamWaitEvent(renderStreamCUDA_, frame.ready, 0),
 		"cudaStreamWaitEvent() for visual snapshot");
 
-	// ensure capacity for fluid and rigid boundary particle instances
+	// ensure capacity for fluid and rigid particle instances
 	if (success && N_total > 0)
 	{
 		success = EnsureInstanceCapacityCUDA(N_total);
@@ -345,7 +326,7 @@ bool RenderingMgr::UpdateParticlesCUDA(
 
 	const float fluidRad = simParams.particleSizeF * 0.5f;
 
-	// write fluid particles instance data first and append rigid boundary instance data
+	// write fluid particles instance data first and append rigid particle instance data
 	if (success && N_total > 0)
 	{
 		try
@@ -354,8 +335,8 @@ bool RenderingMgr::UpdateParticlesCUDA(
 				frame.fluid, frame.rigid,
 				fluidRad,
 				simParams.particleSizeB,
-				visParams.render.rigidBoundaryRadiusScale,
-				frame.N_F, frame.N_RBP, renderStreamCUDA_, out);
+				visParams.render.rigidParticleRadiusScale,
+				frame.N_F, frame.N_R, renderStreamCUDA_, out);
 		}
 		catch (const std::exception& ex)
 		{
@@ -379,7 +360,7 @@ bool RenderingMgr::UpdateParticlesCUDA(
 	if (!success || !released)
 	{
 		N_fluidImpostorInstances_ = 0;
-		N_rigidBoundaryImpostorInstances_ = 0;
+		N_rigidImpostorInstances_ = 0;
 		return false;
 	}
 
@@ -398,19 +379,19 @@ void RenderingMgr::UpdateCentersOfMass(
 	const Sim::SimParams& simParams)
 {
 	N_centerOfMassInstances_ = 0;
-	if (view.centerOfMassR.size() != view.N_R ||
-		view.orientationR.size() != view.N_R)
+	if (view.centerOfMassRB.size() != view.N_RB ||
+		view.orientationRB.size() != view.N_RB)
 	{
 		return;
 	}
 
 	std::vector<glm::mat4> transforms;
-	transforms.reserve(static_cast<size_t>(view.N_R) * 3);
-	for (uint32_t bodyIdx = 0; bodyIdx < view.N_R; bodyIdx++)
+	transforms.reserve(static_cast<size_t>(view.N_RB) * 3);
+	for (uint32_t bodyIdx = 0; bodyIdx < view.N_RB; bodyIdx++)
 	{
 		const auto bodyTransforms = BuildCenterOfMassMarkerTransforms(
-			view.centerOfMassR[bodyIdx],
-			view.orientationR[bodyIdx],
+			view.centerOfMassRB[bodyIdx],
+			view.orientationRB[bodyIdx],
 			simParams.particleSizeF);
 		transforms.insert(
 			transforms.end(), bodyTransforms.begin(), bodyTransforms.end());
@@ -526,7 +507,7 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 	// make sure params cached on the GPU are up to date
 	UpdateCameraUBO(cam);
 
-	if (N_fluidImpostorInstances_ > 0 || N_rigidBoundaryImpostorInstances_ > 0)
+	if (N_fluidImpostorInstances_ > 0 || N_rigidImpostorInstances_ > 0)
 	{
 		// bind state and bind color LUT
 		glUseProgram(progSphereImpostors_);
@@ -544,19 +525,19 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 				0, 4,
 				static_cast<GLsizei>(N_fluidImpostorInstances_));
 		}
-		if (render.showRigidBoundaryParticles && N_rigidBoundaryImpostorInstances_ > 0)
+		if (render.showRigidParticles && N_rigidImpostorInstances_ > 0)
 		{
 			Vis::RenderConfig rigidRender = render;
-			rigidRender.baseColor = render.rigidBoundaryColor;
+			rigidRender.baseColor = render.rigidParticleColor;
 			rigidRender.alpha = 1.0f;
 			rigidRender.scalarModeF = Base::ColorCodingMode::None;
 
-			// render rigid boundary particle instances
+			// render rigid particle instances
 			UpdateParamsUBO(rigidRender);
 			glDrawArraysInstancedBaseInstance(
 				GL_TRIANGLE_FAN,
 				0, 4,
-				static_cast<GLsizei>(N_rigidBoundaryImpostorInstances_),
+				static_cast<GLsizei>(N_rigidImpostorInstances_),
 				N_fluidImpostorInstances_);
 		}
 		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);

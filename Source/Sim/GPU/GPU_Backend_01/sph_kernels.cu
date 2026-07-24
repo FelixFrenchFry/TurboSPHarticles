@@ -188,21 +188,32 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
+		const float* __restrict__ xPosR,
+		const float* __restrict__ yPosR,
+		const float* __restrict__ zPosR,
 		const float* __restrict__ psiB,
+		const float* __restrict__ psiR,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFR,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFR,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFR,
 		const uint8_t* __restrict__ nbrChunkFormatFF,
 		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrChunkFormatFR,
 		const uint8_t* __restrict__ nbrListDelta8FF,
 		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint8_t* __restrict__ nbrListDelta8FR,
 		const uint16_t* __restrict__ nbrListDelta16FF,
 		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint16_t* __restrict__ nbrListDelta16FR,
 		const uint32_t* __restrict__ nbrListAbs32FF,
 		const uint32_t* __restrict__ nbrListAbs32FB,
+		const uint32_t* __restrict__ nbrListAbs32FR,
 		// destinations
 		float* __restrict__ densityF)
 	{
@@ -221,12 +232,16 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
 		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
 		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint32_t baseIdxFR = nbrChunkBaseIdxFR[chunk];
 		const uint8_t formatFF = nbrChunkFormatFF[chunk];
 		const uint8_t formatFB = nbrChunkFormatFB[chunk];
+		const uint8_t formatFR = nbrChunkFormatFR[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
+		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -269,6 +284,26 @@ namespace GPU01
 			tmp_density = fmaf(psiB[j], kw, tmp_density);
 		}
 
+		// FR
+		for (uint32_t k = 0; k < countFR; k++)
+		{
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFR, baseIdxFR, formatFR, lane, k,
+				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+
+			// position difference
+			const float dx = xi - xPosR[j];
+			const float dy = yi - yPosR[j];
+			const float dz = zi - zPosR[j];
+
+			// kernel weight
+			float kw = 0.0f;
+			KernelWeight_CubicSpline(dx, dy, dz, kw);
+
+			// density contribution from rigid neighbor j
+			tmp_density = fmaf(psiR[j], kw, tmp_density);
+		}
+
 		densityF[i] = tmp_density;
 	}
 
@@ -280,28 +315,39 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
+		const float* __restrict__ xPosR,
+		const float* __restrict__ yPosR,
+		const float* __restrict__ zPosR,
 		const float* __restrict__ xVelF,
 		const float* __restrict__ yVelF,
 		const float* __restrict__ zVelF,
-		const float* __restrict__ xVelB,
-		const float* __restrict__ yVelB,
-		const float* __restrict__ zVelB,
+		const float* __restrict__ xVelR,
+		const float* __restrict__ yVelR,
+		const float* __restrict__ zVelR,
 		const float* __restrict__ densityF,
 		const float* __restrict__ volB,
+		const float* __restrict__ volR,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFR,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFR,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFR,
 		const uint8_t* __restrict__ nbrChunkFormatFF,
 		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrChunkFormatFR,
 		const uint8_t* __restrict__ nbrListDelta8FF,
 		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint8_t* __restrict__ nbrListDelta8FR,
 		const uint16_t* __restrict__ nbrListDelta16FF,
 		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint16_t* __restrict__ nbrListDelta16FR,
 		const uint32_t* __restrict__ nbrListAbs32FF,
 		const uint32_t* __restrict__ nbrListAbs32FB,
+		const uint32_t* __restrict__ nbrListAbs32FR,
 		// destinations
 		float* __restrict__ xVelPredF,
 		float* __restrict__ yVelPredF,
@@ -328,12 +374,16 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
 		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
 		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint32_t baseIdxFR = nbrChunkBaseIdxFR[chunk];
 		const uint8_t formatFF = nbrChunkFormatFF[chunk];
 		const uint8_t formatFB = nbrChunkFormatFB[chunk];
+		const uint8_t formatFR = nbrChunkFormatFR[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
+		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -386,9 +436,9 @@ namespace GPU01
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
-			const float dvx = vxi - xVelB[j];
-			const float dvy = vyi - yVelB[j];
-			const float dvz = vzi - zVelB[j];
+			const float dvx = vxi;
+			const float dvy = vyi;
+			const float dvz = vzi;
 
 			// kernel gradient
 			float xkg = 0.0f;
@@ -398,6 +448,38 @@ namespace GPU01
 
 			// viscosity acc contribution from boundary neighbor j
 			const float accViscCoeff = volB[j]
+									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
+									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
+									 + 0.01f * c_sizeF * c_sizeF);
+
+			tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
+			tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
+			tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
+		}
+
+		// FR
+		for (uint32_t k = 0; k < countFR; k++)
+		{
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFR, baseIdxFR, formatFR, lane, k,
+				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+
+			// position difference
+			const float dx = xi - xPosR[j];
+			const float dy = yi - yPosR[j];
+			const float dz = zi - zPosR[j];
+			const float dvx = vxi - xVelR[j];
+			const float dvy = vyi - yVelR[j];
+			const float dvz = vzi - zVelR[j];
+
+			// kernel gradient
+			float xkg = 0.0f;
+			float ykg = 0.0f;
+			float zkg = 0.0f;
+			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+
+			// viscosity acc contribution from rigid neighbor j
+			const float accViscCoeff = volR[j]
 									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
 									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
 									 + 0.01f * c_sizeF * c_sizeF);
@@ -435,28 +517,39 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const float* __restrict__ psiB,
+		const float* __restrict__ xPosR,
+		const float* __restrict__ yPosR,
+		const float* __restrict__ zPosR,
 		const float* __restrict__ xVelPredF,
 		const float* __restrict__ yVelPredF,
 		const float* __restrict__ zVelPredF,
-		const float* __restrict__ xVelB,
-		const float* __restrict__ yVelB,
-		const float* __restrict__ zVelB,
+		const float* __restrict__ xVelR,
+		const float* __restrict__ yVelR,
+		const float* __restrict__ zVelR,
 		const float* __restrict__ densityF,
+		const float* __restrict__ psiB,
+		const float* __restrict__ psiR,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFR,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFR,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFR,
 		const uint8_t* __restrict__ nbrChunkFormatFF,
 		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrChunkFormatFR,
 		const uint8_t* __restrict__ nbrListDelta8FF,
 		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint8_t* __restrict__ nbrListDelta8FR,
 		const uint16_t* __restrict__ nbrListDelta16FF,
 		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint16_t* __restrict__ nbrListDelta16FR,
 		const uint32_t* __restrict__ nbrListAbs32FF,
 		const uint32_t* __restrict__ nbrListAbs32FB,
+		const uint32_t* __restrict__ nbrListAbs32FR,
 		// destinations
 		float* __restrict__ sourceTermF,
 		float* __restrict__ diagElemF,
@@ -484,12 +577,16 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
 		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
 		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint32_t baseIdxFR = nbrChunkBaseIdxFR[chunk];
 		const uint8_t formatFF = nbrChunkFormatFF[chunk];
 		const uint8_t formatFB = nbrChunkFormatFB[chunk];
+		const uint8_t formatFR = nbrChunkFormatFR[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
+		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -542,9 +639,9 @@ namespace GPU01
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
-			const float dvpx = vpxi - xVelB[j];
-			const float dvpy = vpyi - yVelB[j];
-			const float dvpz = vpzi - zVelB[j];
+			const float dvpx = vpxi;
+			const float dvpy = vpyi;
+			const float dvpz = vpzi;
 
 			// kernel gradient
 			float xkg = 0.0f;
@@ -559,6 +656,36 @@ namespace GPU01
 			xCTermB += psiBj * xkg;
 			yCTermB += psiBj * ykg;
 			zCTermB += psiBj * zkg;
+		}
+
+		// FR
+		for (uint32_t k = 0; k < countFR; k++)
+		{
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFR, baseIdxFR, formatFR, lane, k,
+				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+
+			// position difference
+			const float dx = xi - xPosR[j];
+			const float dy = yi - yPosR[j];
+			const float dz = zi - zPosR[j];
+			const float dvpx = vpxi - xVelR[j];
+			const float dvpy = vpyi - yVelR[j];
+			const float dvpz = vpzi - zVelR[j];
+
+			// kernel gradient
+			float xkg = 0.0f;
+			float ykg = 0.0f;
+			float zkg = 0.0f;
+			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+
+			// source term contribution from rigid neighbor
+			const float psiRj = psiR[j];
+			tmp_sourceTermB += psiRj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
+
+			xCTermB += psiRj * xkg;
+			yCTermB += psiRj * ykg;
+			zCTermB += psiRj * zkg;
 		}
 
 		// finalize source term
@@ -610,22 +737,33 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const float* __restrict__ psiB,
+		const float* __restrict__ xPosR,
+		const float* __restrict__ yPosR,
+		const float* __restrict__ zPosR,
 		const float* __restrict__ pressureF,
+		const float* __restrict__ psiB,
+		const float* __restrict__ psiR,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFR,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFR,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFR,
 		const uint8_t* __restrict__ nbrChunkFormatFF,
 		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrChunkFormatFR,
 		const uint8_t* __restrict__ nbrListDelta8FF,
 		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint8_t* __restrict__ nbrListDelta8FR,
 		const uint16_t* __restrict__ nbrListDelta16FF,
 		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint16_t* __restrict__ nbrListDelta16FR,
 		const uint32_t* __restrict__ nbrListAbs32FF,
 		const uint32_t* __restrict__ nbrListAbs32FB,
+		const uint32_t* __restrict__ nbrListAbs32FR,
 		// destinations
 		float* __restrict__ xAccPressF,
 		float* __restrict__ yAccPressF,
@@ -652,12 +790,16 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
 		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
 		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint32_t baseIdxFR = nbrChunkBaseIdxFR[chunk];
 		const uint8_t formatFF = nbrChunkFormatFF[chunk];
 		const uint8_t formatFB = nbrChunkFormatFB[chunk];
+		const uint8_t formatFR = nbrChunkFormatFR[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
+		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -714,6 +856,33 @@ namespace GPU01
 			tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
 		}
 
+		// FR
+		for (uint32_t k = 0; k < countFR; k++)
+		{
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFR, baseIdxFR, formatFR, lane, k,
+				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+
+			// position difference
+			const float dx = xi - xPosR[j];
+			const float dy = yi - yPosR[j];
+			const float dz = zi - zPosR[j];
+
+			// kernel gradient
+			float xkg = 0.0f;
+			float ykg = 0.0f;
+			float zkg = 0.0f;
+			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+
+			const float accCoeffB = c_pressGamma * 2.0f
+								  * psiR[j] * presi * densiInvSqu;
+
+			// pressure acc contribution from rigid neighbor j
+			tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
+			tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
+			tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
+		}
+
 		// finalize pressure acceleration
 		tmp_xAccPressF *= -1.0f;
 		tmp_yAccPressF *= -1.0f;
@@ -732,26 +901,37 @@ namespace GPU01
 		const float* __restrict__ xPosB,
 		const float* __restrict__ yPosB,
 		const float* __restrict__ zPosB,
-		const float* __restrict__ psiB,
+		const float* __restrict__ xPosR,
+		const float* __restrict__ yPosR,
+		const float* __restrict__ zPosR,
 		const float* __restrict__ xAccPressF,
 		const float* __restrict__ yAccPressF,
 		const float* __restrict__ zAccPressF,
 		const float* __restrict__ sourceTermF,
 		const float* __restrict__ diagElemF,
+		const float* __restrict__ psiB,
+		const float* __restrict__ psiR,
 		const uint16_t* __restrict__ nbrCountFF,
 		const uint16_t* __restrict__ nbrCountFB,
+		const uint16_t* __restrict__ nbrCountFR,
 		const uint64_t* __restrict__ nbrChunkOffsetsFF,
 		const uint64_t* __restrict__ nbrChunkOffsetsFB,
+		const uint64_t* __restrict__ nbrChunkOffsetsFR,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		const uint32_t* __restrict__ nbrChunkBaseIdxFR,
 		const uint8_t* __restrict__ nbrChunkFormatFF,
 		const uint8_t* __restrict__ nbrChunkFormatFB,
+		const uint8_t* __restrict__ nbrChunkFormatFR,
 		const uint8_t* __restrict__ nbrListDelta8FF,
 		const uint8_t* __restrict__ nbrListDelta8FB,
+		const uint8_t* __restrict__ nbrListDelta8FR,
 		const uint16_t* __restrict__ nbrListDelta16FF,
 		const uint16_t* __restrict__ nbrListDelta16FB,
+		const uint16_t* __restrict__ nbrListDelta16FR,
 		const uint32_t* __restrict__ nbrListAbs32FF,
 		const uint32_t* __restrict__ nbrListAbs32FB,
+		const uint32_t* __restrict__ nbrListAbs32FR,
 		// destinations
 		float* __restrict__ pressureF)
 	{
@@ -775,12 +955,16 @@ namespace GPU01
 		const uint32_t lane = i % N_SellWidth;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
+		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
 		const uint32_t baseIdxFF = nbrChunkBaseIdxFF[chunk];
 		const uint32_t baseIdxFB = nbrChunkBaseIdxFB[chunk];
+		const uint32_t baseIdxFR = nbrChunkBaseIdxFR[chunk];
 		const uint8_t formatFF = nbrChunkFormatFF[chunk];
 		const uint8_t formatFB = nbrChunkFormatFB[chunk];
+		const uint8_t formatFR = nbrChunkFormatFR[chunk];
 		const uint32_t countFF = static_cast<uint32_t>(nbrCountFF[i]);
 		const uint32_t countFB = static_cast<uint32_t>(nbrCountFB[i]);
+		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
 		for (uint32_t k = 0; k < countFF; k++)
@@ -831,6 +1015,32 @@ namespace GPU01
 			tmp_xSysVecElem = fmaf(psiBj * axi, xkg, tmp_xSysVecElem);
 			tmp_ySysVecElem = fmaf(psiBj * ayi, ykg, tmp_ySysVecElem);
 			tmp_zSysVecElem = fmaf(psiBj * azi, zkg, tmp_zSysVecElem);
+		}
+
+		// FR
+		for (uint32_t k = 0; k < countFR; k++)
+		{
+			const uint32_t j = Sell32ReadNeighbor(
+				baseFR, baseIdxFR, formatFR, lane, k,
+				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+
+			// position difference
+			const float dx = xi - xPosR[j];
+			const float dy = yi - yPosR[j];
+			const float dz = zi - zPosR[j];
+
+			// kernel gradient
+			float xkg = 0.0f;
+			float ykg = 0.0f;
+			float zkg = 0.0f;
+			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+
+			const float psiRj = psiR[j];
+
+			// system vector element contribution from rigid neighbor j
+			tmp_xSysVecElem = fmaf(psiRj * axi, xkg, tmp_xSysVecElem);
+			tmp_ySysVecElem = fmaf(psiRj * ayi, ykg, tmp_ySysVecElem);
+			tmp_zSysVecElem = fmaf(psiRj * azi, zkg, tmp_zSysVecElem);
 		}
 
 		float tmp_pressureF = 0.0f;
@@ -891,22 +1101,30 @@ namespace GPU01
 	void Launch_Density(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* psiB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
+		const float* psiB, const float* psiR,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
+		const uint16_t* nbrCountFR,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFR,
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
+		const uint32_t* nbrChunkBaseIdxFR,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrChunkFormatFR,
 		const uint8_t* nbrListDelta8FF,
 		const uint8_t* nbrListDelta8FB,
+		const uint8_t* nbrListDelta8FR,
 		const uint16_t* nbrListDelta16FF,
 		const uint16_t* nbrListDelta16FB,
+		const uint16_t* nbrListDelta16FR,
 		const uint32_t* nbrListAbs32FF,
 		const uint32_t* nbrListAbs32FB,
-		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t* nbrListAbs32FR,
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		float* densityF)
@@ -915,14 +1133,14 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_Density<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, psiB, nbrCountFF, nbrCountFB,
-			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
-			nbrChunkFormatFF, nbrChunkFormatFB,
-			nbrListDelta8FF, nbrListDelta8FB,
-			nbrListDelta16FF, nbrListDelta16FB,
-			nbrListAbs32FF, nbrListAbs32FB,
-			densityF);
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR, psiB, psiR,
+			nbrCountFF, nbrCountFB, nbrCountFR,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
+			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
+			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
+			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR, densityF);
 
 		GPU::CheckLastKernel("K_Density()");
 	}
@@ -930,25 +1148,33 @@ namespace GPU01
 	void Launch_NonPressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
 		const float* xVelF, const float* yVelF, const float* zVelF,
-		const float* xVelB, const float* yVelB, const float* zVelB,
+		const float* xVelR, const float* yVelR, const float* zVelR,
 		const float* densityF,
-		const float* volB,
+		const float* volB, const float* volR,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
+		const uint16_t* nbrCountFR,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFR,
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
+		const uint32_t* nbrChunkBaseIdxFR,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrChunkFormatFR,
 		const uint8_t* nbrListDelta8FF,
 		const uint8_t* nbrListDelta8FB,
+		const uint8_t* nbrListDelta8FR,
 		const uint16_t* nbrListDelta16FF,
 		const uint16_t* nbrListDelta16FB,
+		const uint16_t* nbrListDelta16FR,
 		const uint32_t* nbrListAbs32FF,
 		const uint32_t* nbrListAbs32FB,
-		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t* nbrListAbs32FR,
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		float* xVelPredF, float* yVelPredF, float* zVelPredF)
@@ -959,16 +1185,15 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
-			xVelF, yVelF, zVelF,
-			xVelB, yVelB, zVelB,
-			densityF, volB,
-			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
-			nbrChunkFormatFF, nbrChunkFormatFB,
-			nbrListDelta8FF, nbrListDelta8FB,
-			nbrListDelta16FF, nbrListDelta16FB,
-			nbrListAbs32FF, nbrListAbs32FB,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
+			xVelF, yVelF, zVelF, xVelR, yVelR, zVelR, densityF, volB, volR,
+			nbrCountFF, nbrCountFB, nbrCountFR,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
+			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
+			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
+			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			xVelPredF, yVelPredF, zVelPredF);
 
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
@@ -977,25 +1202,33 @@ namespace GPU01
 	void Launch_SourceTermAndDiagonalElementAndPressureJacobiInit(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* psiB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
-		const float* xVelB, const float* yVelB, const float* zVelB,
+		const float* xVelR, const float* yVelR, const float* zVelR,
 		const float* densityF,
+		const float* psiB, const float* psiR,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
+		const uint16_t* nbrCountFR,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFR,
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
+		const uint32_t* nbrChunkBaseIdxFR,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrChunkFormatFR,
 		const uint8_t* nbrListDelta8FF,
 		const uint8_t* nbrListDelta8FB,
+		const uint8_t* nbrListDelta8FR,
 		const uint16_t* nbrListDelta16FF,
 		const uint16_t* nbrListDelta16FB,
+		const uint16_t* nbrListDelta16FR,
 		const uint32_t* nbrListAbs32FF,
 		const uint32_t* nbrListAbs32FB,
-		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t* nbrListAbs32FR,
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		float* sourceTermF,
@@ -1008,16 +1241,15 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, psiB,
-			xVelPredF, yVelPredF, zVelPredF,
-			xVelB, yVelB, zVelB,
-			densityF,
-			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
-			nbrChunkFormatFF, nbrChunkFormatFB,
-			nbrListDelta8FF, nbrListDelta8FB,
-			nbrListDelta16FF, nbrListDelta16FB,
-			nbrListAbs32FF, nbrListAbs32FB,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
+			xVelPredF, yVelPredF, zVelPredF, xVelR, yVelR, zVelR, densityF, psiB, psiR,
+			nbrCountFF, nbrCountFB, nbrCountFR,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
+			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
+			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
+			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			sourceTermF, diagElemF, pressureF);
 
 		GPU::CheckLastKernel("K_SourceTermAndDiagonalElementAndPressureJacobiInit()");
@@ -1026,23 +1258,31 @@ namespace GPU01
 	void Launch_PressureAcceleration(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* psiB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
 		const float* pressureF,
+		const float* psiB, const float* psiR,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
+		const uint16_t* nbrCountFR,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFR,
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
+		const uint32_t* nbrChunkBaseIdxFR,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrChunkFormatFR,
 		const uint8_t* nbrListDelta8FF,
 		const uint8_t* nbrListDelta8FB,
+		const uint8_t* nbrListDelta8FR,
 		const uint16_t* nbrListDelta16FF,
 		const uint16_t* nbrListDelta16FB,
+		const uint16_t* nbrListDelta16FR,
 		const uint32_t* nbrListAbs32FF,
 		const uint32_t* nbrListAbs32FB,
-		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t* nbrListAbs32FR,
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		float* xAccPressF,
@@ -1055,13 +1295,14 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_PressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, psiB, pressureF,
-			nbrCountFF, nbrCountFB, nbrChunkOffsetsFF, nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
-			nbrChunkFormatFF, nbrChunkFormatFB,
-			nbrListDelta8FF, nbrListDelta8FB,
-			nbrListDelta16FF, nbrListDelta16FB,
-			nbrListAbs32FF, nbrListAbs32FB,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR, pressureF, psiB, psiR,
+			nbrCountFF, nbrCountFB, nbrCountFR,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
+			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
+			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
+			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		GPU::CheckLastKernel("K_PressureAcceleration()");
@@ -1070,25 +1311,33 @@ namespace GPU01
 	void Launch_PressureRelaxedJacobiSolver(
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
-		const float* psiB,
+		const float* xPosR, const float* yPosR, const float* zPosR,
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const float* sourceTermF,
 		const float* diagElemF,
+		const float* psiB, const float* psiR,
 		const uint16_t* nbrCountFF,
 		const uint16_t* nbrCountFB,
+		const uint16_t* nbrCountFR,
 		const uint64_t* nbrChunkOffsetsFF,
 		const uint64_t* nbrChunkOffsetsFB,
+		const uint64_t* nbrChunkOffsetsFR,
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
+		const uint32_t* nbrChunkBaseIdxFR,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
+		const uint8_t* nbrChunkFormatFR,
 		const uint8_t* nbrListDelta8FF,
 		const uint8_t* nbrListDelta8FB,
+		const uint8_t* nbrListDelta8FR,
 		const uint16_t* nbrListDelta16FF,
 		const uint16_t* nbrListDelta16FB,
+		const uint16_t* nbrListDelta16FR,
 		const uint32_t* nbrListAbs32FF,
 		const uint32_t* nbrListAbs32FB,
-		const uint32_t N_F, const uint32_t N_B,
+		const uint32_t* nbrListAbs32FR,
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		float* pressureF)
@@ -1099,15 +1348,15 @@ namespace GPU01
 		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
 
 		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, psiB, xAccPressF, yAccPressF, zAccPressF,
-			sourceTermF, diagElemF, nbrCountFF, nbrCountFB,
-			nbrChunkOffsetsFF, nbrChunkOffsetsFB,
-			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB,
-			nbrChunkFormatFF, nbrChunkFormatFB,
-			nbrListDelta8FF, nbrListDelta8FB,
-			nbrListDelta16FF, nbrListDelta16FB,
-			nbrListAbs32FF, nbrListAbs32FB,
-			pressureF);
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
+			xAccPressF, yAccPressF, zAccPressF, sourceTermF, diagElemF, psiB, psiR,
+			nbrCountFF, nbrCountFB, nbrCountFR,
+			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
+			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
+			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
+			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR, pressureF);
 
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
 	}

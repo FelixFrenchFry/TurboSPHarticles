@@ -166,40 +166,40 @@ namespace Scene
 			Sync::RigidBodies& rigidBodies,
 			const uint32_t bodyIdx) const
 		{
-			auto& R = rigidBodies;
+			auto& RB = rigidBodies;
 
-			R.xVel[bodyIdx] = cfg_.rigidInitVel.x;
-			R.yVel[bodyIdx] = cfg_.rigidInitVel.y;
-			R.zVel[bodyIdx] = cfg_.rigidInitVel.z;
+			RB.xVel[bodyIdx] = cfg_.rigidInitVel.x;
+			RB.yVel[bodyIdx] = cfg_.rigidInitVel.y;
+			RB.zVel[bodyIdx] = cfg_.rigidInitVel.z;
 
-			R.xOmega[bodyIdx] = cfg_.rigidInitOmega.x;
-			R.yOmega[bodyIdx] = cfg_.rigidInitOmega.y;
-			R.zOmega[bodyIdx] = cfg_.rigidInitOmega.z;
+			RB.xOmega[bodyIdx] = cfg_.rigidInitOmega.x;
+			RB.yOmega[bodyIdx] = cfg_.rigidInitOmega.y;
+			RB.zOmega[bodyIdx] = cfg_.rigidInitOmega.z;
 
 			glm::mat3 orientation{ 1.0f };
 			orientation[0] =
-				{ R.a00[bodyIdx], R.a10[bodyIdx], R.a20[bodyIdx] };
+				{ RB.a00[bodyIdx], RB.a10[bodyIdx], RB.a20[bodyIdx] };
 			orientation[1] =
-				{ R.a01[bodyIdx], R.a11[bodyIdx], R.a21[bodyIdx] };
+				{ RB.a01[bodyIdx], RB.a11[bodyIdx], RB.a21[bodyIdx] };
 			orientation[2] =
-				{ R.a02[bodyIdx], R.a12[bodyIdx], R.a22[bodyIdx] };
+				{ RB.a02[bodyIdx], RB.a12[bodyIdx], RB.a22[bodyIdx] };
 
 			glm::mat3 bodyInertiaInv{ 0.0f };
 			bodyInertiaInv[0] =
-				{ R.iBodyInv00[bodyIdx], R.iBodyInv10[bodyIdx], R.iBodyInv20[bodyIdx] };
+				{ RB.iBodyInv00[bodyIdx], RB.iBodyInv10[bodyIdx], RB.iBodyInv20[bodyIdx] };
 			bodyInertiaInv[1] =
-				{ R.iBodyInv01[bodyIdx], R.iBodyInv11[bodyIdx], R.iBodyInv21[bodyIdx] };
+				{ RB.iBodyInv01[bodyIdx], RB.iBodyInv11[bodyIdx], RB.iBodyInv21[bodyIdx] };
 			bodyInertiaInv[2] =
-				{ R.iBodyInv02[bodyIdx], R.iBodyInv12[bodyIdx], R.iBodyInv22[bodyIdx] };
+				{ RB.iBodyInv02[bodyIdx], RB.iBodyInv12[bodyIdx], RB.iBodyInv22[bodyIdx] };
 
 			const glm::vec3 omegaWorld = cfg_.rigidInitOmega;
 			const glm::vec3 omegaBody = glm::transpose(orientation) * omegaWorld;
 			const glm::vec3 angMomBody = glm::inverse(bodyInertiaInv) * omegaBody;
 			const glm::vec3 angMomWorld = orientation * angMomBody;
 
-			R.xAngMom[bodyIdx] = angMomWorld.x;
-			R.yAngMom[bodyIdx] = angMomWorld.y;
-			R.zAngMom[bodyIdx] = angMomWorld.z;
+			RB.xAngMom[bodyIdx] = angMomWorld.x;
+			RB.yAngMom[bodyIdx] = angMomWorld.y;
+			RB.zAngMom[bodyIdx] = angMomWorld.z;
 		}
 
 		ScenarioMgr& scenarioMgr_;

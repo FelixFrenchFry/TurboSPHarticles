@@ -17,15 +17,9 @@ namespace GPU01
 
 	struct NeighborCountStats
 	{
-		uint32_t p95FF = 0;
-		uint32_t p99FF = 0;
-		uint32_t minFF = 0;
-		uint32_t maxFF = 0;
-
-		uint32_t p95FB = 0;
-		uint32_t p99FB = 0;
-		uint32_t minFB = 0;
-		uint32_t maxFB = 0;
+		uint32_t min = 0;
+		uint32_t max = 0;
+		uint32_t p99 = 0;
 	};
 
 	struct DensityStats
@@ -50,15 +44,12 @@ namespace GPU01
 	}
 
 	void Launch_ComputeNeighborCountStats(
-		const uint16_t* nbrCountFF,
-		const uint16_t* nbrCountFB,
-		uint32_t N_F,
+		const uint16_t* nbrCount,
+		uint32_t N,
 		cudaStream_t stream,
 		// scratch
-		uint32_t* nbrCountHistFF,
-		uint32_t* nbrCountHistFB,
-		uint32_t* nbrCountHistChunkFF,
-		uint32_t* nbrCountHistChunkFB,
+		uint32_t* nbrCountHist,
+		uint32_t* nbrCountHistChunk,
 		// destination
 		NeighborCountStats* stats);
 

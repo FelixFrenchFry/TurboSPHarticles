@@ -26,7 +26,7 @@ void BenchmarksTracker::BeginStep()
 	std::ranges::fill(curStepOcc_, 0);
 }
 
-void BenchmarksTracker::EndStep(const uint32_t simStep, const double simTime)
+void BenchmarksTracker::EndStep(const uint64_t simStep, const double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;

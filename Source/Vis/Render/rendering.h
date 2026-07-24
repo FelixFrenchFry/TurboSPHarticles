@@ -138,7 +138,7 @@ namespace Render
 
 		// draw state
 		uint32_t N_fluidImpostorInstances_ = 0;
-		uint32_t N_rigidBoundaryImpostorInstances_ = 0;
+		uint32_t N_rigidImpostorInstances_ = 0;
 		uint32_t N_centerOfMassInstances_ = 0;
 		uint64_t N_lineVertices_ = 0;
 

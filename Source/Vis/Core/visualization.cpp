@@ -414,14 +414,16 @@ void VisualizationMgr::SyncVisSimState()
 	}
 
 	// move snapshot data into back buffers
+	view_.simStep = snap->simStep;
 	posF_[back_].swap(snap->posF);
 	scalarDataF_[back_].swap(snap->scalarDataF);
-	centerOfMassR_[back_].swap(snap->centerOfMassR);
-	orientationR_[back_].swap(snap->orientationR);
 	posB_[back_].swap(snap->posB);
 	volB_[back_].swap(snap->volB);
-	bodyIdB_[back_].swap(snap->bodyIdB);
 	boxesB_[back_].swap(snap->boxesB);
+	posR_[back_].swap(snap->posR);
+	volR_[back_].swap(snap->volR);
+	centerOfMassRB_[back_].swap(snap->centerOfMassRB);
+	orientationRB_[back_].swap(snap->orientationRB);
 	scalarMode_ = snap->scalarModeF;
 
 	// ensure scalar data size matches position size
@@ -450,16 +452,18 @@ void VisualizationMgr::SyncVisSimState()
 		? std::span<const float>()
 		: std::span<const float>(scalarDataF_[front_].data(), scalarDataF_[front_].size());
 	view_.scalarModeF = scalarMode_;
-	view_.N_R = static_cast<uint32_t>(centerOfMassR_[front_].size());
-	view_.centerOfMassR = std::span<const glm::vec3>(
-		centerOfMassR_[front_].data(), centerOfMassR_[front_].size());
-	view_.orientationR = std::span<const glm::mat3>(
-		orientationR_[front_].data(), orientationR_[front_].size());
 	view_.N_B = static_cast<uint32_t>(posB_[front_].size());
 	view_.posB = std::span<const glm::vec3>(posB_[front_].data(), posB_[front_].size());
 	view_.volB = std::span<const float>(volB_[front_].data(), volB_[front_].size());
-	view_.bodyIdB = std::span<const uint32_t>(bodyIdB_[front_].data(), bodyIdB_[front_].size());
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
+	view_.N_R = static_cast<uint32_t>(posR_[front_].size());
+	view_.posR = std::span<const glm::vec3>(posR_[front_].data(), posR_[front_].size());
+	view_.volR = std::span<const float>(volR_[front_].data(), volR_[front_].size());
+	view_.N_RB = static_cast<uint32_t>(centerOfMassRB_[front_].size());
+	view_.centerOfMassRB = std::span<const glm::vec3>(
+		centerOfMassRB_[front_].data(), centerOfMassRB_[front_].size());
+	view_.orientationRB = std::span<const glm::mat3>(
+		orientationRB_[front_].data(), orientationRB_[front_].size());
 
 	// local copy for thread safety
 	const auto simParams = simParams_;

@@ -70,52 +70,52 @@ namespace Scene
 			Sync::RigidBodies& rigidBodies,
 			const uint32_t bodyIdx) const
 		{
-			auto& R = rigidBodies;
+			auto& RB = rigidBodies;
 
-			R.xVel[bodyIdx] = cfg_.rigidInitVel.x;
-			R.yVel[bodyIdx] = cfg_.rigidInitVel.y;
-			R.zVel[bodyIdx] = cfg_.rigidInitVel.z;
+			RB.xVel[bodyIdx] = cfg_.rigidInitVel.x;
+			RB.yVel[bodyIdx] = cfg_.rigidInitVel.y;
+			RB.zVel[bodyIdx] = cfg_.rigidInitVel.z;
 
-			R.xOmega[bodyIdx] = cfg_.rigidInitOmega.x;
-			R.yOmega[bodyIdx] = cfg_.rigidInitOmega.y;
-			R.zOmega[bodyIdx] = cfg_.rigidInitOmega.z;
+			RB.xOmega[bodyIdx] = cfg_.rigidInitOmega.x;
+			RB.yOmega[bodyIdx] = cfg_.rigidInitOmega.y;
+			RB.zOmega[bodyIdx] = cfg_.rigidInitOmega.z;
 
 			const float omegaBodyX =
-				R.a00[bodyIdx] * cfg_.rigidInitOmega.x +
-				R.a10[bodyIdx] * cfg_.rigidInitOmega.y +
-				R.a20[bodyIdx] * cfg_.rigidInitOmega.z;
+				RB.a00[bodyIdx] * cfg_.rigidInitOmega.x +
+				RB.a10[bodyIdx] * cfg_.rigidInitOmega.y +
+				RB.a20[bodyIdx] * cfg_.rigidInitOmega.z;
 			const float omegaBodyY =
-				R.a01[bodyIdx] * cfg_.rigidInitOmega.x +
-				R.a11[bodyIdx] * cfg_.rigidInitOmega.y +
-				R.a21[bodyIdx] * cfg_.rigidInitOmega.z;
+				RB.a01[bodyIdx] * cfg_.rigidInitOmega.x +
+				RB.a11[bodyIdx] * cfg_.rigidInitOmega.y +
+				RB.a21[bodyIdx] * cfg_.rigidInitOmega.z;
 			const float omegaBodyZ =
-				R.a02[bodyIdx] * cfg_.rigidInitOmega.x +
-				R.a12[bodyIdx] * cfg_.rigidInitOmega.y +
-				R.a22[bodyIdx] * cfg_.rigidInitOmega.z;
+				RB.a02[bodyIdx] * cfg_.rigidInitOmega.x +
+				RB.a12[bodyIdx] * cfg_.rigidInitOmega.y +
+				RB.a22[bodyIdx] * cfg_.rigidInitOmega.z;
 
-			const float iBodyX = R.iBodyInv00[bodyIdx] > 0.0f
-				? 1.0f / R.iBodyInv00[bodyIdx] : 0.0f;
-			const float iBodyY = R.iBodyInv11[bodyIdx] > 0.0f
-				? 1.0f / R.iBodyInv11[bodyIdx] : 0.0f;
-			const float iBodyZ = R.iBodyInv22[bodyIdx] > 0.0f
-				? 1.0f / R.iBodyInv22[bodyIdx] : 0.0f;
+			const float iBodyX = RB.iBodyInv00[bodyIdx] > 0.0f
+				? 1.0f / RB.iBodyInv00[bodyIdx] : 0.0f;
+			const float iBodyY = RB.iBodyInv11[bodyIdx] > 0.0f
+				? 1.0f / RB.iBodyInv11[bodyIdx] : 0.0f;
+			const float iBodyZ = RB.iBodyInv22[bodyIdx] > 0.0f
+				? 1.0f / RB.iBodyInv22[bodyIdx] : 0.0f;
 
 			const float angMomBodyX = iBodyX * omegaBodyX;
 			const float angMomBodyY = iBodyY * omegaBodyY;
 			const float angMomBodyZ = iBodyZ * omegaBodyZ;
 
-			R.xAngMom[bodyIdx] =
-				R.a00[bodyIdx] * angMomBodyX +
-				R.a01[bodyIdx] * angMomBodyY +
-				R.a02[bodyIdx] * angMomBodyZ;
-			R.yAngMom[bodyIdx] =
-				R.a10[bodyIdx] * angMomBodyX +
-				R.a11[bodyIdx] * angMomBodyY +
-				R.a12[bodyIdx] * angMomBodyZ;
-			R.zAngMom[bodyIdx] =
-				R.a20[bodyIdx] * angMomBodyX +
-				R.a21[bodyIdx] * angMomBodyY +
-				R.a22[bodyIdx] * angMomBodyZ;
+			RB.xAngMom[bodyIdx] =
+				RB.a00[bodyIdx] * angMomBodyX +
+				RB.a01[bodyIdx] * angMomBodyY +
+				RB.a02[bodyIdx] * angMomBodyZ;
+			RB.yAngMom[bodyIdx] =
+				RB.a10[bodyIdx] * angMomBodyX +
+				RB.a11[bodyIdx] * angMomBodyY +
+				RB.a12[bodyIdx] * angMomBodyZ;
+			RB.zAngMom[bodyIdx] =
+				RB.a20[bodyIdx] * angMomBodyX +
+				RB.a21[bodyIdx] * angMomBodyY +
+				RB.a22[bodyIdx] * angMomBodyZ;
 		}
 
 		ScenarioMgr& scenarioMgr_;

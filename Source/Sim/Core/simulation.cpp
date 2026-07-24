@@ -193,8 +193,12 @@ void SimulationMgr::ReBuildInitialSimState()
 	simScenario_->Build(universalSimState_, simParams_);
 	universalSimState_.fluidParticles.ensureParticleIdsPresent();
 	universalSimState_.boundaryParticles.ensureParticleIdsPresent();
-	universalSimState_.boundaryParticles.EnsureBoundaryCoefficientsPresent(
+	universalSimState_.rigidParticles.ensureParticleIdsPresent();
+	universalSimState_.boundaryParticles.ensureBoundaryCoefficientsPresent(
 		simParams_.massB, simParams_.restDensity);
+	universalSimState_.rigidParticles.ensureRigidCoefficientsPresent(
+		simParams_.massB, simParams_.restDensity);
+	universalSimState_.ValidateRigidAttachments();
 
 	// compact staged particle vectors once after scenario construction
 	universalSimState_.ShrinkToFitAll();
@@ -310,7 +314,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// explicit maximum number of steps reached
-		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
+		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
 			paramsInit.maxSteps > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet
@@ -442,7 +446,7 @@ void SimulationMgr::RunSim_Blocking()
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// explicit maximum number of steps reached
-		if (static_cast<int64_t>(simStep_) >= paramsInit.maxSteps &&
+		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
 			paramsInit.maxSteps > 0) { break; }
 
 		// small sleep to avoid busy spin when nothing to do yet

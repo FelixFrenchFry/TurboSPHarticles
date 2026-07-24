@@ -3,6 +3,7 @@
 // external
 #include <algorithm>
 #include <cmath>
+#include <cinttypes>
 #include <cstdarg>
 #include <cstdio>
 #include <GLFW/glfw3.h>
@@ -260,7 +261,8 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 		ImGui::Spacing();
 
 		bool showFluidParticles = visParams.render.showFluidParticles;
-		if (ImGui::Checkbox("show fluid particles", &showFluidParticles))
+		if (ImGui::Checkbox("show fluid particles",
+			&showFluidParticles))
 		{
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
@@ -268,18 +270,17 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 				});
 		}
 
-		bool showRigidBoundaryParticles = visParams.render.showRigidBoundaryParticles;
-		if (ImGui::Checkbox("show rigid boundary particles",
-			&showRigidBoundaryParticles))
+		bool showRigidParticles = visParams.render.showRigidParticles;
+		if (ImGui::Checkbox("show rigid particles",
+			&showRigidParticles))
 		{
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
-					.showRigidBoundaryParticles = showRigidBoundaryParticles
+					.showRigidParticles = showRigidParticles
 				});
 		}
 
-		bool showRigidBodyCentersOfMass =
-			visParams.render.showRigidBodyCentersOfMass;
+		bool showRigidBodyCentersOfMass = visParams.render.showRigidBodyCentersOfMass;
 		if (ImGui::Checkbox("show rigid body centers of mass",
 			&showRigidBodyCentersOfMass))
 		{
@@ -466,7 +467,7 @@ void UserInterfaceMgr::BuildSection_SimulationControl(
 
 	ImGui::Text("step count:");
 	ImGui::SameLine();
-	snprintf(stringBuffer, sizeof(stringBuffer), "%lld", simulationMgr.simStep_);
+	snprintf(stringBuffer, sizeof(stringBuffer), "%" PRIu64, simulationMgr.simStep_);
 	ImGui::Text(stringBuffer);
 	ImGui::Spacing();
 }
@@ -635,16 +636,31 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 		{
 			Stats::StatMetric::NumF,
 			Stats::StatMetric::NumB,
+			Stats::StatMetric::NumR,
 			Stats::StatMetric::NumNbrFF_Avg,
-			Stats::StatMetric::NumNbrFF_P95,
-			Stats::StatMetric::NumNbrFF_P99,
 			Stats::StatMetric::NumNbrFF_Min,
 			Stats::StatMetric::NumNbrFF_Max,
+			Stats::StatMetric::NumNbrFF_P99,
 			Stats::StatMetric::NumNbrFB_Avg,
-			Stats::StatMetric::NumNbrFB_P95,
-			Stats::StatMetric::NumNbrFB_P99,
 			Stats::StatMetric::NumNbrFB_Min,
-			Stats::StatMetric::NumNbrFB_Max
+			Stats::StatMetric::NumNbrFB_Max,
+			Stats::StatMetric::NumNbrFB_P99,
+			Stats::StatMetric::NumNbrFR_Avg,
+			Stats::StatMetric::NumNbrFR_Min,
+			Stats::StatMetric::NumNbrFR_Max,
+			Stats::StatMetric::NumNbrFR_P99,
+			Stats::StatMetric::NumNbrRF_Avg,
+			Stats::StatMetric::NumNbrRF_Min,
+			Stats::StatMetric::NumNbrRF_Max,
+			Stats::StatMetric::NumNbrRF_P99,
+			Stats::StatMetric::NumNbrRB_Avg,
+			Stats::StatMetric::NumNbrRB_Min,
+			Stats::StatMetric::NumNbrRB_Max,
+			Stats::StatMetric::NumNbrRB_P99,
+			Stats::StatMetric::NumNbrRR_Avg,
+			Stats::StatMetric::NumNbrRR_Min,
+			Stats::StatMetric::NumNbrRR_Max,
+			Stats::StatMetric::NumNbrRR_P99
 		});
 
 		ImGui::TreePop();

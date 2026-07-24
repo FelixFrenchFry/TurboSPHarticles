@@ -33,24 +33,34 @@ namespace Mem
 		uint64_t allocBytes = 0;
 	};
 
+	struct ParticleClassMemUsage
+	{
+		MemUsage fluid{};
+		MemUsage boundary{};
+		MemUsage rigid{};
+	};
+
 	// "buckets" of data structures used by the sim that allocate memory
 	enum class MemBucket : uint8_t
 	{
 		ParticlePropertiesF,			// buffers storing fluid particle properties (position, velocity, pressure, ...)
 		ParticlePropertiesB,			// buffers storing boundary particle properties (position, ...)
+		ParticlePropertiesR,			// buffers storing rigid particle properties (position, velocity, ...)
 
 		Neighbors_SearchDataStructF,	// data structures used for the neighbor search query of fluid particles (testing for neighborhood with fluid particles)
 		Neighbors_SearchDataStructB,	// data structures used for the neighbor search query of fluid particles (testing for neighborhood with boundary particles)
-		Neighbors_ListStorageF,			// data structures used for the storage of references to fluid neighbors of fluid particles
-		Neighbors_ListStorageB,			// data structures used for the storage of references to boundary neighbors of fluid particles
-
-		Misc,
+		Neighbors_SearchDataStructR,	// data structures used for the neighbor search query of rigid particles (testing for neighborhood with rigid particles)
+		Neighbors_ListStorageF,         // data structures used for the storage of references involving fluid particles
+		Neighbors_ListStorageB,         // data structures used for the storage of references involving boundary particles
+		Neighbors_ListStorageR,         // data structures used for the storage of references involving rigid particles
 
 		Dist_GlobalState,               // additional full scenario state held by the distributed simulation manager
 		Dist_LocalState,                // backend-agnostic rank-local owned + halo particle state
 		Dist_ParticleMetadata,          // distributed ownership/classification/index-map metadata
 		Dist_ExchangeBuffers,           // persistent distributed send/receive/aggregation buffers
 		Dist_Misc,                      // reusable distributed rebuild/export scratches and other misc buffers
+
+		Misc,
 
 		Count
 	};
@@ -103,10 +113,18 @@ namespace Mem
 			{
 				.bucket = MemBucket::ParticlePropertiesB,
 				.type = Base::ParticleType::Boundary,
-				.name = "bound particle properties",
+				.name = "boundary particle properties",
 				.tip =
 				"Memory used/allocated by buffers that store boundary particle properties, namely:\n"
-				"id, body attachment, position, velocity, volB, psiB"
+				"id, position, volB, psiB"
+			},
+			{
+				.bucket = MemBucket::ParticlePropertiesR,
+				.type = Base::ParticleType::Rigid,
+				.name = "rigid particle properties",
+				.tip =
+				"Memory used/allocated by buffers that store rigid particle properties, namely:\n"
+				"id, body attachment, relative/world position, velocity, force, volR, psiR"
 			},
 			{
 				.bucket = MemBucket::Neighbors_SearchDataStructF,
@@ -119,26 +137,42 @@ namespace Mem
 			{
 				.bucket = MemBucket::Neighbors_SearchDataStructB,
 				.type = Base::ParticleType::Boundary,
-				.name = "bound neighbor search data struct",
+				.name = "boundary neighbor search data struct",
 				.tip =
 				"Memory used/allocated by data structures used for the neighbor search query\n"
 				"of boundary particles (testing for neighborhood with boundary particles)"
+			},
+			{
+				.bucket = MemBucket::Neighbors_SearchDataStructR,
+				.type = Base::ParticleType::Rigid,
+				.name = "rigid neighbor search data struct",
+				.tip =
+				"Memory used/allocated by data structures used for the neighbor search query\n"
+				"of fluid and rigid particles (testing for neighborhood with rigid particles)"
 			},
 			{
 				.bucket = MemBucket::Neighbors_ListStorageF,
 				.type = Base::ParticleType::Fluid,
 				.name = "fluid neighbor list storage",
 				.tip =
-				"Memory used/allocated by data structures used for storing references to the\n"
-				"fluid particle neighbors of fluid particles"
+				"Memory used/allocated by data structures used for storing references\n"
+				"involving fluid particles"
 			},
 			{
 				.bucket = MemBucket::Neighbors_ListStorageB,
 				.type = Base::ParticleType::Boundary,
-				.name = "bound neighbor list storage",
+				.name = "boundary neighbor list storage",
 				.tip =
-				"Memory used/allocated by data structures used for storing references to the\n"
-				"boundary particle neighbors of fluid particles"
+				"Memory used/allocated by data structures used for storing references\n"
+				"involving boundary particles"
+			},
+			{
+				.bucket = MemBucket::Neighbors_ListStorageR,
+				.type = Base::ParticleType::Rigid,
+				.name = "rigid neighbor list storage",
+				.tip =
+				"Memory used/allocated by data structures used for storing references\n"
+				"involving rigid particles"
 			},
 			{
 				.bucket = MemBucket::Misc,
@@ -204,7 +238,7 @@ namespace Mem
 	struct MemRecordStep
 	{
 		// metadata
-		uint32_t simStep = 0;
+		uint64_t simStep = 0;
 		double simTime = 0.0;
 
 		// stat data
@@ -237,7 +271,7 @@ namespace Mem
 	}
 	inline void Clear(MemRecordStep& record)
 	{
-		record.simStep = 0u;
+		record.simStep = 0ull;
 		record.simTime = 0.0;
 		Clear(record.mem);
 	}

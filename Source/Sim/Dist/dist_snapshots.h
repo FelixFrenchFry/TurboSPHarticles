@@ -34,7 +34,6 @@ namespace Dist
 	{
 		int globalIdx = -1;
 		uint32_t id = 0;
-		uint32_t bodyId = Sync::InvalidRigidBodyId;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -54,6 +53,7 @@ namespace Dist
 	{
 		uint32_t gatheredFluidParticleCount = 0;
 		uint32_t gatheredBoundaryParticleCount = 0;
+		uint32_t gatheredRigidParticleCount = 0;
 	};
 
 	bool PackOwnedExportSnapshotBuffer(
@@ -65,7 +65,7 @@ namespace Dist
 	bool RebuildExportSnapshotFromGatheredParticles(
 		Sync::ExportSnapshot& exportSnap,
 		const DistExportSnapshotBuffer& gatherBuffer,
-		uint32_t simStep,
+		uint64_t simStep,
 		double simTime);
 
 	bool GatherExportSnapshotToRoot(
@@ -74,7 +74,7 @@ namespace Dist
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
 		const MpiContext& mpiContext,
-		uint32_t simStep,
+		uint64_t simStep,
 		double simTime,
 		DistSnapshotGatherStats* stats = nullptr);
 

@@ -88,32 +88,32 @@
     "SampledMesh": {
       "type": "SampledMesh",
       "model": "HouseBoat",
-      "modelTargetExtent": 1.8,
+      "modelTargetExtent": 1.2,
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 2.0,
-        "vLen": 2.0,
-        "wLen": 1.5
+        "uLen": 1.6,
+        "vLen": 1.6,
+        "wLen": 1.2
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 2.0,
-        "vLen": 0.35,
-        "wLen": 1.5
+        "uLen": 1.6,
+        "vLen": 0.3,
+        "wLen": 1.2
       },
       "rigidBody": {
-        "centerOfMass": [ 0.9, 0.75, 0.75 ],
+        "centerOfMass": [ 0.8, 0.6, 0.6 ],
         "yawDeg": 0.0,
         "pitchDeg": 0.0,
         "rollDeg": 0.0
       },
-      "rigidDensity": 350.0,
+      "rigidDensity": 300.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }

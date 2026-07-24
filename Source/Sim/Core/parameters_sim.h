@@ -55,7 +55,7 @@ namespace Sim
 		float kernelRadiusSqu   = 0.0004f;
 
 		// neighbor count heuristics
-		// TODO: use p95 and p99 values for heuristics?
+		// TODO: use p99 values for heuristics?
 		uint32_t expctdNbrCountSoftMax_FF = 40;
 		uint32_t expctdNbrCountSoftMax_FB = 20;
 		uint32_t expctdNbrCountHardMax_FF = 64;

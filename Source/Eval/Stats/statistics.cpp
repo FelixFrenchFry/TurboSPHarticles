@@ -26,7 +26,7 @@ void StatisticsTracker::BeginStep()
 	std::ranges::fill(recLatest_.stats, 0.0f);
 }
 
-void StatisticsTracker::EndStep(uint32_t simStep, double simTime)
+void StatisticsTracker::EndStep(uint64_t simStep, double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;

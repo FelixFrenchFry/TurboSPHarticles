@@ -122,7 +122,6 @@ namespace
 		DistExportBoundaryParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 		packet.id = boundaryParticles.id[localIdx];
-		packet.bodyId = boundaryParticles.bodyId[localIdx];
 
 		packet.xPos = boundaryParticles.xPos[localIdx];
 		packet.yPos = boundaryParticles.yPos[localIdx];
@@ -199,7 +198,7 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	Sync::ExportSnapshot& exportSnap,
 	const DistExportSnapshotBuffer& gatherBuffer,
-	const uint32_t simStep,
+	const uint64_t simStep,
 	const double simTime)
 {
 	if (gatherBuffer.fluidParticles.size() >
@@ -234,6 +233,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	exportSnap.simTime = simTime;
 	exportSnap.N_F = static_cast<uint32_t>(sortedFluidParticles.size());
 	exportSnap.N_B = static_cast<uint32_t>(sortedBoundaryParticles.size());
+	exportSnap.N_R = 0;
 
 	exportSnap.idF.resize(exportSnap.N_F);
 	exportSnap.xPosF.resize(exportSnap.N_F);
@@ -241,11 +241,16 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	exportSnap.zPosF.resize(exportSnap.N_F);
 	exportSnap.velMagF.resize(exportSnap.N_F);
 	exportSnap.idB.resize(exportSnap.N_B);
-	exportSnap.bodyIdB.resize(exportSnap.N_B);
 	exportSnap.xPosB.resize(exportSnap.N_B);
 	exportSnap.yPosB.resize(exportSnap.N_B);
 	exportSnap.zPosB.resize(exportSnap.N_B);
 	exportSnap.volB.resize(exportSnap.N_B);
+	exportSnap.idR.clear();
+	exportSnap.bodyIdR.clear();
+	exportSnap.xPosR.clear();
+	exportSnap.yPosR.clear();
+	exportSnap.zPosR.clear();
+	exportSnap.volR.clear();
 
 	int prevGlobalIdx = -1;
 	for (uint32_t i = 0; i < exportSnap.N_F; i++)
@@ -271,7 +276,6 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.globalIdx == prevGlobalIdx) { return false; }
 
 		exportSnap.idB[i] = packet.id;
-		exportSnap.bodyIdB[i] = packet.bodyId;
 		exportSnap.xPosB[i] = packet.xPos;
 		exportSnap.yPosB[i] = packet.yPos;
 		exportSnap.zPosB[i] = packet.zPos;
@@ -289,7 +293,7 @@ bool Dist::GatherExportSnapshotToRoot(
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
 	const MpiContext& mpiContext,
-	const uint32_t simStep,
+	const uint64_t simStep,
 	const double simTime,
 	DistSnapshotGatherStats* stats)
 {
@@ -449,6 +453,7 @@ bool Dist::GatherExportSnapshotToRoot(
 				static_cast<uint32_t>(gatheredBuffer.fluidParticles.size());
 			stats->gatheredBoundaryParticleCount =
 				static_cast<uint32_t>(gatheredBuffer.boundaryParticles.size());
+			stats->gatheredRigidParticleCount = 0;
 		}
 	}
 

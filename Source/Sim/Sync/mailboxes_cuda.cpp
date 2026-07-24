@@ -33,7 +33,7 @@ namespace Sync
 			VisualParticleSample* samples = nullptr;
 			size_t capacity = 0;
 			uint32_t N_F = 0;
-			uint32_t N_RBP = 0;
+			uint32_t N_R = 0;
 			cudaEvent_t completion = nullptr; // completion of the last stream using this slot
 			std::shared_ptr<VisualSnapshot> auxiliarySnap{};
 			SlotState state = SlotState::Free;
@@ -135,7 +135,7 @@ namespace Sync
 
 	bool VisualFrameMailboxCUDA::TryAcquireWrite(
 		const uint32_t N_F,
-		const uint32_t N_RBP,
+		const uint32_t N_R,
 		VisualFrameWriteCUDA& dst)
 	{
 		std::scoped_lock lock(impl_->mutex_);
@@ -156,7 +156,7 @@ namespace Sync
 
 		// reclaim completed slots and acquire a free slot for packing
 		impl_->ReclaimRetiredSlots(*this);
-		const size_t N_required = static_cast<size_t>(N_F) + N_RBP;
+		const size_t N_required = static_cast<size_t>(N_F) + N_R;
 		for (uint32_t i = 0; i < impl_->slots_.size(); i++)
 		{
 			auto& slot = impl_->slots_[i];
@@ -165,10 +165,10 @@ namespace Sync
 
 			slot.state = Impl::SlotState::Writing;
 			slot.N_F = N_F;
-			slot.N_RBP = N_RBP;
+			slot.N_R = N_R;
 			dst.slot = i;
 			dst.fluid = N_F > 0 ? slot.samples : nullptr;
-			dst.rigid = N_RBP > 0 ? slot.samples + N_F : nullptr;
+			dst.rigid = N_R > 0 ? slot.samples + N_F : nullptr;
 			return true;
 		}
 
@@ -221,9 +221,9 @@ namespace Sync
 		slot.state = Impl::SlotState::Reading;
 		dst.slot = impl_->latestSlot_;
 		dst.fluid = slot.N_F > 0 ? slot.samples : nullptr;
-		dst.rigid = slot.N_RBP > 0 ? slot.samples + slot.N_F : nullptr;
+		dst.rigid = slot.N_R > 0 ? slot.samples + slot.N_F : nullptr;
 		dst.N_F = slot.N_F;
-		dst.N_RBP = slot.N_RBP;
+		dst.N_R = slot.N_R;
 		dst.ready = slot.completion;
 		dst.auxiliarySnap = std::move(slot.auxiliarySnap);
 		impl_->latestSlot_ = Impl::InvalidSlot;

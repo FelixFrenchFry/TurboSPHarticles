@@ -25,7 +25,7 @@ void MemoryTracker::BeginStep()
 	Clear(recLatest_);
 }
 
-void MemoryTracker::EndStep(uint32_t simStep, double simTime)
+void MemoryTracker::EndStep(uint64_t simStep, double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;

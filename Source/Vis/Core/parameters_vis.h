@@ -1,6 +1,4 @@
 // parameters_vis.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -70,7 +68,7 @@ namespace Vis
 			.lightDirVS             = {0.3f, 0.6f, 0.6f},
 			.clearColor             = {0.2f, 0.2f, 0.2f, 1.0f},
 			.baseColor              = {0.2f, 0.4f, 1.0f},
-			.rigidBoundaryColor     = {0.65f, 0.65f, 0.65f},
+			.rigidParticleColor     = {0.65f, 0.65f, 0.65f},
 			.centerOfMassXAxisColor = {250.0f / 255.0f, 0.0f, 50.0f / 255.0f},
 			.centerOfMassYAxisColor = {40.0f / 255.0f, 180.0f / 255.0f, 80.0f / 255.0f},
 			.centerOfMassZAxisColor = {40.0f / 255.0f, 80.0f / 255.0f, 180.0f / 255.0f},
@@ -82,9 +80,9 @@ namespace Vis
 			.colorMap               = Base::ColorMap::Blues,
 			.scalarModeF            = Base::ColorCodingMode::VelocityMag,
 			.showFluidParticles     = true,
-			.showRigidBoundaryParticles = true,
+			.showRigidParticles     = true,
 			.showRigidBodyCentersOfMass = false,
-			.rigidBoundaryRadiusScale = 1.0f,
+			.rigidParticleRadiusScale = 1.0f,
 			.lineWidth              = 0.02f
 		};
 	};
@@ -122,7 +120,7 @@ namespace Vis
 	{
 		std::optional<glm::vec3> lightDirVS;
 		std::optional<glm::vec3> baseColor;
-		std::optional<glm::vec3> rigidBoundaryColor;
+		std::optional<glm::vec3> rigidParticleColor;
 		std::optional<glm::vec3> centerOfMassXAxisColor;
 		std::optional<glm::vec3> centerOfMassYAxisColor;
 		std::optional<glm::vec3> centerOfMassZAxisColor;
@@ -133,9 +131,9 @@ namespace Vis
 		std::optional<Base::ColorMap> colorMap;
 		std::optional<Base::ColorCodingMode> scalarModeF;
 		std::optional<bool> showFluidParticles;
-		std::optional<bool> showRigidBoundaryParticles;
+		std::optional<bool> showRigidParticles;
 		std::optional<bool> showRigidBodyCentersOfMass;
-		std::optional<float> rigidBoundaryRadiusScale;
+		std::optional<float> rigidParticleRadiusScale;
 	};
 
 	class VisParamsMgr

@@ -24,7 +24,7 @@ namespace Render
 		const float fluidRadius,
 		const float particleSizeB,
 		const float rigidRadiusScale,
-		const uint32_t N_F, const uint32_t N_RBP,
+		const uint32_t N_F, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
 		InstanceData* dst);

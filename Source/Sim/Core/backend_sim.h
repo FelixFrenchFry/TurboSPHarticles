@@ -29,6 +29,7 @@ namespace Sync
 		Skipped,
 		Published,
 	};
+
 } // namespace Sync
 #endif
 
@@ -122,6 +123,7 @@ namespace Sim
 		// info
 		virtual uint32_t GetNumFluidParticles() const = 0;
 		virtual uint32_t GetNumBoundaryParticles() const = 0;
+		virtual uint32_t GetNumRigidParticles() const = 0;
 	};
 
 	// backend factory
@@ -162,8 +164,7 @@ namespace Sim
 			return false;
 		}
 
-		virtual std::pair<Mem::MemUsage, Mem::MemUsage> GetMemUsage(
-			const SimParams& params) const = 0;
+		virtual Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const = 0;
 	};
 
 	struct NeighborSpan
@@ -178,7 +179,7 @@ namespace Sim
 
 		virtual ~I_NeighborList() = default;
 
-		virtual void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) = 0;
+		virtual void Resize(uint32_t N_F, uint32_t N_B, uint32_t N_R, const SimParams& params) = 0;
 
 		// applies optional post-processing on the data structures after the count-query
 		// (e.g. construction of the CSR neighbor storage)
@@ -191,25 +192,40 @@ namespace Sim
 		// sets the neighbor count of fluid particle i, computed by the count-query
 		virtual void SetNbrCountFF(uint32_t i, uint32_t count) = 0;
 		virtual void SetNbrCountFB(uint32_t i, uint32_t count) = 0;
+		virtual void SetNbrCountFR(uint32_t i, uint32_t count) = 0;
+		virtual void SetNbrCountRF(uint32_t i, uint32_t count) = 0;
+		virtual void SetNbrCountRB(uint32_t i, uint32_t count) = 0;
+		virtual void SetNbrCountRR(uint32_t i, uint32_t count) = 0;
 
-		// sets the full neighbor list js of fluid particle i, accumulated in a scratch array by the fill-query
+		// sets the full neighbor list js of source particle i, accumulated in a scratch array by the fill-query
 		// (optionally applying compression and other post-processing if the implementation uses it)
 		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+		virtual void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+		virtual void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+		virtual void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+		virtual void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t count) = 0;
 
-		// gets a "span" of the fluid/boundary neighbor list of fluid particle i
+		// gets a "span" of the list of neighbors for a source particle i
 		// (for compressed neighbor lists, the span points to per-thread scratch space, which
 		// gets overwritten on each call, so the data must be processed before that)
 		virtual NeighborSpan FF(uint32_t i) const = 0;
 		virtual NeighborSpan FB(uint32_t i) const = 0;
+		virtual NeighborSpan FR(uint32_t i) const = 0;
+		virtual NeighborSpan RF(uint32_t i) const = 0;
+		virtual NeighborSpan RB(uint32_t i) const = 0;
+		virtual NeighborSpan RR(uint32_t i) const = 0;
 
 		// default implementations for neighbor counts, overwritten for compressed neighbor lists
 		virtual uint32_t CountFF(uint32_t i) const { return FF(i).count; }
 		virtual uint32_t CountFB(uint32_t i) const { return FB(i).count; }
+		virtual uint32_t CountFR(uint32_t i) const { return FR(i).count; }
+		virtual uint32_t CountRF(uint32_t i) const { return RF(i).count; }
+		virtual uint32_t CountRB(uint32_t i) const { return RB(i).count; }
+		virtual uint32_t CountRR(uint32_t i) const { return RR(i).count; }
 
 		// stats
-		virtual std::pair<Mem::MemUsage, Mem::MemUsage>GetMemUsage(
-			const SimParams& params) const = 0;
+		virtual Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const = 0;
 
 		// flags
 		virtual bool RunCountQuery() const = 0;

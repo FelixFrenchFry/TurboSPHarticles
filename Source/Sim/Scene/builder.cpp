@@ -124,18 +124,40 @@ namespace
 
 void ScenarioMgr::ComputeBoundaryCoefficients(
 	Sync::BoundaryParticles& boundaryParticles,
-	const Sim::SimParams& params)
-{
-	ComputeBoundaryCoefficients(boundaryParticles, params, 0, boundaryParticles.N_);
-}
-
-void ScenarioMgr::ComputeBoundaryCoefficients(
-	Sync::BoundaryParticles& boundaryParticles,
 	const Sim::SimParams& params,
 	const uint32_t beginB,
 	const uint32_t endB)
 {
-	// temp local cell buckets to avoid O(N_B^2) boundary neighbor search
+	ComputeParticleCoefficients(
+		boundaryParticles.xPos, boundaryParticles.yPos, boundaryParticles.zPos,
+		boundaryParticles.volB, boundaryParticles.psiB, boundaryParticles.N_,
+		params, beginB, endB);
+}
+
+void ScenarioMgr::ComputeRigidCoefficients(
+	Sync::RigidParticles& rigidParticles,
+	const Sim::SimParams& params,
+	const uint32_t beginR,
+	const uint32_t endR)
+{
+	ComputeParticleCoefficients(
+		rigidParticles.xRelPos, rigidParticles.yRelPos, rigidParticles.zRelPos,
+		rigidParticles.volR, rigidParticles.psiR, rigidParticles.N_,
+		params, beginR, endR);
+}
+
+void ScenarioMgr::ComputeParticleCoefficients(
+	const std::vector<float>& xPos,
+	const std::vector<float>& yPos,
+	const std::vector<float>& zPos,
+	std::vector<float>& vol,
+	std::vector<float>& psi,
+	const uint32_t N,
+	const Sim::SimParams& params,
+	const uint32_t begin,
+	const uint32_t end)
+{
+	// temp local cell buckets to avoid O(N^2) boundary neighbor search
 	struct CellCoord
 	{
 		int32_t x = 0;
@@ -169,20 +191,14 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 			};
 		};
 
-	const uint32_t N_B = boundaryParticles.N_;
-	assert(beginB <= endB);
-	assert(endB <= N_B);
-	if (beginB == endB) { return; }
+	assert(begin <= end);
+	assert(end <= N);
+	if (begin == end) { return; }
 
-	const float defaultVolB = DefaultBoundaryVolB(params);
-	const float defaultPsiB = DefaultBoundaryPsiB(params);
-	boundaryParticles.volB.resize(N_B);
-	boundaryParticles.psiB.resize(N_B);
-	const auto& xPosB = boundaryParticles.xPos;
-	const auto& yPosB = boundaryParticles.yPos;
-	const auto& zPosB = boundaryParticles.zPos;
-	auto& volB = boundaryParticles.volB;
-	auto& psiB = boundaryParticles.psiB;
+	const float defaultVol = DefaultBoundaryVolB(params);
+	const float defaultPsi = DefaultBoundaryPsiB(params);
+	vol.resize(N);
+	psi.resize(N);
 
 	// keep coefficients valid if params are incomplete
 	if (params.particleSizeF <= 0.0f ||
@@ -192,16 +208,16 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 		params.gridCellSizeRatio <= 0.0f ||
 		params.restDensity <= 0.0f)
 	{
-		std::fill(volB.begin() + beginB, volB.begin() + endB, defaultVolB);
-		std::fill(psiB.begin() + beginB, psiB.begin() + endB, defaultPsiB);
+		std::fill(vol.begin() + begin, vol.begin() + end, defaultVol);
+		std::fill(psi.begin() + begin, psi.begin() + end, defaultPsi);
 		return;
 	}
 
 	const float cellSize = params.kernelRadius * params.gridCellSizeRatio;
 	if (cellSize <= 0.0f)
 	{
-		std::fill(volB.begin() + beginB, volB.begin() + endB, defaultVolB);
-		std::fill(psiB.begin() + beginB, psiB.begin() + endB, defaultPsiB);
+		std::fill(vol.begin() + begin, vol.begin() + end, defaultVol);
+		std::fill(psi.begin() + begin, psi.begin() + end, defaultPsi);
 		return;
 	}
 
@@ -211,7 +227,7 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 		1,
 		static_cast<int32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 	const float cellSizeInv = 1.0f / cellSize;
-	const uint32_t N_compute = endB - beginB;
+	const uint32_t N_compute = end - begin;
 
 	std::vector<CellCoord> cellCoords(N_compute);
 	std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets;
@@ -220,11 +236,11 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 	// insert boundary particles into cell buckets
 	for (uint32_t localIdx = 0; localIdx < N_compute; localIdx++)
 	{
-		const uint32_t i = beginB + localIdx;
+		const uint32_t i = begin + localIdx;
 		cellCoords[localIdx] = makeCellCoord(
-			xPosB[i],
-			yPosB[i],
-			zPosB[i],
+			xPos[i],
+			yPos[i],
+			zPos[i],
 			cellSizeInv);
 		cellBuckets[cellCoords[localIdx]].push_back(i);
 	}
@@ -237,7 +253,7 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 		{
 			for (uint32_t localIdx = r.begin(); localIdx != r.end(); localIdx++)
 			{
-				const uint32_t i = beginB + localIdx;
+				const uint32_t i = begin + localIdx;
 				float sumW = 0.0f;
 				const CellCoord baseCell = cellCoords[localIdx];
 
@@ -259,9 +275,9 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 							for (const uint32_t j : it->second)
 							{
 								sumW += KernelWeight_CubicSpline(
-									xPosB[i] - xPosB[j],
-									yPosB[i] - yPosB[j],
-									zPosB[i] - zPosB[j],
+									xPos[i] - xPos[j],
+									yPos[i] - yPos[j],
+									zPos[i] - zPos[j],
 									params);
 							}
 						}
@@ -271,13 +287,13 @@ void ScenarioMgr::ComputeBoundaryCoefficients(
 				if (sumW > 0.0f && std::isfinite(sumW))
 				{
 					// boundary volume from inverse boundary sample density
-					volB[i] = 1.0f / sumW;
-					psiB[i] = params.restDensity * volB[i];
+					vol[i] = 1.0f / sumW;
+					psi[i] = params.restDensity * vol[i];
 				}
 				else
 				{
-					volB[i] = defaultVolB;
-					psiB[i] = defaultPsiB;
+					vol[i] = defaultVol;
+					psi[i] = defaultPsi;
 				}
 			}
 		},
@@ -289,15 +305,6 @@ void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 											 Sync::UniversalSimState& dst,
 											 const Sim::SimParams& params)
 {
-	/*
-	auto faces = GetFacesFromOBB(box);
-
-	for (const auto& face : faces)
-	{
-		BuildBoundaryLayersOnFace(face, dst, params);
-	}
-	*/
-
 	if (params.boundaryLayers <= 0) { return; }
 
 	const float sizeB = params.particleSizeB;
@@ -331,7 +338,7 @@ void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 		BuildBoundaryLayersOnFace(face, dst, params);
 	}
 
-	ComputeBoundaryCoefficients(dst.boundaryParticles, params);
+	ComputeBoundaryCoefficients(dst.boundaryParticles, params, 0, dst.boundaryParticles.N_);
 }
 
 void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
@@ -667,7 +674,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	}
 
 	assert(idx == (N_base + N_add));
-	ComputeBoundaryCoefficients(dst.boundaryParticles, params);
+	ComputeBoundaryCoefficients(dst.boundaryParticles, params, 0, dst.boundaryParticles.N_);
 }
 
 uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
@@ -701,16 +708,15 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	if (N_keep <= 0) { return Sync::InvalidRigidBodyId; }
 
 	auto& B = dst.boundaryParticles;
-	auto& R = dst.rigidBodies;
+	auto& R = dst.rigidParticles;
+	auto& RB = dst.rigidBodies;
 
-	const uint32_t bodyIdx = R.N_;
-	const uint32_t rigidBoundaryParticleBase = R.N_rigidBoundaryParticles_;
-	const uint32_t N_base = B.N_;
+	const uint32_t bodyIdx = RB.N_;
+	const uint32_t N_base = R.N_;
 	const uint32_t N_add = N_keep;
 
 	dst.ResizeRigidBodies(bodyIdx + 1);
-	R.resizeRigidBoundaryParticles(rigidBoundaryParticleBase + N_add);
-	dst.ResizeBoundary(N_base + N_add);
+	dst.ResizeRigid(N_base + N_add);
 
 	const glm::vec3 center = box.origin
 						   + box.uHat * (0.5f * box.uLen)
@@ -721,26 +727,26 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	const float bodyMass = rigidDensity > 0.0f ? rigidDensity * volume : 0.0f;
 	const float bodyMassInv = bodyMass > 0.0f ? 1.0f / bodyMass : 0.0f;
 
-	R.id[bodyIdx] = bodyIdx;
-	R.xCM[bodyIdx] = center.x;
-	R.yCM[bodyIdx] = center.y;
-	R.zCM[bodyIdx] = center.z;
-	R.rigidBoundaryParticleBegin[bodyIdx] = rigidBoundaryParticleBase;
-	R.rigidBoundaryParticleCount[bodyIdx] = N_add;
-	R.mass[bodyIdx] = bodyMass;
-	R.massInv[bodyIdx] = bodyMassInv;
+	RB.id[bodyIdx] = bodyIdx;
+	RB.xCM[bodyIdx] = center.x;
+	RB.yCM[bodyIdx] = center.y;
+	RB.zCM[bodyIdx] = center.z;
+	RB.rigidParticleBegin[bodyIdx] = N_base;
+	RB.rigidParticleCount[bodyIdx] = N_add;
+	RB.mass[bodyIdx] = bodyMass;
+	RB.massInv[bodyIdx] = bodyMassInv;
 
-	R.a00[bodyIdx] = box.uHat.x; R.a01[bodyIdx] = box.vHat.x; R.a02[bodyIdx] = box.wHat.x;
-	R.a10[bodyIdx] = box.uHat.y; R.a11[bodyIdx] = box.vHat.y; R.a12[bodyIdx] = box.wHat.y;
-	R.a20[bodyIdx] = box.uHat.z; R.a21[bodyIdx] = box.vHat.z; R.a22[bodyIdx] = box.wHat.z;
+	RB.a00[bodyIdx] = box.uHat.x; RB.a01[bodyIdx] = box.vHat.x; RB.a02[bodyIdx] = box.wHat.x;
+	RB.a10[bodyIdx] = box.uHat.y; RB.a11[bodyIdx] = box.vHat.y; RB.a12[bodyIdx] = box.wHat.y;
+	RB.a20[bodyIdx] = box.uHat.z; RB.a21[bodyIdx] = box.vHat.z; RB.a22[bodyIdx] = box.wHat.z;
 
-	R.iBodyInv00[bodyIdx] = bodyMass > 0.0f
+	RB.iBodyInv00[bodyIdx] = bodyMass > 0.0f
 		? 12.0f / (bodyMass * (box.vLen * box.vLen + box.wLen * box.wLen))
 		: 0.0f;
-	R.iBodyInv11[bodyIdx] = bodyMass > 0.0f
+	RB.iBodyInv11[bodyIdx] = bodyMass > 0.0f
 		? 12.0f / (bodyMass * (box.uLen * box.uLen + box.wLen * box.wLen))
 		: 0.0f;
-	R.iBodyInv22[bodyIdx] = bodyMass > 0.0f
+	RB.iBodyInv22[bodyIdx] = bodyMass > 0.0f
 		? 12.0f / (bodyMass * (box.uLen * box.uLen + box.vLen * box.vLen))
 		: 0.0f;
 
@@ -749,8 +755,7 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	std::mt19937_64 rng(params.jitterSeedB);
 	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
 
-	uint32_t idx = N_base;
-	uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleBase;
+	uint32_t rigidParticleIdx = N_base;
 
 	for (uint32_t kw = 0; kw < N_w; kw++) // loop over depth
 	{
@@ -789,29 +794,19 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 									+ box.wHat * w;
 				const glm::vec3 rel = pos - center;
 
-				B.id[idx] = idx;
-				B.bodyId[idx] = bodyIdx;
-				B.rigidBoundaryParticleIdx[idx] = rigidBoundaryParticleIdx;
-				B.xPos[idx] = pos.x;
-				B.yPos[idx] = pos.y;
-				B.zPos[idx] = pos.z;
-				B.xVel[idx] = 0.0f;
-				B.yVel[idx] = 0.0f;
-				B.zVel[idx] = 0.0f;
+				R.id[rigidParticleIdx] = B.N_ + rigidParticleIdx;
+				R.bodyId[rigidParticleIdx] = bodyIdx;
+				R.xRelPos[rigidParticleIdx] = Dot(rel, box.uHat);
+				R.yRelPos[rigidParticleIdx] = Dot(rel, box.vHat);
+				R.zRelPos[rigidParticleIdx] = Dot(rel, box.wHat);
 
-				R.xRelPosRBP[rigidBoundaryParticleIdx] = Dot(rel, box.uHat);
-				R.yRelPosRBP[rigidBoundaryParticleIdx] = Dot(rel, box.vHat);
-				R.zRelPosRBP[rigidBoundaryParticleIdx] = Dot(rel, box.wHat);
-
-				idx++;
-				rigidBoundaryParticleIdx++;
+				rigidParticleIdx++;
 			}
 		}
 	}
 
-	assert(idx == (N_base + N_add));
-	assert(rigidBoundaryParticleIdx == (rigidBoundaryParticleBase + N_add));
-	ComputeBoundaryCoefficients(dst.boundaryParticles, params, N_base, N_base + N_add);
+	assert(rigidParticleIdx == (N_base + N_add));
+	ComputeRigidCoefficients(R, params, N_base, N_base + N_add);
 
 	return bodyIdx;
 }
@@ -848,82 +843,69 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 
 	// validate state growth before resizing any arrays
 	auto& B = dst.boundaryParticles;
-	auto& R = dst.rigidBodies;
+	auto& R = dst.rigidParticles;
+	auto& RB = dst.rigidBodies;
 	const uint32_t N_add = static_cast<uint32_t>(bodyLocalSamples.size());
-	if (R.N_ == std::numeric_limits<uint32_t>::max() ||
-		N_add > std::numeric_limits<uint32_t>::max() - B.N_ ||
-		N_add > std::numeric_limits<uint32_t>::max() - R.N_rigidBoundaryParticles_)
+	if (RB.N_ == std::numeric_limits<uint32_t>::max() ||
+		N_add > std::numeric_limits<uint32_t>::max() - R.N_)
 	{
 		throw std::runtime_error("Rigid surface state exceeds uint32 limits.");
 	}
 
-	const uint32_t bodyIdx = R.N_;
-	const uint32_t rigidBoundaryParticleBase = R.N_rigidBoundaryParticles_;
-	const uint32_t N_base = B.N_;
+	const uint32_t bodyIdx = RB.N_;
+	const uint32_t N_base = R.N_;
 
-	// append the rigid body and its local boundary particle range
+	// append the rigid body and its rigid particle range
 	dst.ResizeRigidBodies(bodyIdx + 1);
-	R.resizeRigidBoundaryParticles(rigidBoundaryParticleBase + N_add);
-	dst.ResizeBoundary(N_base + N_add);
+	dst.ResizeRigid(N_base + N_add);
 
-	R.id[bodyIdx] = bodyIdx;
-	R.rigidBoundaryParticleBegin[bodyIdx] = rigidBoundaryParticleBase;
-	R.rigidBoundaryParticleCount[bodyIdx] = N_add;
-	R.xCM[bodyIdx] = centerOfMass.x;
-	R.yCM[bodyIdx] = centerOfMass.y;
-	R.zCM[bodyIdx] = centerOfMass.z;
+	RB.id[bodyIdx] = bodyIdx;
+	RB.rigidParticleBegin[bodyIdx] = N_base;
+	RB.rigidParticleCount[bodyIdx] = N_add;
+	RB.xCM[bodyIdx] = centerOfMass.x;
+	RB.yCM[bodyIdx] = centerOfMass.y;
+	RB.zCM[bodyIdx] = centerOfMass.z;
 
 	// store local-to-world orientation in row-major solver layout
-	R.a00[bodyIdx] = orientation[0][0];
-	R.a01[bodyIdx] = orientation[1][0];
-	R.a02[bodyIdx] = orientation[2][0];
-	R.a10[bodyIdx] = orientation[0][1];
-	R.a11[bodyIdx] = orientation[1][1];
-	R.a12[bodyIdx] = orientation[2][1];
-	R.a20[bodyIdx] = orientation[0][2];
-	R.a21[bodyIdx] = orientation[1][2];
-	R.a22[bodyIdx] = orientation[2][2];
+	RB.a00[bodyIdx] = orientation[0][0];
+	RB.a01[bodyIdx] = orientation[1][0];
+	RB.a02[bodyIdx] = orientation[2][0];
+	RB.a10[bodyIdx] = orientation[0][1];
+	RB.a11[bodyIdx] = orientation[1][1];
+	RB.a12[bodyIdx] = orientation[2][1];
+	RB.a20[bodyIdx] = orientation[0][2];
+	RB.a21[bodyIdx] = orientation[1][2];
+	RB.a22[bodyIdx] = orientation[2][2];
 
-	R.mass[bodyIdx] = mass;
-	R.massInv[bodyIdx] = mass > 0.0f ? 1.0f / mass : 0.0f;
+	RB.mass[bodyIdx] = mass;
+	RB.massInv[bodyIdx] = mass > 0.0f ? 1.0f / mass : 0.0f;
 
 	// store inverse inertia in body frame
-	R.iBodyInv00[bodyIdx] = bodyInertiaInv[0][0];
-	R.iBodyInv01[bodyIdx] = bodyInertiaInv[1][0];
-	R.iBodyInv02[bodyIdx] = bodyInertiaInv[2][0];
-	R.iBodyInv10[bodyIdx] = bodyInertiaInv[0][1];
-	R.iBodyInv11[bodyIdx] = bodyInertiaInv[1][1];
-	R.iBodyInv12[bodyIdx] = bodyInertiaInv[2][1];
-	R.iBodyInv20[bodyIdx] = bodyInertiaInv[0][2];
-	R.iBodyInv21[bodyIdx] = bodyInertiaInv[1][2];
-	R.iBodyInv22[bodyIdx] = bodyInertiaInv[2][2];
+	RB.iBodyInv00[bodyIdx] = bodyInertiaInv[0][0];
+	RB.iBodyInv01[bodyIdx] = bodyInertiaInv[1][0];
+	RB.iBodyInv02[bodyIdx] = bodyInertiaInv[2][0];
+	RB.iBodyInv10[bodyIdx] = bodyInertiaInv[0][1];
+	RB.iBodyInv11[bodyIdx] = bodyInertiaInv[1][1];
+	RB.iBodyInv12[bodyIdx] = bodyInertiaInv[2][1];
+	RB.iBodyInv20[bodyIdx] = bodyInertiaInv[0][2];
+	RB.iBodyInv21[bodyIdx] = bodyInertiaInv[1][2];
+	RB.iBodyInv22[bodyIdx] = bodyInertiaInv[2][2];
 
-	// append boundary ownership, positions, and body-local offsets
+	// append rigid particle ownership and body-local positions
 	for (uint32_t localIdx = 0; localIdx < N_add; localIdx++)
 	{
-		const uint32_t idx = N_base + localIdx;
-		const uint32_t rigidBoundaryParticleIdx = rigidBoundaryParticleBase + localIdx;
-		// transform body-local samples into their initial world positions
+		const uint32_t rigidParticleIdx = N_base + localIdx;
 		const glm::vec3 localPos = bodyLocalSamples[localIdx].pos;
-		const glm::vec3 worldPos = centerOfMass + orientation * localPos;
 
-		B.id[idx] = idx;
-		B.bodyId[idx] = bodyIdx;
-		B.rigidBoundaryParticleIdx[idx] = rigidBoundaryParticleIdx;
-		B.xPos[idx] = worldPos.x;
-		B.yPos[idx] = worldPos.y;
-		B.zPos[idx] = worldPos.z;
-		B.xVel[idx] = 0.0f;
-		B.yVel[idx] = 0.0f;
-		B.zVel[idx] = 0.0f;
-
-		R.xRelPosRBP[rigidBoundaryParticleIdx] = localPos.x;
-		R.yRelPosRBP[rigidBoundaryParticleIdx] = localPos.y;
-		R.zRelPosRBP[rigidBoundaryParticleIdx] = localPos.z;
+		R.id[rigidParticleIdx] = B.N_ + rigidParticleIdx;
+		R.bodyId[rigidParticleIdx] = bodyIdx;
+		R.xRelPos[rigidParticleIdx] = localPos.x;
+		R.yRelPos[rigidParticleIdx] = localPos.y;
+		R.zRelPos[rigidParticleIdx] = localPos.z;
 	}
 
 	// derive per-particle volume and pseudo-mass from the sampled surface
-	ComputeBoundaryCoefficients(B, params, N_base, N_base + N_add);
+	ComputeRigidCoefficients(R, params, N_base, N_base + N_add);
 	return bodyIdx;
 }
 

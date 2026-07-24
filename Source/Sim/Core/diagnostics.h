@@ -35,7 +35,7 @@ namespace Sim
 			const Bench::BenchmarksTracker& benchmarksTracker,
 			const Bench::BenchOpList& benchOps,
 			Bench::TimeUnit unit,
-			uint32_t step,
+			uint64_t step,
 			int64_t maxSteps = -1);
 
 		static void PrintMemorySummary_Standalone(

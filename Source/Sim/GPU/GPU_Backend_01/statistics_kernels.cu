@@ -13,18 +13,15 @@
 namespace GPU01
 {
 	__global__
-	void K_BuildNeighborCountHistograms(
-		const uint16_t* __restrict__ nbrCountFF,
-		const uint16_t* __restrict__ nbrCountFB,
-		const uint32_t N_F,
-		uint32_t* __restrict__ nbrCountHistFF,
-		uint32_t* __restrict__ nbrCountHistFB)
+	void K_BuildNeighborCountHistogram(
+		const uint16_t* __restrict__ nbrCount,
+		const uint32_t N,
+		uint32_t* __restrict__ nbrCountHist)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
+		if (i >= N) { return; }
 
-		atomicAdd(&nbrCountHistFF[nbrCountFF[i]], 1u);
-		atomicAdd(&nbrCountHistFB[nbrCountFB[i]], 1u);
+		atomicAdd(&nbrCountHist[nbrCount[i]], 1u);
 	}
 
 	__device__
@@ -87,23 +84,19 @@ namespace GPU01
 		const uint32_t* __restrict__ hist,
 		const uint32_t* __restrict__ chunkCounts,
 		const uint32_t N_F,
-		uint32_t& p95,
-		uint32_t& p99,
 		uint32_t& minValue,
-		uint32_t& maxValue)
+		uint32_t& maxValue,
+		uint32_t& p99)
 	{
-		const uint64_t i95 = (95ull * static_cast<uint64_t>(N_F - 1u)) / 100ull;
 		const uint64_t i99 = (99ull * static_cast<uint64_t>(N_F - 1u)) / 100ull;
 
 		uint64_t countBefore = 0ull;
 		bool minWritten = false;
-		bool p95Written = false;
 		bool p99Written = false;
 		uint32_t lastNonEmptyChunk = 0u;
 
 		minValue = 0u;
 		maxValue = 0u;
-		p95 = 0u;
 		p99 = 0u;
 
 		for (uint32_t chunkIdx = 0u; chunkIdx != NbrCountHistogramChunkCount; chunkIdx++)
@@ -120,11 +113,6 @@ namespace GPU01
 
 			const uint64_t countAfter =
 				countBefore + static_cast<uint64_t>(count);
-			if (!p95Written && i95 < countAfter)
-			{
-				p95 = FindPercentileInChunk(hist, chunkIdx, i95, countBefore);
-				p95Written = true;
-			}
 			if (!p99Written && i99 < countAfter)
 			{
 				p99 = FindPercentileInChunk(hist, chunkIdx, i99, countBefore);
@@ -141,10 +129,8 @@ namespace GPU01
 
 	__global__
 	void K_BuildNeighborCountHistogramChunks(
-		const uint32_t* __restrict__ nbrCountHistFF,
-		const uint32_t* __restrict__ nbrCountHistFB,
-		uint32_t* __restrict__ nbrCountHistChunkFF,
-		uint32_t* __restrict__ nbrCountHistChunkFB)
+		const uint32_t* __restrict__ nbrCountHist,
+		uint32_t* __restrict__ nbrCountHistChunk)
 	{
 		const uint32_t chunkIdx = blockIdx.x * blockDim.x + threadIdx.x;
 		if (chunkIdx >= NbrCountHistogramChunkCount) { return; }
@@ -152,39 +138,31 @@ namespace GPU01
 		const uint32_t begin = chunkIdx * NbrCountHistogramChunkSize;
 		const uint32_t end = begin + NbrCountHistogramChunkSize;
 
-		uint32_t countFF = 0u;
-		uint32_t countFB = 0u;
+		uint32_t count = 0u;
 		for (uint32_t value = begin; value != end; value++)
 		{
-			countFF += nbrCountHistFF[value];
-			countFB += nbrCountHistFB[value];
+			count += nbrCountHist[value];
 		}
 
-		nbrCountHistChunkFF[chunkIdx] = countFF;
-		nbrCountHistChunkFB[chunkIdx] = countFB;
+		nbrCountHistChunk[chunkIdx] = count;
 	}
 
 	__global__
 	void K_ComputeNeighborCountStats(
-		const uint32_t* __restrict__ nbrCountHistFF,
-		const uint32_t* __restrict__ nbrCountHistFB,
-		const uint32_t* __restrict__ nbrCountHistChunkFF,
-		const uint32_t* __restrict__ nbrCountHistChunkFB,
-		const uint32_t N_F,
+		const uint32_t* __restrict__ nbrCountHist,
+		const uint32_t* __restrict__ nbrCountHistChunk,
+		const uint32_t N,
 		NeighborCountStats* __restrict__ stats)
 	{
 		if (threadIdx.x != 0u || blockIdx.x != 0u) { return; }
 
 		NeighborCountStats out{};
-		if (N_F > 0u)
+		if (N > 0u)
 		{
-			// scan exact histograms to obtain percentile indices
+			// scan exact histograms to obtain the p99 index
 			ComputeStatsFromHistogram(
-				nbrCountHistFF, nbrCountHistChunkFF, N_F,
-				out.p95FF, out.p99FF, out.minFF, out.maxFF);
-			ComputeStatsFromHistogram(
-				nbrCountHistFB, nbrCountHistChunkFB, N_F,
-				out.p95FB, out.p99FB, out.minFB, out.maxFB);
+				nbrCountHist, nbrCountHistChunk, N,
+				out.min, out.max, out.p99);
 		}
 
 		*stats = out;
@@ -414,55 +392,38 @@ namespace GPU01
 namespace GPU01
 {
 	void Launch_ComputeNeighborCountStats(
-		const uint16_t* nbrCountFF,
-		const uint16_t* nbrCountFB,
-		const uint32_t N_F,
+		const uint16_t* nbrCount,
+		const uint32_t N,
 		cudaStream_t stream,
 		// scratch
-		uint32_t* nbrCountHistFF,
-		uint32_t* nbrCountHistFB,
-		uint32_t* nbrCountHistChunkFF,
-		uint32_t* nbrCountHistChunkFB,
+		uint32_t* nbrCountHist,
+		uint32_t* nbrCountHistChunk,
 		// destination
 		NeighborCountStats* stats)
 	{
-		if (N_F == 0u)
+		if (N == 0u)
 		{
 			GPU::MemsetZero(stats, 1, stream);
 			return;
 		}
 
-		GPU::MemsetZero(nbrCountHistFF, NbrCountHistogramBinCount, stream);
-		GPU::MemsetZero(nbrCountHistFB, NbrCountHistogramBinCount, stream);
+		GPU::MemsetZero(nbrCountHist, NbrCountHistogramBinCount, stream);
 
 		const uint32_t N_BLOCKSIZE = 256u;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1u) / N_BLOCKSIZE;
+		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1u) / N_BLOCKSIZE;
 
-		K_BuildNeighborCountHistograms<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			nbrCountFF,
-			nbrCountFB,
-			N_F,
-			nbrCountHistFF,
-			nbrCountHistFB);
-		GPU::CheckLastKernel("K_BuildNeighborCountHistograms()");
+		K_BuildNeighborCountHistogram<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			nbrCount, N, nbrCountHist);
+		GPU::CheckLastKernel("K_BuildNeighborCountHistogram()");
 
-		const uint32_t N_CHUNK_GRIDSIZE =
-			(NbrCountHistogramChunkCount + N_BLOCKSIZE - 1u) / N_BLOCKSIZE;
+		const uint32_t N_CHUNK_GRIDSIZE = (NbrCountHistogramChunkCount + N_BLOCKSIZE - 1u) / N_BLOCKSIZE;
 
 		K_BuildNeighborCountHistogramChunks<<<N_CHUNK_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			nbrCountHistFF,
-			nbrCountHistFB,
-			nbrCountHistChunkFF,
-			nbrCountHistChunkFB);
+			nbrCountHist, nbrCountHistChunk);
 		GPU::CheckLastKernel("K_BuildNeighborCountHistogramChunks()");
 
 		K_ComputeNeighborCountStats<<<1, 1, 0, stream>>>(
-			nbrCountHistFF,
-			nbrCountHistFB,
-			nbrCountHistChunkFF,
-			nbrCountHistChunkFB,
-			N_F,
-			stats);
+			nbrCountHist, nbrCountHistChunk, N, stats);
 		GPU::CheckLastKernel("K_ComputeNeighborCountStats()");
 	}
 
@@ -488,16 +449,11 @@ namespace GPU01
 
 		// reduce on device and copy only the final stats struct to host
 		K_ComputeDensityStatsPartials<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
-			densityF,
-			restDensity,
-			N_F,
-			partialStats);
+			densityF, restDensity, N_F, partialStats);
 		GPU::CheckLastKernel("K_ComputeDensityStatsPartials()");
 
 		K_FinalizeDensityStats<<<1, N_BLOCKSIZE, sharedBytes, stream>>>(
-			partialStats,
-			N_GRIDSIZE,
-			stats);
+			partialStats, N_GRIDSIZE, stats);
 		GPU::CheckLastKernel("K_FinalizeDensityStats()");
 	}
 
@@ -524,17 +480,11 @@ namespace GPU01
 
 		// reduce on device and copy only the final stats struct to host
 		K_ComputeVelocityStatsPartials<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
-			xVelF,
-			yVelF,
-			zVelF,
-			N_F,
-			partialStats);
+			xVelF, yVelF, zVelF, N_F, partialStats);
 		GPU::CheckLastKernel("K_ComputeVelocityStatsPartials()");
 
 		K_FinalizeVelocityStats<<<1, N_BLOCKSIZE, sharedBytes, stream>>>(
-			partialStats,
-			N_GRIDSIZE,
-			stats);
+			partialStats, N_GRIDSIZE, stats);
 		GPU::CheckLastKernel("K_FinalizeVelocityStats()");
 	}
 

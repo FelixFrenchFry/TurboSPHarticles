@@ -85,7 +85,7 @@ namespace Scene
 										   const Sim::SimParams& params,
 										   float rigidDensity);
 
-		// appends body-local surface samples to the existing rigid boundary state
+		// appends body-local surface samples to the existing rigid particle state
 		uint32_t BuildRigidBody_FromSurfaceSamples(
 			const std::vector<SurfaceSample>& bodyLocalSamples,
 			const glm::vec3& centerOfMass,
@@ -121,13 +121,26 @@ namespace Scene
 		// (inspired by "Versatile Rigid-Fluid Coupling for Incompressible SPH" Akinci et al. 2012)
 		static void ComputeBoundaryCoefficients(
 			Sync::BoundaryParticles& boundaryParticles,
-			const Sim::SimParams& params);
-
-		static void ComputeBoundaryCoefficients(
-			Sync::BoundaryParticles& boundaryParticles,
 			const Sim::SimParams& params,
 			uint32_t beginB,
 			uint32_t endB);
+
+		static void ComputeRigidCoefficients(
+			Sync::RigidParticles& rigidParticles,
+			const Sim::SimParams& params,
+			uint32_t beginR,
+			uint32_t endR);
+
+		static void ComputeParticleCoefficients(
+			const std::vector<float>& xPos,
+			const std::vector<float>& yPos,
+			const std::vector<float>& zPos,
+			std::vector<float>& vol,
+			std::vector<float>& psi,
+			uint32_t N,
+			const Sim::SimParams& params,
+			uint32_t begin,
+			uint32_t end);
 
 		static inline float Jitter3D(uint64_t baseSeed, uint64_t key, float amp);
 

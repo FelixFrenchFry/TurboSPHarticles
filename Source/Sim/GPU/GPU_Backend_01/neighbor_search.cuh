@@ -38,8 +38,7 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage>
-			GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 	private: // ------------------------------------------------------------------------------------
 
@@ -70,8 +69,7 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		std::pair<Mem::MemUsage, Mem::MemUsage>
-			GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 	private: // ------------------------------------------------------------------------------------
 
@@ -83,6 +81,7 @@ namespace Sim
 		uint32_t cellQueryReach_ = 1;
 		uint32_t N_NonEmptyCellsF_ = 0;
 		uint32_t N_NonEmptyCellsB_ = 0;
+		uint32_t N_NonEmptyCellsR_ = 0;
 		uint32_t N_NonEmptyCellsAny_ = 0;
 		uint32_t N_queryCellSlots_ = 0;
 		bool particlesMatchCurrentCellOrder_ = false;
@@ -95,6 +94,12 @@ namespace Sim
 
 		DeviceBuffer<uint64_t> d_uniqueCellIdB_;
 		DeviceBuffer<uint32_t> d_cellStartIdxB_;
+
+		DeviceBuffer<uint64_t> d_uniqueCellIdR_;
+		DeviceBuffer<uint32_t> d_cellStartIdxR_;
+		DeviceBuffer<uint32_t> d_sortedParticleIdxR_;
+		DeviceBuffer<uint64_t> d_cellIdR_;
+		DeviceBuffer<uint32_t> d_cellMarkerR_;
 
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
 		DeviceBuffer<uint32_t> d_cellRefFByAny_; // merged-cell to compact fluid-cell index
