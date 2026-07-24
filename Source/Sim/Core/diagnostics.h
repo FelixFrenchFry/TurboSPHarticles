@@ -31,6 +31,8 @@ namespace Sim
 		static void PrintSimSetup(const SimulationMgr& simMgr,
 								  const SimParams& params);
 
+		static void ResetProgress();
+
 		static void PrintLatestPerformanceSummaryAndProgress(
 			const Bench::BenchmarksTracker& benchmarksTracker,
 			const Bench::BenchOpList& benchOps,

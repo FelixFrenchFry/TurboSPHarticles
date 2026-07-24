@@ -285,6 +285,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 	BeginRunLogging(paramsInit);
+	DiagnosticsMgr::ResetProgress();
 
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
@@ -423,6 +424,7 @@ void SimulationMgr::RunSim_Blocking()
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 	BeginRunLogging(paramsInit);
+	DiagnosticsMgr::ResetProgress();
 
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);

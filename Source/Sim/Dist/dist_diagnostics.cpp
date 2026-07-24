@@ -5,9 +5,7 @@
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
-#include <deque>
 #include <string>
-#include <utility>
 #include <vector>
 
 // internal
@@ -34,14 +32,11 @@ namespace
 		"--------------------------------------------------------------------------------";
 
 	using steady_clock = std::chrono::steady_clock;
-	using Sample = std::pair<uint64_t, steady_clock::time_point>;
-
 	struct ProgressState
 	{
 		bool initialized = false;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
-		std::deque<Sample> history{};
 		int lastNumLines = 0;
 	};
 
@@ -1039,7 +1034,6 @@ namespace
 		{
 			state.initialized = true;
 			state.startSteady = now;
-			state.history.clear();
 			state.lastNumLines = 0;
 			state.lastStep = 0;
 		}
@@ -1048,32 +1042,12 @@ namespace
 		if (step <= state.lastStep) { return; }
 		state.lastStep = step;
 
-		state.history.emplace_back(step, now);
-		constexpr uint32_t MAX_HISTORY = 10;
-		if (state.history.size() > MAX_HISTORY) { state.history.pop_front(); }
-
 		double elapsedS =
 			std::chrono::duration<double>(now - state.startSteady).count();
 		elapsedS = std::max(elapsedS, 1e-14);
 
-		double stepsPerSec = 0.0;
-		if (state.history.size() >= 2)
-		{
-			const auto& oldest = state.history.front();
-			const auto& newest = state.history.back();
-			const double dt =
-				std::chrono::duration<double>(newest.second - oldest.second).count();
-			const uint64_t ds = newest.first - oldest.first;
-
-			if (dt > 1e-14 && ds > 0)
-			{
-				stepsPerSec = static_cast<double>(ds) / dt;
-			}
-		}
-		if (stepsPerSec <= 0.0)
-		{
-			stepsPerSec = static_cast<double>(step) / elapsedS;
-		}
+		const double stepsPerSec =
+			static_cast<double>(step) / elapsedS;
 
 		const int64_t maxSteps = reports.front().maxSteps;
 		const bool hasTotal = maxSteps > 0;
@@ -1119,14 +1093,14 @@ namespace
 		if (hasTotal)
 		{
 			PrintLine(lineCount,
-				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s (recently)",
+				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s",
 				elH, elM, elS,
 				step, maxSteps, percent, stepsPerSec);
 		}
 		else
 		{
 			PrintLine(lineCount,
-				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s (recently)",
+				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s",
 				elH, elM, elS, step, stepsPerSec);
 		}
 

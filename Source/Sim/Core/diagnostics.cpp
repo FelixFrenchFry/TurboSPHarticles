@@ -7,7 +7,6 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
-#include <deque>
 #include <spdlog/spdlog.h>
 #include <string>
 #ifdef _WIN32
@@ -27,10 +26,27 @@
 
 namespace
 {
+	using steady_clock = std::chrono::steady_clock;
+
 	constexpr int N_CLI_SEPARATOR_CHARS = 80;
 	constexpr int N_CLI_SIM_PARAM_LABEL_CHARS = 38;
 	constexpr const char* CLI_SEPARATOR =
 		"--------------------------------------------------------------------------------";
+
+	struct ProgressState
+	{
+		bool initialized = false;
+		uint64_t lastStep = 0;
+		steady_clock::time_point startSteady{};
+		int lastNumLines = 0;
+		std::size_t lastProgressLen = 0;
+	};
+
+	ProgressState& GetProgressState()
+	{
+		static ProgressState state{};
+		return state;
+	}
 
 	void PrintCliSeparator()
 	{
@@ -63,6 +79,14 @@ namespace
 
 namespace Sim
 {
+	void DiagnosticsMgr::ResetProgress()
+	{
+		ProgressState& state = GetProgressState();
+		state = ProgressState{};
+		state.initialized = true;
+		state.startSteady = steady_clock::now();
+	}
+
 	void DiagnosticsMgr::PrintBuildConfig()
 	{
 		printf("\n");
@@ -208,66 +232,31 @@ namespace Sim
         uint64_t step,
         int64_t maxSteps)
     {
-        using steady_clock = std::chrono::steady_clock;
-
-        // static state for progress, benchmarks, and in-place redraw
-        static bool initialized = false;
-        static uint64_t lastStep = 0;
-        static steady_clock::time_point startSteady;
-
-        // history for moving-average steps/s over last few samples
-        using Sample = std::pair<uint64_t, steady_clock::time_point>;
-        static std::deque<Sample> history;
-        static int lastNumLines = 0;
+        ProgressState& state = GetProgressState();
 
         const bool hasTotal = (maxSteps > 0);
         const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
         const auto now = steady_clock::now();
 
         // re-initialize at start or when step == 0
-        if (!initialized || step == 0)
+        if (!state.initialized || step == 0)
         {
-            initialized = true;
-            lastStep = 0;
-            startSteady = now;
-            history.clear();
-            lastNumLines = 0;
+            state = ProgressState{};
+            state.initialized = true;
+            state.startSteady = now;
         }
 
-        if (step <= lastStep) { return; }
-        lastStep = step;
-
-        // update history for moving-average steps/s
-        history.emplace_back(step, now);
-        constexpr uint32_t MAX_HISTORY = 10;
-        if (history.size() > MAX_HISTORY) { history.pop_front(); }
+        if (step <= state.lastStep) { return; }
+        state.lastStep = step;
 
         // total elapsed time since start
-        double elapsedS = std::chrono::duration<double>(now - startSteady).count();
+        double elapsedS =
+            std::chrono::duration<double>(now - state.startSteady).count();
         elapsedS = std::max(elapsedS, 1e-14);
 
-        // compute outputs on every call (no throttling)
-        double stepsPerSec = 0.0;
-        if (history.size() >= 2)
-        {
-            const auto& oldest = history.front();
-            const auto& newest = history.back();
-            double dt = std::chrono::duration<double>(newest.second - oldest.second).count();
-            uint64_t ds = newest.first - oldest.first;
+        const double stepsPerSec = static_cast<double>(step) / elapsedS;
 
-            if (dt > 1e-14 && ds > 0)
-            {
-                stepsPerSec = static_cast<double>(ds) / dt;
-            }
-        }
-
-        // global average if window is too small / degenerate
-        if (stepsPerSec <= 0.0)
-        {
-            stepsPerSec = static_cast<double>(step) / elapsedS;
-        }
-
-        // remaining time based on moving-average speed (only if total steps known)
+        // remaining time based on total simulation speed (only if total steps known)
         double remainingS = 0.0;
         if (hasTotal && stepsPerSec > 1e-14 && step < maxStepsU)
         {
@@ -300,9 +289,9 @@ namespace Sim
         }
 
         // move cursor up to overwrite previous block
-        if (lastNumLines > 0)
+        if (state.lastNumLines > 0)
         {
-            std::printf("\x1b[%dA\r", lastNumLines);
+            std::printf("\x1b[%dA\r", state.lastNumLines);
         }
 
         int lineCount = 0;
@@ -444,14 +433,13 @@ namespace Sim
         lineCount++;
 
         // progress line, using printf and padding to overwrite old text cleanly
-        static std::size_t lastProgressLen = 0;
         char buf[512];
 
         if (hasTotal)
         {
             snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s (recently)",
+                "%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s",
                 elH, elM, elS,
                 step,
                 maxSteps,
@@ -463,7 +451,7 @@ namespace Sim
         {
             snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s (recently)",
+                "%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s",
                 elH, elM, elS,
                 step,
                 stepsPerSec
@@ -471,11 +459,11 @@ namespace Sim
         }
 
         std::string line(buf);
-        if (line.size() < lastProgressLen)
+        if (line.size() < state.lastProgressLen)
         {
-            line.append(lastProgressLen - line.size(), ' ');
+            line.append(state.lastProgressLen - line.size(), ' ');
         }
-        lastProgressLen = line.size();
+        state.lastProgressLen = line.size();
 
         printf("%s\n", line.c_str());
         lineCount++;
@@ -483,7 +471,7 @@ namespace Sim
         fflush(stdout);
 
         // remember how many lines were printed
-        lastNumLines = lineCount;
+        state.lastNumLines = lineCount;
     }
 
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(
