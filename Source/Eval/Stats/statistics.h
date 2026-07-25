@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <deque>
+#include <vector>
 
 // internal
 #include "Source/Sim/Core/parameters_sim.h"
@@ -16,6 +17,41 @@
 
 namespace Stats
 {
+	// rank-local partial stat data for a single metric
+	struct DistributionPartial
+	{
+		uint64_t N = 0;
+		double sum = 0.0;
+		float min = 0.0f;
+		float max = 0.0f;
+		std::vector<uint32_t> histogram;
+
+		void Clear();
+	};
+
+	// rank-local partial stat data used to gather distributed statistics
+	struct StatisticsPartial
+	{
+		uint64_t N_F = 0;
+		uint64_t N_B = 0;
+		uint64_t N_R = 0;
+
+		DistributionPartial nbrCountFF;
+		DistributionPartial nbrCountFB;
+		DistributionPartial nbrCountFR;
+		DistributionPartial nbrCountRF;
+		DistributionPartial nbrCountRB;
+		DistributionPartial nbrCountRR;
+		DistributionPartial velMag;
+
+		uint32_t solverIterCount = 0;
+		double densRelErrorRawSum = 0.0;
+		double densRelErrorPosSum = 0.0;
+		double densRelErrorAbsSum = 0.0;
+
+		void Clear();
+	};
+
 	class StatisticsTracker
 	{
 	public: // ---------------------------------------------------------------------------------------
@@ -29,6 +65,12 @@ namespace Stats
 		void EndStep(uint64_t simStep, double simTime);
 
 		void PackStatSnapshot(Sync::StatSnapshot& snap) const;
+
+		// finalizes the regular stat record from partial stat data
+		static void FinalizeStatisticsRecord(
+			StatRecordStep& record,
+			const StatisticsPartial& partial,
+			const Sim::SimParams& simParams);
 
 		// per-metric queries
 		float GetStat_Latest(StatMetric metric) const;

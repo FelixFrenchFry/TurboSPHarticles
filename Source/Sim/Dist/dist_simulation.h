@@ -24,6 +24,7 @@
 #include "halo_exchange.h"
 #include "mpi_context.h"
 #include "particle_migration.h"
+#include "rigid_body_sync.h"
 
 
 
@@ -61,7 +62,7 @@ namespace Dist
 		DistSimSetupReport BuildDistSimSetupReport() const;
 
 		// main simulation loop
-		void RunSim_Blocking();
+		bool RunSim_Blocking();
 
 		void RequestStop();
 
@@ -87,7 +88,10 @@ namespace Dist
 		bool BuildRankLocalSimState();
 
 		// validates rank-local [ owned ][ halo ] state
-		bool ValidateRankLocalSimState() const;
+		bool ValidateRankLocalSimState(bool includeRigidState) const;
+
+		// validates global ownership counts after distributed state changes
+		bool ValidateGlobalOwnedParticleCounts(const char* phaseName) const;
 
 		// transfers rank-local state into the selected backend
 		bool InitRankLocalBackend();
@@ -101,6 +105,9 @@ namespace Dist
 		// gathers and serializes an export snapshot on the root rank
 		bool WriteExportSnapshot(const Sim::SimParams& params) const;
 
+		// rebuilds the regular CPU01 fluid surface selection from authoritative rank data
+		bool BuildExportFluidParticleLocalIdxs(std::vector<int>& localIdxs) const;
+
 		// builds rank-local startup diagnostics gathered by the root rank
 		DistStartupRankReport BuildStartupRankReport() const;
 
@@ -113,6 +120,7 @@ namespace Dist
 
 		// archives step metrics and reports root-level distributed diagnostics
 		void FillDistributedMemoryRecord(Mem::MemRecordStep& record) const;
+		bool FillDistributedStatisticsRecord(const Sim::SimParams& params) const;
 		void FinalizeBenchMemMeasurements(const Sim::SimParams& params) const;
 		DistRankStepReport BuildRankStepReport(const Sim::SimParams& params, bool exportedStep) const;
 		DistRankBenchReport BuildRankBenchReport() const;
@@ -128,8 +136,11 @@ namespace Dist
 		// temporary guard until boundary particle migration exists
 		bool ValidateOwnedBoundaryParticlesStillOnRank() const;
 
-		// moves the current rank-local SoA state into backend-specific data structures
-		bool PullRankLocalStateIntoBackend();
+		// prepares rank-authoritative particle work and backend state for the next step
+		bool PrepareRankLocalBackendStep();
+
+		// reduces rigid body loads, integrates on root, pushes state, and broadcasts body state
+		bool FinishRankLocalBackendStep(const Sim::SimParams& params);
 
 		// validates particle identity metadata and payload against current backend state
 		bool ValidateRankLocalBackendParticleOrder(const char* phaseName) const;
@@ -166,6 +177,8 @@ namespace Dist
 		std::unique_ptr<IDomainDecomp> domainDecomp_{ nullptr };
 		Sync::UniversalSimState globalSimState_{};
 		Sync::UniversalSimState localSimState_{};
+		uint64_t expectedGlobalFluidParticleCount_ = 0;
+		uint64_t expectedGlobalBoundaryParticleCount_ = 0;
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
 		ParticleClassificationWorkBuffers fluidParticleClassificationWorkBuffers_{};
@@ -173,6 +186,10 @@ namespace Dist
 		MigrationWorkBuffers particleMigrationWorkBuffers_{};
 		HaloExchangeWorkBuffers haloExchangeWorkBuffers_{};
 		HaloRebuildScratch haloRebuildScratch_{};
+		std::vector<int> activeRigidParticleLocalIdxs_{};
+		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
+		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
+		RigidBodySyncBuffers rigidBodySyncBuffers_{};
 		ParticleMigrationStats lastParticleMigrationStats_{};
 		DistSyncTimingReport distSyncTimingReport_{};
 		HaloExchangeStats lastHaloExchangeStats_{};
@@ -180,8 +197,13 @@ namespace Dist
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };
 		std::unique_ptr<Mem::MemoryTracker> memoryTracker_{ nullptr };
+		std::unique_ptr<Stats::StatisticsTracker> statisticsTracker_{ nullptr };
 		Bench::BenchOpList curBenchOps_;
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
+		mutable Stats::StatisticsPartial statisticsPartialScratch_{};
+		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
+		mutable std::vector<uint8_t> globalNearSurfaceFlagsScratch_{};
+		mutable std::vector<int> exportFluidParticleLocalIdxsScratch_{};
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_{};

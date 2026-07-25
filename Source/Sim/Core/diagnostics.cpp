@@ -250,8 +250,7 @@ namespace Sim
         state.lastStep = step;
 
         // total elapsed time since start
-        double elapsedS =
-            std::chrono::duration<double>(now - state.startSteady).count();
+        double elapsedS = std::chrono::duration<double>(now - state.startSteady).count();
         elapsedS = std::max(elapsedS, 1e-14);
 
         const double stepsPerSec = static_cast<double>(step) / elapsedS;

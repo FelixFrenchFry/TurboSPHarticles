@@ -35,11 +35,20 @@ namespace Dist
 		// collectives for MPI communication
 		void Barrier() const;
 		void BroadcastInt(int& value, int root = 0) const;
+		void BroadcastUint64(uint64_t& value, int root = 0) const;
+		void BroadcastFloats(std::vector<float>& values, int root = 0) const;
 		void BroadcastString(std::string& value, int root = 0) const;
+
 		bool AllTrue(bool localValue) const;
-		void AllToAllInts(
-			const std::vector<int>& sendValues,
-			std::vector<int>& recvValues) const;
+		uint64_t AllReduceSumUint64(uint64_t value) const;
+		uint32_t AllReduceMaxUint32(uint32_t value) const;
+		double AllReduceSumDouble(double value) const;
+		float AllReduceMinFloat(float value) const;
+		float AllReduceMaxFloat(float value) const;
+		void AllReduceSumUint32s(std::vector<uint32_t>& values) const;
+		void AllReduceSumFloats(std::vector<float>& values) const;
+		void AllReduceMaxUint8s(std::vector<uint8_t>& values) const;
+		void AllToAllInts(const std::vector<int>& sendValues, std::vector<int>& recvValues) const;
 
 		// point-to-point helpers for neighbor communication
 		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;

@@ -1059,6 +1059,10 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	localState.step = globalState.step;
 	localState.time = globalState.time;
 
+	// rigid particles and bodies are replicated on every rank
+	localState.rigidParticles = globalState.rigidParticles;
+	localState.rigidBodies = globalState.rigidBodies;
+
 	BuildLocalFluidParticlesFromGlobalState(
 		fluidParticleState, localState, globalState,
 		domainDecomp, rank, kernelRadius);

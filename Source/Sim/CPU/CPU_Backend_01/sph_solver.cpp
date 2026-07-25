@@ -335,7 +335,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Particle_Integration);
 
-	if (N_RB_ > 0)
+	if (N_RB_ > 0 && integrateRigidBodies_)
 	{
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
 		IntegrateRigidBodies(timeStep);

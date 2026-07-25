@@ -54,6 +54,12 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& simParams) const override;
 
+		// computes & fills in rank-local partial stat data for distributed execution
+		bool FillStatisticsPartial(Stats::StatisticsPartial& partial, const SimParams& simParams) const override;
+
+		// reports whether CPU01 supports distributed execution
+		bool SupportsDistributedSimulation() const override { return true; }
+
 		// executes only the neighbor search (construction and query of the data NS structure)
 		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;
 
@@ -61,8 +67,25 @@ namespace Sim
 			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
 
-		bool SetActiveFluidParticleLocalIdxs(const std::vector<int>& localIdxs) override;
-		void ClearActiveFluidParticleLocalIdxs() override;
+		// configures rank-authoritative particle work for one distributed step
+		bool ConfigureDistributedStep(
+			const std::vector<int>& activeFluidParticleLocalIdxs,
+			const std::vector<int>& activeRigidParticleLocalIdxs) override;
+
+		// classifies local fluid particles against the export near-surface threshold
+		bool FillFluidParticleNearSurfaceFlags(
+			std::vector<uint8_t>& nearSurfaceFlags) const override;
+
+		// selects local export surface particles using reconciled near-surface flags
+		bool BuildExportFluidParticleLocalIdxs(
+			const std::vector<uint8_t>& nearSurfaceFlags,
+			std::vector<int>& localIdxs) const override;
+
+		// reads body-level force and torque accumulated during the latest backend step
+		bool GetRigidBodyForceTorque(RigidBodyForceTorque& dst) const override;
+
+		// applies synchronized body force and torque through the rigid-body integrator
+		bool ApplyRigidBodyForceTorque(const RigidBodyForceTorque& forceTorque, float timeStep) override;
 
 		// advances the simulation by N_steps
 		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
@@ -73,8 +96,7 @@ namespace Sim
 		bool TerminationConditionSatisfied(const SimParams& params) const;
 
 		// provides the benchmark operation display order
-		void GetBenchOps(Bench::BenchOpList& out) const override
-			{ out = benchOps_; }
+		void GetBenchOps(Bench::BenchOpList& out) const override { out = benchOps_; }
 
 		// info
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
@@ -83,7 +105,16 @@ namespace Sim
 
 	private: // --------------------------------------------------------------------------------------
 
+		// computes rank-local statistics for all particles or active distributed particles,
+		// so records can be finalized locally OR aggregated across ranks before finalization
+		void ComputeStatisticsPartial(
+			Stats::StatisticsPartial& partial,
+			const SimParams& simParams,
+			bool useActiveParticleLocalIdxs) const;
+
 		void ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
+
+		void ClassifyExportSurfaceParticles(const std::vector<uint8_t>& nearSurfaceFlags) const;
 
 		void UpdateRigidParticles();
 		void ClearRigidForcesAndAddGravity(const SimParams& params);
@@ -169,8 +200,13 @@ namespace Sim
 		std::vector<float> iBodyInv20RB_, iBodyInv21RB_, iBodyInv22RB_;
 
 		// optional distributed integration filtering
-		bool useActiveFluidParticleLocalIdxs_ = false;
 		std::vector<uint32_t> activeFluidParticleLocalIdxs_;
+		std::vector<uint32_t> activeRigidParticleLocalIdxs_;
+		std::vector<uint8_t> activeRigidParticleFlags_;
+		bool useActiveFluidParticleLocalIdxs_ = false;
+		bool useActiveRigidParticleLocalIdxs_ = false;
+		bool integrateRigidBodies_ = true;
+		bool applyRigidBodyExternalForces_ = true;
 
 		// misc data
 		float avgRelDensityErrorF_raw_;
@@ -184,6 +220,8 @@ namespace Sim
 		mutable std::vector<uint32_t> workBufferIdF_;
 		mutable std::vector<uint32_t> workBufferIdB_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;
+		mutable std::vector<uint8_t> expNearSurfaceFlagsScratch_;
+		mutable Stats::StatisticsPartial statisticsPartialScratch_;
 
 		// operation benchmarking order
 		Bench::BenchOpList benchOps_ = Bench::MakeDefaultSimBenchOps();

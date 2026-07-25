@@ -37,9 +37,11 @@ namespace Dist
 
 		uint32_t globalFluidParticleCount = 0;
 		uint32_t globalBoundaryParticleCount = 0;
+		uint32_t globalRigidParticleCount = 0;
+		uint32_t globalRigidBodyCount = 0;
 	};
 
-	// fixed-size rank-local report gathered by root for startup tables
+	// rank-local report gathered by root for startup tables
 	struct DistStartupRankReport
 	{
 		int rank = 0;
@@ -47,11 +49,11 @@ namespace Dist
 		char neighborRanks[DIST_STARTUP_REPORT_TEXT_CHARS] = {};
 
 		uint32_t ownedFluidParticleCount = 0;
-
 		uint32_t ownedBoundaryParticleCount = 0;
+		uint32_t replicatedRigidParticleCount = 0;
 	};
 
-	// fixed-size rank-local report gathered by root for distributed progress output
+	// rank-local report gathered by root for distributed progress output
 	struct DistRankStepReport
 	{
 		int rank = 0;
@@ -97,7 +99,7 @@ namespace Dist
 		uint8_t exportedStep = 0;
 	};
 
-	// fixed-size rank-local benchmark report gathered by root for distributed timing rows
+	// rank-local benchmark report gathered by root for distributed timing rows
 	struct DistRankBenchReport
 	{
 		int rank = 0;

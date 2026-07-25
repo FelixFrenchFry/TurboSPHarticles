@@ -1046,8 +1046,7 @@ namespace
 			std::chrono::duration<double>(now - state.startSteady).count();
 		elapsedS = std::max(elapsedS, 1e-14);
 
-		const double stepsPerSec =
-			static_cast<double>(step) / elapsedS;
+		const double stepsPerSec = static_cast<double>(step) / elapsedS;
 
 		const int64_t maxSteps = reports.front().maxSteps;
 		const bool hasTotal = maxSteps > 0;
@@ -1176,13 +1175,17 @@ namespace Dist
 		std::printf("%-30s = %s\n", "decomp method", setup.domainDecompMethod);
 		std::printf("%-30s = %s\n", "mpi thread support",
 			MpiContext::ThreadSupportName(setup.mpiThreadSupport));
-		std::printf("%-30s = [ %u / %u ]\n", "global particles [F / B]",
+		std::printf("%-30s = [ %u / %u / %u ]\n", "global particles [F / B / R]",
 			setup.globalFluidParticleCount,
-			setup.globalBoundaryParticleCount);
+			setup.globalBoundaryParticleCount,
+			setup.globalRigidParticleCount);
+		std::printf("%-30s = %u\n", "global rigid bodies",
+			setup.globalRigidBodyCount);
 		std::printf("\n");
 
-		std::printf("%-2s | %-35s | %17s | %17s\n",
-			"r", "neighbor ranks", "initially owned F", "initially owned B");
+		std::printf("%-2s | %-21s | %15s | %15s | %15s\n",
+			"r", "neighbor ranks",
+			"initial owned F", "initial owned B", "initial owned R");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
 
 		for (const DistStartupRankReport& report : reports)
@@ -1190,11 +1193,12 @@ namespace Dist
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
-			std::printf("%-2s | %-35s | %17u | %17u\n",
+			std::printf("%-2s | %-21s | %15u | %15u | %15u\n",
 				rankLabel,
 				report.neighborRanks,
 				report.ownedFluidParticleCount,
-				report.ownedBoundaryParticleCount);
+				report.ownedBoundaryParticleCount,
+				report.replicatedRigidParticleCount);
 		}
 
 		std::printf("\n");

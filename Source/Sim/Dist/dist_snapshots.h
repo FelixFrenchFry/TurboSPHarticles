@@ -60,7 +60,8 @@ namespace Dist
 		DistExportSnapshotBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
-		const DistParticleState& boundaryParticleState);
+		const DistParticleState& boundaryParticleState,
+		const std::vector<int>& exportFluidParticleLocalIdxs);
 
 	bool RebuildExportSnapshotFromGatheredParticles(
 		Sync::ExportSnapshot& exportSnap,
@@ -68,11 +69,16 @@ namespace Dist
 		uint64_t simStep,
 		double simTime);
 
+	void PackReplicatedRigidExportSnapshot(
+		Sync::ExportSnapshot& exportSnap,
+		const Sync::UniversalSimState& localState);
+
 	bool GatherExportSnapshotToRoot(
 		Sync::ExportSnapshot& exportSnap,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
+		const std::vector<int>& exportFluidParticleLocalIdxs,
 		const MpiContext& mpiContext,
 		uint64_t simStep,
 		double simTime,

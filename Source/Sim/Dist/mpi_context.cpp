@@ -18,14 +18,45 @@ namespace
 	constexpr uint64_t MPI_CONTEXT_BYTE_CHUNK_SIZE =
 		256ull * 1024ull * 1024ull; // ~ 256 MiB
 
-	int CheckedChunkByteCount(const uint64_t byteCount)
+	int CheckedMpiCount(const uint64_t valueCount)
 	{
-		if (byteCount > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+		if (valueCount > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 		{
-			throw std::runtime_error("MPI byte chunk exceeds int count range.");
+			throw std::runtime_error("MPI chunk exceeds int count range.");
 		}
 
-		return static_cast<int>(byteCount);
+		return static_cast<int>(valueCount);
+	}
+
+	void CheckMpiResultImpl(const int result, const char* opName)
+	{
+		if (result == MPI_SUCCESS) { return; }
+
+		throw std::runtime_error(std::string(opName) + " failed with MPI error code " +
+			std::to_string(result) + ".");
+	}
+
+	template <typename T, typename MpiOp>
+	void ForEachMpiVectorChunk(
+		std::vector<T>& values,
+		const char* opName,
+		MpiOp&& mpiOp)
+	{
+		constexpr uint64_t chunkCapacity = MPI_CONTEXT_BYTE_CHUNK_SIZE / sizeof(T);
+
+		uint64_t valueOffset = 0;
+		while (valueOffset < values.size())
+		{
+			const uint64_t chunkSize = std::min(
+				chunkCapacity,
+				static_cast<uint64_t>(values.size()) - valueOffset);
+			CheckMpiResultImpl(
+				mpiOp(
+					values.data() + valueOffset,
+					CheckedMpiCount(chunkSize)),
+				opName);
+			valueOffset += chunkSize;
+		}
 	}
 }
 
@@ -81,6 +112,29 @@ void MpiContext::BroadcastInt(int& value, const int root) const
 	CheckMpiResult(MPI_Bcast(&value, 1, MPI_INT, root, MPI_COMM_WORLD), "MPI_Bcast(int)");
 }
 
+void MpiContext::BroadcastUint64(uint64_t& value, const int root) const
+{
+	CheckMpiResult(MPI_Bcast(&value, 1, MPI_UINT64_T, root, MPI_COMM_WORLD), "MPI_Bcast(uint64)");
+}
+
+void MpiContext::BroadcastFloats(
+	std::vector<float>& values,
+	const int root) const
+{
+	ForEachMpiVectorChunk(
+		values,
+		"MPI_Bcast(floats)",
+		[root](float* chunkData, const int chunkSize)
+		{
+			return MPI_Bcast(
+				chunkData,
+				chunkSize,
+				MPI_FLOAT,
+				root,
+				MPI_COMM_WORLD);
+		});
+}
+
 void MpiContext::BroadcastString(std::string& value, const int root) const
 {
 	// broadcast length first, so non-root ranks can resize their receive buffer
@@ -111,6 +165,132 @@ bool MpiContext::AllTrue(const bool localValue) const
 	CheckMpiResult(MPI_Allreduce(&local, &global, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD),
 		"MPI_Allreduce(bool)");
 	return global != 0;
+}
+
+uint64_t MpiContext::AllReduceSumUint64(const uint64_t value) const
+{
+	uint64_t result = 0;
+	CheckMpiResult(
+		MPI_Allreduce(
+			&value,
+			&result,
+			1,
+			MPI_UINT64_T,
+			MPI_SUM,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(uint64 sum)");
+	return result;
+}
+
+uint32_t MpiContext::AllReduceMaxUint32(const uint32_t value) const
+{
+	uint32_t result = 0;
+	CheckMpiResult(
+		MPI_Allreduce(
+			&value,
+			&result,
+			1,
+			MPI_UINT32_T,
+			MPI_MAX,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(uint32 max)");
+	return result;
+}
+
+double MpiContext::AllReduceSumDouble(const double value) const
+{
+	double result = 0.0;
+	CheckMpiResult(
+		MPI_Allreduce(
+			&value,
+			&result,
+			1,
+			MPI_DOUBLE,
+			MPI_SUM,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(double sum)");
+	return result;
+}
+
+float MpiContext::AllReduceMinFloat(const float value) const
+{
+	float result = 0.0f;
+	CheckMpiResult(
+		MPI_Allreduce(
+			&value,
+			&result,
+			1,
+			MPI_FLOAT,
+			MPI_MIN,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(float min)");
+	return result;
+}
+
+float MpiContext::AllReduceMaxFloat(const float value) const
+{
+	float result = 0.0f;
+	CheckMpiResult(
+		MPI_Allreduce(
+			&value,
+			&result,
+			1,
+			MPI_FLOAT,
+			MPI_MAX,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(float max)");
+	return result;
+}
+
+void MpiContext::AllReduceSumUint32s(std::vector<uint32_t>& values) const
+{
+	ForEachMpiVectorChunk(
+		values,
+		"MPI_Allreduce(uint32s)",
+		[](uint32_t* chunkData, const int chunkSize)
+		{
+			return MPI_Allreduce(
+				MPI_IN_PLACE,
+				chunkData,
+				chunkSize,
+				MPI_UINT32_T,
+				MPI_SUM,
+				MPI_COMM_WORLD);
+		});
+}
+
+void MpiContext::AllReduceSumFloats(std::vector<float>& values) const
+{
+	ForEachMpiVectorChunk(
+		values,
+		"MPI_Allreduce(floats)",
+		[](float* chunkData, const int chunkSize)
+		{
+			return MPI_Allreduce(
+				MPI_IN_PLACE,
+				chunkData,
+				chunkSize,
+				MPI_FLOAT,
+				MPI_SUM,
+				MPI_COMM_WORLD);
+		});
+}
+
+void MpiContext::AllReduceMaxUint8s(std::vector<uint8_t>& values) const
+{
+	ForEachMpiVectorChunk(
+		values,
+		"MPI_Allreduce(uint8 max)",
+		[](uint8_t* chunkData, const int chunkSize)
+		{
+			return MPI_Allreduce(
+				MPI_IN_PLACE,
+				chunkData,
+				chunkSize,
+				MPI_UINT8_T,
+				MPI_MAX,
+				MPI_COMM_WORLD);
+		});
 }
 
 void MpiContext::AllToAllInts(
@@ -252,7 +432,7 @@ void MpiContext::IRecvBytesChunked(
 		requests.emplace_back(MPI_REQUEST_NULL);
 		IRecvBytes(
 			recvBytes + byteOffset,
-			CheckedChunkByteCount(chunkByteCount),
+			CheckedMpiCount(chunkByteCount),
 			peerRank,
 			tag,
 			requests.back());
@@ -286,7 +466,7 @@ void MpiContext::ISendBytesChunked(
 		requests.emplace_back(MPI_REQUEST_NULL);
 		ISendBytes(
 			sendBytes + byteOffset,
-			CheckedChunkByteCount(chunkByteCount),
+			CheckedMpiCount(chunkByteCount),
 			peerRank,
 			tag,
 			requests.back());
@@ -330,8 +510,5 @@ const char* MpiContext::ThreadSupportName(const int threadSupport)
 
 void MpiContext::CheckMpiResult(const int result, const char* opName)
 {
-	if (result == MPI_SUCCESS) { return; }
-
-	throw std::runtime_error(std::string(opName) + " failed with MPI error code " +
-		std::to_string(result) + ".");
+	CheckMpiResultImpl(result, opName);
 }

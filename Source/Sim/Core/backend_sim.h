@@ -39,6 +39,28 @@ namespace Sim
 	class I_NeighborSearch;
 	struct NeighborSpan;
 
+	// body-level force and torque accumulated during one backend step used for distributed execution
+	// (accumulated by each rank, summed up and integrated at root, then broadcast back to each rank)
+	struct RigidBodyForceTorque
+	{
+		std::vector<float> xForce;
+		std::vector<float> yForce;
+		std::vector<float> zForce;
+		std::vector<float> xTorque;
+		std::vector<float> yTorque;
+		std::vector<float> zTorque;
+
+		void Resize(const uint32_t N)
+		{
+			xForce.resize(N);
+			yForce.resize(N);
+			zForce.resize(N);
+			xTorque.resize(N);
+			yTorque.resize(N);
+			zTorque.resize(N);
+		}
+	};
+
 	// -----------------------------------------------------------------------------------------------
 	// --- [ simulation backend interface ] ----------------------------------------------------------
 	// -----------------------------------------------------------------------------------------------
@@ -88,6 +110,12 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		virtual void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& params) const = 0;
 
+		// computes & fills in the partial stat data for the current sim step
+		virtual bool FillStatisticsPartial(Stats::StatisticsPartial&, const SimParams&) const { return false; }
+
+		// reports whether the backend implements all components required for distributed execution
+		virtual bool SupportsDistributedSimulation() const { return false; }
+
 		// executes only the neighbor search (construction and query of the data NS structure)
 		virtual void ExecuteNeighborSearch(const SimParams& params, bool bench = false) = 0;
 
@@ -101,15 +129,27 @@ namespace Sim
 			return false;
 		}
 
-		// sets which local fluid particles are authoritative for integration
-		virtual bool SetActiveFluidParticleLocalIdxs(const std::vector<int>& localIdxs)
+		// configures rank-authoritative particle work for distributed execution
+		virtual bool ConfigureDistributedStep(const std::vector<int>&, const std::vector<int>&) { return false; }
+
+		// classifies fluid particles against the regular export near-surface threshold
+		virtual bool FillFluidParticleNearSurfaceFlags(std::vector<uint8_t>&) const { return false; }
+
+		// selects regular export surface particles using authoritative near-surface flags
+		virtual bool BuildExportFluidParticleLocalIdxs(const std::vector<uint8_t>&, std::vector<int>&) const { return false; }
+
+		// reads body-level force and torque accumulated during the latest backend step
+		virtual bool GetRigidBodyForceTorque(RigidBodyForceTorque&) const { return false; }
+
+		// applies externally synchronized body force and torque through integrator of the backend
+		virtual bool ApplyRigidBodyForceTorque(
+			const RigidBodyForceTorque& forceTorque,
+			float timeStep)
 		{
-			(void)localIdxs;
+			(void)forceTorque;
+			(void)timeStep;
 			return false;
 		}
-
-		// clears distributed integration filtering
-		virtual void ClearActiveFluidParticleLocalIdxs() {}
 
 		// advances the simulation by N_steps
 		virtual void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps = 1) = 0;

@@ -1,10 +1,10 @@
 {
-  "backendVersion": "GPU01",
+  "backendVersion": "CPU01",
   "scenarioType": "SampledMesh",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
 
-  "maxSteps": -1,
+  "maxSteps": 3000,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -47,6 +47,6 @@
   },
 
   "exportEnabled": false,
-  "exportDir": "A",
+  "exportDir": "Test",
   "exportInterval": 10
 }

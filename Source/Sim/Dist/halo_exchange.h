@@ -224,7 +224,7 @@ namespace Dist
 		std::string* failMsg = nullptr);
 
 	// rebuilds local fluid/boundary SoA arrays as [ owned ][ received halos ] from
-	// per-neighbor receive buffers and refreshes matching particle metadata
+	// per-neighbor receive buffers while leaving replicated rigid state unchanged
 	bool RebuildLocalStateWithReceivedHalos(
 		const std::vector<HaloExchangeWorkBuffers::RankBuffers>& exchanges,
 		Sync::UniversalSimState& localState,

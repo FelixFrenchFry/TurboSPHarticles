@@ -11,6 +11,65 @@
 
 using namespace Stats;
 
+namespace
+{
+	float ComputeAverage(const double sum, const uint64_t N)
+	{
+		if (N == 0) { return 0.0f; }
+
+		return static_cast<float>(sum / static_cast<double>(N));
+	}
+
+	float ComputeP99(const DistributionPartial& partial)
+	{
+		if (partial.N == 0) { return 0.0f; }
+
+		const uint64_t i99 = (99ull * (partial.N - 1)) / 100ull;
+		uint64_t cumulativeCount = 0;
+		for (uint64_t value = 0; value < partial.histogram.size(); value++)
+		{
+			cumulativeCount += partial.histogram[value];
+			if (cumulativeCount > i99)
+			{
+				return static_cast<float>(value);
+			}
+		}
+
+		return 0.0f;
+	}
+
+} // namespace anonymous
+
+void DistributionPartial::Clear()
+{
+	N = 0;
+	sum = 0.0;
+	min = 0.0f;
+	max = 0.0f;
+	histogram.clear();
+}
+
+void StatisticsPartial::Clear()
+{
+	N_F = 0;
+	N_B = 0;
+	N_R = 0;
+
+	nbrCountFF.Clear();
+	nbrCountFB.Clear();
+	nbrCountFR.Clear();
+	nbrCountRF.Clear();
+	nbrCountRB.Clear();
+	nbrCountRR.Clear();
+	velMag.Clear();
+
+	solverIterCount = 0;
+
+	densRelErrorRawSum = 0.0;
+	densRelErrorPosSum = 0.0;
+	densRelErrorAbsSum = 0.0;
+}
+
 StatisticsTracker::StatisticsTracker(const Sim::SimParams& simParams)
 	: maxRecCount_(simParams.maxStatRecs)
 	, curRecCount_(0u)
@@ -78,6 +137,93 @@ void StatisticsTracker::PackStatSnapshot(Sync::StatSnapshot& snap) const
 		snap.avg[i] = GetStat_Avg(static_cast<StatMetric>(i));
 		snap.min[i] = GetStat_Min(static_cast<StatMetric>(i));
 		snap.max[i] = GetStat_Max(static_cast<StatMetric>(i));
+	}
+}
+
+void StatisticsTracker::FinalizeStatisticsRecord(
+	StatRecordStep& record,
+	const StatisticsPartial& partial,
+	const Sim::SimParams& simParams)
+{
+	record = {};
+
+	Set(record, StatMetric::NumF, static_cast<float>(partial.N_F));
+	Set(record, StatMetric::NumB, static_cast<float>(partial.N_B));
+	Set(record, StatMetric::NumR, static_cast<float>(partial.N_R));
+
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
+	{
+		const auto setDistributionStats = [&](
+			const DistributionPartial& distribution,
+			const StatMetric avgMetric,
+			const StatMetric minMetric,
+			const StatMetric maxMetric,
+			const StatMetric p99Metric)
+			{
+				Set(record, avgMetric, ComputeAverage(distribution.sum, distribution.N));
+				Set(record, minMetric, distribution.min);
+				Set(record, maxMetric, distribution.max);
+				Set(record, p99Metric, ComputeP99(distribution));
+			};
+
+		setDistributionStats(
+			partial.nbrCountFF,
+			StatMetric::NumNbrFF_Avg,
+			StatMetric::NumNbrFF_Min,
+			StatMetric::NumNbrFF_Max,
+			StatMetric::NumNbrFF_P99);
+		setDistributionStats(
+			partial.nbrCountFB,
+			StatMetric::NumNbrFB_Avg,
+			StatMetric::NumNbrFB_Min,
+			StatMetric::NumNbrFB_Max,
+			StatMetric::NumNbrFB_P99);
+		setDistributionStats(
+			partial.nbrCountFR,
+			StatMetric::NumNbrFR_Avg,
+			StatMetric::NumNbrFR_Min,
+			StatMetric::NumNbrFR_Max,
+			StatMetric::NumNbrFR_P99);
+		setDistributionStats(
+			partial.nbrCountRF,
+			StatMetric::NumNbrRF_Avg,
+			StatMetric::NumNbrRF_Min,
+			StatMetric::NumNbrRF_Max,
+			StatMetric::NumNbrRF_P99);
+		setDistributionStats(
+			partial.nbrCountRB,
+			StatMetric::NumNbrRB_Avg,
+			StatMetric::NumNbrRB_Min,
+			StatMetric::NumNbrRB_Max,
+			StatMetric::NumNbrRB_P99);
+		setDistributionStats(
+			partial.nbrCountRR,
+			StatMetric::NumNbrRR_Avg,
+			StatMetric::NumNbrRR_Min,
+			StatMetric::NumNbrRR_Max,
+			StatMetric::NumNbrRR_P99);
+	}
+
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
+	{
+		Set(record, StatMetric::DensRelError_Raw_Avg,
+			ComputeAverage(partial.densRelErrorRawSum, partial.N_F));
+		Set(record, StatMetric::DensRelError_Pos_Avg,
+			ComputeAverage(partial.densRelErrorPosSum, partial.N_F));
+		Set(record, StatMetric::DensRelError_Abs_Avg,
+			ComputeAverage(partial.densRelErrorAbsSum, partial.N_F));
+	}
+
+	Set(record, StatMetric::NumSolverIters, static_cast<float>(partial.solverIterCount));
+
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
+	{
+		Set(record, StatMetric::CFL_Number,
+			partial.velMag.max * simParams.timeStep / simParams.particleSizeF);
+		Set(record, StatMetric::VelMag_Avg,
+			ComputeAverage(partial.velMag.sum, partial.velMag.N));
+		Set(record, StatMetric::VelMag_Min, partial.velMag.min);
+		Set(record, StatMetric::VelMag_Max, partial.velMag.max);
 	}
 }
 

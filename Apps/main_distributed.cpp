@@ -89,12 +89,13 @@ int main(int argc, char** argv)
 			});
 
 		// simulation runs on the configured simulation thread budget
-		distSimulationMgr.RunSim_Blocking();
+		const bool runOk = distSimulationMgr.RunSim_Blocking();
 		stopWatcher.Stop();
 
         // --- [ shutdown ] ------------------------------------------------------------------------
 
 		distSimulationMgr.Shutdown();
+		if (!runOk) { return EXIT_FAILURE; }
 	}
 	catch (const std::exception& ex)
 	{

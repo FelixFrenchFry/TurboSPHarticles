@@ -330,54 +330,11 @@ void SimBackend_CPU01::PackExportSnapshot(
 		return;
 	}
 
-	// classify surface particles
-	auto& surfaceFlags = expSurfaceFlagsScratch_;
-	surfaceFlags.resize(N_F_);
-
-	const uint32_t N_surface = tbb::parallel_reduce(
-		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
-		[&](const tbb::blocked_range<uint32_t>& r, uint32_t localCount)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				// particle considered part of the surface
-				// if touching boundary OR low fluid neighbor count
-				bool surface = (neighborList_->CountFB(i) > 0 ||
-							   neighborList_->CountFR(i) > 0) ||
-							   neighborList_->CountFF(i) < 28;
-
-				// if not surface itself, check its fluid neighbors
-				if (!surface)
-				{
-					NeighborSpan nbrListFF = neighborList_->FF(i);
-					const uint32_t* nbrFF = nbrListFF.data;
-					const uint32_t N_FF = nbrListFF.count;
-
-					for (uint32_t k = 0; k < N_FF; k++)
-					{
-						const uint32_t j = nbrFF[k];
-
-						if ((neighborList_->CountFB(j) > 0 ||
-							neighborList_->CountFR(j) > 0) ||
-							neighborList_->CountFF(j) < 24)
-						{
-							surface = true;
-							break;
-						}
-					}
-				}
-
-				surfaceFlags[i] = static_cast<uint8_t>(surface);
-				if (surface) { localCount++; }
-			}
-
-			return localCount;
-		},
-		[](uint32_t a, uint32_t b) -> uint32_t
-		{
-			return a + b;
-		}
-	);
+	// classify fluid particles wanted for export
+	FillFluidParticleNearSurfaceFlags(expNearSurfaceFlagsScratch_);
+	ClassifyExportSurfaceParticles(expNearSurfaceFlagsScratch_);
+	const uint32_t N_surface = static_cast<uint32_t>(
+		std::ranges::count(expSurfaceFlagsScratch_, uint8_t{ 1 }));
 
 	if (N_surface == 0) // no particles to export
 	{
@@ -393,7 +350,6 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 	// prepare snapshot buffers
 	snap.N_F = N_surface;
-
 	snap.idF.resize(N_surface);
 	snap.xPosF.resize(N_surface);
 	snap.yPosF.resize(N_surface);
@@ -402,9 +358,10 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 	// copy only surface particles
 	uint32_t dst = 0;
+	// TODO: parallelize with TBB?
 	for (uint32_t i = 0; i < N_F_; i++)
 	{
-		if (!surfaceFlags[i]) { continue; }
+		if (!expSurfaceFlagsScratch_[i]) { continue; }
 
 		snap.xPosF[dst] = xPosF_[i];
 		snap.yPosF[dst] = yPosF_[i];
@@ -419,6 +376,105 @@ void SimBackend_CPU01::PackExportSnapshot(
 
 		dst++;
 	}
+}
+
+bool SimBackend_CPU01::FillFluidParticleNearSurfaceFlags(
+	std::vector<uint8_t>& nearSurfaceFlags) const
+{
+	if (!neighborList_) { return false; }
+
+	nearSurfaceFlags.resize(N_F_);
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// particle considered near the surface
+				// if touching boundary OR low fluid neighbor count
+				nearSurfaceFlags[i] = static_cast<uint8_t>(
+					(neighborList_->CountFB(i) > 0 ||
+					 neighborList_->CountFR(i) > 0) ||
+					 neighborList_->CountFF(i) < 24);
+			}
+		},
+		tbb::auto_partitioner{});
+
+	return true;
+}
+
+void SimBackend_CPU01::ClassifyExportSurfaceParticles(
+	const std::vector<uint8_t>& nearSurfaceFlags) const
+{
+	if (!neighborList_ || nearSurfaceFlags.size() != static_cast<uint64_t>(N_F_))
+	{
+		expSurfaceFlagsScratch_.clear();
+		return;
+	}
+
+	auto& surfaceFlags = expSurfaceFlagsScratch_;
+	surfaceFlags.resize(N_F_);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			for (uint32_t i = r.begin(); i != r.end(); i++)
+			{
+				// particle considered part of the surface
+				// if touching boundary OR low fluid neighbor count
+				bool surface = (neighborList_->CountFB(i) > 0 ||
+							   neighborList_->CountFR(i) > 0) ||
+							   neighborList_->CountFF(i) < 28;
+
+				// if not surface itself, check its fluid neighbors
+				if (!surface)
+				{
+					const NeighborSpan nbrListFF = neighborList_->FF(i);
+					const uint32_t* nbrFF = nbrListFF.data;
+					const uint32_t N_FF = nbrListFF.count;
+
+					for (uint32_t k = 0; k < N_FF; k++)
+					{
+						if (nearSurfaceFlags[nbrFF[k]] != 0)
+						{
+							surface = true;
+							break;
+						}
+					}
+				}
+
+				surfaceFlags[i] = static_cast<uint8_t>(surface);
+			}
+		},
+		tbb::auto_partitioner{});
+}
+
+bool SimBackend_CPU01::BuildExportFluidParticleLocalIdxs(
+	const std::vector<uint8_t>& nearSurfaceFlags,
+	std::vector<int>& localIdxs) const
+{
+	if (!neighborList_ || nearSurfaceFlags.size() != static_cast<uint64_t>(N_F_))
+	{
+		return false;
+	}
+
+	ClassifyExportSurfaceParticles(nearSurfaceFlags);
+	const uint32_t surfaceParticleCount = static_cast<uint32_t>(
+		std::ranges::count(expSurfaceFlagsScratch_, uint8_t{ 1 }));
+
+	localIdxs.clear();
+	localIdxs.reserve(surfaceParticleCount);
+	// TODO: parallelize with TBB?
+	for (uint32_t i = 0; i < N_F_; i++)
+	{
+		if (expSurfaceFlagsScratch_[i] != 0)
+		{
+			localIdxs.push_back(static_cast<int>(i));
+		}
+	}
+
+	return true;
 }
 
 void SimBackend_CPU01::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
@@ -644,6 +700,13 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(workBufferIdF_));
 		Add(usage, MemUsageOf_Vector(workBufferIdB_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
+		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFF.histogram));
+		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFB.histogram));
+		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFR.histogram));
+		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRF.histogram));
+		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRB.histogram));
+		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRR.histogram));
+		Add(usage, MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
 		Add(usage, MemUsageOf_Vector(idRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleBeginRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
@@ -695,17 +758,52 @@ void SimBackend_CPU01::FillStatisticsRecord(
 	Stats::StatRecordStep& record,
 	const SimParams& simParams) const
 {
+	auto& partial = statisticsPartialScratch_;
+	ComputeStatisticsPartial(partial, simParams, false);
+	Stats::StatisticsTracker::FinalizeStatisticsRecord(record, partial, simParams);
+}
+
+bool SimBackend_CPU01::FillStatisticsPartial(
+	Stats::StatisticsPartial& partial,
+	const SimParams& simParams) const
+{
+	ComputeStatisticsPartial(partial, simParams, true);
+	return true;
+}
+
+void SimBackend_CPU01::ComputeStatisticsPartial(
+	Stats::StatisticsPartial& partial,
+	const SimParams& simParams,
+	const bool useActiveParticleLocalIdxs) const
+{
 	using namespace Stats;
 
-	const uint32_t NF = N_F_;
-	const uint32_t NB = N_B_;
-	const uint32_t NR = N_R_;
+	partial.Clear();
 
-	Set(record, StatMetric::NumF, static_cast<float>(NF));
-	Set(record, StatMetric::NumB, static_cast<float>(NB));
-	Set(record, StatMetric::NumR, static_cast<float>(NR));
+	const uint32_t N_F = useActiveParticleLocalIdxs
+		? static_cast<uint32_t>(activeFluidParticleLocalIdxs_.size())
+		: N_F_;
+	const uint32_t N_R = useActiveParticleLocalIdxs
+		? static_cast<uint32_t>(activeRigidParticleLocalIdxs_.size())
+		: N_R_;
 
-	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
+	partial.N_F = N_F;
+	partial.N_B = useActiveParticleLocalIdxs ? 0 : N_B_;
+	partial.N_R = N_R;
+	partial.solverIterCount = N_solverIterCount_;
+
+	const auto getFluidLocalIdx = [&](const uint32_t i)
+	{
+		return useActiveParticleLocalIdxs
+			? activeFluidParticleLocalIdxs_[i]
+			: i;
+	};
+	const auto getRigidLocalIdx = [&](const uint32_t i)
+	{
+		return useActiveParticleLocalIdxs
+			? activeRigidParticleLocalIdxs_[i]
+			: i;
+	};
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Statistics_Computation);
 
@@ -713,185 +811,44 @@ void SimBackend_CPU01::FillStatisticsRecord(
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
-		float sumFF = 0.0f;
-		float minFF = std::numeric_limits<float>::max();
-		float maxFF = 0.0f;
-		float nbrFF_p99 = 0.0f;
-
-		float sumFB = 0.0f;
-		float minFB = std::numeric_limits<float>::max();
-		float maxFB = 0.0f;
-		float nbrFB_p99 = 0.0f;
-
-		if (NF > 0)
+		const auto fillNbrCountPartial =
+			[&]<typename LocalIdxFunc, typename NbrCountFunc>(
+				const uint32_t N,
+				LocalIdxFunc getLocalIdx,
+				NbrCountFunc getNbrCount,
+				DistributionPartial& distribution)
 		{
-			struct NeighStatsLocal
+			distribution.Clear();
+			distribution.N = N;
+			if (N == 0) { return; }
+
+			struct NbrCountStatsLocal
 			{
-				float sumFF;
-				float minFF;
-				float maxFF;
-				float sumFB;
-				float minFB;
-				float maxFB;
+				uint64_t sum = 0;
+				uint32_t min = std::numeric_limits<uint32_t>::max();
+				uint32_t max = 0;
 			};
 
-			NeighStatsLocal globalNeigh = tbb::parallel_reduce(
-				tbb::blocked_range<uint32_t>(0, NF),
-				NeighStatsLocal
-				{
-					.sumFF = 0.0f,
-					.minFF = std::numeric_limits<float>::max(),
-					.maxFF = 0.0f,
-					.sumFB = 0.0f,
-					.minFB = std::numeric_limits<float>::max(),
-					.maxFB = 0.0f
-				},
-				[&](const tbb::blocked_range<uint32_t>& r, NeighStatsLocal local) -> NeighStatsLocal
-				{
-					for (uint32_t i = r.begin(); i != r.end(); i++)
-					{
-						const float N_FF = static_cast<float>(neighborList_->CountFF(i));
-						const float N_FB = static_cast<float>(neighborList_->CountFB(i));
-
-						local.sumFF += N_FF;
-						if (N_FF < local.minFF) [[unlikely]] { local.minFF = N_FF; }
-						if (N_FF > local.maxFF) [[unlikely]] { local.maxFF = N_FF; }
-
-						local.sumFB += N_FB;
-						if (N_FB < local.minFB) [[unlikely]] { local.minFB = N_FB; }
-						if (N_FB > local.maxFB) [[unlikely]] { local.maxFB = N_FB; }
-					}
-					return local;
-				},
-				[](const NeighStatsLocal& a, const NeighStatsLocal& b) -> NeighStatsLocal
-				{
-					NeighStatsLocal r;
-
-					r.sumFF = a.sumFF + b.sumFF;
-					r.minFF = std::min(a.minFF, b.minFF);
-					r.maxFF = std::max(a.maxFF, b.maxFF);
-					r.sumFB = a.sumFB + b.sumFB;
-					r.minFB = std::min(a.minFB, b.minFB);
-					r.maxFB = std::max(a.maxFB, b.maxFB);
-
-					return r;
-				},
-				tbb::auto_partitioner{}
-			);
-
-			sumFF = globalNeigh.sumFF;
-			minFF = globalNeigh.minFF;
-			maxFF = globalNeigh.maxFF;
-			sumFB = globalNeigh.sumFB;
-			minFB = globalNeigh.minFB;
-			maxFB = globalNeigh.maxFB;
-		}
-		if (NF == 0) // reasonable defaults for empty sim
-		{
-			minFF = 0.0f;
-			minFB = 0.0f;
-		}
-
-		if (NF > 0) // determine p99
-		{
-			// reuse workBufferF_ for neighbor counts
-			workBufferF_.resize(NF);
-
-			// FF
-			for (uint32_t i = 0; i < NF; i++)
-			{
-				workBufferF_[i] = static_cast<float>(neighborList_->CountFF(i));
-			}
-
-			{
-				// index of the 99th percentile
-				const size_t i99 = (99ull * (NF - 1)) / 100ull;
-
-				auto begin = workBufferF_.begin();
-				auto end = workBufferF_.end();
-				auto nth99 = begin + i99;
-
-				// select p99 within the full range
-				std::nth_element(begin, nth99, end);
-				nbrFF_p99 = *nth99;
-			}
-
-			// FB
-			for (uint32_t i = 0; i < NF; ++i)
-			{
-				workBufferF_[i] = static_cast<float>(neighborList_->CountFB(i));
-			}
-
-			{
-				// index of the 99th percentile
-				const size_t i99 = (99ull * (NF - 1)) / 100ull;
-
-				auto begin = workBufferF_.begin();
-				auto end = workBufferF_.end();
-				auto nth99 = begin + i99;
-
-				// select p99 within the full range
-				std::nth_element(begin, nth99, end);
-				nbrFB_p99 = *nth99;
-			}
-		}
-		else // reasonable defaults for empty sim
-		{
-			nbrFF_p99 = 0.0f;
-			nbrFB_p99 = 0.0f;
-		}
-
-		Set(record, StatMetric::NumNbrFF_Avg, sumFF * invNF);
-		Set(record, StatMetric::NumNbrFF_Min, minFF);
-		Set(record, StatMetric::NumNbrFF_Max, maxFF);
-		Set(record, StatMetric::NumNbrFF_P99, nbrFF_p99);
-
-		Set(record, StatMetric::NumNbrFB_Avg, sumFB * invNF);
-		Set(record, StatMetric::NumNbrFB_Min, minFB);
-		Set(record, StatMetric::NumNbrFB_Max, maxFB);
-		Set(record, StatMetric::NumNbrFB_P99, nbrFB_p99);
-
-		struct NeighborStats
-		{
-			float avg = 0.0f;
-			float min = 0.0f;
-			float max = 0.0f;
-			float p99 = 0.0f;
-		};
-
-		// compute statistics for the remaining fluid and rigid source neighbors
-		const auto computeNeighborStats = [&]<typename CountFunc>(
-			const uint32_t N,
-			CountFunc countFunc) -> NeighborStats
-		{
-			if (N == 0) { return {}; }
-
-			struct NeighborStatsLocal
-			{
-				float sum = 0.0f;
-				float min = std::numeric_limits<float>::max();
-				float max = 0.0f;
-			};
-
-			const NeighborStatsLocal reduced = tbb::parallel_reduce(
+			const NbrCountStatsLocal nbrCountStats = tbb::parallel_reduce(
 				tbb::blocked_range<uint32_t>(0, N),
-				NeighborStatsLocal{},
+				NbrCountStatsLocal{},
 				[&](const tbb::blocked_range<uint32_t>& r,
-					NeighborStatsLocal local) -> NeighborStatsLocal
+					NbrCountStatsLocal local) -> NbrCountStatsLocal
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const float count = static_cast<float>(countFunc(i));
-						local.sum += count;
-						local.min = std::min(local.min, count);
-						local.max = std::max(local.max, count);
+						const uint32_t N_nbrs =
+							getNbrCount(getLocalIdx(i));
+						local.sum += N_nbrs;
+						local.min = std::min(local.min, N_nbrs);
+						local.max = std::max(local.max, N_nbrs);
 					}
 					return local;
 				},
-				[](const NeighborStatsLocal& a,
-					const NeighborStatsLocal& b) -> NeighborStatsLocal
+				[](const NbrCountStatsLocal& a,
+					const NbrCountStatsLocal& b) -> NbrCountStatsLocal
 				{
-					return NeighborStatsLocal
+					return NbrCountStatsLocal
 					{
 						a.sum + b.sum,
 						std::min(a.min, b.min),
@@ -900,193 +857,169 @@ void SimBackend_CPU01::FillStatisticsRecord(
 				},
 				tbb::auto_partitioner{});
 
-			workBufferF_.resize(N);
+			distribution.sum = static_cast<double>(nbrCountStats.sum);
+			distribution.min = static_cast<float>(nbrCountStats.min);
+			distribution.max = static_cast<float>(nbrCountStats.max);
+			distribution.histogram.assign(static_cast<uint64_t>(nbrCountStats.max) + 1, 0);
+
 			for (uint32_t i = 0; i < N; i++)
 			{
-				workBufferF_[i] = static_cast<float>(countFunc(i));
+				const uint32_t N_nbrs = getNbrCount(getLocalIdx(i));
+				distribution.histogram[N_nbrs]++;
 			}
-
-			const size_t i99 = (99ull * (N - 1)) / 100ull;
-			auto begin = workBufferF_.begin();
-			auto end = workBufferF_.end();
-			auto nth99 = begin + i99;
-			std::nth_element(begin, nth99, end);
-			const float p99 = *nth99;
-
-			return NeighborStats
-			{
-				reduced.sum / static_cast<float>(N),
-				reduced.min,
-				reduced.max,
-				p99
-			};
 		};
 
-		const NeighborStats statsFR = computeNeighborStats(
-			NF, [&](const uint32_t i) { return neighborList_->CountFR(i); });
-		const NeighborStats statsRF = computeNeighborStats(
-			NR, [&](const uint32_t i) { return neighborList_->CountRF(i); });
-		const NeighborStats statsRB = computeNeighborStats(
-			NR, [&](const uint32_t i) { return neighborList_->CountRB(i); });
-		const NeighborStats statsRR = computeNeighborStats(
-			NR, [&](const uint32_t i) { return neighborList_->CountRR(i); });
-
-		Set(record, StatMetric::NumNbrFR_Avg, statsFR.avg);
-		Set(record, StatMetric::NumNbrFR_Min, statsFR.min);
-		Set(record, StatMetric::NumNbrFR_Max, statsFR.max);
-		Set(record, StatMetric::NumNbrFR_P99, statsFR.p99);
-		Set(record, StatMetric::NumNbrRF_Avg, statsRF.avg);
-		Set(record, StatMetric::NumNbrRF_Min, statsRF.min);
-		Set(record, StatMetric::NumNbrRF_Max, statsRF.max);
-		Set(record, StatMetric::NumNbrRF_P99, statsRF.p99);
-		Set(record, StatMetric::NumNbrRB_Avg, statsRB.avg);
-		Set(record, StatMetric::NumNbrRB_Min, statsRB.min);
-		Set(record, StatMetric::NumNbrRB_Max, statsRB.max);
-		Set(record, StatMetric::NumNbrRB_P99, statsRB.p99);
-		Set(record, StatMetric::NumNbrRR_Avg, statsRR.avg);
-		Set(record, StatMetric::NumNbrRR_Min, statsRR.min);
-		Set(record, StatMetric::NumNbrRR_Max, statsRR.max);
-		Set(record, StatMetric::NumNbrRR_P99, statsRR.p99);
+		fillNbrCountPartial(
+			N_F,
+			getFluidLocalIdx,
+			[&](const uint32_t localIdx)
+			{
+				return neighborList_->CountFF(localIdx);
+			},
+			partial.nbrCountFF);
+		fillNbrCountPartial(
+			N_F,
+			getFluidLocalIdx,
+			[&](const uint32_t localIdx)
+			{
+				return neighborList_->CountFB(localIdx);
+			},
+			partial.nbrCountFB);
+		fillNbrCountPartial(
+			N_F,
+			getFluidLocalIdx,
+			[&](const uint32_t localIdx)
+			{
+				return neighborList_->CountFR(localIdx);
+			},
+			partial.nbrCountFR);
+		fillNbrCountPartial(
+			N_R,
+			getRigidLocalIdx,
+			[&](const uint32_t localIdx)
+			{
+				return neighborList_->CountRF(localIdx);
+			},
+			partial.nbrCountRF);
+		fillNbrCountPartial(
+			N_R,
+			getRigidLocalIdx,
+			[&](const uint32_t localIdx)
+			{
+				return neighborList_->CountRB(localIdx);
+			},
+			partial.nbrCountRB);
+		fillNbrCountPartial(
+			N_R,
+			getRigidLocalIdx,
+			[&](const uint32_t localIdx)
+			{
+				return neighborList_->CountRR(localIdx);
+			},
+			partial.nbrCountRR);
 	}
 
 	// --- [ density stats ] -------------------------------------------------------------------------
 
-	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)])
+	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Density)] &&
+		N_F > 0)
 	{
-		// TODO: use double for the accumulations?
-		float sumRelErr_raw = 0.0f;
-		float sumRelErr_pos = 0.0f;
-		float sumRelErr_abs = 0.0f;
-
-		if (NF > 0)
+		struct DensityStatsLocal
 		{
-			struct DensStatsLocal
+			double rawSum = 0.0;
+			double positiveSum = 0.0;
+			double absoluteSum = 0.0;
+		};
+
+		const DensityStatsLocal densityStats = tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(0, N_F),
+			DensityStatsLocal{},
+			[&](const tbb::blocked_range<uint32_t>& r,
+				DensityStatsLocal local) -> DensityStatsLocal
 			{
-				float sumRelErr_raw;
-				float sumRelErr_pos;
-				float sumRelErr_abs;
-			};
-
-			DensStatsLocal globalDens = tbb::parallel_reduce(
-				tbb::blocked_range<uint32_t>(0, NF),
-				DensStatsLocal
+				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					.sumRelErr_raw = 0.0f,
-					.sumRelErr_pos = 0.0f,
-					.sumRelErr_abs = 0.0f
-				},
-				[&](const tbb::blocked_range<uint32_t>& r, DensStatsLocal local) -> DensStatsLocal
+					const uint32_t localIdx =
+						getFluidLocalIdx(i);
+					const float relErr =
+						(densityF_[localIdx] / simParams.restDensity) - 1.0f;
+					local.rawSum += relErr;
+					local.positiveSum += std::max(0.0f, relErr);
+					local.absoluteSum += std::fabs(relErr);
+				}
+				return local;
+			},
+			[](const DensityStatsLocal& a,
+				const DensityStatsLocal& b) -> DensityStatsLocal
+			{
+				return DensityStatsLocal
 				{
-					for (uint32_t i = r.begin(); i != r.end(); i++)
-					{
-						// relative density error (aka deviation)
-						const float relErr = (densityF_[i] / simParams.restDensity) - 1.0f;
-						const float relPosErr = std::max(0.0f, relErr);
-						const float relAbsErr = std::fabs(relErr);
+					a.rawSum + b.rawSum,
+					a.positiveSum + b.positiveSum,
+					a.absoluteSum + b.absoluteSum
+				};
+			},
+			tbb::auto_partitioner{});
 
-						local.sumRelErr_raw += relErr;
-						local.sumRelErr_pos += relPosErr;
-						local.sumRelErr_abs += relAbsErr;
-					}
-
-					return local;
-				},
-				[](const DensStatsLocal& a, const DensStatsLocal& b) -> DensStatsLocal
-				{
-					DensStatsLocal r;
-
-					r.sumRelErr_raw = a.sumRelErr_raw + b.sumRelErr_raw;
-					r.sumRelErr_pos = a.sumRelErr_pos + b.sumRelErr_pos;
-					r.sumRelErr_abs = a.sumRelErr_abs + b.sumRelErr_abs;
-
-					return r;
-				},
-				tbb::auto_partitioner{}
-			);
-
-			sumRelErr_raw = globalDens.sumRelErr_raw;
-			sumRelErr_pos = globalDens.sumRelErr_pos;
-			sumRelErr_abs = globalDens.sumRelErr_abs;
-		}
-
-		Set(record, StatMetric::DensRelError_Raw_Avg, sumRelErr_raw * invNF);
-		Set(record, StatMetric::DensRelError_Pos_Avg, sumRelErr_pos * invNF);
-		Set(record, StatMetric::DensRelError_Abs_Avg, sumRelErr_abs * invNF);
+		partial.densRelErrorRawSum = densityStats.rawSum;
+		partial.densRelErrorPosSum = densityStats.positiveSum;
+		partial.densRelErrorAbsSum = densityStats.absoluteSum;
 	}
-
-	// --- [ pressure stats ] ------------------------------------------------------------------------
-
-	Set(record, StatMetric::NumSolverIters, N_solverIterCount_);
 
 	// --- [ velocity stats ] ------------------------------------------------------------------------
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{
-		float velMagSum = 0.0f;
-		float velMagMin = std::numeric_limits<float>::max();
-		float velMagMax = 0.0f;
+		auto& velMag = partial.velMag;
+		velMag.N = N_F;
 
-		if (NF > 0)
+		if (N_F > 0)
 		{
-			struct VelStatsLocal
+			struct VelMagStatsLocal
 			{
-				float velMagSum;
-				float velMagMin;
-				float velMagMax;
+				double sum = 0.0;
+				float min = std::numeric_limits<float>::max();
+				float max = 0.0f;
 			};
 
-			VelStatsLocal globalVel = tbb::parallel_reduce(
-				tbb::blocked_range<uint32_t>(0, NF),
-				VelStatsLocal
-				{
-					.velMagSum = 0.0f,
-					.velMagMin = std::numeric_limits<float>::max(),
-					.velMagMax = 0.0f
-				},
-				[&](const tbb::blocked_range<uint32_t>& r, VelStatsLocal local) -> VelStatsLocal
+			const VelMagStatsLocal velMagStats = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, N_F),
+				VelMagStatsLocal{},
+				[&](const tbb::blocked_range<uint32_t>& r,
+					VelMagStatsLocal local) -> VelMagStatsLocal
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const float vx = xVelF_[i];
-						const float vy = yVelF_[i];
-						const float vz = zVelF_[i];
+						const uint32_t localIdx =
+							getFluidLocalIdx(i);
+						const float vx = xVelF_[localIdx];
+						const float vy = yVelF_[localIdx];
+						const float vz = zVelF_[localIdx];
+						const float velMagValue =
+							std::sqrt(vx * vx + vy * vy + vz * vz);
 
-						const float velMag = std::sqrt(vx * vx + vy * vy + vz * vz);
-
-						local.velMagSum += velMag;
-						if (velMag < local.velMagMin) [[unlikely]] { local.velMagMin = velMag; }
-						if (velMag > local.velMagMax) [[unlikely]] { local.velMagMax = velMag; }
+						local.sum += velMagValue;
+						local.min = std::min(local.min, velMagValue);
+						local.max = std::max(local.max, velMagValue);
 					}
-
 					return local;
 				},
-				[](const VelStatsLocal& a, const VelStatsLocal& b) -> VelStatsLocal
+				[](const VelMagStatsLocal& a,
+					const VelMagStatsLocal& b) -> VelMagStatsLocal
 				{
-					VelStatsLocal r;
-
-					r.velMagSum = a.velMagSum + b.velMagSum;
-					r.velMagMin = std::min(a.velMagMin, b.velMagMin);
-					r.velMagMax = std::max(a.velMagMax, b.velMagMax);
-
-					return r;
+					return VelMagStatsLocal
+					{
+						a.sum + b.sum,
+						std::min(a.min, b.min),
+						std::max(a.max, b.max)
+					};
 				},
-				tbb::auto_partitioner{}
-			);
+				tbb::auto_partitioner{});
 
-			velMagSum = globalVel.velMagSum;
-			velMagMin = globalVel.velMagMin;
-			velMagMax = globalVel.velMagMax;
+			velMag.sum = velMagStats.sum;
+			velMag.min = velMagStats.min;
+			velMag.max = velMagStats.max;
 		}
-		if (NF == 0) // reasonable defaults for empty sim
-		{
-			velMagMin = 0.0f;
-			velMagMax = 0.0f;
-		}
-
-		Set(record, StatMetric::CFL_Number, velMagMax* simParams.timeStep / simParams.particleSizeF);
-		Set(record, StatMetric::VelMag_Avg, velMagSum * invNF);
-		Set(record, StatMetric::VelMag_Min, velMagMin);
-		Set(record, StatMetric::VelMag_Max, velMagMax);
 	}
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Statistics_Computation);
@@ -1103,6 +1036,7 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 		benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	}
 	neighborSearch_->DataReOrder(params);
+	ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	if (bench)
 	{
@@ -1147,20 +1081,19 @@ bool SimBackend_CPU01::TryGetLastParticleReOrder(
 		oldBoundaryLocalIdx_FromNewLocalIdx);
 }
 
-bool SimBackend_CPU01::SetActiveFluidParticleLocalIdxs(
-	const std::vector<int>& localIdxs)
+bool SimBackend_CPU01::ConfigureDistributedStep(
+	const std::vector<int>& activeFluidParticleLocalIdxs,
+	const std::vector<int>& activeRigidParticleLocalIdxs)
 {
-	activeFluidParticleLocalIdxs_.clear();
-	activeFluidParticleLocalIdxs_.reserve(localIdxs.size());
+	std::vector<uint32_t> activeFluidParticleLocalIdxsU;
+	activeFluidParticleLocalIdxsU.reserve(activeFluidParticleLocalIdxs.size());
 
 	std::vector<uint8_t> activeIdxUsed(N_F_, 0);
-	for (const int localIdx : localIdxs)
+	for (const int localIdx : activeFluidParticleLocalIdxs)
 	{
 		if (localIdx < 0 || static_cast<uint32_t>(localIdx) >= N_F_)
 		{
 			SPDLOG_ERROR("Invalid active fluid particle local index {}.", localIdx);
-			useActiveFluidParticleLocalIdxs_ = false;
-			activeFluidParticleLocalIdxs_.clear();
 			return false;
 		}
 
@@ -1168,23 +1101,74 @@ bool SimBackend_CPU01::SetActiveFluidParticleLocalIdxs(
 		if (activeIdxUsed[localIdxU] != 0)
 		{
 			SPDLOG_ERROR("Duplicate active fluid particle local index {}.", localIdx);
-			useActiveFluidParticleLocalIdxs_ = false;
-			activeFluidParticleLocalIdxs_.clear();
 			return false;
 		}
 
 		activeIdxUsed[localIdxU] = 1;
-		activeFluidParticleLocalIdxs_.push_back(localIdxU);
+		activeFluidParticleLocalIdxsU.push_back(localIdxU);
 	}
 
+	std::vector<uint32_t> activeRigidParticleLocalIdxsU;
+	activeRigidParticleLocalIdxsU.reserve(activeRigidParticleLocalIdxs.size());
+	std::vector<uint8_t> activeRigidParticleFlags(N_R_, 0);
+	for (const int localIdx : activeRigidParticleLocalIdxs)
+	{
+		if (localIdx < 0 || static_cast<uint32_t>(localIdx) >= N_R_)
+		{
+			SPDLOG_ERROR("Invalid active rigid particle local index {}.", localIdx);
+			return false;
+		}
+
+		const uint32_t localIdxU = static_cast<uint32_t>(localIdx);
+		if (activeRigidParticleFlags[localIdxU] != 0)
+		{
+			SPDLOG_ERROR("Duplicate active rigid particle local index {}.", localIdx);
+			return false;
+		}
+
+		activeRigidParticleFlags[localIdxU] = 1;
+		activeRigidParticleLocalIdxsU.push_back(localIdxU);
+	}
+
+	activeFluidParticleLocalIdxs_ = std::move(activeFluidParticleLocalIdxsU);
+	activeRigidParticleLocalIdxs_ = std::move(activeRigidParticleLocalIdxsU);
+	activeRigidParticleFlags_ = std::move(activeRigidParticleFlags);
 	useActiveFluidParticleLocalIdxs_ = true;
+	useActiveRigidParticleLocalIdxs_ = true;
+	integrateRigidBodies_ = false;
+	applyRigidBodyExternalForces_ = false;
 	return true;
 }
 
-void SimBackend_CPU01::ClearActiveFluidParticleLocalIdxs()
+bool SimBackend_CPU01::GetRigidBodyForceTorque(
+	RigidBodyForceTorque& dst) const
 {
-	useActiveFluidParticleLocalIdxs_ = false;
-	activeFluidParticleLocalIdxs_.clear();
+	dst.Resize(N_RB_);
+	dst.xForce = xForceRB_;
+	dst.yForce = yForceRB_;
+	dst.zForce = zForceRB_;
+	dst.xTorque = xTorqueRB_;
+	dst.yTorque = yTorqueRB_;
+	dst.zTorque = zTorqueRB_;
+	return true;
+}
+
+bool SimBackend_CPU01::ApplyRigidBodyForceTorque(
+	const RigidBodyForceTorque& forceTorque,
+	const float timeStep)
+{
+	xForceRB_ = forceTorque.xForce;
+	yForceRB_ = forceTorque.yForce;
+	zForceRB_ = forceTorque.zForce;
+	xTorqueRB_ = forceTorque.xTorque;
+	yTorqueRB_ = forceTorque.yTorque;
+	zTorqueRB_ = forceTorque.zTorque;
+
+	benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
+	IntegrateRigidBodies(timeStep);
+	UpdateRigidParticles();
+	benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
+	return true;
 }
 
 void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
@@ -1207,14 +1191,16 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
 	}
 
 	std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx(N_F_);
+	std::vector<uint8_t> oldFluidLocalIdxUsed(N_F_, 0);
 	for (uint64_t newLocalIdx = 0; newLocalIdx < oldFluidLocalIdx_FromNewLocalIdx.size(); newLocalIdx++)
 	{
 		const uint32_t oldLocalIdx = oldFluidLocalIdx_FromNewLocalIdx[newLocalIdx];
-		if (oldLocalIdx >= N_F_)
+		if (oldLocalIdx >= N_F_ || oldFluidLocalIdxUsed[oldLocalIdx] != 0)
 		{
 			throw std::runtime_error("Invalid CPU01 fluid particle re-order index.");
 		}
 
+		oldFluidLocalIdxUsed[oldLocalIdx] = 1;
 		newFluidLocalIdx_FromOldLocalIdx[oldLocalIdx] =
 			static_cast<uint32_t>(newLocalIdx);
 	}
@@ -1281,6 +1267,8 @@ void SimBackend_CPU01::ClearRigidForcesAndAddGravity(const SimParams& params)
 	std::ranges::fill(yTorqueRB_, 0.0f);
 	std::ranges::fill(zTorqueRB_, 0.0f);
 
+	if (!applyRigidBodyExternalForces_) { return; }
+
 	// gravity acts at the center of mass
 	for (uint32_t bodyIdx = 0; bodyIdx < N_RB_; bodyIdx++)
 	{
@@ -1319,6 +1307,12 @@ void SimBackend_CPU01::ReduceRigidParticleForces()
 			{
 				for (uint32_t rigidParticleIdx = r.begin(); rigidParticleIdx != r.end(); rigidParticleIdx++)
 				{
+					if (useActiveRigidParticleLocalIdxs_ &&
+						activeRigidParticleFlags_[rigidParticleIdx] == 0)
+					{
+						continue;
+					}
+
 					const float lx = xRelPosR_[rigidParticleIdx];
 					const float ly = yRelPosR_[rigidParticleIdx];
 					const float lz = zRelPosR_[rigidParticleIdx];

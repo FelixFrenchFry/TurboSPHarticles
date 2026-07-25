@@ -110,8 +110,8 @@
       "rigidBody": {
         "centerOfMass": [ 0.8, 0.6, 0.6 ],
         "yawDeg": 0.0,
-        "pitchDeg": 0.0,
-        "rollDeg": 0.0
+        "pitchDeg": -10.0,
+        "rollDeg": 20.0
       },
       "rigidDensity": 300.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],

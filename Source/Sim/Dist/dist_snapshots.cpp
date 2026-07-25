@@ -156,20 +156,24 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 	DistExportSnapshotBuffer& gatherBuffer,
 	const Sync::UniversalSimState& localState,
 	const DistParticleState& fluidParticleState,
-	const DistParticleState& boundaryParticleState)
+	const DistParticleState& boundaryParticleState,
+	const std::vector<int>& exportFluidParticleLocalIdxs)
 {
 	gatherBuffer.Clear();
-	gatherBuffer.fluidParticles.reserve(fluidParticleState.particleLocalIdx_Owned.size());
+	gatherBuffer.fluidParticles.reserve(exportFluidParticleLocalIdxs.size());
 	gatherBuffer.boundaryParticles.reserve(boundaryParticleState.particleLocalIdx_Owned.size());
 
 	// fluid particles
-	for (const int localIdx : fluidParticleState.particleLocalIdx_Owned)
+	std::vector<uint8_t> localIdxUsed(localState.fluidParticles.N_, 0);
+	for (const int localIdx : exportFluidParticleLocalIdxs)
 	{
 		if (!IsLocalIdxInRange(localIdx, localState.fluidParticles.N_)) { return false; }
 		if (!HasParticleMetadataAtLocalIdx(fluidParticleState, localIdx)) { return false; }
+		if (localIdxUsed[localIdx] != 0) { return false; }
+		localIdxUsed[localIdx] = 1;
 
 		const DistParticleClass particleClass = fluidParticleState.particleClasses[localIdx];
-		if (!IsOwnedParticleClass(particleClass)) { return false; }
+		if (!IsOwnedParticleClass(particleClass)) { continue; }
 
 		if (fluidParticleState.particleGlobalIdx_FromLocalIdx[localIdx] < 0) { return false; }
 
@@ -287,11 +291,50 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	return true;
 }
 
+void Dist::PackReplicatedRigidExportSnapshot(
+	Sync::ExportSnapshot& exportSnap,
+	const Sync::UniversalSimState& localState)
+{
+	const auto& R = localState.rigidParticles;
+	const auto& RB = localState.rigidBodies;
+
+	exportSnap.N_R = R.N_;
+	exportSnap.idR = R.id;
+	exportSnap.bodyIdR = R.bodyId;
+	exportSnap.xPosR.resize(R.N_);
+	exportSnap.yPosR.resize(R.N_);
+	exportSnap.zPosR.resize(R.N_);
+	exportSnap.volR = R.volR;
+
+	for (uint32_t rigidParticleIdx = 0; rigidParticleIdx < R.N_; rigidParticleIdx++)
+	{
+		const uint32_t bodyIdx = R.bodyId[rigidParticleIdx];
+
+		const float lx = R.xRelPos[rigidParticleIdx];
+		const float ly = R.yRelPos[rigidParticleIdx];
+		const float lz = R.zRelPos[rigidParticleIdx];
+
+		exportSnap.xPosR[rigidParticleIdx] =
+			RB.xCM[bodyIdx] + std::fmaf(
+				RB.a00[bodyIdx], lx,
+				std::fmaf(RB.a01[bodyIdx], ly, RB.a02[bodyIdx] * lz));
+		exportSnap.yPosR[rigidParticleIdx] =
+			RB.yCM[bodyIdx] + std::fmaf(
+				RB.a10[bodyIdx], lx,
+				std::fmaf(RB.a11[bodyIdx], ly, RB.a12[bodyIdx] * lz));
+		exportSnap.zPosR[rigidParticleIdx] =
+			RB.zCM[bodyIdx] + std::fmaf(
+				RB.a20[bodyIdx], lx,
+				std::fmaf(RB.a21[bodyIdx], ly, RB.a22[bodyIdx] * lz));
+	}
+}
+
 bool Dist::GatherExportSnapshotToRoot(
 	Sync::ExportSnapshot& exportSnap,
 	const Sync::UniversalSimState& localState,
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
+	const std::vector<int>& exportFluidParticleLocalIdxs,
 	const MpiContext& mpiContext,
 	const uint64_t simStep,
 	const double simTime,
@@ -304,7 +347,8 @@ bool Dist::GatherExportSnapshotToRoot(
 		sendBuffer,
 		localState,
 		fluidParticleState,
-		boundaryParticleState);
+		boundaryParticleState,
+		exportFluidParticleLocalIdxs);
 
 	int sendFluidCount = 0;
 	int sendBoundaryCount = 0;
@@ -446,6 +490,10 @@ bool Dist::GatherExportSnapshotToRoot(
 			gatheredBuffer,
 			simStep,
 			simTime);
+		if (localOk)
+		{
+			PackReplicatedRigidExportSnapshot(exportSnap, localState);
+		}
 
 		if (localOk && stats)
 		{
@@ -453,7 +501,7 @@ bool Dist::GatherExportSnapshotToRoot(
 				static_cast<uint32_t>(gatheredBuffer.fluidParticles.size());
 			stats->gatheredBoundaryParticleCount =
 				static_cast<uint32_t>(gatheredBuffer.boundaryParticles.size());
-			stats->gatheredRigidParticleCount = 0;
+			stats->gatheredRigidParticleCount = localState.rigidParticles.N_;
 		}
 	}
 
