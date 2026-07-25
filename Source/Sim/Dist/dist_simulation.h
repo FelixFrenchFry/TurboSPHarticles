@@ -72,13 +72,16 @@ namespace Dist
 
 	private:
 
-		// root reads params.json, then every rank loads the broadcast copy
+		// helpers marked [ rank-reduced ] run their own collective before returning, so they hand back
+		// the same result on every rank and callers branch on it directly instead of reducing it again
+
+		// [ rank-reduced ] root reads params.json, then every rank loads the broadcast copy
 		bool LoadParamsFromProfileBroadcast(std::string& profile, bool logStatus = true);
 
-		// applies the same command-line overrides on every rank
+		// [ rank-reduced ] applies the same command-line overrides on every rank
 		bool LoadParamsFromCliOverrides(const std::vector<std::string>& simOverrides, bool logStatus = true);
 
-		// creates the ownership / halo decomp from the selected scenario bounds
+		// [ rank-reduced ] creates the ownership / halo decomp from the selected scenario bounds
 		bool BuildDomainDecomp();
 
 		// builds the full scenario state before rank-local compaction
@@ -90,22 +93,22 @@ namespace Dist
 		// validates rank-local [ owned ][ halo ] state
 		bool ValidateRankLocalSimState(bool includeRigidState) const;
 
-		// validates global ownership counts after distributed state changes
+		// [ rank-reduced ] validates that the owned particle sums still add up to the global counts established during initialization
 		bool ValidateGlobalOwnedParticleCounts(const char* phaseName) const;
 
-		// transfers rank-local state into the selected backend
+		// [ rank-reduced ] transfers rank-local state into the selected backend
 		bool InitRankLocalBackend();
 
-		// runs a backend startup smoke test on rank-local data
+		// [ rank-reduced ] runs a backend startup smoke test on rank-local data
 		bool RunRankLocalBackendStartupCheck();
 
 		// gathers the authoritative owned state on the root rank
 		bool GatherOwnedGlobalSimStateOnRoot(const char* phaseName) const;
 
-		// gathers and serializes an export snapshot on the root rank
+		// [ rank-reduced ] gathers and serializes an export snapshot on the root rank
 		bool WriteExportSnapshot(const Sim::SimParams& params) const;
 
-		// rebuilds the regular CPU01 fluid surface selection from authoritative rank data
+		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
 		bool BuildExportFluidParticleLocalIdxs(std::vector<int>& localIdxs) const;
 
 		// builds rank-local startup diagnostics gathered by the root rank
@@ -120,6 +123,8 @@ namespace Dist
 
 		// archives step metrics and reports root-level distributed diagnostics
 		void FillDistributedMemoryRecord(Mem::MemRecordStep& record) const;
+
+		// [ rank-reduced ] reduces rank-local partial stats into the global stat record
 		bool FillDistributedStatisticsRecord(const Sim::SimParams& params) const;
 		void FinalizeBenchMemMeasurements(const Sim::SimParams& params) const;
 		DistRankStepReport BuildRankStepReport(const Sim::SimParams& params, bool exportedStep) const;
@@ -127,19 +132,19 @@ namespace Dist
 		void DisplayMemoryUsageStats(const Sim::SimParams& params, bool force = false) const;
 		void DisplayDistributedProgress(const Sim::SimParams& params, bool exportedStep) const;
 
-		// runs one distributed step with data movement around the rank-local backend
+		// [ rank-reduced ] runs one distributed step with data movement around the rank-local backend
 		bool ExecuteDistributedStep(const Sim::SimParams& params);
 
-		// migrates owned fluid particles to their current owner ranks
+		// [ rank-reduced ] migrates owned fluid particles to their current owner ranks
 		bool MigrateOwnedFluidParticlesToOwnerRanks();
 
 		// temporary guard until boundary particle migration exists
 		bool ValidateOwnedBoundaryParticlesStillOnRank() const;
 
-		// prepares rank-authoritative particle work and backend state for the next step
+		// [ rank-reduced ] prepares rank-authoritative particle work and backend state for the next step
 		bool PrepareRankLocalBackendStep();
 
-		// reduces rigid body loads, integrates on root, pushes state, and broadcasts body state
+		// [ rank-reduced ] reduces rigid body loads, integrates on root, pushes state, and broadcasts body state
 		bool FinishRankLocalBackendStep(const Sim::SimParams& params);
 
 		// validates particle identity metadata and payload against current backend state
@@ -148,7 +153,7 @@ namespace Dist
 		// validates particle identity metadata without comparing changed solver payload
 		bool ValidateRankLocalParticleMetadata(const char* phaseName) const;
 
-		// exchanges halo particles and rebuilds compact rank-local state
+		// [ rank-reduced ] exchanges halo particles and rebuilds compact rank-local state
 		bool ExchangeRankLocalHalos();
 
 		// keeps particle identity metadata in sync with backend data ordering
