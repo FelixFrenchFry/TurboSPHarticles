@@ -191,6 +191,7 @@ namespace Export
 		uint64_t zF = 0;
 		uint64_t vF = 0;
 		uint64_t idF = 0;
+		uint64_t rankF = 0;
 
 		uint64_t xPosB = 0;
 		uint64_t yPosB = 0;
@@ -204,7 +205,41 @@ namespace Export
 		uint64_t volR = 0;
 		uint64_t idR = 0;
 		uint64_t bodyIdR = 0;
+
+		// total size implied by the arrays above, used to recognize files of the current layout
+		uint64_t totalBytes = 0;
 	};
+
+	static ExportSnapshotOffsets ComputeExportSnapshotOffsets(
+		const ExportSnapshotBinInfo& info)
+	{
+		constexpr uint64_t elemBytes = 4; // float32 / uint32
+
+		// offsets must match SaveExportSnapshot write order
+		ExportSnapshotOffsets off{};
+		off.xF = sizeof(BinHeaderSnap);
+		off.yF = off.xF + static_cast<uint64_t>(info.NF) * elemBytes;
+		off.zF = off.yF + static_cast<uint64_t>(info.NF) * elemBytes;
+		off.vF = off.zF + static_cast<uint64_t>(info.NF) * elemBytes;
+		off.idF = off.vF + static_cast<uint64_t>(info.NF) * elemBytes;
+		off.rankF = off.idF + static_cast<uint64_t>(info.NF) * elemBytes;
+
+		off.xPosB = off.rankF + static_cast<uint64_t>(info.NF) * elemBytes;
+		off.yPosB = off.xPosB + static_cast<uint64_t>(info.NB) * elemBytes;
+		off.zPosB = off.yPosB + static_cast<uint64_t>(info.NB) * elemBytes;
+		off.volB = off.zPosB + static_cast<uint64_t>(info.NB) * elemBytes;
+		off.idB = off.volB + static_cast<uint64_t>(info.NB) * elemBytes;
+		off.xPosR = off.idB + static_cast<uint64_t>(info.NB) * elemBytes;
+		off.yPosR = off.xPosR + static_cast<uint64_t>(info.NR) * elemBytes;
+		off.zPosR = off.yPosR + static_cast<uint64_t>(info.NR) * elemBytes;
+		off.volR = off.zPosR + static_cast<uint64_t>(info.NR) * elemBytes;
+		off.idR = off.volR + static_cast<uint64_t>(info.NR) * elemBytes;
+		off.bodyIdR = off.idR + static_cast<uint64_t>(info.NR) * elemBytes;
+
+		off.totalBytes = off.bodyIdR + static_cast<uint64_t>(info.NR) * elemBytes;
+
+		return off;
+	}
 
 	static bool IsExportSnapshotBinFileName(const std::string& fileName)
 	{
@@ -247,6 +282,16 @@ namespace Export
 		info.NF = hdr.NF;
 		info.NB = hdr.NB;
 		info.NR = hdr.NR;
+
+		// there is only one layout, so a file belongs to it matches the size implied by the array set
+		// (this rejects files left over from older layouts and truncated writes)
+		std::error_code ec;
+		const uint64_t fileBytes = std::filesystem::file_size(path, ec);
+		if (ec || fileBytes != ComputeExportSnapshotOffsets(info).totalBytes)
+		{
+			return false;
+		}
+
 		return true;
 	}
 
@@ -282,35 +327,6 @@ namespace Export
 			});
 
 		return infos;
-	}
-
-	static ExportSnapshotOffsets ComputeExportSnapshotOffsets(
-		const ExportSnapshotBinInfo& info)
-	{
-		constexpr uint64_t elemBytes = 4; // float32 / uint32
-
-		// offsets must match SaveExportSnapshot write order
-		ExportSnapshotOffsets off{};
-		off.xF = sizeof(BinHeaderSnap);
-		off.yF = off.xF + uint64_t(info.NF) * elemBytes;
-		off.zF = off.yF + uint64_t(info.NF) * elemBytes;
-		off.vF = off.zF + uint64_t(info.NF) * elemBytes;
-		off.idF = off.vF + uint64_t(info.NF) * elemBytes;
-
-		off.xPosB = off.idF + uint64_t(info.NF) * elemBytes;
-		off.yPosB = off.xPosB + uint64_t(info.NB) * elemBytes;
-		off.zPosB = off.yPosB + uint64_t(info.NB) * elemBytes;
-		off.volB = off.zPosB + uint64_t(info.NB) * elemBytes;
-		off.idB = off.volB + uint64_t(info.NB) * elemBytes;
-
-		off.xPosR = off.idB + uint64_t(info.NB) * elemBytes;
-		off.yPosR = off.xPosR + uint64_t(info.NR) * elemBytes;
-		off.zPosR = off.yPosR + uint64_t(info.NR) * elemBytes;
-		off.volR = off.zPosR + uint64_t(info.NR) * elemBytes;
-		off.idR = off.volR + uint64_t(info.NR) * elemBytes;
-		off.bodyIdR = off.idR + uint64_t(info.NR) * elemBytes;
-
-		return off;
 	}
 
 	static void WriteBinaryDataItem(
@@ -379,6 +395,7 @@ namespace Export
 		WriteXyzGeometry(ofs, "posF", info.NF, off.xF, off.yF, off.zF, info.fileName);
 		WriteScalarAttribute(ofs, "velMagF", info.NF, "Float", off.vF, info.fileName);
 		WriteScalarAttribute(ofs, "idF", info.NF, "UInt", off.idF, info.fileName);
+		WriteScalarAttribute(ofs, "rankF", info.NF, "UInt", off.rankF, info.fileName);
 		ofs << "      </Grid>\n";
 	}
 
@@ -915,6 +932,7 @@ namespace Export
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
+		assert(snap.rankF.size() == NF_size);
 		assert(snap.idB.size() == NB_size);
 		assert(snap.xPosB.size() == NB_size);
 		assert(snap.yPosB.size() == NB_size);
@@ -943,7 +961,7 @@ namespace Export
 			}
 
 			// arrays are written in the same order as referenced by the XDMF file:
-			// xPosF, yPosF, zPosF, velMagF, idF
+			// xPosF, yPosF, zPosF, velMagF, idF, rankF
 			// xPosB, yPosB, zPosB, volB, idB
 			// xPosR, yPosR, zPosR, volR, idR, bodyIdR
 
@@ -965,6 +983,7 @@ namespace Export
 			WriteVec(ofs, snap.zPosF);
 			WriteVec(ofs, snap.velMagF);
 			WriteVec(ofs, snap.idF);
+			WriteVec(ofs, snap.rankF);
 
 			WriteVec(ofs, snap.xPosB);
 			WriteVec(ofs, snap.yPosB);
@@ -1023,6 +1042,7 @@ namespace Export
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
+		assert(snap.rankF.size() == NF_size);
 		assert(snap.idB.size() == NB_size);
 		assert(snap.xPosB.size() == NB_size);
 		assert(snap.yPosB.size() == NB_size);

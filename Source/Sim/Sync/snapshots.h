@@ -77,6 +77,7 @@ namespace Sync
 		std::vector<float> yPosF;
 		std::vector<float> zPosF;
 		std::vector<float> velMagF;
+		std::vector<uint32_t> rankF; // owner rank, always 0 outside the distributed path
 
 		// data for boundary particle export
 		uint32_t N_B;

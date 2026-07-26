@@ -96,7 +96,8 @@ namespace
 	DistExportFluidParticlePacket PackExportFluidParticle(
 		const Sync::FluidParticles& fluidParticles,
 		const DistParticleState& particleState,
-		const int localIdx)
+		const int localIdx,
+		const int rank)
 	{
 		const float xVel = fluidParticles.xVel[localIdx];
 		const float yVel = fluidParticles.yVel[localIdx];
@@ -105,6 +106,7 @@ namespace
 		DistExportFluidParticlePacket packet{};
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 		packet.id = fluidParticles.id[localIdx];
+		packet.rank = static_cast<uint32_t>(rank);
 
 		packet.xPos = fluidParticles.xPos[localIdx];
 		packet.yPos = fluidParticles.yPos[localIdx];
@@ -157,8 +159,11 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 	const Sync::UniversalSimState& localState,
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
-	const std::vector<int>& exportFluidParticleLocalIdxs)
+	const std::vector<int>& exportFluidParticleLocalIdxs,
+	const int rank)
 {
+	if (rank < 0) { return false; }
+
 	gatherBuffer.Clear();
 	gatherBuffer.fluidParticles.reserve(exportFluidParticleLocalIdxs.size());
 	gatherBuffer.boundaryParticles.reserve(boundaryParticleState.particleLocalIdx_Owned.size());
@@ -178,7 +183,7 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 		if (fluidParticleState.particleGlobalIdx_FromLocalIdx[localIdx] < 0) { return false; }
 
 		gatherBuffer.fluidParticles.push_back(
-			PackExportFluidParticle(localState.fluidParticles, fluidParticleState, localIdx));
+			PackExportFluidParticle(localState.fluidParticles, fluidParticleState, localIdx, rank));
 	}
 
 	// boundary particles
@@ -244,6 +249,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	exportSnap.yPosF.resize(exportSnap.N_F);
 	exportSnap.zPosF.resize(exportSnap.N_F);
 	exportSnap.velMagF.resize(exportSnap.N_F);
+	exportSnap.rankF.resize(exportSnap.N_F);
 	exportSnap.idB.resize(exportSnap.N_B);
 	exportSnap.xPosB.resize(exportSnap.N_B);
 	exportSnap.yPosB.resize(exportSnap.N_B);
@@ -268,6 +274,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		exportSnap.yPosF[i] = packet.yPos;
 		exportSnap.zPosF[i] = packet.zPos;
 		exportSnap.velMagF[i] = packet.velMag;
+		exportSnap.rankF[i] = packet.rank;
 
 		prevGlobalIdx = packet.globalIdx;
 	}
@@ -348,7 +355,8 @@ bool Dist::GatherExportSnapshotToRoot(
 		localState,
 		fluidParticleState,
 		boundaryParticleState,
-		exportFluidParticleLocalIdxs);
+		exportFluidParticleLocalIdxs,
+		mpiContext.Rank());
 
 	int sendFluidCount = 0;
 	int sendBoundaryCount = 0;

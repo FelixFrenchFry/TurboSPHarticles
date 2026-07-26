@@ -22,6 +22,7 @@ namespace Dist
 	{
 		int globalIdx = -1;
 		uint32_t id = 0;
+		uint32_t rank = 0;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -61,7 +62,8 @@ namespace Dist
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
-		const std::vector<int>& exportFluidParticleLocalIdxs);
+		const std::vector<int>& exportFluidParticleLocalIdxs,
+		int rank);
 
 	bool RebuildExportSnapshotFromGatheredParticles(
 		Sync::ExportSnapshot& exportSnap,

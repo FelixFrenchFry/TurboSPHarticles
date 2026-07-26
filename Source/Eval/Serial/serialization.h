@@ -33,8 +33,7 @@ namespace Export
 	public: // -------------------------------------------------------------------------------------
 
 		explicit SerializationMgr(SaveOptions opt = {})
-			: saveOptions_(std::move(opt)) {
-		}
+			: saveOptions_(std::move(opt)) {}
 
 		// lossless serialization of the full simulation state into a file
 		void SaveUniversalSimState(const Sync::UniversalSimState& state,
