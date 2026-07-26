@@ -131,15 +131,12 @@ namespace
 		});
 
 		// prefix chunk-local class counts so each worker fills disjoint output ranges
-		for (uint64_t classIdx = 0;
-			 classIdx != PARTICLE_CLASSIFICATION_CLASS_COUNT;
-			 classIdx++)
+		for (uint64_t classIdx = 0; classIdx != PARTICLE_CLASSIFICATION_CLASS_COUNT; classIdx++)
 		{
 			uint64_t classTotal = 0;
 			for (uint64_t chunkIdx = 0; chunkIdx != chunkCount; chunkIdx++)
 			{
-				const uint64_t chunkClassIdx =
-					chunkIdx * PARTICLE_CLASSIFICATION_CLASS_COUNT + classIdx;
+				const uint64_t chunkClassIdx = chunkIdx * PARTICLE_CLASSIFICATION_CLASS_COUNT + classIdx;
 				workBuffers.classWriteOffsets_ByChunkClass[chunkClassIdx] = classTotal;
 				classTotal += workBuffers.classCounts_ByChunkClass[chunkClassIdx];
 			}
@@ -221,9 +218,7 @@ namespace
 		particleState.ownedParticleCount = ownedParticleCount;
 		particleState.haloParticleCount = localParticleCount - ownedParticleCount;
 
-		for (uint64_t i = ownedParticleCount;
-			 i < static_cast<uint64_t>(localParticleCount);
-			 i++)
+		for (uint64_t i = ownedParticleCount; i < static_cast<uint64_t>(localParticleCount); i++)
 		{
 			const int localIdx = static_cast<int>(i);
 			particleState.particleLocalIdx_Halo.push_back(localIdx);

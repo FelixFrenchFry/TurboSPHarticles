@@ -2035,17 +2035,29 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticleClass);
 
-		// refresh inner/outer lists after migration and backend order changes
-		ClassifyOwnedFluidParticlesIntoInnerOuter(
-			fluidParticleState_, localSimState_.fluidParticles, *domainDecomp_,
-			mpiContext_.Rank(), params.kernelRadius,
-			&fluidParticleClassificationWorkBuffers_);
-		ClassifyOwnedBoundaryParticlesIntoInnerOuter(
-			boundaryParticleState_, localSimState_.boundaryParticles, *domainDecomp_,
-			mpiContext_.Rank(), params.kernelRadius,
-			&boundaryParticleClassificationWorkBuffers_);
+		try
+		{
+			// refresh inner/outer lists after migration and backend order changes
+			ClassifyOwnedFluidParticlesIntoInnerOuter(
+				fluidParticleState_, localSimState_.fluidParticles, *domainDecomp_,
+				mpiContext_.Rank(), params.kernelRadius,
+				&fluidParticleClassificationWorkBuffers_);
+			ClassifyOwnedBoundaryParticlesIntoInnerOuter(
+				boundaryParticleState_, localSimState_.boundaryParticles, *domainDecomp_,
+				mpiContext_.Rank(), params.kernelRadius,
+				&boundaryParticleClassificationWorkBuffers_);
+		}
+		catch (const std::exception& ex)
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to classify rank-local particles: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+			localOk = false;
+		}
 
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticleClass);
+		// reduce rank-local classification failures before entering halo exchange
+		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		// halo exchange only appends received halos, so ownership is unchanged here and
 		// does not have to be re-validated against the global counts
