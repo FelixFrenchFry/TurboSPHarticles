@@ -18,50 +18,50 @@ namespace Sync
 
 	// view into fluid particle data
 	// (non-owning, for read-only access)
-	struct FluidView
+	struct FluidConstView
 	{
 		// metadata
 		uint32_t N_ = 0;
 
 		// fields
-		std::span<uint32_t> id;
-		std::span<float> xPos, yPos, zPos;
-		std::span<float> xVel, yVel, zVel;
-		std::span<float> xVelPred, yVelPred, zVelPred;
-		std::span<float> xAccPress, yAccPress, zAccPress;
-		std::span<float> sourceTerm;
-		std::span<float> diagElem;
-		std::span<float> pressure;
-		std::span<float> density;
+		std::span<const uint32_t> id;
+		std::span<const float> xPos, yPos, zPos;
+		std::span<const float> xVel, yVel, zVel;
+		std::span<const float> xVelPred, yVelPred, zVelPred;
+		std::span<const float> xAccPress, yAccPress, zAccPress;
+		std::span<const float> sourceTerm;
+		std::span<const float> diagElem;
+		std::span<const float> pressure;
+		std::span<const float> density;
 	};
 
 	// view into boundary particle data
 	// (non-owning, for read-only access)
-	struct BoundaryView
+	struct BoundaryConstView
 	{
 		// metadata
 		uint32_t N_ = 0;
 
 		// fields
-		std::span<uint32_t> id;
-		std::span<float> xPos, yPos, zPos;
-		std::span<float> volB;
-		std::span<float> psiB;
+		std::span<const uint32_t> id;
+		std::span<const float> xPos, yPos, zPos;
+		std::span<const float> volB;
+		std::span<const float> psiB;
 	};
 
 	// view into rigid particle data
 	// (non-owning, for read-only access)
-	struct RigidView
+	struct RigidConstView
 	{
 		// metadata
 		uint32_t N_ = 0;
 
 		// fields
-		std::span<uint32_t> id;
-		std::span<uint32_t> bodyId;
-		std::span<float> xRelPos, yRelPos, zRelPos;
-		std::span<float> volR;
-		std::span<float> psiR;
+		std::span<const uint32_t> id;
+		std::span<const uint32_t> bodyId;
+		std::span<const float> xRelPos, yRelPos, zRelPos;
+		std::span<const float> volR;
+		std::span<const float> psiR;
 	};
 
 	// backend-agnostic representation of fluid particles
@@ -198,42 +198,36 @@ namespace Sync
 			assignSequentialIds();
 		}
 
-		// builds and returns a mutable view into the data
-		FluidView view()
+		// builds and returns an immutable view into the data
+		FluidConstView constView() const
 		{
-			return FluidView
+			return FluidConstView
 			{
 				.N_ = N_,
 
-				.id = std::span<uint32_t>(id),
+				.id = std::span<const uint32_t>(id),
 
-				.xPos = std::span<float>(xPos),
-				.yPos = std::span<float>(yPos),
-				.zPos = std::span<float>(zPos),
+				.xPos = std::span<const float>(xPos),
+				.yPos = std::span<const float>(yPos),
+				.zPos = std::span<const float>(zPos),
 
-				.xVel = std::span<float>(xVel),
-				.yVel = std::span<float>(yVel),
-				.zVel = std::span<float>(zVel),
+				.xVel = std::span<const float>(xVel),
+				.yVel = std::span<const float>(yVel),
+				.zVel = std::span<const float>(zVel),
 
-				.xVelPred = std::span<float>(xVelPred),
-				.yVelPred = std::span<float>(yVelPred),
-				.zVelPred = std::span<float>(zVelPred),
+				.xVelPred = std::span<const float>(xVelPred),
+				.yVelPred = std::span<const float>(yVelPred),
+				.zVelPred = std::span<const float>(zVelPred),
 
-				.xAccPress = std::span<float>(xAccPress),
-				.yAccPress = std::span<float>(yAccPress),
-				.zAccPress = std::span<float>(zAccPress),
+				.xAccPress = std::span<const float>(xAccPress),
+				.yAccPress = std::span<const float>(yAccPress),
+				.zAccPress = std::span<const float>(zAccPress),
 
-				.sourceTerm = std::span<float>(sourceTerm),
-				.diagElem = std::span<float>(diagElem),
-				.pressure = std::span<float>(pressure),
-				.density = std::span<float>(density)
+				.sourceTerm = std::span<const float>(sourceTerm),
+				.diagElem = std::span<const float>(diagElem),
+				.pressure = std::span<const float>(pressure),
+				.density = std::span<const float>(density)
 			};
-		}
-
-		// const view reuses same layout
-		FluidView constView() const
-		{
-			return const_cast<FluidParticles*>(this)->view();
 		}
 
 		// TODO: IISPH-specific data?
@@ -330,26 +324,20 @@ namespace Sync
 			}
 		}
 
-		// builds and returns a mutable view into the data
-		BoundaryView view()
+		// builds and returns an immutable view into the data
+		BoundaryConstView constView() const
 		{
-			return BoundaryView
+			return BoundaryConstView
 			{
 				.N_ = N_,
 
-				.id = std::span<uint32_t>(id),
-				.xPos = std::span<float>(xPos),
-				.yPos = std::span<float>(yPos),
-				.zPos = std::span<float>(zPos),
-				.volB = std::span<float>(volB),
-				.psiB = std::span<float>(psiB),
+				.id = std::span<const uint32_t>(id),
+				.xPos = std::span<const float>(xPos),
+				.yPos = std::span<const float>(yPos),
+				.zPos = std::span<const float>(zPos),
+				.volB = std::span<const float>(volB),
+				.psiB = std::span<const float>(psiB),
 			};
-		}
-
-		// const view reuses same layout
-		BoundaryView constView() const
-		{
-			return const_cast<BoundaryParticles*>(this)->view();
 		}
 	};
 
@@ -448,27 +436,21 @@ namespace Sync
 			}
 		}
 
-		// builds and returns a mutable view into the data
-		RigidView view()
+		// builds and returns an immutable view into the data
+		RigidConstView constView() const
 		{
-			return RigidView
+			return RigidConstView
 			{
 				.N_ = N_,
 
-				.id = std::span<uint32_t>(id),
-				.bodyId = std::span<uint32_t>(bodyId),
-				.xRelPos = std::span<float>(xRelPos),
-				.yRelPos = std::span<float>(yRelPos),
-				.zRelPos = std::span<float>(zRelPos),
-				.volR = std::span<float>(volR),
-				.psiR = std::span<float>(psiR),
+				.id = std::span<const uint32_t>(id),
+				.bodyId = std::span<const uint32_t>(bodyId),
+				.xRelPos = std::span<const float>(xRelPos),
+				.yRelPos = std::span<const float>(yRelPos),
+				.zRelPos = std::span<const float>(zRelPos),
+				.volR = std::span<const float>(volR),
+				.psiR = std::span<const float>(psiR),
 			};
-		}
-
-		// const view reuses same layout
-		RigidView constView() const
-		{
-			return const_cast<RigidParticles*>(this)->view();
 		}
 	};
 
@@ -693,12 +675,6 @@ namespace Sync
 				throw std::runtime_error("Rigid body particle ranges do not cover all rigid particles.");
 			}
 		}
-
-		// getters for views into the particle data
-		// NOTE: do not call resize() while holding a view
-		FluidView GetFluidView() { return fluidParticles.view(); }
-		BoundaryView GetBoundaryView() { return boundaryParticles.view(); }
-		RigidView GetRigidView() { return rigidParticles.view(); }
 
 		// TODO: add snapshot of used simulation parameters?
 	};

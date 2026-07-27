@@ -48,7 +48,10 @@ namespace Dist
 		void AllReduceSumUint32s(std::vector<uint32_t>& values) const;
 		void AllReduceSumFloats(std::vector<float>& values) const;
 		void AllReduceMaxUint8s(std::vector<uint8_t>& values) const;
-		void AllToAllInts(const std::vector<int>& sendValues, std::vector<int>& recvValues) const;
+		void AllToAllInts(
+			const std::vector<int>& sendValues,
+			std::vector<int>& recvValues,
+			int valuesPerRank = 1) const;
 
 		// point-to-point helpers for neighbor communication
 		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;

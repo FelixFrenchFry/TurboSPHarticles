@@ -200,45 +200,106 @@ namespace
 		return frame;
 	}
 
-	// TODO: parallelize this with TBB?
+	constexpr uint64_t N_cellTableChunkSize = 4096;
+
+	// finds the start of every cell run in the sorted per-particle cell ID array using a
+	// parallel count -> prefix sum -> parallel fill pipeline
+	// (runStartCounts_ByChunk is caller-owned scratch and is overwritten on every call)
 	void BuildCompactCellTable(
 		const std::vector<uint64_t>& cellId,
 		std::vector<uint64_t>& uniqueCellId,
-		std::vector<uint32_t>& cellStartIdx)
+		std::vector<uint32_t>& cellStartIdx,
+		std::vector<uint32_t>& runStartCounts_ByChunk)
 	{
-		const uint32_t N = static_cast<uint32_t>(cellId.size());
-		uniqueCellId.clear();
-		cellStartIdx.clear();
-		if (N == 0) { return; }
-
-		// first count the number of occupied cells so both output arrays can be sized exactly
-		uint32_t N_Cells = 1;
-		for (uint32_t i = 1; i < N; i++)
+		// (particle counts are capped at uint32_t, so cell counts and start indices are too)
+		const uint64_t N = cellId.size();
+		if (N == 0)
 		{
-			if (cellId[i] != cellId[i - 1]) { N_Cells++; }
+			uniqueCellId.clear();
+			cellStartIdx.clear();
+			return;
 		}
 
-		uniqueCellId.resize(N_Cells);
-		cellStartIdx.resize(N_Cells + 1); // +1 for sentinel
+		const uint64_t chunkCount = (N + N_cellTableChunkSize - 1) / N_cellTableChunkSize;
+		runStartCounts_ByChunk.assign(chunkCount, 0);
 
-		uint32_t c = 0;
-		uniqueCellId[c] = cellId[0];
-		cellStartIdx[c] = 0;
-
-		for (uint32_t i = 1; i < N; i++)
-		{
-			const uint64_t cid = cellId[i];
-
-			if (cid != cellId[i - 1]) // new cell encountered
+		// count cell run starts per chunk without shared counters
+		tbb::parallel_for(
+			tbb::blocked_range<uint64_t>(0, chunkCount),
+			[&](const tbb::blocked_range<uint64_t>& r)
 			{
-				c++;
-				uniqueCellId[c] = cid;
-				cellStartIdx[c] = i;
-			}
+				for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
+				{
+					const uint64_t beginIdx = chunkIdx * N_cellTableChunkSize;
+					const uint64_t endIdx = std::min(beginIdx + N_cellTableChunkSize, N);
+
+					// the very first particle always starts the first cell run
+					uint32_t runStartCount = (beginIdx == 0) ? 1u : 0u;
+
+					// reaching back into the previous chunk is a read-only access into
+					// immutable input, so chunks stay independent
+					const uint64_t firstIdx = (beginIdx == 0) ? 1u : beginIdx;
+					for (uint64_t i = firstIdx; i != endIdx; i++)
+					{
+						if (cellId[i] != cellId[i - 1]) { runStartCount++; }
+					}
+
+					runStartCounts_ByChunk[chunkIdx] = runStartCount;
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		// prefix chunk-local run start counts so each worker fills a disjoint output range
+		uint32_t N_Cells = 0;
+		for (uint64_t chunkIdx = 0; chunkIdx != chunkCount; chunkIdx++)
+		{
+			const uint32_t runStartCount = runStartCounts_ByChunk[chunkIdx];
+			runStartCounts_ByChunk[chunkIdx] = N_Cells; // now the chunk's write offset
+			N_Cells += runStartCount;
 		}
+
+		// (not cleared beforehand, so a stable cell count avoids re-initializing the storage)
+		uniqueCellId.resize(N_Cells);
+		cellStartIdx.resize(static_cast<uint64_t>(N_Cells) + 1ull); // +1 for sentinel
+
+		// fill the compact cell arrays while preserving the sorted cell run order
+		tbb::parallel_for(
+			tbb::blocked_range<uint64_t>(0, chunkCount),
+			[&](const tbb::blocked_range<uint64_t>& r)
+			{
+				for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
+				{
+					const uint64_t beginIdx = chunkIdx * N_cellTableChunkSize;
+					const uint64_t endIdx = std::min(beginIdx + N_cellTableChunkSize, N);
+					uint32_t writeIdx = runStartCounts_ByChunk[chunkIdx];
+
+					// must mirror the counting pass exactly,
+					// or the chunk write offsets do not line up
+					if (beginIdx == 0)
+					{
+						uniqueCellId[writeIdx] = cellId[0];
+						cellStartIdx[writeIdx] = 0;
+						writeIdx++;
+					}
+
+					const uint64_t firstIdx = (beginIdx == 0) ? 1u : beginIdx;
+					for (uint64_t i = firstIdx; i != endIdx; i++)
+					{
+						const uint64_t cid = cellId[i];
+						if (cid == cellId[i - 1]) { continue; } // still inside the same cell
+
+						uniqueCellId[writeIdx] = cid;
+						cellStartIdx[writeIdx] = static_cast<uint32_t>(i);
+						writeIdx++;
+					}
+				}
+			},
+			tbb::auto_partitioner{}
+		);
 
 		// end of the last cell's range as sentinel
-		cellStartIdx[N_Cells] = N;
+		cellStartIdx[N_Cells] = static_cast<uint32_t>(N);
 	}
 
 } // namespace anonymous
@@ -687,6 +748,8 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellIdR_.clear();
 	particleOrderR_.clear();
 	cellTableR_.clear();
+
+	cellRunStartCounts_ByChunk_.clear();
 }
 
 void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
@@ -724,6 +787,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellIdR_.clear();
 		particleOrderR_.clear();
 		cellTableR_.clear();
+
+		cellRunStartCounts_ByChunk_.clear();
 
 		return;
 	}
@@ -836,13 +901,16 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
 
 	// fluid
-	BuildCompactCellTable(cellIdF_, uniqueCellIdF_, cellStartIdxF_);
+	BuildCompactCellTable(
+		cellIdF_, uniqueCellIdF_, cellStartIdxF_, cellRunStartCounts_ByChunk_);
 
 	// boundary
-	BuildCompactCellTable(cellIdB_, uniqueCellIdB_, cellStartIdxB_);
+	BuildCompactCellTable(
+		cellIdB_, uniqueCellIdB_, cellStartIdxB_, cellRunStartCounts_ByChunk_);
 
 	// rigid
-	BuildCompactCellTable(cellIdR_, uniqueCellIdR_, cellStartIdxR_);
+	BuildCompactCellTable(
+		cellIdR_, uniqueCellIdR_, cellStartIdxR_, cellRunStartCounts_ByChunk_);
 
 	BuildDenseCellTables();
 }
@@ -855,6 +923,7 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 		throw std::runtime_error("CPU01 dense compact CLL cell table too large.");
 	}
 
+	// TODO: parallelize with TBB?
 	cellTableF_.assign(static_cast<size_t>(tableSize), EMPTY_32);
 	cellTableB_.assign(static_cast<size_t>(tableSize), EMPTY_32);
 	cellTableR_.assign(static_cast<size_t>(tableSize), EMPTY_32);
@@ -1628,11 +1697,13 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::MemUsage usageR{};
 
 	// F
+	// (the shared cell run start scratch is booked here, because the fluid particles dominate)
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellTableF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellRunStartCounts_ByChunk_));
 
 	// B
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));

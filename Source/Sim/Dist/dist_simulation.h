@@ -20,10 +20,9 @@
 #include "domain_decomp.h"
 #include "dist_diagnostics.h"
 #include "dist_particle_state.h"
-#include "dist_sync_diagnostics.h"
-#include "halo_exchange.h"
+#include "dist_redistribution_diagnostics.h"
 #include "mpi_context.h"
-#include "particle_migration.h"
+#include "particle_redistribution.h"
 #include "rigid_body_sync.h"
 
 
@@ -94,7 +93,7 @@ namespace Dist
 		bool ValidateRankLocalSimState(bool includeRigidState) const;
 
 		// [ rank-reduced ] validates that the owned particle sums still add up to the global counts established during initialization
-		bool ValidateGlobalOwnedParticleCounts(const char* phaseName) const;
+		bool ValidateGlobalOwnedParticleCounts() const;
 
 		// [ rank-reduced ] transfers rank-local state into the selected backend
 		bool InitRankLocalBackend();
@@ -103,10 +102,10 @@ namespace Dist
 		bool RunRankLocalBackendStartupCheck();
 
 		// gathers the authoritative owned state on the root rank
-		bool GatherOwnedGlobalSimStateOnRoot(const char* phaseName) const;
+		bool GatherOwnedGlobalSimStateOnRoot();
 
 		// [ rank-reduced ] gathers and serializes an export snapshot on the root rank
-		bool WriteExportSnapshot(const Sim::SimParams& params) const;
+		bool WriteExportSnapshot(const Sim::SimParams& params);
 
 		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
 		bool BuildExportFluidParticleLocalIdxs(std::vector<int>& localIdxs) const;
@@ -132,29 +131,26 @@ namespace Dist
 		void DisplayMemoryUsageStats(const Sim::SimParams& params, bool force = false) const;
 		void DisplayDistributedProgress(const Sim::SimParams& params, bool exportedStep) const;
 
-		// [ rank-reduced ] runs one distributed step with data movement around the rank-local backend
+		// [ rank-reduced ] runs one distributed step with backend-resident particle storage
 		bool ExecuteDistributedStep(const Sim::SimParams& params);
 
-		// [ rank-reduced ] migrates owned fluid particles to their current owner ranks
-		bool MigrateOwnedFluidParticlesToOwnerRanks();
+		// [ rank-reduced ] routes owned particles and replaces backend [ owned ][ halo ] storage
+		bool RedistributeRankLocalParticles(const Sim::SimParams& params);
 
-		// temporary guard until boundary particle migration exists
-		bool ValidateOwnedBoundaryParticlesStillOnRank() const;
+		// [ rank-reduced ] copies backend state only for export, gather, and diagnostics
+		bool MaterializeRankLocalState();
 
 		// [ rank-reduced ] prepares rank-authoritative particle work and backend state for the next step
 		bool PrepareRankLocalBackendStep();
 
-		// [ rank-reduced ] reduces rigid body loads, integrates on root, pushes state, and broadcasts body state
+		// [ rank-reduced ] reduces rigid loads, integrates on root, and broadcasts body dynamics
 		bool FinishRankLocalBackendStep(const Sim::SimParams& params);
 
 		// validates particle identity metadata and payload against current backend state
-		bool ValidateRankLocalBackendParticleOrder(const char* phaseName) const;
+		bool ValidateRankLocalBackendParticleOrder() const;
 
 		// validates particle identity metadata without comparing changed solver payload
-		bool ValidateRankLocalParticleMetadata(const char* phaseName) const;
-
-		// [ rank-reduced ] exchanges halo particles and rebuilds compact rank-local state
-		bool ExchangeRankLocalHalos();
+		bool ValidateRankLocalParticleMetadata() const;
 
 		// keeps particle identity metadata in sync with backend data ordering
 		bool ApplyLastBackendParticleReOrder();
@@ -186,18 +182,12 @@ namespace Dist
 		uint64_t expectedGlobalBoundaryParticleCount_ = 0;
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
-		ParticleClassificationWorkBuffers fluidParticleClassificationWorkBuffers_{};
-		ParticleClassificationWorkBuffers boundaryParticleClassificationWorkBuffers_{};
-		MigrationWorkBuffers particleMigrationWorkBuffers_{};
-		HaloExchangeWorkBuffers haloExchangeWorkBuffers_{};
-		HaloRebuildScratch haloRebuildScratch_{};
+		ParticleRedistributionMgr particleRedistributionMgr_{};
 		std::vector<int> activeRigidParticleLocalIdxs_{};
 		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
 		RigidBodySyncBuffers rigidBodySyncBuffers_{};
-		ParticleMigrationStats lastParticleMigrationStats_{};
-		DistSyncTimingReport distSyncTimingReport_{};
-		HaloExchangeStats lastHaloExchangeStats_{};
+		ParticleRedistributionTimingReport particleRedistributionTimingReport_{};
 
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };
@@ -205,6 +195,7 @@ namespace Dist
 		std::unique_ptr<Stats::StatisticsTracker> statisticsTracker_{ nullptr };
 		Bench::BenchOpList curBenchOps_;
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
+		Sim::I_DistributedParticleBackend* distributedParticleBackend_ = nullptr;
 		mutable Stats::StatisticsPartial statisticsPartialScratch_{};
 		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint8_t> globalNearSurfaceFlagsScratch_{};

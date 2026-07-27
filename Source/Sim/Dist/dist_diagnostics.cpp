@@ -10,7 +10,7 @@
 
 // internal
 #include "dist_diagnostics.h"
-#include "dist_sync_diagnostics.h"
+#include "dist_redistribution_diagnostics.h"
 #include "mpi_context.h"
 #include "Source/Base/enum_hub.h"
 #include "Source/Base/helpers.h"
@@ -25,7 +25,7 @@ namespace
 	constexpr int DIST_DIAGNOSTICS_TAG_STEP_REPORT = 8101;
 	constexpr int DIST_DIAGNOSTICS_TAG_STARTUP_REPORT = 8102;
 	constexpr int DIST_DIAGNOSTICS_TAG_BENCH_REPORT = 8103;
-	constexpr int DIST_DIAGNOSTICS_TAG_SYNC_TIMING_REPORT = 8104;
+	constexpr int DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT = 8104;
 	constexpr int DIST_DIAGNOSTICS_RANK_TABLE_LIMIT = 16;
 	constexpr int N_CLI_SECTION_SEPARATOR_CHARS = 80;
 	constexpr const char* CLI_SECTION_SEPARATOR =
@@ -321,16 +321,18 @@ namespace
 		mpiContext.WaitAll(requests);
 	}
 
-	void GatherDistSyncTimingReports(
+	void GatherParticleRedistributionTimingReports(
 		const MpiContext& mpiContext,
-		const DistSyncTimingReport& localReport,
-		std::vector<DistSyncTimingReport>& reports)
+		const ParticleRedistributionTimingReport& localReport,
+		std::vector<ParticleRedistributionTimingReport>& reports)
 	{
 		std::vector<MPI_Request> requests{};
 
 		if (mpiContext.IsRoot())
 		{
-			reports.assign(static_cast<uint64_t>(mpiContext.Size()), DistSyncTimingReport{});
+			reports.assign(
+				static_cast<uint64_t>(mpiContext.Size()),
+				ParticleRedistributionTimingReport{});
 			reports[static_cast<uint64_t>(mpiContext.Rank())] = localReport;
 			requests.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
 
@@ -341,9 +343,9 @@ namespace
 				requests.emplace_back(MPI_REQUEST_NULL);
 				mpiContext.IRecvBytes(
 					&reports[static_cast<uint64_t>(rank)],
-					static_cast<int>(sizeof(DistSyncTimingReport)),
+					static_cast<int>(sizeof(ParticleRedistributionTimingReport)),
 					rank,
-					DIST_DIAGNOSTICS_TAG_SYNC_TIMING_REPORT,
+					DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT,
 					requests.back());
 			}
 		}
@@ -352,9 +354,9 @@ namespace
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.ISendBytes(
 				&localReport,
-				static_cast<int>(sizeof(DistSyncTimingReport)),
+				static_cast<int>(sizeof(ParticleRedistributionTimingReport)),
 				mpiContext.RootRank(),
-				DIST_DIAGNOSTICS_TAG_SYNC_TIMING_REPORT,
+				DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT,
 				requests.back());
 		}
 
@@ -448,9 +450,7 @@ namespace
 
 	bool IsDistBenchOp(const Bench::BenchOp op)
 	{
-		return op == Bench::BenchOp::Dist_ParticleMigration ||
-			op == Bench::BenchOp::Dist_ParticleClass ||
-			op == Bench::BenchOp::Dist_HaloExchange ||
+		return op == Bench::BenchOp::Dist_ParticleRedistribution ||
 			op == Bench::BenchOp::Dist_StateSync;
 	}
 
@@ -613,9 +613,7 @@ namespace
 		int rank = 0;
 
 		uint64_t backendAvgNs = 0;
-		uint64_t distParticleMigrationAvgNs = 0;
-		uint64_t distParticleClassAvgNs = 0;
-		uint64_t distHaloExchangeAvgNs = 0;
+		uint64_t distParticleRedistributionAvgNs = 0;
 		uint64_t distStateSyncAvgNs = 0;
 		uint64_t otherAvgNs = 0;
 	};
@@ -650,17 +648,9 @@ namespace
 					continue;
 				}
 
-				if (op == Bench::BenchOp::Dist_ParticleMigration)
+				if (op == Bench::BenchOp::Dist_ParticleRedistribution)
 				{
-					summary.distParticleMigrationAvgNs += avgNs;
-				}
-				else if (op == Bench::BenchOp::Dist_ParticleClass)
-				{
-					summary.distParticleClassAvgNs += avgNs;
-				}
-				else if (op == Bench::BenchOp::Dist_HaloExchange)
-				{
-					summary.distHaloExchangeAvgNs += avgNs;
+					summary.distParticleRedistributionAvgNs += avgNs;
 				}
 				else if (op == Bench::BenchOp::Dist_StateSync)
 				{
@@ -674,9 +664,7 @@ namespace
 
 			const uint64_t displayedAvgNs =
 				summary.backendAvgNs +
-				summary.distParticleMigrationAvgNs +
-				summary.distParticleClassAvgNs +
-				summary.distHaloExchangeAvgNs +
+				summary.distParticleRedistributionAvgNs +
 				summary.distStateSyncAvgNs;
 			summary.otherAvgNs =
 				SaturatingSubtract(totalAvgNs, displayedAvgNs);
@@ -748,13 +736,13 @@ namespace
 		}
 	}
 
-	void PrintDistSyncTimingTable(
+	void PrintParticleRedistributionTimingTable(
 		int& lineCount,
-		const std::vector<DistSyncTimingReport>& reports,
+		const std::vector<ParticleRedistributionTimingReport>& reports,
 		const Bench::TimeUnit unit)
 	{
 		const std::vector<std::string> lines =
-			BuildDistSyncTimingLines(reports, unit);
+			BuildParticleRedistributionTimingLines(reports, unit);
 
 		for (const std::string& line : lines)
 		{
@@ -870,9 +858,9 @@ namespace
 		std::snprintf(unitLabel, sizeof(unitLabel), "[%s]", Bench::UnitLabel(unit));
 
 		PrintLine(lineCount,
-			"%-2s | %10s | %21s | %20s | %17s | %13s | %9s %4s",
-			"r", "backend", "distParticleMigration", "distParticleClassif",
-			"distHaloExchange", "distStateSync", "other", "avg");
+			"%-2s | %10s | %22s | %13s | %9s %4s",
+			"r", "backend", "distRedistribution",
+			"distStateSync", "other", "avg");
 		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
@@ -881,12 +869,12 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(lineCount,
-				"%-2s | %10.2f | %21.2f | %20.2f | %17.2f | %13.2f | %9.2f %4s",
+				"%-2s | %10.2f | %22.2f | %13.2f | %9.2f %4s",
 				rankLabel,
 				Bench::ConvertFromNs(unit, summary.backendAvgNs),
-				Bench::ConvertFromNs(unit, summary.distParticleMigrationAvgNs),
-				Bench::ConvertFromNs(unit, summary.distParticleClassAvgNs),
-				Bench::ConvertFromNs(unit, summary.distHaloExchangeAvgNs),
+				Bench::ConvertFromNs(
+					unit,
+					summary.distParticleRedistributionAvgNs),
 				Bench::ConvertFromNs(unit, summary.distStateSyncAvgNs),
 				Bench::ConvertFromNs(unit, summary.otherAvgNs),
 				unitLabel);
@@ -1022,7 +1010,8 @@ namespace
 	void PrintDashboard(
 		const std::vector<DistRankStepReport>& reports,
 		const std::vector<DistRankBenchReport>& benchReports,
-		const std::vector<DistSyncTimingReport>& syncTimingReports,
+		const std::vector<ParticleRedistributionTimingReport>&
+			redistributionTimingReports,
 		const Bench::BenchOpList& benchOps,
 		const Sim::SimParams& params)
 	{
@@ -1071,8 +1060,8 @@ namespace
 			PrintLine(lineCount);
 			PrintParticleExchangeTable(lineCount, reports);
 			PrintLine(lineCount);
-			PrintDistSyncTimingTable(
-				lineCount, syncTimingReports, params.timeUnit);
+			PrintParticleRedistributionTimingTable(
+				lineCount, redistributionTimingReports, params.timeUnit);
 		}
 		else
 		{
@@ -1219,7 +1208,8 @@ namespace Dist
 		const Bench::BenchOpList& benchOps,
 		const DistRankStepReport& localStepReport,
 		const DistRankBenchReport& localBenchReport,
-		const DistSyncTimingReport& localDistSyncTimingReport)
+		const ParticleRedistributionTimingReport&
+			localParticleRedistributionTimingReport)
 	{
 		std::vector<DistRankStepReport> reports{};
 		GatherRankStepReports(mpiContext, localStepReport, reports);
@@ -1227,14 +1217,18 @@ namespace Dist
 		std::vector<DistRankBenchReport> benchReports{};
 		GatherRankBenchReports(mpiContext, localBenchReport, benchReports);
 
-		std::vector<DistSyncTimingReport> syncTimingReports{};
-		GatherDistSyncTimingReports(
-			mpiContext, localDistSyncTimingReport, syncTimingReports);
+		std::vector<ParticleRedistributionTimingReport>
+			redistributionTimingReports{};
+		GatherParticleRedistributionTimingReports(
+			mpiContext,
+			localParticleRedistributionTimingReport,
+			redistributionTimingReports);
 
 		if (!mpiContext.IsRoot()) { return; }
 
 		PrintDashboard(
-			reports, benchReports, syncTimingReports, benchOps, params);
+			reports, benchReports, redistributionTimingReports,
+			benchOps, params);
 	}
 
 	void DistDiagnosticsMgr::PrintMemorySummary(

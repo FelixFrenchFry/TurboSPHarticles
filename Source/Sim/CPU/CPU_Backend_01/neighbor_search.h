@@ -139,6 +139,11 @@ namespace Sim
 		std::vector<uint32_t> particleOrderR_;
 		std::vector<uint32_t> cellTableR_;
 
+		// scratch shared by the compact cell table builds, holding per-chunk cell run start
+		// counts that are prefixed into per-chunk write offsets
+		// (only valid because the fluid, boundary, and rigid builds run one after another)
+		std::vector<uint32_t> cellRunStartCounts_ByChunk_;
+
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 

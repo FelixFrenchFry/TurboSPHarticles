@@ -50,9 +50,7 @@ namespace Bench
 		Visualization,                      // preparation of simulation data for visualization
 
 		// distributed simulation
-		Dist_ParticleMigration,             // migration of owned particles to their owner ranks
-		Dist_ParticleClass,                 // inner/outer classification of rank-local owned particles
-		Dist_HaloExchange,                  // halo particle packing, exchange, and local rebuild
+		Dist_ParticleRedistribution,        // particle migration, halo exchange, and rank-local rebuild
 		Dist_StateSync,                     // rank-local state handoff around backend data structures
 
 		// totals
@@ -160,21 +158,9 @@ namespace Bench
 				.unit = "ns"
 			},
 			{
-				.op = BenchOp::Dist_ParticleMigration,
-				.name = "dist particle migration",
-				.alias = "distParticleMigration",
-				.unit = "ns"
-			},
-			{
-				.op = BenchOp::Dist_ParticleClass,
-				.name = "dist particle classification",
-				.alias = "distParticleClassif",
-				.unit = "ns"
-			},
-			{
-				.op = BenchOp::Dist_HaloExchange,
-				.name = "dist halo exchange",
-				.alias = "distHaloExchange",
+				.op = BenchOp::Dist_ParticleRedistribution,
+				.name = "dist particle redistribution",
+				.alias = "distParticleRedistribution",
 				.unit = "ns"
 			},
 			{

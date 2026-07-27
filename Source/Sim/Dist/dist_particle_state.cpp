@@ -226,6 +226,7 @@ namespace
 		}
 	}
 
+	#if defined(_DEBUG)
 	bool IsLocalIdxInRange(
 		const int localIdx,
 		const uint32_t firstLocalIdx,
@@ -297,6 +298,7 @@ namespace
 
 		return true;
 	}
+	#endif
 
 	bool LocalIdxReOrderCoversRange(
 		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
@@ -589,8 +591,6 @@ bool DistParticleState::IsValidLocalLayout(
 		return false;
 	};
 
-	const uint32_t haloStartLocalIdx = ownedParticleCount;
-
 	// core counts and class storage must match the compact local range
 	if (static_cast<uint64_t>(particleClasses.size()) != localParticleCount)
 	{
@@ -617,6 +617,9 @@ bool DistParticleState::IsValidLocalLayout(
 			"particleLocalIdx_Inner.size() + particleLocalIdx_Outer.size() "
 			"does not match ownedParticleCount.");
 	}
+
+	#if defined(_DEBUG)
+	const uint32_t haloStartLocalIdx = ownedParticleCount;
 
 	// index lists must cover the compact owned and halo ranges
 	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, haloStartLocalIdx))
@@ -705,6 +708,7 @@ bool DistParticleState::IsValidLocalLayout(
 			return fail("particleLocalIdx_Halo contains an index whose class is not Halo.");
 		}
 	}
+	#endif
 
 	return true;
 }
@@ -759,6 +763,7 @@ bool DistParticleState::IsValidLocalParticleState(
 		return fail("particleLocalIdx_FromGlobalIdx.size() does not match globalParticleCount.");
 	}
 
+	#if defined(_DEBUG)
 	std::vector<uint8_t> activeLocalIdxs(localParticleCount, 0);
 
 	// owned list entries must be unique active inner or outer particles
@@ -860,8 +865,8 @@ bool DistParticleState::IsValidLocalParticleState(
 		}
 	}
 
-	// local-to-global entries must be unique and round-trip through the inverse map
-	std::vector<uint8_t> activeGlobalIdxs(globalParticleCount, 0);
+	// local-to-global entries must round-trip through the inverse map, which already
+	// implies uniqueness, since the inverse map holds a single localIdx per globalIdx
 	for (uint64_t localIdx = 0; localIdx < localParticleCount; localIdx++)
 	{
 		const int globalIdx = particleGlobalIdx_FromLocalIdx[localIdx];
@@ -869,16 +874,10 @@ bool DistParticleState::IsValidLocalParticleState(
 		{
 			return fail("particleGlobalIdx_FromLocalIdx contains an index outside the global particle range.");
 		}
-		if (activeGlobalIdxs[globalIdx] != 0)
-		{
-			return fail("particleGlobalIdx_FromLocalIdx contains a duplicate active global index.");
-		}
 		if (particleLocalIdx_FromGlobalIdx[globalIdx] != static_cast<int>(localIdx))
 		{
 			return fail("particleLocalIdx_FromGlobalIdx does not map active globalIdx back to localIdx.");
 		}
-
-		activeGlobalIdxs[globalIdx] = 1;
 	}
 
 	// non-empty global-to-local entries must also round-trip through the local map
@@ -895,6 +894,7 @@ bool DistParticleState::IsValidLocalParticleState(
 			return fail("particleGlobalIdx_FromLocalIdx does not map active localIdx back to globalIdx.");
 		}
 	}
+	#endif
 
 	return true;
 }

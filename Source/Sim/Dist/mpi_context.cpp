@@ -295,21 +295,28 @@ void MpiContext::AllReduceMaxUint8s(std::vector<uint8_t>& values) const
 
 void MpiContext::AllToAllInts(
 	const std::vector<int>& sendValues,
-	std::vector<int>& recvValues) const
+	std::vector<int>& recvValues,
+	const int valuesPerRank) const
 {
-	if (sendValues.size() != static_cast<uint64_t>(size_))
+	if (valuesPerRank <= 0)
+	{
+		throw std::runtime_error("MPI all-to-all values-per-rank must be positive.");
+	}
+
+	const uint64_t expectedValueCount = static_cast<uint64_t>(size_) * static_cast<uint64_t>(valuesPerRank);
+	if (sendValues.size() != expectedValueCount)
 	{
 		throw std::runtime_error("MPI all-to-all int send buffer size does not match world size.");
 	}
 
-	recvValues.resize(static_cast<uint64_t>(size_));
+	recvValues.resize(expectedValueCount);
 	CheckMpiResult(
 		MPI_Alltoall(
 			sendValues.data(),
-			1,
+			valuesPerRank,
 			MPI_INT,
 			recvValues.data(),
-			1,
+			valuesPerRank,
 			MPI_INT,
 			MPI_COMM_WORLD),
 		"MPI_Alltoall(int)");

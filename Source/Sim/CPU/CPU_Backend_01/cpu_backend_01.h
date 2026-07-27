@@ -17,7 +17,7 @@
 
 namespace Sim
 {
-	class SimBackend_CPU01 final : public I_SimBackend
+	class SimBackend_CPU01 final  : public I_SimBackend, public I_DistributedParticleBackend
 	{
 	public: // ---------------------------------------------------------------------------------------
 
@@ -59,6 +59,22 @@ namespace Sim
 
 		// reports whether CPU01 supports distributed execution
 		bool SupportsDistributedSimulation() const override { return true; }
+
+		I_DistributedParticleBackend* GetDistributedParticleBackend() override { return this; }
+
+		Sync::FluidConstView GetFluidParticleView() const override;
+		Sync::BoundaryConstView GetBoundaryParticleView() const override;
+		Sync::RigidConstView GetRigidParticleView() const override;
+
+		bool ApplyParticleRedistribution(
+			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
+			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+			const Sync::FluidParticles& appendedFluidParticles,
+			const Sync::BoundaryParticles& appendedBoundaryParticles,
+			const SimParams& params) override;
+
+		void CopyRigidBodyStateTo(Sync::RigidBodies& rigidBodies) const override;
+		bool ApplyRigidBodyStateFrom(const Sync::RigidBodies& rigidBodies) override;
 
 		// executes only the neighbor search (construction and query of the data NS structure)
 		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;

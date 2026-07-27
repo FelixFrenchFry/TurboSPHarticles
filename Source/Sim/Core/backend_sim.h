@@ -61,6 +61,31 @@ namespace Sim
 		}
 	};
 
+	// optional backend capability for particle exchange between ranks for distributed execution
+	class I_DistributedParticleBackend
+	{
+	public:
+
+		virtual ~I_DistributedParticleBackend() = default;
+
+		// non-owning views remain valid until backend particle storage is replaced or re-ordered
+		virtual Sync::FluidConstView GetFluidParticleView() const = 0;
+		virtual Sync::BoundaryConstView GetBoundaryParticleView() const = 0;
+		virtual Sync::RigidConstView GetRigidParticleView() const = 0;
+
+		// compacts retained particles in place and appends migration + halo particles
+		virtual bool ApplyParticleRedistribution(
+			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
+			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+			const Sync::FluidParticles& appendedFluidParticles,
+			const Sync::BoundaryParticles& appendedBoundaryParticles,
+			const SimParams& params) = 0;
+
+		// copies/applies only dynamic rigid-body state used by distributed synchronization
+		virtual void CopyRigidBodyStateTo(Sync::RigidBodies& rigidBodies) const = 0;
+		virtual bool ApplyRigidBodyStateFrom(const Sync::RigidBodies& rigidBodies) = 0;
+	};
+
 	// -----------------------------------------------------------------------------------------------
 	// --- [ simulation backend interface ] ----------------------------------------------------------
 	// -----------------------------------------------------------------------------------------------
@@ -115,6 +140,9 @@ namespace Sim
 
 		// reports whether the backend implements all components required for distributed execution
 		virtual bool SupportsDistributedSimulation() const { return false; }
+
+		// exposes optional backend-resident particle storage used for particle exchange in distributed execution
+		virtual I_DistributedParticleBackend* GetDistributedParticleBackend() { return nullptr; }
 
 		// executes only the neighbor search (construction and query of the data NS structure)
 		virtual void ExecuteNeighborSearch(const SimParams& params, bool bench = false) = 0;

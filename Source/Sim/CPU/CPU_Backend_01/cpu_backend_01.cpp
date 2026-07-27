@@ -299,6 +299,408 @@ void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 	RB.N_ = N_RB_;
 }
 
+Sync::FluidConstView SimBackend_CPU01::GetFluidParticleView() const
+{
+	return
+	{
+		.N_ = N_F_,
+		.id = idF_,
+		.xPos = xPosF_, .yPos = yPosF_, .zPos = zPosF_,
+		.xVel = xVelF_, .yVel = yVelF_, .zVel = zVelF_,
+		.xVelPred = xVelPredF_, .yVelPred = yVelPredF_, .zVelPred = zVelPredF_,
+		.xAccPress = xAccPressF_, .yAccPress = yAccPressF_, .zAccPress = zAccPressF_,
+		.sourceTerm = sourceTermF_,
+		.diagElem = diagElemF_,
+		.pressure = pressureF_,
+		.density = densityF_
+	};
+}
+
+Sync::BoundaryConstView SimBackend_CPU01::GetBoundaryParticleView() const
+{
+	return
+	{
+		.N_ = N_B_,
+		.id = idB_,
+		.xPos = xPosB_, .yPos = yPosB_, .zPos = zPosB_,
+		.volB = volB_,
+		.psiB = psiB_
+	};
+}
+
+Sync::RigidConstView SimBackend_CPU01::GetRigidParticleView() const
+{
+	return
+	{
+		.N_ = N_R_,
+		.id = idR_,
+		.bodyId = bodyIdR_,
+		.xRelPos = xRelPosR_, .yRelPos = yRelPosR_, .zRelPos = zRelPosR_,
+		.volR = volR_,
+		.psiR = psiR_
+	};
+}
+
+bool SimBackend_CPU01::ApplyParticleRedistribution(
+	const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
+	const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+	const Sync::FluidParticles& appendedFluidParticles,
+	const Sync::BoundaryParticles& appendedBoundaryParticles,
+	const SimParams& params)
+{
+	const auto fluidSizeValid = [&appendedFluidParticles](const auto& values)
+	{
+		return values.size() == static_cast<uint64_t>(appendedFluidParticles.N_);
+	};
+	const auto boundarySizeValid = [&appendedBoundaryParticles](const auto& values)
+	{
+		return values.size() == static_cast<uint64_t>(appendedBoundaryParticles.N_);
+	};
+
+	if (!fluidSizeValid(appendedFluidParticles.id) ||
+		!fluidSizeValid(appendedFluidParticles.xPos) ||
+		!fluidSizeValid(appendedFluidParticles.yPos) ||
+		!fluidSizeValid(appendedFluidParticles.zPos) ||
+		!fluidSizeValid(appendedFluidParticles.xVel) ||
+		!fluidSizeValid(appendedFluidParticles.yVel) ||
+		!fluidSizeValid(appendedFluidParticles.zVel) ||
+		!fluidSizeValid(appendedFluidParticles.xVelPred) ||
+		!fluidSizeValid(appendedFluidParticles.yVelPred) ||
+		!fluidSizeValid(appendedFluidParticles.zVelPred) ||
+		!fluidSizeValid(appendedFluidParticles.xAccPress) ||
+		!fluidSizeValid(appendedFluidParticles.yAccPress) ||
+		!fluidSizeValid(appendedFluidParticles.zAccPress) ||
+		!fluidSizeValid(appendedFluidParticles.sourceTerm) ||
+		!fluidSizeValid(appendedFluidParticles.diagElem) ||
+		!fluidSizeValid(appendedFluidParticles.pressure) ||
+		!fluidSizeValid(appendedFluidParticles.density) ||
+		!boundarySizeValid(appendedBoundaryParticles.id) ||
+		!boundarySizeValid(appendedBoundaryParticles.xPos) ||
+		!boundarySizeValid(appendedBoundaryParticles.yPos) ||
+		!boundarySizeValid(appendedBoundaryParticles.zPos) ||
+		!boundarySizeValid(appendedBoundaryParticles.volB) ||
+		!boundarySizeValid(appendedBoundaryParticles.psiB))
+	{
+		return false;
+	}
+
+	const uint64_t finalFluidParticleCount =
+		retainedFluidOldLocalIdx_FromNewLocalIdx.size() +
+		static_cast<uint64_t>(appendedFluidParticles.N_);
+	const uint64_t finalBoundaryParticleCount =
+		retainedBoundaryOldLocalIdx_FromNewLocalIdx.size() +
+		static_cast<uint64_t>(appendedBoundaryParticles.N_);
+	if (finalFluidParticleCount > std::numeric_limits<uint32_t>::max() ||
+		finalBoundaryParticleCount > std::numeric_limits<uint32_t>::max())
+	{
+		return false;
+	}
+
+	const auto compactionMapValid = [](
+		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+		const uint32_t oldParticleCount)
+	{
+		const uint64_t retainedParticleCount =
+			oldLocalIdx_FromNewLocalIdx.size();
+		if (retainedParticleCount > oldParticleCount) { return false; }
+
+		#if defined(_DEBUG)
+		// exhaustively validate compaction sources outside optimized builds
+		std::vector<uint8_t> oldLocalIdxUsed(oldParticleCount, 0);
+		for (uint64_t newLocalIdx = 0;
+			 newLocalIdx != retainedParticleCount;
+			 newLocalIdx++)
+		{
+			const uint32_t oldLocalIdx = oldLocalIdx_FromNewLocalIdx[newLocalIdx];
+			if (oldLocalIdx >= oldParticleCount ||
+				(oldLocalIdx != newLocalIdx &&
+				 oldLocalIdx < retainedParticleCount))
+			{
+				return false;
+			}
+
+			if (oldLocalIdxUsed[oldLocalIdx] != 0) { return false; }
+			oldLocalIdxUsed[oldLocalIdx] = 1;
+		}
+		#endif
+
+		return true;
+	};
+
+	if (!compactionMapValid(retainedFluidOldLocalIdx_FromNewLocalIdx, N_F_) ||
+		!compactionMapValid(retainedBoundaryOldLocalIdx_FromNewLocalIdx, N_B_))
+	{
+		return false;
+	}
+
+	const uint32_t finalFluidParticleCount_U32 =
+		static_cast<uint32_t>(finalFluidParticleCount);
+	const uint32_t finalBoundaryParticleCount_U32 =
+		static_cast<uint32_t>(finalBoundaryParticleCount);
+
+	// reserve first so no allocation can invalidate compaction sources
+	idF_.reserve(finalFluidParticleCount_U32);
+	xPosF_.reserve(finalFluidParticleCount_U32);
+	yPosF_.reserve(finalFluidParticleCount_U32);
+	zPosF_.reserve(finalFluidParticleCount_U32);
+	xVelF_.reserve(finalFluidParticleCount_U32);
+	yVelF_.reserve(finalFluidParticleCount_U32);
+	zVelF_.reserve(finalFluidParticleCount_U32);
+	xVelPredF_.reserve(finalFluidParticleCount_U32);
+	yVelPredF_.reserve(finalFluidParticleCount_U32);
+	zVelPredF_.reserve(finalFluidParticleCount_U32);
+	xAccPressF_.reserve(finalFluidParticleCount_U32);
+	yAccPressF_.reserve(finalFluidParticleCount_U32);
+	zAccPressF_.reserve(finalFluidParticleCount_U32);
+	sourceTermF_.reserve(finalFluidParticleCount_U32);
+	diagElemF_.reserve(finalFluidParticleCount_U32);
+	pressureF_.reserve(finalFluidParticleCount_U32);
+	densityF_.reserve(finalFluidParticleCount_U32);
+
+	idB_.reserve(finalBoundaryParticleCount_U32);
+	xPosB_.reserve(finalBoundaryParticleCount_U32);
+	yPosB_.reserve(finalBoundaryParticleCount_U32);
+	zPosB_.reserve(finalBoundaryParticleCount_U32);
+	volB_.reserve(finalBoundaryParticleCount_U32);
+	psiB_.reserve(finalBoundaryParticleCount_U32);
+
+	// fill removed fluid slots from retained particles in the old tail
+	// TODO: parallelize this with TBB?
+	// TODO: use explicit SIMD, similar to sph_solver.cpp implementation?
+	// TODO: look for HPC best practices in this use-case?
+	for (uint64_t newLocalIdx = 0; newLocalIdx != retainedFluidOldLocalIdx_FromNewLocalIdx.size(); newLocalIdx++)
+	{
+		const uint32_t oldLocalIdx = retainedFluidOldLocalIdx_FromNewLocalIdx[newLocalIdx];
+		if (oldLocalIdx == newLocalIdx) { continue; }
+
+		idF_[newLocalIdx] = idF_[oldLocalIdx];
+		xPosF_[newLocalIdx] = xPosF_[oldLocalIdx];
+		yPosF_[newLocalIdx] = yPosF_[oldLocalIdx];
+		zPosF_[newLocalIdx] = zPosF_[oldLocalIdx];
+		xVelF_[newLocalIdx] = xVelF_[oldLocalIdx];
+		yVelF_[newLocalIdx] = yVelF_[oldLocalIdx];
+		zVelF_[newLocalIdx] = zVelF_[oldLocalIdx];
+		xVelPredF_[newLocalIdx] = xVelPredF_[oldLocalIdx];
+		yVelPredF_[newLocalIdx] = yVelPredF_[oldLocalIdx];
+		zVelPredF_[newLocalIdx] = zVelPredF_[oldLocalIdx];
+		xAccPressF_[newLocalIdx] = xAccPressF_[oldLocalIdx];
+		yAccPressF_[newLocalIdx] = yAccPressF_[oldLocalIdx];
+		zAccPressF_[newLocalIdx] = zAccPressF_[oldLocalIdx];
+		sourceTermF_[newLocalIdx] = sourceTermF_[oldLocalIdx];
+		diagElemF_[newLocalIdx] = diagElemF_[oldLocalIdx];
+		pressureF_[newLocalIdx] = pressureF_[oldLocalIdx];
+		densityF_[newLocalIdx] = densityF_[oldLocalIdx];
+	}
+
+	// fill removed boundary slots from retained particles in the old tail
+	// TODO: parallelize this with TBB?
+	// TODO: use explicit SIMD, similar to sph_solver.cpp implementation?
+	// TODO: look for HPC best practices in this use-case?
+	for (uint64_t newLocalIdx = 0; newLocalIdx != retainedBoundaryOldLocalIdx_FromNewLocalIdx.size(); newLocalIdx++)
+	{
+		const uint32_t oldLocalIdx = retainedBoundaryOldLocalIdx_FromNewLocalIdx[newLocalIdx];
+		if (oldLocalIdx == newLocalIdx) { continue; }
+
+		idB_[newLocalIdx] = idB_[oldLocalIdx];
+		xPosB_[newLocalIdx] = xPosB_[oldLocalIdx];
+		yPosB_[newLocalIdx] = yPosB_[oldLocalIdx];
+		zPosB_[newLocalIdx] = zPosB_[oldLocalIdx];
+		volB_[newLocalIdx] = volB_[oldLocalIdx];
+		psiB_[newLocalIdx] = psiB_[oldLocalIdx];
+	}
+
+	// resize native storage after compaction sources are no longer needed
+	N_F_ = finalFluidParticleCount_U32;
+	idF_.resize(N_F_);
+	xPosF_.resize(N_F_);
+	yPosF_.resize(N_F_);
+	zPosF_.resize(N_F_);
+	xVelF_.resize(N_F_);
+	yVelF_.resize(N_F_);
+	zVelF_.resize(N_F_);
+	xVelPredF_.resize(N_F_);
+	yVelPredF_.resize(N_F_);
+	zVelPredF_.resize(N_F_);
+	xAccPressF_.resize(N_F_);
+	yAccPressF_.resize(N_F_);
+	zAccPressF_.resize(N_F_);
+	sourceTermF_.resize(N_F_);
+	diagElemF_.resize(N_F_);
+	pressureF_.resize(N_F_);
+	densityF_.resize(N_F_);
+
+	N_B_ = finalBoundaryParticleCount_U32;
+	idB_.resize(N_B_);
+	xPosB_.resize(N_B_);
+	yPosB_.resize(N_B_);
+	zPosB_.resize(N_B_);
+	volB_.resize(N_B_);
+	psiB_.resize(N_B_);
+
+	// append received migrants and all newly constructed halos
+	// fluid
+	// TODO: look for HPC best practices in this use-case?
+	const uint64_t fluidAppendBegin = retainedFluidOldLocalIdx_FromNewLocalIdx.size();
+	std::copy(
+		appendedFluidParticles.id.begin(),
+		appendedFluidParticles.id.end(),
+		idF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.xPos.begin(),
+		appendedFluidParticles.xPos.end(),
+		xPosF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.yPos.begin(),
+		appendedFluidParticles.yPos.end(),
+		yPosF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.zPos.begin(),
+		appendedFluidParticles.zPos.end(),
+		zPosF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.xVel.begin(),
+		appendedFluidParticles.xVel.end(),
+		xVelF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.yVel.begin(),
+		appendedFluidParticles.yVel.end(),
+		yVelF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.zVel.begin(),
+		appendedFluidParticles.zVel.end(),
+		zVelF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.xVelPred.begin(),
+		appendedFluidParticles.xVelPred.end(),
+		xVelPredF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.yVelPred.begin(),
+		appendedFluidParticles.yVelPred.end(),
+		yVelPredF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.zVelPred.begin(),
+		appendedFluidParticles.zVelPred.end(),
+		zVelPredF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.xAccPress.begin(),
+		appendedFluidParticles.xAccPress.end(),
+		xAccPressF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.yAccPress.begin(),
+		appendedFluidParticles.yAccPress.end(),
+		yAccPressF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.zAccPress.begin(),
+		appendedFluidParticles.zAccPress.end(),
+		zAccPressF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.sourceTerm.begin(),
+		appendedFluidParticles.sourceTerm.end(),
+		sourceTermF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.diagElem.begin(),
+		appendedFluidParticles.diagElem.end(),
+		diagElemF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.pressure.begin(),
+		appendedFluidParticles.pressure.end(),
+		pressureF_.begin() + fluidAppendBegin);
+	std::copy(
+		appendedFluidParticles.density.begin(),
+		appendedFluidParticles.density.end(),
+		densityF_.begin() + fluidAppendBegin);
+
+	// boundary
+	const uint64_t boundaryAppendBegin = retainedBoundaryOldLocalIdx_FromNewLocalIdx.size();
+	std::copy(
+		appendedBoundaryParticles.id.begin(),
+		appendedBoundaryParticles.id.end(),
+		idB_.begin() + boundaryAppendBegin);
+	std::copy(
+		appendedBoundaryParticles.xPos.begin(),
+		appendedBoundaryParticles.xPos.end(),
+		xPosB_.begin() + boundaryAppendBegin);
+	std::copy(
+		appendedBoundaryParticles.yPos.begin(),
+		appendedBoundaryParticles.yPos.end(),
+		yPosB_.begin() + boundaryAppendBegin);
+	std::copy(
+		appendedBoundaryParticles.zPos.begin(),
+		appendedBoundaryParticles.zPos.end(),
+		zPosB_.begin() + boundaryAppendBegin);
+	std::copy(
+		appendedBoundaryParticles.volB.begin(),
+		appendedBoundaryParticles.volB.end(),
+		volB_.begin() + boundaryAppendBegin);
+	std::copy(
+		appendedBoundaryParticles.psiB.begin(),
+		appendedBoundaryParticles.psiB.end(),
+		psiB_.begin() + boundaryAppendBegin);
+
+	activeFluidParticleLocalIdxs_.clear();
+	useActiveFluidParticleLocalIdxs_ = false;
+	neighborList_->Resize(N_F_, N_B_, N_R_, params);
+	return true;
+}
+
+void SimBackend_CPU01::CopyRigidBodyStateTo(
+	Sync::RigidBodies& rigidBodies) const
+{
+	rigidBodies.N_ = N_RB_;
+	rigidBodies.xCM = xCMRB_; rigidBodies.yCM = yCMRB_; rigidBodies.zCM = zCMRB_;
+	rigidBodies.xVel = xVelRB_; rigidBodies.yVel = yVelRB_; rigidBodies.zVel = zVelRB_;
+	rigidBodies.xOmega = xOmegaRB_; rigidBodies.yOmega = yOmegaRB_; rigidBodies.zOmega = zOmegaRB_;
+	rigidBodies.xAngMom = xAngMomRB_; rigidBodies.yAngMom = yAngMomRB_; rigidBodies.zAngMom = zAngMomRB_;
+	rigidBodies.a00 = a00RB_; rigidBodies.a01 = a01RB_; rigidBodies.a02 = a02RB_;
+	rigidBodies.a10 = a10RB_; rigidBodies.a11 = a11RB_; rigidBodies.a12 = a12RB_;
+	rigidBodies.a20 = a20RB_; rigidBodies.a21 = a21RB_; rigidBodies.a22 = a22RB_;
+}
+
+bool SimBackend_CPU01::ApplyRigidBodyStateFrom(
+	const Sync::RigidBodies& rigidBodies)
+{
+	const auto bodySizeValid = [&rigidBodies](const auto& values)
+	{
+		return values.size() == static_cast<uint64_t>(rigidBodies.N_);
+	};
+
+	if (rigidBodies.N_ != N_RB_ ||
+		!bodySizeValid(rigidBodies.xCM) ||
+		!bodySizeValid(rigidBodies.yCM) ||
+		!bodySizeValid(rigidBodies.zCM) ||
+		!bodySizeValid(rigidBodies.xVel) ||
+		!bodySizeValid(rigidBodies.yVel) ||
+		!bodySizeValid(rigidBodies.zVel) ||
+		!bodySizeValid(rigidBodies.xOmega) ||
+		!bodySizeValid(rigidBodies.yOmega) ||
+		!bodySizeValid(rigidBodies.zOmega) ||
+		!bodySizeValid(rigidBodies.xAngMom) ||
+		!bodySizeValid(rigidBodies.yAngMom) ||
+		!bodySizeValid(rigidBodies.zAngMom) ||
+		!bodySizeValid(rigidBodies.a00) ||
+		!bodySizeValid(rigidBodies.a01) ||
+		!bodySizeValid(rigidBodies.a02) ||
+		!bodySizeValid(rigidBodies.a10) ||
+		!bodySizeValid(rigidBodies.a11) ||
+		!bodySizeValid(rigidBodies.a12) ||
+		!bodySizeValid(rigidBodies.a20) ||
+		!bodySizeValid(rigidBodies.a21) ||
+		!bodySizeValid(rigidBodies.a22))
+	{
+		return false;
+	}
+
+	xCMRB_ = rigidBodies.xCM; yCMRB_ = rigidBodies.yCM; zCMRB_ = rigidBodies.zCM;
+	xVelRB_ = rigidBodies.xVel; yVelRB_ = rigidBodies.yVel; zVelRB_ = rigidBodies.zVel;
+	xOmegaRB_ = rigidBodies.xOmega; yOmegaRB_ = rigidBodies.yOmega; zOmegaRB_ = rigidBodies.zOmega;
+	xAngMomRB_ = rigidBodies.xAngMom; yAngMomRB_ = rigidBodies.yAngMom; zAngMomRB_ = rigidBodies.zAngMom;
+	a00RB_ = rigidBodies.a00; a01RB_ = rigidBodies.a01; a02RB_ = rigidBodies.a02;
+	a10RB_ = rigidBodies.a10; a11RB_ = rigidBodies.a11; a12RB_ = rigidBodies.a12;
+	a20RB_ = rigidBodies.a20; a21RB_ = rigidBodies.a21; a22RB_ = rigidBodies.a22;
+	UpdateRigidParticles();
+	return true;
+}
+
 void SimBackend_CPU01::PackExportSnapshot(
 	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
