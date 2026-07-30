@@ -62,9 +62,9 @@ namespace GPU
 	// helper for copying buffer data from host to device
 	template <class T>
 	inline void Copy_HostToDevice(T* dstDevice, const T* srcHost, 
-								  size_t countElems, cudaStream_t stream)
+								  size_t N_elements, cudaStream_t stream)
 	{
-		if (countElems == 0) { return; }
+		if (N_elements == 0) { return; }
 
 		if (!dstDevice)
 		{
@@ -78,7 +78,7 @@ namespace GPU
 				"with a nonzero element count.");
 		}
 
-		Check(cudaMemcpyAsync(dstDevice, srcHost, countElems * sizeof(T),
+		Check(cudaMemcpyAsync(dstDevice, srcHost, N_elements * sizeof(T),
 			  cudaMemcpyHostToDevice, stream),
 			  "cudaMemcpyAsync() H->D");
 	}
@@ -86,9 +86,9 @@ namespace GPU
 	// helper for copying buffer data from device to host
 	template <class T>
 	inline void Copy_DeviceToHost(T* dstHost, const T* srcDevice,
-								  size_t countElems, cudaStream_t stream)
+								  size_t N_elements, cudaStream_t stream)
 	{
-		if (countElems == 0) { return; }
+		if (N_elements == 0) { return; }
 
 		if (!dstHost)
 		{
@@ -102,7 +102,7 @@ namespace GPU
 				"with a nonzero element count.");
 		}
 
-		Check(cudaMemcpyAsync(dstHost, srcDevice, countElems * sizeof(T),
+		Check(cudaMemcpyAsync(dstHost, srcDevice, N_elements * sizeof(T),
 			  cudaMemcpyDeviceToHost, stream), 
 			  "cudaMemcpyAsync() D to H");
 	}
@@ -110,9 +110,9 @@ namespace GPU
 	// helper for setting device buffer memory to a given byte value
 	template <class T>
 	inline void MemsetBytes(T* dstDevice, int value,
-							size_t countElems, cudaStream_t stream)
+							size_t N_elements, cudaStream_t stream)
 	{
-		if (countElems == 0) { return; }
+		if (N_elements == 0) { return; }
 
 		if (!dstDevice)
 		{
@@ -120,16 +120,16 @@ namespace GPU
 				"with a nonzero element count.");
 		}
 
-		Check(cudaMemsetAsync(dstDevice, value, countElems * sizeof(T), stream), 
+		Check(cudaMemsetAsync(dstDevice, value, N_elements * sizeof(T), stream),
 			  "cudaMemsetAsync()");
 	}
 
 	// helper for setting device buffer memory to zero
 	template <class T>
 	inline void MemsetZero(T* dstDevice,
-						   size_t countElems, cudaStream_t stream)
+						   size_t N_elements, cudaStream_t stream)
 	{
-		MemsetBytes(dstDevice, 0, countElems, stream);
+		MemsetBytes(dstDevice, 0, N_elements, stream);
 	}
 
 } // namespace GPU

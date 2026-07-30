@@ -478,7 +478,7 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 	const float wOff = radius + StartOffset(wLen_i, size, static_cast<int>(N_w));
 
 	// first pass to determine how many particles to keep
-	uint32_t keepCount = 0;
+	uint32_t N_keep = 0;
 	for (uint32_t kw = 0; kw < N_w; kw++)
 	{
 		for (uint32_t jv = 0; jv < N_v; jv++)
@@ -496,17 +496,17 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				w = std::clamp(w, radius, box.wLen - radius);
 
 				// apply filter
-				if (!keep || keep(u, v, w)) { keepCount++; }
+				if (!keep || keep(u, v, w)) { N_keep++; }
 			}
 		}
 	}
-	if (keepCount == 0) { return; }
+	if (N_keep == 0) { return; }
 
 	auto& F = dst.fluidParticles;
 
 	// resize fluid particle data structures
 	const uint32_t N_base = F.N_;
-	dst.ResizeFluid(N_base + keepCount);
+	dst.ResizeFluid(N_base + N_keep);
 
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
 	uint32_t outIdx = N_base;

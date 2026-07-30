@@ -204,12 +204,12 @@ namespace Export
 			{
 				const Mem::MemUsage& usage = record.mem[s][i];
 
-				totalUsed += usage.usedBytes;
-				totalAlloc += usage.allocBytes;
+				totalUsed += usage.N_usedBytes;
+				totalAlloc += usage.N_allocBytes;
 
 				memoryMetricsCsv_ << ','
-								  << usage.usedBytes << ','
-								  << usage.allocBytes;
+								  << usage.N_usedBytes << ','
+								  << usage.N_allocBytes;
 			}
 
 			memoryMetricsCsv_ << ','

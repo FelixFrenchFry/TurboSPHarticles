@@ -14,7 +14,7 @@ constexpr float  PI = std::numbers::pi_v<float>;
 
 namespace GPU01
 {
-	static constexpr uint32_t N_SellWidth = 32u;
+	static constexpr uint32_t N_SELL_WIDTH = 32u;
 
 	__constant__ uint32_t c_N_F;
 	__constant__ uint32_t c_N_B;
@@ -124,7 +124,7 @@ namespace GPU01
 		const uint8_t* __restrict__ nbrListDelta8)
 	{
 		return chunkBaseIdx + static_cast<uint32_t>(
-			nbrListDelta8[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane]);
+			nbrListDelta8[chunkBase + static_cast<uint64_t>(k) * N_SELL_WIDTH + lane]);
 	}
 
 	__device__ __forceinline__
@@ -136,7 +136,7 @@ namespace GPU01
 		const uint16_t* __restrict__ nbrListDelta16)
 	{
 		return chunkBaseIdx + static_cast<uint32_t>(
-			nbrListDelta16[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane]);
+			nbrListDelta16[chunkBase + static_cast<uint64_t>(k) * N_SELL_WIDTH + lane]);
 	}
 
 	__device__ __forceinline__
@@ -146,7 +146,7 @@ namespace GPU01
 		const uint32_t k,
 		const uint32_t* __restrict__ nbrListAbs32)
 	{
-		return nbrListAbs32[chunkBase + static_cast<uint64_t>(k) * N_SellWidth + lane];
+		return nbrListAbs32[chunkBase + static_cast<uint64_t>(k) * N_SELL_WIDTH + lane];
 	}
 
 	__device__ __forceinline__
@@ -228,8 +228,8 @@ namespace GPU01
 		// temp accumulation variable
 		float tmp_density = 0.0f;
 
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -370,8 +370,8 @@ namespace GPU01
 		float tmp_yAccViscF = 0.0f;
 		float tmp_zAccViscF = 0.0f;
 
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -573,8 +573,8 @@ namespace GPU01
 		float yCTermF = 0.0f;
 		float zCTermF = 0.0f;
 		float gradSquSumF = 0.0f;
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -786,8 +786,8 @@ namespace GPU01
 		float tmp_xAccPressF = 0.0f;
 		float tmp_yAccPressF = 0.0f;
 		float tmp_zAccPressF = 0.0f;
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -951,8 +951,8 @@ namespace GPU01
 		float tmp_xSysVecElem = 0.0f;
 		float tmp_ySysVecElem = 0.0f;
 		float tmp_zSysVecElem = 0.0f;
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -1129,10 +1129,10 @@ namespace GPU01
 		// destinations
 		float* densityF)
 	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_Density<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_Density<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR, psiB, psiR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
 			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
@@ -1181,10 +1181,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_NonPressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_NonPressureAcceleration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
 			xVelF, yVelF, zVelF, xVelR, yVelR, zVelR, densityF, volB, volR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
@@ -1237,10 +1237,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
 			xVelPredF, yVelPredF, zVelPredF, xVelR, yVelR, zVelR, densityF, psiB, psiR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
@@ -1291,10 +1291,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_PressureAcceleration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_PressureAcceleration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR, pressureF, psiB, psiR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
 			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
@@ -1344,10 +1344,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_PressureRelaxedJacobiSolver<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_PressureRelaxedJacobiSolver<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
 			xAccPressF, yAccPressF, zAccPressF, sourceTermF, diagElemF, psiB, psiR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
@@ -1372,10 +1372,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_Integration<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_Integration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xVelPredF, yVelPredF, zVelPredF, xAccPressF, yAccPressF, zAccPressF,
 			xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
 

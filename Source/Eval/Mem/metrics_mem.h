@@ -29,8 +29,8 @@ namespace Mem
 
 	struct MemUsage
 	{
-		uint64_t usedBytes = 0;
-		uint64_t allocBytes = 0;
+		uint64_t N_usedBytes = 0;
+		uint64_t N_allocBytes = 0;
 	};
 
 	struct ParticleClassMemUsage
@@ -255,8 +255,8 @@ namespace Mem
 		{ Set(record, MemSpace::RAM, bucket, mem); }
 	inline void Add(MemUsage& a, const MemUsage& b)
 	{
-		a.usedBytes += b.usedBytes;
-		a.allocBytes += b.allocBytes;
+		a.N_usedBytes += b.N_usedBytes;
+		a.N_allocBytes += b.N_allocBytes;
 	}
 	inline void Clear(MemBucketRecord& record)
 	{
@@ -280,28 +280,28 @@ namespace Mem
 	template<class T, size_t N>
 	inline MemUsage MemUsageOf_Array([[maybe_unused]] const std::array<T, N>& src)
 	{
-		const uint64_t used = static_cast<uint64_t>(N) * sizeof(T);
-		const uint64_t alloc = static_cast<uint64_t>(N) * sizeof(T);
+		const uint64_t N_usedBytes = static_cast<uint64_t>(N) * sizeof(T);
+		const uint64_t N_allocBytes = static_cast<uint64_t>(N) * sizeof(T);
 
-		return MemUsage{ used, alloc };
+		return MemUsage{ N_usedBytes, N_allocBytes };
 	}
 
 	template<class T, class Alloc>
 	inline MemUsage MemUsageOf_Vector(const std::vector<T, Alloc>& src)
 	{
-		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
-		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+		const uint64_t N_usedBytes = static_cast<uint64_t>(src.size()) * sizeof(T);
+		const uint64_t N_allocBytes = static_cast<uint64_t>(src.capacity()) * sizeof(T);
 
-		return MemUsage{ used, alloc };
+		return MemUsage{ N_usedBytes, N_allocBytes };
 	}
 
 	template<class T, std::size_t N, class Alloc>
 	inline MemUsage MemUsageOf_SmallVector(const boost::container::small_vector<T, N, Alloc>& src)
 	{
-		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
-		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+		const uint64_t N_usedBytes = static_cast<uint64_t>(src.size()) * sizeof(T);
+		const uint64_t N_allocBytes = static_cast<uint64_t>(src.capacity()) * sizeof(T);
 
-		return MemUsage{ used, alloc };
+		return MemUsage{ N_usedBytes, N_allocBytes };
 	}
 
 	template<class T, std::size_t N, class Alloc>
@@ -312,12 +312,12 @@ namespace Mem
 			return MemUsage{ 0ull, 0ull };
 		}
 
-		const uint64_t used = static_cast<uint64_t>(src.size()) * sizeof(T);
-		const uint64_t alloc = static_cast<uint64_t>(src.capacity()) * sizeof(T);
+		const uint64_t N_usedBytes = static_cast<uint64_t>(src.size()) * sizeof(T);
+		const uint64_t N_allocBytes = static_cast<uint64_t>(src.capacity()) * sizeof(T);
 		// only count spill heap allocation to prevent double-counting
 		// inline small_vector storage nested in another data struct
 
-		return MemUsage{ used, alloc };
+		return MemUsage{ N_usedBytes, N_allocBytes };
 	}
 
 	template<class T, class AllocInner, class AllocOuter>

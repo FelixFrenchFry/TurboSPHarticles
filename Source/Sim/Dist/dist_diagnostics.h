@@ -22,6 +22,13 @@ namespace Dist
 	class MpiContext;
 	struct ParticleRedistributionTimingReport;
 
+	// MPI tags for distributed diagnostic reports
+	inline constexpr int DIST_DIAGNOSTICS_TAG_HARDWARE_REPORT = 8100;
+	inline constexpr int DIST_DIAGNOSTICS_TAG_STEP_REPORT = 8101;
+	inline constexpr int DIST_DIAGNOSTICS_TAG_STARTUP_REPORT = 8102;
+	inline constexpr int DIST_DIAGNOSTICS_TAG_BENCH_REPORT = 8103;
+	inline constexpr int DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT = 8104;
+
 	constexpr int DIST_STARTUP_REPORT_TEXT_CHARS = 128;
 
 	// root-only summary of the distributed setup after initialization
@@ -35,10 +42,10 @@ namespace Dist
 		const char* neighborSearchMethod = "";
 		const char* neighborListStorage = "";
 
-		uint32_t globalFluidParticleCount = 0;
-		uint32_t globalBoundaryParticleCount = 0;
-		uint32_t globalRigidParticleCount = 0;
-		uint32_t globalRigidBodyCount = 0;
+		uint32_t N_globalF = 0;
+		uint32_t N_globalB = 0;
+		uint32_t N_globalR = 0;
+		uint32_t N_globalRB = 0;
 	};
 
 	// rank-local report gathered by root for startup tables
@@ -48,9 +55,9 @@ namespace Dist
 
 		char neighborRanks[DIST_STARTUP_REPORT_TEXT_CHARS] = {};
 
-		uint32_t ownedFluidParticleCount = 0;
-		uint32_t ownedBoundaryParticleCount = 0;
-		uint32_t replicatedRigidParticleCount = 0;
+		uint32_t N_ownedF = 0;
+		uint32_t N_ownedB = 0;
+		uint32_t N_replicatedR = 0;
 	};
 
 	// rank-local report gathered by root for distributed progress output
@@ -61,40 +68,40 @@ namespace Dist
 		uint64_t step = 0;
 		int64_t maxSteps = -1;
 
-		uint32_t ownedFluidParticleCount = 0;
-		uint32_t innerFluidParticleCount = 0;
-		uint32_t outerFluidParticleCount = 0;
-		uint32_t haloFluidParticleCount = 0;
-		uint32_t ownedBoundaryParticleCount = 0;
-		uint32_t innerBoundaryParticleCount = 0;
-		uint32_t outerBoundaryParticleCount = 0;
-		uint32_t haloBoundaryParticleCount = 0;
+		uint32_t N_ownedF = 0;
+		uint32_t N_innerF = 0;
+		uint32_t N_outerF = 0;
+		uint32_t N_haloF = 0;
+		uint32_t N_ownedB = 0;
+		uint32_t N_innerB = 0;
+		uint32_t N_outerB = 0;
+		uint32_t N_haloB = 0;
 
-		uint32_t migratedFluidParticleSendCount = 0;
-		uint32_t migratedFluidParticleRecvCount = 0;
-		uint32_t migratedBoundaryParticleSendCount = 0;
-		uint32_t migratedBoundaryParticleRecvCount = 0;
+		uint32_t N_sentMigratedF = 0;
+		uint32_t N_recvMigratedF = 0;
+		uint32_t N_sentMigratedB = 0;
+		uint32_t N_recvMigratedB = 0;
 
-		uint32_t haloFluidParticleSendCount = 0;
-		uint32_t haloFluidParticleRecvCount = 0;
-		uint32_t haloBoundaryParticleSendCount = 0;
-		uint32_t haloBoundaryParticleRecvCount = 0;
+		uint32_t N_sentHaloF = 0;
+		uint32_t N_recvHaloF = 0;
+		uint32_t N_sentHaloB = 0;
+		uint32_t N_recvHaloB = 0;
 
 		uint64_t totalStepLatestNs = 0;
 		uint64_t totalStepAvgNs = 0;
 
-		uint64_t latestMemUsedBytes = 0;
-		uint64_t latestMemAllocBytes = 0;
-		uint64_t maxMemUsedBytes = 0;
-		uint64_t maxMemAllocBytes = 0;
+		uint64_t N_latestMemUsedBytes = 0;
+		uint64_t N_latestMemAllocBytes = 0;
+		uint64_t N_maxMemUsedBytes = 0;
+		uint64_t N_maxMemAllocBytes = 0;
 
-		uint64_t maxBackendMemAllocBytes = 0;
-		uint64_t maxDistGlobalStateMemAllocBytes = 0;
-		uint64_t maxDistLocalStateMemAllocBytes = 0;
-		uint64_t maxDistParticleMetadataMemAllocBytes = 0;
-		uint64_t maxDistExchangeBuffersMemAllocBytes = 0;
-		uint64_t maxDistMiscMemAllocBytes = 0;
-		uint64_t maxTotalTrackedMemAllocBytes = 0;
+		uint64_t N_maxBackendMemAllocBytes = 0;
+		uint64_t N_maxDistGlobalStateMemAllocBytes = 0;
+		uint64_t N_maxDistLocalStateMemAllocBytes = 0;
+		uint64_t N_maxDistParticleMetadataMemAllocBytes = 0;
+		uint64_t N_maxDistExchangeBuffersMemAllocBytes = 0;
+		uint64_t N_maxDistMiscMemAllocBytes = 0;
+		uint64_t N_maxTotalTrackedMemAllocBytes = 0;
 
 		uint8_t exportedStep = 0;
 	};

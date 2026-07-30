@@ -4,10 +4,12 @@
 
 // external
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
 // internal
+#include "Source/Eval/Mem/metrics_mem.h"
 #include "Source/Sim/Sync/state_sim.h"
 #include "domain_decomp.h"
 
@@ -15,42 +17,66 @@
 
 namespace Dist
 {
+	// sentinel representing no global particle, valid indices are in [0, N_global)
+	inline constexpr uint32_t NO_GLOBAL_PARTICLE_IDX = std::numeric_limits<uint32_t>::max();
+
+	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
+	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CHUNK_SIZE = 16384;
+	inline constexpr uint32_t N_PARTICLE_CLASSIFICATION_CLASSES = 3;
+	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_OWNED = 0;
+	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_INNER = 1;
+	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_OUTER = 2;
+
 	enum class DistParticleClass
 	{
 		Inner,  // particle owned by this rank, NOT exported to other ranks
 		Outer,  // particle owned by this rank, exported to other ranks
 		Halo,   // particle NOT owned by this rank, received from a neighbor rank
-		None    // particle is not active in this rank (e.g. outside owned + halo bounds)
+		None    // particle is not active in this rank (e.g. outside owned AND halo bounds)
 	};
 
-	// reusable scratch for parallel owned-particle classification
+	// reusable scratch for parallelized classification process of owned particles
 	struct ParticleClassificationWorkBuffers
 	{
-		std::vector<uint64_t> classCounts_ByChunkClass;
-		std::vector<uint64_t> classWriteOffsets_ByChunkClass;
-		std::vector<uint64_t> classTotals;
+		std::vector<uint32_t> classCounts_ByChunkClass;
+		std::vector<uint32_t> classWriteOffsets_ByChunkClass;
+		std::vector<uint32_t> classTotals;
 	};
 
-	// stores all classification of particles (F/B) based on the domain decomp
+	// reusable scratch for parallelized local particle re-ordering
+	struct ParticleReOrderWorkBuffers
+	{
+		std::vector<DistParticleClass> particleClasses;
+		std::vector<uint32_t> particleLocalIdx_Owned;
+		std::vector<uint32_t> particleLocalIdx_Inner;
+		std::vector<uint32_t> particleLocalIdx_Outer;
+		std::vector<uint32_t> particleLocalIdx_Halo;
+		std::vector<uint32_t> particleGlobalIdx_FromLocalIdx;
+		ParticleClassificationWorkBuffers classification;
+	};
+
+	// stores all classification of particles (F/B) based on the domain decomp,
 	// local SoA layout is [ owned particles ][ halo particles ]
 	struct DistParticleState
 	{
-		// compact local SoA ranges before backend data re-ordering
-		uint32_t ownedParticleCount = 0;
-		uint32_t haloParticleCount = 0;
+		// compact local SoA ranges (before backend data re-ordering)
+		uint32_t N_owned = 0;
+		uint32_t N_halo = 0;
 
-		// per-particle class flag, indexed by localIdx
+		// per-local-particle class flag, indexed by localIdx
 		std::vector<DistParticleClass> particleClasses;
 
 		// cached local indices for each class
-		std::vector<int> particleLocalIdx_Owned;
-		std::vector<int> particleLocalIdx_Inner;
-		std::vector<int> particleLocalIdx_Outer;
-		std::vector<int> particleLocalIdx_Halo;
+		std::vector<uint32_t> particleLocalIdx_Owned;
+		std::vector<uint32_t> particleLocalIdx_Inner;
+		std::vector<uint32_t> particleLocalIdx_Outer;
+		std::vector<uint32_t> particleLocalIdx_Halo;
 
-		// index maps between the full scenario state and compact rank-local state
-		std::vector<int> particleGlobalIdx_FromLocalIdx;
-		std::vector<int> particleLocalIdx_FromGlobalIdx;
+		// index map from the compact rank-local state to the full scenario state
+		std::vector<uint32_t> particleGlobalIdx_FromLocalIdx;
+
+		// per-global-particle active flag, set while that particle is held by this rank
+		std::vector<uint8_t> activeGlobalIdxFlags;
 
 		// clears all particle classification metadata, compact range counts, and local/global index maps
 		void Clear();
@@ -58,23 +84,37 @@ namespace Dist
 		// clears only particle class lists and compact range counts while preserving local/global index maps
 		void ClearParticleClasses();
 
+		// checks that all per-local-particle metadata is present at the given index
+		bool HasMetadataAtLocalIdx(uint32_t localIdx) const;
+
 		// validates metadata for compact pre-backend-reorder layout [ owned particles ][ halo particles ]
-		bool IsValidLocalLayout(uint32_t localParticleCount, std::string* failMsg = nullptr) const;
+		bool IsValidLocalLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
 
 		// validates local metadata after backend data re-ordering, where owned
 		// and halo particles may no longer be stored in compact contiguous ranges
 		bool IsValidLocalParticleState(
-			uint32_t localParticleCount,
-			uint32_t globalParticleCount,
+			uint32_t N_local,
+			uint32_t N_global,
 			std::string* failMsg = nullptr) const;
 	};
+
+	// TODO: move these functions into the DistParticleState class?
+
+	// memory accounting shared by distributed particle storage and metadata owners
+	Mem::MemUsage GetParticleMemoryUsage(const Sync::FluidParticles& particles);
+	Mem::MemUsage GetParticleMemoryUsage(const Sync::BoundaryParticles& particles);
+	Mem::MemUsage GetParticleMemoryUsage(const Sync::RigidParticles& particles);
+	Mem::MemUsage GetParticleMemoryUsage(const Sync::UniversalSimState& state);
+	Mem::MemUsage GetParticleMemoryUsage(const DistParticleState& particleState);
+	Mem::MemUsage GetParticleMemoryUsage(const ParticleReOrderWorkBuffers& workBuffers);
 
 	// rebuilds particle classes, class index lists, and local/global maps after
 	// the backend changes local particle order
 	bool ApplyLocalParticleReOrder(
 		DistParticleState& particleState,
 		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
-		uint32_t globalParticleCount);
+		uint32_t N_global,
+		ParticleReOrderWorkBuffers* workBuffers = nullptr);
 
 	// rebuilds fluid particle class lists by keeping particles owned by this
 	// rank and splitting them into inner / outer by domain boundary distance

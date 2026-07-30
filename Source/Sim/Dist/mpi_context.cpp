@@ -18,14 +18,14 @@ namespace
 	constexpr uint64_t MPI_CONTEXT_BYTE_CHUNK_SIZE =
 		256ull * 1024ull * 1024ull; // ~ 256 MiB
 
-	int CheckedMpiCount(const uint64_t valueCount)
+	int CheckedMpiCount(const uint64_t N_values)
 	{
-		if (valueCount > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+		if (N_values > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 		{
 			throw std::runtime_error("MPI chunk exceeds int count range.");
 		}
 
-		return static_cast<int>(valueCount);
+		return static_cast<int>(N_values);
 	}
 
 	void CheckMpiResultImpl(const int result, const char* opName)
@@ -47,18 +47,19 @@ namespace
 		uint64_t valueOffset = 0;
 		while (valueOffset < values.size())
 		{
-			const uint64_t chunkSize = std::min(
+			const uint64_t N_chunkValues = std::min(
 				chunkCapacity,
 				static_cast<uint64_t>(values.size()) - valueOffset);
 			CheckMpiResultImpl(
 				mpiOp(
 					values.data() + valueOffset,
-					CheckedMpiCount(chunkSize)),
+					CheckedMpiCount(N_chunkValues)),
 				opName);
-			valueOffset += chunkSize;
+			valueOffset += N_chunkValues;
 		}
 	}
-}
+
+} // namespace anonymous
 
 MpiContext::MpiContext(
 	int& argc,
@@ -86,7 +87,7 @@ MpiContext::MpiContext(
 	}
 
 	CheckMpiResult(MPI_Comm_rank(MPI_COMM_WORLD, &rank_), "MPI_Comm_rank");
-	CheckMpiResult(MPI_Comm_size(MPI_COMM_WORLD, &size_), "MPI_Comm_size");
+	CheckMpiResult(MPI_Comm_size(MPI_COMM_WORLD, &N_ranks_), "MPI_Comm_size");
 }
 
 MpiContext::~MpiContext()
@@ -124,11 +125,11 @@ void MpiContext::BroadcastFloats(
 	ForEachMpiVectorChunk(
 		values,
 		"MPI_Bcast(floats)",
-		[root](float* chunkData, const int chunkSize)
+		[root](float* chunkData, const int N_chunkValues)
 		{
 			return MPI_Bcast(
 				chunkData,
-				chunkSize,
+				N_chunkValues,
 				MPI_FLOAT,
 				root,
 				MPI_COMM_WORLD);
@@ -138,22 +139,22 @@ void MpiContext::BroadcastFloats(
 void MpiContext::BroadcastString(std::string& value, const int root) const
 {
 	// broadcast length first, so non-root ranks can resize their receive buffer
-	int length = (rank_ == root) ? static_cast<int>(value.size()) : 0;
+	int N_chars = (rank_ == root) ? static_cast<int>(value.size()) : 0;
 
-	BroadcastInt(length, root);
-	if (length < 0)
+	BroadcastInt(N_chars, root);
+	if (N_chars < 0)
 	{
 		throw std::runtime_error("Invalid negative MPI string broadcast length.");
 	}
 
 	if (rank_ != root)
 	{
-		value.resize(static_cast<uint64_t>(length));
+		value.resize(static_cast<uint64_t>(N_chars));
 	}
 
-	if (length > 0)
+	if (N_chars > 0)
 	{
-		CheckMpiResult(MPI_Bcast(value.data(), length, MPI_CHAR, root, MPI_COMM_WORLD),
+		CheckMpiResult(MPI_Bcast(value.data(), N_chars, MPI_CHAR, root, MPI_COMM_WORLD),
 			"MPI_Bcast(string)");
 	}
 }
@@ -180,6 +181,20 @@ uint64_t MpiContext::AllReduceSumUint64(const uint64_t value) const
 			MPI_COMM_WORLD),
 		"MPI_Allreduce(uint64 sum)");
 	return result;
+}
+
+void MpiContext::AllReduceSumUint64s(
+	std::array<uint64_t, 2>& values) const
+{
+	CheckMpiResult(
+		MPI_Allreduce(
+			MPI_IN_PLACE,
+			values.data(),
+			static_cast<int>(values.size()),
+			MPI_UINT64_T,
+			MPI_SUM,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(uint64 pair sum)");
 }
 
 uint32_t MpiContext::AllReduceMaxUint32(const uint32_t value) const
@@ -247,12 +262,12 @@ void MpiContext::AllReduceSumUint32s(std::vector<uint32_t>& values) const
 	ForEachMpiVectorChunk(
 		values,
 		"MPI_Allreduce(uint32s)",
-		[](uint32_t* chunkData, const int chunkSize)
+		[](uint32_t* chunkData, const int N_chunkValues)
 		{
 			return MPI_Allreduce(
 				MPI_IN_PLACE,
 				chunkData,
-				chunkSize,
+				N_chunkValues,
 				MPI_UINT32_T,
 				MPI_SUM,
 				MPI_COMM_WORLD);
@@ -264,12 +279,12 @@ void MpiContext::AllReduceSumFloats(std::vector<float>& values) const
 	ForEachMpiVectorChunk(
 		values,
 		"MPI_Allreduce(floats)",
-		[](float* chunkData, const int chunkSize)
+		[](float* chunkData, const int N_chunkValues)
 		{
 			return MPI_Allreduce(
 				MPI_IN_PLACE,
 				chunkData,
-				chunkSize,
+				N_chunkValues,
 				MPI_FLOAT,
 				MPI_SUM,
 				MPI_COMM_WORLD);
@@ -281,12 +296,12 @@ void MpiContext::AllReduceMaxUint8s(std::vector<uint8_t>& values) const
 	ForEachMpiVectorChunk(
 		values,
 		"MPI_Allreduce(uint8 max)",
-		[](uint8_t* chunkData, const int chunkSize)
+		[](uint8_t* chunkData, const int N_chunkValues)
 		{
 			return MPI_Allreduce(
 				MPI_IN_PLACE,
 				chunkData,
-				chunkSize,
+				N_chunkValues,
 				MPI_UINT8_T,
 				MPI_MAX,
 				MPI_COMM_WORLD);
@@ -296,27 +311,27 @@ void MpiContext::AllReduceMaxUint8s(std::vector<uint8_t>& values) const
 void MpiContext::AllToAllInts(
 	const std::vector<int>& sendValues,
 	std::vector<int>& recvValues,
-	const int valuesPerRank) const
+	const int N_valuesPerRank) const
 {
-	if (valuesPerRank <= 0)
+	if (N_valuesPerRank <= 0)
 	{
 		throw std::runtime_error("MPI all-to-all values-per-rank must be positive.");
 	}
 
-	const uint64_t expectedValueCount = static_cast<uint64_t>(size_) * static_cast<uint64_t>(valuesPerRank);
-	if (sendValues.size() != expectedValueCount)
+	const uint64_t N_expectedValues = static_cast<uint64_t>(N_ranks_) * static_cast<uint64_t>(N_valuesPerRank);
+	if (sendValues.size() != N_expectedValues)
 	{
 		throw std::runtime_error("MPI all-to-all int send buffer size does not match world size.");
 	}
 
-	recvValues.resize(expectedValueCount);
+	recvValues.resize(N_expectedValues);
 	CheckMpiResult(
 		MPI_Alltoall(
 			sendValues.data(),
-			valuesPerRank,
+			N_valuesPerRank,
 			MPI_INT,
 			recvValues.data(),
-			valuesPerRank,
+			N_valuesPerRank,
 			MPI_INT,
 			MPI_COMM_WORLD),
 		"MPI_Alltoall(int)");
@@ -360,16 +375,16 @@ void MpiContext::ISendInt(
 
 void MpiContext::IRecvBytes(
 	void* recvData,
-	const int recvByteCount,
+	const int N_recvBytes,
 	const int peerRank,
 	const int tag,
 	MPI_Request& request) const
 {
-	if (recvByteCount < 0)
+	if (N_recvBytes < 0)
 	{
 		throw std::runtime_error("Invalid negative MPI byte count.");
 	}
-	if (recvByteCount > 0 && recvData == nullptr)
+	if (N_recvBytes > 0 && recvData == nullptr)
 	{
 		throw std::runtime_error("Invalid null MPI receive buffer.");
 	}
@@ -377,7 +392,7 @@ void MpiContext::IRecvBytes(
 	CheckMpiResult(
 		MPI_Irecv(
 			recvData,
-			recvByteCount,
+			N_recvBytes,
 			MPI_BYTE,
 			peerRank,
 			tag,
@@ -388,16 +403,16 @@ void MpiContext::IRecvBytes(
 
 void MpiContext::ISendBytes(
 	const void* sendData,
-	const int sendByteCount,
+	const int N_sendBytes,
 	const int peerRank,
 	const int tag,
 	MPI_Request& request) const
 {
-	if (sendByteCount < 0)
+	if (N_sendBytes < 0)
 	{
 		throw std::runtime_error("Invalid negative MPI byte count.");
 	}
-	if (sendByteCount > 0 && sendData == nullptr)
+	if (N_sendBytes > 0 && sendData == nullptr)
 	{
 		throw std::runtime_error("Invalid null MPI send buffer.");
 	}
@@ -405,7 +420,7 @@ void MpiContext::ISendBytes(
 	CheckMpiResult(
 		MPI_Isend(
 			sendData,
-			sendByteCount,
+			N_sendBytes,
 			MPI_BYTE,
 			peerRank,
 			tag,
@@ -416,12 +431,12 @@ void MpiContext::ISendBytes(
 
 void MpiContext::IRecvBytesChunked(
 	void* recvData,
-	const uint64_t recvByteCount,
+	const uint64_t N_recvBytes,
 	const int peerRank,
 	const int tag,
 	std::vector<MPI_Request>& requests) const
 {
-	if (recvByteCount == 0) { return; }
+	if (N_recvBytes == 0) { return; }
 	if (recvData == nullptr)
 	{
 		throw std::runtime_error("Invalid null MPI chunked receive buffer.");
@@ -431,31 +446,31 @@ void MpiContext::IRecvBytesChunked(
 	uint64_t byteOffset = 0;
 
 	// use the same tag for each chunk; MPI preserves ordering for same peer/tag/communicator
-	while (byteOffset < recvByteCount)
+	while (byteOffset < N_recvBytes)
 	{
-		const uint64_t chunkByteCount = std::min(
-			MPI_CONTEXT_BYTE_CHUNK_SIZE, recvByteCount - byteOffset);
+		const uint64_t N_chunkBytes = std::min(
+			MPI_CONTEXT_BYTE_CHUNK_SIZE, N_recvBytes - byteOffset);
 
 		requests.emplace_back(MPI_REQUEST_NULL);
 		IRecvBytes(
 			recvBytes + byteOffset,
-			CheckedMpiCount(chunkByteCount),
+			CheckedMpiCount(N_chunkBytes),
 			peerRank,
 			tag,
 			requests.back());
 
-		byteOffset += chunkByteCount;
+		byteOffset += N_chunkBytes;
 	}
 }
 
 void MpiContext::ISendBytesChunked(
 	const void* sendData,
-	const uint64_t sendByteCount,
+	const uint64_t N_sendBytes,
 	const int peerRank,
 	const int tag,
 	std::vector<MPI_Request>& requests) const
 {
-	if (sendByteCount == 0) { return; }
+	if (N_sendBytes == 0) { return; }
 	if (sendData == nullptr)
 	{
 		throw std::runtime_error("Invalid null MPI chunked send buffer.");
@@ -465,20 +480,20 @@ void MpiContext::ISendBytesChunked(
 	uint64_t byteOffset = 0;
 
 	// use the same tag for each chunk; MPI preserves ordering for same peer/tag/communicator
-	while (byteOffset < sendByteCount)
+	while (byteOffset < N_sendBytes)
 	{
-		const uint64_t chunkByteCount = std::min(
-			MPI_CONTEXT_BYTE_CHUNK_SIZE, sendByteCount - byteOffset);
+		const uint64_t N_chunkBytes = std::min(
+			MPI_CONTEXT_BYTE_CHUNK_SIZE, N_sendBytes - byteOffset);
 
 		requests.emplace_back(MPI_REQUEST_NULL);
 		ISendBytes(
 			sendBytes + byteOffset,
-			CheckedMpiCount(chunkByteCount),
+			CheckedMpiCount(N_chunkBytes),
 			peerRank,
 			tag,
 			requests.back());
 
-		byteOffset += chunkByteCount;
+		byteOffset += N_chunkBytes;
 	}
 }
 

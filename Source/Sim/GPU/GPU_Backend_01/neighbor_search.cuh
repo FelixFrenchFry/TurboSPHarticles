@@ -79,10 +79,10 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 		uint32_t cellQueryReach_ = 1;
-		uint32_t N_NonEmptyCellsF_ = 0;
-		uint32_t N_NonEmptyCellsB_ = 0;
-		uint32_t N_NonEmptyCellsR_ = 0;
-		uint32_t N_NonEmptyCellsAny_ = 0;
+		uint32_t N_nonEmptyCellsF_ = 0;
+		uint32_t N_nonEmptyCellsB_ = 0;
+		uint32_t N_nonEmptyCellsR_ = 0;
+		uint32_t N_nonEmptyCellsAny_ = 0;
 		uint32_t N_queryCellSlots_ = 0;
 		bool particlesMatchCurrentCellOrder_ = false;
 		bool cellIdsAvailableForReuse_ = false;
@@ -116,7 +116,7 @@ namespace Sim
 			DeviceBuffer<uint32_t>& d_cellStartIdx,
 			uint32_t* d_markerScanScratch,
 			const uint64_t* d_cellIdSorted,
-			uint32_t N, uint32_t& N_NonEmptyCells);
+			uint32_t N, uint32_t& N_nonEmptyCells);
 
 		void BuildMergedCompactCellLookup();
 		void BuildQueryLookupBounds();

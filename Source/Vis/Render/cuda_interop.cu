@@ -74,13 +74,13 @@ namespace Render
 		// destinations
 		InstanceData* dst)
 	{
-		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_BLOCK_SIZE = 256;
 
 		// pack fluid particles into OpenGL instance data
 		if (N_F > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_PackFluidInstancesCUDA<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_PackFluidInstancesCUDA<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				fluid, fluidRadius, N_F, dst);
 			GPU::CheckLastKernel("K_PackFluidInstancesCUDA()");
 		}
@@ -88,8 +88,8 @@ namespace Render
 		// append rigid particles to OpenGL instance data
 		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_PackRigidInstancesCUDA<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_PackRigidInstancesCUDA<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				rigid, particleSizeB, rigidRadiusScale, N_R, N_F, dst);
 			GPU::CheckLastKernel("K_PackRigidInstancesCUDA()");
 		}

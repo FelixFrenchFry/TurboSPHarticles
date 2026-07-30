@@ -16,9 +16,9 @@
 
 
 // TODO: make these used the params based on heuristic expected values?
-static constexpr uint32_t N_perScratchInlineFF = 64;
-static constexpr uint32_t N_perScratchInlineFB = 48;
-static constexpr uint32_t N_perScratchInlineFR = 48;
+static constexpr uint32_t N_PER_SCRATCH_INLINE_FF = 64;
+static constexpr uint32_t N_PER_SCRATCH_INLINE_FB = 48;
+static constexpr uint32_t N_PER_SCRATCH_INLINE_FR = 48;
 
 namespace Sim
 {
@@ -172,19 +172,19 @@ namespace Sim
 
 		void Finalize_Fill() override {}
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override;
-		void SetNbrCountFB(uint32_t i, uint32_t count) override;
-		void SetNbrCountFR(uint32_t i, uint32_t count) override;
-		void SetNbrCountRF(uint32_t i, uint32_t count) override;
-		void SetNbrCountRB(uint32_t i, uint32_t count) override;
-		void SetNbrCountRR(uint32_t i, uint32_t count) override;
+		void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountFR(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountRF(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountRB(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountRR(uint32_t i, uint32_t N_nbrs) override;
 
-		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
@@ -252,15 +252,15 @@ namespace Sim
 		// thread-local neighbor scratch for contiguous access
 		// TODO: still needed despite chunked SELL storage?
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+			uint32_t, N_PER_SCRATCH_INLINE_FF>> nbrScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+			uint32_t, N_PER_SCRATCH_INLINE_FB>> nbrScratchFB_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFR>> nbrScratchFR_;
+			uint32_t, N_PER_SCRATCH_INLINE_FR>> nbrScratchFR_;
 
 		// misc
 		static constexpr uint32_t chunkWidth = CPU::N_SIMD_WIDTH;
-		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+		static constexpr float extraAllocCapacityPct_ = 4.0f; // TODO: fine-tune
 
 		// helpers
 		static uint32_t ChunkOfParticle(uint32_t i) noexcept;
@@ -299,19 +299,19 @@ namespace Sim
 
 		void Finalize_Fill() override {}
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override;
-		void SetNbrCountFB(uint32_t i, uint32_t count) override;
-		void SetNbrCountFR(uint32_t i, uint32_t count) override;
-		void SetNbrCountRF(uint32_t i, uint32_t count) override;
-		void SetNbrCountRB(uint32_t i, uint32_t count) override;
-		void SetNbrCountRR(uint32_t i, uint32_t count) override;
+		void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountFR(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountRF(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountRB(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountRR(uint32_t i, uint32_t N_nbrs) override;
 
-		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
@@ -401,15 +401,15 @@ namespace Sim
 
 		// thread-local neighbor scratch for contiguous access
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+			uint32_t, N_PER_SCRATCH_INLINE_FF>> nbrScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+			uint32_t, N_PER_SCRATCH_INLINE_FB>> nbrScratchFB_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFR>> nbrScratchFR_;
+			uint32_t, N_PER_SCRATCH_INLINE_FR>> nbrScratchFR_;
 
 		// misc
 		static constexpr uint32_t chunkWidth = CPU::N_SIMD_WIDTH;
-		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+		static constexpr float extraAllocCapacityPct_ = 4.0f; // TODO: fine-tune
 
 		// helpers
 		static uint32_t ChunkOfParticle(uint32_t i) noexcept;

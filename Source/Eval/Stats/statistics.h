@@ -44,7 +44,7 @@ namespace Stats
 		DistributionPartial nbrCountRR;
 		DistributionPartial velMag;
 
-		uint32_t solverIterCount = 0;
+		uint32_t N_solverIters = 0;
 		double densRelErrorRawSum = 0.0;
 		double densRelErrorPosSum = 0.0;
 		double densRelErrorAbsSum = 0.0;
@@ -86,12 +86,12 @@ namespace Stats
 	private: // --------------------------------------------------------------------------------------
 
 		// max and current number of steps for which stat data is kept
-		uint32_t maxRecCount_;
-		uint32_t curRecCount_;
+		uint32_t N_maxRecords_;
+		uint32_t N_records_;
 
 		StatRecordStep recLatest_;
 
-		// rolling buffer for the stat data for the last maxCount_ steps
+		// rolling buffer for the stat data for the last N_maxRecords_ steps
 		std::deque<StatRecordStep> recHistory_;
 
 		// all-time per-metric aggregates

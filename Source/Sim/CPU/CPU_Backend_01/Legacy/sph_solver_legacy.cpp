@@ -133,7 +133,7 @@ void CPU01::Density(
 				// contributions from fluid neighbors
 				NeighborSpan nbrListFF = neighborList.FF(i);
 				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
-				const uint32_t N_FF = nbrListFF.count;
+				const uint32_t N_FF = nbrListFF.N;
 				#pragma omp simd reduction(+:tmp_densityF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -157,7 +157,7 @@ void CPU01::Density(
 				// contributions from boundary neighbors
 				NeighborSpan nbrListFB = neighborList.FB(i);
 				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
-				const uint32_t N_FB = nbrListFB.count;
+				const uint32_t N_FB = nbrListFB.N;
 				#pragma omp simd reduction(+:tmp_densityB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -232,7 +232,7 @@ void CPU01::NonPressureAcceleration(
 				// contributions from fluid neighbors
 				NeighborSpan nbrListFF = neighborList.FF(i);
 				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
-				const uint32_t N_FF = nbrListFF.count;
+				const uint32_t N_FF = nbrListFF.N;
 				#pragma omp simd reduction(+:tmp_xAccViscF,tmp_yAccViscF,tmp_zAccViscF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -275,7 +275,7 @@ void CPU01::NonPressureAcceleration(
 				// contributions from boundary neighbors
 				NeighborSpan nbrListFB = neighborList.FB(i);
 				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
-				const uint32_t N_FB = nbrListFB.count;
+				const uint32_t N_FB = nbrListFB.N;
 				#pragma omp simd reduction(+:tmp_xAccViscB,tmp_yAccViscB,tmp_zAccViscB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -380,7 +380,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 				// contributions from fluid neighbors
 				NeighborSpan nbrListFF = neighborList.FF(i);
 				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
-				const uint32_t N_FF = nbrListFF.count;
+				const uint32_t N_FF = nbrListFF.N;
 				#pragma omp simd reduction(+:tmp_SourceTermF,xCTermF,yCTermF,zCTermF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -423,7 +423,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit(
 				// contributions from boundary neighbors
 				NeighborSpan nbrListFB = neighborList.FB(i);
 				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
-				const uint32_t N_FB = nbrListFB.count;
+				const uint32_t N_FB = nbrListFB.N;
 				#pragma omp simd reduction(+:tmp_SourceTermB,xCTermB,yCTermB,zCTermB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -598,7 +598,7 @@ void CPU01::PressureAcceleration(
 				// contributions from fluid neighbors
 				NeighborSpan nbrListFF = neighborList.FF(i);
 				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
-				const uint32_t N_FF = nbrListFF.count;
+				const uint32_t N_FF = nbrListFF.N;
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
 				for (uint32_t k = 0; k < N_FF; k++)
 				{
@@ -632,7 +632,7 @@ void CPU01::PressureAcceleration(
 				// contributions from boundary neighbors
 				NeighborSpan nbrListFB = neighborList.FB(i);
 				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
-				const uint32_t N_FB = nbrListFB.count;
+				const uint32_t N_FB = nbrListFB.N;
 				#pragma omp simd reduction(+:tmp_xAccPressF,tmp_yAccPressF,tmp_zAccPressF)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{
@@ -734,7 +734,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 				// contributions from fluid neighbors
 				NeighborSpan nbrListFF = neighborList.FF(i);
 				const uint32_t* RESTRICT nbrFF = nbrListFF.data;
-				const uint32_t N_FF = nbrListFF.count;
+				const uint32_t N_FF = nbrListFF.N;
 				#pragma omp simd reduction(+:tmp_SysVecElemF)
 				for (uint32_t k = 0; k < N_FF; ++k)
 				{
@@ -767,7 +767,7 @@ void CPU01::PressureRelaxedJacobiSolver(
 				// contributions from boundary neighbors
 				NeighborSpan nbrListFB = neighborList.FB(i);
 				const uint32_t* RESTRICT nbrFB = nbrListFB.data;
-				const uint32_t N_FB = nbrListFB.count;
+				const uint32_t N_FB = nbrListFB.N;
 				#pragma omp simd reduction(+:tmp_SysVecElemB)
 				for (uint32_t k = 0; k < N_FB; k++)
 				{

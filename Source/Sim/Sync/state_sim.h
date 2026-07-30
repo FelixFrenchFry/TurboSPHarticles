@@ -649,17 +649,19 @@ namespace Sync
 			for (uint32_t bodyIdx = 0; bodyIdx < bodies.N_; bodyIdx++)
 			{
 				const uint32_t begin = bodies.rigidParticleBegin[bodyIdx];
-				const uint32_t count = bodies.rigidParticleCount[bodyIdx];
+				const uint32_t N_rigidParticles = bodies.rigidParticleCount[bodyIdx];
+				const uint32_t end = begin + N_rigidParticles;
+
 				if (begin != nextRigidParticleIdx)
 				{
 					throw std::runtime_error("Rigid body particle ranges are not contiguous.");
 				}
-				if (begin > R.N_ || count > R.N_ - begin)
+				if (begin > R.N_ || N_rigidParticles > R.N_ - begin)
 				{
 					throw std::runtime_error("Invalid rigid body particle range.");
 				}
 
-				for (uint32_t rigidParticleIdx = begin; rigidParticleIdx < begin + count; rigidParticleIdx++)
+				for (uint32_t rigidParticleIdx = begin; rigidParticleIdx < end; rigidParticleIdx++)
 				{
 					if (R.bodyId[rigidParticleIdx] != bodyIdx)
 					{
@@ -667,7 +669,7 @@ namespace Sync
 					}
 				}
 
-				nextRigidParticleIdx = begin + count;
+				nextRigidParticleIdx = end;
 			}
 
 			if (nextRigidParticleIdx != R.N_)

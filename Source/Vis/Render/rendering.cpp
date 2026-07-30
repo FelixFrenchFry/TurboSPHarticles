@@ -309,14 +309,14 @@ bool RenderingMgr::UpdateParticlesCUDA(
 
 	if (success && N_total > 0)
 	{
-		size_t mappedBytes = 0;
+		size_t N_mappedBytes = 0;
 		success = HandleErrorCUDA(
 			cudaGraphicsResourceGetMappedPointer(
 				reinterpret_cast<void**>(&out),
-				&mappedBytes,
+				&N_mappedBytes,
 				instanceResourceCUDA_),
 			"cudaGraphicsResourceGetMappedPointer() for particle instances");
-		if (success && mappedBytes < static_cast<size_t>(N_total) * sizeof(InstanceData))
+		if (success && N_mappedBytes < static_cast<size_t>(N_total) * sizeof(InstanceData))
 		{
 			interopReadyCUDA_ = false;
 			visualFrameMailboxCUDA_->Disable("mapped OpenGL instance buffer is too small");
@@ -400,10 +400,10 @@ void RenderingMgr::UpdateCentersOfMass(
 	N_centerOfMassInstances_ = static_cast<uint32_t>(transforms.size());
 	if (N_centerOfMassInstances_ == 0) { return; }
 
-	const GLsizeiptr bytes =
+	const GLsizeiptr N_bytes =
 		static_cast<GLsizeiptr>(transforms.size() * sizeof(glm::mat4));
 	glNamedBufferData(
-		vboCenterOfMassInstances_, bytes, transforms.data(), GL_DYNAMIC_DRAW);
+		vboCenterOfMassInstances_, N_bytes, transforms.data(), GL_DYNAMIC_DRAW);
 }
 
 void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::VisParams& params)
@@ -418,8 +418,8 @@ void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::
 	N_lineVertices_ = lineVertices.size();
 	if (N_lineVertices_ == 0) { return; }
 
-	const GLsizeiptr bytes = static_cast<GLsizeiptr>(lineVertices.size() * sizeof(glm::vec3));
-	glNamedBufferData(vboLines_, bytes, lineVertices.data(), GL_DYNAMIC_DRAW);
+	const GLsizeiptr N_bytes = static_cast<GLsizeiptr>(lineVertices.size() * sizeof(glm::vec3));
+	glNamedBufferData(vboLines_, N_bytes, lineVertices.data(), GL_DYNAMIC_DRAW);
 }
 
 void RenderingMgr::UpdateColorMap(const ColorMapData& colorMap)

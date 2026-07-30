@@ -21,11 +21,6 @@ using namespace Dist;
 
 namespace
 {
-	constexpr int DIST_DIAGNOSTICS_TAG_HARDWARE_REPORT = 8100;
-	constexpr int DIST_DIAGNOSTICS_TAG_STEP_REPORT = 8101;
-	constexpr int DIST_DIAGNOSTICS_TAG_STARTUP_REPORT = 8102;
-	constexpr int DIST_DIAGNOSTICS_TAG_BENCH_REPORT = 8103;
-	constexpr int DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT = 8104;
 	constexpr int DIST_DIAGNOSTICS_RANK_TABLE_LIMIT = 16;
 	constexpr int N_CLI_SECTION_SEPARATOR_CHARS = 80;
 	constexpr const char* CLI_SECTION_SEPARATOR =
@@ -37,7 +32,7 @@ namespace
 		bool initialized = false;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
-		int lastNumLines = 0;
+		int N_lastLines = 0;
 	};
 
 	struct DistHardwareReport
@@ -73,28 +68,28 @@ namespace
 		std::putchar('\n');
 	}
 
-	void PrintLine(int& lineCount)
+	void PrintLine(int& N_lines)
 	{
 		std::printf("\x1b[2K\n");
-		lineCount++;
+		N_lines++;
 	}
 
 	template <typename... Args>
-	void PrintLine(int& lineCount, const char* fmt, Args... args)
+	void PrintLine(int& N_lines, const char* fmt, Args... args)
 	{
 		std::printf("\x1b[2K");
 		std::printf(fmt, args...);
 		std::printf("\n");
-		lineCount++;
+		N_lines++;
 	}
 
 	void FormatHms(double seconds, int& h, int& m, int& s)
 	{
 		seconds = std::max(seconds, 0.0);
-		const int total = static_cast<int>(seconds + 0.5);
-		h = total / 3600;
-		m = (total % 3600) / 60;
-		s = total % 60;
+		const int N_totalSeconds = static_cast<int>(seconds + 0.5);
+		h = N_totalSeconds / 3600;
+		m = (N_totalSeconds % 3600) / 60;
+		s = N_totalSeconds % 60;
 	}
 
 	void FormatRankLabel(char* buffer, const size_t bufferSize, const int rank)
@@ -681,63 +676,63 @@ namespace
 	}
 
 	void PrintParticleLayoutTable(
-		int& lineCount,
+		int& N_lines,
 		const std::vector<DistRankStepReport>& reports)
 	{
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"%-2s | %10s | %10s | %10s | %10s | %10s | %10s",
 			"r", "inner F", "outer F", "halo F",
 			"inner B", "outer B", "halo B");
-		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
+		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankStepReport& report : reports)
 		{
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%-2s | %10u | %10u | %10u | %10u | %10u | %10u",
 				rankLabel,
-				report.innerFluidParticleCount,
-				report.outerFluidParticleCount,
-				report.haloFluidParticleCount,
-				report.innerBoundaryParticleCount,
-				report.outerBoundaryParticleCount,
-				report.haloBoundaryParticleCount);
+				report.N_innerF,
+				report.N_outerF,
+				report.N_haloF,
+				report.N_innerB,
+				report.N_outerB,
+				report.N_haloB);
 		}
 	}
 
 	void PrintParticleExchangeTable(
-		int& lineCount,
+		int& N_lines,
 		const std::vector<DistRankStepReport>& reports)
 	{
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"%-2s | %17s | %17s | %16s | %16s",
 			"r", "migr F send/recv", "halo F send/recv",
 			"migr B send/recv", "halo B send/recv");
-		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
+		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankStepReport& report : reports)
 		{
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%-2s | %7u / %-7u | %7u / %-7u | %6u / %-7u | %6u / %-7u",
 				rankLabel,
-				report.migratedFluidParticleSendCount,
-				report.migratedFluidParticleRecvCount,
-				report.haloFluidParticleSendCount,
-				report.haloFluidParticleRecvCount,
-				report.migratedBoundaryParticleSendCount,
-				report.migratedBoundaryParticleRecvCount,
-				report.haloBoundaryParticleSendCount,
-				report.haloBoundaryParticleRecvCount);
+				report.N_sentMigratedF,
+				report.N_recvMigratedF,
+				report.N_sentHaloF,
+				report.N_recvHaloF,
+				report.N_sentMigratedB,
+				report.N_recvMigratedB,
+				report.N_sentHaloB,
+				report.N_recvHaloB);
 		}
 	}
 
 	void PrintParticleRedistributionTimingTable(
-		int& lineCount,
+		int& N_lines,
 		const std::vector<ParticleRedistributionTimingReport>& reports,
 		const Bench::TimeUnit unit)
 	{
@@ -746,12 +741,12 @@ namespace
 
 		for (const std::string& line : lines)
 		{
-			PrintLine(lineCount, "%s", line.c_str());
+			PrintLine(N_lines, "%s", line.c_str());
 		}
 	}
 
 	void PrintBenchmarkSummaryTable(
-		int& lineCount,
+		int& N_lines,
 		const std::vector<DistRankBenchReport>& reports,
 		const Bench::BenchOpList& benchOps,
 		const Bench::TimeUnit unit)
@@ -777,10 +772,10 @@ namespace
 		std::snprintf(latestLabel, sizeof(latestLabel), "latest [%s]", unitStr);
 		std::snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
 
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"%-33.33s | %11s  %8s | %10s  %8s",
 			"benchmark summary", latestLabel, "% total", avgLabel, "% total");
-		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
+		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		auto PrintBenchRow =
 			[&](const char* name,
@@ -814,7 +809,7 @@ namespace
 				FormatPercentLabel(pctAvgLabel, sizeof(pctAvgLabel), pctAvg);
 			}
 
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%-33.33s | %11.2f  %8s | %10.2f  %8s",
 				name, latestTime, pctLatestLabel,
 				avgTime, pctAvgLabel);
@@ -830,13 +825,13 @@ namespace
 		if (tableSummary.totalIdx >= 0)
 		{
 			PrintBenchRow("other", tableSummary.other, false);
-			PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
+			PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 			PrintBenchRow(
 				"total",
 				tableSummary.ops[static_cast<std::size_t>(
 					tableSummary.totalIdx)],
 				true);
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%-33.33s | %11d  %8s | %10d  %8s",
 				"critical rank for latest/avg",
 				tableSummary.latestCriticalRank, "---",
@@ -845,7 +840,7 @@ namespace
 	}
 
 	void PrintRankTimingTable(
-		int& lineCount,
+		int& N_lines,
 		const std::vector<DistRankBenchReport>& reports,
 		const Bench::BenchOpList& benchOps,
 		const Bench::TimeUnit unit)
@@ -857,18 +852,18 @@ namespace
 		char unitLabel[8];
 		std::snprintf(unitLabel, sizeof(unitLabel), "[%s]", Bench::UnitLabel(unit));
 
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"%-2s | %10s | %22s | %13s | %9s %4s",
 			"r", "backend", "distRedistribution",
 			"distStateSync", "other", "avg");
-		PrintLine(lineCount, "%s", CLI_SECTION_SEPARATOR);
+		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
 		{
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%-2s | %10.2f | %22.2f | %13.2f | %9.2f %4s",
 				rankLabel,
 				Bench::ConvertFromNs(unit, summary.backendAvgNs),
@@ -924,13 +919,13 @@ namespace
 			std::snprintf(line, sizeof(line),
 				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9.2f",
 				rankLabel,
-				Mem::ConvertFromBytes(unit, report.maxBackendMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.maxDistGlobalStateMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.maxDistLocalStateMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.maxDistParticleMetadataMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.maxDistExchangeBuffersMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.maxDistMiscMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.maxTotalTrackedMemAllocBytes));
+				Mem::ConvertFromBytes(unit, report.N_maxBackendMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxDistGlobalStateMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxDistLocalStateMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxDistParticleMetadataMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxDistExchangeBuffersMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxDistMiscMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxTotalTrackedMemAllocBytes));
 			table += line;
 			table += '\n';
 		}
@@ -948,34 +943,34 @@ namespace
 	}
 
 	void PrintAggregateTable(
-		int& lineCount,
+		int& N_lines,
 		const std::vector<DistRankStepReport>& reports,
 		const Sim::SimParams& params)
 	{
 		const uint64_t totalOwnedFluid =
-			SumReportField(reports, &DistRankStepReport::ownedFluidParticleCount);
+			SumReportField(reports, &DistRankStepReport::N_ownedF);
 		const uint64_t totalHaloFluid =
-			SumReportField(reports, &DistRankStepReport::haloFluidParticleCount);
+			SumReportField(reports, &DistRankStepReport::N_haloF);
 		const uint64_t totalOwnedBoundary =
-			SumReportField(reports, &DistRankStepReport::ownedBoundaryParticleCount);
+			SumReportField(reports, &DistRankStepReport::N_ownedB);
 		const uint64_t totalHaloBoundary =
-			SumReportField(reports, &DistRankStepReport::haloBoundaryParticleCount);
+			SumReportField(reports, &DistRankStepReport::N_haloB);
 		const uint64_t totalMigrationSent =
-			SumReportField(reports, &DistRankStepReport::migratedFluidParticleSendCount);
+			SumReportField(reports, &DistRankStepReport::N_sentMigratedF);
 		const uint64_t totalMigrationReceived =
-			SumReportField(reports, &DistRankStepReport::migratedFluidParticleRecvCount);
+			SumReportField(reports, &DistRankStepReport::N_recvMigratedF);
 		const uint64_t totalHaloFluidSent =
-			SumReportField(reports, &DistRankStepReport::haloFluidParticleSendCount);
+			SumReportField(reports, &DistRankStepReport::N_sentHaloF);
 		const uint64_t totalHaloFluidReceived =
-			SumReportField(reports, &DistRankStepReport::haloFluidParticleRecvCount);
+			SumReportField(reports, &DistRankStepReport::N_recvHaloF);
 		const uint64_t totalBoundaryMigrationSent =
-			SumReportField(reports, &DistRankStepReport::migratedBoundaryParticleSendCount);
+			SumReportField(reports, &DistRankStepReport::N_sentMigratedB);
 		const uint64_t totalBoundaryMigrationReceived =
-			SumReportField(reports, &DistRankStepReport::migratedBoundaryParticleRecvCount);
+			SumReportField(reports, &DistRankStepReport::N_recvMigratedB);
 		const uint64_t totalHaloBoundarySent =
-			SumReportField(reports, &DistRankStepReport::haloBoundaryParticleSendCount);
+			SumReportField(reports, &DistRankStepReport::N_sentHaloB);
 		const uint64_t totalHaloBoundaryReceived =
-			SumReportField(reports, &DistRankStepReport::haloBoundaryParticleRecvCount);
+			SumReportField(reports, &DistRankStepReport::N_recvHaloB);
 
 		const double latestMin =
 			Bench::ConvertFromNs(params.timeUnit,
@@ -989,11 +984,11 @@ namespace
 		const int slowestRank = RankWithMax(reports, &DistRankStepReport::totalStepLatestNs);
 
 		const char* timeUnitStr = Bench::UnitLabel(params.timeUnit);
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"particles | owned F %" PRIu64 " | halo F %" PRIu64
 			" | owned B %" PRIu64 " | halo B %" PRIu64,
 			totalOwnedFluid, totalHaloFluid, totalOwnedBoundary, totalHaloBoundary);
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"traffic   | migrated F %" PRIu64 " / %" PRIu64
 			" | halo F sent/recv %" PRIu64 " / %" PRIu64
 			" | migrated B %" PRIu64 " / %" PRIu64
@@ -1002,7 +997,7 @@ namespace
 			totalHaloFluidSent, totalHaloFluidReceived,
 			totalBoundaryMigrationSent, totalBoundaryMigrationReceived,
 			totalHaloBoundarySent, totalHaloBoundaryReceived);
-		PrintLine(lineCount,
+		PrintLine(N_lines,
 			"timing    | min/avg/max %.3f / %.3f / %.3f %s | slowest rank %d",
 			latestMin, latestAvg, latestMax, timeUnitStr, slowestRank);
 	}
@@ -1023,7 +1018,7 @@ namespace
 		{
 			state.initialized = true;
 			state.startSteady = now;
-			state.lastNumLines = 0;
+			state.N_lastLines = 0;
 			state.lastStep = 0;
 		}
 
@@ -1048,52 +1043,52 @@ namespace
 			percent = progress * 100.0;
 		}
 
-		if (state.lastNumLines > 0)
+		if (state.N_lastLines > 0)
 		{
-			std::printf("\x1b[%dA\r", state.lastNumLines);
+			std::printf("\x1b[%dA\r", state.N_lastLines);
 		}
 
-		int lineCount = 0;
+		int N_lines = 0;
 		if (static_cast<int>(reports.size()) <= DIST_DIAGNOSTICS_RANK_TABLE_LIMIT)
 		{
-			PrintParticleLayoutTable(lineCount, reports);
-			PrintLine(lineCount);
-			PrintParticleExchangeTable(lineCount, reports);
-			PrintLine(lineCount);
+			PrintParticleLayoutTable(N_lines, reports);
+			PrintLine(N_lines);
+			PrintParticleExchangeTable(N_lines, reports);
+			PrintLine(N_lines);
 			PrintParticleRedistributionTimingTable(
-				lineCount, redistributionTimingReports, params.timeUnit);
+				N_lines, redistributionTimingReports, params.timeUnit);
 		}
 		else
 		{
-			PrintAggregateTable(lineCount, reports, params);
+			PrintAggregateTable(N_lines, reports, params);
 		}
 
-		PrintLine(lineCount);
-		PrintBenchmarkSummaryTable(lineCount, benchReports, benchOps, params.timeUnit);
+		PrintLine(N_lines);
+		PrintBenchmarkSummaryTable(N_lines, benchReports, benchOps, params.timeUnit);
 		if (static_cast<int>(benchReports.size()) <= DIST_DIAGNOSTICS_RANK_TABLE_LIMIT)
 		{
-			PrintLine(lineCount);
-			PrintRankTimingTable(lineCount, benchReports, benchOps, params.timeUnit);
+			PrintLine(N_lines);
+			PrintRankTimingTable(N_lines, benchReports, benchOps, params.timeUnit);
 		}
-		PrintLine(lineCount);
+		PrintLine(N_lines);
 		int elH, elM, elS;
 		FormatHms(elapsedS, elH, elM, elS);
 		if (hasTotal)
 		{
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s",
 				elH, elM, elS,
 				step, maxSteps, percent, stepsPerSec);
 		}
 		else
 		{
-			PrintLine(lineCount,
+			PrintLine(N_lines,
 				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s",
 				elH, elM, elS, step, stepsPerSec);
 		}
 
 		std::fflush(stdout);
-		state.lastNumLines = lineCount;
+		state.N_lastLines = N_lines;
 	}
 
 } // namespace anonymous
@@ -1165,11 +1160,11 @@ namespace Dist
 		std::printf("%-30s = %s\n", "mpi thread support",
 			MpiContext::ThreadSupportName(setup.mpiThreadSupport));
 		std::printf("%-30s = [ %u / %u / %u ]\n", "global particles [F / B / R]",
-			setup.globalFluidParticleCount,
-			setup.globalBoundaryParticleCount,
-			setup.globalRigidParticleCount);
+			setup.N_globalF,
+			setup.N_globalB,
+			setup.N_globalR);
 		std::printf("%-30s = %u\n", "global rigid bodies",
-			setup.globalRigidBodyCount);
+			setup.N_globalRB);
 		std::printf("\n");
 
 		std::printf("%-2s | %-21s | %15s | %15s | %15s\n",
@@ -1185,9 +1180,9 @@ namespace Dist
 			std::printf("%-2s | %-21s | %15u | %15u | %15u\n",
 				rankLabel,
 				report.neighborRanks,
-				report.ownedFluidParticleCount,
-				report.ownedBoundaryParticleCount,
-				report.replicatedRigidParticleCount);
+				report.N_ownedF,
+				report.N_ownedB,
+				report.N_replicatedR);
 		}
 
 		std::printf("\n");

@@ -25,7 +25,7 @@ namespace
 
 	struct EdgeData
 	{
-		uint32_t count = 0;
+		uint32_t N_triangles = 0;
 		int32_t orientation = 0;
 		std::array<uint32_t, 2> triangleIdx{};
 	};
@@ -83,10 +83,10 @@ namespace
 		const int32_t orientation = a < b ? 1 : -1;
 
 		EdgeData& edge = edges[key];
-		if (edge.count < 2) { edge.triangleIdx[edge.count] = triangleIdx; }
-		edge.count++;
+		if (edge.N_triangles < 2) { edge.triangleIdx[edge.N_triangles] = triangleIdx; }
+		edge.N_triangles++;
 		edge.orientation += orientation;
-		if (edge.count > 2)
+		if (edge.N_triangles > 2)
 		{
 			throw std::runtime_error(
 				"Rigid mesh contains an edge shared by more than two triangles.");
@@ -161,7 +161,7 @@ namespace Scene
 		{
 			const EdgeKey& key = edgeEntry.first;
 			const EdgeData& edge = edgeEntry.second;
-			if (edge.count != 2 || edge.orientation != 0)
+			if (edge.N_triangles != 2 || edge.orientation != 0)
 			{
 				throw std::runtime_error(
 					"Rigid mesh must be a closed consistently oriented triangle surface.");

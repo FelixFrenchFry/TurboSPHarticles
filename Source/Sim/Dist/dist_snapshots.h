@@ -15,12 +15,18 @@
 
 namespace Dist
 {
+	// MPI tags for distributed export-snapshot gathering
+	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT = 7101;
+	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD = 7102;
+	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT = 7103;
+	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD = 7104;
+
 	class MpiContext;
 
 	// fluid particle payload used to gather distributed export snapshots
 	struct DistExportFluidParticlePacket
 	{
-		int globalIdx = -1;
+		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
 		uint32_t id = 0;
 		uint32_t rank = 0;
 
@@ -33,7 +39,7 @@ namespace Dist
 	// boundary particle payload used to gather distributed export snapshots
 	struct DistExportBoundaryParticlePacket
 	{
-		int globalIdx = -1;
+		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
 		uint32_t id = 0;
 
 		float xPos = 0.0f;
@@ -52,9 +58,9 @@ namespace Dist
 
 	struct DistSnapshotGatherStats
 	{
-		uint32_t gatheredFluidParticleCount = 0;
-		uint32_t gatheredBoundaryParticleCount = 0;
-		uint32_t gatheredRigidParticleCount = 0;
+		uint32_t N_gatheredF = 0; // gathered fluid particles count
+		uint32_t N_gatheredB = 0; // gathered boundary particles count
+		uint32_t N_gatheredR = 0; // gathered rigid particle count
 	};
 
 	bool PackOwnedExportSnapshotBuffer(
@@ -62,7 +68,7 @@ namespace Dist
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
-		const std::vector<int>& exportFluidParticleLocalIdxs,
+		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 		int rank);
 
 	bool RebuildExportSnapshotFromGatheredParticles(
@@ -80,7 +86,7 @@ namespace Dist
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
-		const std::vector<int>& exportFluidParticleLocalIdxs,
+		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 		const MpiContext& mpiContext,
 		uint64_t simStep,
 		double simTime,

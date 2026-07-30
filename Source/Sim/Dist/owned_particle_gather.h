@@ -14,12 +14,18 @@
 
 namespace Dist
 {
+	// MPI tags for authoritative owned-particle gathering
+	inline constexpr int OWNED_PARTICLE_GATHER_TAG_FLUID_COUNT = 6101;
+	inline constexpr int OWNED_PARTICLE_GATHER_TAG_BOUNDARY_COUNT = 6102;
+	inline constexpr int OWNED_PARTICLE_GATHER_TAG_FLUID_PAYLOAD = 6103;
+	inline constexpr int OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD = 6104;
+
 	class MpiContext;
 
 	// fluid particle payload used to gather authoritative owned particles
 	struct OwnedFluidParticlePacket
 	{
-		int globalIdx = -1;
+		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
 		uint32_t id = 0;
 
 		float xPos = 0.0f;
@@ -47,7 +53,7 @@ namespace Dist
 	// boundary particle payload used to gather authoritative owned particles
 	struct OwnedBoundaryParticlePacket
 	{
-		int globalIdx = -1;
+		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
 		uint32_t id = 0;
 
 		float xPos = 0.0f;
@@ -67,8 +73,8 @@ namespace Dist
 
 	struct OwnedParticleGatherStats
 	{
-		uint32_t gatheredFluidParticleCount = 0;
-		uint32_t gatheredBoundaryParticleCount = 0;
+		uint32_t N_gatheredF = 0;
+		uint32_t N_gatheredB = 0;
 	};
 
 	bool PackOwnedParticleGatherBuffer(
@@ -80,8 +86,8 @@ namespace Dist
 	bool RebuildGlobalOwnedStateFromGatheredParticles(
 		Sync::UniversalSimState& globalOwnedState,
 		const OwnedParticleGatherBuffer& gatherBuffer,
-		uint32_t globalFluidParticleCount,
-		uint32_t globalBoundaryParticleCount);
+		uint32_t N_globalF,
+		uint32_t N_globalB);
 
 	bool GatherOwnedParticlesToRoot(
 		Sync::UniversalSimState& globalOwnedState,
@@ -89,8 +95,8 @@ namespace Dist
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,
 		const MpiContext& mpiContext,
-		uint32_t globalFluidParticleCount,
-		uint32_t globalBoundaryParticleCount,
+		uint32_t N_globalF,
+		uint32_t N_globalB,
 		OwnedParticleGatherStats* stats = nullptr);
 
 } // namespace Dist

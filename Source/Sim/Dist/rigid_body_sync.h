@@ -37,11 +37,11 @@ namespace Dist
 
 	// assigns each replicated rigid particle to the rank owning its world position
 	bool BuildActiveRigidParticleLocalIdxs(
-		std::vector<int>& activeRigidParticleLocalIdxs,
+		std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 		const Sync::UniversalSimState& localState,
 		const IDomainDecomp& domainDecomp,
 		int rank,
-		int rankCount,
+		int N_ranks,
 		std::string* failMsg = nullptr);
 
 	// sums body-level force and torque accumulated from rank-authoritative rigid particles

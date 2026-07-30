@@ -106,7 +106,7 @@ namespace
 		return (p.size() == 1 && p[0] >= 'A' && p[0] <= 'Z');
 	}
 
-} // anonymous
+} // namespace anonymous
 
 void App::SetupLogging()
 {

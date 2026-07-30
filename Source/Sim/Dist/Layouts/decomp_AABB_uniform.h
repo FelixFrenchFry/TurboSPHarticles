@@ -32,9 +32,11 @@ namespace Dist
 		AABB OwnedExtentAABB(int rank) const override;
 		AABB HaloExtentAABB(int rank) const override;
 
-		bool IsValidForRankCount(int rankCount) const override;
+		bool IsValidForRankCount(int N_ranks) const override;
 
 	private: // --------------------------------------------------------------------------------------
+
+		static constexpr int SPLIT_AXIS = 0;
 
 		struct AABBRankSubdomain
 		{
@@ -52,6 +54,9 @@ namespace Dist
 
 		AABB globalBounds_;
 		std::vector<AABBRankSubdomain> rankSubdomains_;
+		std::vector<float> slabMinSplitPos_;
+		float haloRadius_ = 0.0f;
+		float slabLenInv_ = 0.0f;
 	};
 
 } // namespace Dist

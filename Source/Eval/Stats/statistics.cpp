@@ -25,11 +25,11 @@ namespace
 		if (partial.N == 0) { return 0.0f; }
 
 		const uint64_t i99 = (99ull * (partial.N - 1)) / 100ull;
-		uint64_t cumulativeCount = 0;
+		uint64_t N_cumulative = 0;
 		for (uint64_t value = 0; value < partial.histogram.size(); value++)
 		{
-			cumulativeCount += partial.histogram[value];
-			if (cumulativeCount > i99)
+			N_cumulative += partial.histogram[value];
+			if (N_cumulative > i99)
 			{
 				return static_cast<float>(value);
 			}
@@ -63,7 +63,7 @@ void StatisticsPartial::Clear()
 	nbrCountRR.Clear();
 	velMag.Clear();
 
-	solverIterCount = 0;
+	N_solverIters = 0;
 
 	densRelErrorRawSum = 0.0;
 	densRelErrorPosSum = 0.0;
@@ -71,8 +71,8 @@ void StatisticsPartial::Clear()
 }
 
 StatisticsTracker::StatisticsTracker(const Sim::SimParams& simParams)
-	: maxRecCount_(simParams.maxStatRecs)
-	, curRecCount_(0u)
+	: N_maxRecords_(simParams.maxStatRecs)
+	, N_records_(0u)
 {
 	recLatest_ = {};
 	std::ranges::fill(recLatest_.stats, 0.0f);
@@ -93,12 +93,12 @@ void StatisticsTracker::EndStep(uint64_t simStep, double simTime)
 
 	// push latest record to history and check excess
 	recHistory_.push_back(recLatest_);
-	if (recHistory_.size() > maxRecCount_)
+	if (recHistory_.size() > N_maxRecords_)
 	{
 		recHistory_.pop_front();
 	}
 
-	if (curRecCount_ == 0) // first entry
+	if (N_records_ == 0) // first entry
 	{
 		statsSum_allTime_ = recLatest_.stats;
 		statsMin_allTime_ = recLatest_.stats;
@@ -121,7 +121,7 @@ void StatisticsTracker::EndStep(uint64_t simStep, double simTime)
 		}
 	}
 
-	curRecCount_ += 1;
+	N_records_ += 1;
 }
 
 void StatisticsTracker::PackStatSnapshot(Sync::StatSnapshot& snap) const
@@ -214,7 +214,7 @@ void StatisticsTracker::FinalizeStatisticsRecord(
 			ComputeAverage(partial.densRelErrorAbsSum, partial.N_F));
 	}
 
-	Set(record, StatMetric::NumSolverIters, static_cast<float>(partial.solverIterCount));
+	Set(record, StatMetric::NumSolverIters, static_cast<float>(partial.N_solverIters));
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{
@@ -229,28 +229,28 @@ void StatisticsTracker::FinalizeStatisticsRecord(
 
 float StatisticsTracker::GetStat_Latest(StatMetric metric) const
 {
-	if (curRecCount_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0f; }
 
 	return recLatest_.stats[GetIdx(metric)];
 }
 
 float StatisticsTracker::GetStat_Avg(StatMetric metric) const
 {
-	if (curRecCount_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0f; }
 
-	return statsSum_allTime_[GetIdx(metric)] / static_cast<float>(curRecCount_);
+	return statsSum_allTime_[GetIdx(metric)] / static_cast<float>(N_records_);
 }
 
 float StatisticsTracker::GetStat_Min(StatMetric metric) const
 {
-	if (curRecCount_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0f; }
 
 	return statsMin_allTime_[GetIdx(metric)];
 }
 
 float StatisticsTracker::GetStat_Max(StatMetric metric) const
 {
-	if (curRecCount_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0f; }
 
 	return statsMax_allTime_[GetIdx(metric)];
 }

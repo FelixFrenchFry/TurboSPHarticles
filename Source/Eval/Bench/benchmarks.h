@@ -60,8 +60,8 @@ namespace Bench
 		std::array<Clock::time_point, GetIdx(BenchOp::Count)> t0_single_{};
 
 		// max and current number of steps for which timings are kept
-		uint32_t maxRecCount_;
-		uint32_t curRecCount_;
+		uint32_t N_maxRecords_;
+		uint32_t N_records_;
 
 		// per-step per-operation timing (in nanoseconds) and occurrence flags
 		std::array<uint64_t, GetIdx(BenchOp::Count)> curStepNs_{};
@@ -69,7 +69,7 @@ namespace Bench
 
 		BenchRecordStep recLatest_;
 
-		// rolling buffer for the timings for the last maxCount_ steps
+		// rolling buffer for the timings for the last N_maxRecords_ steps
 		std::deque<BenchRecordStep> recHistory_;
 
 		// all-time per-operation aggregates (in nanoseconds)

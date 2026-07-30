@@ -41,7 +41,7 @@ namespace
 		const auto minIt = std::find_if(
 			distribution.histogram.begin(),
 			distribution.histogram.end(),
-			[](const uint32_t count) { return count > 0; });
+			[](const uint32_t N_nbrs) { return N_nbrs > 0; });
 
 		distribution.min = static_cast<float>(std::distance(distribution.histogram.begin(), minIt));
 		distribution.max = static_cast<float>(maxGlobal);
@@ -105,7 +105,7 @@ void Dist::FinalizeDistributedStatisticsRecord(
 
 	// --- [ solver stats ] --------------------------------------------------------------------------
 
-	partial.solverIterCount = mpiContext.AllReduceMaxUint32(partial.solverIterCount);
+	partial.N_solverIters = mpiContext.AllReduceMaxUint32(partial.N_solverIters);
 
 	// --- [ velocity stats ] ------------------------------------------------------------------------
 

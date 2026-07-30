@@ -141,10 +141,12 @@ namespace Base
         return diff <= rel_epsilon * fmaxf(std::fabs(a), std::fabs(b));
     }
 
-    // returns ceil(n * pct / 100) using pure integer math
-    constexpr uint64_t ExtraPercent(uint64_t n, uint32_t pct) noexcept
+    constexpr uint64_t ExtraPercent(const uint64_t n, const float pct) noexcept
 	{
-        return (n * pct + 99u) / 100u;
+        const float extra = static_cast<float>(n) * pct / 100.0f;
+        const uint64_t roundedDown = static_cast<uint64_t>(extra);
+
+        return roundedDown + (static_cast<float>(roundedDown) < extra ? 1u : 0u);
     }
 
     template <class T>
@@ -193,16 +195,16 @@ namespace Mem
         GB, MB, KB, B
     };
 
-    static inline double ConvertFromBytes(ByteUnit unit, uint64_t bytes)
+    static inline double ConvertFromBytes(ByteUnit unit, uint64_t N_bytes)
     {
         switch (unit)
         {
-        case ByteUnit::GB: { return static_cast<double>(bytes) / (1000.0 * 1000.0 * 1000.0); }
-        case ByteUnit::MB: { return static_cast<double>(bytes) / (1000.0 * 1000.0); }
-        case ByteUnit::KB: { return static_cast<double>(bytes) / 1000.0; }
-        case ByteUnit::B: { return static_cast<double>(bytes); }
+        case ByteUnit::GB: { return static_cast<double>(N_bytes) / (1000.0 * 1000.0 * 1000.0); }
+        case ByteUnit::MB: { return static_cast<double>(N_bytes) / (1000.0 * 1000.0); }
+        case ByteUnit::KB: { return static_cast<double>(N_bytes) / 1000.0; }
+        case ByteUnit::B: { return static_cast<double>(N_bytes); }
         }
-        return static_cast<double>(bytes);
+        return static_cast<double>(N_bytes);
     }
 
     static inline const char* UnitLabel(ByteUnit u)

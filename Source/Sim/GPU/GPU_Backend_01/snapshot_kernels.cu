@@ -89,13 +89,13 @@ namespace GPU01
 		Sync::VisualParticleSample* fluidDst,
 		Sync::VisualParticleSample* rigidDst)
 	{
-		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_BLOCK_SIZE = 256;
 
 		// pack fluid particles into visual samples
 		if (N_F > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_PackFluidVisualSamples<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_PackFluidVisualSamples<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF, xVelF, yVelF, zVelF, densityF, pressureF,
 				scalarMode, N_F, fluidDst);
 			GPU::CheckLastKernel("K_PackFluidVisualSamples()");
@@ -104,8 +104,8 @@ namespace GPU01
 		// pack rigid particles into visual samples
 		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_PackRigidVisualSamples<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_PackRigidVisualSamples<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosR, yPosR, zPosR, volR, N_R, rigidDst);
 			GPU::CheckLastKernel("K_PackRigidVisualSamples()");
 		}

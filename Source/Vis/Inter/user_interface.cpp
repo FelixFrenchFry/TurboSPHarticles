@@ -1,4 +1,4 @@
-﻿// user_interface.cpp
+// user_interface.cpp
 
 // external
 #include <algorithm>
@@ -960,10 +960,6 @@ void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
 		ImGui::SameLine();
 		if (ImGui::Checkbox("us ", &us)) { benchTimeUnit_ = Bench::TimeUnit::us; s = ms = false; }
 		ImGui::Spacing();
-
-		// number of steps shown in sparkline
-		ImGui::SetNextItemWidth(120.0f);
-		ImGui::SliderInt("history", &sparklineContextLength_, 32, 1024);
 
 		ImGui::TreePop();
 	}

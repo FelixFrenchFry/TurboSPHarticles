@@ -12,8 +12,8 @@
 using namespace Bench;
 
 BenchmarksTracker::BenchmarksTracker(const Sim::SimParams& simParams)
-	: maxRecCount_(simParams.maxBenchRecs)
-	, curRecCount_(0u)
+	: N_maxRecords_(simParams.maxBenchRecs)
+	, N_records_(0u)
 {
 	recLatest_ = {};
 	std::ranges::fill(recLatest_.time, 0ull);
@@ -35,12 +35,12 @@ void BenchmarksTracker::EndStep(const uint64_t simStep, const double simTime)
 
 	// push latest record to history and check excess
 	recHistory_.push_back(recLatest_);
-	if (recHistory_.size() > maxRecCount_)
+	if (recHistory_.size() > N_maxRecords_)
 	{
 		recHistory_.pop_front();
 	}
 
-	if (curRecCount_ == 0) // first entry
+	if (N_records_ == 0) // first entry
 	{
 		benchSum_allTime_ = recLatest_.time;
 		benchMax_allTime_ = recLatest_.time;
@@ -77,7 +77,7 @@ void BenchmarksTracker::EndStep(const uint64_t simStep, const double simTime)
 		}
 	}
 
-	curRecCount_ += 1;
+	N_records_ += 1;
 }
 
 void BenchmarksTracker::StartBench(const BenchOp op)
@@ -125,7 +125,7 @@ void BenchmarksTracker::PackBenchSnapshot(Sync::BenchSnapshot& snap) const
 
 uint64_t BenchmarksTracker::GetBench_Latest(const BenchOp op) const
 {
-	if (curRecCount_ == 0) { return 0; }
+	if (N_records_ == 0) { return 0; }
 
 	return recLatest_.time[GetIdx(op)];
 }
@@ -133,25 +133,25 @@ uint64_t BenchmarksTracker::GetBench_Latest(const BenchOp op) const
 uint64_t BenchmarksTracker::GetBench_Avg_OverAll(const BenchOp op) const
 {
 	const uint64_t sum = benchSum_allTime_[GetIdx(op)];
-	if (curRecCount_ == 0 || sum == 0) { return 0; }
+	if (N_records_ == 0 || sum == 0) { return 0; }
 
 	// integer division with ceil
-	return ((sum - 1) / curRecCount_) + 1;
+	return ((sum - 1) / N_records_) + 1;
 }
 
 uint64_t BenchmarksTracker::GetBench_Avg_WhenUsed(const BenchOp op) const
 {
 	const uint64_t sum = benchSum_allTime_[GetIdx(op)];
-	const uint64_t numOcc = numOcc_allTime_[GetIdx(op)];
-	if (curRecCount_ == 0 || sum == 0 || numOcc == 0) { return 0; }
+	const uint64_t N_occurrences = numOcc_allTime_[GetIdx(op)];
+	if (N_records_ == 0 || sum == 0 || N_occurrences == 0) { return 0; }
 
 	// integer division with ceil
-	return ((sum - 1) / numOcc) + 1;
+	return ((sum - 1) / N_occurrences) + 1;
 }
 
 uint64_t BenchmarksTracker::GetBench_Min(const BenchOp op) const
 {
-	if (curRecCount_ == 0) { return 0; }
+	if (N_records_ == 0) { return 0; }
 
 	const uint64_t minNs = benchMin_allTime_[GetIdx(op)];
 	return minNs == std::numeric_limits<uint64_t>::max() ? 0 : minNs;
@@ -159,14 +159,14 @@ uint64_t BenchmarksTracker::GetBench_Min(const BenchOp op) const
 
 uint64_t BenchmarksTracker::GetBench_Max(const BenchOp op) const
 {
-	if (curRecCount_ == 0) { return 0; }
+	if (N_records_ == 0) { return 0; }
 
 	return benchMax_allTime_[GetIdx(op)];
 }
 
 uint64_t BenchmarksTracker::GetBench_NumOcc(const BenchOp op) const
 {
-	if (curRecCount_ == 0) { return 0; }
+	if (N_records_ == 0) { return 0; }
 
 	return numOcc_allTime_[GetIdx(op)];
 }
@@ -174,7 +174,7 @@ uint64_t BenchmarksTracker::GetBench_NumOcc(const BenchOp op) const
 void BenchmarksTracker::ClearRecordHistory()
 {
 	recHistory_.clear();
-	curRecCount_ = 0;
+	N_records_ = 0;
 	recLatest_ = {};
 	std::ranges::fill(recLatest_.time, 0);
 	std::ranges::fill(curStepNs_, 0);

@@ -12,7 +12,7 @@
 
 namespace GPU01
 {
-	static constexpr uint32_t N_SellWidth = 32u;
+	static constexpr uint32_t N_SELL_WIDTH = 32u;
 
 	__constant__ uint32_t c_ns_N_F;
 	__constant__ uint32_t c_ns_N_B;
@@ -25,18 +25,18 @@ namespace GPU01
 	__constant__ float c_ns_xBoxOrig;
 	__constant__ float c_ns_yBoxOrig;
 	__constant__ float c_ns_zBoxOrig;
-	__constant__ uint32_t c_ns_N_DimX;
-	__constant__ uint32_t c_ns_N_DimY;
-	__constant__ uint32_t c_ns_N_DimZ;
-	__constant__ uint32_t c_ns_N_Cells;
+	__constant__ uint32_t c_ns_N_dimX;
+	__constant__ uint32_t c_ns_N_dimY;
+	__constant__ uint32_t c_ns_N_dimZ;
+	__constant__ uint32_t c_ns_N_cells;
 	__constant__ uint32_t c_ns_EMPTY;
 
 	void NS_ReloadConstants(
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		const float kernelRadius, const float cellSize, const uint32_t cellQueryReach,
 		const float xBoxOrig, const float yBoxOrig, const float zBoxOrig,
-		const uint32_t N_DimX, const uint32_t N_DimY, const uint32_t N_DimZ,
-		const uint32_t N_Cells, const uint32_t EMPTY,
+		const uint32_t N_dimX, const uint32_t N_dimY, const uint32_t N_dimZ,
+		const uint32_t N_cells, const uint32_t EMPTY,
 		cudaStream_t stream)
 	{
 		float kernelRadiusSqu = kernelRadius * kernelRadius;
@@ -54,10 +54,10 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_ns_xBoxOrig, &xBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_yBoxOrig, &yBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_zBoxOrig, &zBoxOrig, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_DimX, &N_DimX, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_DimY, &N_DimY, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_DimZ, &N_DimZ, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_Cells, &N_Cells, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimX, &N_dimX, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimY, &N_dimY, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimZ, &N_dimZ, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_cells, &N_cells, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_EMPTY, &EMPTY, sizeof(uint32_t)));
 
 		GPU::StreamSync(stream);
@@ -70,7 +70,7 @@ namespace GPU01
 	__device__ __forceinline__
 	uint32_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz)
 	{
-		return cx + c_ns_N_DimX * (cy + c_ns_N_DimY * cz);
+		return cx + c_ns_N_dimX * (cy + c_ns_N_dimY * cz);
 	}
 
 	__device__ __forceinline__
@@ -116,7 +116,7 @@ namespace GPU01
 	{
 		if (wr < chunkPitch)
 		{
-			const uint64_t linearIdx = wr * N_SellWidth + lane;
+			const uint64_t linearIdx = wr * N_SELL_WIDTH + lane;
 
 			if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta8))
 			{
@@ -198,7 +198,7 @@ namespace GPU01
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
-		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
 
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
@@ -324,8 +324,8 @@ namespace GPU01
 		const float zi = zPosF[i];
 
 		// write ranges of packed SELL32 neighbor lists
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -431,9 +431,9 @@ namespace GPU01
 		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
 		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
 
-		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_DimX - 1);
-		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_DimY - 1);
-		const uint32_t cz = ClampInt(czi, 0, c_ns_N_DimZ - 1);
+		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_dimX - 1);
+		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_dimY - 1);
+		const uint32_t cz = ClampInt(czi, 0, c_ns_N_dimZ - 1);
 
 		cellIdF[i] = MapToCellId_Basic(static_cast<uint32_t>(cx),
 									   static_cast<uint32_t>(cy),
@@ -462,9 +462,9 @@ namespace GPU01
 		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
 		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
 
-		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_DimX - 1);
-		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_DimY - 1);
-		const uint32_t cz = ClampInt(czi, 0, c_ns_N_DimZ - 1);
+		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_dimX - 1);
+		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_dimY - 1);
+		const uint32_t cz = ClampInt(czi, 0, c_ns_N_dimZ - 1);
 
 		cellIdB[i] = MapToCellId_Basic(static_cast<uint32_t>(cx),
 									   static_cast<uint32_t>(cy),
@@ -505,13 +505,13 @@ namespace GPU01
 
 	__global__
 	void K_ClearRanges(
-		const uint32_t N_Cells,
+		const uint32_t N_cells,
 		// destinations
 		uint32_t* __restrict__ cellStartIdx,
 		uint32_t* __restrict__ cellEndIdx)
 	{
 		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_Cells) { return; }
+		if (i >= N_cells) { return; }
 
 		cellStartIdx[i] = c_ns_EMPTY;
 		cellEndIdx[i] = c_ns_EMPTY;
@@ -576,10 +576,10 @@ namespace GPU01
 	__device__
 	int BinarySearchUniqueCellId(
 		const uint64_t* uniqueCellId,
-		uint32_t N_NonEmptyCells, uint64_t cid)
+		uint32_t N_nonEmptyCells, uint64_t cid)
 	{
 		int low = 0;
-		int high = static_cast<int>(N_NonEmptyCells) - 1;
+		int high = static_cast<int>(N_nonEmptyCells) - 1;
 
 		while (low <= high)
 		{
@@ -597,10 +597,10 @@ namespace GPU01
 	__device__
 	uint32_t LowerBoundUniqueCellId(
 		const uint64_t* uniqueCellId,
-		uint32_t N_NonEmptyCells, uint64_t cid)
+		uint32_t N_nonEmptyCells, uint64_t cid)
 	{
 		uint32_t lo = 0;
-		uint32_t hi = N_NonEmptyCells;
+		uint32_t hi = N_nonEmptyCells;
 
 		while (lo < hi)
 		{
@@ -621,10 +621,10 @@ namespace GPU01
 	__device__
 	uint32_t UpperBoundUniqueCellId(
 		const uint64_t* uniqueCellId,
-		uint32_t N_NonEmptyCells, uint64_t cid)
+		uint32_t N_nonEmptyCells, uint64_t cid)
 	{
 		uint32_t lo = 0;
-		uint32_t hi = N_NonEmptyCells;
+		uint32_t hi = N_nonEmptyCells;
 
 		while (lo < hi)
 		{
@@ -696,7 +696,7 @@ namespace GPU01
 		const uint64_t* __restrict__ cellIdSorted,
 		const uint32_t* __restrict__ cellStartScan,
 		const uint32_t N,
-		const uint32_t N_NonEmptyCells,
+		const uint32_t N_nonEmptyCells,
 		// destinations
 		uint64_t* __restrict__ uniqueCellId,
 		uint32_t* __restrict__ cellStartIdx)
@@ -729,28 +729,28 @@ namespace GPU01
 		// one thread also writes the sentinel
 		if (i == N - 1)
 		{
-			cellStartIdx[N_NonEmptyCells] = N;
+			cellStartIdx[N_nonEmptyCells] = N;
 		}
 	}
 
 	__global__
 	void K_FillMergedCompactCellRefs(
 		const uint64_t* __restrict__ uniqueCellIdAny,
-		const uint32_t N_NonEmptyCellsAny,
+		const uint32_t N_nonEmptyCellsAny,
 		const uint64_t* __restrict__ uniqueCellIdF,
 		const uint64_t* __restrict__ uniqueCellIdB,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t N_NonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
 		// destinations
 		uint32_t* __restrict__ cellRefFByAny,
 		uint32_t* __restrict__ cellRefBByAny)
 	{
 		const uint32_t cAny = blockIdx.x * blockDim.x + threadIdx.x;
-		if (cAny >= N_NonEmptyCellsAny) { return; }
+		if (cAny >= N_nonEmptyCellsAny) { return; }
 
 		const uint64_t cid = uniqueCellIdAny[cAny];
-		const int cF = BinarySearchUniqueCellId(uniqueCellIdF, N_NonEmptyCellsF, cid);
-		const int cB = BinarySearchUniqueCellId(uniqueCellIdB, N_NonEmptyCellsB, cid);
+		const int cF = BinarySearchUniqueCellId(uniqueCellIdF, N_nonEmptyCellsF, cid);
+		const int cB = BinarySearchUniqueCellId(uniqueCellIdB, N_nonEmptyCellsB, cid);
 
 		cellRefFByAny[cAny] = (cF >= 0) ? static_cast<uint32_t>(cF) : 0xffffffffu;
 		cellRefBByAny[cAny] = (cB >= 0) ? static_cast<uint32_t>(cB) : 0xffffffffu;
@@ -763,8 +763,8 @@ namespace GPU01
 		const float* __restrict__ zPosF,
 		const uint32_t* __restrict__ cellStartIdxF,
 		const uint64_t* __restrict__ uniqueCellIdAny,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t N_NonEmptyCellsAny,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsAny,
 		const uint32_t cellQueryReach,
 		// destinations
 		uint32_t* __restrict__ compactCellIdxByParticleF,
@@ -772,7 +772,7 @@ namespace GPU01
 		uint32_t* __restrict__ queryHiAnyByCellF)
 	{
 		const uint32_t cF = blockIdx.x * blockDim.x + threadIdx.x;
-		if (cF >= N_NonEmptyCellsF) { return; }
+		if (cF >= N_nonEmptyCellsF) { return; }
 
 		const uint32_t srcBegin = cellStartIdxF[cF];
 		const uint32_t srcEnd = cellStartIdxF[cF + 1];
@@ -814,9 +814,9 @@ namespace GPU01
 		}
 
 		const uint32_t loAny = LowerBoundUniqueCellId(
-			uniqueCellIdAny, N_NonEmptyCellsAny, litMaxCellId);
+			uniqueCellIdAny, N_nonEmptyCellsAny, litMaxCellId);
 		uint32_t hiAny = UpperBoundUniqueCellId(
-			uniqueCellIdAny, N_NonEmptyCellsAny, bigMinCellId);
+			uniqueCellIdAny, N_nonEmptyCellsAny, bigMinCellId);
 		if (hiAny < loAny) { hiAny = loAny; }
 
 		queryLoAnyByCellF[cF] = loAny;
@@ -837,22 +837,22 @@ namespace GPU01
 		const uint64_t* __restrict__ uniqueCellIdAny,
 		const uint32_t* __restrict__ queryLoAnyByCellF,
 		const uint32_t* __restrict__ queryHiAnyByCellF,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t queryCellSlotCount,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_queryCellSlots,
 		// destinations
 		uint32_t* __restrict__ queryCellRefAnyByCellF)
 	{
 		const uint32_t cF = blockIdx.x * blockDim.x + threadIdx.x;
-		if (cF >= N_NonEmptyCellsF) { return; }
+		if (cF >= N_nonEmptyCellsF) { return; }
 
 		const uint32_t srcBegin = cellStartIdxF[cF];
 		const uint32_t srcEnd = cellStartIdxF[cF + 1];
 		const uint64_t slotBase =
-			static_cast<uint64_t>(cF) * static_cast<uint64_t>(queryCellSlotCount);
+			static_cast<uint64_t>(cF) * static_cast<uint64_t>(N_queryCellSlots);
 
 		if (srcBegin >= srcEnd)
 		{
-			for (uint32_t s = 0; s < queryCellSlotCount; s++)
+			for (uint32_t s = 0; s < N_queryCellSlots; s++)
 			{
 				queryCellRefAnyByCellF[slotBase + s] = 0xffffffffu;
 			}
@@ -892,7 +892,7 @@ namespace GPU01
 						if (cAny >= 0) { cAny_nbr = static_cast<uint32_t>(cAny); }
 					}
 
-					if (s < queryCellSlotCount)
+					if (s < N_queryCellSlots)
 					{
 						queryCellRefAnyByCellF[slotBase + s] = cAny_nbr;
 					}
@@ -901,7 +901,7 @@ namespace GPU01
 			}
 		}
 
-		for (; s < queryCellSlotCount; s++)
+		for (; s < N_queryCellSlots; s++)
 		{
 			queryCellRefAnyByCellF[slotBase + s] = 0xffffffffu;
 		}
@@ -952,11 +952,11 @@ namespace GPU01
 		const uint32_t* __restrict__ cellStartIdxB,
 		const uint32_t* __restrict__ compactCellIdxByParticleF,
 		const uint32_t* __restrict__ queryCellRefAnyByCellF,
-		const uint32_t queryCellSlotCount,
+		const uint32_t N_queryCellSlots,
 		const uint64_t* __restrict__ uniqueCellIdR,
 		const uint32_t* __restrict__ cellStartIdxR,
 		const uint32_t* __restrict__ sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsR,
+		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F,
 		// destinations
 		uint16_t* __restrict__ nbrCountFF,
@@ -977,10 +977,10 @@ namespace GPU01
 		const float x = xPosF[i];
 		const float y = yPosF[i];
 		const float z = zPosF[i];
-		const uint32_t chunk = i / N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
 		const uint32_t cF_src = compactCellIdxByParticleF[i];
 		const uint64_t querySlotBase =
-			static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(queryCellSlotCount);
+			static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(N_queryCellSlots);
 
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
@@ -993,7 +993,7 @@ namespace GPU01
 		uint32_t maxRefFR = 0u;
 
 		// check all particles j in the cached neighboring grid cells
-		for (uint32_t s = 0; s < queryCellSlotCount; s++)
+		for (uint32_t s = 0; s < N_queryCellSlots; s++)
 		{
 			const uint32_t cAny_nbr = queryCellRefAnyByCellF[querySlotBase + s];
 			if (cAny_nbr == 0xffffffffu) { continue; }
@@ -1085,7 +1085,7 @@ namespace GPU01
 						const uint64_t cellId = MapToCellId(
 							cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
 						const int cellR = BinarySearchUniqueCellId(
-							uniqueCellIdR, N_NonEmptyCellsR, cellId);
+							uniqueCellIdR, N_nonEmptyCellsR, cellId);
 						if (cellR < 0) { continue; }
 
 						const uint32_t begin = cellStartIdxR[cellR];
@@ -1141,11 +1141,11 @@ namespace GPU01
 		const uint32_t* __restrict__ cellStartIdxB,
 		const uint32_t* __restrict__ compactCellIdxByParticleF,
 		const uint32_t* __restrict__ queryCellRefAnyByCellF,
-		const uint32_t queryCellSlotCount,
+		const uint32_t N_queryCellSlots,
 		const uint64_t* __restrict__ uniqueCellIdR,
 		const uint32_t* __restrict__ cellStartIdxR,
 		const uint32_t* __restrict__ sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsR,
+		const uint32_t N_nonEmptyCellsR,
 		const uint16_t* __restrict__ nbrChunkMaxCountFF,
 		const uint16_t* __restrict__ nbrChunkMaxCountFB,
 		const uint16_t* __restrict__ nbrChunkMaxCountFR,
@@ -1181,11 +1181,11 @@ namespace GPU01
 		const float z = zPosF[i];
 		const uint32_t cF_src = compactCellIdxByParticleF[i];
 		const uint64_t querySlotBase =
-			static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(queryCellSlotCount);
+			static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(N_queryCellSlots);
 
 		// write ranges of packed SELL32 neighbor lists
-		const uint32_t chunk = i / N_SellWidth;
-		const uint32_t lane = i % N_SellWidth;
+		const uint32_t chunk = i / N_SELL_WIDTH;
+		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
 		const uint64_t baseFB = nbrChunkOffsetsFB[chunk];
 		const uint64_t baseFR = nbrChunkOffsetsFR[chunk];
@@ -1203,7 +1203,7 @@ namespace GPU01
 		uint32_t wrFR = 0;
 
 		// check all particles j in the cached neighboring grid cells
-		for (uint32_t s = 0; s < queryCellSlotCount; s++)
+		for (uint32_t s = 0; s < N_queryCellSlots; s++)
 		{
 			const uint32_t cAny_nbr = queryCellRefAnyByCellF[querySlotBase + s];
 			if (cAny_nbr == 0xffffffffu) { continue; }
@@ -1303,7 +1303,7 @@ namespace GPU01
 						const uint64_t cellId = MapToCellId(
 							cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
 						const int cellR = BinarySearchUniqueCellId(
-							uniqueCellIdR, N_NonEmptyCellsR, cellId);
+							uniqueCellIdR, N_nonEmptyCellsR, cellId);
 						if (cellR < 0) { continue; }
 
 						const uint32_t begin = cellStartIdxR[cellR];
@@ -1484,9 +1484,9 @@ namespace GPU01
 		const uint64_t* __restrict__ uniqueCellIdR,
 		const uint32_t* __restrict__ cellStartIdxR,
 		const uint32_t* __restrict__ sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t N_NonEmptyCellsB,
-		const uint32_t N_NonEmptyCellsR,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsR,
 		// destinations
 		uint16_t* __restrict__ nbrCountRF,
 		uint16_t* __restrict__ nbrCountRB,
@@ -1520,7 +1520,7 @@ namespace GPU01
 
 					// count fluid neighbors in this cell
 					const int cellF = BinarySearchUniqueCellId(
-						uniqueCellIdF, N_NonEmptyCellsF, cellId);
+						uniqueCellIdF, N_nonEmptyCellsF, cellId);
 					if (cellF >= 0)
 					{
 						const uint32_t beginF = cellStartIdxF[cellF];
@@ -1539,7 +1539,7 @@ namespace GPU01
 
 					// count static boundary neighbors in this cell
 					const int cellB = BinarySearchUniqueCellId(
-						uniqueCellIdB, N_NonEmptyCellsB, cellId);
+						uniqueCellIdB, N_nonEmptyCellsB, cellId);
 					if (cellB >= 0)
 					{
 						const uint32_t beginB = cellStartIdxB[cellB];
@@ -1558,7 +1558,7 @@ namespace GPU01
 
 					// count rigid neighbors attached to other bodies in this cell
 					const int cellR = BinarySearchUniqueCellId(
-						uniqueCellIdR, N_NonEmptyCellsR, cellId);
+						uniqueCellIdR, N_nonEmptyCellsR, cellId);
 					if (cellR >= 0)
 					{
 						const uint32_t beginR = cellStartIdxR[cellR];
@@ -1603,9 +1603,9 @@ namespace GPU01
 		const uint64_t* __restrict__ uniqueCellIdR,
 		const uint32_t* __restrict__ cellStartIdxR,
 		const uint32_t* __restrict__ sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t N_NonEmptyCellsB,
-		const uint32_t N_NonEmptyCellsR,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsR,
 		const uint64_t* __restrict__ nbrOffsetsRF,
 		const uint64_t* __restrict__ nbrOffsetsRB,
 		const uint64_t* __restrict__ nbrOffsetsRR,
@@ -1642,7 +1642,7 @@ namespace GPU01
 
 					// store fluid neighbors in this cell
 					const int cellF = BinarySearchUniqueCellId(
-						uniqueCellIdF, N_NonEmptyCellsF, cellId);
+						uniqueCellIdF, N_nonEmptyCellsF, cellId);
 					if (cellF >= 0)
 					{
 						const uint32_t beginF = cellStartIdxF[cellF];
@@ -1661,7 +1661,7 @@ namespace GPU01
 
 					// store static boundary neighbors in this cell
 					const int cellB = BinarySearchUniqueCellId(
-						uniqueCellIdB, N_NonEmptyCellsB, cellId);
+						uniqueCellIdB, N_nonEmptyCellsB, cellId);
 					if (cellB >= 0)
 					{
 						const uint32_t beginB = cellStartIdxB[cellB];
@@ -1680,7 +1680,7 @@ namespace GPU01
 
 					// store rigid neighbors attached to other bodies in this cell
 					const int cellR = BinarySearchUniqueCellId(
-						uniqueCellIdR, N_NonEmptyCellsR, cellId);
+						uniqueCellIdR, N_nonEmptyCellsR, cellId);
 					if (cellR >= 0)
 					{
 						const uint32_t beginR = cellStartIdxR[cellR];
@@ -1731,10 +1731,10 @@ namespace GPU01
 		(void)N_B;
 		(void)N_R;
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_BruteForce_Query_Count<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_BruteForce_Query_Count<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
 			xPosR, yPosR, zPosR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
@@ -1778,10 +1778,10 @@ namespace GPU01
 		(void)N_B;
 		(void)N_R;
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_BruteForce_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_BruteForce_Query_Fill<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
 			xPosR, yPosR, zPosR,
 			nbrChunkMaxCountFF, nbrChunkMaxCountFB, nbrChunkMaxCountFR,
@@ -1805,10 +1805,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillCellIdAndIdxF<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_FillCellIdAndIdxF<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, N_F, cellIdF);
 
 		GPU::CheckLastKernel("K_FillCellIdAndIdxF()");
@@ -1823,10 +1823,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_B + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_B + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillCellIdAndIdxB<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_FillCellIdAndIdxB<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosB, yPosB, zPosB, N_B, cellIdB);
 
 		GPU::CheckLastKernel("K_FillCellIdAndIdxB()");
@@ -1841,28 +1841,28 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_BuildRangesFromSortedKeys<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_BuildRangesFromSortedKeys<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			cellId, N, cellStartIdx, cellEndIdx);
 
 		GPU::CheckLastKernel("K_BuildRangesFromSortedKeys()");
 	}
 
 	void Launch_ClearRanges(
-		const uint32_t N_Cells,
+		const uint32_t N_cells,
 		cudaStream_t stream,
 		// destinations
 		uint32_t* cellStartIdx, uint32_t* cellEndIdx)
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_Cells + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_cells + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_ClearRanges<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			N_Cells, cellStartIdx, cellEndIdx);
+		K_ClearRanges<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
+			N_cells, cellStartIdx, cellEndIdx);
 
 		GPU::CheckLastKernel("K_ClearRanges()");
 	}
@@ -1876,10 +1876,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_MarkCellStarts<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_MarkCellStarts<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			cellIdSorted, N, cellStartMarker);
 
 		GPU::CheckLastKernel("K_MarkCellStarts()");
@@ -1889,7 +1889,7 @@ namespace GPU01
 		const uint64_t* cellIdSorted,
 		const uint32_t* cellStartScan,
 		const uint32_t N,
-		const uint32_t N_NonEmptyCells,
+		const uint32_t N_nonEmptyCells,
 		cudaStream_t stream,
 		// destinations
 		uint64_t* uniqueCellId,
@@ -1897,34 +1897,34 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillUniqueCellIdAndCellStartIdx<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			cellIdSorted, cellStartScan, N, N_NonEmptyCells, uniqueCellId, cellStartIdx);
+		K_FillUniqueCellIdAndCellStartIdx<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
+			cellIdSorted, cellStartScan, N, N_nonEmptyCells, uniqueCellId, cellStartIdx);
 
 		GPU::CheckLastKernel("K_FillUniqueCellIdAndCellStartIdx()");
 	}
 
 	void Launch_FillMergedCompactCellRefs(
 		const uint64_t* uniqueCellIdAny,
-		const uint32_t N_NonEmptyCellsAny,
+		const uint32_t N_nonEmptyCellsAny,
 		const uint64_t* uniqueCellIdF,
 		const uint64_t* uniqueCellIdB,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t N_NonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
 		cudaStream_t stream,
 		// destinations
 		uint32_t* cellRefFByAny,
 		uint32_t* cellRefBByAny)
 	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_NonEmptyCellsAny + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsAny + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillMergedCompactCellRefs<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
-			uniqueCellIdAny, N_NonEmptyCellsAny,
+		K_FillMergedCompactCellRefs<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
+			uniqueCellIdAny, N_nonEmptyCellsAny,
 			uniqueCellIdF, uniqueCellIdB,
-			N_NonEmptyCellsF, N_NonEmptyCellsB,
+			N_nonEmptyCellsF, N_nonEmptyCellsB,
 			cellRefFByAny, cellRefBByAny);
 
 		GPU::CheckLastKernel("K_FillMergedCompactCellRefs()");
@@ -1934,8 +1934,8 @@ namespace GPU01
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const uint32_t* cellStartIdxF,
 		const uint64_t* uniqueCellIdAny,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t N_NonEmptyCellsAny,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsAny,
 		const uint32_t cellQueryReach,
 		cudaStream_t stream,
 		// destinations
@@ -1943,13 +1943,13 @@ namespace GPU01
 		uint32_t* queryLoAnyByCellF,
 		uint32_t* queryHiAnyByCellF)
 	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_NonEmptyCellsF + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsF + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillQueryLookupBoundsF<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_FillQueryLookupBoundsF<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF,
 			cellStartIdxF, uniqueCellIdAny,
-			N_NonEmptyCellsF, N_NonEmptyCellsAny, cellQueryReach,
+			N_nonEmptyCellsF, N_nonEmptyCellsAny, cellQueryReach,
 			compactCellIdxByParticleF,
 			queryLoAnyByCellF, queryHiAnyByCellF);
 
@@ -1962,20 +1962,20 @@ namespace GPU01
 		const uint64_t* uniqueCellIdAny,
 		const uint32_t* queryLoAnyByCellF,
 		const uint32_t* queryHiAnyByCellF,
-		const uint32_t N_NonEmptyCellsF,
-		const uint32_t queryCellSlotCount,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_queryCellSlots,
 		cudaStream_t stream,
 		// destinations
 		uint32_t* queryCellRefAnyByCellF)
 	{
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_NonEmptyCellsF + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsF + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillQueryCellRefsByCellF<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_FillQueryCellRefsByCellF<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF,
 			cellStartIdxF, uniqueCellIdAny,
 			queryLoAnyByCellF, queryHiAnyByCellF,
-			N_NonEmptyCellsF, queryCellSlotCount,
+			N_nonEmptyCellsF, N_queryCellSlots,
 			queryCellRefAnyByCellF);
 
 		GPU::CheckLastKernel("K_FillQueryCellRefsByCellF()");
@@ -1990,10 +1990,10 @@ namespace GPU01
 	{
 		// TODO: initialize constants if needed
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillCellIdAndInitParticleIdx<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_FillCellIdAndInitParticleIdx<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPos, yPos, zPos, N, cellId, sortedParticleIdx);
 
 		GPU::CheckLastKernel("K_FillCellIdAndInitParticleIdx()");
@@ -2010,8 +2010,8 @@ namespace GPU01
 		const uint64_t* uniqueCellIdR,
 		const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsR,
-		const uint32_t queryCellSlotCount,
+		const uint32_t N_nonEmptyCellsR,
+		const uint32_t N_queryCellSlots,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
@@ -2028,18 +2028,18 @@ namespace GPU01
 		(void)N_B;
 		(void)N_R;
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_CellLinkedList_Compact_Query_Count<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_CellLinkedList_Compact_Query_Count<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
 			xPosR, yPosR, zPosR,
 			cellRefFByAny, cellRefBByAny,
 			cellStartIdxF, cellStartIdxB,
 			compactCellIdxByParticleF,
-			queryCellRefAnyByCellF, queryCellSlotCount,
+			queryCellRefAnyByCellF, N_queryCellSlots,
 			uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
-			N_NonEmptyCellsR,
+			N_nonEmptyCellsR,
 			N_F,
 			nbrCountFF, nbrCountFB, nbrCountFR,
 			nbrChunkMinRefFF, nbrChunkMaxRefFF,
@@ -2060,8 +2060,8 @@ namespace GPU01
 		const uint64_t* uniqueCellIdR,
 		const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsR,
-		const uint32_t queryCellSlotCount,
+		const uint32_t N_nonEmptyCellsR,
+		const uint32_t N_queryCellSlots,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		const uint16_t* nbrChunkMaxCountFF,
@@ -2091,18 +2091,18 @@ namespace GPU01
 		(void)N_B;
 		(void)N_R;
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_F + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_CellLinkedList_Compact_Query_Fill<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_CellLinkedList_Compact_Query_Fill<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
 			xPosR, yPosR, zPosR,
 			cellRefFByAny, cellRefBByAny,
 			cellStartIdxF, cellStartIdxB,
 			compactCellIdxByParticleF,
-			queryCellRefAnyByCellF, queryCellSlotCount,
+			queryCellRefAnyByCellF, N_queryCellSlots,
 			uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
-			N_NonEmptyCellsR,
+			N_nonEmptyCellsR,
 			nbrChunkMaxCountFF, nbrChunkMaxCountFB, nbrChunkMaxCountFR,
 			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
 			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
@@ -2131,11 +2131,11 @@ namespace GPU01
 		(void)N_F;
 		(void)N_B;
 
-		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_BLOCK_SIZE = 256;
 		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_BruteForce_Query_Count_RF_RB_RR<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_BruteForce_Query_Count_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF,
 				xPosB, yPosB, zPosB,
 				xPosR, yPosR, zPosR, bodyIdR,
@@ -2162,11 +2162,11 @@ namespace GPU01
 		(void)N_F;
 		(void)N_B;
 
-		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_BLOCK_SIZE = 256;
 		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_BruteForce_Query_Fill_RF_RB_RR<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_BruteForce_Query_Fill_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF,
 				xPosB, yPosB, zPosB,
 				xPosR, yPosR, zPosR, bodyIdR,
@@ -2185,8 +2185,8 @@ namespace GPU01
 		const uint64_t* uniqueCellIdB, const uint32_t* cellStartIdxB,
 		const uint64_t* uniqueCellIdR, const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
-		const uint32_t N_NonEmptyCellsR,
+		const uint32_t N_nonEmptyCellsF, const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
@@ -2197,18 +2197,18 @@ namespace GPU01
 		(void)N_F;
 		(void)N_B;
 
-		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_BLOCK_SIZE = 256;
 		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_Compact_Query_Count_RF_RB_RR<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_Compact_Query_Count_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF,
 				xPosB, yPosB, zPosB,
 				xPosR, yPosR, zPosR, bodyIdR,
 				uniqueCellIdF, cellStartIdxF,
 				uniqueCellIdB, cellStartIdxB,
 				uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
-				N_NonEmptyCellsF, N_NonEmptyCellsB, N_NonEmptyCellsR,
+				N_nonEmptyCellsF, N_nonEmptyCellsB, N_nonEmptyCellsR,
 				nbrCountRF, nbrCountRB, nbrCountRR);
 			GPU::CheckLastKernel("K_Compact_Query_Count_RF_RB_RR()");
 		}
@@ -2223,8 +2223,8 @@ namespace GPU01
 		const uint64_t* uniqueCellIdB, const uint32_t* cellStartIdxB,
 		const uint64_t* uniqueCellIdR, const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_NonEmptyCellsF, const uint32_t N_NonEmptyCellsB,
-		const uint32_t N_NonEmptyCellsR,
+		const uint32_t N_nonEmptyCellsF, const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		const uint64_t* nbrOffsetsRF,
@@ -2238,18 +2238,18 @@ namespace GPU01
 		(void)N_F;
 		(void)N_B;
 
-		const uint32_t N_BLOCKSIZE = 256;
+		const uint32_t N_BLOCK_SIZE = 256;
 		if (N_R > 0)
 		{
-			const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-			K_Compact_Query_Fill_RF_RB_RR<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+			K_Compact_Query_Fill_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF,
 				xPosB, yPosB, zPosB,
 				xPosR, yPosR, zPosR, bodyIdR,
 				uniqueCellIdF, cellStartIdxF,
 				uniqueCellIdB, cellStartIdxB,
 				uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
-				N_NonEmptyCellsF, N_NonEmptyCellsB, N_NonEmptyCellsR,
+				N_nonEmptyCellsF, N_nonEmptyCellsB, N_nonEmptyCellsR,
 				nbrOffsetsRF, nbrOffsetsRB, nbrOffsetsRR,
 				nbrListRF, nbrListRB, nbrListRR);
 			GPU::CheckLastKernel("K_Compact_Query_Fill_RF_RB_RR()");

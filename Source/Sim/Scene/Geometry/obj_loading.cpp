@@ -117,11 +117,11 @@ namespace Scene
 						std::to_string(lineNumber) + ".");
 				}
 
-				const int64_t vertexCount = static_cast<int64_t>(mesh.vertices.size());
+				const int64_t N_vertices = static_cast<int64_t>(mesh.vertices.size());
 				const int64_t vertexIdx = objIndex > 0
 					? objIndex - 1
-					: vertexCount + objIndex;
-				if (vertexIdx < 0 || vertexIdx >= vertexCount)
+					: N_vertices + objIndex;
+				if (vertexIdx < 0 || vertexIdx >= N_vertices)
 				{
 					throw std::runtime_error("Rigid mesh OBJ face index is out of range at line " +
 						std::to_string(lineNumber) + ".");

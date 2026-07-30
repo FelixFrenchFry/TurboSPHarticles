@@ -236,7 +236,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 	// rest solver-related variables
-	N_solverIterCount_ = 1;
+	N_solverIters_ = 1;
 	avgRelDensityErrorF_raw_ = 0.0f;
 	avgRelDensityErrorF_pos_ = 0.0f;
 	avgRelDensityErrorF_abs_ = 0.0f;
@@ -269,7 +269,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			*affinityPart_, pressureF, avgRelDensityErrorF_raw_,
 			avgRelDensityErrorF_pos_, avgRelDensityErrorF_abs_);
 
-		N_solverIterCount_++;
+		N_solverIters_++;
 	} while (!TerminationConditionSatisfied(params));
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
@@ -347,8 +347,8 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) const
 {
 	// check min/max iteration condition for potential early-out
-	if (N_solverIterCount_ < params.minSolverIters) { return false; }
-	if (N_solverIterCount_ >= params.maxSolverIters) { return true; }
+	if (N_solverIters_ < params.minSolverIters) { return false; }
+	if (N_solverIters_ >= params.maxSolverIters) { return true; }
 
 	bool satisfied = false;
 
@@ -356,7 +356,7 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) co
 	switch (params.solverTerminationCond)
 	{
 	case Base::SolverTerminationCond::FixedIters:
-		if (N_solverIterCount_ >= params.fixedIters)
+		if (N_solverIters_ >= params.fixedIters)
 		{
 			satisfied = true;
 		}
@@ -382,7 +382,7 @@ bool SimBackend_CPU01::TerminationConditionSatisfied(const SimParams& params) co
 		}
 		break;
 	default:
-		if (N_solverIterCount_ >= 3)
+		if (N_solverIters_ >= 3)
 		{
 			satisfied = true;
 		}
@@ -413,11 +413,11 @@ void CPU01::Density_ChunkedSELL(
 {
 	(void)N_F;
 
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
@@ -553,7 +553,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 	(void)restDensity;
 	(void)N_F;
 
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 	const CPU::Float32xSIMD particleSizeSquEps = CPU::SetFloat32xSIMD(0.01f * particleSizeSquF);
@@ -565,7 +565,7 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 	const CPU::Float32xSIMD zGravityV = CPU::SetFloat32xSIMD(zGravity);
 
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
@@ -774,7 +774,7 @@ void CPU01::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 				float yForce = 0.0f;
 				float zForce = 0.0f;
 				const NeighborSpan nbrRF = neighborList.RF(i);
-				for (uint32_t k = 0; k < nbrRF.count; k++)
+				for (uint32_t k = 0; k < nbrRF.N; k++)
 				{
 					const uint32_t j = nbrRF.data[k];
 
@@ -840,7 +840,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 {
 	(void)N_F;
 
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD timeStepV = CPU::SetFloat32xSIMD(timeStep);
 	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
 	const CPU::Float32xSIMD restDensityV = CPU::SetFloat32xSIMD(restDensity);
@@ -853,7 +853,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
@@ -1064,7 +1064,7 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 {
 	(void)N_F;
 
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = neighborList.ChunkNumTotal();
 	const float densiInvSqu = 1.0f / (restDensity * restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 	const CPU::Float32xSIMD densiInvSquV = CPU::SetFloat32xSIMD(densiInvSqu);
@@ -1072,7 +1072,7 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
 
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
@@ -1235,7 +1235,7 @@ void CPU01::AccumulateRigidParticlePressureForces_ChunkedSELL(
 				float yForce = 0.0f;
 				float zForce = 0.0f;
 				const NeighborSpan nbrRF = neighborList.RF(i);
-				for (uint32_t k = 0; k < nbrRF.count; k++)
+				for (uint32_t k = 0; k < nbrRF.N; k++)
 				{
 					const uint32_t j = nbrRF.data[k];
 
@@ -1313,7 +1313,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 		}
 	};
 
-	const uint32_t numChunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
 	const CPU::Float32xSIMD restDensityV = CPU::SetFloat32xSIMD(restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
@@ -1322,7 +1322,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 
 	DensityErrorAccum acc = tbb::parallel_reduce(
-		tbb::blocked_range<uint32_t>(0, numChunks), DensityErrorAccum{},
+		tbb::blocked_range<uint32_t>(0, N_chunks), DensityErrorAccum{},
 		[&](const tbb::blocked_range<uint32_t>& r, DensityErrorAccum local)
 		{
 			alignas(CPU::N_SIMD_ALIGNMENT) float relErrTmp[CPU::N_SIMD_WIDTH]{};

@@ -93,16 +93,16 @@ namespace Sim
 		float cellSizeInv_ = 0.0f;
 		float kernelRadiusSqu_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
-		static constexpr uint32_t N_CellFrameRebuildMargin_ = 8; // hysteresis buffer
-		static constexpr uint32_t N_QueryCellInline = 96;
+		static constexpr uint32_t N_CELL_FRAME_REBUILD_MARGIN = 8; // hysteresis buffer
+		static constexpr uint32_t N_QUERY_CELL_INLINE = 96;
 
 		// local grid frame in cell coordinates
 		int cellOrigX_ = 0;
 		int cellOrigY_ = 0;
 		int cellOrigZ_ = 0;
-		uint32_t N_DimX_ = 0;
-		uint32_t N_DimY_ = 0;
-		uint32_t N_DimZ_ = 0;
+		uint32_t N_dimX_ = 0;
+		uint32_t N_dimY_ = 0;
+		uint32_t N_dimZ_ = 0;
 		bool cellFrameValid_ = false;
 		bool cellIdsMatchCurrentParticleOrder_ = false;
 
@@ -114,9 +114,9 @@ namespace Sim
 
 		struct QueryMetaScratch
 		{
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> fluidRanges;
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> boundaryRanges;
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline> rigidRanges;
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE> fluidRanges;
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE> boundaryRanges;
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE> rigidRanges;
 		};
 		mutable tbb::enumerable_thread_specific<QueryMetaScratch> queryMetaScratch_;
 
@@ -152,14 +152,14 @@ namespace Sim
 		void BuildDenseCellTables();
 		void GatherCellQueryRanges(
 			int cx, int cy, int cz,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const;
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const;
 		void GatherChunkQueryRanges(
 			uint32_t begin, uint32_t end,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
-			boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const;
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const;
 		inline uint64_t MapToCellId(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToDenseCellIdx(int cx, int cy, int cz) const noexcept;

@@ -10,10 +10,10 @@
 
 namespace GPU01
 {
-	static constexpr uint32_t NbrCountHistogramBinCount = 65536u;
-	static constexpr uint32_t NbrCountHistogramChunkSize = 256u;
-	static constexpr uint32_t NbrCountHistogramChunkCount =
-		NbrCountHistogramBinCount / NbrCountHistogramChunkSize;
+	static constexpr uint32_t N_NBR_COUNT_HISTOGRAM_BINS = 65536u;
+	static constexpr uint32_t N_NBR_COUNT_HISTOGRAM_CHUNK = 256u;
+	static constexpr uint32_t N_NBR_COUNT_HISTOGRAM_CHUNKS =
+		N_NBR_COUNT_HISTOGRAM_BINS / N_NBR_COUNT_HISTOGRAM_CHUNK;
 
 	struct NeighborCountStats
 	{
@@ -36,11 +36,12 @@ namespace GPU01
 		float velMagMax = 0.0f;
 	};
 
-	static constexpr uint32_t StatisticsReductionBlockSize = 256u;
+	static constexpr uint32_t N_STATISTICS_REDUCTION_BLOCK = 256u;
 
 	inline uint32_t StatisticsReductionBlockCount(const uint32_t N_F)
 	{
-		return (N_F + StatisticsReductionBlockSize - 1u) / StatisticsReductionBlockSize;
+		return (N_F + N_STATISTICS_REDUCTION_BLOCK - 1u) /
+			N_STATISTICS_REDUCTION_BLOCK;
 	}
 
 	void Launch_ComputeNeighborCountStats(

@@ -28,10 +28,10 @@ namespace Scene
 	// generated input and output counts
 	struct SurfaceSamplingStats
 	{
-		uint32_t candidateCount = 0;
-		uint32_t initialSampleCount = 0;
-		uint32_t coverageRepairCount = 0;
-		uint32_t coverageProbeCount = 0;
+		uint32_t N_candidates = 0;
+		uint32_t N_initialSamples = 0;
+		uint32_t N_coverageRepairs = 0;
+		uint32_t N_coverageProbes = 0;
 		float surfaceArea = 0.0f;
 	};
 

@@ -15,6 +15,7 @@
 #include <stdexcept>
 
 // internal
+#include "Source/Base/helpers.h"
 #include "Source/Eval/Bench/benchmarks.h"
 #include "Source/Sim/Core/backend_sim.h"
 #include "Source/Sim/Core/parameters_sim.h"
@@ -170,7 +171,7 @@ namespace Sim
 		uint32_t N_B_ = 0; // number of boundary particles
 		uint32_t N_R_ = 0; // number of rigid particles
 		uint32_t N_RB_ = 0; // number of rigid bodies
-		uint32_t N_solverIterCount_ = 0;
+		uint32_t N_solverIters_ = 0;
 
 		// --- [ backend-specific data structures for operating the simulation ] ---
 
@@ -282,7 +283,7 @@ namespace Sim
 		uint64_t N_abs32FF_ = 0; // compressed abs32 storage length in refs
 		uint64_t N_abs32FB_ = 0;
 		uint64_t N_abs32FR_ = 0;
-		const uint32_t extraAllocCapacityPct_ = 2; // TODO: fine-tune
+		const float extraAllocCapacityPct_ = 2.0f; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
 		DeviceBuffer<uint32_t> d_reorderIdScratch_;
 
@@ -331,93 +332,93 @@ namespace Sim
 
 		// resizes all device buffers when particle counts change
 		// (does not preserve data)
-		void EnsureCapacity(uint32_t N_F_new, uint32_t N_B_new, bool force = false)
+		void EnsureCapacity(uint32_t N_newF, uint32_t N_newB, bool force = false)
 		{
-			const uint32_t N_chunks_new = (N_F_new == 0u) ? 0u : ((N_F_new - 1u) / 32u) + 1u;
-			const uint32_t N_reorder_scratch_new = std::max(N_F_new, N_B_new);
+			const uint32_t N_newChunks = (N_newF == 0u) ? 0u : ((N_newF - 1u) / 32u) + 1u;
+			const uint32_t N_newReorderScratch = std::max(N_newF, N_newB);
 			const bool needOverflow = d_nbrOverflowFlag_.Size() != 1;
-			const bool needFluid = force || N_F_new != N_F_ ||
-				d_idF_.Size() != N_F_new ||
-				d_xPosF_.Size() != N_F_new || d_yPosF_.Size() != N_F_new || d_zPosF_.Size() != N_F_new ||
-				d_xVelF_.Size() != N_F_new || d_yVelF_.Size() != N_F_new || d_zVelF_.Size() != N_F_new ||
-				d_xVelPredF_.Size() != N_F_new || d_yVelPredF_.Size() != N_F_new || d_zVelPredF_.Size() != N_F_new ||
-				d_xAccPressF_.Size() != N_F_new || d_yAccPressF_.Size() != N_F_new || d_zAccPressF_.Size() != N_F_new ||
-				d_sourceTermF_.Size() != N_F_new || d_diagElemF_.Size() != N_F_new ||
-				d_pressureF_.Size() != N_F_new || d_densityF_.Size() != N_reorder_scratch_new ||
-				d_nbrCountFF_.Size() != N_F_new || d_nbrCountFB_.Size() != N_F_new || d_nbrCountFR_.Size() != N_F_new ||
-				d_nbrChunkMaxCountFF_.Size() != N_chunks_new || d_nbrChunkMaxCountFB_.Size() != N_chunks_new || d_nbrChunkMaxCountFR_.Size() != N_chunks_new ||
-				d_nbrChunkBaseIdxFF_.Size() != N_chunks_new || d_nbrChunkBaseIdxFB_.Size() != N_chunks_new || d_nbrChunkBaseIdxFR_.Size() != N_chunks_new ||
-				d_nbrChunkFormatFF_.Size() != N_chunks_new || d_nbrChunkFormatFB_.Size() != N_chunks_new || d_nbrChunkFormatFR_.Size() != N_chunks_new ||
-				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_nbrChunkOffsetsFR_.Size() != static_cast<size_t>(N_chunks_new) + 1 ||
-				d_reorderIdScratch_.Size() != N_reorder_scratch_new;
-			const bool needBoundary = force || N_B_new != N_B_ ||
-				d_idB_.Size() != N_B_new ||
-				d_xPosB_.Size() != N_B_new || d_yPosB_.Size() != N_B_new || d_zPosB_.Size() != N_B_new ||
-				d_volB_.Size() != N_B_new || d_psiB_.Size() != N_B_new;
+			const bool needFluid = force || N_newF != N_F_ ||
+				d_idF_.Size() != N_newF ||
+				d_xPosF_.Size() != N_newF || d_yPosF_.Size() != N_newF || d_zPosF_.Size() != N_newF ||
+				d_xVelF_.Size() != N_newF || d_yVelF_.Size() != N_newF || d_zVelF_.Size() != N_newF ||
+				d_xVelPredF_.Size() != N_newF || d_yVelPredF_.Size() != N_newF || d_zVelPredF_.Size() != N_newF ||
+				d_xAccPressF_.Size() != N_newF || d_yAccPressF_.Size() != N_newF || d_zAccPressF_.Size() != N_newF ||
+				d_sourceTermF_.Size() != N_newF || d_diagElemF_.Size() != N_newF ||
+				d_pressureF_.Size() != N_newF || d_densityF_.Size() != N_newReorderScratch ||
+				d_nbrCountFF_.Size() != N_newF || d_nbrCountFB_.Size() != N_newF || d_nbrCountFR_.Size() != N_newF ||
+				d_nbrChunkMaxCountFF_.Size() != N_newChunks || d_nbrChunkMaxCountFB_.Size() != N_newChunks || d_nbrChunkMaxCountFR_.Size() != N_newChunks ||
+				d_nbrChunkBaseIdxFF_.Size() != N_newChunks || d_nbrChunkBaseIdxFB_.Size() != N_newChunks || d_nbrChunkBaseIdxFR_.Size() != N_newChunks ||
+				d_nbrChunkFormatFF_.Size() != N_newChunks || d_nbrChunkFormatFB_.Size() != N_newChunks || d_nbrChunkFormatFR_.Size() != N_newChunks ||
+				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_newChunks) + 1 ||
+				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_newChunks) + 1 ||
+				d_nbrChunkOffsetsFR_.Size() != static_cast<size_t>(N_newChunks) + 1 ||
+				d_reorderIdScratch_.Size() != N_newReorderScratch;
+			const bool needBoundary = force || N_newB != N_B_ ||
+				d_idB_.Size() != N_newB ||
+				d_xPosB_.Size() != N_newB || d_yPosB_.Size() != N_newB || d_zPosB_.Size() != N_newB ||
+				d_volB_.Size() != N_newB || d_psiB_.Size() != N_newB;
 			if (!(needFluid || needBoundary || needOverflow)) { return; }
 
-			N_F_ = N_F_new;
-			N_B_ = N_B_new;
+			N_F_ = N_newF;
+			N_B_ = N_newB;
 			d_idF_.Resize(N_F_);
 			d_xPosF_.Resize(N_F_); d_yPosF_.Resize(N_F_); d_zPosF_.Resize(N_F_);
 			d_xVelF_.Resize(N_F_); d_yVelF_.Resize(N_F_); d_zVelF_.Resize(N_F_);
 			d_xVelPredF_.Resize(N_F_); d_yVelPredF_.Resize(N_F_); d_zVelPredF_.Resize(N_F_);
 			d_xAccPressF_.Resize(N_F_); d_yAccPressF_.Resize(N_F_); d_zAccPressF_.Resize(N_F_);
 			d_sourceTermF_.Resize(N_F_); d_diagElemF_.Resize(N_F_);
-			d_pressureF_.Resize(N_F_); d_densityF_.Resize(N_reorder_scratch_new);
+			d_pressureF_.Resize(N_F_); d_densityF_.Resize(N_newReorderScratch);
 
 			d_idB_.Resize(N_B_);
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
 			d_volB_.Resize(N_B_); d_psiB_.Resize(N_B_);
-			d_reorderIdScratch_.Resize(N_reorder_scratch_new);
+			d_reorderIdScratch_.Resize(N_newReorderScratch);
 
 			d_nbrCountFF_.Resize(N_F_); d_nbrCountFB_.Resize(N_F_); d_nbrCountFR_.Resize(N_F_);
-			d_nbrChunkMaxCountFF_.Resize(N_chunks_new); d_nbrChunkMaxCountFB_.Resize(N_chunks_new); d_nbrChunkMaxCountFR_.Resize(N_chunks_new);
-			d_nbrChunkBaseIdxFF_.Resize(N_chunks_new); d_nbrChunkBaseIdxFB_.Resize(N_chunks_new); d_nbrChunkBaseIdxFR_.Resize(N_chunks_new);
-			d_nbrChunkFormatFF_.Resize(N_chunks_new); d_nbrChunkFormatFB_.Resize(N_chunks_new); d_nbrChunkFormatFR_.Resize(N_chunks_new);
-			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_chunks_new) + 1);
-			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_chunks_new) + 1);
-			d_nbrChunkOffsetsFR_.Resize(static_cast<size_t>(N_chunks_new) + 1);
+			d_nbrChunkMaxCountFF_.Resize(N_newChunks); d_nbrChunkMaxCountFB_.Resize(N_newChunks); d_nbrChunkMaxCountFR_.Resize(N_newChunks);
+			d_nbrChunkBaseIdxFF_.Resize(N_newChunks); d_nbrChunkBaseIdxFB_.Resize(N_newChunks); d_nbrChunkBaseIdxFR_.Resize(N_newChunks);
+			d_nbrChunkFormatFF_.Resize(N_newChunks); d_nbrChunkFormatFB_.Resize(N_newChunks); d_nbrChunkFormatFR_.Resize(N_newChunks);
+			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_newChunks) + 1);
+			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_newChunks) + 1);
+			d_nbrChunkOffsetsFR_.Resize(static_cast<size_t>(N_newChunks) + 1);
 			d_nbrOverflowFlag_.Resize(1);
 		}
 
 		void EnsureRigidCapacity(
-			uint32_t N_RB_new, uint32_t N_R_new, bool force = false)
+			uint32_t N_newRB, uint32_t N_newR, bool force = false)
 		{
-			const bool needRigidBodies = force || N_RB_new != N_RB_ ||
-				d_idRB_.Size() != N_RB_new ||
-				d_rigidParticleBeginRB_.Size() != N_RB_new || d_rigidParticleCountRB_.Size() != N_RB_new ||
-				d_xCMRB_.Size() != N_RB_new || d_yCMRB_.Size() != N_RB_new || d_zCMRB_.Size() != N_RB_new ||
-				d_xVelRB_.Size() != N_RB_new || d_yVelRB_.Size() != N_RB_new || d_zVelRB_.Size() != N_RB_new ||
-				d_xOmegaRB_.Size() != N_RB_new || d_yOmegaRB_.Size() != N_RB_new || d_zOmegaRB_.Size() != N_RB_new ||
-				d_xAngMomRB_.Size() != N_RB_new || d_yAngMomRB_.Size() != N_RB_new || d_zAngMomRB_.Size() != N_RB_new ||
-				d_xForceRB_.Size() != N_RB_new || d_yForceRB_.Size() != N_RB_new || d_zForceRB_.Size() != N_RB_new ||
-				d_xTorqueRB_.Size() != N_RB_new || d_yTorqueRB_.Size() != N_RB_new || d_zTorqueRB_.Size() != N_RB_new ||
-				d_a00RB_.Size() != N_RB_new || d_a01RB_.Size() != N_RB_new || d_a02RB_.Size() != N_RB_new ||
-				d_a10RB_.Size() != N_RB_new || d_a11RB_.Size() != N_RB_new || d_a12RB_.Size() != N_RB_new ||
-				d_a20RB_.Size() != N_RB_new || d_a21RB_.Size() != N_RB_new || d_a22RB_.Size() != N_RB_new ||
-				d_massRB_.Size() != N_RB_new || d_massInvRB_.Size() != N_RB_new ||
-				d_iBodyInv00RB_.Size() != N_RB_new || d_iBodyInv01RB_.Size() != N_RB_new || d_iBodyInv02RB_.Size() != N_RB_new ||
-				d_iBodyInv10RB_.Size() != N_RB_new || d_iBodyInv11RB_.Size() != N_RB_new || d_iBodyInv12RB_.Size() != N_RB_new ||
-				d_iBodyInv20RB_.Size() != N_RB_new || d_iBodyInv21RB_.Size() != N_RB_new || d_iBodyInv22RB_.Size() != N_RB_new;
-			const bool needRigidParticles = force || N_R_new != N_R_ ||
-				d_idR_.Size() != N_R_new || d_bodyIdR_.Size() != N_R_new ||
-				d_xPosR_.Size() != N_R_new || d_yPosR_.Size() != N_R_new || d_zPosR_.Size() != N_R_new ||
-				d_xRelPosR_.Size() != N_R_new || d_yRelPosR_.Size() != N_R_new || d_zRelPosR_.Size() != N_R_new ||
-				d_xVelR_.Size() != N_R_new || d_yVelR_.Size() != N_R_new || d_zVelR_.Size() != N_R_new ||
-				d_xForceR_.Size() != N_R_new || d_yForceR_.Size() != N_R_new || d_zForceR_.Size() != N_R_new ||
-				d_volR_.Size() != N_R_new || d_psiR_.Size() != N_R_new ||
-				d_nbrCountRF_.Size() != N_R_new || d_nbrCountRB_.Size() != N_R_new ||
-				d_nbrCountRR_.Size() != N_R_new ||
-				d_nbrOffsetsRF_.Size() != static_cast<size_t>(N_R_new) + 1 ||
-				d_nbrOffsetsRB_.Size() != static_cast<size_t>(N_R_new) + 1 ||
-				d_nbrOffsetsRR_.Size() != static_cast<size_t>(N_R_new) + 1;
+			const bool needRigidBodies = force || N_newRB != N_RB_ ||
+				d_idRB_.Size() != N_newRB ||
+				d_rigidParticleBeginRB_.Size() != N_newRB || d_rigidParticleCountRB_.Size() != N_newRB ||
+				d_xCMRB_.Size() != N_newRB || d_yCMRB_.Size() != N_newRB || d_zCMRB_.Size() != N_newRB ||
+				d_xVelRB_.Size() != N_newRB || d_yVelRB_.Size() != N_newRB || d_zVelRB_.Size() != N_newRB ||
+				d_xOmegaRB_.Size() != N_newRB || d_yOmegaRB_.Size() != N_newRB || d_zOmegaRB_.Size() != N_newRB ||
+				d_xAngMomRB_.Size() != N_newRB || d_yAngMomRB_.Size() != N_newRB || d_zAngMomRB_.Size() != N_newRB ||
+				d_xForceRB_.Size() != N_newRB || d_yForceRB_.Size() != N_newRB || d_zForceRB_.Size() != N_newRB ||
+				d_xTorqueRB_.Size() != N_newRB || d_yTorqueRB_.Size() != N_newRB || d_zTorqueRB_.Size() != N_newRB ||
+				d_a00RB_.Size() != N_newRB || d_a01RB_.Size() != N_newRB || d_a02RB_.Size() != N_newRB ||
+				d_a10RB_.Size() != N_newRB || d_a11RB_.Size() != N_newRB || d_a12RB_.Size() != N_newRB ||
+				d_a20RB_.Size() != N_newRB || d_a21RB_.Size() != N_newRB || d_a22RB_.Size() != N_newRB ||
+				d_massRB_.Size() != N_newRB || d_massInvRB_.Size() != N_newRB ||
+				d_iBodyInv00RB_.Size() != N_newRB || d_iBodyInv01RB_.Size() != N_newRB || d_iBodyInv02RB_.Size() != N_newRB ||
+				d_iBodyInv10RB_.Size() != N_newRB || d_iBodyInv11RB_.Size() != N_newRB || d_iBodyInv12RB_.Size() != N_newRB ||
+				d_iBodyInv20RB_.Size() != N_newRB || d_iBodyInv21RB_.Size() != N_newRB || d_iBodyInv22RB_.Size() != N_newRB;
+			const bool needRigidParticles = force || N_newR != N_R_ ||
+				d_idR_.Size() != N_newR || d_bodyIdR_.Size() != N_newR ||
+				d_xPosR_.Size() != N_newR || d_yPosR_.Size() != N_newR || d_zPosR_.Size() != N_newR ||
+				d_xRelPosR_.Size() != N_newR || d_yRelPosR_.Size() != N_newR || d_zRelPosR_.Size() != N_newR ||
+				d_xVelR_.Size() != N_newR || d_yVelR_.Size() != N_newR || d_zVelR_.Size() != N_newR ||
+				d_xForceR_.Size() != N_newR || d_yForceR_.Size() != N_newR || d_zForceR_.Size() != N_newR ||
+				d_volR_.Size() != N_newR || d_psiR_.Size() != N_newR ||
+				d_nbrCountRF_.Size() != N_newR || d_nbrCountRB_.Size() != N_newR ||
+				d_nbrCountRR_.Size() != N_newR ||
+				d_nbrOffsetsRF_.Size() != static_cast<size_t>(N_newR) + 1 ||
+				d_nbrOffsetsRB_.Size() != static_cast<size_t>(N_newR) + 1 ||
+				d_nbrOffsetsRR_.Size() != static_cast<size_t>(N_newR) + 1;
 			if (!(needRigidBodies || needRigidParticles)) { return; }
 
-			N_RB_ = N_RB_new;
-			N_R_ = N_R_new;
+			N_RB_ = N_newRB;
+			N_R_ = N_newR;
 			d_idR_.Resize(N_R_); d_bodyIdR_.Resize(N_R_);
 			d_xPosR_.Resize(N_R_); d_yPosR_.Resize(N_R_); d_zPosR_.Resize(N_R_);
 			d_xRelPosR_.Resize(N_R_); d_yRelPosR_.Resize(N_R_); d_zRelPosR_.Resize(N_R_);
@@ -450,12 +451,14 @@ namespace Sim
 		// and ensures list-storage capacity for the fill-query.
 		void FinalizeNeighborLists_Count();
 
-		void EnsureNsSharedScratchCapacity(const size_t requiredBytes)
+		void EnsureNsSharedScratchCapacity(const size_t N_requiredBytes)
 		{
-			if (requiredBytes <= d_nsSharedScratch_.Size()) { return; }
+			if (N_requiredBytes <= d_nsSharedScratch_.Size()) { return; }
 
-			const size_t capacity = requiredBytes
-				+ (requiredBytes * static_cast<size_t>(extraAllocCapacityPct_)) / size_t{ 100 };
+			const size_t capacity = N_requiredBytes +
+				static_cast<size_t>(Base::ExtraPercent(
+					N_requiredBytes,
+					extraAllocCapacityPct_));
 			d_nsSharedScratch_.Resize(capacity);
 		}
 	};

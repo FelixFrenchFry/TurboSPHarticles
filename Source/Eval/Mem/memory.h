@@ -49,12 +49,12 @@ namespace Mem
 	private: // --------------------------------------------------------------------------------------
 
 		// max and current number of steps for which memory usage is kept
-		uint32_t maxRecCount_;
-		uint32_t curRecCount_;
+		uint32_t N_maxRecords_;
+		uint32_t N_records_;
 
 		MemRecordStep recLatest_;
 
-		// rolling buffer for the memory usage for the last maxCount_ steps
+		// rolling buffer for the memory usage for the last N_maxRecords_ steps
 		std::deque<MemRecordStep> recHistory_;
 
 		// all-time per-bucket aggregates

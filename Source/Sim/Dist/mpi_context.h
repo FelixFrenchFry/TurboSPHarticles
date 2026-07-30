@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <array>
 #include <cstdint>
 #include <mpi.h>
 #include <string>
@@ -27,7 +28,7 @@ namespace Dist
 
 		// metadata about MPI environment
 		int Rank() const { return rank_; }
-		int Size() const { return size_; }
+		int Size() const { return N_ranks_; }
 		int RootRank() const { return rootRank_; }
 		int ThreadSupport() const { return threadSupport_; }
 		bool IsRoot() const { return rank_ == rootRank_; }
@@ -41,6 +42,7 @@ namespace Dist
 
 		bool AllTrue(bool localValue) const;
 		uint64_t AllReduceSumUint64(uint64_t value) const;
+		void AllReduceSumUint64s(std::array<uint64_t, 2>& values) const;
 		uint32_t AllReduceMaxUint32(uint32_t value) const;
 		double AllReduceSumDouble(double value) const;
 		float AllReduceMinFloat(float value) const;
@@ -51,32 +53,32 @@ namespace Dist
 		void AllToAllInts(
 			const std::vector<int>& sendValues,
 			std::vector<int>& recvValues,
-			int valuesPerRank = 1) const;
+			int N_valuesPerRank = 1) const;
 
 		// point-to-point helpers for neighbor communication
 		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;
 		void ISendInt(const int& sendValue, int peerRank, int tag, MPI_Request& request) const;
 		void IRecvBytes(
 			void* recvData,
-			int recvByteCount,
+			int N_recvBytes,
 			int peerRank,
 			int tag,
 			MPI_Request& request) const;
 		void ISendBytes(
 			const void* sendData,
-			int sendByteCount,
+			int N_sendBytes,
 			int peerRank,
 			int tag,
 			MPI_Request& request) const;
 		void IRecvBytesChunked(
 			void* recvData,
-			uint64_t recvByteCount,
+			uint64_t N_recvBytes,
 			int peerRank,
 			int tag,
 			std::vector<MPI_Request>& requests) const;
 		void ISendBytesChunked(
 			const void* sendData,
-			uint64_t sendByteCount,
+			uint64_t N_sendBytes,
 			int peerRank,
 			int tag,
 			std::vector<MPI_Request>& requests) const;
@@ -90,7 +92,7 @@ namespace Dist
 		static void CheckMpiResult(int result, const char* opName);
 
 		int rank_ = 0;
-		int size_ = 1;
+		int N_ranks_ = 1;
 		int rootRank_ = 0;
 		int threadSupport_ = MPI_THREAD_SINGLE;
 		// only the context that called MPI_Init_thread is allowed to call MPI_Finalize

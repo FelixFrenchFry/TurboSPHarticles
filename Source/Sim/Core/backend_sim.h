@@ -158,13 +158,23 @@ namespace Sim
 		}
 
 		// configures rank-authoritative particle work for distributed execution
-		virtual bool ConfigureDistributedStep(const std::vector<int>&, const std::vector<int>&) { return false; }
+		virtual bool ConfigureDistributedStep(
+			const std::vector<uint32_t>&,
+			const std::vector<uint32_t>&)
+		{
+			return false;
+		}
 
 		// classifies fluid particles against the regular export near-surface threshold
 		virtual bool FillFluidParticleNearSurfaceFlags(std::vector<uint8_t>&) const { return false; }
 
 		// selects regular export surface particles using authoritative near-surface flags
-		virtual bool BuildExportFluidParticleLocalIdxs(const std::vector<uint8_t>&, std::vector<int>&) const { return false; }
+		virtual bool BuildExportFluidParticleLocalIdxs(
+			const std::vector<uint8_t>&,
+			std::vector<uint32_t>&) const
+		{
+			return false;
+		}
 
 		// reads body-level force and torque accumulated during the latest backend step
 		virtual bool GetRigidBodyForceTorque(RigidBodyForceTorque&) const { return false; }
@@ -238,7 +248,7 @@ namespace Sim
 	struct NeighborSpan
 	{
 		const uint32_t* data = nullptr;
-		uint32_t count = 0;
+		uint32_t N = 0;
 	};
 
 	class I_NeighborList
@@ -258,21 +268,21 @@ namespace Sim
 		virtual void Finalize_Fill() = 0;
 
 		// sets the neighbor count of fluid particle i, computed by the count-query
-		virtual void SetNbrCountFF(uint32_t i, uint32_t count) = 0;
-		virtual void SetNbrCountFB(uint32_t i, uint32_t count) = 0;
-		virtual void SetNbrCountFR(uint32_t i, uint32_t count) = 0;
-		virtual void SetNbrCountRF(uint32_t i, uint32_t count) = 0;
-		virtual void SetNbrCountRB(uint32_t i, uint32_t count) = 0;
-		virtual void SetNbrCountRR(uint32_t i, uint32_t count) = 0;
+		virtual void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) = 0;
+		virtual void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) = 0;
+		virtual void SetNbrCountFR(uint32_t i, uint32_t N_nbrs) = 0;
+		virtual void SetNbrCountRF(uint32_t i, uint32_t N_nbrs) = 0;
+		virtual void SetNbrCountRB(uint32_t i, uint32_t N_nbrs) = 0;
+		virtual void SetNbrCountRR(uint32_t i, uint32_t N_nbrs) = 0;
 
 		// sets the full neighbor list js of source particle i, accumulated in a scratch array by the fill-query
 		// (optionally applying compression and other post-processing if the implementation uses it)
-		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
-		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
-		virtual void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t count) = 0;
-		virtual void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t count) = 0;
-		virtual void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t count) = 0;
-		virtual void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t count) = 0;
+		virtual void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) = 0;
+		virtual void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) = 0;
+		virtual void SetNbrListFR(uint32_t i, const uint32_t* js, uint32_t N_nbrs) = 0;
+		virtual void SetNbrListRF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) = 0;
+		virtual void SetNbrListRB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) = 0;
+		virtual void SetNbrListRR(uint32_t i, const uint32_t* js, uint32_t N_nbrs) = 0;
 
 		// gets a "span" of the list of neighbors for a source particle i
 		// (for compressed neighbor lists, the span points to per-thread scratch space, which
@@ -285,12 +295,12 @@ namespace Sim
 		virtual NeighborSpan RR(uint32_t i) const = 0;
 
 		// default implementations for neighbor counts, overwritten for compressed neighbor lists
-		virtual uint32_t CountFF(uint32_t i) const { return FF(i).count; }
-		virtual uint32_t CountFB(uint32_t i) const { return FB(i).count; }
-		virtual uint32_t CountFR(uint32_t i) const { return FR(i).count; }
-		virtual uint32_t CountRF(uint32_t i) const { return RF(i).count; }
-		virtual uint32_t CountRB(uint32_t i) const { return RB(i).count; }
-		virtual uint32_t CountRR(uint32_t i) const { return RR(i).count; }
+		virtual uint32_t CountFF(uint32_t i) const { return FF(i).N; }
+		virtual uint32_t CountFB(uint32_t i) const { return FB(i).N; }
+		virtual uint32_t CountFR(uint32_t i) const { return FR(i).N; }
+		virtual uint32_t CountRF(uint32_t i) const { return RF(i).N; }
+		virtual uint32_t CountRB(uint32_t i) const { return RB(i).N; }
+		virtual uint32_t CountRR(uint32_t i) const { return RR(i).N; }
 
 		// stats
 		virtual Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const = 0;

@@ -32,11 +32,11 @@ namespace Sim
 
 		void Finalize_Fill() override {}
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
-		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) override {}
 
-		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
@@ -74,11 +74,11 @@ namespace Sim
 
 		void Finalize_Fill() override {}
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override;
-		void SetNbrCountFB(uint32_t i, uint32_t count) override;
+		void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) override;
+		void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) override;
 
-		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
@@ -102,14 +102,14 @@ namespace Sim
 		std::vector<uint32_t> nbrCountFB_; // TODO: make this uint16_t?
 		std::vector<uint32_t> nbrLocalOffsetsFF_; // size: N_F
 		std::vector<uint32_t> nbrLocalOffsetsFB_; // size: N_F
-		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / offsetBlockParticleCount_ + 1
-		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / offsetBlockParticleCount_ + 1
+		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / N_offsetBlockParticles_ + 1
+		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / N_offsetBlockParticles_ + 1
 		std::vector<uint32_t> nbrListFF_; // size: N_F * avg FF neighbor count
 		std::vector<uint32_t> nbrListFB_; // size: N_F * avg FB neighbor count
 
 		// misc
-		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
-		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
+		static constexpr uint32_t N_offsetBlockParticles_ = 8192u;
+		static constexpr float extraAllocCapacityPct_ = 4.0f; // TODO: fine-tune
 
 		// helpers
 		static uint32_t OffsetBlockNumTotal(uint32_t N_F) noexcept;
@@ -139,16 +139,16 @@ namespace Sim
 
 		void Finalize_Fill() override;
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
-		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) override {}
 
 		void SetInputOrder(NeighborListInputOrder inputOrder)
 		{
 			inputOrder_ = inputOrder;
 		}
 
-		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
@@ -184,8 +184,8 @@ namespace Sim
 		std::vector<uint32_t> nbrCountFB_; // TODO: make this uint16_t?
 		std::vector<uint32_t> nbrLocalOffsetsFF_; // size: N_F
 		std::vector<uint32_t> nbrLocalOffsetsFB_; // size: N_F
-		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / offsetBlockParticleCount_ + 1
-		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / offsetBlockParticleCount_ + 1
+		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / N_offsetBlockParticles_ + 1
+		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / N_offsetBlockParticles_ + 1
 		std::vector<uint8_t> nbrListCompressedFF_; // size: N_F * avg FF neighbor count * avg bytes per neighbor
 		std::vector<uint8_t> nbrListCompressedFB_; // size: N_F * avg FB neighbor count * avg bytes per neighbor
 		std::vector<uint8_t> nbrWidthCodeFF_; // width code from measure phase, reused in encode
@@ -193,22 +193,22 @@ namespace Sim
 
 		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+			uint32_t, N_PER_SCRATCH_INLINE_FF>> nbrScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+			uint32_t, N_PER_SCRATCH_INLINE_FB>> nbrScratchFB_;
 
 		// thread-local sorting scratch used if incoming list is not guaranteed to be sorted
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> sortScratchFF_;
+			uint32_t, N_PER_SCRATCH_INLINE_FF>> sortScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> sortScratchFB_;
+			uint32_t, N_PER_SCRATCH_INLINE_FB>> sortScratchFB_;
 
 		// misc
 		NeighborListInputOrder inputOrder_ = NeighborListInputOrder::Unknown;
 		FillPhase fillPhase_ = FillPhase::Measure;
-		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
-		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
-		static constexpr uint32_t overheadBytesPerNeighborList = 5;
+		static constexpr uint32_t N_offsetBlockParticles_ = 8192u;
+		static constexpr float extraAllocCapacityPct_ = 4.0f; // TODO: fine-tune
+		static constexpr uint32_t N_overheadBytesPerNbrList = 5;
 		static constexpr double expctdBytePerCompressedNeighbor = 1.6; // TODO: fine-tune
 
 		// helpers
@@ -229,16 +229,16 @@ namespace Sim
 		static uint8_t ChooseWidthCode(uint32_t maxGap) noexcept;
 		static uint32_t GetNumWidthBytes(uint8_t widthCode) noexcept;
 		static uint64_t MeasureEncodedBytes(
-			const uint32_t* js, uint32_t count, uint8_t& widthCode);
+			const uint32_t* js, uint32_t N_nbrs, uint8_t& widthCode);
 		static inline uint16_t ReadU16LE(const uint8_t* src) noexcept;
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
 		static inline void WriteU16LE(uint8_t* dst, uint16_t v) noexcept;
 		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
 		template<typename T_Out>
-		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
-			uint32_t count, T_Out& out);
-		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
-			const uint32_t* js, uint32_t count, uint8_t widthCode);
+		static void DecodeNeighborList(const uint8_t* src, uint64_t N_srcBytes,
+			uint32_t N_nbrs, T_Out& out);
+		static void EncodeNeighborList(uint8_t* dst, uint64_t N_dstBytes,
+			const uint32_t* js, uint32_t N_nbrs, uint8_t widthCode);
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -256,16 +256,16 @@ namespace Sim
 
 		void Finalize_Fill() override;
 
-		void SetNbrCountFF(uint32_t i, uint32_t count) override {}
-		void SetNbrCountFB(uint32_t i, uint32_t count) override {}
+		void SetNbrCountFF(uint32_t i, uint32_t N_nbrs) override {}
+		void SetNbrCountFB(uint32_t i, uint32_t N_nbrs) override {}
 
 		void SetInputOrder(NeighborListInputOrder inputOrder)
 		{
 			inputOrder_ = inputOrder;
 		}
 
-		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t count) override;
-		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t count) override;
+		void SetNbrListFF(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
+		void SetNbrListFB(uint32_t i, const uint32_t* js, uint32_t N_nbrs) override;
 
 		NeighborSpan FF(uint32_t i) const override;
 		NeighborSpan FB(uint32_t i) const override;
@@ -301,29 +301,29 @@ namespace Sim
 		std::vector<uint32_t> nbrCountFB_; // TODO: make this uint16_t?
 		std::vector<uint32_t> nbrLocalOffsetsFF_; // size: N_F
 		std::vector<uint32_t> nbrLocalOffsetsFB_; // size: N_F
-		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / offsetBlockParticleCount_ + 1
-		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / offsetBlockParticleCount_ + 1
+		std::vector<uint64_t> nbrBlockBasesFF_; // size: N_F / N_offsetBlockParticles_ + 1
+		std::vector<uint64_t> nbrBlockBasesFB_; // size: N_F / N_offsetBlockParticles_ + 1
 		std::vector<uint8_t> nbrListCompressedFF_; // size: N_F * avg FF neighbor count * avg bytes per neighbor
 		std::vector<uint8_t> nbrListCompressedFB_; // size: N_F * avg FB neighbor count * avg bytes per neighbor
 
 		// thread-local decode scratch for FF()/FB() to return neighbors as uint32_t
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> nbrScratchFF_;
+			uint32_t, N_PER_SCRATCH_INLINE_FF>> nbrScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> nbrScratchFB_;
+			uint32_t, N_PER_SCRATCH_INLINE_FB>> nbrScratchFB_;
 
 		// thread-local sorting scratch used if incoming list is not guaranteed to be sorted
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFF>> sortScratchFF_;
+			uint32_t, N_PER_SCRATCH_INLINE_FF>> sortScratchFF_;
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
-			uint32_t, N_perScratchInlineFB>> sortScratchFB_;
+			uint32_t, N_PER_SCRATCH_INLINE_FB>> sortScratchFB_;
 
 		// misc
 		NeighborListInputOrder inputOrder_ = NeighborListInputOrder::Unknown;
 		FillPhase fillPhase_ = FillPhase::Measure;
-		static constexpr uint32_t offsetBlockParticleCount_ = 8192u;
-		static constexpr uint32_t extraAllocCapacityPct_ = 4; // TODO: fine-tune
-		static constexpr uint32_t overheadBytesPerNeighborList = 4;
+		static constexpr uint32_t N_offsetBlockParticles_ = 8192u;
+		static constexpr float extraAllocCapacityPct_ = 4.0f; // TODO: fine-tune
+		static constexpr uint32_t N_overheadBytesPerNbrList = 4;
 		static constexpr double expctdBytePerCompressedNeighbor = 0.8; // TODO: fine-tune
 
 		// helpers
@@ -341,16 +341,16 @@ namespace Sim
 			std::vector<uint32_t>& nbrLocalOffsets,
 			std::vector<uint64_t>& nbrBlockBases,
 			std::vector<uint8_t>& nbrList) const;
-		static uint32_t ControlBytesFor(uint32_t count) noexcept;
+		static uint32_t ControlBytesFor(uint32_t N_nbrs) noexcept;
 		static uint8_t DeltaMask(uint32_t delta) noexcept;
-		static uint64_t MeasureEncodedBytes(const uint32_t* js, uint32_t count);
+		static uint64_t MeasureEncodedBytes(const uint32_t* js, uint32_t N_nbrs);
 		static inline uint32_t ReadU32LE(const uint8_t* src) noexcept;
 		static inline void WriteU32LE(uint8_t* dst, uint32_t v) noexcept;
 		template<typename T_Out>
-		static void DecodeNeighborList(const uint8_t* src, uint64_t srcBytes,
-			uint32_t count, T_Out& out);
-		static void EncodeNeighborList(uint8_t* dst, uint64_t dstBytes,
-			const uint32_t* js, uint32_t count);
+		static void DecodeNeighborList(const uint8_t* src, uint64_t N_srcBytes,
+			uint32_t N_nbrs, T_Out& out);
+		static void EncodeNeighborList(uint8_t* dst, uint64_t N_dstBytes,
+			const uint32_t* js, uint32_t N_nbrs);
 	};
 
 } // namespace Sim

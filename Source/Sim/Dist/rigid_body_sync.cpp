@@ -135,17 +135,17 @@ void RigidBodySyncBuffers::UnpackRigidBodyState(
 }
 
 bool Dist::BuildActiveRigidParticleLocalIdxs(
-	std::vector<int>& activeRigidParticleLocalIdxs,
+	std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 	const Sync::UniversalSimState& localState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const int rankCount,
+	const int N_ranks,
 	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
 
 	// determine the rigid particles authoritative on this rank
-	if (rank < 0 || rank >= rankCount)
+	if (rank < 0 || rank >= N_ranks)
 	{
 		if (failMsg) { *failMsg = "rank is outside the distributed rank range."; }
 		return false;
@@ -184,7 +184,7 @@ bool Dist::BuildActiveRigidParticleLocalIdxs(
 		};
 
 		const int ownerRank = domainDecomp.OwnerRank(position);
-		if (ownerRank < 0 || ownerRank >= rankCount)
+		if (ownerRank < 0 || ownerRank >= N_ranks)
 		{
 			if (failMsg) { *failMsg =
 				"rigid particle world position is outside the distributed domain."; }
@@ -192,7 +192,7 @@ bool Dist::BuildActiveRigidParticleLocalIdxs(
 		}
 		if (ownerRank == rank)
 		{
-			activeRigidParticleLocalIdxs.push_back(static_cast<int>(rigidParticleIdx));
+			activeRigidParticleLocalIdxs.push_back(rigidParticleIdx);
 		}
 	}
 

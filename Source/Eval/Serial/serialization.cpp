@@ -81,14 +81,14 @@ namespace Export
 		}
 	}
 
-	static void WriteExact(std::ofstream& ofs, const void* data, size_t bytes)
+	static void WriteExact(std::ofstream& ofs, const void* data, size_t N_bytes)
 	{
-		ofs.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(bytes));
+		ofs.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(N_bytes));
 	}
 
-	static void ReadExact(std::ifstream& ifs, void* data, size_t bytes)
+	static void ReadExact(std::ifstream& ifs, void* data, size_t N_bytes)
 	{
-		ifs.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(bytes));
+		ifs.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(N_bytes));
 	}
 
 	template <class T>
@@ -213,30 +213,30 @@ namespace Export
 	static ExportSnapshotOffsets ComputeExportSnapshotOffsets(
 		const ExportSnapshotBinInfo& info)
 	{
-		constexpr uint64_t elemBytes = 4; // float32 / uint32
+		constexpr uint64_t N_elementBytes = 4; // float32 / uint32
 
 		// offsets must match SaveExportSnapshot write order
 		ExportSnapshotOffsets off{};
 		off.xF = sizeof(BinHeaderSnap);
-		off.yF = off.xF + static_cast<uint64_t>(info.NF) * elemBytes;
-		off.zF = off.yF + static_cast<uint64_t>(info.NF) * elemBytes;
-		off.vF = off.zF + static_cast<uint64_t>(info.NF) * elemBytes;
-		off.idF = off.vF + static_cast<uint64_t>(info.NF) * elemBytes;
-		off.rankF = off.idF + static_cast<uint64_t>(info.NF) * elemBytes;
+		off.yF = off.xF + static_cast<uint64_t>(info.NF) * N_elementBytes;
+		off.zF = off.yF + static_cast<uint64_t>(info.NF) * N_elementBytes;
+		off.vF = off.zF + static_cast<uint64_t>(info.NF) * N_elementBytes;
+		off.idF = off.vF + static_cast<uint64_t>(info.NF) * N_elementBytes;
+		off.rankF = off.idF + static_cast<uint64_t>(info.NF) * N_elementBytes;
 
-		off.xPosB = off.rankF + static_cast<uint64_t>(info.NF) * elemBytes;
-		off.yPosB = off.xPosB + static_cast<uint64_t>(info.NB) * elemBytes;
-		off.zPosB = off.yPosB + static_cast<uint64_t>(info.NB) * elemBytes;
-		off.volB = off.zPosB + static_cast<uint64_t>(info.NB) * elemBytes;
-		off.idB = off.volB + static_cast<uint64_t>(info.NB) * elemBytes;
-		off.xPosR = off.idB + static_cast<uint64_t>(info.NB) * elemBytes;
-		off.yPosR = off.xPosR + static_cast<uint64_t>(info.NR) * elemBytes;
-		off.zPosR = off.yPosR + static_cast<uint64_t>(info.NR) * elemBytes;
-		off.volR = off.zPosR + static_cast<uint64_t>(info.NR) * elemBytes;
-		off.idR = off.volR + static_cast<uint64_t>(info.NR) * elemBytes;
-		off.bodyIdR = off.idR + static_cast<uint64_t>(info.NR) * elemBytes;
+		off.xPosB = off.rankF + static_cast<uint64_t>(info.NF) * N_elementBytes;
+		off.yPosB = off.xPosB + static_cast<uint64_t>(info.NB) * N_elementBytes;
+		off.zPosB = off.yPosB + static_cast<uint64_t>(info.NB) * N_elementBytes;
+		off.volB = off.zPosB + static_cast<uint64_t>(info.NB) * N_elementBytes;
+		off.idB = off.volB + static_cast<uint64_t>(info.NB) * N_elementBytes;
+		off.xPosR = off.idB + static_cast<uint64_t>(info.NB) * N_elementBytes;
+		off.yPosR = off.xPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
+		off.zPosR = off.yPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
+		off.volR = off.zPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
+		off.idR = off.volR + static_cast<uint64_t>(info.NR) * N_elementBytes;
+		off.bodyIdR = off.idR + static_cast<uint64_t>(info.NR) * N_elementBytes;
 
-		off.totalBytes = off.bodyIdR + static_cast<uint64_t>(info.NR) * elemBytes;
+		off.totalBytes = off.bodyIdR + static_cast<uint64_t>(info.NR) * N_elementBytes;
 
 		return off;
 	}
@@ -286,8 +286,8 @@ namespace Export
 		// there is only one layout, so a file belongs to it matches the size implied by the array set
 		// (this rejects files left over from older layouts and truncated writes)
 		std::error_code ec;
-		const uint64_t fileBytes = std::filesystem::file_size(path, ec);
-		if (ec || fileBytes != ComputeExportSnapshotOffsets(info).totalBytes)
+		const uint64_t N_fileBytes = std::filesystem::file_size(path, ec);
+		if (ec || N_fileBytes != ComputeExportSnapshotOffsets(info).totalBytes)
 		{
 			return false;
 		}
@@ -331,13 +331,13 @@ namespace Export
 
 	static void WriteBinaryDataItem(
 		std::ofstream& ofs,
-		uint32_t count,
+		uint32_t N_values,
 		const char* numberType,
 		uint64_t offset,
 		const std::string& fileName,
 		const char* indent)
 	{
-		ofs << indent << "<DataItem Dimensions=\"" << count
+		ofs << indent << "<DataItem Dimensions=\"" << N_values
 			<< "\" NumberType=\"" << numberType << "\" Precision=\"4\" "
 			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
 			<< offset << "\">\n";
@@ -348,7 +348,7 @@ namespace Export
 	static void WriteXyzGeometry(
 		std::ofstream& ofs,
 		const char* name,
-		uint32_t count,
+		uint32_t N_points,
 		uint64_t offX,
 		uint64_t offY,
 		uint64_t offZ,
@@ -357,11 +357,11 @@ namespace Export
 		ofs << "        <Geometry Name=\"" << name << "\" GeometryType=\"XYZ\">\n";
 		ofs << "          <DataItem ItemType=\"Function\" "
 			<< "Function=\"JOIN($0, $1, $2)\" "
-			<< "Dimensions=\"" << count << " 3\" "
+			<< "Dimensions=\"" << N_points << " 3\" "
 			<< "NumberType=\"Float\" Precision=\"4\">\n";
-		WriteBinaryDataItem(ofs, count, "Float", offX, fileName, "            ");
-		WriteBinaryDataItem(ofs, count, "Float", offY, fileName, "            ");
-		WriteBinaryDataItem(ofs, count, "Float", offZ, fileName, "            ");
+		WriteBinaryDataItem(ofs, N_points, "Float", offX, fileName, "            ");
+		WriteBinaryDataItem(ofs, N_points, "Float", offY, fileName, "            ");
+		WriteBinaryDataItem(ofs, N_points, "Float", offZ, fileName, "            ");
 		ofs << "          </DataItem>\n";
 		ofs << "        </Geometry>\n";
 	}
@@ -369,14 +369,14 @@ namespace Export
 	static void WriteScalarAttribute(
 		std::ofstream& ofs,
 		const char* name,
-		uint32_t count,
+		uint32_t N_values,
 		const char* numberType,
 		uint64_t offset,
 		const std::string& fileName)
 	{
 		ofs << "        <Attribute Name=\"" << name << "\" "
 			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-		WriteBinaryDataItem(ofs, count, numberType, offset, fileName, "          ");
+		WriteBinaryDataItem(ofs, N_values, numberType, offset, fileName, "          ");
 		ofs << "        </Attribute>\n";
 	}
 

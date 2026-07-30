@@ -29,18 +29,18 @@ namespace GPU01
 		const uint32_t* __restrict__ hist,
 		const uint32_t chunkIdx,
 		const uint64_t targetIdx,
-		uint64_t countBefore)
+		uint64_t N_before)
 	{
-		const uint32_t begin = chunkIdx * NbrCountHistogramChunkSize;
-		const uint32_t end = begin + NbrCountHistogramChunkSize;
+		const uint32_t begin = chunkIdx * N_NBR_COUNT_HISTOGRAM_CHUNK;
+		const uint32_t end = begin + N_NBR_COUNT_HISTOGRAM_CHUNK;
 
 		for (uint32_t value = begin; value != end; value++)
 		{
-			const uint32_t count = hist[value];
-			if (count == 0u) { continue; }
+			const uint32_t N_occurrences = hist[value];
+			if (N_occurrences == 0u) { continue; }
 
-			countBefore += static_cast<uint64_t>(count);
-			if (targetIdx < countBefore) { return value; }
+			N_before += static_cast<uint64_t>(N_occurrences);
+			if (targetIdx < N_before) { return value; }
 		}
 
 		return end - 1u;
@@ -51,8 +51,8 @@ namespace GPU01
 		const uint32_t* __restrict__ hist,
 		const uint32_t chunkIdx)
 	{
-		const uint32_t begin = chunkIdx * NbrCountHistogramChunkSize;
-		const uint32_t end = begin + NbrCountHistogramChunkSize;
+		const uint32_t begin = chunkIdx * N_NBR_COUNT_HISTOGRAM_CHUNK;
+		const uint32_t end = begin + N_NBR_COUNT_HISTOGRAM_CHUNK;
 
 		for (uint32_t value = begin; value != end; value++)
 		{
@@ -67,8 +67,8 @@ namespace GPU01
 		const uint32_t* __restrict__ hist,
 		const uint32_t chunkIdx)
 	{
-		const uint32_t begin = chunkIdx * NbrCountHistogramChunkSize;
-		const uint32_t end = begin + NbrCountHistogramChunkSize;
+		const uint32_t begin = chunkIdx * N_NBR_COUNT_HISTOGRAM_CHUNK;
+		const uint32_t end = begin + N_NBR_COUNT_HISTOGRAM_CHUNK;
 
 		for (uint32_t value = end; value != begin; value--)
 		{
@@ -90,7 +90,7 @@ namespace GPU01
 	{
 		const uint64_t i99 = (99ull * static_cast<uint64_t>(N_F - 1u)) / 100ull;
 
-		uint64_t countBefore = 0ull;
+		uint64_t N_before = 0ull;
 		bool minWritten = false;
 		bool p99Written = false;
 		uint32_t lastNonEmptyChunk = 0u;
@@ -99,10 +99,12 @@ namespace GPU01
 		maxValue = 0u;
 		p99 = 0u;
 
-		for (uint32_t chunkIdx = 0u; chunkIdx != NbrCountHistogramChunkCount; chunkIdx++)
+		for (uint32_t chunkIdx = 0u;
+			chunkIdx != N_NBR_COUNT_HISTOGRAM_CHUNKS;
+			chunkIdx++)
 		{
-			const uint32_t count = chunkCounts[chunkIdx];
-			if (count == 0u) { continue; }
+			const uint32_t N_occurrences = chunkCounts[chunkIdx];
+			if (N_occurrences == 0u) { continue; }
 
 			if (!minWritten)
 			{
@@ -111,14 +113,14 @@ namespace GPU01
 			}
 			lastNonEmptyChunk = chunkIdx;
 
-			const uint64_t countAfter =
-				countBefore + static_cast<uint64_t>(count);
-			if (!p99Written && i99 < countAfter)
+			const uint64_t N_after =
+				N_before + static_cast<uint64_t>(N_occurrences);
+			if (!p99Written && i99 < N_after)
 			{
-				p99 = FindPercentileInChunk(hist, chunkIdx, i99, countBefore);
+				p99 = FindPercentileInChunk(hist, chunkIdx, i99, N_before);
 				p99Written = true;
 			}
-			countBefore = countAfter;
+			N_before = N_after;
 		}
 
 		if (minWritten)
@@ -133,18 +135,18 @@ namespace GPU01
 		uint32_t* __restrict__ nbrCountHistChunk)
 	{
 		const uint32_t chunkIdx = blockIdx.x * blockDim.x + threadIdx.x;
-		if (chunkIdx >= NbrCountHistogramChunkCount) { return; }
+		if (chunkIdx >= N_NBR_COUNT_HISTOGRAM_CHUNKS) { return; }
 
-		const uint32_t begin = chunkIdx * NbrCountHistogramChunkSize;
-		const uint32_t end = begin + NbrCountHistogramChunkSize;
+		const uint32_t begin = chunkIdx * N_NBR_COUNT_HISTOGRAM_CHUNK;
+		const uint32_t end = begin + N_NBR_COUNT_HISTOGRAM_CHUNK;
 
-		uint32_t count = 0u;
+		uint32_t N_occurrences = 0u;
 		for (uint32_t value = begin; value != end; value++)
 		{
-			count += nbrCountHist[value];
+			N_occurrences += nbrCountHist[value];
 		}
 
-		nbrCountHistChunk[chunkIdx] = count;
+		nbrCountHistChunk[chunkIdx] = N_occurrences;
 	}
 
 	__global__
@@ -407,18 +409,19 @@ namespace GPU01
 			return;
 		}
 
-		GPU::MemsetZero(nbrCountHist, NbrCountHistogramBinCount, stream);
+		GPU::MemsetZero(nbrCountHist, N_NBR_COUNT_HISTOGRAM_BINS, stream);
 
-		const uint32_t N_BLOCKSIZE = 256u;
-		const uint32_t N_GRIDSIZE = (N + N_BLOCKSIZE - 1u) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256u;
+		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1u) / N_BLOCK_SIZE;
 
-		K_BuildNeighborCountHistogram<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_BuildNeighborCountHistogram<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			nbrCount, N, nbrCountHist);
 		GPU::CheckLastKernel("K_BuildNeighborCountHistogram()");
 
-		const uint32_t N_CHUNK_GRIDSIZE = (NbrCountHistogramChunkCount + N_BLOCKSIZE - 1u) / N_BLOCKSIZE;
+		const uint32_t N_CHUNK_GRID_SIZE =
+			(N_NBR_COUNT_HISTOGRAM_CHUNKS + N_BLOCK_SIZE - 1u) / N_BLOCK_SIZE;
 
-		K_BuildNeighborCountHistogramChunks<<<N_CHUNK_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_BuildNeighborCountHistogramChunks<<<N_CHUNK_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			nbrCountHist, nbrCountHistChunk);
 		GPU::CheckLastKernel("K_BuildNeighborCountHistogramChunks()");
 
@@ -443,17 +446,17 @@ namespace GPU01
 			return;
 		}
 
-		const uint32_t N_BLOCKSIZE = StatisticsReductionBlockSize;
-		const uint32_t N_GRIDSIZE = StatisticsReductionBlockCount(N_F);
-		const uint32_t sharedBytes = 3u * N_BLOCKSIZE * static_cast<uint32_t>(sizeof(float));
+		const uint32_t N_BLOCK_SIZE = N_STATISTICS_REDUCTION_BLOCK;
+		const uint32_t N_GRID_SIZE = StatisticsReductionBlockCount(N_F);
+		const uint32_t N_sharedBytes = 3u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 
 		// reduce on device and copy only the final stats struct to host
-		K_ComputeDensityStatsPartials<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
+		K_ComputeDensityStatsPartials<<<N_GRID_SIZE, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
 			densityF, restDensity, N_F, partialStats);
 		GPU::CheckLastKernel("K_ComputeDensityStatsPartials()");
 
-		K_FinalizeDensityStats<<<1, N_BLOCKSIZE, sharedBytes, stream>>>(
-			partialStats, N_GRIDSIZE, stats);
+		K_FinalizeDensityStats<<<1, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
+			partialStats, N_GRID_SIZE, stats);
 		GPU::CheckLastKernel("K_FinalizeDensityStats()");
 	}
 
@@ -474,17 +477,17 @@ namespace GPU01
 			return;
 		}
 
-		const uint32_t N_BLOCKSIZE = StatisticsReductionBlockSize;
-		const uint32_t N_GRIDSIZE = StatisticsReductionBlockCount(N_F);
-		const uint32_t sharedBytes = 3u * N_BLOCKSIZE * static_cast<uint32_t>(sizeof(float));
+		const uint32_t N_BLOCK_SIZE = N_STATISTICS_REDUCTION_BLOCK;
+		const uint32_t N_GRID_SIZE = StatisticsReductionBlockCount(N_F);
+		const uint32_t N_sharedBytes = 3u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 
 		// reduce on device and copy only the final stats struct to host
-		K_ComputeVelocityStatsPartials<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
+		K_ComputeVelocityStatsPartials<<<N_GRID_SIZE, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
 			xVelF, yVelF, zVelF, N_F, partialStats);
 		GPU::CheckLastKernel("K_ComputeVelocityStatsPartials()");
 
-		K_FinalizeVelocityStats<<<1, N_BLOCKSIZE, sharedBytes, stream>>>(
-			partialStats, N_GRIDSIZE, stats);
+		K_FinalizeVelocityStats<<<1, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
+			partialStats, N_GRID_SIZE, stats);
 		GPU::CheckLastKernel("K_FinalizeVelocityStats()");
 	}
 

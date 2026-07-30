@@ -38,7 +38,7 @@ namespace
 		bool initialized = false;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
-		int lastNumLines = 0;
+		int N_lastLines = 0;
 		std::size_t lastProgressLen = 0;
 	};
 
@@ -265,10 +265,10 @@ namespace Sim
         auto fmt_hms = [](double seconds, int& h, int& m, int& s)
             {
                 seconds = std::max(seconds, 0.0);
-                int total = static_cast<int>(seconds + 0.5);
-                h = total / 3600;
-                m = (total % 3600) / 60;
-                s = total % 60;
+                int N_totalSeconds = static_cast<int>(seconds + 0.5);
+                h = N_totalSeconds / 3600;
+                m = (N_totalSeconds % 3600) / 60;
+                s = N_totalSeconds % 60;
             };
 
         int elH, elM, elS;
@@ -288,12 +288,12 @@ namespace Sim
         }
 
         // move cursor up to overwrite previous block
-        if (state.lastNumLines > 0)
+        if (state.N_lastLines > 0)
         {
-            std::printf("\x1b[%dA\r", state.lastNumLines);
+            std::printf("\x1b[%dA\r", state.N_lastLines);
         }
 
-        int lineCount = 0;
+        int N_lines = 0;
 
         // per-operation timing
         std::vector<uint64_t> opLatest(benchOps.size(), 0);
@@ -344,13 +344,13 @@ namespace Sim
         snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
 
         std::printf("\n");
-        lineCount++;
+        N_lines++;
         // header
         printf("%-30.30s | %12s  %8s | %12s  %8s\n",
             "benchmark summary", latestLabel, "% total", avgLabel, "% total");
-        lineCount++;
+        N_lines++;
 		PrintCliSeparator();
-        lineCount++;
+        N_lines++;
 
         auto PrintTimingRow =
             [&](const char* name,
@@ -396,7 +396,7 @@ namespace Sim
                         name, t_latest, pctLatestLabel, t_avg, pctAvgLabel);
                 }
 
-                lineCount++;
+                N_lines++;
             };
 
         auto PrintRow = [&](const uint32_t i, const bool isTotal)
@@ -423,13 +423,13 @@ namespace Sim
 
             PrintTimingRow("other", otherLatestNs, otherAvgNs, false);
 			PrintCliSeparator();
-            lineCount++;
+            N_lines++;
             PrintRow(static_cast<uint32_t>(totalIdx), true);
         }
 
         // blank line separating table and progress line
         printf("\n");
-        lineCount++;
+        N_lines++;
 
         // progress line, using printf and padding to overwrite old text cleanly
         char buf[512];
@@ -465,12 +465,12 @@ namespace Sim
         state.lastProgressLen = line.size();
 
         printf("%s\n", line.c_str());
-        lineCount++;
+        N_lines++;
 
         fflush(stdout);
 
         // remember how many lines were printed
-        state.lastNumLines = lineCount;
+        state.N_lastLines = N_lines;
     }
 
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(
@@ -497,12 +497,12 @@ namespace Sim
 			{
 				const uint8_t spaceIdx = Mem::GetIdx(space);
 
-				uint64_t totalMaxUsedBytes = 0;
-				uint64_t totalMaxAllocBytes = 0;
+				uint64_t N_totalMaxUsedBytes = 0;
+				uint64_t N_totalMaxAllocBytes = 0;
 				for (uint8_t i = 0; i < BUCKET_COUNT; i++)
 				{
-					totalMaxUsedBytes += snap.max[spaceIdx][i].usedBytes;
-					totalMaxAllocBytes += snap.max[spaceIdx][i].allocBytes;
+					N_totalMaxUsedBytes += snap.max[spaceIdx][i].N_usedBytes;
+					N_totalMaxAllocBytes += snap.max[spaceIdx][i].N_allocBytes;
 				}
 
 				std::printf("\n");
@@ -513,17 +513,17 @@ namespace Sim
 				auto GetMemBytes = [&](const Mem::MemBucket bucket, const bool alloc)
 					{
 						const auto& mem = snap.max[spaceIdx][Mem::GetIdx(bucket)];
-						return alloc ? mem.allocBytes : mem.usedBytes;
+						return alloc ? mem.N_allocBytes : mem.N_usedBytes;
 					};
 
 				auto PrintMemRow = [&](const char* name,
-									   const uint64_t maxUsedBytes,
+									   const uint64_t N_maxUsedBytes,
 									   const char* pctUsedLabel,
-									   const uint64_t maxAllocBytes,
+									   const uint64_t N_maxAllocBytes,
 									   const char* pctAllocLabel)
 					{
-						const double vMaxUsed = Mem::ConvertFromBytes(unit, maxUsedBytes);
-						const double vMaxAlloc = Mem::ConvertFromBytes(unit, maxAllocBytes);
+						const double vMaxUsed = Mem::ConvertFromBytes(unit, N_maxUsedBytes);
+						const double vMaxAlloc = Mem::ConvertFromBytes(unit, N_maxAllocBytes);
 
 						std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
 							name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
@@ -534,22 +534,22 @@ namespace Sim
 											 const Mem::MemBucket bucketB,
 											 const Mem::MemBucket bucketR)
 					{
-						const uint64_t maxUsedBytesF = GetMemBytes(bucketF, false);
-						const uint64_t maxUsedBytesB = GetMemBytes(bucketB, false);
-						const uint64_t maxUsedBytesR = GetMemBytes(bucketR, false);
-						const uint64_t maxAllocBytesF = GetMemBytes(bucketF, true);
-						const uint64_t maxAllocBytesB = GetMemBytes(bucketB, true);
-						const uint64_t maxAllocBytesR = GetMemBytes(bucketR, true);
+						const uint64_t N_maxUsedBytesF = GetMemBytes(bucketF, false);
+						const uint64_t N_maxUsedBytesB = GetMemBytes(bucketB, false);
+						const uint64_t N_maxUsedBytesR = GetMemBytes(bucketR, false);
+						const uint64_t N_maxAllocBytesF = GetMemBytes(bucketF, true);
+						const uint64_t N_maxAllocBytesB = GetMemBytes(bucketB, true);
+						const uint64_t N_maxAllocBytesR = GetMemBytes(bucketR, true);
 
-						const uint64_t maxUsedBytes = maxUsedBytesF + maxUsedBytesB + maxUsedBytesR;
-						const uint64_t maxAllocBytes = maxAllocBytesF + maxAllocBytesB + maxAllocBytesR;
+						const uint64_t N_maxUsedBytes = N_maxUsedBytesF + N_maxUsedBytesB + N_maxUsedBytesR;
+						const uint64_t N_maxAllocBytes = N_maxAllocBytesF + N_maxAllocBytesB + N_maxAllocBytesR;
 
 						char pctUsedLabel[16];
 						char pctAllocLabel[16];
-						if (maxUsedBytes > 0ull)
+						if (N_maxUsedBytes > 0ull)
 						{
-							const double pctUsed = 100.0 * static_cast<double>(maxUsedBytesF)
-								/ static_cast<double>(maxUsedBytes);
+							const double pctUsed = 100.0 * static_cast<double>(N_maxUsedBytesF)
+								/ static_cast<double>(N_maxUsedBytes);
 							std::snprintf(pctUsedLabel, sizeof(pctUsedLabel),
 								"%.1f %%", pctUsed);
 						}
@@ -557,10 +557,10 @@ namespace Sim
 						{
 							std::snprintf(pctUsedLabel, sizeof(pctUsedLabel), "---");
 						}
-						if (maxAllocBytes > 0ull)
+						if (N_maxAllocBytes > 0ull)
 						{
-							const double pctAlloc = 100.0 * static_cast<double>(maxAllocBytesF)
-								/ static_cast<double>(maxAllocBytes);
+							const double pctAlloc = 100.0 * static_cast<double>(N_maxAllocBytesF)
+								/ static_cast<double>(N_maxAllocBytes);
 							std::snprintf(pctAllocLabel, sizeof(pctAllocLabel),
 								"%.1f %%", pctAlloc);
 						}
@@ -569,7 +569,7 @@ namespace Sim
 							std::snprintf(pctAllocLabel, sizeof(pctAllocLabel), "---");
 						}
 
-						PrintMemRow(name, maxUsedBytes, pctUsedLabel, maxAllocBytes, pctAllocLabel);
+						PrintMemRow(name, N_maxUsedBytes, pctUsedLabel, N_maxAllocBytes, pctAllocLabel);
 					};
 
 				// combine particle class buckets for concise CLI output
@@ -593,8 +593,8 @@ namespace Sim
 
 				PrintCliSeparator();
 
-				const double tMaxUsed = Mem::ConvertFromBytes(unit, totalMaxUsedBytes);
-				const double tMaxAlloc = Mem::ConvertFromBytes(unit, totalMaxAllocBytes);
+				const double tMaxUsed = Mem::ConvertFromBytes(unit, N_totalMaxUsedBytes);
+				const double tMaxAlloc = Mem::ConvertFromBytes(unit, N_totalMaxAllocBytes);
 
 				char totalUsedValueLabel[32];
 				char totalAllocValueLabel[32];

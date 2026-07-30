@@ -11,8 +11,8 @@
 using namespace Mem;
 
 MemoryTracker::MemoryTracker(const Sim::SimParams& simParams)
-	: maxRecCount_(simParams.maxMemRecs)
-	, curRecCount_(0u)
+	: N_maxRecords_(simParams.maxMemRecs)
+	, N_records_(0u)
 {
 	recLatest_ = {};
 	Clear(recLatest_);
@@ -33,12 +33,12 @@ void MemoryTracker::EndStep(uint64_t simStep, double simTime)
 
 	// push latest record to history and check excess
 	recHistory_.push_back(recLatest_);
-	if (recHistory_.size() > maxRecCount_)
+	if (recHistory_.size() > N_maxRecords_)
 	{
 		recHistory_.pop_front();
 	}
 
-	if (curRecCount_ == 0) // first entry
+	if (N_records_ == 0) // first entry
 	{
 		memMax_allTime_ = recLatest_.mem;
 	}
@@ -49,17 +49,17 @@ void MemoryTracker::EndStep(uint64_t simStep, double simTime)
 			for (uint8_t i = 0; i < GetIdx(MemBucket::Count); i++)
 			{
 				// update all-time max of used and allocated memory
-				memMax_allTime_[s][i].usedBytes =
-					std::max(recLatest_.mem[s][i].usedBytes,
-							 memMax_allTime_[s][i].usedBytes);
-				memMax_allTime_[s][i].allocBytes =
-					std::max(recLatest_.mem[s][i].allocBytes,
-							 memMax_allTime_[s][i].allocBytes);
+				memMax_allTime_[s][i].N_usedBytes =
+					std::max(recLatest_.mem[s][i].N_usedBytes,
+							 memMax_allTime_[s][i].N_usedBytes);
+				memMax_allTime_[s][i].N_allocBytes =
+					std::max(recLatest_.mem[s][i].N_allocBytes,
+							 memMax_allTime_[s][i].N_allocBytes);
 			}
 		}
 	}
 
-	curRecCount_ += 1;
+	N_records_ += 1;
 }
 
 void MemoryTracker::PackMemSnapshot(Sync::MemSnapshot& snap) const
@@ -83,36 +83,36 @@ uint64_t MemoryTracker::GetMem_Latest_Used(
 	const MemSpace space,
 	const MemBucket bucket) const
 {
-	if (curRecCount_ == 0) { return 0ull; }
+	if (N_records_ == 0) { return 0ull; }
 
-	return recLatest_.mem[GetIdx(space)][GetIdx(bucket)].usedBytes;
+	return recLatest_.mem[GetIdx(space)][GetIdx(bucket)].N_usedBytes;
 }
 
 uint64_t MemoryTracker::GetMem_Latest_Alloc(
 	const MemSpace space,
 	const MemBucket bucket) const
 {
-	if (curRecCount_ == 0) { return 0ull; }
+	if (N_records_ == 0) { return 0ull; }
 
-	return recLatest_.mem[GetIdx(space)][GetIdx(bucket)].allocBytes;
+	return recLatest_.mem[GetIdx(space)][GetIdx(bucket)].N_allocBytes;
 }
 
 uint64_t MemoryTracker::GetMem_Max_Used(
 	const MemSpace space,
 	const MemBucket bucket) const
 {
-	if (curRecCount_ == 0) { return 0ull; }
+	if (N_records_ == 0) { return 0ull; }
 
-	return memMax_allTime_[GetIdx(space)][GetIdx(bucket)].usedBytes;
+	return memMax_allTime_[GetIdx(space)][GetIdx(bucket)].N_usedBytes;
 }
 
 uint64_t MemoryTracker::GetMem_Max_Alloc(
 	const MemSpace space,
 	const MemBucket bucket) const
 {
-	if (curRecCount_ == 0) { return 0ull; }
+	if (N_records_ == 0) { return 0ull; }
 
-	return memMax_allTime_[GetIdx(space)][GetIdx(bucket)].allocBytes;
+	return memMax_allTime_[GetIdx(space)][GetIdx(bucket)].N_allocBytes;
 }
 
 uint64_t MemoryTracker::GetMem_Latest_Used(const MemBucket bucket) const

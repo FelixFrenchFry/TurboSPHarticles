@@ -58,7 +58,7 @@ namespace
 		const ParticleRedistributionTimingReport& report,
 		const ParticleRedistributionTimingOp op)
 	{
-		if (report.sampleCount == 0) { return 0; }
+		if (report.N_samples == 0) { return 0; }
 
 		uint64_t totalNs = report.totalNs[GetIdx(op)];
 		if (op == ParticleRedistributionTimingOp::RouteFluid)
@@ -67,7 +67,7 @@ namespace
 				GetIdx(ParticleRedistributionTimingOp::RoutePrep)];
 		}
 
-		return totalNs / report.sampleCount;
+		return totalNs / report.N_samples;
 	}
 
 	void FormatRankLabel(
@@ -111,7 +111,7 @@ namespace Dist
 		const int rank)
 	{
 		report.rank = rank;
-		report.sampleCount++;
+		report.N_samples++;
 	}
 
 	std::vector<std::string> BuildParticleRedistributionTimingLines(

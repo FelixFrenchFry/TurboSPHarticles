@@ -25,30 +25,30 @@ using namespace Sim;
 
 namespace
 {
-	static constexpr uint32_t N_SellWidth = 32u;
+	static constexpr uint32_t N_SELL_WIDTH = 32u;
 
 	template <typename T>
 	inline Mem::MemUsage MemUsageOf_DeviceBuffer(
 		const DeviceBuffer<T>& src) noexcept
 	{
-		const uint64_t bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
+		const uint64_t N_bytes = static_cast<uint64_t>(src.Size()) * sizeof(T);
 
-		return Mem::MemUsage{ bytes, bytes };
+		return Mem::MemUsage{ N_bytes, N_bytes };
 	}
 
 	inline uint32_t SellChunkOfParticle(const uint32_t i) noexcept
 	{
-		return i / N_SellWidth;
+		return i / N_SELL_WIDTH;
 	}
 
 	inline uint32_t SellLaneOfParticle(const uint32_t i) noexcept
 	{
-		return i % N_SellWidth;
+		return i % N_SELL_WIDTH;
 	}
 
 	inline uint32_t SellChunkNumTotal(const uint32_t N_F) noexcept
 	{
-		return (N_F == 0u) ? 0u : ((N_F - 1u) / N_SellWidth) + 1u;
+		return (N_F == 0u) ? 0u : ((N_F - 1u) / N_SELL_WIDTH) + 1u;
 	}
 
 	inline uint32_t ReadCompressedSell32Neighbor(
@@ -62,7 +62,7 @@ namespace
 	{
 		const uint32_t chunk = SellChunkOfParticle(i);
 		const uint32_t lane = SellLaneOfParticle(i);
-		const uint64_t linearIdx = static_cast<uint64_t>(k) * N_SellWidth + lane;
+		const uint64_t linearIdx = static_cast<uint64_t>(k) * N_SELL_WIDTH + lane;
 		const uint64_t base = chunkOffsets[chunk];
 
 		if (chunkFormat[chunk] == static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8))
@@ -78,7 +78,7 @@ namespace
 		return nbrListAbs32[base + linearIdx];
 	}
 
-} // anonymous
+} // namespace anonymous
 
 SimBackend_GPU01::SimBackend_GPU01(
 	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
@@ -492,7 +492,7 @@ void SimBackend_GPU01::PackExportSnapshot(
 
 	const uint32_t N_surface = tbb::parallel_reduce(
 		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
-		[&](const tbb::blocked_range<uint32_t>& r, uint32_t localCount)
+		[&](const tbb::blocked_range<uint32_t>& r, uint32_t N_local)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
@@ -522,10 +522,10 @@ void SimBackend_GPU01::PackExportSnapshot(
 				}
 
 				surfaceFlags[i] = static_cast<uint8_t>(surface);
-				if (surface) { localCount++; }
+				if (surface) { N_local++; }
 			}
 
-			return localCount;
+			return N_local;
 		},
 		[](uint32_t a, uint32_t b) -> uint32_t
 		{
@@ -1001,42 +1001,42 @@ void SimBackend_GPU01::FillMemoryRecord(
 
 		// compressed SELL32 storage used for FF, FB, and FR neighbors
 		MemUsage listFF{};
-		listFF.usedBytes = static_cast<uint64_t>(N_packedFF_);
-		listFF.allocBytes =
+		listFF.N_usedBytes = static_cast<uint64_t>(N_packedFF_);
+		listFF.N_allocBytes =
 			static_cast<uint64_t>(d_nbrListDelta8FF_.Size()) * sizeof(uint8_t)
 			+ static_cast<uint64_t>(d_nbrListDelta16FF_.Size()) * sizeof(uint16_t)
 			+ static_cast<uint64_t>(d_nbrListAbs32FF_.Size()) * sizeof(uint32_t);
 		Add(usageF, listFF);
 
 		MemUsage listFB{};
-		listFB.usedBytes = static_cast<uint64_t>(N_packedFB_);
-		listFB.allocBytes =
+		listFB.N_usedBytes = static_cast<uint64_t>(N_packedFB_);
+		listFB.N_allocBytes =
 			static_cast<uint64_t>(d_nbrListDelta8FB_.Size()) * sizeof(uint8_t)
 			+ static_cast<uint64_t>(d_nbrListDelta16FB_.Size()) * sizeof(uint16_t)
 			+ static_cast<uint64_t>(d_nbrListAbs32FB_.Size()) * sizeof(uint32_t);
 		Add(usageB, listFB);
 
 		MemUsage listFR{};
-		listFR.usedBytes = static_cast<uint64_t>(N_packedFR_);
-		listFR.allocBytes =
+		listFR.N_usedBytes = static_cast<uint64_t>(N_packedFR_);
+		listFR.N_allocBytes =
 			static_cast<uint64_t>(d_nbrListDelta8FR_.Size()) * sizeof(uint8_t)
 			+ static_cast<uint64_t>(d_nbrListDelta16FR_.Size()) * sizeof(uint16_t)
 			+ static_cast<uint64_t>(d_nbrListAbs32FR_.Size()) * sizeof(uint32_t);
 		Add(usageR, listFR);
 
 		MemUsage listRF{};
-		listRF.usedBytes = N_totalRF_ * sizeof(uint32_t);
-		listRF.allocBytes = static_cast<uint64_t>(d_nbrListRF_.Size()) * sizeof(uint32_t);
+		listRF.N_usedBytes = N_totalRF_ * sizeof(uint32_t);
+		listRF.N_allocBytes = static_cast<uint64_t>(d_nbrListRF_.Size()) * sizeof(uint32_t);
 		Add(usageR, listRF);
 
 		MemUsage listRB{};
-		listRB.usedBytes = N_totalRB_ * sizeof(uint32_t);
-		listRB.allocBytes = static_cast<uint64_t>(d_nbrListRB_.Size()) * sizeof(uint32_t);
+		listRB.N_usedBytes = N_totalRB_ * sizeof(uint32_t);
+		listRB.N_allocBytes = static_cast<uint64_t>(d_nbrListRB_.Size()) * sizeof(uint32_t);
 		Add(usageR, listRB);
 
 		MemUsage listRR{};
-		listRR.usedBytes = N_totalRR_ * sizeof(uint32_t);
-		listRR.allocBytes = static_cast<uint64_t>(d_nbrListRR_.Size()) * sizeof(uint32_t);
+		listRR.N_usedBytes = N_totalRR_ * sizeof(uint32_t);
+		listRR.N_allocBytes = static_cast<uint64_t>(d_nbrListRR_.Size()) * sizeof(uint32_t);
 		Add(usageR, listRR);
 
 		// shared overflow flag is accounted in the fluid-side bucket to avoid double-counting
@@ -1135,8 +1135,8 @@ void SimBackend_GPU01::FillStatisticsRecord(
 		d_nbrCountStats_.Resize(N_relations);
 		if (NF > 0 || NR > 0)
 		{
-			d_nbrCountHist_.Resize(GPU01::NbrCountHistogramBinCount);
-			d_nbrCountHistChunk_.Resize(GPU01::NbrCountHistogramChunkCount);
+			d_nbrCountHist_.Resize(GPU01::N_NBR_COUNT_HISTOGRAM_BINS);
+			d_nbrCountHistChunk_.Resize(GPU01::N_NBR_COUNT_HISTOGRAM_CHUNKS);
 		}
 
 		const std::array<const uint16_t*, N_relations> counts
@@ -1161,11 +1161,11 @@ void SimBackend_GPU01::FillStatisticsRecord(
 		GPU::StreamSync(stream_);
 
 		const auto setNeighborStats = [&](const GPU01::NeighborCountStats& stats,
-			const uint64_t total, const float sourceCountInv,
+			const uint64_t total, const float N_sourcesInv,
 			const StatMetric avg, const StatMetric min, const StatMetric max,
 			const StatMetric p99)
 		{
-			Set(record, avg, static_cast<float>(total) * sourceCountInv);
+			Set(record, avg, static_cast<float>(total) * N_sourcesInv);
 			Set(record, min, static_cast<float>(stats.min));
 			Set(record, max, static_cast<float>(stats.max));
 			Set(record, p99, static_cast<float>(stats.p99));
@@ -1219,7 +1219,7 @@ void SimBackend_GPU01::FillStatisticsRecord(
 
 	// --- [ pressure stats ] ------------------------------------------------------------------------
 
-	Set(record, StatMetric::NumSolverIters, static_cast<float>(N_solverIterCount_));
+	Set(record, StatMetric::NumSolverIters, static_cast<float>(N_solverIters_));
 
 	// --- [ velocity stats ] ------------------------------------------------------------------------
 
@@ -1467,7 +1467,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 		// rest solver-related variables
-		N_solverIterCount_ = 1;
+		N_solverIters_ = 1;
 
 		do
 		{
@@ -1510,7 +1510,7 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 
 			GPU::StreamSync(stream_);
 
-			N_solverIterCount_++;
+			N_solverIters_++;
 		} while (!TerminationConditionSatisfied(params));
 		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 
@@ -1613,8 +1613,8 @@ void SimBackend_GPU01::ExecuteFullSimStep(const SimParams& params, uint32_t N_st
 bool SimBackend_GPU01::TerminationConditionSatisfied(const SimParams& params) const
 {
 	// check min/max iteration condition for potential early-out
-	if (N_solverIterCount_ < params.minSolverIters) { return false; }
-	if (N_solverIterCount_ >= params.maxSolverIters) { return true; }
+	if (N_solverIters_ < params.minSolverIters) { return false; }
+	if (N_solverIters_ >= params.maxSolverIters) { return true; }
 
 	bool satisfied = false;
 
@@ -1622,7 +1622,7 @@ bool SimBackend_GPU01::TerminationConditionSatisfied(const SimParams& params) co
 	switch (params.solverTerminationCond)
 	{
 	case Base::SolverTerminationCond::FixedIters:
-		if (N_solverIterCount_ >= params.fixedIters)
+		if (N_solverIters_ >= params.fixedIters)
 		{
 			satisfied = true;
 		}

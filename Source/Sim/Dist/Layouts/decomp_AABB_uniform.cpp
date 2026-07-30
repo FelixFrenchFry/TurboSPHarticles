@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
@@ -21,7 +22,8 @@ namespace
 			&& a.min.y <= b.max.y && a.max.y >= b.min.y
 			&& a.min.z <= b.max.z && a.max.z >= b.min.z;
 	}
-}
+
+} // namespace anonymous
 
 void Decomp_AABB_Uniform::Build(const DomainDecompInput& input)
 {
@@ -33,18 +35,28 @@ void Decomp_AABB_Uniform::Build(const DomainDecompInput& input)
 	{
 		throw std::runtime_error("Cannot build Decomp_AABB_Uniform with negative halo radius.");
 	}
-	if (input.rankCount <= 0)
+	if (input.N_ranks <= 0)
 	{
 		throw std::runtime_error("Cannot build Decomp_AABB_Uniform for non-positive rank count.");
 	}
 
-	// one uniform AABB slab per rank, always split along the global X axis
-	constexpr int splitAxis = 0;
-	std::vector<AABBRankSubdomain> rankSubdomains =
-		BuildSlabSubdomains(input, splitAxis);
+	// one uniform AABB slab per rank, split along the global X axis
+	std::vector<AABBRankSubdomain> rankSubdomains = BuildSlabSubdomains(input, SPLIT_AXIS);
 
 	globalBounds_ = input.globalBounds;
 	rankSubdomains_ = std::move(rankSubdomains);
+	haloRadius_ = input.haloRadius;
+
+	// scales a split axis offset to a slab index
+	slabLenInv_ = static_cast<float>(input.N_ranks) /
+		(input.globalBounds.max[SPLIT_AXIS] - input.globalBounds.min[SPLIT_AXIS]);
+
+	// slab lower bounds packed for the owner lookup
+	slabMinSplitPos_.resize(static_cast<uint64_t>(input.N_ranks));
+	for (int rank = 0; rank < input.N_ranks; rank++)
+	{
+		slabMinSplitPos_[rank] = rankSubdomains_[rank].ownedBounds.min[SPLIT_AXIS];
+	}
 }
 
 const AABB& Decomp_AABB_Uniform::GlobalExtentAABB() const
@@ -54,16 +66,22 @@ const AABB& Decomp_AABB_Uniform::GlobalExtentAABB() const
 
 int Decomp_AABB_Uniform::OwnerRank(const glm::vec3& position) const
 {
-	if (!globalBounds_.Contains(position)) { return -1; }
+	const int N_ranks = static_cast<int>(slabMinSplitPos_.size());
+	if (N_ranks <= 0 || !globalBounds_.Contains(position)) { return -1; }
 
-	int ownerRank = -1;
-	for (const AABBRankSubdomain& subdomain : rankSubdomains_)
+	// uniform slabs tile the split axis, so the offset maps straight to a slab index
+	const float splitPos = position[SPLIT_AXIS];
+	const float slabIdx = std::floor((splitPos - globalBounds_.min[SPLIT_AXIS]) * slabLenInv_);
+	int ownerRank = std::clamp(static_cast<int>(slabIdx), 0, N_ranks - 1);
+
+	// settle on the last slab the position reaches, so shared faces go to the higher rank
+	while (ownerRank + 1 < N_ranks && splitPos >= slabMinSplitPos_[ownerRank + 1])
 	{
-		if (subdomain.ownedBounds.Contains(position))
-		{
-			// deterministic tie-break on shared AABB faces
-			ownerRank = subdomain.rank;
-		}
+		ownerRank++;
+	}
+	while (ownerRank > 0 && splitPos < slabMinSplitPos_[ownerRank])
+	{
+		ownerRank--;
 	}
 
 	return ownerRank;
@@ -74,17 +92,22 @@ bool Decomp_AABB_Uniform::IsInnerOwnedParticle(
 	const glm::vec3& position,
 	const float kernelRadius) const
 {
+	// stored halo bounds already expand each subdomain by the build radius,
+	// so they only answer this query for the radius used to build the decomp
+	if (std::max(0.0f, kernelRadius) != haloRadius_)
+	{
+		throw std::runtime_error(
+			"Decomp_AABB_Uniform inner particle query radius does not match the build halo radius.");
+	}
+
 	if (OwnerRank(position) != rank) { return false; }
 
 	const AABBRankSubdomain& localSubdomain = Subdomain(rank);
-	const float haloRadius = std::max(0.0f, kernelRadius);
 
 	for (const int neighborRank : localSubdomain.neighborRanks)
 	{
 		// outer owned particles are needed by at least one neighbor rank
-		const AABB neighborReach =
-			Subdomain(neighborRank).ownedBounds.Expanded(haloRadius);
-		if (neighborReach.Contains(position))
+		if (Subdomain(neighborRank).haloBounds.Contains(position))
 		{
 			return false;
 		}
@@ -108,13 +131,13 @@ AABB Decomp_AABB_Uniform::HaloExtentAABB(const int rank) const
 	return Subdomain(rank).haloBounds;
 }
 
-bool Decomp_AABB_Uniform::IsValidForRankCount(const int rankCount) const
+bool Decomp_AABB_Uniform::IsValidForRankCount(const int N_ranks) const
 {
-	if (rankCount <= 0) { return false; }
-	if (static_cast<int>(rankSubdomains_.size()) != rankCount) { return false; }
+	if (N_ranks <= 0) { return false; }
+	if (static_cast<int>(rankSubdomains_.size()) != N_ranks) { return false; }
 	if (!globalBounds_.IsValid()) { return false; }
 
-	for (int rank = 0; rank < rankCount; rank++)
+	for (int rank = 0; rank < N_ranks; rank++)
 	{
 		const AABBRankSubdomain& subdomain = rankSubdomains_[rank];
 
@@ -126,7 +149,7 @@ bool Decomp_AABB_Uniform::IsValidForRankCount(const int rankCount) const
 
 		for (const int neighborRank : subdomain.neighborRanks)
 		{
-			if (neighborRank < 0 || neighborRank >= rankCount) { return false; }
+			if (neighborRank < 0 || neighborRank >= N_ranks) { return false; }
 			if (neighborRank == rank) { return false; }
 
 			const std::vector<int>& neighborRanks = rankSubdomains_[neighborRank].neighborRanks;
@@ -155,20 +178,20 @@ Decomp_AABB_Uniform::BuildSlabSubdomains(
 	const int splitAxis) const
 {
 	std::vector<AABBRankSubdomain> subdomains{};
-	subdomains.reserve(static_cast<uint64_t>(input.rankCount));
+	subdomains.reserve(static_cast<uint64_t>(input.N_ranks));
 
 	const float splitMin = input.globalBounds.min[splitAxis];
 	const float splitMax = input.globalBounds.max[splitAxis];
 	const float splitLen = splitMax - splitMin;
-	const float slabLen = splitLen / static_cast<float>(input.rankCount);
+	const float slabLen = splitLen / static_cast<float>(input.N_ranks);
 
-	for (int rank = 0; rank < input.rankCount; rank++)
+	for (int rank = 0; rank < input.N_ranks; rank++)
 	{
 		AABB ownedBounds = input.globalBounds;
 
 		ownedBounds.min[splitAxis] =
 			splitMin + static_cast<float>(rank) * slabLen;
-		ownedBounds.max[splitAxis] = (rank == input.rankCount - 1)
+		ownedBounds.max[splitAxis] = (rank == input.N_ranks - 1)
 			? splitMax
 			: splitMin + static_cast<float>(rank + 1) * slabLen;
 
@@ -180,9 +203,9 @@ Decomp_AABB_Uniform::BuildSlabSubdomains(
 		subdomains.push_back(std::move(subdomain));
 	}
 
-	for (int rank = 0; rank < input.rankCount; rank++)
+	for (int rank = 0; rank < input.N_ranks; rank++)
 	{
-		for (int otherRank = 0; otherRank < input.rankCount; otherRank++)
+		for (int otherRank = 0; otherRank < input.N_ranks; otherRank++)
 		{
 			if (otherRank == rank) { continue; }
 

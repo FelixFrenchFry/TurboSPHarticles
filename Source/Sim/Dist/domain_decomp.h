@@ -17,7 +17,7 @@ namespace Dist
 	{
 		AABB globalBounds;
 		float haloRadius = 0.0f;
-		int rankCount = 1;
+		int N_ranks = 1;
 	};
 
 	// interface for domain decomp strategies
@@ -45,7 +45,7 @@ namespace Dist
 		virtual AABB OwnedExtentAABB(int rank) const = 0;
 		virtual AABB HaloExtentAABB(int rank) const = 0;
 
-		virtual bool IsValidForRankCount(int rankCount) const = 0;
+		virtual bool IsValidForRankCount(int N_ranks) const = 0;
 	};
 
 } // namespace Dist

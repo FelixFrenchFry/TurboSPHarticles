@@ -20,41 +20,43 @@ namespace
 {
 	uint64_t ExpectedPackedCSRCapacity(
 		const uint32_t N_F,
-		const uint32_t expctdAvgNbrCountHardMax)
+		const uint32_t N_expectedAvgNbrsHardMax)
 	{
-		return static_cast<uint64_t>(N_F) * static_cast<uint64_t>(expctdAvgNbrCountHardMax);
+		return static_cast<uint64_t>(N_F) *
+			static_cast<uint64_t>(N_expectedAvgNbrsHardMax);
 	}
 
 	template<typename T>
 	void EnsurePackedCSRStorageCapacity(
 		std::vector<T>& nbrList,
-		const uint64_t count)
+		const uint64_t N_elements)
 	{
-		if (nbrList.capacity() < count)
+		if (nbrList.capacity() < N_elements)
 		{
-			nbrList.reserve(count);
+			nbrList.reserve(N_elements);
 		}
 	}
 
 	template<typename T>
 	void EnsurePackedCSRStorageCapacity(
 		std::vector<T>& nbrList,
-		const uint64_t count,
-		const uint32_t extraAllocCapacityPct)
+		const uint64_t N_elements,
+		const float extraAllocCapacityPct)
 	{
-		if (nbrList.capacity() < count)
+		if (nbrList.capacity() < N_elements)
 		{
-			const uint64_t capTarget = count + Base::ExtraPercent(count, extraAllocCapacityPct);
+			const uint64_t capTarget =
+				N_elements + Base::ExtraPercent(N_elements, extraAllocCapacityPct);
 			nbrList.reserve(capTarget);
 		}
 	}
 
 	SELLNeighborCount NarrowNeighborCount_Debug(
-		const uint32_t count,
+		const uint32_t N_nbrs,
 		const char* overflowMsg)
 	{
 		#if defined(_DEBUG)
-		if (count > std::numeric_limits<SELLNeighborCount>::max()) [[unlikely]]
+		if (N_nbrs > std::numeric_limits<SELLNeighborCount>::max()) [[unlikely]]
 		{
 			throw std::runtime_error(overflowMsg);
 		}
@@ -62,7 +64,7 @@ namespace
 		(void)overflowMsg;
 		#endif
 
-		return static_cast<SELLNeighborCount>(count);
+		return static_cast<SELLNeighborCount>(N_nbrs);
 	}
 
 	void FinalizeCSRNeighborStorage(
@@ -79,8 +81,7 @@ namespace
 		nbrList.resize(nbrOffsets.back());
 	}
 
-
-} // anonymous
+} // namespace anonymous
 
 // -------------------------------------------------------------------------------------------------
 // --- [ chunked SELL neighbor list, explicit ] ---------------------------------------------------
@@ -94,19 +95,19 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::Resize(
 	N_B_ = N_B;
 	N_R_ = N_R;
 
-	const uint32_t numChunks = ChunkNumTotal(N_F_);
-	const uint32_t paddedCount = numChunks * chunkWidth;
+	const uint32_t N_chunks = ChunkNumTotal(N_F_);
+	const uint32_t N_padded = N_chunks * chunkWidth;
 
 	// count arrays are padded, tail chunk still has a full SIMD width
-	nbrCountFF_.assign(paddedCount, 0);
-	nbrCountFB_.assign(paddedCount, 0);
-	nbrCountFR_.assign(paddedCount, 0);
-	nbrChunkMaxCountFF_.assign(numChunks, 0);
-	nbrChunkMaxCountFB_.assign(numChunks, 0);
-	nbrChunkMaxCountFR_.assign(numChunks, 0);
-	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
-	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
-	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+	nbrCountFF_.assign(N_padded, 0);
+	nbrCountFB_.assign(N_padded, 0);
+	nbrCountFR_.assign(N_padded, 0);
+	nbrChunkMaxCountFF_.assign(N_chunks, 0);
+	nbrChunkMaxCountFB_.assign(N_chunks, 0);
+	nbrChunkMaxCountFR_.assign(N_chunks, 0);
+	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 	nbrListFF_.clear();
 	nbrListFB_.clear();
 	nbrListFR_.clear();
@@ -154,58 +155,58 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::Finalize_Count()
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrCountFF(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountFF_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"Chunked SELL FF neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrCountFB(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountFB_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"Chunked SELL FB neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrCountFR(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountFR_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"Chunked SELL FR neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrCountRF(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountRF_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"RF neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrCountRB(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountRB_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"RB neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrCountRR(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountRR_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"RR neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListFF(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountFF_[i] != count) [[unlikely]]
+	if (nbrCountFF_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in explicit chunked SELL FF neighbor storage.");
@@ -214,28 +215,28 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListFF(
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t pitch = nbrChunkMaxCountFF_[chunk];
-	if (count > pitch) [[unlikely]]
+	if (N_nbrs > pitch) [[unlikely]]
 	{
 		throw std::runtime_error("Chunked SELL FF neighbor count exceeds chunk pitch.");
 	}
 
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		nbrListFF_[ParticleStorageIdx(i, k, nbrChunkOffsetsFF_)] = js[k];
 	}
 
 	// padding entries are valid indices so SIMD gathers never touch invalid memory
-	for (uint32_t k = count; k < pitch; k++)
+	for (uint32_t k = N_nbrs; k < pitch; k++)
 	{
 		nbrListFF_[ParticleStorageIdx(i, k, nbrChunkOffsetsFF_)] = i;
 	}
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListFB(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountFB_[i] != count) [[unlikely]]
+	if (nbrCountFB_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in explicit chunked SELL FB neighbor storage.");
@@ -244,29 +245,29 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListFB(
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t pitch = nbrChunkMaxCountFB_[chunk];
-	if (count > pitch) [[unlikely]]
+	if (N_nbrs > pitch) [[unlikely]]
 	{
 		throw std::runtime_error("Chunked SELL FB neighbor count exceeds chunk pitch.");
 	}
 
 	const uint32_t safeBoundaryIdx = 0;
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		nbrListFB_[ParticleStorageIdx(i, k, nbrChunkOffsetsFB_)] = js[k];
 	}
 
 	// padding entries are valid indices so SIMD gathers never touch invalid memory
-	for (uint32_t k = count; k < pitch; k++)
+	for (uint32_t k = N_nbrs; k < pitch; k++)
 	{
 		nbrListFB_[ParticleStorageIdx(i, k, nbrChunkOffsetsFB_)] = safeBoundaryIdx;
 	}
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListFR(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountFR_[i] != count) [[unlikely]]
+	if (nbrCountFR_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in explicit chunked SELL FR neighbor storage.");
@@ -275,154 +276,154 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListFR(
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t pitch = nbrChunkMaxCountFR_[chunk];
-	if (count > pitch) [[unlikely]]
+	if (N_nbrs > pitch) [[unlikely]]
 	{
 		throw std::runtime_error("Chunked SELL FR neighbor count exceeds chunk pitch.");
 	}
 
 	const uint32_t safeRigidIdx = 0;
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		nbrListFR_[ParticleStorageIdx(i, k, nbrChunkOffsetsFR_)] = js[k];
 	}
 
 	// padding entries are valid indices so SIMD gathers never touch invalid memory
-	for (uint32_t k = count; k < pitch; k++)
+	for (uint32_t k = N_nbrs; k < pitch; k++)
 	{
 		nbrListFR_[ParticleStorageIdx(i, k, nbrChunkOffsetsFR_)] = safeRigidIdx;
 	}
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListRF(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountRF_[i] != count) [[unlikely]]
+	if (nbrCountRF_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in RF neighbor storage.");
 	}
 	#endif
 
-	if (count > 0)
+	if (N_nbrs > 0)
 	{
-		std::copy_n(js, count, nbrListRF_.data() + nbrOffsetsRF_[i]);
+		std::copy_n(js, N_nbrs, nbrListRF_.data() + nbrOffsetsRF_[i]);
 	}
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListRB(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountRB_[i] != count) [[unlikely]]
+	if (nbrCountRB_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in RB neighbor storage.");
 	}
 	#endif
 
-	if (count > 0)
+	if (N_nbrs > 0)
 	{
-		std::copy_n(js, count, nbrListRB_.data() + nbrOffsetsRB_[i]);
+		std::copy_n(js, N_nbrs, nbrListRB_.data() + nbrOffsetsRB_[i]);
 	}
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::SetNbrListRR(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountRR_[i] != count) [[unlikely]]
+	if (nbrCountRR_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in RR neighbor storage.");
 	}
 	#endif
 
-	if (count > 0)
+	if (N_nbrs > 0)
 	{
-		std::copy_n(js, count, nbrListRR_.data() + nbrOffsetsRR_[i]);
+		std::copy_n(js, N_nbrs, nbrListRR_.data() + nbrOffsetsRR_[i]);
 	}
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU01::FF(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountFF_[i];
-	if (count == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountFF_[i];
+	if (N_nbrs == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFF_.local();
-	out.resize(count);
+	out.resize(N_nbrs);
 
 	// reconstruct fluid neighbor list of one particle from SELL storage
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = nbrListFF_[ParticleStorageIdx(i, k, nbrChunkOffsetsFF_)];
 	}
 
-	return NeighborSpan{ out.data(), count };
+	return NeighborSpan{ out.data(), N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU01::FB(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountFB_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountFB_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFB_.local();
-	out.resize(count);
+	out.resize(N_nbrs);
 
 	// reconstruct boundary neighbor list of one particle from SELL storage
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = nbrListFB_[ParticleStorageIdx(i, k, nbrChunkOffsetsFB_)];
 	}
 
-	return NeighborSpan{ out.data(), count };
+	return NeighborSpan{ out.data(), N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU01::FR(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountFR_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountFR_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFR_.local();
-	out.resize(count);
+	out.resize(N_nbrs);
 
 	// reconstruct rigid neighbor list of one particle from SELL storage
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = nbrListFR_[ParticleStorageIdx(i, k, nbrChunkOffsetsFR_)];
 	}
 
-	return NeighborSpan{ out.data(), count };
+	return NeighborSpan{ out.data(), N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU01::RF(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountRF_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountRF_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nbrListRF_.data() + nbrOffsetsRF_[i], count };
+	return NeighborSpan{ nbrListRF_.data() + nbrOffsetsRF_[i], N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU01::RB(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountRB_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountRB_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nbrListRB_.data() + nbrOffsetsRB_[i], count };
+	return NeighborSpan{ nbrListRB_.data() + nbrOffsetsRB_[i], N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU01::RR(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountRR_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountRR_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nbrListRR_.data() + nbrOffsetsRR_[i], count };
+	return NeighborSpan{ nbrListRR_.data() + nbrOffsetsRR_[i], N_nbrs };
 }
 
 uint32_t NeighborLists_ChunkedSELL_Explicit_CPU01::CountFF(
@@ -650,10 +651,10 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinishFFChunkWrite(
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
-		const uint32_t count = writtenCounts[lane];
+		const uint32_t N_written = writtenCounts[lane];
 
 		#if defined(_DEBUG)
-		if (nbrCountFF_[i] != count) [[unlikely]]
+		if (nbrCountFF_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Count and fill query mismatch in direct chunked SELL FF neighbor storage.");
@@ -661,7 +662,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinishFFChunkWrite(
 		#endif
 
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
-		for (uint32_t k = count; k < pitch; k++)
+		for (uint32_t k = N_written; k < pitch; k++)
 		{
 			nbrListFF_[offset + static_cast<uint64_t>(k) * chunkWidth + lane] = i;
 		}
@@ -690,10 +691,10 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinishFBChunkWrite(
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
-		const uint32_t count = writtenCounts[lane];
+		const uint32_t N_written = writtenCounts[lane];
 
 		#if defined(_DEBUG)
-		if (nbrCountFB_[i] != count) [[unlikely]]
+		if (nbrCountFB_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Count and fill query mismatch in direct chunked SELL FB neighbor storage.");
@@ -701,7 +702,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinishFBChunkWrite(
 		#endif
 
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
-		for (uint32_t k = count; k < pitch; k++)
+		for (uint32_t k = N_written; k < pitch; k++)
 		{
 			nbrListFB_[offset + static_cast<uint64_t>(k) * chunkWidth + lane] = safeBoundaryIdx;
 		}
@@ -730,10 +731,10 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinishFRChunkWrite(
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
-		const uint32_t count = writtenCounts[lane];
+		const uint32_t N_written = writtenCounts[lane];
 
 		#if defined(_DEBUG)
-		if (nbrCountFR_[i] != count) [[unlikely]]
+		if (nbrCountFR_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Count and fill query mismatch in direct chunked SELL FR neighbor storage.");
@@ -741,7 +742,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinishFRChunkWrite(
 		#endif
 
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
-		for (uint32_t k = count; k < pitch; k++)
+		for (uint32_t k = N_written; k < pitch; k++)
 		{
 			nbrListFR_[offset + static_cast<uint64_t>(k) * chunkWidth + lane] = safeRigidIdx;
 		}
@@ -805,26 +806,26 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::BuildChunkMaxCount(
 	const std::vector<SELLNeighborCount>& nbrCounts,
 	std::vector<SELLNeighborCount>& nbrChunkMaxCount) const
 {
-	const uint32_t numChunks = ChunkNumTotal(N_F_);
-	nbrChunkMaxCount.assign(numChunks, 0);
+	const uint32_t N_chunks = ChunkNumTotal(N_F_);
+	nbrChunkMaxCount.assign(N_chunks, 0);
 
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
 				const uint32_t begin = ChunkBegin(chunk);
 				const uint32_t end = ChunkEnd(chunk, N_F_);
-				SELLNeighborCount maxCount = 0;
+				SELLNeighborCount N_maxNbrs = 0;
 
 				// one pitch per chunk keeps all SIMD lanes aligned for traversal
 				for (uint32_t i = begin; i < end; i++)
 				{
-					maxCount = std::max(maxCount, nbrCounts[i]);
+					N_maxNbrs = std::max(N_maxNbrs, nbrCounts[i]);
 				}
 
-				nbrChunkMaxCount[chunk] = maxCount;
+				nbrChunkMaxCount[chunk] = N_maxNbrs;
 			}
 		},
 		tbb::auto_partitioner{}
@@ -836,10 +837,10 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinalizeChunkOffsets(
 	std::vector<uint64_t>& nbrChunkOffsets,
 	std::vector<uint32_t>& nbrList) const
 {
-	const uint32_t numChunks = ChunkNumTotal(N_F_);
-	nbrChunkOffsets.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+	const uint32_t N_chunks = ChunkNumTotal(N_F_);
+	nbrChunkOffsets.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 
-	for (uint32_t chunk = 0; chunk < numChunks; chunk++)
+	for (uint32_t chunk = 0; chunk < N_chunks; chunk++)
 	{
 		const uint64_t chunkStorage =
 			static_cast<uint64_t>(nbrChunkMaxCount[chunk]) * chunkWidth;
@@ -849,7 +850,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinalizeChunkOffsets(
 			= nbrChunkOffsets[chunk] + chunkStorage;
 	}
 
-	const uint64_t N_total = nbrChunkOffsets[numChunks];
+	const uint64_t N_total = nbrChunkOffsets[N_chunks];
 	EnsurePackedCSRStorageCapacity(nbrList, N_total, extraAllocCapacityPct_);
 	nbrList.resize(N_total);
 }
@@ -868,32 +869,32 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::Resize(
 	N_B_ = N_B;
 	N_R_ = N_R;
 
-	const uint32_t numChunks = ChunkNumTotal(N_F_);
-	const uint32_t paddedCount = numChunks * chunkWidth;
+	const uint32_t N_chunks = ChunkNumTotal(N_F_);
+	const uint32_t N_padded = N_chunks * chunkWidth;
 	const uint32_t invalidRef = std::numeric_limits<uint32_t>::max();
 
 	// count arrays are padded, tail chunk still has a full SIMD width
-	nbrCountFF_.assign(paddedCount, 0);
-	nbrCountFB_.assign(paddedCount, 0);
-	nbrCountFR_.assign(paddedCount, 0);
-	nbrChunkMaxCountFF_.assign(numChunks, 0);
-	nbrChunkMaxCountFB_.assign(numChunks, 0);
-	nbrChunkMaxCountFR_.assign(numChunks, 0);
-	nbrChunkMinRefFF_.assign(numChunks, invalidRef);
-	nbrChunkMinRefFB_.assign(numChunks, invalidRef);
-	nbrChunkMinRefFR_.assign(numChunks, invalidRef);
-	nbrChunkMaxRefFF_.assign(numChunks, 0);
-	nbrChunkMaxRefFB_.assign(numChunks, 0);
-	nbrChunkMaxRefFR_.assign(numChunks, 0);
-	nbrChunkBaseIdxFF_.assign(numChunks, 0);
-	nbrChunkBaseIdxFB_.assign(numChunks, 0);
-	nbrChunkBaseIdxFR_.assign(numChunks, 0);
-	nbrChunkFormatFF_.assign(numChunks, SELLChunkFormat::Abs32);
-	nbrChunkFormatFB_.assign(numChunks, SELLChunkFormat::Abs32);
-	nbrChunkFormatFR_.assign(numChunks, SELLChunkFormat::Abs32);
-	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
-	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
-	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+	nbrCountFF_.assign(N_padded, 0);
+	nbrCountFB_.assign(N_padded, 0);
+	nbrCountFR_.assign(N_padded, 0);
+	nbrChunkMaxCountFF_.assign(N_chunks, 0);
+	nbrChunkMaxCountFB_.assign(N_chunks, 0);
+	nbrChunkMaxCountFR_.assign(N_chunks, 0);
+	nbrChunkMinRefFF_.assign(N_chunks, invalidRef);
+	nbrChunkMinRefFB_.assign(N_chunks, invalidRef);
+	nbrChunkMinRefFR_.assign(N_chunks, invalidRef);
+	nbrChunkMaxRefFF_.assign(N_chunks, 0);
+	nbrChunkMaxRefFB_.assign(N_chunks, 0);
+	nbrChunkMaxRefFR_.assign(N_chunks, 0);
+	nbrChunkBaseIdxFF_.assign(N_chunks, 0);
+	nbrChunkBaseIdxFB_.assign(N_chunks, 0);
+	nbrChunkBaseIdxFR_.assign(N_chunks, 0);
+	nbrChunkFormatFF_.assign(N_chunks, SELLChunkFormat::Abs32);
+	nbrChunkFormatFB_.assign(N_chunks, SELLChunkFormat::Abs32);
+	nbrChunkFormatFR_.assign(N_chunks, SELLChunkFormat::Abs32);
+	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 
 	nbrListDelta8FF_.clear();
 	nbrListDelta8FB_.clear();
@@ -943,58 +944,58 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::Finalize_Count()
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrCountFF(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountFF_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"Compressed chunked SELL FF neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrCountFB(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountFB_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"Compressed chunked SELL FB neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrCountFR(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountFR_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"Compressed chunked SELL FR neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrCountRF(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountRF_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"RF neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrCountRB(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountRB_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"RB neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrCountRR(
-	const uint32_t i, const uint32_t count)
+	const uint32_t i, const uint32_t N_nbrs)
 {
 	nbrCountRR_[i] = NarrowNeighborCount_Debug(
-		count,
+		N_nbrs,
 		"RR neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFF(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountFF_[i] != count) [[unlikely]]
+	if (nbrCountFF_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in compressed chunked SELL FF neighbor storage.");
@@ -1004,12 +1005,12 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFF(
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
 	ChunkedSELLNeighborSpan_Write chunkFF = FFChunkWrite(chunk);
-	if (count > chunkFF.pitch) [[unlikely]]
+	if (N_nbrs > chunkFF.pitch) [[unlikely]]
 	{
 		throw std::runtime_error("Compressed chunked SELL FF neighbor count exceeds chunk pitch.");
 	}
 
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		chunkFF.StoreNeighbor(lane, k, js[k]);
 	}
@@ -1019,17 +1020,17 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFF(
 		(chunkFF.format == SELLChunkFormat::Delta8 ||
 		 chunkFF.format == SELLChunkFormat::Delta16)
 		? chunkFF.baseIdx : i;
-	for (uint32_t k = count; k < chunkFF.pitch; k++)
+	for (uint32_t k = N_nbrs; k < chunkFF.pitch; k++)
 	{
 		chunkFF.StoreNeighbor(lane, k, safeFluidIdx);
 	}
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFB(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountFB_[i] != count) [[unlikely]]
+	if (nbrCountFB_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in compressed chunked SELL FB neighbor storage.");
@@ -1040,12 +1041,12 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFB(
 	const uint32_t lane = LaneOfParticle(i);
 	const uint32_t safeBoundaryIdx = 0;
 	ChunkedSELLNeighborSpan_Write chunkFB = FBChunkWrite(chunk);
-	if (count > chunkFB.pitch) [[unlikely]]
+	if (N_nbrs > chunkFB.pitch) [[unlikely]]
 	{
 		throw std::runtime_error("Compressed chunked SELL FB neighbor count exceeds chunk pitch.");
 	}
 
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		chunkFB.StoreNeighbor(lane, k, js[k]);
 	}
@@ -1055,17 +1056,17 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFB(
 		(chunkFB.format == SELLChunkFormat::Delta8 ||
 		 chunkFB.format == SELLChunkFormat::Delta16)
 		? chunkFB.baseIdx : safeBoundaryIdx;
-	for (uint32_t k = count; k < chunkFB.pitch; k++)
+	for (uint32_t k = N_nbrs; k < chunkFB.pitch; k++)
 	{
 		chunkFB.StoreNeighbor(lane, k, safePaddingBoundaryIdx);
 	}
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFR(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountFR_[i] != count) [[unlikely]]
+	if (nbrCountFR_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in compressed chunked SELL FR neighbor storage.");
@@ -1076,12 +1077,12 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFR(
 	const uint32_t lane = LaneOfParticle(i);
 	const uint32_t safeRigidIdx = 0;
 	ChunkedSELLNeighborSpan_Write chunkFR = FRChunkWrite(chunk);
-	if (count > chunkFR.pitch) [[unlikely]]
+	if (N_nbrs > chunkFR.pitch) [[unlikely]]
 	{
 		throw std::runtime_error("Compressed chunked SELL FR neighbor count exceeds chunk pitch.");
 	}
 
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		chunkFR.StoreNeighbor(lane, k, js[k]);
 	}
@@ -1091,154 +1092,154 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListFR(
 		(chunkFR.format == SELLChunkFormat::Delta8 ||
 		 chunkFR.format == SELLChunkFormat::Delta16)
 		? chunkFR.baseIdx : safeRigidIdx;
-	for (uint32_t k = count; k < chunkFR.pitch; k++)
+	for (uint32_t k = N_nbrs; k < chunkFR.pitch; k++)
 	{
 		chunkFR.StoreNeighbor(lane, k, safePaddingRigidIdx);
 	}
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListRF(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountRF_[i] != count) [[unlikely]]
+	if (nbrCountRF_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in RF neighbor storage.");
 	}
 	#endif
 
-	if (count > 0)
+	if (N_nbrs > 0)
 	{
-		std::copy_n(js, count, nbrListRF_.data() + nbrOffsetsRF_[i]);
+		std::copy_n(js, N_nbrs, nbrListRF_.data() + nbrOffsetsRF_[i]);
 	}
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListRB(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountRB_[i] != count) [[unlikely]]
+	if (nbrCountRB_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in RB neighbor storage.");
 	}
 	#endif
 
-	if (count > 0)
+	if (N_nbrs > 0)
 	{
-		std::copy_n(js, count, nbrListRB_.data() + nbrOffsetsRB_[i]);
+		std::copy_n(js, N_nbrs, nbrListRB_.data() + nbrOffsetsRB_[i]);
 	}
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::SetNbrListRR(
-	const uint32_t i, const uint32_t* js, const uint32_t count)
+	const uint32_t i, const uint32_t* js, const uint32_t N_nbrs)
 {
 	#if defined(_DEBUG)
-	if (nbrCountRR_[i] != count) [[unlikely]]
+	if (nbrCountRR_[i] != N_nbrs) [[unlikely]]
 	{
 		throw std::runtime_error(
 			"Count and fill query mismatch in RR neighbor storage.");
 	}
 	#endif
 
-	if (count > 0)
+	if (N_nbrs > 0)
 	{
-		std::copy_n(js, count, nbrListRR_.data() + nbrOffsetsRR_[i]);
+		std::copy_n(js, N_nbrs, nbrListRR_.data() + nbrOffsetsRR_[i]);
 	}
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FF(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountFF_[i];
-	if (count == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountFF_[i];
+	if (N_nbrs == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFF_.local();
-	out.resize(count);
+	out.resize(N_nbrs);
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
 	const ChunkedSELLNeighborSpan_Read chunkFF = FFChunk(chunk);
 
 	// reconstruct fluid neighbor list of one particle from compressed SELL storage
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = chunkFF.ReadNeighborIdx(lane, k);
 	}
 
-	return NeighborSpan{ out.data(), count };
+	return NeighborSpan{ out.data(), N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FB(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountFB_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountFB_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFB_.local();
-	out.resize(count);
+	out.resize(N_nbrs);
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
 	const ChunkedSELLNeighborSpan_Read chunkFB = FBChunk(chunk);
 
 	// reconstruct boundary neighbor list of one particle from compressed SELL storage
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = chunkFB.ReadNeighborIdx(lane, k);
 	}
 
-	return NeighborSpan{ out.data(), count };
+	return NeighborSpan{ out.data(), N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FR(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountFR_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountFR_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFR_.local();
-	out.resize(count);
+	out.resize(N_nbrs);
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
 	const ChunkedSELLNeighborSpan_Read chunkFR = FRChunk(chunk);
 
 	// reconstruct rigid neighbor list of one particle from compressed SELL storage
-	for (uint32_t k = 0; k < count; k++)
+	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = chunkFR.ReadNeighborIdx(lane, k);
 	}
 
-	return NeighborSpan{ out.data(), count };
+	return NeighborSpan{ out.data(), N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU01::RF(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountRF_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountRF_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nbrListRF_.data() + nbrOffsetsRF_[i], count };
+	return NeighborSpan{ nbrListRF_.data() + nbrOffsetsRF_[i], N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU01::RB(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountRB_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountRB_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nbrListRB_.data() + nbrOffsetsRB_[i], count };
+	return NeighborSpan{ nbrListRB_.data() + nbrOffsetsRB_[i], N_nbrs };
 }
 
 NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU01::RR(
 	const uint32_t i) const
 {
-	const uint32_t count = nbrCountRR_[i];
-	if (count == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
+	const uint32_t N_nbrs = nbrCountRR_[i];
+	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
-	return NeighborSpan{ nbrListRR_.data() + nbrOffsetsRR_[i], count };
+	return NeighborSpan{ nbrListRR_.data() + nbrOffsetsRR_[i], N_nbrs };
 }
 
 uint32_t NeighborLists_ChunkedSELL_AdaptCompress_CPU01::CountFF(
@@ -1393,10 +1394,10 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinishFFChunkWrite(
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
-		const uint32_t count = writtenCounts[lane];
+		const uint32_t N_written = writtenCounts[lane];
 
 		#if defined(_DEBUG)
-		if (nbrCountFF_[i] != count) [[unlikely]]
+		if (nbrCountFF_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Count and fill query mismatch in direct compressed SELL FF neighbor storage.");
@@ -1408,7 +1409,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinishFFChunkWrite(
 			(chunkFF.format == SELLChunkFormat::Delta8 ||
 			 chunkFF.format == SELLChunkFormat::Delta16)
 			? chunkFF.baseIdx : i;
-		for (uint32_t k = count; k < chunkFF.pitch; k++)
+		for (uint32_t k = N_written; k < chunkFF.pitch; k++)
 		{
 			chunkFF.StoreNeighbor(lane, k, safeFluidIdx);
 		}
@@ -1440,10 +1441,10 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinishFBChunkWrite(
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
-		const uint32_t count = writtenCounts[lane];
+		const uint32_t N_written = writtenCounts[lane];
 
 		#if defined(_DEBUG)
-		if (nbrCountFB_[i] != count) [[unlikely]]
+		if (nbrCountFB_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Count and fill query mismatch in direct compressed SELL FB neighbor storage.");
@@ -1455,7 +1456,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinishFBChunkWrite(
 			(chunkFB.format == SELLChunkFormat::Delta8 ||
 			 chunkFB.format == SELLChunkFormat::Delta16)
 			? chunkFB.baseIdx : safeBoundaryIdx;
-		for (uint32_t k = count; k < chunkFB.pitch; k++)
+		for (uint32_t k = N_written; k < chunkFB.pitch; k++)
 		{
 			chunkFB.StoreNeighbor(lane, k, safePaddingBoundaryIdx);
 		}
@@ -1487,10 +1488,10 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinishFRChunkWrite(
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
-		const uint32_t count = writtenCounts[lane];
+		const uint32_t N_written = writtenCounts[lane];
 
 		#if defined(_DEBUG)
-		if (nbrCountFR_[i] != count) [[unlikely]]
+		if (nbrCountFR_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
 				"Count and fill query mismatch in direct compressed SELL FR neighbor storage.");
@@ -1502,7 +1503,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinishFRChunkWrite(
 			(chunkFR.format == SELLChunkFormat::Delta8 ||
 			 chunkFR.format == SELLChunkFormat::Delta16)
 			? chunkFR.baseIdx : safeRigidIdx;
-		for (uint32_t k = count; k < chunkFR.pitch; k++)
+		for (uint32_t k = N_written; k < chunkFR.pitch; k++)
 		{
 			chunkFR.StoreNeighbor(lane, k, safePaddingRigidIdx);
 		}
@@ -1741,26 +1742,26 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::BuildChunkMaxCount(
 	const std::vector<SELLNeighborCount>& nbrCounts,
 	std::vector<SELLNeighborCount>& nbrChunkMaxCount) const
 {
-	const uint32_t numChunks = ChunkNumTotal(N_F_);
-	nbrChunkMaxCount.assign(numChunks, 0);
+	const uint32_t N_chunks = ChunkNumTotal(N_F_);
+	nbrChunkMaxCount.assign(N_chunks, 0);
 
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
 			{
 				const uint32_t begin = ChunkBegin(chunk);
 				const uint32_t end = ChunkEnd(chunk, N_F_);
-				SELLNeighborCount maxCount = 0;
+				SELLNeighborCount N_maxNbrs = 0;
 
 				// one pitch per chunk keeps all SIMD lanes aligned for traversal
 				for (uint32_t i = begin; i < end; i++)
 				{
-					maxCount = std::max(maxCount, nbrCounts[i]);
+					N_maxNbrs = std::max(N_maxNbrs, nbrCounts[i]);
 				}
 
-				nbrChunkMaxCount[chunk] = maxCount;
+				nbrChunkMaxCount[chunk] = N_maxNbrs;
 			}
 		},
 		tbb::auto_partitioner{}
@@ -1778,14 +1779,14 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinalizeChunkStorage(
 	std::vector<uint16_t>& nbrListDelta16,
 	std::vector<uint32_t>& nbrListAbs32) const
 {
-	const uint32_t numChunks = ChunkNumTotal(N_F_);
-	nbrChunkOffsets.assign(static_cast<uint64_t>(numChunks) + 1ull, 0);
+	const uint32_t N_chunks = ChunkNumTotal(N_F_);
+	nbrChunkOffsets.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 
 	uint64_t N_delta8 = 0;
 	uint64_t N_delta16 = 0;
 	uint64_t N_abs32 = 0;
 
-	for (uint32_t chunk = 0; chunk < numChunks; chunk++)
+	for (uint32_t chunk = 0; chunk < N_chunks; chunk++)
 	{
 		const uint32_t pitch = nbrChunkMaxCount[chunk];
 		const uint64_t chunkStorage = ChunkStorageSize(pitch);

@@ -263,8 +263,8 @@ namespace GPU01
 		float yForce = 0.0f;
 		float zForce = 0.0f;
 		const uint64_t begin = nbrOffsetsRF[i];
-		const uint32_t count = nbrCountRF[i];
-		for (uint32_t k = 0; k < count; k++)
+		const uint32_t N_nbrs = nbrCountRF[i];
+		for (uint32_t k = 0; k < N_nbrs; k++)
 		{
 			const uint32_t j = nbrListRF[begin + k];
 
@@ -322,8 +322,8 @@ namespace GPU01
 		float zForce = 0.0f;
 		const float densityInvSqu = 1.0f / (restDensity * restDensity);
 		const uint64_t begin = nbrOffsetsRF[i];
-		const uint32_t count = nbrCountRF[i];
-		for (uint32_t k = 0; k < count; k++)
+		const uint32_t N_nbrs = nbrCountRF[i];
+		for (uint32_t k = 0; k < N_nbrs; k++)
 		{
 			const uint32_t j = nbrListRF[begin + k];
 
@@ -372,11 +372,11 @@ namespace GPU01
 		if (bodyIdx >= N_RB) { return; }
 
 		const uint32_t begin = rigidParticleBeginRB[bodyIdx];
-		const uint32_t count = rigidParticleCountRB[bodyIdx];
+		const uint32_t N_rigidParticles = rigidParticleCountRB[bodyIdx];
 		#ifndef NDEBUG
-		if (begin > N_R || count > N_R - begin) { return; }
+		if (begin > N_R || N_rigidParticles > N_R - begin) { return; }
 		#endif
-		const uint32_t end = begin + count;
+		const uint32_t end = begin + N_rigidParticles;
 
 		float sumXForce = 0.0f;
 		float sumYForce = 0.0f;
@@ -557,9 +557,9 @@ namespace GPU01
 	{
 		if (N_R == 0) { return; }
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-		K_UpdateRigidParticles<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+		K_UpdateRigidParticles<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			bodyIdR, xRelPosR, yRelPosR, zRelPosR,
 			xCMRB, yCMRB, zCMRB, xVelRB, yVelRB, zVelRB, xOmegaRB, yOmegaRB, zOmegaRB,
 			a00RB, a01RB, a02RB, a10RB, a11RB, a12RB, a20RB, a21RB, a22RB,
@@ -581,10 +581,10 @@ namespace GPU01
 	{
 		if (N_RB == 0) { return; }
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_RB + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_RB + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_ClearRigidForcesAndAddGravity<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_ClearRigidForcesAndAddGravity<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			massRB, massInvRB,
 			xGravity, yGravity, zGravity,
 			N_RB,
@@ -615,9 +615,9 @@ namespace GPU01
 		float* xForceR, float* yForceR, float* zForceR)
 	{
 		if (N_R == 0) { return; }
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-		K_AccumulateRigidParticleNonPressureForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+		K_AccumulateRigidParticleNonPressureForces<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR,
 			xVelF, yVelF, zVelF, xVelR, yVelR, zVelR, volR,
 			nbrCountRF, nbrOffsetsRF, nbrListRF,
@@ -646,9 +646,9 @@ namespace GPU01
 		float* xForceR, float* yForceR, float* zForceR)
 	{
 		if (N_R == 0) { return; }
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_R + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
-		K_AccumulateRigidParticlePressureForces<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+		K_AccumulateRigidParticlePressureForces<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR, pressureF, psiR,
 			nbrCountRF, nbrOffsetsRF, nbrListRF,
 			particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
@@ -677,11 +677,11 @@ namespace GPU01
 	{
 		if (N_RB == 0 || N_R == 0) { return; }
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = N_RB;
-		const uint32_t sharedBytes = 6u * N_BLOCKSIZE * static_cast<uint32_t>(sizeof(float));
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = N_RB;
+		const uint32_t N_sharedBytes = 6u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 
-		K_ReduceRigidParticleForces<<<N_GRIDSIZE, N_BLOCKSIZE, sharedBytes, stream>>>(
+		K_ReduceRigidParticleForces<<<N_GRID_SIZE, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
 			rigidParticleBeginRB,
 			rigidParticleCountRB,
 			xRelPosR,
@@ -722,10 +722,10 @@ namespace GPU01
 	{
 		if (N_RB == 0) { return; }
 
-		const uint32_t N_BLOCKSIZE = 256;
-		const uint32_t N_GRIDSIZE = (N_RB + N_BLOCKSIZE - 1) / N_BLOCKSIZE;
+		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_RB + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_IntegrateRigidBodies<<<N_GRIDSIZE, N_BLOCKSIZE, 0, stream>>>(
+		K_IntegrateRigidBodies<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			timeStep,
 			N_RB,
 			xCMRB, yCMRB, zCMRB,

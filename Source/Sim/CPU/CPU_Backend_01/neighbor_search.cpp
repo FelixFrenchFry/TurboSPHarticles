@@ -119,9 +119,9 @@ namespace
 		int cellOrigX = 0;
 		int cellOrigY = 0;
 		int cellOrigZ = 0;
-		uint32_t N_DimX = 0;
-		uint32_t N_DimY = 0;
-		uint32_t N_DimZ = 0;
+		uint32_t N_dimX = 0;
+		uint32_t N_dimY = 0;
+		uint32_t N_dimZ = 0;
 	};
 
 	// TODO: parallelize this with TBB?
@@ -193,14 +193,14 @@ namespace
 		frame.cellOrigX = cxMin;
 		frame.cellOrigY = cyMin;
 		frame.cellOrigZ = czMin;
-		frame.N_DimX = static_cast<uint32_t>(cxMax - cxMin + 1);
-		frame.N_DimY = static_cast<uint32_t>(cyMax - cyMin + 1);
-		frame.N_DimZ = static_cast<uint32_t>(czMax - czMin + 1);
+		frame.N_dimX = static_cast<uint32_t>(cxMax - cxMin + 1);
+		frame.N_dimY = static_cast<uint32_t>(cyMax - cyMin + 1);
+		frame.N_dimZ = static_cast<uint32_t>(czMax - czMin + 1);
 
 		return frame;
 	}
 
-	constexpr uint64_t N_cellTableChunkSize = 4096;
+	constexpr uint64_t N_CELL_TABLE_CHUNK = 4096;
 
 	// finds the start of every cell run in the sorted per-particle cell ID array using a
 	// parallel count -> prefix sum -> parallel fill pipeline
@@ -220,58 +220,58 @@ namespace
 			return;
 		}
 
-		const uint64_t chunkCount = (N + N_cellTableChunkSize - 1) / N_cellTableChunkSize;
-		runStartCounts_ByChunk.assign(chunkCount, 0);
+		const uint64_t N_chunks = (N + N_CELL_TABLE_CHUNK - 1) / N_CELL_TABLE_CHUNK;
+		runStartCounts_ByChunk.assign(N_chunks, 0);
 
 		// count cell run starts per chunk without shared counters
 		tbb::parallel_for(
-			tbb::blocked_range<uint64_t>(0, chunkCount),
+			tbb::blocked_range<uint64_t>(0, N_chunks),
 			[&](const tbb::blocked_range<uint64_t>& r)
 			{
 				for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
 				{
-					const uint64_t beginIdx = chunkIdx * N_cellTableChunkSize;
-					const uint64_t endIdx = std::min(beginIdx + N_cellTableChunkSize, N);
+					const uint64_t beginIdx = chunkIdx * N_CELL_TABLE_CHUNK;
+					const uint64_t endIdx = std::min(beginIdx + N_CELL_TABLE_CHUNK, N);
 
 					// the very first particle always starts the first cell run
-					uint32_t runStartCount = (beginIdx == 0) ? 1u : 0u;
+					uint32_t N_runStarts = (beginIdx == 0) ? 1u : 0u;
 
 					// reaching back into the previous chunk is a read-only access into
 					// immutable input, so chunks stay independent
 					const uint64_t firstIdx = (beginIdx == 0) ? 1u : beginIdx;
 					for (uint64_t i = firstIdx; i != endIdx; i++)
 					{
-						if (cellId[i] != cellId[i - 1]) { runStartCount++; }
+						if (cellId[i] != cellId[i - 1]) { N_runStarts++; }
 					}
 
-					runStartCounts_ByChunk[chunkIdx] = runStartCount;
+					runStartCounts_ByChunk[chunkIdx] = N_runStarts;
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 
 		// prefix chunk-local run start counts so each worker fills a disjoint output range
-		uint32_t N_Cells = 0;
-		for (uint64_t chunkIdx = 0; chunkIdx != chunkCount; chunkIdx++)
+		uint32_t N_cells = 0;
+		for (uint64_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
 		{
-			const uint32_t runStartCount = runStartCounts_ByChunk[chunkIdx];
-			runStartCounts_ByChunk[chunkIdx] = N_Cells; // now the chunk's write offset
-			N_Cells += runStartCount;
+			const uint32_t N_runStarts = runStartCounts_ByChunk[chunkIdx];
+			runStartCounts_ByChunk[chunkIdx] = N_cells; // now the chunk's write offset
+			N_cells += N_runStarts;
 		}
 
 		// (not cleared beforehand, so a stable cell count avoids re-initializing the storage)
-		uniqueCellId.resize(N_Cells);
-		cellStartIdx.resize(static_cast<uint64_t>(N_Cells) + 1ull); // +1 for sentinel
+		uniqueCellId.resize(N_cells);
+		cellStartIdx.resize(static_cast<uint64_t>(N_cells) + 1ull); // +1 for sentinel
 
 		// fill the compact cell arrays while preserving the sorted cell run order
 		tbb::parallel_for(
-			tbb::blocked_range<uint64_t>(0, chunkCount),
+			tbb::blocked_range<uint64_t>(0, N_chunks),
 			[&](const tbb::blocked_range<uint64_t>& r)
 			{
 				for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
 				{
-					const uint64_t beginIdx = chunkIdx * N_cellTableChunkSize;
-					const uint64_t endIdx = std::min(beginIdx + N_cellTableChunkSize, N);
+					const uint64_t beginIdx = chunkIdx * N_CELL_TABLE_CHUNK;
+					const uint64_t endIdx = std::min(beginIdx + N_CELL_TABLE_CHUNK, N);
 					uint32_t writeIdx = runStartCounts_ByChunk[chunkIdx];
 
 					// must mirror the counting pass exactly,
@@ -299,7 +299,7 @@ namespace
 		);
 
 		// end of the last cell's range as sentinel
-		cellStartIdx[N_Cells] = static_cast<uint32_t>(N);
+		cellStartIdx[N_cells] = static_cast<uint32_t>(N);
 	}
 
 } // namespace anonymous
@@ -339,10 +339,10 @@ void NS_BruteForce_CPU01::Query_Count(const SimParams& params)
 	const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
 	// count FF, FB, and FR neighbors of each fluid particle
-	const uint32_t numChunks = be_.neighborList_->ChunkNumTotal();
+	const uint32_t N_chunks = be_.neighborList_->ChunkNumTotal();
 	const bool trackChunkNeighborIdxRange = be_.neighborList_->NeedsChunkNeighborIdxRange();
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
@@ -525,9 +525,9 @@ void NS_BruteForce_CPU01::Query_Fill(const SimParams& params)
 	const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
 	// fill FF, FB, and FR neighbors of each fluid particle
-	const uint32_t numChunks = be_.neighborList_->ChunkNumTotal();
+	const uint32_t N_chunks = be_.neighborList_->ChunkNumTotal();
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, numChunks),
+		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
@@ -725,9 +725,9 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellOrigX_ = 0;
 	cellOrigY_ = 0;
 	cellOrigZ_ = 0;
-	N_DimX_ = 0;
-	N_DimY_ = 0;
-	N_DimZ_ = 0;
+	N_dimX_ = 0;
+	N_dimY_ = 0;
+	N_dimZ_ = 0;
 	cellFrameValid_ = false;
 	cellIdsMatchCurrentParticleOrder_ = false;
 
@@ -764,9 +764,9 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellOrigX_ = 0;
 		cellOrigY_ = 0;
 		cellOrigZ_ = 0;
-		N_DimX_ = 0;
-		N_DimY_ = 0;
-		N_DimZ_ = 0;
+		N_dimX_ = 0;
+		N_dimY_ = 0;
+		N_dimZ_ = 0;
 		cellFrameValid_ = false;
 		cellIdsMatchCurrentParticleOrder_ = false;
 
@@ -917,16 +917,16 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 {
-	const uint64_t tableSize = static_cast<uint64_t>(N_DimX_) * N_DimY_ * N_DimZ_;
-	if (tableSize > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) [[unlikely]]
+	const uint64_t N_tableCells = static_cast<uint64_t>(N_dimX_) * N_dimY_ * N_dimZ_;
+	if (N_tableCells > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) [[unlikely]]
 	{
 		throw std::runtime_error("CPU01 dense compact CLL cell table too large.");
 	}
 
 	// TODO: parallelize with TBB?
-	cellTableF_.assign(static_cast<size_t>(tableSize), EMPTY_32);
-	cellTableB_.assign(static_cast<size_t>(tableSize), EMPTY_32);
-	cellTableR_.assign(static_cast<size_t>(tableSize), EMPTY_32);
+	cellTableF_.assign(static_cast<size_t>(N_tableCells), EMPTY_32);
+	cellTableB_.assign(static_cast<size_t>(N_tableCells), EMPTY_32);
+	cellTableR_.assign(static_cast<size_t>(N_tableCells), EMPTY_32);
 
 	const auto buildTable = [&](const std::vector<uint32_t>& cellStartIdx,
 		const std::vector<float>& xPos,
@@ -934,11 +934,11 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 		const std::vector<float>& zPos,
 		std::vector<uint32_t>& cellTable)
 		{
-			const uint32_t N_Cells =
+			const uint32_t N_cells =
 				(cellStartIdx.empty()) ? 0u : static_cast<uint32_t>(cellStartIdx.size() - 1u);
 
 			tbb::parallel_for(
-				tbb::blocked_range<uint32_t>(0, N_Cells),
+				tbb::blocked_range<uint32_t>(0, N_cells),
 				[&](const tbb::blocked_range<uint32_t>& r)
 				{
 					for (uint32_t c = r.begin(); c != r.end(); c++)
@@ -962,9 +962,9 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 	buildTable(cellStartIdxB_, be_.xPosB_, be_.yPosB_, be_.zPosB_, cellTableB_);
 
 	// rigid ranges index the sorted permutation instead of reordering rigid particle data
-	const uint32_t N_CellsR = cellStartIdxR_.empty()
+	const uint32_t N_cellsR = cellStartIdxR_.empty()
 		? 0u : static_cast<uint32_t>(cellStartIdxR_.size() - 1u);
-	for (uint32_t c = 0; c < N_CellsR; c++)
+	for (uint32_t c = 0; c < N_cellsR; c++)
 	{
 		const uint32_t begin = cellStartIdxR_[c];
 		const uint32_t rigidParticleIdx = particleOrderR_[begin];
@@ -979,9 +979,9 @@ void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
 	const int cx,
 	const int cy,
 	const int cz,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const
 {
 	const int cellQueryReach = static_cast<int>(cellQueryReach_);
 
@@ -1052,9 +1052,9 @@ void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
 void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
 	const uint32_t begin,
 	const uint32_t end,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& fluidRanges,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& boundaryRanges,
-	boost::container::small_vector<ActiveCellRange, N_QueryCellInline>& rigidRanges) const
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const
 {
 	fluidRanges.clear();
 	boundaryRanges.clear();
@@ -1118,7 +1118,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 		const float* RESTRICT zPosR = be_.zPosR_.data();
 		const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
-		const uint32_t numChunks = (N_F == 0u)
+		const uint32_t N_chunks = (N_F == 0u)
 			? 0u : ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
 		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
 		auto* chunkedSELLNeighborList = be_.neighborList_.get();
@@ -1126,7 +1126,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 			chunkedSELLNeighborList->NeedsChunkNeighborIdxRange();
 
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, numChunks),
+			tbb::blocked_range<uint32_t>(0, N_chunks),
 			[&](const tbb::blocked_range<uint32_t>& range)
 			{
 				auto& queryMetaScratch = queryMetaScratch_.local();
@@ -1351,12 +1351,12 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 		const float* RESTRICT zPosR = be_.zPosR_.data();
 		const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
 
-		const uint32_t numChunks = (N_F == 0u)
+		const uint32_t N_chunks = (N_F == 0u)
 			? 0u : ((N_F - 1u) / CPU::N_SIMD_WIDTH) + 1u;
 		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
 
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, numChunks),
+			tbb::blocked_range<uint32_t>(0, N_chunks),
 			[&](const tbb::blocked_range<uint32_t>& range)
 			{
 				auto& queryMetaScratch = queryMetaScratch_.local();
@@ -1732,9 +1732,9 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 		cellOrigX_ = 0;
 		cellOrigY_ = 0;
 		cellOrigZ_ = 0;
-		N_DimX_ = 0;
-		N_DimY_ = 0;
-		N_DimZ_ = 0;
+		N_dimX_ = 0;
+		N_dimY_ = 0;
+		N_dimZ_ = 0;
 		cellFrameValid_ = false;
 		return;
 	}
@@ -1746,9 +1746,9 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 		const int xMinInner = cellOrigX_ + margin;
 		const int yMinInner = cellOrigY_ + margin;
 		const int zMinInner = cellOrigZ_ + margin;
-		const int xMaxInner = cellOrigX_ + static_cast<int>(N_DimX_) - 1 - margin;
-		const int yMaxInner = cellOrigY_ + static_cast<int>(N_DimY_) - 1 - margin;
-		const int zMaxInner = cellOrigZ_ + static_cast<int>(N_DimZ_) - 1 - margin;
+		const int xMaxInner = cellOrigX_ + static_cast<int>(N_dimX_) - 1 - margin;
+		const int yMaxInner = cellOrigY_ + static_cast<int>(N_dimY_) - 1 - margin;
+		const int zMaxInner = cellOrigZ_ + static_cast<int>(N_dimZ_) - 1 - margin;
 
 		const auto particlesExceeded = [&](const std::vector<float>& xPos,
 			const std::vector<float>& yPos, const std::vector<float>& zPos) -> bool
@@ -1788,19 +1788,19 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 		be_.xPosR_.data(), be_.yPosR_.data(), be_.zPosR_.data(), N_R);
 	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
 
-	const int margin = static_cast<int>(cellQueryReach_ + N_CellFrameRebuildMargin_);
+	const int margin = static_cast<int>(cellQueryReach_ + N_CELL_FRAME_REBUILD_MARGIN);
 	cellOrigX_ = cellFrame.cellOrigX - margin;
 	cellOrigY_ = cellFrame.cellOrigY - margin;
 	cellOrigZ_ = cellFrame.cellOrigZ - margin;
-	N_DimX_ = cellFrame.N_DimX + static_cast<uint32_t>(2 * margin);
-	N_DimY_ = cellFrame.N_DimY + static_cast<uint32_t>(2 * margin);
-	N_DimZ_ = cellFrame.N_DimZ + static_cast<uint32_t>(2 * margin);
+	N_dimX_ = cellFrame.N_dimX + static_cast<uint32_t>(2 * margin);
+	N_dimY_ = cellFrame.N_dimY + static_cast<uint32_t>(2 * margin);
+	N_dimZ_ = cellFrame.N_dimZ + static_cast<uint32_t>(2 * margin);
 
 	static constexpr uint32_t MaxAxisCells = (1u << 21);
-	if (N_DimX_ > MaxAxisCells || N_DimY_ > MaxAxisCells || N_DimZ_ > MaxAxisCells)
+	if (N_dimX_ > MaxAxisCells || N_dimY_ > MaxAxisCells || N_dimZ_ > MaxAxisCells)
 	{
 		SPDLOG_ERROR("Compact CLL cell frame exceeds the 21-bit axis limit [{}, {}, {}].",
-			N_DimX_, N_DimY_, N_DimZ_);
+			N_dimX_, N_dimY_, N_dimZ_);
 		assert(false);
 		cellFrameValid_ = false;
 		return;
@@ -1822,9 +1822,9 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
 	const int lx = cx - cellOrigX_;
 	const int ly = cy - cellOrigY_;
 	const int lz = cz - cellOrigZ_;
-	assert(lx >= 0 && lx < static_cast<int>(N_DimX_));
-	assert(ly >= 0 && ly < static_cast<int>(N_DimY_));
-	assert(lz >= 0 && lz < static_cast<int>(N_DimZ_));
+	assert(lx >= 0 && lx < static_cast<int>(N_dimX_));
+	assert(ly >= 0 && ly < static_cast<int>(N_dimY_));
+	assert(lz >= 0 && lz < static_cast<int>(N_dimZ_));
 
 	const uint32_t ux = static_cast<uint32_t>(lx);
 	const uint32_t uy = static_cast<uint32_t>(ly);
@@ -1846,12 +1846,12 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToDenseCellIdx(
 	const int lx = cx - cellOrigX_;
 	const int ly = cy - cellOrigY_;
 	const int lz = cz - cellOrigZ_;
-	assert(lx >= 0 && lx < static_cast<int>(N_DimX_));
-	assert(ly >= 0 && ly < static_cast<int>(N_DimY_));
-	assert(lz >= 0 && lz < static_cast<int>(N_DimZ_));
+	assert(lx >= 0 && lx < static_cast<int>(N_dimX_));
+	assert(ly >= 0 && ly < static_cast<int>(N_dimY_));
+	assert(lz >= 0 && lz < static_cast<int>(N_dimZ_));
 
-	return (static_cast<uint64_t>(lz) * N_DimY_ + static_cast<uint32_t>(ly))
-		* N_DimX_ + static_cast<uint32_t>(lx);
+	return (static_cast<uint64_t>(lz) * N_dimY_ + static_cast<uint32_t>(ly))
+		* N_dimX_ + static_cast<uint32_t>(lx);
 }
 
 // spread out lower 21 bits of v into lower 63 bits and fill with gaps zeros like 000x00x00x00x00x...

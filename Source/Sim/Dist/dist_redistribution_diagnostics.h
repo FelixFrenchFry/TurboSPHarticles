@@ -48,7 +48,7 @@ namespace Dist
 	struct ParticleRedistributionTimingReport
 	{
 		int rank = 0;
-		uint64_t sampleCount = 0;
+		uint64_t N_samples = 0;
 		std::array<uint64_t, GetIdx(ParticleRedistributionTimingOp::Count)> totalNs{};
 	};
 

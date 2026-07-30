@@ -108,7 +108,7 @@ namespace Dist
 		bool WriteExportSnapshot(const Sim::SimParams& params);
 
 		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
-		bool BuildExportFluidParticleLocalIdxs(std::vector<int>& localIdxs) const;
+		bool BuildExportFluidParticleLocalIdxs(std::vector<uint32_t>& localIdxs) const;
 
 		// builds rank-local startup diagnostics gathered by the root rank
 		DistStartupRankReport BuildStartupRankReport() const;
@@ -178,12 +178,14 @@ namespace Dist
 		std::unique_ptr<IDomainDecomp> domainDecomp_{ nullptr };
 		Sync::UniversalSimState globalSimState_{};
 		Sync::UniversalSimState localSimState_{};
-		uint64_t expectedGlobalFluidParticleCount_ = 0;
-		uint64_t expectedGlobalBoundaryParticleCount_ = 0;
+		uint64_t N_expectedGlobalF_ = 0; // expected global fluid particle count
+		uint64_t N_expectedGlobalB_ = 0; // expected global boundary particle count
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
+		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
+		ParticleReOrderWorkBuffers boundaryParticleReOrderWorkBuffers_{};
 		ParticleRedistributionMgr particleRedistributionMgr_{};
-		std::vector<int> activeRigidParticleLocalIdxs_{};
+		std::vector<uint32_t> activeRigidParticleLocalIdxs_{};
 		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
 		RigidBodySyncBuffers rigidBodySyncBuffers_{};
@@ -195,11 +197,11 @@ namespace Dist
 		std::unique_ptr<Stats::StatisticsTracker> statisticsTracker_{ nullptr };
 		Bench::BenchOpList curBenchOps_;
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
-		Sim::I_DistributedParticleBackend* distributedParticleBackend_ = nullptr;
+		Sim::I_DistributedParticleBackend* distParticleBackend_ = nullptr;
 		mutable Stats::StatisticsPartial statisticsPartialScratch_{};
 		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint8_t> globalNearSurfaceFlagsScratch_{};
-		mutable std::vector<int> exportFluidParticleLocalIdxsScratch_{};
+		mutable std::vector<uint32_t> exportFluidParticleLocalIdxsScratch_{};
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_{};

@@ -85,8 +85,8 @@ namespace Sim
 
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
-			const std::vector<int>& activeFluidParticleLocalIdxs,
-			const std::vector<int>& activeRigidParticleLocalIdxs) override;
+			const std::vector<uint32_t>& activeFluidParticleLocalIdxs,
+			const std::vector<uint32_t>& activeRigidParticleLocalIdxs) override;
 
 		// classifies local fluid particles against the export near-surface threshold
 		bool FillFluidParticleNearSurfaceFlags(
@@ -95,7 +95,7 @@ namespace Sim
 		// selects local export surface particles using reconciled near-surface flags
 		bool BuildExportFluidParticleLocalIdxs(
 			const std::vector<uint8_t>& nearSurfaceFlags,
-			std::vector<int>& localIdxs) const override;
+			std::vector<uint32_t>& localIdxs) const override;
 
 		// reads body-level force and torque accumulated during the latest backend step
 		bool GetRigidBodyForceTorque(RigidBodyForceTorque& dst) const override;
@@ -120,6 +120,13 @@ namespace Sim
 		uint32_t GetNumRigidParticles() const override { return N_R_; }
 
 	private: // --------------------------------------------------------------------------------------
+
+		// extra capacity for particle fields that grow during distributed redistribution
+		static constexpr float particleFieldExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune
+
+		// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
+		static constexpr uint32_t particleCompactionBlockSize_ = 1024;
+		static constexpr uint32_t particleAppendBlockSize_ = 4096;
 
 		// computes rank-local statistics for all particles or active distributed particles,
 		// so records can be finalized locally OR aggregated across ranks before finalization
@@ -154,12 +161,12 @@ namespace Sim
 		uint32_t N_B_ = 0; // number of boundary particles
 		uint32_t N_R_ = 0; // number of rigid particles
 		uint32_t N_RB_ = 0; // number of rigid bodies
-		uint32_t N_solverIterCount_ = 0;
+		uint32_t N_solverIters_ = 0;
 
 		// persistent parallelization partitioner for TBB
 		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;
 
-		// --- [ backend-specific data structures for operating the simulation ] -------------------------
+		// --- [ backend-specific data structures for operating the simulation ] ---
 
 		// fluid particles
 		std::vector<uint32_t> idF_;
