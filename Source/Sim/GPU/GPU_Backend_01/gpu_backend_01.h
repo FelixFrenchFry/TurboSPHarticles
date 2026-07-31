@@ -77,6 +77,8 @@ namespace Sim
 			size_ = 0;
 		}
 
+		void Swap(DeviceBuffer& other) noexcept { Swap_(other); }
+
 	private: // --------------------------------------------------------------------------------------
 
 		void Swap_(DeviceBuffer& o) noexcept

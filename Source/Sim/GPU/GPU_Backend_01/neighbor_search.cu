@@ -319,11 +319,20 @@ namespace
 			thrust::device_pointer_cast(d_src.Data()),
 			thrust::device_pointer_cast(d_tmp.Data()));
 
-		thrust::copy(
-			thrust::cuda::par.on(stream),
-			thrust::device_pointer_cast(d_tmp.Data()),
-			thrust::device_pointer_cast(d_tmp.Data() + N),
-			thrust::device_pointer_cast(d_src.Data()));
+		// equal-sized buffers exchange their storage instead of copying the gathered data back
+		// (the re-order scratch is sized for the largest particle class, so smaller classes copy)
+		if (d_src.Size() == d_tmp.Size())
+		{
+			d_src.Swap(d_tmp);
+		}
+		else
+		{
+			thrust::copy(
+				thrust::cuda::par.on(stream),
+				thrust::device_pointer_cast(d_tmp.Data()),
+				thrust::device_pointer_cast(d_tmp.Data() + N),
+				thrust::device_pointer_cast(d_src.Data()));
+		}
 	}
 
 } // namespace anonymous
