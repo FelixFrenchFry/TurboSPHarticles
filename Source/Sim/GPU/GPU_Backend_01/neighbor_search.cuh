@@ -69,6 +69,8 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
+		void DataReOrder_SolverStep(const SimParams& params) override;
+
 		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
 	private: // ------------------------------------------------------------------------------------
@@ -111,6 +113,7 @@ namespace Sim
 
 		// helpers
 		void EnsureStorageAllocation();
+		void ReOrderParticleData(const SimParams& params, bool permuteSolverFields);
 		void BuildCompactCellList(
 			DeviceBuffer<uint64_t>& d_uniqueCellId,
 			DeviceBuffer<uint32_t>& d_cellStartIdx,

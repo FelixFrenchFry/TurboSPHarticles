@@ -956,6 +956,18 @@ void NS_CellLinkedList_Compact_GPU01::Query_Fill(const SimParams& params)
 
 void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 {
+	ReOrderParticleData(params, true);
+}
+
+void NS_CellLinkedList_Compact_GPU01::DataReOrder_SolverStep(const SimParams& params)
+{
+	ReOrderParticleData(params, false);
+}
+
+void NS_CellLinkedList_Compact_GPU01::ReOrderParticleData(
+	const SimParams& params,
+	const bool permuteSolverFields)
+{
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
 	const uint32_t N_MAX = std::max(N_F, N_B);
@@ -1020,8 +1032,12 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 			keysB, keysB + N_B, valsB);
 	}
 
-	// density array as temp scratch storage (only needed after the particle arrays are re-ordered)
-	DeviceBuffer<float>& d_reorderScratch = be_.d_densityF_;
+	// density array as temp scratch storage (only needed after the particle arrays are re-ordered),
+	// unless it is permuted itself below and needs a scratch buffer of its own
+	DeviceBuffer<float> d_solverFieldScratch;
+	if (permuteSolverFields) { d_solverFieldScratch.Resize(N_MAX); }
+	DeviceBuffer<float>& d_reorderScratch =
+		permuteSolverFields ? d_solverFieldScratch : be_.d_densityF_;
 
 	// re-order fluid SoA arrays according to sorted fluid indices
 	if (N_F > 0)
@@ -1037,9 +1053,9 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelF_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelF_, d_reorderScratch, be_.stream_);
 
-		// remaining particle arrays do not need to be re-ordered, since they are re-initialized completely
-		// (d_xyzVelPredF_, d_xyzAccPressF_, d_sourceTermF_, d_diagElemF_, d_pressureF_, d_densityF_)
-		if (false) // TODO: execute only if no full sim step is performed, e.g. neighbor search 0 before sim run?
+		// the remaining fluid particle fields only need to be permuted after backend-only neighbor searches,
+		// because a following full solver step re-initializes them (TODO: update if solver step behavior changes)
+		if (permuteSolverFields)
 		{
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xAccPressF_, d_reorderScratch, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, d_reorderScratch, be_.stream_);
@@ -1051,6 +1067,7 @@ void NS_CellLinkedList_Compact_GPU01::DataReOrder(const SimParams& params)
 
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, d_reorderScratch, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, d_reorderScratch, be_.stream_);
+			// without a warm start, pressure is re-initialized by the source-term kernel
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, d_reorderScratch, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, d_reorderScratch, be_.stream_);
 		}
