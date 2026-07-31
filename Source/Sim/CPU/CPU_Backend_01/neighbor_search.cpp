@@ -1696,11 +1696,12 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 }
 
 bool NS_CellLinkedList_Compact_CPU01::TryGetLastParticleReOrder(
-	std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-	std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+	std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+	std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
 {
 	if (!cellIdsMatchCurrentParticleOrder_) { return false; }
 
+	// the permutations stay until the next re-order rebuilds them, so a view is enough
 	oldFluidLocalIdx_FromNewLocalIdx = particleOrderF_;
 	oldBoundaryLocalIdx_FromNewLocalIdx = particleOrderB_;
 	return true;

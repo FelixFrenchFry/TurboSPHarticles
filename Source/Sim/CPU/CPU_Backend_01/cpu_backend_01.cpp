@@ -7,6 +7,7 @@
 #include <glm/vec3.hpp>
 #include <limits>
 #include <numbers>
+#include <span>
 #include <stdexcept>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
@@ -1465,8 +1466,8 @@ void SimBackend_CPU01::ExecuteNeighborSearch(const SimParams& params, const bool
 }
 
 bool SimBackend_CPU01::TryGetLastParticleReOrder(
-	std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-	std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+	std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+	std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
 {
 	if (!neighborSearch_) { return false; }
 
@@ -1561,8 +1562,8 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
 	if (!useActiveFluidParticleLocalIdxs_) { return; }
 	if (!neighborSearch_) { return; }
 
-	std::vector<uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
-	std::vector<uint32_t> oldBoundaryLocalIdx_FromNewLocalIdx;
+	std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
+	std::span<const uint32_t> oldBoundaryLocalIdx_FromNewLocalIdx;
 	if (!neighborSearch_->TryGetLastParticleReOrder(
 		oldFluidLocalIdx_FromNewLocalIdx,
 		oldBoundaryLocalIdx_FromNewLocalIdx))

@@ -5,6 +5,7 @@
 // external
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -112,7 +113,7 @@ namespace Dist
 	// the backend changes local particle order
 	bool ApplyLocalParticleReOrder(
 		DistParticleState& particleState,
-		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+		std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
 		uint32_t N_global,
 		ParticleReOrderWorkBuffers* workBuffers = nullptr);
 

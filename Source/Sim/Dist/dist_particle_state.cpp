@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <span>
 #include <utility>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -283,7 +284,7 @@ namespace
 
 	#if defined(_DEBUG)
 	bool LocalIdxReOrderCoversRange(
-		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+		const std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
 		const uint32_t N_local)
 	{
 		if (oldLocalIdx_FromNewLocalIdx.size() != N_local)
@@ -1009,7 +1010,7 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 
 bool Dist::ApplyLocalParticleReOrder(
 	DistParticleState& particleState,
-	const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+	const std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
 	const uint32_t N_global,
 	ParticleReOrderWorkBuffers* workBuffers)
 {

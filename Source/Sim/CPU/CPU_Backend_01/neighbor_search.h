@@ -6,6 +6,7 @@
 #include <boost/container/small_vector.hpp>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <tbb/enumerable_thread_specific.h>
 #include <vector>
 
@@ -79,8 +80,8 @@ namespace Sim
 		void DataReOrder_SolverStep(const SimParams& params) override;
 
 		bool TryGetLastParticleReOrder(
-			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
 
 		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 

@@ -5,6 +5,7 @@
 // external
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
 
 // internal
@@ -147,10 +148,11 @@ namespace Sim
 		// executes only the neighbor search (construction and query of the data NS structure)
 		virtual void ExecuteNeighborSearch(const SimParams& params, bool bench = false) = 0;
 
-		// provides the latest local re-order permutation if the backend exposes it
+		// provides views onto the latest local re-order permutation, if neighbor search exposes it
+		// (non-owning, valid until the next re-order or construction)
 		virtual bool TryGetLastParticleReOrder(
-			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
 		{
 			(void)oldFluidLocalIdx_FromNewLocalIdx;
 			(void)oldBoundaryLocalIdx_FromNewLocalIdx;
@@ -233,14 +235,15 @@ namespace Sim
 		virtual void DataReOrder(const SimParams& params) = 0;
 
 		// re-orders particle fields ahead of a full solver step, which re-initializes some of them,
-		// so permutations of those fields are skipped
+		// so permutations of those fields are skipped (TODO: update if solver step behavior changes)
 		// (currently omitted are velPred, accPress, sourceTerm, diagElem, pressure, and density)
 		virtual void DataReOrder_SolverStep(const SimParams& params) { DataReOrder(params); }
 
-		// provides the latest local re-order permutation if this neighbor search exposes it
+		// provides views onto the latest local re-order permutation, if neighbor search exposes it
+		// (non-owning, valid until the next re-order or construction)
 		virtual bool TryGetLastParticleReOrder(
-			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
+			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
 		{
 			(void)oldFluidLocalIdx_FromNewLocalIdx;
 			(void)oldBoundaryLocalIdx_FromNewLocalIdx;

@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
+#include <span>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdexcept>
@@ -2228,8 +2229,8 @@ bool DistSimulationMgr::ApplyLastBackendParticleReOrder()
 {
 	if (!simBackend_) { return false; }
 
-	std::vector<uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
-	std::vector<uint32_t> oldBoundaryLocalIdx_FromNewLocalIdx;
+	std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
+	std::span<const uint32_t> oldBoundaryLocalIdx_FromNewLocalIdx;
 
 	const bool hasParticleReOrder =
 		simBackend_->TryGetLastParticleReOrder(

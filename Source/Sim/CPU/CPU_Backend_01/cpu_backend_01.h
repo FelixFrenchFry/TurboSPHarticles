@@ -4,6 +4,7 @@
 
 // external
 #include <cstdint>
+#include <span>
 #include <vector>
 #include <tbb/partitioner.h>
 
@@ -80,8 +81,8 @@ namespace Sim
 		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;
 
 		bool TryGetLastParticleReOrder(
-			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
+			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
 
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
