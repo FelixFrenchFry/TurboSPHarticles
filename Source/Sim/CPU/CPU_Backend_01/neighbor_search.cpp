@@ -105,6 +105,20 @@ namespace
 		return mask;
 	}
 
+	// drops the duplicates that overlapping query stencils leave behind
+	// (distinct cells own distinct particle ranges, begin index identifies a range)
+	template<typename TCellRanges>
+	void DropDuplicateCellRanges(TCellRanges& ranges)
+	{
+		std::sort(ranges.begin(), ranges.end(),
+			[](const auto& a, const auto& b) { return a.begin < b.begin; });
+
+		ranges.erase(
+			std::unique(ranges.begin(), ranges.end(),
+				[](const auto& a, const auto& b) { return a.begin == b.begin; }),
+			ranges.end());
+	}
+
 	struct SceneAABB
 	{
 		float minX = std::numeric_limits<float>::max();
@@ -976,6 +990,64 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 	}
 }
 
+void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
+	const int cxBegin, const int cxEnd,
+	const int cyBegin, const int cyEnd,
+	const int czBegin, const int czEnd,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
+	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const
+{
+	// direct local-frame lookup for the compact-cell index of every queried cell
+	// (every cell coordinate is visited once, so the appended ranges are distinct)
+	for (int oz = czBegin; oz <= czEnd; oz++)
+	{
+		for (int oy = cyBegin; oy <= cyEnd; oy++)
+		{
+			for (int ox = cxBegin; ox <= cxEnd; ox++)
+			{
+				const uint64_t tableIdx = MapToDenseCellIdx(ox, oy, oz);
+
+				// fluid neighbors
+				const uint32_t cF_nbr = cellTableF_[tableIdx];
+				if (cF_nbr != EMPTY_32)
+				{
+					const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
+					const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
+					if (sF_nbr < eF_nbr)
+					{
+						fluidRanges.push_back(ActiveCellRange{ sF_nbr, eF_nbr });
+					}
+				}
+
+				// boundary neighbors
+				const uint32_t cB_nbr = cellTableB_[tableIdx];
+				if (cB_nbr != EMPTY_32)
+				{
+					const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
+					const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
+					if (sB_nbr < eB_nbr)
+					{
+						boundaryRanges.push_back(ActiveCellRange{ sB_nbr, eB_nbr });
+					}
+				}
+
+				// rigid neighbors
+				const uint32_t cR_nbr = cellTableR_[tableIdx];
+				if (cR_nbr != EMPTY_32)
+				{
+					const uint32_t sR_nbr = cellStartIdxR_[cR_nbr];
+					const uint32_t eR_nbr = cellStartIdxR_[cR_nbr + 1];
+					if (sR_nbr < eR_nbr)
+					{
+						rigidRanges.push_back(ActiveCellRange{ sR_nbr, eR_nbr });
+					}
+				}
+			}
+		}
+	}
+}
+
 void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
 	const int cx,
 	const int cy,
@@ -986,68 +1058,11 @@ void NS_CellLinkedList_Compact_CPU01::GatherCellQueryRanges(
 {
 	const int cellQueryReach = static_cast<int>(cellQueryReach_);
 
-	const auto appendUnique = [](auto& ranges, const ActiveCellRange range)
-		{
-			for (const ActiveCellRange& existing : ranges)
-			{
-				if (existing.begin == range.begin && existing.end == range.end)
-				{
-					return;
-				}
-			}
-
-			ranges.push_back(range);
-		};
-
-	// direct local-frame lookup for the compact-cell index of every queried cell
-	for (int rz = -cellQueryReach; rz <= cellQueryReach; rz++)
-	{
-		const int oz = cz + rz; // target cell coordinate in z-direction
-
-		for (int ry = -cellQueryReach; ry <= cellQueryReach; ry++)
-		{
-			const int oy = cy + ry; // target cell coordinate in y-direction
-
-			for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
-			{
-				const int ox = cx + rx; // target cell coordinate in x-direction
-				const uint64_t tableIdx = MapToDenseCellIdx(ox, oy, oz);
-
-				const uint32_t cF_nbr = cellTableF_[tableIdx];
-				if (cF_nbr != EMPTY_32)
-				{
-					const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
-					const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
-					if (sF_nbr < eF_nbr)
-					{
-						appendUnique(fluidRanges, ActiveCellRange{ sF_nbr, eF_nbr });
-					}
-				}
-
-				const uint32_t cB_nbr = cellTableB_[tableIdx];
-				if (cB_nbr != EMPTY_32)
-				{
-					const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
-					const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
-					if (sB_nbr < eB_nbr)
-					{
-						appendUnique(boundaryRanges, ActiveCellRange{ sB_nbr, eB_nbr });
-					}
-				}
-
-				const uint32_t cR_nbr = cellTableR_[tableIdx];
-				if (cR_nbr != EMPTY_32)
-				{
-					const uint32_t sR_nbr = cellStartIdxR_[cR_nbr];
-					const uint32_t eR_nbr = cellStartIdxR_[cR_nbr + 1];
-					if (sR_nbr < eR_nbr)
-					{
-						appendUnique(rigidRanges, ActiveCellRange{ sR_nbr, eR_nbr });
-					}
-				}
-			}
-		}
-	}
+	GatherBoxQueryRanges(
+		cx - cellQueryReach, cx + cellQueryReach,
+		cy - cellQueryReach, cy + cellQueryReach,
+		cz - cellQueryReach, cz + cellQueryReach,
+		fluidRanges, boundaryRanges, rigidRanges);
 }
 
 void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
@@ -1061,32 +1076,24 @@ void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
 	boundaryRanges.clear();
 	rigidRanges.clear();
 
+	// collect the distinct cells the chunk's particles sit in
 	int cellX[CPU::N_SIMD_WIDTH]{};
 	int cellY[CPU::N_SIMD_WIDTH]{};
 	int cellZ[CPU::N_SIMD_WIDTH]{};
+	uint32_t N_cells = 0;
 
 	for (uint32_t i = begin; i < end; i++)
 	{
-		const uint32_t lane = i - begin;
-		cellX[lane] = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-		cellY[lane] = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-		cellZ[lane] = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
-	}
-
-	for (uint32_t i = begin; i < end; i++)
-	{
-		const uint32_t lane = i - begin;
-		const int cx = cellX[lane];
-		const int cy = cellY[lane];
-		const int cz = cellZ[lane];
+		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
 		bool alreadyVisited = false;
-		for (uint32_t j = begin; j < i; j++)
+		for (uint32_t cell = 0; cell < N_cells; cell++)
 		{
-			const uint32_t prevLane = j - begin;
-			if (cx == cellX[prevLane] &&
-				cy == cellY[prevLane] &&
-				cz == cellZ[prevLane])
+			if (cx == cellX[cell] &&
+				cy == cellY[cell] &&
+				cz == cellZ[cell])
 			{
 				alreadyVisited = true;
 				break;
@@ -1095,8 +1102,57 @@ void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
 
 		if (alreadyVisited) { continue; }
 
-		GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+		cellX[N_cells] = cx;
+		cellY[N_cells] = cy;
+		cellZ[N_cells] = cz;
+		N_cells++;
 	}
+
+	if (N_cells == 0) { return; }
+
+	// cell-coordinate box enclosing all of them
+	int cxMin = cellX[0]; int cxMax = cellX[0];
+	int cyMin = cellY[0]; int cyMax = cellY[0];
+	int czMin = cellZ[0]; int czMax = cellZ[0];
+
+	for (uint32_t cell = 1; cell < N_cells; cell++)
+	{
+		cxMin = std::min(cxMin, cellX[cell]); cxMax = std::max(cxMax, cellX[cell]);
+		cyMin = std::min(cyMin, cellY[cell]); cyMax = std::max(cyMax, cellY[cell]);
+		czMin = std::min(czMin, cellZ[cell]); czMax = std::max(czMax, cellZ[cell]);
+	}
+
+	const int cellQueryReach = static_cast<int>(cellQueryReach_);
+	const uint64_t N_stencilSpan = 2ull * cellQueryReach_ + 1ull;
+	const uint64_t N_stencilCells = N_stencilSpan * N_stencilSpan * N_stencilSpan;
+	const uint64_t N_boxCells =
+		(static_cast<uint64_t>(cxMax - cxMin) + N_stencilSpan) *
+		(static_cast<uint64_t>(cyMax - cyMin) + N_stencilSpan) *
+		(static_cast<uint64_t>(czMax - czMin) + N_stencilSpan);
+
+	// one box sweep visits every cell once and needs no duplicate filtering, but Z-ordered cell IDs
+	// can spread a chunk out, so only use if it is smaller than the per-cell stencils it replaces
+	if (N_boxCells <= static_cast<uint64_t>(N_cells) * N_stencilCells)
+	{
+		GatherBoxQueryRanges(
+			cxMin - cellQueryReach, cxMax + cellQueryReach,
+			cyMin - cellQueryReach, cyMax + cellQueryReach,
+			czMin - cellQueryReach, czMax + cellQueryReach,
+			fluidRanges, boundaryRanges, rigidRanges);
+		return;
+	}
+
+	// spread-out cells keep their own stencils, whose overlaps have to be dropped again
+	for (uint32_t cell = 0; cell < N_cells; cell++)
+	{
+		GatherCellQueryRanges(
+			cellX[cell], cellY[cell], cellZ[cell],
+			fluidRanges, boundaryRanges, rigidRanges);
+	}
+
+	DropDuplicateCellRanges(fluidRanges);
+	DropDuplicateCellRanges(boundaryRanges);
+	DropDuplicateCellRanges(rigidRanges);
 }
 
 void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)

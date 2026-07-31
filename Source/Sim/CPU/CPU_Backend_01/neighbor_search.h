@@ -154,6 +154,14 @@ namespace Sim
 		void UpdateCellFrame();
 		void ReOrderParticleData(const SimParams& params, bool permuteSolverFields);
 		void BuildDenseCellTables();
+
+		// appends the non-empty cell ranges of an inclusive cell-coordinate box,
+		// visiting every cell once to only require dropping duplicates when boxes overlap
+		void GatherBoxQueryRanges(
+			int cxBegin, int cxEnd, int cyBegin, int cyEnd, int czBegin, int czEnd,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
+			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const;
 		void GatherCellQueryRanges(
 			int cx, int cy, int cz,
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
