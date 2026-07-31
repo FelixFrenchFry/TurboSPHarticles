@@ -127,18 +127,21 @@ namespace Sim
 		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
 		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the re-ordered particle arrays
 		std::vector<uint64_t> cellIdF_; // per-particle cell ID array
+		std::vector<uint64_t> cellIdScratchF_; // resident permutation scratch for the cell ID array
 		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
 		std::vector<uint32_t> cellTableF_; // dense local-frame lookup table for compact cell indices
 
 		std::vector<uint64_t> uniqueCellIdB_;
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint64_t> cellIdB_;
+		std::vector<uint64_t> cellIdScratchB_;
 		std::vector<uint32_t> particleOrderB_;
 		std::vector<uint32_t> cellTableB_;
 
 		std::vector<uint64_t> uniqueCellIdR_;
 		std::vector<uint32_t> cellStartIdxR_;
 		std::vector<uint64_t> cellIdR_;
+		std::vector<uint64_t> cellIdScratchR_;
 		std::vector<uint32_t> particleOrderR_;
 		std::vector<uint32_t> cellTableR_;
 

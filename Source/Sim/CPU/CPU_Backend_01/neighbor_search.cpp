@@ -749,18 +749,21 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	uniqueCellIdF_.clear();
 	cellStartIdxF_.clear();
 	cellIdF_.clear();
+	cellIdScratchF_.clear();
 	particleOrderF_.clear();
 	cellTableF_.clear();
 
 	uniqueCellIdB_.clear();
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
+	cellIdScratchB_.clear();
 	particleOrderB_.clear();
 	cellTableB_.clear();
 
 	uniqueCellIdR_.clear();
 	cellStartIdxR_.clear();
 	cellIdR_.clear();
+	cellIdScratchR_.clear();
 	particleOrderR_.clear();
 	cellTableR_.clear();
 
@@ -909,8 +912,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 				if (cellIdR_[a] != cellIdR_[b]) { return cellIdR_[a] < cellIdR_[b]; }
 				return a < b;
 			});
-		std::vector<uint64_t> cellIdScratchR;
-		ApplyPermutation(particleOrderR_, cellIdR_, cellIdScratchR);
+		ApplyPermutation(particleOrderR_, cellIdR_, cellIdScratchR_);
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
@@ -1459,8 +1461,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 							// padding lanes are already cleared, so only the matching lanes are visited
 							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
 							{
-								const uint32_t lane =
-									static_cast<uint32_t>(std::countr_zero(hitLanes));
+								const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
 								if (writtenFF[lane] >= chunkFF.pitch) [[unlikely]]
 								{
 									throw std::runtime_error(
@@ -1492,8 +1493,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 							// padding lanes are already cleared, so only the matching lanes are visited
 							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
 							{
-								const uint32_t lane =
-									static_cast<uint32_t>(std::countr_zero(hitLanes));
+								const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
 								if (writtenFB[lane] >= chunkFB.pitch) [[unlikely]]
 								{
 									throw std::runtime_error(
@@ -1525,8 +1525,7 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 							// padding lanes are already cleared, so only the matching lanes are visited
 							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
 							{
-								const uint32_t lane =
-									static_cast<uint32_t>(std::countr_zero(hitLanes));
+								const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
 								chunkFR.StoreNeighbor(lane, writtenFR[lane], l);
 								writtenFR[lane]++;
 							}
@@ -1645,8 +1644,7 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
 	cellSize_ = cellSize;
-	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f)
-		? 0.0f : (1.0f / cellSize);
+	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f) ? 0.0f : (1.0f / cellSize);
 	cellQueryReach_ = cellQueryReach;
 
 	if (cellSizeChanged || cellQueryReachChanged) { cellFrameValid_ = false; }
@@ -1682,8 +1680,7 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 
 		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 		// so Construct() can reuse them instead of re-computing them right away
-		std::vector<uint64_t> cellIdScratchF;
-		ApplyPermutation(particleOrderF_, cellIdF_, cellIdScratchF);
+		ApplyPermutation(particleOrderF_, cellIdF_, cellIdScratchF_);
 		ApplyPermutation(particleOrderF_, be_.idF_, be_.workBufferIdF_);
 		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
@@ -1743,8 +1740,7 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 
 		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 		// so Construct() can reuse them instead of re-computing them right away
-		std::vector<uint64_t> cellIdScratchB;
-		ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB);
+		ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB_);
 		ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
 		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
 		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
@@ -1780,6 +1776,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdScratchF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellTableF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellRunStartCounts_ByChunk_));
@@ -1788,6 +1785,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdScratchB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellTableB_));
 
@@ -1795,6 +1793,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(uniqueCellIdR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellStartIdxR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdR_));
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdScratchR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(particleOrderR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellTableR_));
 

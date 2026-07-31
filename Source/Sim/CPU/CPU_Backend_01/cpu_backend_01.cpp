@@ -1576,17 +1576,31 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
 		throw std::runtime_error("Invalid CPU01 fluid particle re-order size.");
 	}
 
-	std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx(N_F_);
+	#if defined(_DEBUG)
+	// exhaustively validate that the re-order contains no duplicates, so the inversion
+	// below can write every old local index without claiming it first
 	std::vector<uint8_t> oldFluidLocalIdxUsed(N_F_, 0);
-	for (uint32_t newLocalIdx = 0; newLocalIdx < N_F_; newLocalIdx++)
+	for (const uint32_t oldLocalIdx : oldFluidLocalIdx_FromNewLocalIdx)
 	{
-		const uint32_t oldLocalIdx = oldFluidLocalIdx_FromNewLocalIdx[newLocalIdx];
 		if (oldLocalIdx >= N_F_ || oldFluidLocalIdxUsed[oldLocalIdx] != 0)
 		{
 			throw std::runtime_error("Invalid CPU01 fluid particle re-order index.");
 		}
 
 		oldFluidLocalIdxUsed[oldLocalIdx] = 1;
+	}
+	#endif
+
+	// invert the re-order, so remapping the active indices below is one lookup per particle
+	std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx(N_F_);
+	for (uint32_t newLocalIdx = 0; newLocalIdx < N_F_; newLocalIdx++)
+	{
+		const uint32_t oldLocalIdx = oldFluidLocalIdx_FromNewLocalIdx[newLocalIdx];
+		if (oldLocalIdx >= N_F_)
+		{
+			throw std::runtime_error("Invalid CPU01 fluid particle re-order index.");
+		}
+
 		newFluidLocalIdx_FromOldLocalIdx[oldLocalIdx] = newLocalIdx;
 	}
 
