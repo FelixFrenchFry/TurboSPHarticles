@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <glm/exponential.hpp>
 #include <glm/vec3.hpp>
@@ -727,7 +728,7 @@ void SimBackend_CPU01::PackExportSnapshot(
 	}
 
 	// classify fluid particles wanted for export
-	FillFluidParticleNearSurfaceFlags(expNearSurfaceFlagsScratch_);
+	FillFluidParticleNearSurfaceFlags(simParams, expNearSurfaceFlagsScratch_);
 	ClassifyExportSurfaceParticles(expNearSurfaceFlagsScratch_);
 	const uint32_t N_surface = static_cast<uint32_t>(
 		std::ranges::count(expSurfaceFlagsScratch_, uint8_t{ 1 }));
@@ -775,9 +776,12 @@ void SimBackend_CPU01::PackExportSnapshot(
 }
 
 bool SimBackend_CPU01::FillFluidParticleNearSurfaceFlags(
+	const SimParams& simParams,
 	std::vector<uint8_t>& nearSurfaceFlags) const
 {
 	if (!neighborList_) { return false; }
+
+	const uint32_t nbrCountThreshold = simParams.surfaceNbrCountThreshold;
 
 	nearSurfaceFlags.resize(N_F_);
 	tbb::parallel_for(
@@ -786,12 +790,12 @@ bool SimBackend_CPU01::FillFluidParticleNearSurfaceFlags(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// particle considered near the surface
-				// if touching boundary OR low fluid neighbor count
 				nearSurfaceFlags[i] = static_cast<uint8_t>(
-					(neighborList_->CountFB(i) > 0 ||
-					 neighborList_->CountFR(i) > 0) ||
-					 neighborList_->CountFF(i) < 24);
+					IsNearSurfaceFluidParticle(
+						neighborList_->CountFF(i),
+						neighborList_->CountFB(i),
+						neighborList_->CountFR(i),
+						nbrCountThreshold));
 			}
 		},
 		tbb::auto_partitioner{});
@@ -809,38 +813,35 @@ void SimBackend_CPU01::ClassifyExportSurfaceParticles(
 	}
 
 	auto& surfaceFlags = expSurfaceFlagsScratch_;
-	surfaceFlags.resize(N_F_);
+	surfaceFlags.assign(N_F_, 0);
 
+	// only near-surface particles are traversed, each marking itself and its fluid neighbors
+	// (equivalent to checking every particle for near-surface neighbors, since FF is symmetric)
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
+			// neighbors of different near-surface particles overlap, so the marks are
+			// written as relaxed atomic stores (plain byte stores, no synchronization)
+			const auto Mark = [&](const uint32_t i) noexcept
+			{
+				std::atomic_ref<uint8_t>{ surfaceFlags[i] }.store(1, std::memory_order_relaxed);
+			};
+
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// particle considered part of the surface
-				// if touching boundary OR low fluid neighbor count
-				bool surface = (neighborList_->CountFB(i) > 0 ||
-							   neighborList_->CountFR(i) > 0) ||
-							   neighborList_->CountFF(i) < 28;
+				if (nearSurfaceFlags[i] == 0) { continue; }
 
-				// if not surface itself, check its fluid neighbors
-				if (!surface)
+				Mark(i);
+
+				const NeighborSpan nbrListFF = neighborList_->FF(i);
+				const uint32_t* nbrFF = nbrListFF.data;
+				const uint32_t N_nbrsFF = nbrListFF.N;
+
+				for (uint32_t k = 0; k < N_nbrsFF; k++)
 				{
-					const NeighborSpan nbrListFF = neighborList_->FF(i);
-					const uint32_t* nbrFF = nbrListFF.data;
-					const uint32_t N_nbrsFF = nbrListFF.N;
-
-					for (uint32_t k = 0; k < N_nbrsFF; k++)
-					{
-						if (nearSurfaceFlags[nbrFF[k]] != 0)
-						{
-							surface = true;
-							break;
-						}
-					}
+					Mark(nbrFF[k]);
 				}
-
-				surfaceFlags[i] = static_cast<uint8_t>(surface);
 			}
 		},
 		tbb::auto_partitioner{});

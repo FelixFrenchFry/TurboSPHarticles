@@ -648,6 +648,29 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		EndWrite();
 	}
 
+	// --- [ export surface classification ] ---------------------------------------------------------
+
+	{
+		float surfaceNbrCountRatio = params_.surfaceNbrCountRatio;
+
+		if (auto it = j.find("surfaceNbrCountRatio"); it != j.end())
+		{
+			surfaceNbrCountRatio = it->get<float>();
+		}
+
+		if (!SurfaceNbrCountRatioValid_(surfaceNbrCountRatio))
+		{
+			SPDLOG_WARN("Invalid surface neighbor count ratio in JSON.");
+			return false;
+		}
+
+		BeginWrite();
+		params_.surfaceNbrCountRatio = surfaceNbrCountRatio;
+
+		UpdateSurfaceNbrCountThreshold_();
+		EndWrite();
+	}
+
 	if (!AssertParamDerivationCorrectness())
 	{
 		SPDLOG_ERROR("Derived simulation parameters are invalid.");
@@ -1327,6 +1350,35 @@ void SimParamsMgr::Set_SurfaceSamplingDistanceRatios(
 	EndWrite();
 }
 
+void SimParamsMgr::Set_SurfaceNbrCountRatio(
+	const float surfaceNbrCountRatio, const bool verbose)
+{
+	if (!SurfaceNbrCountRatioValid_(surfaceNbrCountRatio))
+	{
+		SPDLOG_ERROR(
+			"Parameter change cancelled: Surface neighbor count ratio must be finite, "
+			"> 0 and <= {}.", surfaceNbrCountRatioMax_);
+		return;
+	}
+
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(surfaceNbrCountRatio, params_.surfaceNbrCountRatio, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'surfaceNbrCountRatio' from {} to {}",
+			params_.surfaceNbrCountRatio, surfaceNbrCountRatio);
+	}
+
+	// apply changes
+	BeginWrite();
+	params_.surfaceNbrCountRatio = surfaceNbrCountRatio;
+	UpdateSurfaceNbrCountThreshold_();
+	EndWrite();
+}
+
 void SimParamsMgr::UpdateNeighborCountHeuristics_()
 {
 	params_.expctdNbrCountSoftMax_FF = HeuristicExpectedNeighborCount_SoftMax(
@@ -1341,6 +1393,9 @@ void SimParamsMgr::UpdateNeighborCountHeuristics_()
 		params_.kernelSuppRatio, Base::ParticleType::Fluid);
 	params_.expctdAvgNbrCountHardMax_FB = HeuristicExpectedAvgNeighborCount_HardMax(
 		params_.kernelSuppRatio, Base::ParticleType::Boundary);
+
+	// the surface threshold is a fraction of the expected fluid neighbor count
+	UpdateSurfaceNbrCountThreshold_();
 }
 
 void SimParamsMgr::UpdateSurfaceSamplingDistances_()
@@ -1351,6 +1406,12 @@ void SimParamsMgr::UpdateSurfaceSamplingDistances_()
 		params_.surfaceSamplingMaxDistanceRatio * params_.particleSizeB;
 	params_.surfaceSamplingCoverageProbeSpacing =
 		params_.surfaceSamplingCoverageProbeSpacingRatio * params_.particleSizeB;
+}
+
+void SimParamsMgr::UpdateSurfaceNbrCountThreshold_()
+{
+	params_.surfaceNbrCountThreshold = HeuristicSurfaceNbrCountThreshold(
+		params_.surfaceNbrCountRatio, params_.expctdAvgNbrCountHardMax_FF);
 }
 
 bool SimParamsMgr::SurfaceSamplingDistanceRatiosValid_(
@@ -1381,6 +1442,17 @@ bool SimParamsMgr::SurfaceSamplingDistanceRatiosValid_(
 	const float distanceEpsilon = 32.0f * std::numeric_limits<float>::epsilon() *
 		std::max(maxDistance, particleSizeF);
 	return maxDistance <= particleSizeF + distanceEpsilon;
+}
+
+bool SimParamsMgr::SurfaceNbrCountRatioValid_(const float surfaceNbrCountRatio)
+{
+	if (!std::isfinite(surfaceNbrCountRatio) || surfaceNbrCountRatio <= 0.0f)
+	{
+		return false;
+	}
+
+	const float ratioEpsilon = 32.0f * std::numeric_limits<float>::epsilon() * surfaceNbrCountRatioMax_;
+	return surfaceNbrCountRatio <= surfaceNbrCountRatioMax_ + ratioEpsilon;
 }
 
 bool SimParamsMgr::AssertParamDerivationCorrectness() const
@@ -1470,6 +1542,10 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		return par.surfaceSamplingMaxTrialsPerCell > 0;
 	});
+	ok &= Check("surfaceNbrCountThreshold == 0", true, [&]()
+	{
+		return par.surfaceNbrCountThreshold > 0;
+	});
 
 	// relationships
 	ok &= Check("particleSizeInvF != 1 / particleSizeF", true, [&]()
@@ -1520,6 +1596,15 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 		const float expect =
 			par.surfaceSamplingCoverageProbeSpacingRatio * par.particleSizeB;
 		return Base::ApproxEqu(par.surfaceSamplingCoverageProbeSpacing, expect);
+	});
+	ok &= Check("surfaceNbrCountRatio invalid", true, [&]()
+	{
+		return SurfaceNbrCountRatioValid_(par.surfaceNbrCountRatio);
+	});
+	ok &= Check("surfaceNbrCountThreshold derivation mismatch", true, [&]()
+	{
+		return par.surfaceNbrCountThreshold == HeuristicSurfaceNbrCountThreshold(
+			par.surfaceNbrCountRatio, par.expctdAvgNbrCountHardMax_FF);
 	});
 	ok &= Check("kernelSuppRatio != cubic spline support ratio", true, [&]()
 	{
@@ -1625,6 +1710,17 @@ uint32_t SimParamsMgr::HeuristicExpectedAvgNeighborCount_HardMax(
 
 	float heuristic = std::ceil(volume * occupancy * (1.0f + margin));
 	return static_cast<uint32_t>(heuristic);
+}
+
+uint32_t SimParamsMgr::HeuristicSurfaceNbrCountThreshold(
+	float surfaceNbrCountRatio, uint32_t expctdAvgNbrCountHardMax_FF) const
+{
+	// a fluid particle is near the surface once its kernel support is truncated far enough,
+	// so the threshold tracks the expected fluid neighbor count of a full support
+	float heuristic = std::round(
+		surfaceNbrCountRatio * static_cast<float>(expctdAvgNbrCountHardMax_FF));
+
+	return std::max(static_cast<uint32_t>(heuristic), 1u);
 }
 
 inline void SimParamsMgr::BeginWrite()

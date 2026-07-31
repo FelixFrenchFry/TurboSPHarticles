@@ -1445,7 +1445,8 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 	}
 
 	if (localOk &&
-		(!simBackend_->FillFluidParticleNearSurfaceFlags(localNearSurfaceFlagsScratch_) ||
+		(!simBackend_->FillFluidParticleNearSurfaceFlags(
+			simParams_, localNearSurfaceFlagsScratch_) ||
 		localNearSurfaceFlagsScratch_.size() !=
 			static_cast<uint64_t>(localSimState_.fluidParticles.N_)))
 	{

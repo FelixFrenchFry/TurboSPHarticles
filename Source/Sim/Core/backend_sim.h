@@ -62,6 +62,17 @@ namespace Sim
 		}
 	};
 
+	// shared export surface criterion, so every backend classifies fluid particles identically
+	inline bool IsNearSurfaceFluidParticle(
+		const uint32_t nbrCountFF,
+		const uint32_t nbrCountFB,
+		const uint32_t nbrCountFR,
+		const uint32_t nbrCountThreshold) noexcept
+	{
+		// surface particle IF touching boundary OR rigid body OR low fluid neighbor count
+		return nbrCountFB > 0 || nbrCountFR > 0 || nbrCountFF < nbrCountThreshold;
+	}
+
 	// optional backend capability for particle exchange between ranks for distributed execution
 	class I_DistributedParticleBackend
 	{
@@ -168,7 +179,12 @@ namespace Sim
 		}
 
 		// classifies fluid particles against the regular export near-surface threshold
-		virtual bool FillFluidParticleNearSurfaceFlags(std::vector<uint8_t>&) const { return false; }
+		virtual bool FillFluidParticleNearSurfaceFlags(
+			const SimParams&,
+			std::vector<uint8_t>&) const
+		{
+			return false;
+		}
 
 		// selects regular export surface particles using authoritative near-surface flags
 		virtual bool BuildExportFluidParticleLocalIdxs(

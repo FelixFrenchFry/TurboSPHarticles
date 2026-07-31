@@ -91,6 +91,7 @@ namespace Sim
 
 		// classifies local fluid particles against the export near-surface threshold
 		bool FillFluidParticleNearSurfaceFlags(
+			const SimParams& simParams,
 			std::vector<uint8_t>& nearSurfaceFlags) const override;
 
 		// selects local export surface particles using reconciled near-surface flags

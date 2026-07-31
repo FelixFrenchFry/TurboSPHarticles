@@ -135,6 +135,10 @@ namespace Sim
 		bool exportEnabled      = true;
 		std::string exportDir   = "A";
 		uint32_t exportInterval = 10;
+
+		// export surface classification
+		float surfaceNbrCountRatio = 0.67f; // near-surface neighborhood fill ratio
+		uint32_t surfaceNbrCountThreshold = 24; // fluid neighbor count derived from the ratio
 	};
 
 	class SimParamsMgr
@@ -176,6 +180,7 @@ namespace Sim
 			float maxDistanceRatio,
 			float coverageProbeSpacingRatio,
 			bool verbose = false);
+		void Set_SurfaceNbrCountRatio(float surfaceNbrCountRatio, bool verbose = false);
 
 		// helpers
 		bool AssertParamDerivationCorrectness() const;
@@ -185,20 +190,27 @@ namespace Sim
 			float kernelSuppRatio, Base::ParticleType type) const;
 		uint32_t HeuristicExpectedAvgNeighborCount_HardMax(
 			float kernelSuppRatio, Base::ParticleType type) const;
+		uint32_t HeuristicSurfaceNbrCountThreshold(
+			float surfaceNbrCountRatio, uint32_t expctdAvgNbrCountHardMax_FF) const;
 
 	private: // --------------------------------------------------------------------------------------
 
 		alignas(64) SimParams params_{}; // current active copy of visualization parameters
 		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
 
+		// keeps the dilated export surface selection from covering the whole fluid domain
+		static constexpr float surfaceNbrCountRatioMax_ = 0.85f;
+
 		void UpdateNeighborCountHeuristics_();
 		void UpdateSurfaceSamplingDistances_();
+		void UpdateSurfaceNbrCountThreshold_();
 		static bool SurfaceSamplingDistanceRatiosValid_(
 			float minDistanceRatio,
 			float maxDistanceRatio,
 			float coverageProbeSpacingRatio,
 			float particleSizeF,
 			float particleSizeB);
+		static bool SurfaceNbrCountRatioValid_(float surfaceNbrCountRatio);
 		inline void BeginWrite(); // mark beginning of write operation
 		inline void EndWrite(); // mark end of write operation
 	};

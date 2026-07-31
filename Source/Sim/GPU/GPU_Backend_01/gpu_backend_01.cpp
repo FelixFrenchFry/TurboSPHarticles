@@ -1,12 +1,13 @@
 // gpu_backend_01.cpp
 
 // external
+#include <algorithm>
+#include <atomic>
 #include <glm/vec3.hpp>
 #include <cmath>
 #include <numbers>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
 
 // internal
 #include "Source/Base/helpers.h"
@@ -364,10 +365,6 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 void SimBackend_GPU01::PackExportSnapshot(
 	Sync::ExportSnapshot& snap, const SimParams& simParams) const
 {
-	(void)simParams;
-
-	// TODO: only export surface particles?
-
 	snap.simStep = simStep_;
 	snap.simTime = simTime_;
 
@@ -487,51 +484,50 @@ void SimBackend_GPU01::PackExportSnapshot(
 	GPU::StreamSync(stream_);
 
 	// classify surface particles
-	auto& surfaceFlags = h_expSurfaceFlagsScratch_;
-	surfaceFlags.resize(N_F_);
+	const uint32_t nbrCountThreshold = simParams.surfaceNbrCountThreshold;
 
-	const uint32_t N_surface = tbb::parallel_reduce(
-		tbb::blocked_range<uint32_t>(0, N_F_), uint32_t{ 0 },
-		[&](const tbb::blocked_range<uint32_t>& r, uint32_t N_local)
+	auto& surfaceFlags = h_expSurfaceFlagsScratch_;
+	surfaceFlags.assign(N_F_, 0);
+
+	// only near-surface particles are traversed, each marking itself and its fluid neighbors
+	// (equivalent to checking every particle for near-surface neighbors, since FF is symmetric)
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_F_),
+		[&](const tbb::blocked_range<uint32_t>& r)
 		{
+			// neighbors of different near-surface particles overlap, so the marks are
+			// written as relaxed atomic stores (plain byte stores, no synchronization)
+			const auto Mark = [&](const uint32_t i) noexcept
+			{
+				std::atomic_ref<uint8_t>{ surfaceFlags[i] }.store(1, std::memory_order_relaxed);
+			};
+
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// particle considered part of the surface
-				// if touching boundary OR low fluid neighbor count
-				bool surface = h_nbrCountFB[i] > 0 || h_nbrCountFR[i] > 0 || h_nbrCountFF[i] < 28;
-
-				// if not surface itself, check its fluid neighbors
-				if (!surface)
+				if (!IsNearSurfaceFluidParticle(
+					h_nbrCountFF[i], h_nbrCountFB[i], h_nbrCountFR[i], nbrCountThreshold))
 				{
-					const uint32_t N_FF = h_nbrCountFF[i];
-
-					for (uint32_t k = 0; k < N_FF; k++)
-					{
-						const uint32_t j = ReadCompressedSell32Neighbor(
-							h_nbrChunkOffsetsFF, h_nbrChunkBaseIdxFF,
-							h_nbrChunkFormatFF,
-							h_nbrListDelta8FF, h_nbrListDelta16FF, h_nbrListAbs32FF,
-							i, k);
-
-						if (h_nbrCountFB[j] > 0 || h_nbrCountFR[j] > 0 || h_nbrCountFF[j] < 24)
-						{
-							surface = true;
-							break;
-						}
-					}
+					continue;
 				}
 
-				surfaceFlags[i] = static_cast<uint8_t>(surface);
-				if (surface) { N_local++; }
-			}
+				Mark(i);
 
-			return N_local;
+				const uint32_t N_FF = h_nbrCountFF[i];
+
+				for (uint32_t k = 0; k < N_FF; k++)
+				{
+					Mark(ReadCompressedSell32Neighbor(
+						h_nbrChunkOffsetsFF, h_nbrChunkBaseIdxFF,
+						h_nbrChunkFormatFF,
+						h_nbrListDelta8FF, h_nbrListDelta16FF, h_nbrListAbs32FF,
+						i, k));
+				}
+			}
 		},
-		[](uint32_t a, uint32_t b) -> uint32_t
-		{
-			return a + b;
-		}
-	);
+		tbb::auto_partitioner{});
+
+	const uint32_t N_surface = static_cast<uint32_t>(
+		std::ranges::count(surfaceFlags, uint8_t{ 1 }));
 
 	if (N_surface == 0) // no particles to export
 	{

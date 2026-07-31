@@ -192,6 +192,10 @@ namespace Sim
 			params.surfaceSamplingMaxTrialsPerCell);
 		printf("%-*s = %" PRIu64 "\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling seed", params.surfaceSamplingSeed);
+		printf("%-*s = [ %.3f / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"surface nbr [ratio/count]",
+			params.surfaceNbrCountRatio,
+			params.surfaceNbrCountThreshold);
 
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
 		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
