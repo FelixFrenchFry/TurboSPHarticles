@@ -120,6 +120,21 @@ namespace CPU
 		return MaskKLessThanCounts32xSIMD(k, LoadUInt32xSIMD(counts));
 	}
 
+	// return the lanes a partial chunk covers, so its padding lanes can be masked in registers
+	inline Mask32xSIMD ValidLaneMask32xSIMD(
+		const uint32_t begin,
+		const uint32_t end) noexcept
+	{
+		alignas(N_SIMD_ALIGNMENT) uint32_t lanes[N_SIMD_WIDTH]{};
+
+		for (uint32_t lane = 0; lane < N_SIMD_WIDTH; lane++)
+		{
+			lanes[lane] = lane;
+		}
+
+		return SelectMask32xSIMD(LoadUInt32xSIMD(lanes) < SetUInt32xSIMD(end - begin));
+	}
+
 	// select per lane between two float SIMD vectors
 	inline Float32xSIMD SelectFloat32xSIMD(
 		const Mask32xSIMD mask,
@@ -143,6 +158,16 @@ namespace CPU
 		const Mask32xSIMD mask) noexcept
 	{
 		return AndMaskedFloat32xSIMD(v, mask);
+	}
+
+	// add one to every uint32 lane selected by a float lane mask, keeping counters in registers
+	inline UInt32xSIMD AddMaskedOneUInt32xSIMD(
+		const UInt32xSIMD v,
+		const Mask32xSIMD mask) noexcept
+	{
+		const UIntMask32xSIMD maskU = xsimd::batch_bool_cast<uint32_t>(mask);
+
+		return v + xsimd::select(maskU, SetUInt32xSIMD(1u), SetUInt32xSIMD(0u));
 	}
 
 	// take the absolute value by clearing the sign bit
