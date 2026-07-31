@@ -500,16 +500,10 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::SetBulkFromParticleView(
 		GatherParticleField(particles_.xVel, src.xVel, localIdxs, blockRange);
 		GatherParticleField(particles_.yVel, src.yVel, localIdxs, blockRange);
 		GatherParticleField(particles_.zVel, src.zVel, localIdxs, blockRange);
-		GatherParticleField(particles_.xVelPred, src.xVelPred, localIdxs, blockRange);
-		GatherParticleField(particles_.yVelPred, src.yVelPred, localIdxs, blockRange);
-		GatherParticleField(particles_.zVelPred, src.zVelPred, localIdxs, blockRange);
-		GatherParticleField(particles_.xAccPress, src.xAccPress, localIdxs, blockRange);
-		GatherParticleField(particles_.yAccPress, src.yAccPress, localIdxs, blockRange);
-		GatherParticleField(particles_.zAccPress, src.zAccPress, localIdxs, blockRange);
-		GatherParticleField(particles_.sourceTerm, src.sourceTerm, localIdxs, blockRange);
-		GatherParticleField(particles_.diagElem, src.diagElem, localIdxs, blockRange);
-		GatherParticleField(particles_.pressure, src.pressure, localIdxs, blockRange);
-		GatherParticleField(particles_.density, src.density, localIdxs, blockRange);
+
+		// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+		// because the following solver step re-writes them before reading them
+		// TODO: keep it like this or copy them too, if solver step behavior changes?
 	});
 }
 
@@ -525,16 +519,10 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::CopyToLocalParticle(
 	dst.xVel[localIdx] = particles_.xVel[bufferIdx];
 	dst.yVel[localIdx] = particles_.yVel[bufferIdx];
 	dst.zVel[localIdx] = particles_.zVel[bufferIdx];
-	dst.xVelPred[localIdx] = particles_.xVelPred[bufferIdx];
-	dst.yVelPred[localIdx] = particles_.yVelPred[bufferIdx];
-	dst.zVelPred[localIdx] = particles_.zVelPred[bufferIdx];
-	dst.xAccPress[localIdx] = particles_.xAccPress[bufferIdx];
-	dst.yAccPress[localIdx] = particles_.yAccPress[bufferIdx];
-	dst.zAccPress[localIdx] = particles_.zAccPress[bufferIdx];
-	dst.sourceTerm[localIdx] = particles_.sourceTerm[bufferIdx];
-	dst.diagElem[localIdx] = particles_.diagElem[bufferIdx];
-	dst.pressure[localIdx] = particles_.pressure[bufferIdx];
-	dst.density[localIdx] = particles_.density[bufferIdx];
+
+	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+	// because the following solver step re-writes them before reading them
+	// TODO: keep it like this or copy them too, if solver step behavior changes?
 }
 
 void ParticleRedistributionMgr::FluidExchangeBuffer::CopyBulkToLocalParticles(
@@ -555,16 +543,10 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::CopyBulkToLocalParticles(
 		CopyParticleField(dst.xVel, particles_.xVel, dstBeginLocalIdx, blockRange);
 		CopyParticleField(dst.yVel, particles_.yVel, dstBeginLocalIdx, blockRange);
 		CopyParticleField(dst.zVel, particles_.zVel, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.xVelPred, particles_.xVelPred, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.yVelPred, particles_.yVelPred, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.zVelPred, particles_.zVelPred, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.xAccPress, particles_.xAccPress, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.yAccPress, particles_.yAccPress, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.zAccPress, particles_.zAccPress, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.sourceTerm, particles_.sourceTerm, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.diagElem, particles_.diagElem, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.pressure, particles_.pressure, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.density, particles_.density, dstBeginLocalIdx, blockRange);
+
+		// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+		// because the following solver step re-writes them before reading them
+		// TODO: keep it like this or copy them too, if solver step behavior changes?
 	});
 }
 
@@ -577,23 +559,17 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::QueueIRecvPayload(
 	if (IsEmpty()) { return; }
 
 	QueueIRecvVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
-	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 2, requests);
-	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueIRecvVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueIRecvVector(mpiContext, particles_.xVel, N_particles_, peerRank, tagBase + 5, requests);
-	QueueIRecvVector(mpiContext, particles_.yVel, N_particles_, peerRank, tagBase + 6, requests);
-	QueueIRecvVector(mpiContext, particles_.zVel, N_particles_, peerRank, tagBase + 7, requests);
-	QueueIRecvVector(mpiContext, particles_.xVelPred, N_particles_, peerRank, tagBase + 8, requests);
-	QueueIRecvVector(mpiContext, particles_.yVelPred, N_particles_, peerRank, tagBase + 9, requests);
-	QueueIRecvVector(mpiContext, particles_.zVelPred, N_particles_, peerRank, tagBase + 10, requests);
-	QueueIRecvVector(mpiContext, particles_.xAccPress, N_particles_, peerRank, tagBase + 11, requests);
-	QueueIRecvVector(mpiContext, particles_.yAccPress, N_particles_, peerRank, tagBase + 12, requests);
-	QueueIRecvVector(mpiContext, particles_.zAccPress, N_particles_, peerRank, tagBase + 13, requests);
-	QueueIRecvVector(mpiContext, particles_.sourceTerm, N_particles_, peerRank, tagBase + 14, requests);
-	QueueIRecvVector(mpiContext, particles_.diagElem, N_particles_, peerRank, tagBase + 15, requests);
-	QueueIRecvVector(mpiContext, particles_.pressure, N_particles_, peerRank, tagBase + 16, requests);
-	QueueIRecvVector(mpiContext, particles_.density, N_particles_, peerRank, tagBase + 17, requests);
-	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 18, requests);
+	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
+	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
+	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
+	QueueIRecvVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
+	QueueIRecvVector(mpiContext, particles_.xVel, N_particles_, peerRank, tagBase + 6, requests);
+	QueueIRecvVector(mpiContext, particles_.yVel, N_particles_, peerRank, tagBase + 7, requests);
+	QueueIRecvVector(mpiContext, particles_.zVel, N_particles_, peerRank, tagBase + 8, requests);
+
+	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+	// because the following solver step re-writes them before reading them
+	// TODO: keep it like this or copy them too, if solver step behavior changes?
 }
 
 void ParticleRedistributionMgr::FluidExchangeBuffer::QueueISendPayload(
@@ -605,23 +581,17 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::QueueISendPayload(
 	if (IsEmpty()) { return; }
 
 	QueueISendVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
-	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 2, requests);
-	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueISendVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueISendVector(mpiContext, particles_.xVel, N_particles_, peerRank, tagBase + 5, requests);
-	QueueISendVector(mpiContext, particles_.yVel, N_particles_, peerRank, tagBase + 6, requests);
-	QueueISendVector(mpiContext, particles_.zVel, N_particles_, peerRank, tagBase + 7, requests);
-	QueueISendVector(mpiContext, particles_.xVelPred, N_particles_, peerRank, tagBase + 8, requests);
-	QueueISendVector(mpiContext, particles_.yVelPred, N_particles_, peerRank, tagBase + 9, requests);
-	QueueISendVector(mpiContext, particles_.zVelPred, N_particles_, peerRank, tagBase + 10, requests);
-	QueueISendVector(mpiContext, particles_.xAccPress, N_particles_, peerRank, tagBase + 11, requests);
-	QueueISendVector(mpiContext, particles_.yAccPress, N_particles_, peerRank, tagBase + 12, requests);
-	QueueISendVector(mpiContext, particles_.zAccPress, N_particles_, peerRank, tagBase + 13, requests);
-	QueueISendVector(mpiContext, particles_.sourceTerm, N_particles_, peerRank, tagBase + 14, requests);
-	QueueISendVector(mpiContext, particles_.diagElem, N_particles_, peerRank, tagBase + 15, requests);
-	QueueISendVector(mpiContext, particles_.pressure, N_particles_, peerRank, tagBase + 16, requests);
-	QueueISendVector(mpiContext, particles_.density, N_particles_, peerRank, tagBase + 17, requests);
-	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 18, requests);
+	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
+	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
+	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
+	QueueISendVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
+	QueueISendVector(mpiContext, particles_.xVel, N_particles_, peerRank, tagBase + 6, requests);
+	QueueISendVector(mpiContext, particles_.yVel, N_particles_, peerRank, tagBase + 7, requests);
+	QueueISendVector(mpiContext, particles_.zVel, N_particles_, peerRank, tagBase + 8, requests);
+
+	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+	// because the following solver step re-writes them before reading them
+	// TODO: keep it like this or copy them too, if solver step behavior changes?
 }
 
 int ParticleRedistributionMgr::FluidExchangeBuffer::CheckedCount() const
@@ -736,12 +706,12 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueIRecvPayload(
 	if (IsEmpty()) { return; }
 
 	QueueIRecvVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
-	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 2, requests);
-	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueIRecvVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueIRecvVector(mpiContext, particles_.volB, N_particles_, peerRank, tagBase + 5, requests);
-	QueueIRecvVector(mpiContext, particles_.psiB, N_particles_, peerRank, tagBase + 6, requests);
-	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 7, requests);
+	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
+	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
+	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
+	QueueIRecvVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
+	QueueIRecvVector(mpiContext, particles_.volB, N_particles_, peerRank, tagBase + 6, requests);
+	QueueIRecvVector(mpiContext, particles_.psiB, N_particles_, peerRank, tagBase + 7, requests);
 }
 
 void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueISendPayload(
@@ -753,12 +723,12 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueISendPayload(
 	if (IsEmpty()) { return; }
 
 	QueueISendVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
-	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 2, requests);
-	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueISendVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueISendVector(mpiContext, particles_.volB, N_particles_, peerRank, tagBase + 5, requests);
-	QueueISendVector(mpiContext, particles_.psiB, N_particles_, peerRank, tagBase + 6, requests);
-	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 7, requests);
+	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
+	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
+	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
+	QueueISendVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
+	QueueISendVector(mpiContext, particles_.volB, N_particles_, peerRank, tagBase + 6, requests);
+	QueueISendVector(mpiContext, particles_.psiB, N_particles_, peerRank, tagBase + 7, requests);
 }
 
 int ParticleRedistributionMgr::BoundaryExchangeBuffer::CheckedCount() const
@@ -877,16 +847,10 @@ void ParticleRedistributionMgr::CopyFluidParticle(
 	dst.xVel[dstLocalIdx] = src.xVel[srcLocalIdx];
 	dst.yVel[dstLocalIdx] = src.yVel[srcLocalIdx];
 	dst.zVel[dstLocalIdx] = src.zVel[srcLocalIdx];
-	dst.xVelPred[dstLocalIdx] = src.xVelPred[srcLocalIdx];
-	dst.yVelPred[dstLocalIdx] = src.yVelPred[srcLocalIdx];
-	dst.zVelPred[dstLocalIdx] = src.zVelPred[srcLocalIdx];
-	dst.xAccPress[dstLocalIdx] = src.xAccPress[srcLocalIdx];
-	dst.yAccPress[dstLocalIdx] = src.yAccPress[srcLocalIdx];
-	dst.zAccPress[dstLocalIdx] = src.zAccPress[srcLocalIdx];
-	dst.sourceTerm[dstLocalIdx] = src.sourceTerm[srcLocalIdx];
-	dst.diagElem[dstLocalIdx] = src.diagElem[srcLocalIdx];
-	dst.pressure[dstLocalIdx] = src.pressure[srcLocalIdx];
-	dst.density[dstLocalIdx] = src.density[srcLocalIdx];
+
+	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+	// because the following solver step re-writes them before reading them
+	// TODO: keep it like this or copy them too, if solver step behavior changes?
 }
 
 void ParticleRedistributionMgr::CopyBoundaryParticle(

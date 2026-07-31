@@ -232,6 +232,11 @@ namespace Sim
 
 		virtual void DataReOrder(const SimParams& params) = 0;
 
+		// re-orders particle fields ahead of a full solver step, which re-initializes some of them,
+		// so permutations of those fields are skipped
+		// (currently omitted are velPred, accPress, sourceTerm, diagElem, pressure, and density)
+		virtual void DataReOrder_SolverStep(const SimParams& params) { DataReOrder(params); }
+
 		// provides the latest local re-order permutation if this neighbor search exposes it
 		virtual bool TryGetLastParticleReOrder(
 			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,

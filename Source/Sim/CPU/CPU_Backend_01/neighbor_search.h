@@ -76,6 +76,8 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
+		void DataReOrder_SolverStep(const SimParams& params) override;
+
 		bool TryGetLastParticleReOrder(
 			std::vector<uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 			std::vector<uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
@@ -149,6 +151,7 @@ namespace Sim
 
 		// helpers
 		void UpdateCellFrame();
+		void ReOrderParticleData(const SimParams& params, bool permuteSolverFields);
 		void BuildDenseCellTables();
 		void GatherCellQueryRanges(
 			int cx, int cy, int cz,

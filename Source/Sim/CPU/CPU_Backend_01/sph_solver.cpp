@@ -82,7 +82,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 	// --- [ particle data re-ordering ] -------------------------------------------------------------
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
-	neighborSearch_->DataReOrder(params);
+	neighborSearch_->DataReOrder_SolverStep(params);
 	ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);

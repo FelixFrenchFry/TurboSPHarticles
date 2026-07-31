@@ -1550,6 +1550,18 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 
 void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 {
+	ReOrderParticleData(params, true);
+}
+
+void NS_CellLinkedList_Compact_CPU01::DataReOrder_SolverStep(const SimParams& params)
+{
+	ReOrderParticleData(params, false);
+}
+
+void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
+	const SimParams& params,
+	const bool permuteSolverFields)
+{
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
 	if (N_F == 0 && N_B == 0)
@@ -1620,19 +1632,24 @@ void NS_CellLinkedList_Compact_CPU01::DataReOrder(const SimParams& params)
 		ApplyPermutation(particleOrderF_, be_.yVelF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.zVelF_, be_.workBufferF_);
 
-		// keep all per-fluid-particle fields aligned after backend-only neighbor searches
-		ApplyPermutation(particleOrderF_, be_.xVelPredF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.yVelPredF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.zVelPredF_, be_.workBufferF_);
+		// the remaining fluid particle fields only need to be permuted after backend-only neighbor searches,
+		// because a following full solver step re-initializes them (TODO: update if solver step behavior changes)
+		if (permuteSolverFields)
+		{
+			ApplyPermutation(particleOrderF_, be_.xVelPredF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.yVelPredF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.zVelPredF_, be_.workBufferF_);
 
-		ApplyPermutation(particleOrderF_, be_.xAccPressF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.yAccPressF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.zAccPressF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.xAccPressF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.yAccPressF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.zAccPressF_, be_.workBufferF_);
 
-		ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.pressureF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.densityF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
+			// without a warm start, pressure is re-initialized by the source-term kernel
+			ApplyPermutation(particleOrderF_, be_.pressureF_, be_.workBufferF_);
+			ApplyPermutation(particleOrderF_, be_.densityF_, be_.workBufferF_);
+		}
 	}
 
 	// build the exact compact-CLL cell IDs and particle permutation for boundary particles

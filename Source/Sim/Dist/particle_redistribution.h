@@ -160,10 +160,13 @@ namespace Dist
 	private:
 
 		// extra capacity for reusable particle payload and pipeline scratch storage
-		static constexpr float exchangeBufferExtraAllocCapacityPct_ = 12.5f; // TODO: fine-tune
+		static constexpr float exchangeBufferExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune
 		static constexpr float scratchBufferExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune
 
-		// packed SoA payload for migrated or halo fluid particles
+		// packed SoA payload for migrated or halo fluid particles, carrying only identity,
+		// (the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+		// because the following solver step re-writes them before reading them)
+		// TODO: keep it like this or copy them too, if solver step behavior changes?
 		class FluidExchangeBuffer
 		{
 		public:
@@ -211,7 +214,7 @@ namespace Dist
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
 			std::vector<uint32_t> globalIdx_;
-			Sync::FluidParticles particles_;
+			Sync::FluidParticles particles_; // fields left out of the payload stay allocated, but are not filled
 		};
 
 		// packed SoA payload for migrated or halo boundary particles
@@ -296,6 +299,7 @@ namespace Dist
 			uint32_t localIdx);
 
 		// particle property copying into append-only backend mutation storage
+		// (fluid particles carry the same reduced field set as FluidExchangeBuffer)
 		static void CopyFluidParticle(
 			const Sync::FluidConstView& src,
 			Sync::FluidParticles& dst,
