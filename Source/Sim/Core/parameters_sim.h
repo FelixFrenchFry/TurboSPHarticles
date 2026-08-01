@@ -33,6 +33,8 @@ namespace Sim
 			Base::NeighborSearchMethod::CellLinkedList_Compact;
 		Base::NeighborListMethod neighborListMethod =
 			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
+		Base::DomainDecompMethod domainDecompMethod =
+			Base::DomainDecompMethod::AABB_Uniform; // (distributed only)
 
 		// simulation state
 		bool simRunning         = false;

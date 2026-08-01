@@ -3,9 +3,11 @@
 #pragma once
 
 // external
+#include <memory>
 #include <vector>
 
 // internal
+#include "Source/Base/enum_hub.h"
 #include "domain_geometry.h"
 
 
@@ -47,5 +49,8 @@ namespace Dist
 
 		virtual bool IsValidForRankCount(int N_ranks) const = 0;
 	};
+
+	// domain decomp factory
+	std::unique_ptr<IDomainDecomp> MakeDomainDecomp(Base::DomainDecompMethod method);
 
 } // namespace Dist

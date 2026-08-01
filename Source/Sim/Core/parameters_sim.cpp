@@ -171,6 +171,30 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		};
 
+	auto ParseDomainDecompMethod = [](const nlohmann::json& v, Base::DomainDecompMethod& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "AABB_Uniform")
+					{ out = Base::DomainDecompMethod::AABB_Uniform; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::DomainDecompMethod::AABB_Uniform;
+					return true;
+				default:
+					return false;
+				}
+			}
+			return false;
+		};
+
 	// TODO: implement actual setters for backend version and scenario type?
 	{
 		BeginWrite();
@@ -228,6 +252,21 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'neighborListStorage' value in JSON.");
+				EndWrite();
+				return false;
+			}
+		}
+
+		if (auto it = j.find("domainDecompMethod"); it != j.end())
+		{
+			Base::DomainDecompMethod ddm;
+			if (ParseDomainDecompMethod(*it, ddm))
+			{
+				params_.domainDecompMethod = ddm;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'domainDecompMethod' value in JSON.");
 				EndWrite();
 				return false;
 			}

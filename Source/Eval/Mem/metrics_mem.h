@@ -35,7 +35,7 @@ namespace Mem
 
 	struct ProcessMemUsage
 	{
-		// OS-reported process high-water resident memory, separate from tracked buckets
+		// high-water resident process memory report by OS, separate from tracked buckets
 		uint64_t N_peakResidentBytes = 0;
 	};
 

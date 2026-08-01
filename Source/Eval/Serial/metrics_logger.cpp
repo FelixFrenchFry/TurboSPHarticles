@@ -392,6 +392,8 @@ namespace Export
 				Base::ToEffectiveNeighborListStorageCString(
 					simParams.backendVersion,
 					simParams.neighborListMethod) },
+			{ "domainDecompMethod", static_cast<int>(simParams.domainDecompMethod) },
+			{ "domainDecompMethodName", Base::ToCString(simParams.domainDecompMethod) },
 			{ "exportEnabled", simParams.exportEnabled },
 			{ "exportDir", simParams.exportDir },
 			{ "exportInterval", simParams.exportInterval },

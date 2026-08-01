@@ -1181,7 +1181,7 @@ namespace Dist
 		std::printf("%-30s = %s\n", "neighbor list storage",
 			setup.neighborListStorage);
 
-		std::printf("%-30s = %s\n", "decomp method", setup.domainDecompMethod);
+		std::printf("%-30s = %s\n", "domain decomp method", setup.domainDecompMethod);
 		std::printf("%-30s = %s\n", "mpi thread support",
 			MpiContext::ThreadSupportName(setup.mpiThreadSupport));
 		std::printf("%-30s = [ %u / %u / %u ]\n", "global particles [F / B / R]",

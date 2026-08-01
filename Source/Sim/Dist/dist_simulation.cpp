@@ -29,7 +29,6 @@
 #include "dist_snapshots.h"
 #include "dist_statistics.h"
 #include "rigid_body_sync.h"
-#include "Layouts/decomp_AABB_uniform.h"
 
 
 
@@ -434,7 +433,6 @@ DistSimulationMgr::DistSimulationMgr(MpiContext& mpiContext,
 									 Sim::SimParamsMgr& simParamsMgr)
 	: mpiContext_{ mpiContext }
 	, simParamsMgr_{ simParamsMgr }
-	, domainDecomp_{ std::make_unique<Decomp_AABB_Uniform>() }
 	, loggingMgr_{ MakeRankLoggingOptions(mpiContext) }
 {
 	// nothing to do
@@ -481,6 +479,8 @@ bool DistSimulationMgr::Init(
 	if (!mpiContext_.AllTrue(simScenario_ != nullptr)) { return false; }
 
 	SPDLOG_INFO_MPI("Init distributed domain decomp...", mpiContext_);
+	// every rank parses the same broadcast parameters, so all ranks pick the same strategy
+	SelectDomainDecomp(simParams_.domainDecompMethod);
 	if (!BuildDomainDecomp()) { return false; }
 
 	SPDLOG_INFO_MPI("Init rank-local particle states...", mpiContext_);
@@ -623,6 +623,34 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	}
 }
 
+void DistSimulationMgr::SelectDomainDecomp(const Base::DomainDecompMethod method)
+{
+	domainDecomp_.reset();
+
+	// create new domain decomp, which still has to be built for the selected scenario
+	try
+	{
+		domainDecomp_ = MakeDomainDecomp(method);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to create distributed domain decomp ({}): {} "
+			"AABB_Uniform is currently the only domain decomp.",
+			mpiContext_.Rank(), mpiContext_.Size(),
+			static_cast<int>(method), ex.what());
+		return;
+	}
+	if (!domainDecomp_)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to create distributed domain decomp ({}). "
+			"AABB_Uniform is currently the only domain decomp.",
+			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(method));
+		return;
+	}
+}
+
 bool DistSimulationMgr::ReBuildInitialSimState()
 {
 	bool localOk = true;
@@ -722,7 +750,7 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 	DistSimSetupReport report{};
 	report.mpiThreadSupport = mpiContext_.ThreadSupport();
 
-	report.domainDecompMethod = domainDecomp_ ? domainDecomp_->Name() : "<none>";
+	report.domainDecompMethod = Base::ToCString(simParams_.domainDecompMethod);
 	report.backendVersion = Base::ToCString(simParams_.backendVersion);
 	report.scenarioType = Base::ToCString(simParams_.scenarioType);
 	report.neighborSearchMethod = Base::ToCString(simParams_.neighborSearchMethod);
@@ -1036,6 +1064,12 @@ bool DistSimulationMgr::BuildDomainDecomp()
 		if (!simScenario_)
 		{
 			SPDLOG_ERROR("[rank {}/{}] Failed to build distributed domain decomp (no scenario selected).",
+				mpiContext_.Rank(), mpiContext_.Size());
+			localOk = false;
+		}
+		else if (!domainDecomp_)
+		{
+			SPDLOG_ERROR("[rank {}/{}] Failed to build distributed domain decomp (no domain decomp selected).",
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}

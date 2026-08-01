@@ -118,6 +118,20 @@ namespace Base
 		return "ChunkedSELLX::<unknown>";
 	}
 
+	enum class DomainDecompMethod : uint8_t
+	{
+		AABB_Uniform        // 0 uniform AABB slabs, split along the global X axis
+	};
+	constexpr const char* ToCString(const DomainDecompMethod v) noexcept
+	{
+		switch (v)
+		{
+		case DomainDecompMethod::AABB_Uniform:
+			return "AABB_Uniform";
+		}
+		return "DomainDecompMethod::<unknown>";
+	}
+
 	enum class SolverTerminationCond : uint8_t
 	{
 		FixedIters,             // 0

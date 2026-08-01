@@ -52,6 +52,10 @@ namespace Dist
 		// (destroys previous backend and all its data)
 		void SelectSimBackend(Base::BackendVersion version);
 
+		// create or switch domain decomp
+		// (destroys previous domain decomp, so it has to be built again afterwards)
+		void SelectDomainDecomp(Base::DomainDecompMethod method);
+
 		bool ReBuildInitialSimState();
 
 		// prints root-gathered distributed setup diagnostics
