@@ -26,21 +26,16 @@ namespace
 
 	constexpr std::array<
 		ParticleRedistributionTimingColumn,
-		GetIdx(ParticleRedistributionTimingOp::Count) - 1>
+		GetIdx(ParticleRedistributionTimingOp::Count)>
 		TIMING_COLUMNS
 	{{
-		{ "routeF", ParticleRedistributionTimingOp::RouteFluid },
-		{ "routeB", ParticleRedistributionTimingOp::RouteBoundary },
+		{ "route", ParticleRedistributionTimingOp::Route },
 		{ "pack", ParticleRedistributionTimingOp::Pack },
 		{ "exch", ParticleRedistributionTimingOp::Exchange },
-		{ "prepF", ParticleRedistributionTimingOp::FluidPrep },
-		{ "keptF", ParticleRedistributionTimingOp::KeptFluid },
-		{ "migrF", ParticleRedistributionTimingOp::MigratedFluid },
-		{ "haloF", ParticleRedistributionTimingOp::HaloFluid },
-		{ "prepB", ParticleRedistributionTimingOp::BoundaryPrep },
-		{ "keptB", ParticleRedistributionTimingOp::KeptBoundary },
-		{ "migrB", ParticleRedistributionTimingOp::MigratedBoundary },
-		{ "haloB", ParticleRedistributionTimingOp::HaloBoundary },
+		{ "prep", ParticleRedistributionTimingOp::Prep },
+		{ "kept", ParticleRedistributionTimingOp::Kept },
+		{ "migr", ParticleRedistributionTimingOp::Migrated },
+		{ "halo", ParticleRedistributionTimingOp::Halo },
 		{ "backend", ParticleRedistributionTimingOp::Backend },
 		{ "wPack", ParticleRedistributionTimingOp::SyncPack },
 		{ "wCounts", ParticleRedistributionTimingOp::SyncCounts },
@@ -61,14 +56,7 @@ namespace
 	{
 		if (report.N_samples == 0) { return 0; }
 
-		uint64_t totalNs = report.totalNs[GetIdx(op)];
-		if (op == ParticleRedistributionTimingOp::RouteFluid)
-		{
-			totalNs += report.totalNs[
-				GetIdx(ParticleRedistributionTimingOp::RoutePrep)];
-		}
-
-		return totalNs / report.N_samples;
+		return report.totalNs[GetIdx(op)] / report.N_samples;
 	}
 
 	void FormatRankLabel(

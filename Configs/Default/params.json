@@ -3,7 +3,7 @@
   "scenarioType": "ConvergingDam",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
-  "domainDecompMethod": 0,
+  "domainDecompMethod": 1,
 
   "maxSteps": 100,
   "timeStep": 0.001,

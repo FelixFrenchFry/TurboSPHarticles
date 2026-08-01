@@ -16,21 +16,17 @@
 
 namespace Dist
 {
+	// pipeline stages are timed across both particle kinds, because the fluid and
+	// boundary paths of a stage run back to back and never overlap
 	enum class ParticleRedistributionTimingOp : uint8_t
 	{
-		RoutePrep,
-		RouteFluid,
-		RouteBoundary,
+		Route,
 		Pack,
 		Exchange,
-		FluidPrep,
-		KeptFluid,
-		MigratedFluid,
-		HaloFluid,
-		BoundaryPrep,
-		KeptBoundary,
-		MigratedBoundary,
-		HaloBoundary,
+		Prep,
+		Kept,
+		Migrated,
+		Halo,
 		Backend,
 		SyncPack,
 		SyncCounts,
