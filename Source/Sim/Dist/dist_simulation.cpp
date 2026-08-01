@@ -27,7 +27,6 @@
 #include "dist_helpers.h"
 #include "dist_snapshots.h"
 #include "dist_statistics.h"
-#include "owned_particle_gather.h"
 #include "rigid_body_sync.h"
 #include "Layouts/decomp_AABB_uniform.h"
 
@@ -37,6 +36,31 @@ using namespace Dist;
 
 namespace
 {
+	// checksum over the global indices owned by this rank, summed across all ranks it has
+	// to stay at the value the initial partition produced (wrap-around sums are intended)
+	uint64_t OwnedGlobalIdxChecksum(const DistParticleState& particleState)
+	{
+		uint64_t checksum = 0;
+
+		for (const uint32_t localIdx : particleState.particleLocalIdx_Owned)
+		{
+			if (localIdx >= particleState.particleGlobalIdx_FromLocalIdx.size()) { continue; }
+
+			// using SplitMix64-style mix
+			uint64_t x = static_cast<uint64_t>(
+				particleState.particleGlobalIdx_FromLocalIdx[localIdx]) + 0x9E3779B97F4A7C15ull;
+			x ^= x >> 30;
+			x *= 0xBF58476D1CE4E5B9ull;
+			x ^= x >> 27;
+			x *= 0x94D049BB133111EBull;
+			x ^= x >> 31;
+
+			checksum += x;
+		}
+
+		return checksum;
+	}
+
 	void IncludePoint(AABB& box, const glm::vec3& point)
 	{
 		box.min.x = std::min(box.min.x, point.x);
@@ -656,6 +680,12 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 		return false;
 	}
 
+	// use initial partition to validate if per-step ownership checksums match across ranks
+	expectedOwnedIdxChecksumF_ =
+		mpiContext_.AllReduceSumUint64(OwnedGlobalIdxChecksum(fluidParticleState_));
+	expectedOwnedIdxChecksumB_ =
+		mpiContext_.AllReduceSumUint64(OwnedGlobalIdxChecksum(boundaryParticleState_));
+
 	try
 	{
 		rigidBodySyncBuffers_.Resize(globalSimState_.rigidBodies.N_);
@@ -889,13 +919,6 @@ bool DistSimulationMgr::RunSim_Blocking()
 		std::printf("\n");
 	}
 	DisplayMemoryUsageStats(paramsFinal, true);
-
-	if (runOk && !GatherOwnedGlobalSimStateOnRoot())
-	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to gather owned global state after distributed run.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		runOk = false;
-	}
 
 	running_.store(false, std::memory_order_release);
 	EndRunLogging();
@@ -1201,18 +1224,22 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 
 bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 {
-	// the global particle counts are an initialization invariant checked once in
-	// ReBuildInitialSimState(), so only the current ownership sums are re-checked per step
-	std::array<uint64_t, 2> N_globalOwned
+	// rank-local owned particle counts and global index checksums, summed across all ranks
+	std::array<uint64_t, 4> N_globalOwned
 	{
 		fluidParticleState_.N_owned,
-		boundaryParticleState_.N_owned
+		boundaryParticleState_.N_owned,
+		OwnedGlobalIdxChecksum(fluidParticleState_),
+		OwnedGlobalIdxChecksum(boundaryParticleState_)
 	};
 	mpiContext_.AllReduceSumUint64s(N_globalOwned);
 
 	const bool countsValid =
 		N_globalOwned[0] == N_expectedGlobalF_ &&
 		N_globalOwned[1] == N_expectedGlobalB_;
+	const bool checksumsValid =
+		N_globalOwned[2] == expectedOwnedIdxChecksumF_ &&
+		N_globalOwned[3] == expectedOwnedIdxChecksumB_;
 
 	if (!countsValid)
 	{
@@ -1225,8 +1252,63 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 			N_globalOwned[1],
 			N_expectedGlobalB_);
 	}
+	else if (!checksumsValid)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Global owned particle indices are not owned by exactly one rank "
+			"(fluid checksum={}/{}, boundary checksum={}/{}).",
+			mpiContext_.Rank(), mpiContext_.Size(),
+			N_globalOwned[2],
+			expectedOwnedIdxChecksumF_,
+			N_globalOwned[3],
+			expectedOwnedIdxChecksumB_);
+	}
 
-	return countsValid;
+	#if defined(_DEBUG)
+	// [ rank-reduced ] names the first global index not owned by exactly one rank, detected by the checksums
+	const auto ReportOwnedIdxConflicts = [&](
+		const DistParticleState& particleState,
+		const uint64_t N_global,
+		const char* particleTypeName) -> bool
+	{
+		std::vector<uint32_t> ownerRankCounts(N_global, 0u);
+
+		for (const uint32_t localIdx : particleState.particleLocalIdx_Owned)
+		{
+			if (localIdx >= particleState.particleGlobalIdx_FromLocalIdx.size()) { continue; }
+
+			const uint32_t globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+			if (globalIdx < ownerRankCounts.size()) { ownerRankCounts[globalIdx] = 1; }
+		}
+		mpiContext_.AllReduceSumUint32s(ownerRankCounts);
+
+		const auto invalidOwnerIt = std::find_if(
+			ownerRankCounts.begin(),
+			ownerRankCounts.end(),
+			[](const uint32_t N_ranks) { return N_ranks != 1; });
+		if (invalidOwnerIt != ownerRankCounts.end())
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Global {} particle {} has {} owner ranks (expected exactly one).",
+				mpiContext_.Rank(), mpiContext_.Size(),
+				particleTypeName,
+				static_cast<uint32_t>(std::distance(ownerRankCounts.begin(), invalidOwnerIt)),
+				*invalidOwnerIt);
+			return false;
+		}
+
+		return true;
+	};
+
+	// both run unconditionally, because each one is a collective
+	const bool fluidIdxsValid =
+		ReportOwnedIdxConflicts(fluidParticleState_, N_expectedGlobalF_, "fluid");
+	const bool boundaryIdxsValid =
+		ReportOwnedIdxConflicts(boundaryParticleState_, N_expectedGlobalB_, "boundary");
+	if (!fluidIdxsValid || !boundaryIdxsValid) { return false; }
+	#endif
+
+	return countsValid && checksumsValid;
 }
 
 bool DistSimulationMgr::InitRankLocalBackend()
@@ -1328,37 +1410,6 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 	}
 
 	return mpiContext_.AllTrue(localOk);
-}
-
-bool DistSimulationMgr::GatherOwnedGlobalSimStateOnRoot()
-{
-	if (!MaterializeRankLocalState()) { return false; }
-
-	Sync::UniversalSimState globalOwnedState{};
-	OwnedParticleGatherStats stats{};
-
-	const bool gatherOk = GatherOwnedParticlesToRoot(
-		globalOwnedState,
-		localSimState_,
-		fluidParticleState_,
-		boundaryParticleState_,
-		mpiContext_,
-		static_cast<uint32_t>(N_expectedGlobalF_),
-		static_cast<uint32_t>(N_expectedGlobalB_),
-		&stats);
-
-	localSimState_.fluidParticles = {};
-	localSimState_.boundaryParticles = {};
-	if (!gatherOk) { return false; }
-
-	SPDLOG_INFO_MPI("Gathered owned global state (fluid={}, boundary={}, step={}, time={})",
-		mpiContext_,
-		stats.N_gatheredF,
-		stats.N_gatheredB,
-		globalOwnedState.step,
-		globalOwnedState.time);
-
-	return true;
 }
 
 bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)

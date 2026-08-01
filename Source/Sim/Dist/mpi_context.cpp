@@ -184,7 +184,7 @@ uint64_t MpiContext::AllReduceSumUint64(const uint64_t value) const
 }
 
 void MpiContext::AllReduceSumUint64s(
-	std::array<uint64_t, 2>& values) const
+	std::array<uint64_t, 4>& values) const
 {
 	CheckMpiResult(
 		MPI_Allreduce(
@@ -194,7 +194,7 @@ void MpiContext::AllReduceSumUint64s(
 			MPI_UINT64_T,
 			MPI_SUM,
 			MPI_COMM_WORLD),
-		"MPI_Allreduce(uint64 pair sum)");
+		"MPI_Allreduce(uint64 sum)");
 }
 
 uint32_t MpiContext::AllReduceMaxUint32(const uint32_t value) const

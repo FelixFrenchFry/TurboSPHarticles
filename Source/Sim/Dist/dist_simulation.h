@@ -101,9 +101,6 @@ namespace Dist
 		// [ rank-reduced ] runs a backend startup smoke test on rank-local data
 		bool RunRankLocalBackendStartupCheck();
 
-		// gathers the authoritative owned state on the root rank
-		bool GatherOwnedGlobalSimStateOnRoot();
-
 		// [ rank-reduced ] gathers and serializes an export snapshot on the root rank
 		bool WriteExportSnapshot(const Sim::SimParams& params);
 
@@ -180,6 +177,8 @@ namespace Dist
 		Sync::UniversalSimState localSimState_{};
 		uint64_t N_expectedGlobalF_ = 0; // expected global fluid particle count
 		uint64_t N_expectedGlobalB_ = 0; // expected global boundary particle count
+		uint64_t expectedOwnedIdxChecksumF_ = 0; // checksum over the global fluid index range
+		uint64_t expectedOwnedIdxChecksumB_ = 0; // checksum over the global boundary index range
 		DistParticleState fluidParticleState_{};
 		DistParticleState boundaryParticleState_{};
 		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
