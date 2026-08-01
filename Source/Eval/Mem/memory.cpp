@@ -2,10 +2,45 @@
 
 // external
 #include <algorithm>
+#if defined(_WIN32)
+	#include <windows.h>
+	#include <psapi.h>
+#elif defined(__linux__)
+	#include <sys/resource.h>
+#endif
 
 // internal
 #include "memory.h"
 
+
+
+namespace
+{
+	Mem::ProcessMemUsage QueryProcessMemoryUsage() noexcept
+	{
+#if defined(_WIN32)
+		PROCESS_MEMORY_COUNTERS counters{};
+		counters.cb = sizeof(counters);
+		if (!GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)))
+		{
+			return {};
+		}
+
+		return { static_cast<uint64_t>(counters.PeakWorkingSetSize) };
+#elif defined(__linux__)
+		rusage usage{};
+		if (getrusage(RUSAGE_SELF, &usage) != 0)
+		{
+			return {};
+		}
+
+		return { static_cast<uint64_t>(usage.ru_maxrss) * 1024ull };
+#else
+		return {};
+#endif
+	}
+
+} // namespace
 
 
 using namespace Mem;
@@ -25,11 +60,28 @@ void MemoryTracker::BeginStep()
 	Clear(recLatest_);
 }
 
+bool MemoryTracker::SampleProcessMemory()
+{
+	const ProcessMemUsage process = QueryProcessMemoryUsage();
+	const uint64_t N_previousPeakResidentBytes =
+		recLatest_.process.N_peakResidentBytes;
+	const uint64_t N_peakResidentBytes = std::max(
+		N_previousPeakResidentBytes,
+		process.N_peakResidentBytes);
+	const bool changed = N_peakResidentBytes > N_previousPeakResidentBytes;
+	recLatest_.process.N_peakResidentBytes = N_peakResidentBytes;
+	processMax_allTime_.N_peakResidentBytes = std::max(
+		processMax_allTime_.N_peakResidentBytes,
+		N_peakResidentBytes);
+	return changed;
+}
+
 void MemoryTracker::EndStep(uint64_t simStep, double simTime)
 {
 	// fill latest record
 	recLatest_.simStep = simStep;
 	recLatest_.simTime = simTime;
+	SampleProcessMemory();
 
 	// push latest record to history and check excess
 	recHistory_.push_back(recLatest_);
@@ -67,6 +119,8 @@ void MemoryTracker::PackMemSnapshot(Sync::MemSnapshot& snap) const
 	// metadata
 	snap.simStep = recLatest_.simStep;
 	snap.simTime = recLatest_.simTime;
+	snap.latestProcess = recLatest_.process;
+	snap.maxProcess = processMax_allTime_;
 
 	// fill in the latest and max memory usage (used and allocated)
 	for (uint8_t s = 0; s < GetIdx(MemSpace::Count); s++)
@@ -138,4 +192,5 @@ uint64_t MemoryTracker::GetMem_Max_Alloc(MemBucket bucket) const
 void MemoryTracker::ClearAllTime()
 {
 	Clear(memMax_allTime_);
+	processMax_allTime_ = {};
 }

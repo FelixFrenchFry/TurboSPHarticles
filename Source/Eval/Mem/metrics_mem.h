@@ -33,6 +33,12 @@ namespace Mem
 		uint64_t N_allocBytes = 0;
 	};
 
+	struct ProcessMemUsage
+	{
+		// OS-reported process high-water resident memory, separate from tracked buckets
+		uint64_t N_peakResidentBytes = 0;
+	};
+
 	struct ParticleClassMemUsage
 	{
 		MemUsage fluid{};
@@ -241,7 +247,8 @@ namespace Mem
 		uint64_t simStep = 0;
 		double simTime = 0.0;
 
-		// stat data
+		// process and tracked memory data
+		ProcessMemUsage process{};
 		MemSpaceRecord mem{};
 	};
 
@@ -273,6 +280,7 @@ namespace Mem
 	{
 		record.simStep = 0ull;
 		record.simTime = 0.0;
+		record.process = {};
 		Clear(record.mem);
 	}
 

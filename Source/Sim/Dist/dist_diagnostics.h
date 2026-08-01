@@ -104,6 +104,7 @@ namespace Dist
 		uint64_t N_maxTotalTrackedMemAllocBytes = 0;
 
 		uint8_t exportedStep = 0;
+		uint64_t N_processPeakResidentBytes = 0;
 	};
 
 	// rank-local benchmark report gathered by root for distributed timing rows
@@ -140,6 +141,10 @@ namespace Dist
 			const DistStartupRankReport& localReport);
 
 		static void ResetProgress();
+
+		static void PrintFinalProgressPeakRam(
+			const MpiContext& mpiContext,
+			const DistRankStepReport& localStepReport);
 
 		static void PrintLatestPerformanceSummaryAndProgress(
 			const MpiContext& mpiContext,

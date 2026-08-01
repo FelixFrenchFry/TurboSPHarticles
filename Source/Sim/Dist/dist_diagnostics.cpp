@@ -50,6 +50,73 @@ namespace
 		return state;
 	}
 
+	std::string FormatPeakRam(
+		const uint64_t N_peakResidentBytes,
+		const int rank)
+	{
+		char buffer[80];
+		std::snprintf(buffer, sizeof(buffer), " | peak RAM %.2f GB (rank %d)",
+			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_peakResidentBytes),
+			rank);
+		return buffer;
+	}
+
+	void FormatHms(double seconds, int& h, int& m, int& s)
+	{
+		seconds = std::max(seconds, 0.0);
+		const int N_totalSeconds = static_cast<int>(seconds + 0.5);
+		h = N_totalSeconds / 3600;
+		m = (N_totalSeconds % 3600) / 60;
+		s = N_totalSeconds % 60;
+	}
+
+	std::string FormatProgressLine(
+		const std::vector<DistRankStepReport>& reports,
+		const double elapsedS,
+		const uint64_t N_peakResidentBytes,
+		const int peakRank)
+	{
+		if (reports.empty()) { return {}; }
+
+		const uint64_t step = reports.front().step;
+		const int64_t maxSteps = reports.front().maxSteps;
+		const bool hasTotal = maxSteps > 0;
+		const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
+
+		const double elapsed = std::max(elapsedS, 1e-14);
+
+		const double stepsPerSec = static_cast<double>(step) / elapsed;
+		double percent = 0.0;
+		if (hasTotal)
+		{
+			const double progress = std::min(1.0, std::max(0.0,
+				static_cast<double>(step) / static_cast<double>(maxStepsU)));
+			percent = progress * 100.0;
+		}
+
+		int elH, elM, elS;
+		FormatHms(elapsed, elH, elM, elS);
+		const std::string peakRamLabel = FormatPeakRam(
+			N_peakResidentBytes, peakRank);
+
+		char progressLine[256];
+		if (hasTotal)
+		{
+			std::snprintf(progressLine, sizeof(progressLine),
+				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s%s",
+				elH, elM, elS,
+				step, maxSteps, percent, stepsPerSec, peakRamLabel.c_str());
+		}
+		else
+		{
+			std::snprintf(progressLine, sizeof(progressLine),
+				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s%s",
+				elH, elM, elS, step, stepsPerSec, peakRamLabel.c_str());
+		}
+
+		return progressLine;
+	}
+
 	void PrintCliSeparator()
 	{
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
@@ -81,15 +148,6 @@ namespace
 		std::printf(fmt, args...);
 		std::printf("\n");
 		N_lines++;
-	}
-
-	void FormatHms(double seconds, int& h, int& m, int& s)
-	{
-		seconds = std::max(seconds, 0.0);
-		const int N_totalSeconds = static_cast<int>(seconds + 0.5);
-		h = N_totalSeconds / 3600;
-		m = (N_totalSeconds % 3600) / 60;
-		s = N_totalSeconds % 60;
 	}
 
 	void FormatRankLabel(char* buffer, const size_t bufferSize, const int rank)
@@ -882,30 +940,14 @@ namespace
 		const Base::BackendVersion backendVersion)
 	{
 		std::string table{};
-		char sectionTitle[64];
-		std::snprintf(sectionTitle, sizeof(sectionTitle),
-			"distributed memory usage [%s in %s]",
+		char memoryUnitLabel[32];
+		std::snprintf(memoryUnitLabel, sizeof(memoryUnitLabel), "%s [%s]",
 			MemSpaceLabel(backendVersion), Mem::UnitLabel(unit));
-
-		char headerLine[128];
-		int N_chars = std::snprintf(headerLine, sizeof(headerLine), "--- [ %s ] ",
-			sectionTitle);
-		N_chars = std::max(0, N_chars);
-
-		table += headerLine;
-		for (int i = N_chars; i < N_CLI_SECTION_SEPARATOR_CHARS; i++)
-		{
-			table += '-';
-		}
-		table += '\n';
-		table += CLI_SECTION_SEPARATOR;
-		table += '\n';
 
 		char line[256];
 		std::snprintf(line, sizeof(line),
 			"%-2s | %8s | %8s | %8s | %8s | %8s | %8s | %9s",
-			"r", "backend", "global", "local",
-			"meta", "exch", "misc", "total");
+			"r", "backend", "metadata", "exchange", "misc", "total", "process", "");
 		table += line;
 		table += '\n';
 		table += CLI_SECTION_SEPARATOR;
@@ -916,16 +958,21 @@ namespace
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
+			const uint64_t N_maxDistMiscAndStateMemAllocBytes =
+				report.N_maxDistGlobalStateMemAllocBytes +
+				report.N_maxDistLocalStateMemAllocBytes +
+				report.N_maxDistMiscMemAllocBytes;
+
 			std::snprintf(line, sizeof(line),
-				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9.2f",
+				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9s",
 				rankLabel,
 				Mem::ConvertFromBytes(unit, report.N_maxBackendMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.N_maxDistGlobalStateMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.N_maxDistLocalStateMemAllocBytes),
 				Mem::ConvertFromBytes(unit, report.N_maxDistParticleMetadataMemAllocBytes),
 				Mem::ConvertFromBytes(unit, report.N_maxDistExchangeBuffersMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.N_maxDistMiscMemAllocBytes),
-				Mem::ConvertFromBytes(unit, report.N_maxTotalTrackedMemAllocBytes));
+				Mem::ConvertFromBytes(unit, N_maxDistMiscAndStateMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_maxTotalTrackedMemAllocBytes),
+				Mem::ConvertFromBytes(unit, report.N_processPeakResidentBytes),
+				memoryUnitLabel);
 			table += line;
 			table += '\n';
 		}
@@ -1026,27 +1073,14 @@ namespace
 		if (step <= state.lastStep) { return; }
 		state.lastStep = step;
 
-		double elapsedS =
-			std::chrono::duration<double>(now - state.startSteady).count();
-		elapsedS = std::max(elapsedS, 1e-14);
-
-		const double stepsPerSec = static_cast<double>(step) / elapsedS;
-
-		const int64_t maxSteps = reports.front().maxSteps;
-		const bool hasTotal = maxSteps > 0;
-		const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
-		double percent = 0.0;
-		if (hasTotal)
-		{
-			const double progress = std::min(1.0, std::max(0.0,
-				static_cast<double>(step) / static_cast<double>(maxStepsU)));
-			percent = progress * 100.0;
-		}
-
 		if (state.N_lastLines > 0)
 		{
 			std::printf("\x1b[%dA\r", state.N_lastLines);
 		}
+
+		double elapsedS = std::chrono::duration<double>(
+			now - state.startSteady).count();
+		elapsedS = std::max(elapsedS, 1e-14);
 
 		int N_lines = 0;
 		if (static_cast<int>(reports.size()) <= DIST_DIAGNOSTICS_RANK_TABLE_LIMIT)
@@ -1071,22 +1105,13 @@ namespace
 			PrintRankTimingTable(N_lines, benchReports, benchOps, params.timeUnit);
 		}
 		PrintLine(N_lines);
-		int elH, elM, elS;
-		FormatHms(elapsedS, elH, elM, elS);
-		if (hasTotal)
-		{
-			PrintLine(N_lines,
-				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s",
-				elH, elM, elS,
-				step, maxSteps, percent, stepsPerSec);
-		}
-		else
-		{
-			PrintLine(N_lines,
-				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s",
-				elH, elM, elS, step, stepsPerSec);
-		}
-
+		const uint64_t processPeakResidentMax = MaxReportField(
+			reports, &DistRankStepReport::N_processPeakResidentBytes);
+		const int processPeakResidentMaxRank = RankWithMax(
+			reports, &DistRankStepReport::N_processPeakResidentBytes);
+		const std::string progressLine = FormatProgressLine(
+			reports, elapsedS, processPeakResidentMax, processPeakResidentMaxRank);
+		PrintLine(N_lines, "%s", progressLine.c_str());
 		std::fflush(stdout);
 		state.N_lastLines = N_lines;
 	}
@@ -1195,6 +1220,30 @@ namespace Dist
 		state = ProgressState{};
 		state.initialized = true;
 		state.startSteady = steady_clock::now();
+	}
+
+	void DistDiagnosticsMgr::PrintFinalProgressPeakRam(
+		const MpiContext& mpiContext,
+		const DistRankStepReport& localStepReport)
+	{
+		std::vector<DistRankStepReport> reports{};
+		GatherRankStepReports(mpiContext, localStepReport, reports);
+		if (!mpiContext.IsRoot() || reports.empty()) { return; }
+
+		ProgressState& state = GetProgressState();
+		if (state.N_lastLines == 0) { return; }
+
+		const uint64_t processPeakResidentMax = MaxReportField(
+			reports, &DistRankStepReport::N_processPeakResidentBytes);
+		const int processPeakResidentMaxRank = RankWithMax(
+			reports, &DistRankStepReport::N_processPeakResidentBytes);
+
+		const double elapsedS = std::chrono::duration<double>(
+			steady_clock::now() - state.startSteady).count();
+		const std::string progressLine = FormatProgressLine(
+			reports, elapsedS, processPeakResidentMax, processPeakResidentMaxRank);
+		std::printf("FINAL: %s\n\n", progressLine.c_str());
+		std::fflush(stdout);
 	}
 
 	void DistDiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(

@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 // internal
+#include "Source/Eval/Mem/memory.h"
 #include "Source/Eval/Serial/serialization.h"
 #include "Source/Sim/Core/diagnostics.h"
 #include "Source/Sim/CPU/CPU_Backend_01/cpu_backend_01.h"
@@ -400,18 +401,22 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	DisplayMemoryUsageStats(paramsFinal, true);
-
 	{
 		// transfer last sim state into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
 		simBackend_->PushToUniversalSimState(universalSimState_);
 	}
 
+	DisplayMemoryUsageStats(paramsFinal, true);
+	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
+	if (processMemoryChanged) { AppendLatestMemoryMetricsLog(); }
+
 	EndRunLogging();
 
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running");
+	DiagnosticsMgr::PrintFinalProgressPeakRam(
+		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }
 
 void SimulationMgr::RunSim_Blocking()
@@ -510,19 +515,23 @@ void SimulationMgr::RunSim_Blocking()
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	DisplayMemoryUsageStats(paramsFinal, true);
-
 	{
 		// transfer last sim state into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
 		simBackend_->PushToUniversalSimState(universalSimState_);
 	}
 
+	DisplayMemoryUsageStats(paramsFinal, true);
+	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
+	if (processMemoryChanged) { AppendLatestMemoryMetricsLog(); }
+
 	running_.store(false, std::memory_order_release);
 	EndRunLogging();
 
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running");
+	DiagnosticsMgr::PrintFinalProgressPeakRam(
+		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }
 
 // requests the controller thread to stop cleanly
@@ -616,6 +625,8 @@ void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
 	record.simTime = simTime_;
 
 	simBackend_->FillMemoryRecord(record, params);
+	memoryTracker_.SampleProcessMemory();
+	record.process = memoryTracker_.GetCurrentRecord().process;
 	loggingMgr_.AppendMemoryRecord(record);
 }
 
@@ -662,7 +673,8 @@ void SimulationMgr::DisplayPerformanceStats(
 	const SimParams& params) const
 {
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-		benchmarksTracker_, curBenchOps_, params.timeUnit, simStep_, params.maxSteps);
+		benchmarksTracker_, curBenchOps_, params.timeUnit, simStep_, params.maxSteps,
+		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }
 
 void SimulationMgr::DisplayMemoryUsageStats(

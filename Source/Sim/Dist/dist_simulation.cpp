@@ -21,6 +21,7 @@
 // internal
 #include "Source/Base/enum_hub.h"
 #include "Source/Base/helpers.h"
+#include "Source/Eval/Mem/memory.h"
 #include "Source/Sim/Scene/scenario_sim.h"
 #include "dist_diagnostics.h"
 #include "dist_simulation.h"
@@ -919,15 +920,22 @@ bool DistSimulationMgr::RunSim_Blocking()
 		std::printf("\n");
 	}
 	DisplayMemoryUsageStats(paramsFinal, true);
+	if (memoryTracker_)
+	{
+		const bool processMemoryChanged = memoryTracker_->SampleProcessMemory();
+		if (processMemoryChanged) { AppendLatestMemoryMetricsLog(); }
+	}
 
 	running_.store(false, std::memory_order_release);
 	EndRunLogging();
 
-	SPDLOG_INFO_MPI("Distributed simulation stopped running", mpiContext_);
 	if (mpiContext_.IsRoot())
 	{
 		printf("\n");
 	}
+	SPDLOG_INFO_MPI("Distributed simulation stopped running", mpiContext_);
+	DistDiagnosticsMgr::PrintFinalProgressPeakRam(
+		mpiContext_, BuildRankStepReport(paramsFinal, false));
 
 	return runOk;
 }
@@ -1593,6 +1601,7 @@ void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& para
 {
 	if (!loggingMgr_.IsActive()) { return; }
 	if (!simBackend_) { return; }
+	if (!memoryTracker_) { return; }
 
 	Mem::MemRecordStep record{};
 	record.simStep = simStep_;
@@ -1600,6 +1609,8 @@ void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& para
 
 	simBackend_->FillMemoryRecord(record, params);
 	FillDistributedMemoryRecord(record);
+	memoryTracker_->SampleProcessMemory();
+	record.process = memoryTracker_->GetCurrentRecord().process;
 	loggingMgr_.AppendMemoryRecord(record);
 }
 
@@ -1777,6 +1788,8 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 	}
 
 	report.exportedStep = exportedStep ? 1 : 0;
+	report.N_processPeakResidentBytes =
+		memoryTracker_ ? memoryTracker_->GetCurrentRecord().process.N_peakResidentBytes : 0;
 	return report;
 }
 

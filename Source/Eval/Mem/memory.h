@@ -29,6 +29,9 @@ namespace Mem
 		// pushes the record to history and aggregates step's memory usage
 		void EndStep(uint64_t simStep, double simTime);
 
+		// samples OS-reported process memory without adding a simulation-step record
+		bool SampleProcessMemory();
+
 		void PackMemSnapshot(Sync::MemSnapshot& snap) const;
 
 		// per-metric queries
@@ -57,8 +60,11 @@ namespace Mem
 		// rolling buffer for the memory usage for the last N_maxRecords_ steps
 		std::deque<MemRecordStep> recHistory_;
 
-		// all-time per-bucket aggregates
+		// all-time tracked memory aggregates
 		MemSpaceRecord memMax_allTime_{};
+
+		// all-time process peak
+		ProcessMemUsage processMax_allTime_{};
 
 		// helpers
 		void ClearAllTime();

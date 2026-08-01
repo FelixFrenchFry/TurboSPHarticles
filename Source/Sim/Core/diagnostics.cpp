@@ -18,6 +18,7 @@
 // internal
 #include "build_config.h"
 #include "diagnostics.h"
+#include "Source/Base/helpers.h"
 #include "Source/Sim/Core/parameters_sim.h"
 #include "Source/Sim/Core/simulation.h"
 #include "Source/Eval/Bench/benchmarks.h"
@@ -40,12 +41,21 @@ namespace
 		steady_clock::time_point startSteady{};
 		int N_lastLines = 0;
 		std::size_t lastProgressLen = 0;
+		std::string lastProgressLine{};
 	};
 
 	ProgressState& GetProgressState()
 	{
 		static ProgressState state{};
 		return state;
+	}
+
+	std::string FormatPeakRam(const uint64_t N_peakResidentBytes)
+	{
+		char buffer[64];
+		std::snprintf(buffer, sizeof(buffer), " | peak RAM %.2f GB",
+			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_peakResidentBytes));
+		return buffer;
 	}
 
 	void PrintCliSeparator()
@@ -85,6 +95,22 @@ namespace Sim
 		state = ProgressState{};
 		state.initialized = true;
 		state.startSteady = steady_clock::now();
+	}
+
+	void DiagnosticsMgr::PrintFinalProgressPeakRam(
+		const uint64_t N_peakResidentBytes)
+	{
+		ProgressState& state = GetProgressState();
+		if (state.N_lastLines == 0 || state.lastProgressLine.empty()) { return; }
+
+		const std::string marker = " | peak RAM ";
+		const std::size_t markerPos = state.lastProgressLine.find(marker);
+		if (markerPos == std::string::npos) { return; }
+
+		std::string line = state.lastProgressLine.substr(0, markerPos);
+		line += FormatPeakRam(N_peakResidentBytes);
+		std::printf("\nFINAL: %s\n\n", line.c_str());
+		std::fflush(stdout);
 	}
 
 	void DiagnosticsMgr::PrintBuildConfig()
@@ -234,7 +260,8 @@ namespace Sim
         const Bench::BenchOpList& benchOps,
         Bench::TimeUnit unit,
         uint64_t step,
-        int64_t maxSteps)
+        int64_t maxSteps,
+        const uint64_t N_peakResidentBytes)
     {
         ProgressState& state = GetProgressState();
 
@@ -461,12 +488,14 @@ namespace Sim
             );
         }
 
-        std::string line(buf);
-        if (line.size() < state.lastProgressLen)
-        {
-            line.append(state.lastProgressLen - line.size(), ' ');
-        }
-        state.lastProgressLen = line.size();
+		std::string line(buf);
+		line += FormatPeakRam(N_peakResidentBytes);
+		if (line.size() < state.lastProgressLen)
+		{
+			line.append(state.lastProgressLen - line.size(), ' ');
+		}
+		state.lastProgressLen = line.size();
+		state.lastProgressLine = line;
 
         printf("%s\n", line.c_str());
         N_lines++;

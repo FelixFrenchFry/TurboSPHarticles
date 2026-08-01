@@ -281,6 +281,7 @@ target_link_libraries(TSP_H PUBLIC
     xsimd
     TBB::tbb
     TBB::tbbmalloc
+    $<$<PLATFORM_ID:Windows>:Psapi>
     $<$<BOOL:${ENABLE_CUDA}>:CUDA::cudart>
     Project_Warnings
     Project_Defines

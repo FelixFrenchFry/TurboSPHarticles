@@ -146,6 +146,8 @@ namespace Sync
 		// metadata
 		uint64_t simStep;
 		double simTime;
+		Mem::ProcessMemUsage latestProcess{};
+		Mem::ProcessMemUsage maxProcess{};
 
 		// per-space / per-bucket memory usage
 		Mem::MemSpaceRecord latest{};

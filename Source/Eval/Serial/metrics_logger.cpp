@@ -217,7 +217,9 @@ namespace Export
 							  << totalAlloc;
 		}
 
-		memoryMetricsCsv_ << '\n';
+		memoryMetricsCsv_ << ','
+						  << record.process.N_peakResidentBytes
+						  << '\n';
 		memoryMetricsCsv_.flush();
 
 		if (!memoryMetricsCsv_.good())
@@ -438,7 +440,7 @@ namespace Export
 							  << spaceKey << "_total_allocBytes";
 		}
 
-		memoryMetricsCsv_ << '\n';
+		memoryMetricsCsv_ << ",process_peakResidentBytes\n";
 	}
 
 	void LoggingMgr::WriteBenchmarkMetricsHeader()
