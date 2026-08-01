@@ -29,6 +29,7 @@ namespace Dist
 		HaloFluid,
 		BoundaryPrep,
 		KeptBoundary,
+		MigratedBoundary,
 		HaloBoundary,
 		Backend,
 		SyncPack,

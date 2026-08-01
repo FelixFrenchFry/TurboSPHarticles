@@ -1773,6 +1773,8 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 	report.N_recvMigratedF = redistributionStats.N_recvOwnedF;
 	report.N_sentHaloF = redistributionStats.N_sentHaloF;
 	report.N_recvHaloF = redistributionStats.N_recvHaloF;
+	report.N_sentMigratedB = redistributionStats.N_sentOwnedB;
+	report.N_recvMigratedB = redistributionStats.N_recvOwnedB;
 	report.N_sentHaloB = redistributionStats.N_sentHaloB;
 	report.N_recvHaloB = redistributionStats.N_recvHaloB;
 

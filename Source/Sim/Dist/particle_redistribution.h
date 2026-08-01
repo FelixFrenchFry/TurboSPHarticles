@@ -47,15 +47,17 @@ namespace Dist
 	inline constexpr uint32_t RETAINED_CLASSIFICATION_CLASS_OUTER = 1;
 
 	// packed particle count lanes exchanged once per redistribution
-	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_COUNT = 3;
+	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_COUNT = 4;
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_OWNED_FLUID = 0;
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_HALO_FLUID = 1;
-	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_HALO_BOUNDARY = 2;
+	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_OWNED_BOUNDARY = 2;
+	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_HALO_BOUNDARY = 3;
 
-	// disjoint MPI tag ranges for the three particle payloads
+	// disjoint MPI tag ranges for the four particle payloads
 	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_OWNED_FLUID = 5310;
 	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_HALO_FLUID = 5410;
-	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_HALO_BOUNDARY = 5510;
+	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_OWNED_BOUNDARY = 5510;
+	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_HALO_BOUNDARY = 5610;
 
 	class MpiContext;
 	struct ParticleRedistributionTimingReport;
@@ -66,12 +68,14 @@ namespace Dist
 		// (outer vector = destination rank, inner vector = local particle indices)
 		std::vector<std::vector<uint32_t>> ownedFluidLocalIdxs_ByDstRank;
 		std::vector<std::vector<uint32_t>> haloFluidLocalIdxs_ByDstRank;
+		std::vector<std::vector<uint32_t>> ownedBoundaryLocalIdxs_ByDstRank;
 		std::vector<std::vector<uint32_t>> haloBoundaryLocalIdxs_ByDstRank;
 
 		// particles retained locally in the rebuilt backend state
 		std::vector<uint32_t> keptOwnedFluidLocalIdxs;
-		std::vector<uint32_t> keptOwnedBoundaryLocalIdxs;
 		std::vector<uint32_t> localHaloFluidLocalIdxs;
+		std::vector<uint32_t> keptOwnedBoundaryLocalIdxs;
+		std::vector<uint32_t> localHaloBoundaryLocalIdxs;
 
 		// set when that neighbor needs the particle as halo data, so a zero marks an inner owned particle
 		std::vector<uint32_t> fluidHaloNeighborMask_ByLocalIdx;
@@ -105,15 +109,15 @@ namespace Dist
 
 	struct ParticleRedistributionStats
 	{
-		// ownership migration traffic
+		// fluid ownership migration and halo traffic
 		uint32_t N_sentOwnedF = 0;
 		uint32_t N_recvOwnedF = 0;
-
-		// fluid halo traffic
 		uint32_t N_sentHaloF = 0;
 		uint32_t N_recvHaloF = 0;
 
-		// boundary halo traffic
+		// boundary ownership migration and halo traffic
+		uint32_t N_sentOwnedB = 0;
+		uint32_t N_recvOwnedB = 0;
 		uint32_t N_sentHaloB = 0;
 		uint32_t N_recvHaloB = 0;
 	};
@@ -271,13 +275,15 @@ namespace Dist
 		// send and receive storage for exchange with one neighbor rank
 		struct RankBuffers
 		{
-			// ownership migration payloads
+			// fluid migration and halo payloads
 			FluidExchangeBuffer sendOwnedFluidParticles;
 			FluidExchangeBuffer recvOwnedFluidParticles;
-
-			// fluid and boundary halo payloads
 			FluidExchangeBuffer sendHaloFluidParticles;
 			FluidExchangeBuffer recvHaloFluidParticles;
+
+			// boundary migration and halo payloads
+			BoundaryExchangeBuffer sendOwnedBoundaryParticles;
+			BoundaryExchangeBuffer recvOwnedBoundaryParticles;
 			BoundaryExchangeBuffer sendHaloBoundaryParticles;
 			BoundaryExchangeBuffer recvHaloBoundaryParticles;
 
@@ -286,6 +292,8 @@ namespace Dist
 			int N_recvOwnedF = 0;
 			int N_sendHaloF = 0;
 			int N_recvHaloF = 0;
+			int N_sendOwnedB = 0;
+			int N_recvOwnedB = 0;
 			int N_sendHaloB = 0;
 			int N_recvHaloB = 0;
 		};
@@ -397,6 +405,9 @@ namespace Dist
 		bool PrepareBoundaryParticleMutation(
 			const Sync::BoundaryConstView& oldParticles,
 			const DistParticleState& oldParticleState,
+			const IDomainDecomp& domainDecomp,
+			int rank,
+			float kernelRadius,
 			uint32_t N_global,
 			std::string* failMsg,
 			ParticleRedistributionTimingReport* timingReport);

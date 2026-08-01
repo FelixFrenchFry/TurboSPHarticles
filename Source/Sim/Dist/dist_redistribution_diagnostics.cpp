@@ -39,6 +39,7 @@ namespace
 		{ "haloF", ParticleRedistributionTimingOp::HaloFluid },
 		{ "prepB", ParticleRedistributionTimingOp::BoundaryPrep },
 		{ "keptB", ParticleRedistributionTimingOp::KeptBoundary },
+		{ "migrB", ParticleRedistributionTimingOp::MigratedBoundary },
 		{ "haloB", ParticleRedistributionTimingOp::HaloBoundary },
 		{ "backend", ParticleRedistributionTimingOp::Backend },
 		{ "wPack", ParticleRedistributionTimingOp::SyncPack },
