@@ -1,6 +1,4 @@
 // builder.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -49,9 +47,19 @@ namespace Scene
 
 	class ScenarioMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		ScenarioMgr() = default;
+
+		// restricts fluid and boundary particle generation to the given world-space region,
+		// distributed ranks build their own regions while particle IDs stay the global scenario indices
+		void BeginBuildRegion(const glm::vec3& min, const glm::vec3& max);
+		void EndBuildRegion();
+
+		// unfiltered particle counts of the build region session, identical on every rank
+		// because the generated particle set does not depend on the region
+		uint32_t GetBuiltGlobalFluidParticleCount() const { return N_builtGlobalF_; }
+		uint32_t GetBuiltGlobalBoundaryParticleCount() const { return N_builtGlobalB_; }
 
 		// builds a box-shaped boundary container around a given OBB
 		// (boundary particle layers grow outwards by default)
@@ -71,7 +79,7 @@ namespace Scene
 										  const Sim::SimParams& params,
 										  const ParticleKeepPredicate& keep);
 
-		// TODO: builds a sphere of fluid particles inside a given sphere
+		// TODO: builds a sphere of fluid particles inside a given hollow sphere of boundary particles
 
 		// builds a hollow block of boundary particles inside a given OBB
 		// (thickness given boundary layers param)
@@ -110,7 +118,11 @@ namespace Scene
 
 		static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr);
 
-	private: // --------------------------------------------------------------------------------------
+	private:
+
+		// tests a world-space particle position against the current build region
+		// (always true while no build region is active)
+		bool IsInsideBuildRegion(const glm::vec3& pos) const;
 
 		// builds a slab of boundary particles on a given OBB face
 		void BuildBoundaryLayersOnFace(const OBBFace& face,
@@ -150,6 +162,13 @@ namespace Scene
 
 		static inline uint32_t ParticleCountHollowBox(
 			uint32_t N_u, uint32_t N_v, uint32_t N_w, uint32_t layers);
+
+		// build region state, reset by every BeginBuildRegion() call
+		glm::vec3 buildRegionMin_{ 0.0f };
+		glm::vec3 buildRegionMax_{ 0.0f };
+		bool hasBuildRegion_ = false;
+		uint32_t N_builtGlobalF_ = 0; // total fluid particles generated, before the region filter
+		uint32_t N_builtGlobalB_ = 0; // total boundary particles generated, before the region filter
 	};
 
 } // namespace Scene

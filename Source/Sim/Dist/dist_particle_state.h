@@ -137,14 +137,15 @@ namespace Dist
 		float kernelRadius,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
-	// extracts the fluid / boundary particles needed by this rank and
-	// replicates rigid particles / bodies into the rank-local simulation state
+	// extracts the fluid/boundary particles needed by this rank and
+	// replicates rigid particles and bodies into the rank-local sim state
 	void BuildLocalParticlesFromGlobalState(
 		Sync::UniversalSimState& localState,
 		DistParticleState& fluidParticleState,
 		DistParticleState& boundaryParticleState,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
-		int rank, float kernelRadius);
+		int rank, float kernelRadius,
+		uint32_t N_globalF, uint32_t N_globalB);
 
 } // namespace Dist

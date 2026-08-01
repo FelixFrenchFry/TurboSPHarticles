@@ -438,7 +438,8 @@ namespace
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float kernelRadius)
+		const float kernelRadius,
+		const uint32_t N_globalF)
 	{
 		const Sync::FluidParticles& globalFluid = globalState.fluidParticles;
 		Sync::FluidParticles& localFluid = localState.fluidParticles;
@@ -453,17 +454,20 @@ namespace
 		localState.ResizeFluid(N_local);
 		particleState.Clear();
 		particleState.particleGlobalIdx_FromLocalIdx.reserve(N_local);
-		particleState.activeGlobalIdxFlags.assign(globalFluid.N_, 0);
+		particleState.activeGlobalIdxFlags.assign(N_globalF, 0);
+
+		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
 		// copy particles owned by this rank into the compact prefix
 		// TODO: parallelize this global particle scan with TBB?
 		uint32_t localIdx = 0;
-		for (uint32_t globalIdx = 0; globalIdx != globalFluid.N_; globalIdx++)
+		for (uint32_t srcIdx = 0; srcIdx != globalFluid.N_; srcIdx++)
 		{
-			if (domainDecomp.OwnerRank(FluidPositionAtArrayIdx(globalFluid, globalIdx)) != rank) { continue; }
+			if (domainDecomp.OwnerRank(FluidPositionAtArrayIdx(globalFluid, srcIdx)) != rank) { continue; }
 
-			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, globalIdx, localIdx);
+			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
 
+			const uint32_t globalIdx = globalFluid.id[srcIdx];
 			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
 			particleState.activeGlobalIdxFlags[globalIdx] = 1;
 			localIdx++;
@@ -471,14 +475,15 @@ namespace
 
 		// append non-owned particles inside the halo bounds of this rank
 		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t globalIdx = 0; globalIdx != globalFluid.N_; globalIdx++)
+		for (uint32_t srcIdx = 0; srcIdx != globalFluid.N_; srcIdx++)
 		{
 			if (!IsHaloParticleForRank(
-				FluidPositionAtArrayIdx(globalFluid, globalIdx),
+				FluidPositionAtArrayIdx(globalFluid, srcIdx),
 				domainDecomp, haloBounds, rank)) { continue; }
 
-			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, globalIdx, localIdx);
+			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
 
+			const uint32_t globalIdx = globalFluid.id[srcIdx];
 			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
 			particleState.activeGlobalIdxFlags[globalIdx] = 1;
 			localIdx++;
@@ -498,7 +503,8 @@ namespace
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float kernelRadius)
+		const float kernelRadius,
+		const uint32_t N_globalB)
 	{
 		const Sync::BoundaryParticles& globalBoundary = globalState.boundaryParticles;
 		Sync::BoundaryParticles& localBoundary = localState.boundaryParticles;
@@ -513,17 +519,20 @@ namespace
 		localState.ResizeBoundary(N_local);
 		particleState.Clear();
 		particleState.particleGlobalIdx_FromLocalIdx.reserve(N_local);
-		particleState.activeGlobalIdxFlags.assign(globalBoundary.N_, 0);
+		particleState.activeGlobalIdxFlags.assign(N_globalB, 0);
+
+		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
 		// copy particles owned by this rank into the compact prefix
 		// TODO: parallelize this global particle scan with TBB?
 		uint32_t localIdx = 0;
-		for (uint32_t globalIdx = 0; globalIdx != globalBoundary.N_; globalIdx++)
+		for (uint32_t srcIdx = 0; srcIdx != globalBoundary.N_; srcIdx++)
 		{
-			if (domainDecomp.OwnerRank(BoundaryPositionAtArrayIdx(globalBoundary, globalIdx)) != rank) { continue; }
+			if (domainDecomp.OwnerRank(BoundaryPositionAtArrayIdx(globalBoundary, srcIdx)) != rank) { continue; }
 
-			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, globalIdx, localIdx);
+			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
 
+			const uint32_t globalIdx = globalBoundary.id[srcIdx];
 			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
 			particleState.activeGlobalIdxFlags[globalIdx] = 1;
 			localIdx++;
@@ -531,14 +540,15 @@ namespace
 
 		// append non-owned particles inside the halo bounds of this rank
 		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t globalIdx = 0; globalIdx != globalBoundary.N_; globalIdx++)
+		for (uint32_t srcIdx = 0; srcIdx != globalBoundary.N_; srcIdx++)
 		{
 			if (!IsHaloParticleForRank(
-				BoundaryPositionAtArrayIdx(globalBoundary, globalIdx),
+				BoundaryPositionAtArrayIdx(globalBoundary, srcIdx),
 				domainDecomp, haloBounds, rank)) { continue; }
 
-			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, globalIdx, localIdx);
+			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
 
+			const uint32_t globalIdx = globalBoundary.id[srcIdx];
 			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
 			particleState.activeGlobalIdxFlags[globalIdx] = 1;
 			localIdx++;
@@ -1279,7 +1289,9 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	const Sync::UniversalSimState& globalState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius)
+	const float kernelRadius,
+	const uint32_t N_globalF,
+	const uint32_t N_globalB)
 {
 	// reset the rank-local state while preserving global step and time
 	localState = {};
@@ -1291,8 +1303,8 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	// build compact rank-local fluid and boundary particle layouts
 	BuildLocalFluidParticlesFromGlobalState(
 		fluidParticleState, localState, globalState,
-		domainDecomp, rank, kernelRadius);
+		domainDecomp, rank, kernelRadius, N_globalF);
 	BuildLocalBoundaryParticlesFromGlobalState(
 		boundaryParticleState, localState, globalState,
-		domainDecomp, rank, kernelRadius);
+		domainDecomp, rank, kernelRadius, N_globalB);
 }

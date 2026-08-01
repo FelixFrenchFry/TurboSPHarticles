@@ -49,5 +49,5 @@
   "exportEnabled": false,
   "exportDir": "Test",
   "exportInterval": 10,
-  "surfaceNbrCountRatio": 0.67
+  "surfaceNbrCountRatio": 0.75
 }

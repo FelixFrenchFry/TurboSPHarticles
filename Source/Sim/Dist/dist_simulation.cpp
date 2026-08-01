@@ -275,20 +275,21 @@ namespace
 		return usage;
 	}
 
-	bool FluidParticleOrderMatchesLocalIdxMap(
+	// the scenario builder stores the global scenario index in id, so a re-order that reached the
+	// backend particle data but not the localIdx metadata (or the other way around) shows up here
+	// (the rank-local scenario build slice is not addressable by global index, so the particle
+	// payload itself can no longer be compared against it)
+	bool FluidParticleIdsMatchLocalIdxMap(
 		const Sync::UniversalSimState& backendState,
-		const Sync::UniversalSimState& globalState,
 		const DistParticleState& particleState)
 	{
 		const auto& backendFluid = backendState.fluidParticles;
-		const auto& globalFluid = globalState.fluidParticles;
 
 		if (particleState.particleGlobalIdx_FromLocalIdx.size() != backendFluid.N_)
 		{
 			return false;
 		}
-		if (backendFluid.id.size() != backendFluid.N_ ||
-			globalFluid.id.size() != globalFluid.N_)
+		if (backendFluid.id.size() != backendFluid.N_)
 		{
 			return false;
 		}
@@ -296,26 +297,8 @@ namespace
 		// TODO: parallelize this with TBB, or leave it because only called during init?
 		for (uint32_t localIdx = 0; localIdx < backendFluid.N_; localIdx++)
 		{
-			const uint32_t globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
-			if (globalIdx >= globalFluid.N_) { return false; }
-
-			if (backendFluid.id[localIdx] != globalFluid.id[globalIdx] ||
-				!Base::ApproxEqu(backendFluid.xPos[localIdx], globalFluid.xPos[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.yPos[localIdx], globalFluid.yPos[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.zPos[localIdx], globalFluid.zPos[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.xVel[localIdx], globalFluid.xVel[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.yVel[localIdx], globalFluid.yVel[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.zVel[localIdx], globalFluid.zVel[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.xVelPred[localIdx], globalFluid.xVelPred[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.yVelPred[localIdx], globalFluid.yVelPred[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.zVelPred[localIdx], globalFluid.zVelPred[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.xAccPress[localIdx], globalFluid.xAccPress[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.yAccPress[localIdx], globalFluid.yAccPress[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.zAccPress[localIdx], globalFluid.zAccPress[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.sourceTerm[localIdx], globalFluid.sourceTerm[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.diagElem[localIdx], globalFluid.diagElem[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.pressure[localIdx], globalFluid.pressure[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendFluid.density[localIdx], globalFluid.density[globalIdx], 1e-6f))
+			if (backendFluid.id[localIdx] !=
+				particleState.particleGlobalIdx_FromLocalIdx[localIdx])
 			{
 				return false;
 			}
@@ -324,20 +307,17 @@ namespace
 		return true;
 	}
 
-	bool BoundaryParticleOrderMatchesLocalIdxMap(
+	bool BoundaryParticleIdsMatchLocalIdxMap(
 		const Sync::UniversalSimState& backendState,
-		const Sync::UniversalSimState& globalState,
 		const DistParticleState& particleState)
 	{
 		const auto& backendBoundary = backendState.boundaryParticles;
-		const auto& globalBoundary = globalState.boundaryParticles;
 
 		if (particleState.particleGlobalIdx_FromLocalIdx.size() != backendBoundary.N_)
 		{
 			return false;
 		}
-		if (backendBoundary.id.size() != backendBoundary.N_ ||
-			globalBoundary.id.size() != globalBoundary.N_)
+		if (backendBoundary.id.size() != backendBoundary.N_)
 		{
 			return false;
 		}
@@ -345,15 +325,8 @@ namespace
 		// TODO: parallelize this with TBB, or leave it because only called during init?
 		for (uint32_t localIdx = 0; localIdx < backendBoundary.N_; localIdx++)
 		{
-			const uint32_t globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
-			if (globalIdx >= globalBoundary.N_) { return false; }
-
-			if (backendBoundary.id[localIdx] != globalBoundary.id[globalIdx] ||
-				!Base::ApproxEqu(backendBoundary.xPos[localIdx], globalBoundary.xPos[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendBoundary.yPos[localIdx], globalBoundary.yPos[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendBoundary.zPos[localIdx], globalBoundary.zPos[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendBoundary.volB[localIdx], globalBoundary.volB[globalIdx], 1e-6f) ||
-				!Base::ApproxEqu(backendBoundary.psiB[localIdx], globalBoundary.psiB[globalIdx], 1e-6f))
+			if (backendBoundary.id[localIdx] !=
+				particleState.particleGlobalIdx_FromLocalIdx[localIdx])
 			{
 				return false;
 			}
@@ -665,14 +638,15 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
-	N_expectedGlobalF_ = globalSimState_.fluidParticles.N_;
-	N_expectedGlobalB_ = globalSimState_.boundaryParticles.N_;
+	// cached before the broadcast to confirm below that every rank generated the same particles
+	const uint64_t N_builtGlobalF = N_expectedGlobalF_;
+	const uint64_t N_builtGlobalB = N_expectedGlobalB_;
 	mpiContext_.BroadcastUint64(N_expectedGlobalF_, mpiContext_.RootRank());
 	mpiContext_.BroadcastUint64(N_expectedGlobalB_, mpiContext_.RootRank());
 
 	const bool globalParticleCountsMatch =
-		globalSimState_.fluidParticles.N_ == N_expectedGlobalF_ &&
-		globalSimState_.boundaryParticles.N_ == N_expectedGlobalB_;
+		N_builtGlobalF == N_expectedGlobalF_ &&
+		N_builtGlobalB == N_expectedGlobalB_;
 
 	if (!mpiContext_.AllTrue(globalParticleCountsMatch))
 	{
@@ -725,8 +699,8 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 		simParams_.backendVersion,
 		simParams_.neighborListMethod);
 
-	report.N_globalF = globalSimState_.fluidParticles.N_;
-	report.N_globalB = globalSimState_.boundaryParticles.N_;
+	report.N_globalF = static_cast<uint32_t>(N_expectedGlobalF_);
+	report.N_globalB = static_cast<uint32_t>(N_expectedGlobalB_);
 	report.N_globalR = globalSimState_.rigidParticles.N_;
 	report.N_globalRB = globalSimState_.rigidBodies.N_;
 
@@ -1075,13 +1049,31 @@ bool DistSimulationMgr::BuildGlobalSimState()
 			mpiContext_.Rank(), mpiContext_.Size());
 		return false;
 	}
+	if (!domainDecomp_)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to build global sim state (no domain decomp).",
+			mpiContext_.Rank(), mpiContext_.Size());
+		return false;
+	}
 	// reset scenario and all full-state data
 	globalSimState_ = {};
 	globalSimState_.step = 0;
 	globalSimState_.time = 0.0;
 
-	// all ranks build the same full scenario before rank-local compaction
+	// every rank builds the same scenario but keeps only the slice it needs, expanded by one
+	// kernel radius so boundary coefficient computations (psiB) still see complete neighborhoods
+	const AABB buildRegion = domainDecomp_->HaloExtentAABB(mpiContext_.Rank())
+		.Expanded(simParams_.kernelRadius);
+
+	scenarioMgr_.BeginBuildRegion(buildRegion.min, buildRegion.max);
 	simScenario_->Build(globalSimState_, simParams_);
+	scenarioMgr_.EndBuildRegion();
+
+	// the generated particle set does not depend on the build region, so these counts are
+	// the full scenario counts and every rank arrives at the same values
+	N_expectedGlobalF_ = scenarioMgr_.GetBuiltGlobalFluidParticleCount();
+	N_expectedGlobalB_ = scenarioMgr_.GetBuiltGlobalBoundaryParticleCount();
+
 	globalSimState_.fluidParticles.ensureParticleIdsPresent();
 	globalSimState_.boundaryParticles.ensureParticleIdsPresent();
 	globalSimState_.rigidParticles.ensureParticleIdsPresent();
@@ -1119,7 +1111,9 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 		globalSimState_,
 		*domainDecomp_,
 		mpiContext_.Rank(),
-		simParams_.kernelRadius);
+		simParams_.kernelRadius,
+		static_cast<uint32_t>(N_expectedGlobalF_),
+		static_cast<uint32_t>(N_expectedGlobalB_));
 
 	localSimState_.ShrinkToFitAll();
 
@@ -1157,8 +1151,7 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 		localOk = false;
 	}
 
-	if (fluidParticleState_.activeGlobalIdxFlags.size() !=
-		static_cast<uint64_t>(globalSimState_.fluidParticles.N_))
+	if (fluidParticleState_.activeGlobalIdxFlags.size() != N_expectedGlobalF_)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid fluid active global index flags.",
 			mpiContext_.Rank(), mpiContext_.Size());
@@ -1173,8 +1166,7 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 		localOk = false;
 	}
 
-	if (boundaryParticleState_.activeGlobalIdxFlags.size() !=
-		static_cast<uint64_t>(globalSimState_.boundaryParticles.N_))
+	if (boundaryParticleState_.activeGlobalIdxFlags.size() != N_expectedGlobalB_)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid boundary active global index flags.",
 			mpiContext_.Rank(), mpiContext_.Size());
@@ -1321,6 +1313,11 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 			// fluid and boundary payloads remain backend-resident after startup
 			localSimState_.fluidParticles = {};
 			localSimState_.boundaryParticles = {};
+
+			// the replicated scenario payload is only a build-time source and the check above
+			// is its last reader, so only the replicated rigid state is kept past startup
+			globalSimState_.fluidParticles = {};
+			globalSimState_.boundaryParticles = {};
 		}
 	}
 	catch (const std::exception& ex)
@@ -1346,8 +1343,8 @@ bool DistSimulationMgr::GatherOwnedGlobalSimStateOnRoot()
 		fluidParticleState_,
 		boundaryParticleState_,
 		mpiContext_,
-		globalSimState_.fluidParticles.N_,
-		globalSimState_.boundaryParticles.N_,
+		static_cast<uint32_t>(N_expectedGlobalF_),
+		static_cast<uint32_t>(N_expectedGlobalB_),
 		&stats);
 
 	localSimState_.fluidParticles = {};
@@ -1460,7 +1457,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 	// sized from the global count on every rank, so the reconciliation below stays collective
 	// even when a rank has already failed and only contributes its zero-initialized flags
 	auto& globalNearSurfaceFlags = globalNearSurfaceFlagsScratch_;
-	globalNearSurfaceFlags.assign(globalSimState_.fluidParticles.N_, 0);
+	globalNearSurfaceFlags.assign(N_expectedGlobalF_, 0);
 
 	if (localOk)
 	{
@@ -1479,7 +1476,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 
 			const uint32_t globalIdx =
 				fluidParticleState_.particleGlobalIdx_FromLocalIdx[localIdx];
-			if (globalIdx >= globalSimState_.fluidParticles.N_)
+			if (globalIdx >= N_expectedGlobalF_)
 			{
 				SPDLOG_ERROR(
 					"[rank {}/{}] Invalid owned fluid particle global index "
@@ -1507,7 +1504,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 			}
 
 			const uint32_t globalIdx = fluidParticleState_.particleGlobalIdx_FromLocalIdx[localIdx];
-			if (globalIdx >= globalSimState_.fluidParticles.N_)
+			if (globalIdx >= N_expectedGlobalF_)
 			{
 				localOk = false;
 				break;
@@ -1900,8 +1897,8 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 			*domainDecomp_,
 			mpiContext_,
 			params,
-			globalSimState_.fluidParticles.N_,
-			globalSimState_.boundaryParticles.N_,
+			static_cast<uint32_t>(N_expectedGlobalF_),
+			static_cast<uint32_t>(N_expectedGlobalB_),
 			&failMsg,
 			&particleRedistributionTimingReport_))
 		{
@@ -2167,11 +2164,9 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder() const
 {
 	const bool fluidOrderStable =
-		FluidParticleOrderMatchesLocalIdxMap(
-			localSimState_, globalSimState_, fluidParticleState_);
+		FluidParticleIdsMatchLocalIdxMap(localSimState_, fluidParticleState_);
 	const bool boundaryOrderStable =
-		BoundaryParticleOrderMatchesLocalIdxMap(
-			localSimState_, globalSimState_, boundaryParticleState_);
+		BoundaryParticleIdsMatchLocalIdxMap(localSimState_, boundaryParticleState_);
 	const bool rigidStateStable =
 		RigidStateMatchesGlobalState(localSimState_, globalSimState_);
 
@@ -2202,14 +2197,14 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata() const
 	const bool fluidMetadataValid =
 		fluidParticleState_.IsValidLocalParticleState(
 			N_localF,
-			globalSimState_.fluidParticles.N_,
+			static_cast<uint32_t>(N_expectedGlobalF_),
 			&fluidFailMsg);
 
 	std::string boundaryFailMsg{};
 	const bool boundaryMetadataValid =
 		boundaryParticleState_.IsValidLocalParticleState(
 			N_localB,
-			globalSimState_.boundaryParticles.N_,
+			static_cast<uint32_t>(N_expectedGlobalB_),
 			&boundaryFailMsg);
 
 	if (!fluidMetadataValid || !boundaryMetadataValid)
@@ -2245,7 +2240,7 @@ bool DistSimulationMgr::ApplyLastBackendParticleReOrder()
 	if (!ApplyLocalParticleReOrder(
 		fluidParticleState_,
 		oldFluidLocalIdx_FromNewLocalIdx,
-		globalSimState_.fluidParticles.N_,
+		static_cast<uint32_t>(N_expectedGlobalF_),
 		&fluidParticleReOrderWorkBuffers_))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to apply backend fluid particle re-order.",
@@ -2256,7 +2251,7 @@ bool DistSimulationMgr::ApplyLastBackendParticleReOrder()
 	if (!ApplyLocalParticleReOrder(
 		boundaryParticleState_,
 		oldBoundaryLocalIdx_FromNewLocalIdx,
-		globalSimState_.boundaryParticles.N_,
+		static_cast<uint32_t>(N_expectedGlobalB_),
 		&boundaryParticleReOrderWorkBuffers_))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to apply backend boundary particle re-order.",

@@ -137,8 +137,8 @@ namespace Sim
 		uint32_t exportInterval = 10;
 
 		// export surface classification
-		float surfaceNbrCountRatio = 0.67f; // near-surface neighborhood fill ratio
-		uint32_t surfaceNbrCountThreshold = 24; // fluid neighbor count derived from the ratio
+		float surfaceNbrCountRatio = 0.75f; // near-surface neighborhood fill ratio
+		uint32_t surfaceNbrCountThreshold = 27; // fluid neighbor count derived from the ratio
 	};
 
 	class SimParamsMgr

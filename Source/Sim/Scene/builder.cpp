@@ -301,6 +301,30 @@ void ScenarioMgr::ComputeParticleCoefficients(
 	);
 }
 
+void ScenarioMgr::BeginBuildRegion(const glm::vec3& min, const glm::vec3& max)
+{
+	buildRegionMin_ = min;
+	buildRegionMax_ = max;
+	hasBuildRegion_ = true;
+
+	N_builtGlobalF_ = 0;
+	N_builtGlobalB_ = 0;
+}
+
+void ScenarioMgr::EndBuildRegion()
+{
+	hasBuildRegion_ = false;
+}
+
+bool ScenarioMgr::IsInsideBuildRegion(const glm::vec3& pos) const
+{
+	if (!hasBuildRegion_) { return true; }
+
+	return pos.x >= buildRegionMin_.x && pos.x <= buildRegionMax_.x
+		&& pos.y >= buildRegionMin_.y && pos.y <= buildRegionMax_.y
+		&& pos.z >= buildRegionMin_.z && pos.z <= buildRegionMax_.z;
+}
+
 void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 											 Sync::UniversalSimState& dst,
 											 const Sim::SimParams& params)
@@ -362,10 +386,10 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 
 	auto& F = dst.fluidParticles;
 
-	// resize fluid particle data structures
-	const uint32_t N_base = F.N_;
+	// dense generation index of the first particle, so IDs stay the global scenario indices
+	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
 	const uint32_t N_add = N_u * N_v * N_w;
-	dst.ResizeFluid(N_base + N_add);
+	N_builtGlobalF_ += N_add;
 
 	// offsets from box planes
 	const float uOff = radius + StartOffset(uLen_i, size, static_cast<int>(N_u));
@@ -373,6 +397,116 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	const float wOff = radius + StartOffset(wLen_i, size, static_cast<int>(N_w));
 
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
+
+	// world position of one generated particle, so the region passes below stay consistent
+	const auto ParticlePosition = [&](const uint32_t iu, const uint32_t jv,
+									  const uint32_t kw, const uint32_t idx) -> glm::vec3
+	{
+		// position components
+		float u = uOff + static_cast<float>(iu) * size;
+		float v = vOff + static_cast<float>(jv) * size;
+		float w = wOff + static_cast<float>(kw) * size;
+
+		// optionally apply jittering
+		if (jitAmp > 0.0f)
+		{
+			// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
+			const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
+
+			u += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 0ull, jitAmp);
+			v += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 1ull, jitAmp);
+			w += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 2ull, jitAmp);
+		}
+
+		// clamp to make edge particles remain fully inside the box
+		u = std::clamp(u, radius, box.uLen - radius);
+		v = std::clamp(v, radius, box.vLen - radius);
+		w = std::clamp(w, radius, box.wLen - radius);
+
+		return box.origin
+			 + box.uHat * u
+			 + box.vHat * v
+			 + box.wHat * w;
+	};
+
+	// writes one particle into its storage slot, tagged with its global scenario index
+	const auto WriteParticle = [&](const uint32_t outIdx, const uint32_t idx, const glm::vec3& pos)
+	{
+		F.id[outIdx] = idx;
+
+		// use pos for new particle
+		F.xPos[outIdx] = pos.x;
+		F.yPos[outIdx] = pos.y;
+		F.zPos[outIdx] = pos.z;
+
+		// no velocity by default
+		F.xVel[outIdx] = 0.0f;
+		F.yVel[outIdx] = 0.0f;
+		F.zVel[outIdx] = 0.0f;
+		F.xVelPred[outIdx] = 0.0f;
+		F.yVelPred[outIdx] = 0.0f;
+		F.zVelPred[outIdx] = 0.0f;
+
+		// no acceleration by default
+		F.xAccPress[outIdx] = 0.0f;
+		F.yAccPress[outIdx] = 0.0f;
+		F.zAccPress[outIdx] = 0.0f;
+
+		// default pressure, density, etc...
+		F.sourceTerm[outIdx] = 0.0f;
+		F.diagElem[outIdx] = 0.0f;
+		F.pressure[outIdx] = 0.0f;
+		F.density[outIdx] = params.restDensity;
+	};
+
+	// keep only the generated particles inside the build region
+	if (hasBuildRegion_)
+	{
+		// first pass to determine how many particles to keep
+		uint32_t N_keep = 0;
+		for (uint32_t kw = 0; kw < N_w; kw++) // depth
+		{
+			for (uint32_t jv = 0; jv < N_v; jv++) // height
+			{
+				for (uint32_t iu = 0; iu < N_u; iu++) // width
+				{
+					const uint32_t idx = N_base + (N_v * kw + jv) * N_u + iu;
+
+					if (IsInsideBuildRegion(ParticlePosition(iu, jv, kw, idx))) { N_keep++; }
+				}
+			}
+		}
+		if (N_keep == 0) { return; }
+
+		// resize fluid particle data structures according to the kept particle count
+		const uint32_t N_localBase = F.N_;
+		dst.ResizeFluid(N_localBase + N_keep);
+
+		// second pass to actually add particles
+		uint32_t outIdx = N_localBase;
+		for (uint32_t kw = 0; kw < N_w; kw++) // depth
+		{
+			for (uint32_t jv = 0; jv < N_v; jv++) // height
+			{
+				for (uint32_t iu = 0; iu < N_u; iu++) // width
+				{
+					const uint32_t idx = N_base + (N_v * kw + jv) * N_u + iu;
+					const glm::vec3 pos = ParticlePosition(iu, jv, kw, idx);
+
+					// skip erroneous particles
+					if (!IsInsideBuildRegion(pos)) { continue; }
+
+					WriteParticle(outIdx, idx, pos);
+					outIdx++;
+				}
+			}
+		}
+
+		return;
+	}
+
+	// resize fluid particle data structures according to the new total particle count
+	dst.ResizeFluid(N_base + N_add);
 
 	// add particles
 	if (N_w > 0 && N_v > 0 && N_u > 0)
@@ -391,58 +525,11 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 							const uint32_t local = (N_v * kw + jv) * N_u + iu;
 							const uint32_t idx = N_base + local;
 
-							// position components
-							float u = uOff + static_cast<float>(iu) * size;
-							float v = vOff + static_cast<float>(jv) * size;
-							float w = wOff + static_cast<float>(kw) * size;
-
-							// optionally apply jittering
-							if (jitAmp > 0.0f)
-							{
-								// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
-								const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
-
-								u += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 0ull, jitAmp);
-								v += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 1ull, jitAmp);
-								w += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 2ull, jitAmp);
-							}
-
-							// clamp to make edge particles remain fully inside the box
-							u = std::clamp(u, radius, box.uLen - radius);
-							v = std::clamp(v, radius, box.vLen - radius);
-							w = std::clamp(w, radius, box.wLen - radius);
-
-							const glm::vec3 pos = box.origin
-												+ box.uHat * u
-												+ box.vHat * v
-												+ box.wHat * w;
-
-							F.id[idx] = idx;
-
-							// use pos for new particle
-							F.xPos[idx] = pos.x;
-							F.yPos[idx] = pos.y;
-							F.zPos[idx] = pos.z;
-
-							// no velocity by default
-							F.xVel[idx] = 0.0f;
-							F.yVel[idx] = 0.0f;
-							F.zVel[idx] = 0.0f;
-							F.xVelPred[idx] = 0.0f;
-							F.yVelPred[idx] = 0.0f;
-							F.zVelPred[idx] = 0.0f;
-
-							// no acceleration by default
-							F.xAccPress[idx] = 0.0f;
-							F.yAccPress[idx] = 0.0f;
-							F.zAccPress[idx] = 0.0f;
-
-							// default pressure, density, etc...
-							F.sourceTerm[idx] = 0.0f;
-							F.diagElem[idx] = 0.0f;
-							F.pressure[idx] = 0.0f;
-							F.density[idx] = params.restDensity;
-
+							WriteParticle(idx, idx, ParticlePosition(
+								static_cast<uint32_t>(iu),
+								static_cast<uint32_t>(jv),
+								static_cast<uint32_t>(kw),
+								idx));
 						}
 					}
 				}
@@ -479,11 +566,11 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 
 	// first pass to determine how many particles to keep
 	uint32_t N_keep = 0;
-	for (uint32_t kw = 0; kw < N_w; kw++)
+	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
-		for (uint32_t jv = 0; jv < N_v; jv++)
+		for (uint32_t jv = 0; jv < N_v; jv++) // height
 		{
-			for (uint32_t iu = 0; iu < N_u; iu++)
+			for (uint32_t iu = 0; iu < N_u; iu++) // width
 			{
 				// position components
 				float u = uOff + static_cast<float>(iu) * size;
@@ -504,19 +591,25 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 
 	auto& F = dst.fluidParticles;
 
+	// dense generation index of the first particle, so IDs stay the global scenario indices
+	// TODO: apply the build region here too, see BuildFluidBlock_OBB?
+	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
+	N_builtGlobalF_ += N_keep;
+
 	// resize fluid particle data structures
-	const uint32_t N_base = F.N_;
-	dst.ResizeFluid(N_base + N_keep);
+	const uint32_t N_localBase = F.N_;
+	dst.ResizeFluid(N_localBase + N_keep);
 
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
-	uint32_t outIdx = N_base;
+	uint32_t outIdx = N_localBase;
+	uint32_t idx = N_base;
 
 	// second pass to actually add particles
-	for (uint32_t kw = 0; kw < N_w; kw++)
+	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
-		for (uint32_t jv = 0; jv < N_v; jv++)
+		for (uint32_t jv = 0; jv < N_v; jv++) // height
 		{
-			for (uint32_t iu = 0; iu < N_u; iu++)
+			for (uint32_t iu = 0; iu < N_u; iu++) // width
 			{
 				// position components
 				float u = uOff + static_cast<float>(iu) * size;
@@ -532,9 +625,9 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 					// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
 					const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
 
-					u += Jitter3D(baseSeed, static_cast<uint64_t>(outIdx) * 3ull + 0ull, jitAmp);
-					v += Jitter3D(baseSeed, static_cast<uint64_t>(outIdx) * 3ull + 1ull, jitAmp);
-					w += Jitter3D(baseSeed, static_cast<uint64_t>(outIdx) * 3ull + 2ull, jitAmp);
+					u += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 0ull, jitAmp);
+					v += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 1ull, jitAmp);
+					w += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 2ull, jitAmp);
 				}
 
 				// clamp to make edge particles remain fully inside the box
@@ -547,7 +640,7 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 									+ box.vHat * v
 									+ box.wHat * w;
 
-				F.id[outIdx] = outIdx;
+				F.id[outIdx] = idx;
 
 				// use pos for new particle
 				F.xPos[outIdx] = pos.x;
@@ -574,6 +667,7 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				F.density[outIdx] = params.restDensity;
 
 				outIdx++;
+				idx++;
 			}
 		}
 	}
@@ -622,19 +716,19 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 
 	uint32_t idx = N_base;
 
-	for (uint32_t kw = 0; kw < N_w; kw++) // loop over depth
+	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
 		// interior particle beyond layers in w, and clamp to prevent drift
 		const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
 		float w = std::min(wLen_i, static_cast<float>(kw) * size);
 
-		for (uint32_t jv = 0; jv < N_v; jv++) // loop over height
+		for (uint32_t jv = 0; jv < N_v; jv++) // height
 		{
 			// interior particle beyond layers in v, and clamp to prevent drift
 			const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
 			float v = std::min(vLen_i, static_cast<float>(jv) * size);
 
-			for (uint32_t iu = 0; iu < N_u; iu++) // loop over width
+			for (uint32_t iu = 0; iu < N_u; iu++) // width
 			{
 				// interior particle beyond layers in u, and clamp to prevent drift
 				const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
@@ -757,19 +851,19 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 
 	uint32_t rigidParticleIdx = N_base;
 
-	for (uint32_t kw = 0; kw < N_w; kw++) // loop over depth
+	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
 		// interior particle beyond layers in w, and clamp to prevent drift
 		const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
 		float w = std::min(wLen_i, static_cast<float>(kw) * size);
 
-		for (uint32_t jv = 0; jv < N_v; jv++) // loop over height
+		for (uint32_t jv = 0; jv < N_v; jv++) // height
 		{
 			// interior particle beyond layers in v, and clamp to prevent drift
 			const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
 			float v = std::min(vLen_i, static_cast<float>(jv) * size);
 
-			for (uint32_t iu = 0; iu < N_u; iu++) // loop over width
+			for (uint32_t iu = 0; iu < N_u; iu++) // width
 			{
 				// interior particle beyond layers in u, and clamp to prevent drift
 				const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
@@ -1035,7 +1129,11 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	const float defaultPsiB = DefaultBoundaryPsiB(params);
 
 	// pre-reserve memory for new particles
-	dst.ReserveBoundaryAdditional(N_u * N_v * params.boundaryLayers);
+	// (a build region keeps only a slice of the face, so its storage grows on demand instead)
+	if (!hasBuildRegion_)
+	{
+		dst.ReserveBoundaryAdditional(N_u * N_v * params.boundaryLayers);
+	}
 	auto& B = dst.boundaryParticles;
 
 	for (uint32_t layer = 0; layer < params.boundaryLayers; layer++)
@@ -1055,9 +1153,15 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 
 				const glm::vec3 pos = face.origin + bu + bv + face.nHat * outOffset;
 
-				// TODO: add jittering
+				// TODO: add jittering?
 
-				const uint32_t idx = static_cast<uint32_t>(B.xPos.size());
+				// dense generation index of the first particle, so IDs stay the global scenario indices
+				const uint32_t idx = hasBuildRegion_
+					? N_builtGlobalB_
+					: static_cast<uint32_t>(B.xPos.size());
+				N_builtGlobalB_++;
+
+				if (!IsInsideBuildRegion(pos)) { continue; }
 
 				B.id.push_back(idx);
 
