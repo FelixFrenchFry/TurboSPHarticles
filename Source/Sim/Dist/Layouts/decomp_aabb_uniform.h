@@ -1,4 +1,4 @@
-// decomp_AABB_uniform.h
+// decomp_aabb_uniform.h
 
 #pragma once
 
@@ -7,6 +7,7 @@
 
 // internal
 #include "Source/Sim/Dist/domain_decomp.h"
+#include "aabb_slab_layout.h"
 
 
 
@@ -15,7 +16,7 @@ namespace Dist
 	// uniform AABB slab decomp, split along the global X axis
 	class Decomp_AABB_Uniform final : public IDomainDecomp
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		const char* Name() const override { return "Decomp_AABB_Uniform"; }
 
@@ -34,29 +35,11 @@ namespace Dist
 
 		bool IsValidForRankCount(int N_ranks) const override;
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		static constexpr int SPLIT_AXIS = 0;
 
-		struct AABBRankSubdomain
-		{
-			int rank = 0;
-			AABB ownedBounds; // domain bounds owned by this rank
-			AABB haloBounds; // owned bounds expanded by halo radius
-			std::vector<int> neighborRanks; // ranks whose owned bounds overlap this halo
-		};
-
-		const AABBRankSubdomain& Subdomain(int rank) const;
-
-		std::vector<AABBRankSubdomain> BuildSlabSubdomains(
-			const DomainDecompInput& input,
-			int splitAxis) const;
-
-		AABB globalBounds_;
-		std::vector<AABBRankSubdomain> rankSubdomains_;
-		std::vector<float> slabMinSplitPos_;
-		float haloRadius_ = 0.0f;
-		float slabLenInv_ = 0.0f;
+		AABBSlabLayout slabLayout_;
 	};
 
 } // namespace Dist

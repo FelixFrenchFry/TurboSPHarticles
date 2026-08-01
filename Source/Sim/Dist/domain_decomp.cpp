@@ -6,7 +6,7 @@
 
 // internal
 #include "domain_decomp.h"
-#include "Layouts/decomp_AABB_uniform.h"
+#include "Layouts/decomp_aabb_uniform.h"
 
 
 
