@@ -72,3 +72,8 @@ bool Decomp_AABB_Uniform::IsValidForRankCount(const int N_ranks) const
 {
 	return slabLayout_.IsValidForRankCount(N_ranks);
 }
+
+void Decomp_AABB_Uniform::Repartition(const DomainDecompRepartitionInput&)
+{
+	throw std::runtime_error("Decomp_AABB_Uniform does not support repartitioning.");
+}

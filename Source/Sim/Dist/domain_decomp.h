@@ -4,6 +4,8 @@
 
 // external
 #include <memory>
+#include <span>
+#include <stdexcept>
 #include <vector>
 
 // internal
@@ -20,6 +22,12 @@ namespace Dist
 		AABB globalBounds;
 		float haloRadius = 0.0f;
 		int N_ranks = 1;
+	};
+
+	// candidate partition positions supplied by a repartitioning policy
+	struct DomainDecompRepartitionInput
+	{
+		std::span<const float> partitionPositions;
 	};
 
 	// interface for domain decomp strategies
@@ -48,6 +56,15 @@ namespace Dist
 		virtual AABB HaloExtentAABB(int rank) const = 0;
 
 		virtual bool IsValidForRankCount(int N_ranks) const = 0;
+
+		// reports whether the strategy can apply a new partition
+		virtual bool SupportsRepartition() const { return false; }
+
+		// strategies that do not support repartitioning must not silently ignore a request
+		virtual void Repartition(const DomainDecompRepartitionInput&)
+		{
+			throw std::runtime_error("This domain decomp strategy does not support repartitioning.");
+		}
 	};
 
 	// domain decomp factory

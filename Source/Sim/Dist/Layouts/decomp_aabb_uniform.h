@@ -34,6 +34,8 @@ namespace Dist
 		AABB HaloExtentAABB(int rank) const override;
 
 		bool IsValidForRankCount(int N_ranks) const override;
+		bool SupportsRepartition() const override { return false; }
+		void Repartition(const DomainDecompRepartitionInput& input) override;
 
 	private:
 

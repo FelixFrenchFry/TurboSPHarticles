@@ -72,3 +72,12 @@ bool Decomp_AABB_Dynamic::IsValidForRankCount(const int N_ranks) const
 {
 	return slabLayout_.IsValidForRankCount(N_ranks);
 }
+
+void Decomp_AABB_Dynamic::Repartition(const DomainDecompRepartitionInput& input)
+{
+	const std::vector<float> splitPositions(
+		input.partitionPositions.begin(),
+		input.partitionPositions.end());
+
+	slabLayout_.Rebuild(splitPositions);
+}
