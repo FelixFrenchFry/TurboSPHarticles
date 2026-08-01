@@ -564,8 +564,43 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 	const float vOff = radius + StartOffset(vLen_i, size, static_cast<int>(N_v));
 	const float wOff = radius + StartOffset(wLen_i, size, static_cast<int>(N_w));
 
-	// first pass to determine how many particles to keep
-	uint32_t N_keep = 0;
+	auto& F = dst.fluidParticles;
+
+	// dense generation index of the first particle, so IDs stay the global scenario indices
+	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
+	const float jitAmp = params.jitterFracF * params.particleSizeF;
+
+	// world position of one generated particle, so the region passes below stay consistent
+	const auto ParticlePosition = [&](const uint32_t iu, const uint32_t jv,
+		const uint32_t kw, const uint32_t idx) -> glm::vec3
+	{
+		float u = uOff + static_cast<float>(iu) * size;
+		float v = vOff + static_cast<float>(jv) * size;
+		float w = wOff + static_cast<float>(kw) * size;
+
+		if (jitAmp > 0.0f)
+		{
+			// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
+			const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
+
+			u += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 0ull, jitAmp);
+			v += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 1ull, jitAmp);
+			w += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 2ull, jitAmp);
+		}
+
+		u = std::clamp(u, radius, box.uLen - radius);
+		v = std::clamp(v, radius, box.vLen - radius);
+		w = std::clamp(w, radius, box.wLen - radius);
+
+		return box.origin
+			+ box.uHat * u
+			+ box.vHat * v
+			+ box.wHat * w;
+	};
+
+	// first pass determines both the global filtered count and the local region count
+	uint32_t N_keepGlobal = 0;
+	uint32_t N_keepLocal = 0;
 	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
 		for (uint32_t jv = 0; jv < N_v; jv++) // height
@@ -583,24 +618,27 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				w = std::clamp(w, radius, box.wLen - radius);
 
 				// apply filter
-				if (!keep || keep(u, v, w)) { N_keep++; }
+				if (keep && !keep(u, v, w)) { continue; }
+
+				const uint32_t globalIdx = N_base + N_keepGlobal;
+				N_keepGlobal++;
+				if (!hasBuildRegion_ || IsInsideBuildRegion(
+					ParticlePosition(iu, jv, kw, globalIdx)))
+				{
+					N_keepLocal++;
+				}
 			}
 		}
 	}
-	if (N_keep == 0) { return; }
+	if (N_keepGlobal == 0) { return; }
 
-	auto& F = dst.fluidParticles;
-
-	// dense generation index of the first particle, so IDs stay the global scenario indices
-	// TODO: apply the build region here too, see BuildFluidBlock_OBB?
-	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
-	N_builtGlobalF_ += N_keep;
+	// advance the global count on every rank, even if this rank has no particles in the region
+	N_builtGlobalF_ += N_keepGlobal;
+	if (N_keepLocal == 0) { return; }
 
 	// resize fluid particle data structures
 	const uint32_t N_localBase = F.N_;
-	dst.ResizeFluid(N_localBase + N_keep);
-
-	const float jitAmp = params.jitterFracF * params.particleSizeF;
+	dst.ResizeFluid(N_localBase + N_keepLocal);
 	uint32_t outIdx = N_localBase;
 	uint32_t idx = N_base;
 
@@ -616,29 +654,19 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				float v = vOff + static_cast<float>(jv) * size;
 				float w = wOff + static_cast<float>(kw) * size;
 
-				// apply filter
-				if (keep && !keep(u, v, w)) { continue; }
-
-				// optionally apply jittering
-				if (jitAmp > 0.0f)
-				{
-					// use (idx * 3 + {0,1,2}) as unique keys for x,y,z jitter
-					const uint64_t baseSeed = static_cast<uint64_t>(params.jitterSeedF);
-
-					u += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 0ull, jitAmp);
-					v += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 1ull, jitAmp);
-					w += Jitter3D(baseSeed, static_cast<uint64_t>(idx) * 3ull + 2ull, jitAmp);
-				}
-
-				// clamp to make edge particles remain fully inside the box
 				u = std::clamp(u, radius, box.uLen - radius);
 				v = std::clamp(v, radius, box.vLen - radius);
 				w = std::clamp(w, radius, box.wLen - radius);
 
-				const glm::vec3 pos = box.origin
-									+ box.uHat * u
-									+ box.vHat * v
-									+ box.wHat * w;
+				// apply filter
+				if (keep && !keep(u, v, w)) { continue; }
+
+				const glm::vec3 pos = ParticlePosition(iu, jv, kw, idx);
+				if (hasBuildRegion_ && !IsInsideBuildRegion(pos))
+				{
+					idx++;
+					continue;
+				}
 
 				F.id[outIdx] = idx;
 
