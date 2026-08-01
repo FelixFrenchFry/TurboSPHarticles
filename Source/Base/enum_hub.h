@@ -120,7 +120,8 @@ namespace Base
 
 	enum class DomainDecompMethod : uint8_t
 	{
-		AABB_Uniform        // 0 uniform AABB slabs, split along the global X axis
+		AABB_Uniform,       // 0 uniformly sized AABB slabs, split along the global X axis
+		AABB_Dynamic        // 1 non-uniformly sized AABB slabs with walls that be shifted
 	};
 	constexpr const char* ToCString(const DomainDecompMethod v) noexcept
 	{
@@ -128,6 +129,8 @@ namespace Base
 		{
 		case DomainDecompMethod::AABB_Uniform:
 			return "AABB_Uniform";
+		case DomainDecompMethod::AABB_Dynamic:
+			return "AABB_Dynamic";
 		}
 		return "DomainDecompMethod::<unknown>";
 	}

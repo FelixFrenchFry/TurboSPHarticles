@@ -178,6 +178,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				const std::string s = v.get<std::string>();
 				if (s == "AABB_Uniform")
 					{ out = Base::DomainDecompMethod::AABB_Uniform; return true; }
+				if (s == "AABB_Dynamic")
+					{ out = Base::DomainDecompMethod::AABB_Dynamic; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -187,6 +189,9 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				{
 				case 0:
 					out = Base::DomainDecompMethod::AABB_Uniform;
+					return true;
+				case 1:
+					out = Base::DomainDecompMethod::AABB_Dynamic;
 					return true;
 				default:
 					return false;

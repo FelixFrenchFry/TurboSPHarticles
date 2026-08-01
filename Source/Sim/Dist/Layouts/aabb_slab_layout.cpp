@@ -25,6 +25,43 @@ namespace
 
 } // namespace anonymous
 
+std::vector<float> Dist::MakeUniformSplitPositions(
+	const AABB& globalBounds,
+	const int N_ranks,
+	const int splitAxis)
+{
+	if (!globalBounds.IsValid())
+	{
+		throw std::runtime_error(
+			"Cannot make uniform split positions with invalid global domain bounds.");
+	}
+	if (N_ranks <= 0)
+	{
+		throw std::runtime_error(
+			"Cannot make uniform split positions for non-positive rank count.");
+	}
+	if (splitAxis < 0 || splitAxis > 2)
+	{
+		throw std::runtime_error("Cannot make uniform split positions with invalid split axis.");
+	}
+
+	const float splitMin = globalBounds.min[splitAxis];
+	const float splitMax = globalBounds.max[splitAxis];
+	const float splitLen = splitMax - splitMin;
+	const float slabLen = splitLen / static_cast<float>(N_ranks);
+
+	std::vector<float> splitPositions{};
+	splitPositions.resize(static_cast<uint64_t>(N_ranks) + 1);
+
+	for (int rank = 0; rank < N_ranks; rank++)
+	{
+		splitPositions[rank] = splitMin + static_cast<float>(rank) * slabLen;
+	}
+	splitPositions[N_ranks] = splitMax;
+
+	return splitPositions;
+}
+
 void AABBSlabLayout::Build(
 	const AABB& globalBounds,
 	const float haloRadius,
@@ -89,6 +126,22 @@ void AABBSlabLayout::Build(
 	rankSubdomains_ = std::move(rankSubdomains);
 	splitPositions_ = splitPositions;
 	haloRadius_ = haloRadius;
+}
+
+void AABBSlabLayout::Rebuild(const std::vector<float>& splitPositions)
+{
+	if (rankSubdomains_.empty())
+	{
+		throw std::runtime_error("Cannot rebuild AABBSlabLayout before it was built.");
+	}
+
+	// only the walls change, so everything else is re-derived from the stored build state
+	Build(
+		globalBounds_,
+		haloRadius_,
+		static_cast<int>(rankSubdomains_.size()),
+		splitAxis_,
+		splitPositions);
 }
 
 const AABB& AABBSlabLayout::GlobalExtentAABB() const

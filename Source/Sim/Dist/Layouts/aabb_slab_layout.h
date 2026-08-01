@@ -12,6 +12,12 @@
 
 namespace Dist
 {
+	// create uniformly spaced split positions for an AABB slab layout
+	std::vector<float> MakeUniformSplitPositions(
+		const AABB& globalBounds,
+		int N_ranks,
+		int splitAxis);
+
 	// reusable AABB slab geometry built from ordered split positions
 	class AABBSlabLayout final
 	{
@@ -23,6 +29,9 @@ namespace Dist
 			int N_ranks,
 			int splitAxis,
 			const std::vector<float>& splitPositions);
+
+		// re-derives the layout from new walls, keeping the state the last build was based on
+		void Rebuild(const std::vector<float>& splitPositions);
 
 		const AABB& GlobalExtentAABB() const;
 
