@@ -6,6 +6,7 @@
   "domainDecompMethod": 1,
   "loadBalanceMetric": 1,
   "loadBalanceTrigger": 0,
+  "loadBalanceWeightModel": 0,
 
   "maxSteps": 2000,
   "timeStep": 0.001,

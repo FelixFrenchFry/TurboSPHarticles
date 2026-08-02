@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <vector>
 
@@ -24,8 +23,8 @@ const char* RankOwnedParticleCountMetric::Name() const
 
 double RankOwnedParticleCountMetric::Evaluate(const RankLoadSample& sample)
 {
-	return static_cast<double>(sample.N_ownedF) +
-		static_cast<double>(sample.N_ownedB);
+	// TODO: restore a boundary-particle weight when boundary work is modeled?
+	return static_cast<double>(sample.N_ownedF);
 }
 
 const char* RankBackendStepTimeMetric::Name() const
@@ -154,6 +153,7 @@ bool LoadBalanceMgr::Configure(
 	// reset selected policies
 	loadMetric_.reset();
 	rebalanceTrigger_.reset();
+	weightModel_ = params.loadBalanceWeightModel;
 
 	try
 	{
@@ -161,7 +161,7 @@ bool LoadBalanceMgr::Configure(
 		if (!loadMetric_) { return true; }
 
 		// verify repartition support before creating the trigger
-		if (!domainDecomp.SupportsRepartition())
+		if (!domainDecomp.SupportsRepartition(weightModel_))
 		{
 			if (failMsg)
 			{
@@ -192,6 +192,7 @@ bool LoadBalanceMgr::Configure(
 
 bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	const RankLoadSample& localSample,
+	const DomainDecompRepartitionParticleInput& localParticleInput,
 	IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
 	std::string* failMsg)
@@ -200,7 +201,8 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	if (!Enabled()) { return true; }
 
 	// evaluate and validate load of this rank
-	bool localOk = rebalanceTrigger_ != nullptr && domainDecomp.SupportsRepartition();
+	bool localOk = rebalanceTrigger_ != nullptr &&
+		domainDecomp.SupportsRepartition(weightModel_);
 	double localLoad = 0.0;
 	if (localOk)
 	{
@@ -263,10 +265,33 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	mpiContext.BroadcastInt(shouldRebalance, mpiContext.RootRank());
 	if (shouldRebalance == 0) { return true; }
 
-	// apply the same domain repartition input on every rank
+	// build and combine the strategy-defined spatial particle profile
+	DomainDecompRepartitionProfile profile{};
 	try
 	{
-		domainDecomp.Repartition({ .loadByRank = loadByRank });
+		DomainDecompRepartitionParticleInput profileInput = localParticleInput;
+		profileInput.weightModel = weightModel_;
+		domainDecomp.BuildRepartitionProfile(profileInput, profile);
+	}
+	catch (const std::exception& ex)
+	{
+		if (failMsg) { *failMsg = ex.what(); }
+		localOk = false;
+	}
+	if (!mpiContext.AllTrue(localOk)) { return false; }
+
+	try
+	{
+		mpiContext.AllReduceSumUint32s(profile.ownedFluidByUnit);
+		mpiContext.AllReduceSumUint32s(profile.ownedBoundaryByUnit);
+
+		domainDecomp.Repartition(
+		{
+			.weightModel = weightModel_,
+			.loadByRank = loadByRank,
+			.ownedFluidByUnit = profile.ownedFluidByUnit,
+			.ownedBoundaryByUnit = profile.ownedBoundaryByUnit
+		});
 		if (!domainDecomp.IsValidForRankCount(mpiContext.Size()))
 		{
 			throw std::runtime_error("Load balancing produced an invalid domain decomposition.");
@@ -279,16 +304,5 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	}
 
 	// reduce the domain repartition result across ranks
-	const bool globalOk = mpiContext.AllTrue(localOk);
-	if (globalOk && mpiContext.IsRoot())
-	{
-		SPDLOG_INFO(
-			"Repartitioned distributed domain at step {} using {} / {} "
-			"(relative imbalance {:.3f}).",
-			localSample.step,
-			loadMetric_->Name(),
-			rebalanceTrigger_->Name(),
-			relativeImbalance);
-	}
-	return globalOk;
+	return mpiContext.AllTrue(localOk);
 }

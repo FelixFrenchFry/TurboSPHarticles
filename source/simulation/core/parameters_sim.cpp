@@ -263,6 +263,30 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		};
 
+	auto ParseLoadBalanceWeightModel = [](
+		const nlohmann::json& v,
+		Base::LoadBalanceWeightModel& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "OwnedParticleCount")
+					{ out = Base::LoadBalanceWeightModel::OwnedParticleCount; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				const int i = v.get<int>();
+				if (i == 0)
+				{
+					out = Base::LoadBalanceWeightModel::OwnedParticleCount;
+					return true;
+				}
+				return false;
+			}
+			return false;
+		};
+
 	// TODO: implement actual setters for backend version and scenario type?
 	{
 		BeginWrite();
@@ -365,6 +389,21 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'loadBalanceTrigger' value in JSON.");
+				EndWrite();
+				return false;
+			}
+		}
+
+		if (auto it = j.find("loadBalanceWeightModel"); it != j.end())
+		{
+			Base::LoadBalanceWeightModel weightModel;
+			if (ParseLoadBalanceWeightModel(*it, weightModel))
+			{
+				params_.loadBalanceWeightModel = weightModel;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'loadBalanceWeightModel' value in JSON.");
 				EndWrite();
 				return false;
 			}

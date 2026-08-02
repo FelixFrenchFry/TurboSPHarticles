@@ -45,6 +45,7 @@ namespace Dist
 		const std::vector<int>& NeighborRanks(int rank) const;
 		AABB OwnedExtentAABB(int rank) const;
 		AABB HaloExtentAABB(int rank) const;
+		int RankCount() const { return static_cast<int>(rankSubdomains_.size()); }
 
 		bool IsValidForRankCount(int N_ranks) const;
 

@@ -34,12 +34,16 @@ namespace Dist
 		AABB HaloExtentAABB(int rank) const override;
 
 		bool IsValidForRankCount(int N_ranks) const override;
-		bool SupportsRepartition() const override { return true; }
+		bool SupportsRepartition(Base::LoadBalanceWeightModel weightModel) const override;
+		void BuildRepartitionProfile(
+			const DomainDecompRepartitionParticleInput& input,
+			DomainDecompRepartitionProfile& profile) const override;
 		void Repartition(const DomainDecompRepartitionInput& input) override;
 
 	private:
 
 		static constexpr int SPLIT_AXIS = 0;
+		static constexpr uint32_t PROFILE_BIN_COUNT = 256;
 
 		AABBSlabLayout slabLayout_;
 	};

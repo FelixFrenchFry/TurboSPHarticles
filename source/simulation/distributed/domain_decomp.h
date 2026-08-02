@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -24,10 +25,39 @@ namespace Dist
 		int N_ranks = 1;
 	};
 
-	// rank loads supplied by the load balancing coordinator
+	// local positions and ownership indices used to build repartition profiles
+	struct DomainDecompParticlePositionView
+	{
+		std::span<const float> x;
+		std::span<const float> y;
+		std::span<const float> z;
+		std::span<const uint32_t> ownedLocalIdx;
+	};
+
+	struct DomainDecompRepartitionParticleInput
+	{
+		Base::LoadBalanceWeightModel weightModel =
+			Base::LoadBalanceWeightModel::OwnedParticleCount;
+		int rank = 0;
+		DomainDecompParticlePositionView fluid;
+		DomainDecompParticlePositionView boundary;
+	};
+
+	// local strategy-defined spatial weights split by owned particle type
+	struct DomainDecompRepartitionProfile
+	{
+		std::vector<uint32_t> ownedFluidByUnit;
+		std::vector<uint32_t> ownedBoundaryByUnit;
+	};
+
+	// rank loads and global spatial weights supplied by the load balancing coordinator
 	struct DomainDecompRepartitionInput
 	{
+		Base::LoadBalanceWeightModel weightModel =
+			Base::LoadBalanceWeightModel::OwnedParticleCount;
 		std::span<const double> loadByRank;
+		std::span<const uint32_t> ownedFluidByUnit;
+		std::span<const uint32_t> ownedBoundaryByUnit;
 	};
 
 	// interface for domain decomp strategies
@@ -57,8 +87,17 @@ namespace Dist
 
 		virtual bool IsValidForRankCount(int N_ranks) const = 0;
 
-		// reports whether the strategy can apply a new partition
-		virtual bool SupportsRepartition() const { return false; }
+		// reports whether the strategy supports the selected repartition weight model
+		virtual bool SupportsRepartition(Base::LoadBalanceWeightModel) const { return false; }
+
+		// builds the local strategy-defined spatial weight profile
+		virtual void BuildRepartitionProfile(
+			const DomainDecompRepartitionParticleInput&,
+			DomainDecompRepartitionProfile&) const
+		{
+			throw std::runtime_error(
+				"This domain decomp does not support repartition weight profiles.");
+		}
 
 		// strategies that do not support repartitioning must not silently ignore a request
 		virtual void Repartition(const DomainDecompRepartitionInput&)

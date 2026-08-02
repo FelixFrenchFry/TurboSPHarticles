@@ -398,6 +398,8 @@ namespace Export
 			{ "loadBalanceMetricName", Base::ToCString(simParams.loadBalanceMetric) },
 			{ "loadBalanceTrigger", static_cast<int>(simParams.loadBalanceTrigger) },
 			{ "loadBalanceTriggerName", Base::ToCString(simParams.loadBalanceTrigger) },
+			{ "loadBalanceWeightModel", static_cast<int>(simParams.loadBalanceWeightModel) },
+			{ "loadBalanceWeightModelName", Base::ToCString(simParams.loadBalanceWeightModel) },
 			{ "exportEnabled", simParams.exportEnabled },
 			{ "exportDir", simParams.exportDir },
 			{ "exportInterval", simParams.exportInterval },

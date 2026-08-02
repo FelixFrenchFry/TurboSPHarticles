@@ -39,6 +39,7 @@ namespace Dist
 		const char* domainDecompMethod = "";
 		const char* loadBalanceMetric = "";
 		const char* loadBalanceTrigger = "";
+		const char* loadBalanceWeightModel = "";
 		const char* backendVersion = "";
 		const char* scenarioType = "";
 		const char* neighborSearchMethod = "";

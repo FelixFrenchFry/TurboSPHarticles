@@ -57,7 +57,7 @@ namespace Dist
 		virtual double Evaluate(const RankLoadSample& sample) = 0;
 	};
 
-	// turns load sample into load value from owned fluid and boundary particle counts
+	// turns load sample into load value from owned fluid particle counts
 	class RankOwnedParticleCountMetric final : public ILoadMetric
 	{
 	public:
@@ -140,10 +140,11 @@ namespace Dist
 			const IDomainDecomp& domainDecomp,
 			std::string* failMsg = nullptr);
 
-		// [ rank-reduced ] evaluates the local metric, gathers rank loads, and broadcasts the trigger decision,
-		// then repartitions and validates the domain on all ranks when rebalancing is requested
+		// [ rank-reduced ] evaluates the local metric and broadcasts the trigger decision
+		// then builds a global particle profile and repartitions the domain when requested
 		bool EvaluateLoadAndRebalance(
 			const RankLoadSample& localSample,
+			const DomainDecompRepartitionParticleInput& localParticleInput,
 			IDomainDecomp& domainDecomp,
 			const MpiContext& mpiContext,
 			std::string* failMsg = nullptr);
@@ -154,6 +155,8 @@ namespace Dist
 
 		std::unique_ptr<ILoadMetric> loadMetric_{ nullptr };
 		std::unique_ptr<IRebalanceTrigger> rebalanceTrigger_{ nullptr };
+		Base::LoadBalanceWeightModel weightModel_ =
+			Base::LoadBalanceWeightModel::OwnedParticleCount;
 	};
 
 } // namespace Dist

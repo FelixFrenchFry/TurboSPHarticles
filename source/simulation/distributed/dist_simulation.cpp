@@ -754,6 +754,7 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 	report.domainDecompMethod = Base::ToCString(simParams_.domainDecompMethod);
 	report.loadBalanceMetric = Base::ToCString(simParams_.loadBalanceMetric);
 	report.loadBalanceTrigger = Base::ToCString(simParams_.loadBalanceTrigger);
+	report.loadBalanceWeightModel = Base::ToCString(simParams_.loadBalanceWeightModel);
 	report.backendVersion = Base::ToCString(simParams_.backendVersion);
 	report.scenarioType = Base::ToCString(simParams_.scenarioType);
 	report.neighborSearchMethod = Base::ToCString(simParams_.neighborSearchMethod);
@@ -1909,11 +1910,11 @@ void DistSimulationMgr::DisplayDistributedProgress(
 bool DistSimulationMgr::UpdateLoadBalancing()
 {
 	if (!loadBalanceMgr_.Enabled()) { return true; }
-	if (!domainDecomp_ || !benchmarksTracker_)
+	if (!domainDecomp_ || !benchmarksTracker_ || !distParticleBackend_)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to update distributed load balancing "
-			"(missing domain decomposition or benchmark tracker).",
+			"(missing domain decomposition, benchmark tracker, or backend particle storage).",
 			mpiContext_.Rank(), mpiContext_.Size());
 		return mpiContext_.AllTrue(false);
 	}
@@ -1928,10 +1929,34 @@ bool DistSimulationMgr::UpdateLoadBalancing()
 		.rankBackendStepTimeNs =
 			benchmarksTracker_->GetBench_Latest(Bench::BenchOp::Dist_RankBackendStep)
 	};
+	const Sync::FluidConstView fluidParticles =
+		distParticleBackend_->GetFluidParticleView();
+	const Sync::BoundaryConstView boundaryParticles =
+		distParticleBackend_->GetBoundaryParticleView();
+	const DomainDecompRepartitionParticleInput localParticleInput
+	{
+		.weightModel = simParams_.loadBalanceWeightModel,
+		.rank = mpiContext_.Rank(),
+		.fluid =
+		{
+			.x = fluidParticles.xPos,
+			.y = fluidParticles.yPos,
+			.z = fluidParticles.zPos,
+			.ownedLocalIdx = fluidParticleState_.particleLocalIdx_Owned
+		},
+		.boundary =
+		{
+			.x = boundaryParticles.xPos,
+			.y = boundaryParticles.yPos,
+			.z = boundaryParticles.zPos,
+			.ownedLocalIdx = boundaryParticleState_.particleLocalIdx_Owned
+		}
+	};
 
 	std::string failMsg{};
 	const bool ok = loadBalanceMgr_.EvaluateLoadAndRebalance(
 		localSample,
+		localParticleInput,
 		*domainDecomp_,
 		mpiContext_,
 		&failMsg);

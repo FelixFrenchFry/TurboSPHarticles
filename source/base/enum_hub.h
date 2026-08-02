@@ -174,6 +174,20 @@ namespace Base
 		return "LoadBalanceTrigger::<unknown>";
 	}
 
+	enum class LoadBalanceWeightModel : uint8_t
+	{
+		OwnedParticleCount       // 0 owned fluid particle count
+	};
+	constexpr const char* ToCString(const LoadBalanceWeightModel v) noexcept
+	{
+		switch (v)
+		{
+		case LoadBalanceWeightModel::OwnedParticleCount:
+			return "OwnedParticleCount";
+		}
+		return "LoadBalanceWeightModel::<unknown>";
+	}
+
 	enum class SolverTerminationCond : uint8_t
 	{
 		FixedIters,             // 0

@@ -39,6 +39,8 @@ namespace Sim
 			Base::LoadBalanceMetric::Disabled; // (distributed only)
 		Base::LoadBalanceTrigger loadBalanceTrigger =
 			Base::LoadBalanceTrigger::SustainedImbalance; // (distributed only)
+		Base::LoadBalanceWeightModel loadBalanceWeightModel =
+			Base::LoadBalanceWeightModel::OwnedParticleCount; // (distributed only)
 
 		// simulation state
 		bool simRunning         = false;
