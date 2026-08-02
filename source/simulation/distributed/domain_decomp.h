@@ -24,10 +24,10 @@ namespace Dist
 		int N_ranks = 1;
 	};
 
-	// candidate partition positions supplied by a repartitioning policy
+	// rank loads supplied by the load balancing coordinator
 	struct DomainDecompRepartitionInput
 	{
-		std::span<const float> partitionPositions;
+		std::span<const double> loadByRank;
 	};
 
 	// interface for domain decomp strategies

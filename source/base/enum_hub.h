@@ -135,6 +135,45 @@ namespace Base
 		return "DomainDecompMethod::<unknown>";
 	}
 
+	enum class LoadBalanceMetric : uint8_t
+	{
+		Disabled,               // 0
+		RankOwnedParticleCount, // 1
+		RankBackendStepTime     // 2
+		// TODO: add metric for owned + halo particle count?
+	};
+	constexpr const char* ToCString(const LoadBalanceMetric v) noexcept
+	{
+		switch (v)
+		{
+		case LoadBalanceMetric::Disabled:
+			return "Disabled";
+		case LoadBalanceMetric::RankOwnedParticleCount:
+			return "RankOwnedParticleCount";
+		case LoadBalanceMetric::RankBackendStepTime:
+			return "RankBackendStepTime";
+		}
+		return "LoadBalanceMetric::<unknown>";
+	}
+
+	enum class LoadBalanceTrigger : uint8_t
+	{
+		Periodic,               // 0
+		SustainedImbalance      // 1
+		// TODO: separate between periodic with and without threshold checked at each period?
+	};
+	constexpr const char* ToCString(const LoadBalanceTrigger v) noexcept
+	{
+		switch (v)
+		{
+		case LoadBalanceTrigger::Periodic:
+			return "Periodic";
+		case LoadBalanceTrigger::SustainedImbalance:
+			return "SustainedImbalance";
+		}
+		return "LoadBalanceTrigger::<unknown>";
+	}
+
 	enum class SolverTerminationCond : uint8_t
 	{
 		FixedIters,             // 0

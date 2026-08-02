@@ -257,6 +257,23 @@ float MpiContext::AllReduceMaxFloat(const float value) const
 	return result;
 }
 
+void MpiContext::AllGatherDouble(
+	const double localValue,
+	std::vector<double>& values) const
+{
+	values.resize(static_cast<uint64_t>(N_ranks_));
+	CheckMpiResult(
+		MPI_Allgather(
+			&localValue,
+			1,
+			MPI_DOUBLE,
+			values.data(),
+			1,
+			MPI_DOUBLE,
+			MPI_COMM_WORLD),
+		"MPI_Allgather(double)");
+}
+
 void MpiContext::AllReduceSumUint32s(std::vector<uint32_t>& values) const
 {
 	ForEachMpiVectorChunk(

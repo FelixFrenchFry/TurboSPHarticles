@@ -202,6 +202,14 @@ namespace Sim
 		printf("%-*s = [ %" PRId64 " / %" PRId64 " ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterSeed [F / B]",
 			params.jitterSeedF, params.jitterSeedB);
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "boundaryLayers", params.boundaryLayers);
+		printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"loadBalanceThreshold", params.loadBalanceThreshold);
+		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"loadBalanceSustainSteps", params.loadBalanceSustainSteps);
+		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"loadBalanceCooldownSteps", params.loadBalanceCooldownSteps);
+		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"loadBalanceIntervalSteps", params.loadBalanceIntervalSteps);
 		printf("%-*s = [ %.3f / %.3f / %.3f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling ratio [min/max/probe]",
 			params.surfaceSamplingMinDistanceRatio,

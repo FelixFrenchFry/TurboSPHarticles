@@ -35,6 +35,10 @@ namespace Sim
 			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
 		Base::DomainDecompMethod domainDecompMethod =
 			Base::DomainDecompMethod::AABB_Uniform; // (distributed only)
+		Base::LoadBalanceMetric loadBalanceMetric =
+			Base::LoadBalanceMetric::Disabled; // (distributed only)
+		Base::LoadBalanceTrigger loadBalanceTrigger =
+			Base::LoadBalanceTrigger::SustainedImbalance; // (distributed only)
 
 		// simulation state
 		bool simRunning         = false;
@@ -97,6 +101,12 @@ namespace Sim
 		float jitterFracB       = 0.0f; // % of particle size
 		int64_t jitterSeedB     = 42; // RNG seed for jitter
 		uint32_t boundaryLayers = 2;
+
+		// distributed load balancing
+		float loadBalanceThreshold = 0.1f; // relative max/mean imbalance
+		uint32_t loadBalanceSustainSteps = 3;
+		uint32_t loadBalanceCooldownSteps = 20;
+		uint32_t loadBalanceIntervalSteps = 50;
 
 		// surface sampling spacing
 		float surfaceSamplingMinDistanceRatio = 0.8f; // minimum accepted sample spacing / particleSizeB

@@ -37,6 +37,8 @@ namespace Dist
 		int mpiThreadSupport = 0;
 
 		const char* domainDecompMethod = "";
+		const char* loadBalanceMetric = "";
+		const char* loadBalanceTrigger = "";
 		const char* backendVersion = "";
 		const char* scenarioType = "";
 		const char* neighborSearchMethod = "";

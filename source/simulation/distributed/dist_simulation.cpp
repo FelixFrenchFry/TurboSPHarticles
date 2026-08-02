@@ -482,6 +482,7 @@ bool DistSimulationMgr::Init(
 	// every rank parses the same broadcast parameters, so all ranks pick the same strategy
 	SelectDomainDecomp(simParams_.domainDecompMethod);
 	if (!BuildDomainDecomp()) { return false; }
+	if (!ConfigureLoadBalancing()) { return false; }
 
 	SPDLOG_INFO_MPI("Init rank-local particle states...", mpiContext_);
 	if (!ReBuildInitialSimState()) { return false; }
@@ -751,6 +752,8 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 	report.mpiThreadSupport = mpiContext_.ThreadSupport();
 
 	report.domainDecompMethod = Base::ToCString(simParams_.domainDecompMethod);
+	report.loadBalanceMetric = Base::ToCString(simParams_.loadBalanceMetric);
+	report.loadBalanceTrigger = Base::ToCString(simParams_.loadBalanceTrigger);
 	report.backendVersion = Base::ToCString(simParams_.backendVersion);
 	report.scenarioType = Base::ToCString(simParams_.scenarioType);
 	report.neighborSearchMethod = Base::ToCString(simParams_.neighborSearchMethod);
@@ -933,6 +936,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 		// evaluate the benchmarks and memory usage for this step
 		FinalizeBenchMemMeasurements(params);
+		if (runOk && !UpdateLoadBalancing()) { runOk = false; }
 		AppendLatestMemoryMetricsLog();
 		AppendLatestBenchmarkMetricsLog();
 
@@ -1103,6 +1107,38 @@ bool DistSimulationMgr::BuildDomainDecomp()
 		localOk = false;
 	}
 
+	return mpiContext_.AllTrue(localOk);
+}
+
+bool DistSimulationMgr::ConfigureLoadBalancing()
+{
+	bool localOk = true;
+	std::string failMsg{};
+
+	try
+	{
+		if (!domainDecomp_)
+		{
+			failMsg = "No domain decomposition selected.";
+			localOk = false;
+		}
+		else if (!loadBalanceMgr_.Configure(simParams_, *domainDecomp_, &failMsg))
+		{
+			localOk = false;
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		failMsg = ex.what();
+		localOk = false;
+	}
+
+	if (!localOk)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to configure distributed load balancing: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), failMsg);
+	}
 	return mpiContext_.AllTrue(localOk);
 }
 
@@ -1870,6 +1906,45 @@ void DistSimulationMgr::DisplayDistributedProgress(
 		particleRedistributionTimingReport_);
 }
 
+bool DistSimulationMgr::UpdateLoadBalancing()
+{
+	if (!loadBalanceMgr_.Enabled()) { return true; }
+	if (!domainDecomp_ || !benchmarksTracker_)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to update distributed load balancing "
+			"(missing domain decomposition or benchmark tracker).",
+			mpiContext_.Rank(), mpiContext_.Size());
+		return mpiContext_.AllTrue(false);
+	}
+
+	const RankLoadSample localSample
+	{
+		.step = simStep_,
+		.N_ownedF = fluidParticleState_.N_owned,
+		.N_ownedB = boundaryParticleState_.N_owned,
+		.N_haloF = fluidParticleState_.N_halo,
+		.N_haloB = boundaryParticleState_.N_halo,
+		.rankBackendStepTimeNs =
+			benchmarksTracker_->GetBench_Latest(Bench::BenchOp::Dist_RankBackendStep)
+	};
+
+	std::string failMsg{};
+	const bool ok = loadBalanceMgr_.EvaluateLoadAndRebalance(
+		localSample,
+		*domainDecomp_,
+		mpiContext_,
+		&failMsg);
+	if (!ok)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to update distributed load balancing: {}",
+			mpiContext_.Rank(), mpiContext_.Size(),
+			failMsg.empty() ? "Another rank reported an error." : failMsg);
+	}
+	return ok;
+}
+
 bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 {
 	// results of [ rank-reduced ] helpers are returned directly, because every rank already
@@ -1917,6 +1992,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 
 		if (!PrepareRankLocalBackendStep()) { return false; }
 
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_RankBackendStep);
 		try
 		{
 			simBackend_->ExecuteFullSimStep(params);
@@ -1928,6 +2004,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 			localOk = false;
 		}
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_RankBackendStep);
 		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);

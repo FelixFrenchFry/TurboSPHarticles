@@ -1,11 +1,13 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "ConvergingDam",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 1,
+  "loadBalanceMetric": 1,
+  "loadBalanceTrigger": 0,
 
-  "maxSteps": 100,
+  "maxSteps": 2000,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -28,6 +30,11 @@
   "jitterFracB": 0.0,
   "jitterSeedB": 67,
   "boundaryLayers": 2,
+
+  "loadBalanceThreshold": 0.01,
+  "loadBalanceSustainSteps": 3,
+  "loadBalanceCooldownSteps": 20,
+  "loadBalanceIntervalSteps": 100,
 
   "surfaceSamplingMinDistanceRatio": 0.5,
   "surfaceSamplingMaxDistanceRatio": 1.0,

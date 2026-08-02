@@ -200,6 +200,69 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		};
 
+	auto ParseLoadBalanceMetric = [](const nlohmann::json& v, Base::LoadBalanceMetric& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "Disabled")
+					{ out = Base::LoadBalanceMetric::Disabled; return true; }
+				if (s == "RankOwnedParticleCount")
+					{ out = Base::LoadBalanceMetric::RankOwnedParticleCount; return true; }
+				if (s == "RankBackendStepTime")
+					{ out = Base::LoadBalanceMetric::RankBackendStepTime; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::LoadBalanceMetric::Disabled;
+					return true;
+				case 1:
+					out = Base::LoadBalanceMetric::RankOwnedParticleCount;
+					return true;
+				case 2:
+					out = Base::LoadBalanceMetric::RankBackendStepTime;
+					return true;
+				default:
+					return false;
+				}
+			}
+			return false;
+		};
+
+	auto ParseLoadBalanceTrigger = [](const nlohmann::json& v, Base::LoadBalanceTrigger& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "Periodic")
+					{ out = Base::LoadBalanceTrigger::Periodic; return true; }
+				if (s == "SustainedImbalance")
+					{ out = Base::LoadBalanceTrigger::SustainedImbalance; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::LoadBalanceTrigger::Periodic;
+					return true;
+				case 1:
+					out = Base::LoadBalanceTrigger::SustainedImbalance;
+					return true;
+				default:
+					return false;
+				}
+			}
+			return false;
+		};
+
 	// TODO: implement actual setters for backend version and scenario type?
 	{
 		BeginWrite();
@@ -272,6 +335,36 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'domainDecompMethod' value in JSON.");
+				EndWrite();
+				return false;
+			}
+		}
+
+		if (auto it = j.find("loadBalanceMetric"); it != j.end())
+		{
+			Base::LoadBalanceMetric metric;
+			if (ParseLoadBalanceMetric(*it, metric))
+			{
+				params_.loadBalanceMetric = metric;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'loadBalanceMetric' value in JSON.");
+				EndWrite();
+				return false;
+			}
+		}
+
+		if (auto it = j.find("loadBalanceTrigger"); it != j.end())
+		{
+			Base::LoadBalanceTrigger trigger;
+			if (ParseLoadBalanceTrigger(*it, trigger))
+			{
+				params_.loadBalanceTrigger = trigger;
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'loadBalanceTrigger' value in JSON.");
 				EndWrite();
 				return false;
 			}
@@ -503,6 +596,69 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	if (auto it = j.find("boundaryLayers"); it != j.end())
 	{
 		Set_BoundaryLayers(it->get<uint32_t>(), verbose);
+	}
+
+	// --- [ distributed load balancing ] ------------------------------------------------------------
+
+	{
+		BeginWrite();
+
+		if (auto it = j.find("loadBalanceThreshold"); it != j.end())
+		{
+			if (!it->is_number())
+			{
+				SPDLOG_WARN("Invalid 'loadBalanceThreshold' value in JSON.");
+				EndWrite();
+				return false;
+			}
+
+			const float threshold = it->get<float>();
+			if (!std::isfinite(threshold) || threshold < 0.0f)
+			{
+				SPDLOG_WARN("Invalid 'loadBalanceThreshold' value in JSON (must be finite and >= 0).");
+				EndWrite();
+				return false;
+			}
+			params_.loadBalanceThreshold = threshold;
+		}
+
+		const auto ParseLoadBalanceStepCount = [&](
+			const char* name,
+			const bool allowZero,
+			uint32_t& value) -> bool
+			{
+				const auto it = j.find(name);
+				if (it == j.end()) { return true; }
+				if (!it->is_number_integer())
+				{
+					SPDLOG_WARN("Invalid '{}' value in JSON.", name);
+					return false;
+				}
+
+				const int64_t parsed = it->get<int64_t>();
+				const int64_t min = allowZero ? 0 : 1;
+				if (parsed < min || parsed > static_cast<int64_t>(std::numeric_limits<uint32_t>::max()))
+				{
+					SPDLOG_WARN("Invalid '{}' value in JSON.", name);
+					return false;
+				}
+
+				value = static_cast<uint32_t>(parsed);
+				return true;
+			};
+
+		if (!ParseLoadBalanceStepCount(
+			"loadBalanceSustainSteps", false, params_.loadBalanceSustainSteps) ||
+			!ParseLoadBalanceStepCount(
+				"loadBalanceCooldownSteps", true, params_.loadBalanceCooldownSteps) ||
+			!ParseLoadBalanceStepCount(
+				"loadBalanceIntervalSteps", false, params_.loadBalanceIntervalSteps))
+		{
+			EndWrite();
+			return false;
+		}
+
+		EndWrite();
 	}
 
 	// --- [ surface sampling ] ----------------------------------------------------------------------

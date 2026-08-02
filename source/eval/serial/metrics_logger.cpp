@@ -394,12 +394,20 @@ namespace Export
 					simParams.neighborListMethod) },
 			{ "domainDecompMethod", static_cast<int>(simParams.domainDecompMethod) },
 			{ "domainDecompMethodName", Base::ToCString(simParams.domainDecompMethod) },
+			{ "loadBalanceMetric", static_cast<int>(simParams.loadBalanceMetric) },
+			{ "loadBalanceMetricName", Base::ToCString(simParams.loadBalanceMetric) },
+			{ "loadBalanceTrigger", static_cast<int>(simParams.loadBalanceTrigger) },
+			{ "loadBalanceTriggerName", Base::ToCString(simParams.loadBalanceTrigger) },
 			{ "exportEnabled", simParams.exportEnabled },
 			{ "exportDir", simParams.exportDir },
 			{ "exportInterval", simParams.exportInterval },
 			{ "expctdAvgNbrCountHardMax_FF", simParams.expctdAvgNbrCountHardMax_FF },
 			{ "expctdAvgNbrCountHardMax_FB", simParams.expctdAvgNbrCountHardMax_FB },
 			{ "gridCellSizeRatio", simParams.gridCellSizeRatio },
+			{ "loadBalanceThreshold", simParams.loadBalanceThreshold },
+			{ "loadBalanceSustainSteps", simParams.loadBalanceSustainSteps },
+			{ "loadBalanceCooldownSteps", simParams.loadBalanceCooldownSteps },
+			{ "loadBalanceIntervalSteps", simParams.loadBalanceIntervalSteps },
 			{ "maxThreadsSim", simParams.maxThreadsSim }
 		};
 

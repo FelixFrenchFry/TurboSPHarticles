@@ -47,6 +47,7 @@ namespace Dist
 		double AllReduceSumDouble(double value) const;
 		float AllReduceMinFloat(float value) const;
 		float AllReduceMaxFloat(float value) const;
+		void AllGatherDouble(double localValue, std::vector<double>& values) const;
 		void AllReduceSumUint32s(std::vector<uint32_t>& values) const;
 		void AllReduceSumFloats(std::vector<float>& values) const;
 		void AllReduceMaxUint8s(std::vector<uint8_t>& values) const;

@@ -21,6 +21,7 @@
 #include "dist_diagnostics.h"
 #include "dist_particle_state.h"
 #include "dist_redistribution_diagnostics.h"
+#include "load_balance.h"
 #include "mpi_context.h"
 #include "particle_redistribution.h"
 #include "rigid_body_sync.h"
@@ -87,6 +88,9 @@ namespace Dist
 		// [ rank-reduced ] creates the ownership / halo decomp from the selected scenario bounds
 		bool BuildDomainDecomp();
 
+		// [ rank-reduced ] selects load metric and trigger policies for the current domain decomp
+		bool ConfigureLoadBalancing();
+
 		// builds the full scenario state before rank-local compaction
 		bool BuildGlobalSimState();
 
@@ -134,6 +138,9 @@ namespace Dist
 
 		// [ rank-reduced ] runs one distributed step with backend-resident particle storage
 		bool ExecuteDistributedStep(const Sim::SimParams& params);
+
+		// [ rank-reduced ] evaluates load balancing after a completed and measured step
+		bool UpdateLoadBalancing();
 
 		// [ rank-reduced ] routes owned particles and replaces backend [ owned ][ halo ] storage
 		bool RedistributeRankLocalParticles(const Sim::SimParams& params);
@@ -188,6 +195,7 @@ namespace Dist
 		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
 		ParticleReOrderWorkBuffers boundaryParticleReOrderWorkBuffers_{};
 		ParticleRedistributionMgr particleRedistributionMgr_{};
+		LoadBalanceMgr loadBalanceMgr_{};
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_{};
 		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
