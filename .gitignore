@@ -10,7 +10,7 @@ lib/
 
 # CMake generated files ---------------------------------------------------------------------------
 CMakeFiles/
-CMakeScripts/
+CMakescripts/
 Testing/
 Makefile
 CMakeCache.txt
@@ -37,9 +37,9 @@ build.ninja
 *.gcov
 # MSVC
 *.obj
-!Assets/Models/
-!Assets/Models/Meshes/
-!Assets/Models/Meshes/*.obj
+!assets/models/
+!assets/models/meshes/
+!assets/models/meshes/*.obj
 *.lib
 *.exp
 *.dll
@@ -107,5 +107,7 @@ Folder.DotSettings.user
 *.exe
 *.out
 *.app
-Export/
-Logs/
+exports/*
+!exports/.gitkeep
+logs/*
+!logs/.gitkeep

@@ -52,9 +52,9 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # paths to certain directiories
-set(TSP_EXPORT_DIR "${CMAKE_SOURCE_DIR}/Export")
-set(TSP_CONFIG_DIR "${CMAKE_SOURCE_DIR}/Configs")
-set(TSP_LOGS_DIR "${CMAKE_SOURCE_DIR}/Logs")
+set(TSP_EXPORT_DIR "${CMAKE_SOURCE_DIR}/exports")
+set(TSP_CONFIG_DIR "${CMAKE_SOURCE_DIR}/configs")
+set(TSP_LOGS_DIR "${CMAKE_SOURCE_DIR}/logs")
 
 # --- [ dependencies via vcpkg ] ---
 # ----------------------------------
@@ -121,29 +121,29 @@ endif()
 # --- [ sources ] ---
 # -------------------
 
-file(GLOB_RECURSE SRC_BASE CONFIGURE_DEPENDS "Source/Base/*.cpp")
-file(GLOB_RECURSE SRC_EVAL CONFIGURE_DEPENDS "Source/Eval/*.cpp")
-file(GLOB_RECURSE SRC_SIM_CORE CONFIGURE_DEPENDS "Source/Sim/Core/*.cpp")
-file(GLOB_RECURSE SRC_SIM_SCENE CONFIGURE_DEPENDS "Source/Sim/Scene/*.cpp")
-file(GLOB_RECURSE SRC_SIM_SYNC CONFIGURE_DEPENDS "Source/Sim/Sync/*.cpp")
-file(GLOB_RECURSE SRC_SIM_CPU CONFIGURE_DEPENDS "Source/Sim/CPU/*.cpp")
-list(FILTER SRC_SIM_CPU EXCLUDE REGEX "/Legacy/")
+file(GLOB_RECURSE SRC_BASE CONFIGURE_DEPENDS "source/base/*.cpp")
+file(GLOB_RECURSE SRC_EVAL CONFIGURE_DEPENDS "source/eval/*.cpp")
+file(GLOB_RECURSE SRC_SIM_CORE CONFIGURE_DEPENDS "source/simulation/core/*.cpp")
+file(GLOB_RECURSE SRC_SIM_SCENE CONFIGURE_DEPENDS "source/simulation/scene/*.cpp")
+file(GLOB_RECURSE SRC_SIM_SYNC CONFIGURE_DEPENDS "source/simulation/sync/*.cpp")
+file(GLOB_RECURSE SRC_SIM_CPU CONFIGURE_DEPENDS "source/simulation/CPU/*.cpp")
+list(FILTER SRC_SIM_CPU EXCLUDE REGEX "/legacy/")
 
 if(ENABLE_CUDA)
     file(GLOB_RECURSE SRC_SIM_GPU CONFIGURE_DEPENDS
-        "Source/Sim/GPU/*.cpp"
-        "Source/Sim/GPU/*.cu")
+        "source/simulation/GPU/*.cpp"
+        "source/simulation/GPU/*.cu")
 endif()
 
 if(ENABLE_VIS)
-    file(GLOB_RECURSE SRC_VIS CONFIGURE_DEPENDS "Source/Vis/*.cpp")
+    file(GLOB_RECURSE SRC_VIS CONFIGURE_DEPENDS "source/visualization/*.cpp")
     if(ENABLE_CUDA)
-        file(GLOB_RECURSE SRC_VIS_CUDA CONFIGURE_DEPENDS "Source/Vis/*.cu")
+        file(GLOB_RECURSE SRC_VIS_CUDA CONFIGURE_DEPENDS "source/visualization/*.cu")
     endif()
 endif()
 
 if(ENABLE_MPI)
-    file(GLOB_RECURSE SRC_SIM_DIST CONFIGURE_DEPENDS "Source/Sim/Dist/*.cpp")
+    file(GLOB_RECURSE SRC_SIM_DIST CONFIGURE_DEPENDS "source/simulation/distributed/*.cpp")
 endif()
 
 # --- [ project-wide helpers ] ---
@@ -359,8 +359,8 @@ endif()
 # ----------------
 
 add_executable(TSP_Headless
-    "Apps/main_headless.cpp"
-    "Apps/app_runtime.cpp")
+    "apps/main_headless.cpp"
+    "apps/app_runtime.cpp")
 target_link_libraries(TSP_Headless PRIVATE 
     TSP_H
     CLI11::CLI11
@@ -368,8 +368,8 @@ target_link_libraries(TSP_Headless PRIVATE
 
 if(ENABLE_VIS)
     add_executable(TSP_Visual
-        "Apps/main_visual.cpp"
-        "Apps/app_runtime.cpp")
+        "apps/main_visual.cpp"
+        "apps/app_runtime.cpp")
     target_link_libraries(TSP_Visual PRIVATE
         TSP_V
         CLI11::CLI11
@@ -378,8 +378,8 @@ endif()
 
 if(ENABLE_MPI)
     add_executable(TSP_Distributed
-        "Apps/main_distributed.cpp"
-        "Apps/app_runtime.cpp")
+        "apps/main_distributed.cpp"
+        "apps/app_runtime.cpp")
     target_link_libraries(TSP_Distributed PRIVATE
         TSP_D
         CLI11::CLI11

@@ -1,2 +1,2 @@
 # excludes generated embedded font data from Git language statistics
-Source/Vis/Assets/iosevka_compressed.h linguist-generated
+source/visualization/fonts/iosevka_compressed.h linguist-generated
