@@ -196,6 +196,8 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	RB.ensureRigidBodyIdsPresent();
 	src.ValidateRigidAttachments();
 
+	// (no resize, because it is included in the transfer operations)
+
 	// transfer to backend fluid data structures
 	idF_ = std::move(F.id);
 	xPosF_ = std::move(F.xPos);
@@ -296,60 +298,107 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	neighborList_->Resize(N_F_, N_B_, N_R_, params);
 }
 
-// TODO: re-implement this to free up memory as soon as copied out?
-void SimBackend_CPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
+void SimBackend_CPU01::PushToUniversalSimState(
+	Sync::UniversalSimState& dst,
+	const bool backendWillBeRetired)
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
 	auto& R = dst.rigidParticles;
 	auto& RB = dst.rigidBodies;
-
+	F.N_ = N_F_;
+	B.N_ = N_B_;
+	R.N_ = N_R_;
+	RB.N_ = N_RB_;
 	dst.step = simStep_;
 	dst.time = simTime_;
 
-	// (no resize, because it is included in the copy operations)
+	const auto transferField = [backendWillBeRetired](auto& dstField, auto& srcField)
+	{
+		if (backendWillBeRetired)
+		{
+			dstField = std::move(srcField);
+		}
+		else
+		{
+			dstField = srcField;
+		}
+	};
 
-	// copy fluid particles
-	F.id = idF_;
-	F.xPos = xPosF_; F.yPos = yPosF_; F.zPos = zPosF_;
-	F.xVel = xVelF_; F.yVel = yVelF_; F.zVel = zVelF_;
-	F.xVelPred = xVelPredF_; F.yVelPred = yVelPredF_; F.zVelPred = zVelPredF_;
-	F.xAccPress = xAccPressF_; F.yAccPress = yAccPressF_; F.zAccPress = zAccPressF_;
-	F.sourceTerm = sourceTermF_;
-	F.diagElem = diagElemF_;
-	F.pressure = pressureF_;
-	F.density = densityF_;
-	F.N_ = N_F_;
+	// (no resize, because it is included in the transfer operations)
 
-	// copy boundary particles
-	B.id = idB_;
-	B.xPos = xPosB_; B.yPos = yPosB_; B.zPos = zPosB_;
-	B.volB = volB_; B.psiB = psiB_;
-	B.N_ = N_B_;
+	// transfer from backend fluid data structures
+	transferField(F.id, idF_);
+	transferField(F.xPos, xPosF_);
+	transferField(F.yPos, yPosF_);
+	transferField(F.zPos, zPosF_);
+	transferField(F.xVel, xVelF_);
+	transferField(F.yVel, yVelF_);
+	transferField(F.zVel, zVelF_);
+	transferField(F.xVelPred, xVelPredF_);
+	transferField(F.yVelPred, yVelPredF_);
+	transferField(F.zVelPred, zVelPredF_);
+	transferField(F.xAccPress, xAccPressF_);
+	transferField(F.yAccPress, yAccPressF_);
+	transferField(F.zAccPress, zAccPressF_);
+	transferField(F.sourceTerm, sourceTermF_);
+	transferField(F.diagElem, diagElemF_);
+	transferField(F.pressure, pressureF_);
+	transferField(F.density, densityF_);
 
-	// copy rigid particles
-	R.id = idR_;
-	R.bodyId = bodyIdR_;
-	R.xRelPos = xRelPosR_; R.yRelPos = yRelPosR_; R.zRelPos = zRelPosR_;
-	R.volR = volR_; R.psiR = psiR_;
-	R.N_ = N_R_;
+	// transfer from backend boundary data structures
+	transferField(B.id, idB_);
+	transferField(B.xPos, xPosB_);
+	transferField(B.yPos, yPosB_);
+	transferField(B.zPos, zPosB_);
+	transferField(B.volB, volB_);
+	transferField(B.psiB, psiB_);
 
-	// copy rigid bodies
-	RB.id = idRB_;
-	RB.rigidParticleBegin = rigidParticleBeginRB_;
-	RB.rigidParticleCount = rigidParticleCountRB_;
-	RB.xCM = xCMRB_; RB.yCM = yCMRB_; RB.zCM = zCMRB_;
-	RB.xVel = xVelRB_; RB.yVel = yVelRB_; RB.zVel = zVelRB_;
-	RB.xOmega = xOmegaRB_; RB.yOmega = yOmegaRB_; RB.zOmega = zOmegaRB_;
-	RB.xAngMom = xAngMomRB_; RB.yAngMom = yAngMomRB_; RB.zAngMom = zAngMomRB_;
-	RB.a00 = a00RB_; RB.a01 = a01RB_; RB.a02 = a02RB_;
-	RB.a10 = a10RB_; RB.a11 = a11RB_; RB.a12 = a12RB_;
-	RB.a20 = a20RB_; RB.a21 = a21RB_; RB.a22 = a22RB_;
-	RB.mass = massRB_; RB.massInv = massInvRB_;
-	RB.iBodyInv00 = iBodyInv00RB_; RB.iBodyInv01 = iBodyInv01RB_; RB.iBodyInv02 = iBodyInv02RB_;
-	RB.iBodyInv10 = iBodyInv10RB_; RB.iBodyInv11 = iBodyInv11RB_; RB.iBodyInv12 = iBodyInv12RB_;
-	RB.iBodyInv20 = iBodyInv20RB_; RB.iBodyInv21 = iBodyInv21RB_; RB.iBodyInv22 = iBodyInv22RB_;
-	RB.N_ = N_RB_;
+	// transfer from backend rigid particle data structures
+	transferField(R.id, idR_);
+	transferField(R.bodyId, bodyIdR_);
+	transferField(R.xRelPos, xRelPosR_);
+	transferField(R.yRelPos, yRelPosR_);
+	transferField(R.zRelPos, zRelPosR_);
+	transferField(R.volR, volR_);
+	transferField(R.psiR, psiR_);
+
+	// transfer from backend rigid body data structures
+	transferField(RB.id, idRB_);
+	transferField(RB.rigidParticleBegin, rigidParticleBeginRB_);
+	transferField(RB.rigidParticleCount, rigidParticleCountRB_);
+	transferField(RB.xCM, xCMRB_);
+	transferField(RB.yCM, yCMRB_);
+	transferField(RB.zCM, zCMRB_);
+	transferField(RB.xVel, xVelRB_);
+	transferField(RB.yVel, yVelRB_);
+	transferField(RB.zVel, zVelRB_);
+	transferField(RB.xOmega, xOmegaRB_);
+	transferField(RB.yOmega, yOmegaRB_);
+	transferField(RB.zOmega, zOmegaRB_);
+	transferField(RB.xAngMom, xAngMomRB_);
+	transferField(RB.yAngMom, yAngMomRB_);
+	transferField(RB.zAngMom, zAngMomRB_);
+	transferField(RB.a00, a00RB_);
+	transferField(RB.a01, a01RB_);
+	transferField(RB.a02, a02RB_);
+	transferField(RB.a10, a10RB_);
+	transferField(RB.a11, a11RB_);
+	transferField(RB.a12, a12RB_);
+	transferField(RB.a20, a20RB_);
+	transferField(RB.a21, a21RB_);
+	transferField(RB.a22, a22RB_);
+	transferField(RB.mass, massRB_);
+	transferField(RB.massInv, massInvRB_);
+	transferField(RB.iBodyInv00, iBodyInv00RB_);
+	transferField(RB.iBodyInv01, iBodyInv01RB_);
+	transferField(RB.iBodyInv02, iBodyInv02RB_);
+	transferField(RB.iBodyInv10, iBodyInv10RB_);
+	transferField(RB.iBodyInv11, iBodyInv11RB_);
+	transferField(RB.iBodyInv12, iBodyInv12RB_);
+	transferField(RB.iBodyInv20, iBodyInv20RB_);
+	transferField(RB.iBodyInv21, iBodyInv21RB_);
+	transferField(RB.iBodyInv22, iBodyInv22RB_);
 }
 
 Sync::FluidConstView SimBackend_CPU01::GetFluidParticleView() const

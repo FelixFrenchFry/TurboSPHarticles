@@ -541,8 +541,15 @@ void DistSimulationMgr::SelectSimScenario(
 
 void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 {
+	if (simBackend_)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Distributed simulation backend switching is currently disabled.",
+			mpiContext_.Rank(), mpiContext_.Size());
+		return;
+	}
+
 	distParticleBackend_ = nullptr;
-	simBackend_.reset();
 	statisticsTracker_.reset();
 	memoryTracker_.reset();
 	benchmarksTracker_.reset();
@@ -1464,7 +1471,7 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 			if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
 
 			Sync::UniversalSimState backendSimState{};
-			simBackend_->PushToUniversalSimState(backendSimState);
+			simBackend_->PushToUniversalSimState(backendSimState, false);
 			localSimState_ = std::move(backendSimState);
 			localSimState_.step = simStep_;
 			localSimState_.time = simTime_;
@@ -2138,7 +2145,7 @@ bool DistSimulationMgr::MaterializeRankLocalState()
 		else
 		{
 			Sync::UniversalSimState backendSimState{};
-			simBackend_->PushToUniversalSimState(backendSimState);
+			simBackend_->PushToUniversalSimState(backendSimState, false);
 			localSimState_ = std::move(backendSimState);
 			localSimState_.step = simStep_;
 			localSimState_.time = simTime_;

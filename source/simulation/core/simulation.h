@@ -49,8 +49,7 @@ namespace Sim
 		// (destroys previous scenario and all its data)
 		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
 
-		// create or switch backend
-		// (destroys previous backend and all its data)
+		// create or re-create backend when no backend is active
 		void SelectSimBackend(Base::BackendVersion version);
 
 		void ReBuildInitialSimState();

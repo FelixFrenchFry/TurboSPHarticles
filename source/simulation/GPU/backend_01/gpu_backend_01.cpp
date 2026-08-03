@@ -122,7 +122,6 @@ SimBackend_GPU01::~SimBackend_GPU01()
 	}
 }
 
-// TODO: re-implement this to free up memory as soon as copied in!
 void SimBackend_GPU01::PullFromUniversalSimState(
 	Sync::UniversalSimState& src, const SimParams& params)
 {
@@ -259,22 +258,24 @@ void SimBackend_GPU01::PullFromUniversalSimState(
 	GPU::StreamSync(stream_);
 }
 
-// TODO: re-implement this to free up memory as soon as copied out?
-void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) const
+void SimBackend_GPU01::PushToUniversalSimState(
+	Sync::UniversalSimState& dst,
+	const bool backendWillBeRetired)
 {
 	auto& F = dst.fluidParticles;
 	auto& B = dst.boundaryParticles;
 	auto& R = dst.rigidParticles;
 	auto& RB = dst.rigidBodies;
+	(void)backendWillBeRetired; // device storage is released by the owning manager after synchronization
 
-	dst.step = simStep_;
-	dst.time = simTime_;
 	dst.ResizeFluid(N_F_);
 	dst.ResizeBoundary(N_B_);
 	dst.ResizeRigid(N_R_);
 	dst.ResizeRigidBodies(N_RB_);
+	dst.step = simStep_;
+	dst.time = simTime_;
 
-	// copy fluid particles
+	// copy fluid particle data to host
 	if (N_F_ > 0)
 	{
 		GPU::Copy_DeviceToHost(F.id.data(), d_idF_.Data(), N_F_, stream_);
@@ -296,7 +297,7 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(F.density.data(), d_densityF_.Data(), N_F_, stream_);
 	}
 
-	// copy static boundary particles
+	// copy boundary particle data to host
 	if (N_B_ > 0)
 	{
 		GPU::Copy_DeviceToHost(B.id.data(), d_idB_.Data(), N_B_, stream_);
@@ -307,7 +308,7 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(B.psiB.data(), d_psiB_.Data(), N_B_, stream_);
 	}
 
-	// copy canonical rigid particle state
+	// copy rigid particle data to host
 	if (N_R_ > 0)
 	{
 		GPU::Copy_DeviceToHost(R.id.data(), d_idR_.Data(), N_R_, stream_);
@@ -319,7 +320,7 @@ void SimBackend_GPU01::PushToUniversalSimState(Sync::UniversalSimState& dst) con
 		GPU::Copy_DeviceToHost(R.psiR.data(), d_psiR_.Data(), N_R_, stream_);
 	}
 
-	// copy rigid body state
+	// copy rigid body data to host
 	if (N_RB_ > 0)
 	{
 		GPU::Copy_DeviceToHost(RB.id.data(), d_idRB_.Data(), N_RB_, stream_);

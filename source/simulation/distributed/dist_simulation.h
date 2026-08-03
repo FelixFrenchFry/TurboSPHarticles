@@ -49,8 +49,7 @@ namespace Dist
 		// (destroys previous scenario and all its data)
 		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
 
-		// create or switch backend
-		// (destroys previous backend and all its data)
+		// create backend when no backend is active
 		void SelectSimBackend(Base::BackendVersion version);
 
 		// create or switch domain decomp

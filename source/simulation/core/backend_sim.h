@@ -115,8 +115,9 @@ namespace Sim
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) = 0;
 
-		// copies & translates backend-specific data structures into -> universal simulation state
-		virtual void PushToUniversalSimState(Sync::UniversalSimState& dst) const = 0;
+		// materializes backend-specific data structures into -> universal simulation state
+		// (implementations may transfer storage when the backend will be retired afterwards)
+		virtual void PushToUniversalSimState(Sync::UniversalSimState& dst, bool backendWillBeRetired) = 0;
 
 		// packs the current simulation state into a snapshot used for exporting or visualization
 		// (implementation is backend-specific for better performance)

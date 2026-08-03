@@ -122,12 +122,11 @@ void SimulationMgr::SelectSimBackend(
 		return;
 	}
 
-	if (simBackend_) // a backend already exists
+	if (simBackend_)
 	{
-		std::scoped_lock lock(stateMutex_);
-
-		// transfer its current data into the universal state to save it
-		simBackend_->PushToUniversalSimState(universalSimState_);
+		// TODO: implement?
+		SPDLOG_ERROR("Simulation backend switching is currently disabled.");
+		return;
 	}
 
 	// create new backend and initialize it with the universal state
@@ -164,20 +163,13 @@ void SimulationMgr::ReBuildInitialSimState()
 		throw std::runtime_error(
 			"Failed to re-build initial simulation state without a selected scenario.");
 	}
-	if (!simBackend_)
-	{
-		throw std::runtime_error(
-			"Failed to re-build initial simulation state without a selected backend.");
-	}
-
-	// TODO: make sure simulation is stopped first to fix bug
 
 	// stop simulation
 	simParamsMgr_.Set_SimRunning(false);
 	simParamsMgr_.Set_SimRunNextStep(false);
 
 	// lock state during re-build
-	std::scoped_lock lock(stateMutex_);
+	std::unique_lock lock(stateMutex_);
 
 	// reset metadata
 	simStep_ = 0;
@@ -204,8 +196,15 @@ void SimulationMgr::ReBuildInitialSimState()
 	// compact staged particle vectors once after scenario construction
 	universalSimState_.ShrinkToFitAll();
 
-	// transfer universal state into backend-specific data structures
-	simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
+	if (simBackend_)
+	{
+		// transfer universal state into backend-specific data structures
+		simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
+		return;
+	}
+
+	lock.unlock();
+	SelectSimBackend(simParams_.backendVersion);
 }
 
 void SimulationMgr::Launch_Async()
@@ -214,6 +213,10 @@ void SimulationMgr::Launch_Async()
 	{
 		SPDLOG_ERROR("Failed to launch async SimulationMgr (not initialized).");
 		return;
+	}
+	if (!simBackend_)
+	{
+		SelectSimBackend(simParams_.backendVersion);
 	}
 	if (!simBackend_)
 	{
@@ -258,6 +261,10 @@ void SimulationMgr::Launch_Blocking()
 	{
 		SPDLOG_ERROR("Failed to launch blocking SimulationMgr (not initialized).");
 		return;
+	}
+	if (!simBackend_)
+	{
+		SelectSimBackend(simParams_.backendVersion);
 	}
 	if (!simBackend_)
 	{
@@ -404,7 +411,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	{
 		// transfer last sim state into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
-		simBackend_->PushToUniversalSimState(universalSimState_);
+		simBackend_->PushToUniversalSimState(universalSimState_, true);
+		simBackend_.reset();
 	}
 
 	DisplayMemoryUsageStats(paramsFinal, true);
@@ -518,7 +526,8 @@ void SimulationMgr::RunSim_Blocking()
 	{
 		// transfer last sim state into the universal state to save it
 		std::scoped_lock lock(stateMutex_);
-		simBackend_->PushToUniversalSimState(universalSimState_);
+		simBackend_->PushToUniversalSimState(universalSimState_, true);
+		simBackend_.reset();
 	}
 
 	DisplayMemoryUsageStats(paramsFinal, true);
