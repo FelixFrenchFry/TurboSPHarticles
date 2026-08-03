@@ -107,6 +107,7 @@ namespace Dist
 		uint64_t N_maxTotalTrackedMemAllocBytes = 0;
 
 		uint8_t exportedStep = 0;
+		uint64_t N_processResidentBytes = 0;
 		uint64_t N_processPeakResidentBytes = 0;
 	};
 

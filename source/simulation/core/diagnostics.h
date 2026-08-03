@@ -33,7 +33,8 @@ namespace Sim
 
 		static void ResetProgress();
 
-		static void PrintFinalProgressPeakRam(uint64_t N_peakResidentBytes);
+		static void PrintFinalProgressPeakRam(uint64_t N_residentBytes,
+											  uint64_t N_peakResidentBytes);
 
 		static void PrintLatestPerformanceSummaryAndProgress(
 			const Bench::BenchmarksTracker& benchmarksTracker,
@@ -41,6 +42,7 @@ namespace Sim
 			Bench::TimeUnit unit,
 			uint64_t step,
 			int64_t maxSteps = -1,
+			uint64_t N_residentBytes = 0,
 			uint64_t N_peakResidentBytes = 0);
 
 		static void PrintMemorySummary_Standalone(

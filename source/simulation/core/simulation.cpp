@@ -424,6 +424,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running");
 	DiagnosticsMgr::PrintFinalProgressPeakRam(
+		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
 		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }
 
@@ -540,6 +541,7 @@ void SimulationMgr::RunSim_Blocking()
 	printf("\n");
 	SPDLOG_INFO("Simulation stopped running");
 	DiagnosticsMgr::PrintFinalProgressPeakRam(
+		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
 		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }
 
@@ -683,6 +685,7 @@ void SimulationMgr::DisplayPerformanceStats(
 {
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
 		benchmarksTracker_, curBenchOps_, params.timeUnit, simStep_, params.maxSteps,
+		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
 		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }
 

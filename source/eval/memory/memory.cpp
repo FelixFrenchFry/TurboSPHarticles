@@ -6,7 +6,9 @@
 	#include <windows.h>
 	#include <psapi.h>
 #elif defined(__linux__)
+	#include <cstdio>
 	#include <sys/resource.h>
+	#include <unistd.h>
 #endif
 
 // internal
@@ -26,7 +28,9 @@ namespace
 			return {};
 		}
 
-		return { static_cast<uint64_t>(counters.PeakWorkingSetSize) };
+		return {
+			static_cast<uint64_t>(counters.WorkingSetSize),
+			static_cast<uint64_t>(counters.PeakWorkingSetSize) };
 #elif defined(__linux__)
 		rusage usage{};
 		if (getrusage(RUSAGE_SELF, &usage) != 0)
@@ -34,7 +38,22 @@ namespace
 			return {};
 		}
 
-		return { static_cast<uint64_t>(usage.ru_maxrss) * 1024ull };
+		// getrusage only reports the high-water mark, the current one comes from procfs
+		uint64_t N_residentBytes = 0;
+		if (FILE* statm = std::fopen("/proc/self/statm", "r"))
+		{
+			unsigned long N_residentPages = 0;
+			if (std::fscanf(statm, "%*u %lu", &N_residentPages) == 1)
+			{
+				N_residentBytes = static_cast<uint64_t>(N_residentPages)
+					* static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
+			}
+			std::fclose(statm);
+		}
+
+		return {
+			N_residentBytes,
+			static_cast<uint64_t>(usage.ru_maxrss) * 1024ull };
 #else
 		return {};
 #endif
@@ -69,7 +88,11 @@ bool MemoryTracker::SampleProcessMemory()
 		N_previousPeakResidentBytes,
 		process.N_peakResidentBytes);
 	const bool changed = N_peakResidentBytes > N_previousPeakResidentBytes;
+	recLatest_.process.N_residentBytes = process.N_residentBytes;
 	recLatest_.process.N_peakResidentBytes = N_peakResidentBytes;
+	processMax_allTime_.N_residentBytes = std::max(
+		processMax_allTime_.N_residentBytes,
+		process.N_residentBytes);
 	processMax_allTime_.N_peakResidentBytes = std::max(
 		processMax_allTime_.N_peakResidentBytes,
 		N_peakResidentBytes);

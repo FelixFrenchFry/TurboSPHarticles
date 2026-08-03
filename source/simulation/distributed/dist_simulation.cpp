@@ -969,10 +969,6 @@ bool DistSimulationMgr::RunSim_Blocking()
 	running_.store(false, std::memory_order_release);
 	EndRunLogging();
 
-	if (mpiContext_.IsRoot())
-	{
-		printf("\n");
-	}
 	SPDLOG_INFO_MPI("Distributed simulation stopped running", mpiContext_);
 	DistDiagnosticsMgr::PrintFinalProgressPeakRam(
 		mpiContext_, BuildRankStepReport(paramsFinal, false));
@@ -1868,6 +1864,8 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 	}
 
 	report.exportedStep = exportedStep ? 1 : 0;
+	report.N_processResidentBytes =
+		memoryTracker_ ? memoryTracker_->GetCurrentRecord().process.N_residentBytes : 0;
 	report.N_processPeakResidentBytes =
 		memoryTracker_ ? memoryTracker_->GetCurrentRecord().process.N_peakResidentBytes : 0;
 	return report;

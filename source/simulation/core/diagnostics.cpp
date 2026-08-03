@@ -50,10 +50,13 @@ namespace
 		return state;
 	}
 
-	std::string FormatPeakRam(const uint64_t N_peakResidentBytes)
+	std::string FormatRamUsage(
+		const uint64_t N_residentBytes,
+		const uint64_t N_peakResidentBytes)
 	{
 		char buffer[64];
-		std::snprintf(buffer, sizeof(buffer), " | peak RAM %.2f GB",
+		std::snprintf(buffer, sizeof(buffer), " | RSS %.2f GB | HWM %.2f GB",
+			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_residentBytes),
 			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_peakResidentBytes));
 		return buffer;
 	}
@@ -98,18 +101,20 @@ namespace Sim
 	}
 
 	void DiagnosticsMgr::PrintFinalProgressPeakRam(
+		const uint64_t N_residentBytes,
 		const uint64_t N_peakResidentBytes)
 	{
 		ProgressState& state = GetProgressState();
 		if (state.N_lastLines == 0 || state.lastProgressLine.empty()) { return; }
 
-		const std::string marker = " | peak RAM ";
+		const std::string marker = " | RSS ";
 		const std::size_t markerPos = state.lastProgressLine.find(marker);
 		if (markerPos == std::string::npos) { return; }
 
 		std::string line = state.lastProgressLine.substr(0, markerPos);
-		line += FormatPeakRam(N_peakResidentBytes);
-		std::printf("\nFINAL: %s\n\n", line.c_str());
+		line += FormatRamUsage(N_residentBytes, N_peakResidentBytes);
+		SPDLOG_INFO("Final progress report:");
+		std::printf("\n%s\n\n", line.c_str());
 		std::fflush(stdout);
 	}
 
@@ -269,6 +274,7 @@ namespace Sim
         Bench::TimeUnit unit,
         uint64_t step,
         int64_t maxSteps,
+        const uint64_t N_residentBytes,
         const uint64_t N_peakResidentBytes)
     {
         ProgressState& state = GetProgressState();
@@ -477,7 +483,7 @@ namespace Sim
         {
             snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s",
+                "%02d:%02d:%02d time | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s",
                 elH, elM, elS,
                 step,
                 maxSteps,
@@ -489,7 +495,7 @@ namespace Sim
         {
             snprintf(
                 buf, sizeof(buf),
-                "%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s",
+                "%02d:%02d:%02d time | %" PRIu64 " steps | %.3f steps/s",
                 elH, elM, elS,
                 step,
                 stepsPerSec
@@ -497,7 +503,7 @@ namespace Sim
         }
 
 		std::string line(buf);
-		line += FormatPeakRam(N_peakResidentBytes);
+		line += FormatRamUsage(N_residentBytes, N_peakResidentBytes);
 		if (line.size() < state.lastProgressLen)
 		{
 			line.append(state.lastProgressLen - line.size(), ' ');

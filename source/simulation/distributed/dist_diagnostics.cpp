@@ -10,6 +10,7 @@
 
 // internal
 #include "dist_diagnostics.h"
+#include "dist_helpers.h"
 #include "dist_redistribution_diagnostics.h"
 #include "mpi_context.h"
 #include "source/base/enum_hub.h"
@@ -50,14 +51,19 @@ namespace
 		return state;
 	}
 
-	std::string FormatPeakRam(
+	std::string FormatRamUsage(
+		const uint64_t N_residentBytes,
+		const int residentRank,
 		const uint64_t N_peakResidentBytes,
-		const int rank)
+		const int peakRank)
 	{
 		char buffer[80];
-		std::snprintf(buffer, sizeof(buffer), " | peak RAM %.2f GB (rank %d)",
+		std::snprintf(buffer, sizeof(buffer),
+			" | RSS %.2f GB (rank %d) | HWM %.2f GB (rank %d)",
+			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_residentBytes),
+			residentRank,
 			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_peakResidentBytes),
-			rank);
+			peakRank);
 		return buffer;
 	}
 
@@ -73,6 +79,8 @@ namespace
 	std::string FormatProgressLine(
 		const std::vector<DistRankStepReport>& reports,
 		const double elapsedS,
+		const uint64_t N_residentBytes,
+		const int residentRank,
 		const uint64_t N_peakResidentBytes,
 		const int peakRank)
 	{
@@ -96,22 +104,22 @@ namespace
 
 		int elH, elM, elS;
 		FormatHms(elapsed, elH, elM, elS);
-		const std::string peakRamLabel = FormatPeakRam(
-			N_peakResidentBytes, peakRank);
+		const std::string ramUsageLabel = FormatRamUsage(
+			N_residentBytes, residentRank, N_peakResidentBytes, peakRank);
 
 		char progressLine[256];
 		if (hasTotal)
 		{
 			std::snprintf(progressLine, sizeof(progressLine),
-				"%02d:%02d:%02d elapsed | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s%s",
+				"%02d:%02d:%02d time | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s%s",
 				elH, elM, elS,
-				step, maxSteps, percent, stepsPerSec, peakRamLabel.c_str());
+				step, maxSteps, percent, stepsPerSec, ramUsageLabel.c_str());
 		}
 		else
 		{
 			std::snprintf(progressLine, sizeof(progressLine),
-				"%02d:%02d:%02d elapsed | %" PRIu64 " steps | %.3f steps/s%s",
-				elH, elM, elS, step, stepsPerSec, peakRamLabel.c_str());
+				"%02d:%02d:%02d time | %" PRIu64 " steps | %.3f steps/s%s",
+				elH, elM, elS, step, stepsPerSec, ramUsageLabel.c_str());
 		}
 
 		return progressLine;
@@ -1105,12 +1113,18 @@ namespace
 			PrintRankTimingTable(N_lines, benchReports, benchOps, params.timeUnit);
 		}
 		PrintLine(N_lines);
+		const uint64_t processResidentMax = MaxReportField(
+			reports, &DistRankStepReport::N_processResidentBytes);
+		const int processResidentMaxRank = RankWithMax(
+			reports, &DistRankStepReport::N_processResidentBytes);
 		const uint64_t processPeakResidentMax = MaxReportField(
 			reports, &DistRankStepReport::N_processPeakResidentBytes);
 		const int processPeakResidentMaxRank = RankWithMax(
 			reports, &DistRankStepReport::N_processPeakResidentBytes);
 		const std::string progressLine = FormatProgressLine(
-			reports, elapsedS, processPeakResidentMax, processPeakResidentMaxRank);
+			reports, elapsedS,
+			processResidentMax, processResidentMaxRank,
+			processPeakResidentMax, processPeakResidentMaxRank);
 		PrintLine(N_lines, "%s", progressLine.c_str());
 		std::fflush(stdout);
 		state.N_lastLines = N_lines;
@@ -1237,6 +1251,10 @@ namespace Dist
 		ProgressState& state = GetProgressState();
 		if (state.N_lastLines == 0) { return; }
 
+		const uint64_t processResidentMax = MaxReportField(
+			reports, &DistRankStepReport::N_processResidentBytes);
+		const int processResidentMaxRank = RankWithMax(
+			reports, &DistRankStepReport::N_processResidentBytes);
 		const uint64_t processPeakResidentMax = MaxReportField(
 			reports, &DistRankStepReport::N_processPeakResidentBytes);
 		const int processPeakResidentMaxRank = RankWithMax(
@@ -1245,8 +1263,11 @@ namespace Dist
 		const double elapsedS = std::chrono::duration<double>(
 			steady_clock::now() - state.startSteady).count();
 		const std::string progressLine = FormatProgressLine(
-			reports, elapsedS, processPeakResidentMax, processPeakResidentMaxRank);
-		std::printf("FINAL: %s\n\n", progressLine.c_str());
+			reports, elapsedS,
+			processResidentMax, processResidentMaxRank,
+			processPeakResidentMax, processPeakResidentMaxRank);
+		SPDLOG_INFO_MPI("Final progress report:", mpiContext);
+		std::printf("\n%s\n\n", progressLine.c_str());
 		std::fflush(stdout);
 	}
 
