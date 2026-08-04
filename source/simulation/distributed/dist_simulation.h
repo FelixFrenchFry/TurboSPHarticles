@@ -21,6 +21,7 @@
 #include "dist_diagnostics.h"
 #include "dist_particle_state.h"
 #include "dist_redistribution_diagnostics.h"
+#include "dist_snapshots.h"
 #include "load_balance.h"
 #include "mpi_context.h"
 #include "particle_redistribution.h"
@@ -212,6 +213,7 @@ namespace Dist
 		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint8_t> globalNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint32_t> exportFluidParticleLocalIdxsScratch_{};
+		mutable DistExportSnapshotBuffer exportSnapGatherScratch_{};
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_{};

@@ -203,6 +203,17 @@ namespace
 		return usage;
 	}
 
+	Mem::MemUsage MemoryUsageOfExportSnapshotGatherBuffer(
+		const DistExportSnapshotBuffer& gatherBuffer)
+	{
+		Mem::MemUsage usage{};
+
+		Mem::Add(usage, Mem::MemUsageOf_Vector(gatherBuffer.fluidParticles));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(gatherBuffer.boundaryParticles));
+
+		return usage;
+	}
+
 	Mem::MemUsage MemoryUsageOfRigidBodyForceTorque(
 		const Sim::RigidBodyForceTorque& forceTorque)
 	{
@@ -1488,6 +1499,7 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	auto& expSnap = exportSnapScratch_;
 	const bool gatherOk = GatherExportSnapshotToRoot(
 		expSnap,
+		exportSnapGatherScratch_,
 		localSimState_,
 		fluidParticleState_,
 		boundaryParticleState_,
@@ -1707,6 +1719,7 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(globalNearSurfaceFlagsScratch_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(exportFluidParticleLocalIdxsScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfExportSnapshot(exportSnapScratch_));
+	Mem::Add(miscUsage, MemoryUsageOfExportSnapshotGatherBuffer(exportSnapGatherScratch_));
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_Misc, miscUsage);
 }
 

@@ -71,9 +71,10 @@ namespace Dist
 		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 		int rank);
 
+	// sorts the gathered packets in place, where the gather storage doubles as the sort buffer
 	bool RebuildExportSnapshotFromGatheredParticles(
 		Sync::ExportSnapshot& exportSnap,
-		const DistExportSnapshotBuffer& gatherBuffer,
+		DistExportSnapshotBuffer& gatherBuffer,
 		uint64_t simStep,
 		double simTime);
 
@@ -81,8 +82,11 @@ namespace Dist
 		Sync::ExportSnapshot& exportSnap,
 		const Sync::UniversalSimState& localState);
 
+	// reusable caller-owned gather storage, holding the locally packed packets on every rank
+	// and additionally the payloads received from all other ranks on the root rank
 	bool GatherExportSnapshotToRoot(
 		Sync::ExportSnapshot& exportSnap,
+		DistExportSnapshotBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
 		const DistParticleState& fluidParticleState,
 		const DistParticleState& boundaryParticleState,

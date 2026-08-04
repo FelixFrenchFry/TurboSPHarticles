@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <tbb/parallel_sort.h>
 #include <utility>
 
 // internal
@@ -21,10 +22,12 @@ namespace
 	{
 		int rank = -1;
 
-		DistExportSnapshotBuffer recvBuffer;
-
 		int N_recvF = 0;
 		int N_recvB = 0;
+
+		// packet slots reserved for this rank behind the locally packed packets
+		uint64_t recvFluidBeginIdx = 0;
+		uint64_t recvBoundaryBeginIdx = 0;
 	};
 
 	template <typename T>
@@ -39,9 +42,8 @@ namespace
 	}
 
 	template <typename T>
-	int CheckedByteCount(const std::vector<T>& packets)
+	int CheckedByteCount(const uint64_t N_packets)
 	{
-		const uint64_t N_packets = packets.size();
 		const uint64_t N_max =
 			static_cast<uint64_t>(std::numeric_limits<int>::max()) / sizeof(T);
 
@@ -54,15 +56,26 @@ namespace
 	}
 
 	template <typename T>
-	const void* DataOrNull(const std::vector<T>& packets)
+	int CheckedByteCount(const std::vector<T>& packets)
 	{
-		return packets.empty() ? nullptr : packets.data();
+		return CheckedByteCount<T>(packets.size());
 	}
 
 	template <typename T>
 	void* DataOrNull(std::vector<T>& packets)
 	{
 		return packets.empty() ? nullptr : packets.data();
+	}
+
+	// receive destination inside the shared gather storage,
+	// only addressed when that rank actually sends packets
+	template <typename T>
+	void* DataAtOrNull(
+		std::vector<T>& packets,
+		const uint64_t beginIdx,
+		const uint64_t N_packets)
+	{
+		return (N_packets == 0) ? nullptr : packets.data() + beginIdx;
 	}
 
 	DistExportFluidParticlePacket PackExportFluidParticle(
@@ -103,20 +116,6 @@ namespace
 		packet.volB = boundaryParticles.volB[localIdx];
 
 		return packet;
-	}
-
-	void AppendDistExportSnapshotBuffer(
-		DistExportSnapshotBuffer& dst,
-		const DistExportSnapshotBuffer& src)
-	{
-		dst.fluidParticles.insert(
-			dst.fluidParticles.end(),
-			src.fluidParticles.begin(),
-			src.fluidParticles.end());
-		dst.boundaryParticles.insert(
-			dst.boundaryParticles.end(),
-			src.boundaryParticles.begin(),
-			src.boundaryParticles.end());
 	}
 
 } // namespace anonymous
@@ -189,7 +188,7 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 
 bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	Sync::ExportSnapshot& exportSnap,
-	const DistExportSnapshotBuffer& gatherBuffer,
+	DistExportSnapshotBuffer& gatherBuffer,
 	const uint64_t simStep,
 	const double simTime)
 {
@@ -204,16 +203,17 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		return false;
 	}
 
-	std::vector<DistExportFluidParticlePacket> sortedFluidParticles = gatherBuffer.fluidParticles;
-	std::vector<DistExportBoundaryParticlePacket> sortedBoundaryParticles = gatherBuffer.boundaryParticles;
-	std::sort(
+	// gathered packets are ordered by global index in place
+	std::vector<DistExportFluidParticlePacket>& sortedFluidParticles = gatherBuffer.fluidParticles;
+	std::vector<DistExportBoundaryParticlePacket>& sortedBoundaryParticles = gatherBuffer.boundaryParticles;
+	tbb::parallel_sort(
 		sortedFluidParticles.begin(),
 		sortedFluidParticles.end(),
 		[](const DistExportFluidParticlePacket& a, const DistExportFluidParticlePacket& b)
 		{
 			return a.globalIdx < b.globalIdx;
 		});
-	std::sort(
+	tbb::parallel_sort(
 		sortedBoundaryParticles.begin(),
 		sortedBoundaryParticles.end(),
 		[](const DistExportBoundaryParticlePacket& a, const DistExportBoundaryParticlePacket& b)
@@ -321,6 +321,7 @@ void Dist::PackReplicatedRigidExportSnapshot(
 
 bool Dist::GatherExportSnapshotToRoot(
 	Sync::ExportSnapshot& exportSnap,
+	DistExportSnapshotBuffer& gatherBuffer,
 	const Sync::UniversalSimState& localState,
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
@@ -332,9 +333,9 @@ bool Dist::GatherExportSnapshotToRoot(
 {
 	if (stats) { *stats = {}; }
 
-	DistExportSnapshotBuffer sendBuffer{};
+	// locally packed packets occupy the front of the gather storage on every rank
 	bool localOk = PackOwnedExportSnapshotBuffer(
-		sendBuffer,
+		gatherBuffer,
 		localState,
 		fluidParticleState,
 		boundaryParticleState,
@@ -345,20 +346,17 @@ bool Dist::GatherExportSnapshotToRoot(
 	int N_sendB = 0;
 	if (localOk)
 	{
-		N_sendF = CheckedPacketCount(sendBuffer.fluidParticles);
-		N_sendB = CheckedPacketCount(sendBuffer.boundaryParticles);
+		N_sendF = CheckedPacketCount(gatherBuffer.fluidParticles);
+		N_sendB = CheckedPacketCount(gatherBuffer.boundaryParticles);
 	}
 
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 
-	DistExportSnapshotBuffer gatheredBuffer{};
 	std::vector<RankDistExportSnapshotGather> rankGathers{};
 	rankGathers.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
 
 	if (mpiContext.IsRoot())
 	{
-		gatheredBuffer = sendBuffer;
-
 		for (int rank = 0; rank < mpiContext.Size(); rank++)
 		{
 			if (rank == mpiContext.RootRank()) { continue; }
@@ -411,6 +409,10 @@ bool Dist::GatherExportSnapshotToRoot(
 
 	if (mpiContext.IsRoot())
 	{
+		// reserve one packet slot range per rank behind the locally packed packets
+		uint64_t N_gatheredF = gatherBuffer.fluidParticles.size();
+		uint64_t N_gatheredB = gatherBuffer.boundaryParticles.size();
+
 		for (RankDistExportSnapshotGather& rankGather : rankGathers)
 		{
 			if (rankGather.N_recvF < 0 || rankGather.N_recvB < 0)
@@ -419,32 +421,43 @@ bool Dist::GatherExportSnapshotToRoot(
 				break;
 			}
 
-			rankGather.recvBuffer.fluidParticles.resize(
-				static_cast<uint64_t>(rankGather.N_recvF));
-			rankGather.recvBuffer.boundaryParticles.resize(
-				static_cast<uint64_t>(rankGather.N_recvB));
+			rankGather.recvFluidBeginIdx = N_gatheredF;
+			rankGather.recvBoundaryBeginIdx = N_gatheredB;
+			N_gatheredF += static_cast<uint64_t>(rankGather.N_recvF);
+			N_gatheredB += static_cast<uint64_t>(rankGather.N_recvB);
+		}
+
+		if (localOk)
+		{
+			gatherBuffer.fluidParticles.resize(N_gatheredF);
+			gatherBuffer.boundaryParticles.resize(N_gatheredB);
 		}
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 
 	requests.reserve(rankGathers.size() * 2);
 
-	// gather payloads after all root receive buffers are sized correctly
+	// gather payloads after the root gather storage holds a slot range for every rank
 	if (mpiContext.IsRoot())
 	{
-		for (RankDistExportSnapshotGather& rankGather : rankGathers)
+		for (const RankDistExportSnapshotGather& rankGather : rankGathers)
 		{
+			const uint64_t N_recvF = static_cast<uint64_t>(rankGather.N_recvF);
+			const uint64_t N_recvB = static_cast<uint64_t>(rankGather.N_recvB);
+
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.IRecvBytes(
-				DataOrNull(rankGather.recvBuffer.fluidParticles),
-				CheckedByteCount(rankGather.recvBuffer.fluidParticles),
+				DataAtOrNull(
+					gatherBuffer.fluidParticles, rankGather.recvFluidBeginIdx, N_recvF),
+				CheckedByteCount<DistExportFluidParticlePacket>(N_recvF),
 				rankGather.rank,
 				DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
 				requests.back());
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.IRecvBytes(
-				DataOrNull(rankGather.recvBuffer.boundaryParticles),
-				CheckedByteCount(rankGather.recvBuffer.boundaryParticles),
+				DataAtOrNull(
+					gatherBuffer.boundaryParticles, rankGather.recvBoundaryBeginIdx, N_recvB),
+				CheckedByteCount<DistExportBoundaryParticlePacket>(N_recvB),
 				rankGather.rank,
 				DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
 				requests.back());
@@ -454,15 +467,15 @@ bool Dist::GatherExportSnapshotToRoot(
 	{
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendBytes(
-			DataOrNull(sendBuffer.fluidParticles),
-			CheckedByteCount(sendBuffer.fluidParticles),
+			DataOrNull(gatherBuffer.fluidParticles),
+			CheckedByteCount(gatherBuffer.fluidParticles),
 			mpiContext.RootRank(),
 			DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
 			requests.back());
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendBytes(
-			DataOrNull(sendBuffer.boundaryParticles),
-			CheckedByteCount(sendBuffer.boundaryParticles),
+			DataOrNull(gatherBuffer.boundaryParticles),
+			CheckedByteCount(gatherBuffer.boundaryParticles),
 			mpiContext.RootRank(),
 			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
 			requests.back());
@@ -471,14 +484,9 @@ bool Dist::GatherExportSnapshotToRoot(
 
 	if (mpiContext.IsRoot())
 	{
-		for (const RankDistExportSnapshotGather& rankGather : rankGathers)
-		{
-			AppendDistExportSnapshotBuffer(gatheredBuffer, rankGather.recvBuffer);
-		}
-
 		localOk = RebuildExportSnapshotFromGatheredParticles(
 			exportSnap,
-			gatheredBuffer,
+			gatherBuffer,
 			simStep,
 			simTime);
 		if (localOk)
@@ -489,9 +497,9 @@ bool Dist::GatherExportSnapshotToRoot(
 		if (localOk && stats)
 		{
 			stats->N_gatheredF =
-				static_cast<uint32_t>(gatheredBuffer.fluidParticles.size());
+				static_cast<uint32_t>(gatherBuffer.fluidParticles.size());
 			stats->N_gatheredB =
-				static_cast<uint32_t>(gatheredBuffer.boundaryParticles.size());
+				static_cast<uint32_t>(gatherBuffer.boundaryParticles.size());
 			stats->N_gatheredR = localState.rigidParticles.N_;
 		}
 	}
