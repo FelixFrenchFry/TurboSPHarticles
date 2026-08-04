@@ -863,6 +863,9 @@ bool DistSimulationMgr::RunSim_Blocking()
 	DistDiagnosticsMgr::ResetProgress();
 	bool runOk = true;
 
+	// reported once the loop below is left, so every exit states why the run ended
+	const char* stopReason = "unknown reason";
+
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
@@ -873,22 +876,33 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 	while (true)
 	{
-		if (!runOk) { break; }
+		if (!runOk)
+		{
+			stopReason = "failed export, statistics, or load balancing stage";
+			break;
+		}
 
 		SyncParameters(true);
 
 		// local copy for step-local consistency
-		const auto params = simParams_;
+		auto params = simParams_;
+
+		// the run length is fixed at launch, so progress reports match the step limit below
+		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// let any rank stop the whole MPI loop cleanly
 		const bool keepRunning = mpiContext_.AllTrue(
 			!stopRequested_.load(std::memory_order_acquire));
-		if (!keepRunning) { break; }
+		if (!keepRunning) { stopReason = "stop requested"; break; }
 
 		// explicit maximum number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
-			paramsInit.maxSteps > 0) { break; }
+			paramsInit.maxSteps > 0)
+		{
+			stopReason = "maximum number of steps reached";
+			break;
+		}
 
 		// small sleep to avoid busy spin when nothing to do yet
 		if (!doSimStep)
@@ -922,6 +936,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 		{
 			FinalizeBenchMemMeasurements(params);
 			runOk = false;
+			stopReason = "failed simulation step";
 			break;
 		}
 
@@ -951,10 +966,13 @@ bool DistSimulationMgr::RunSim_Blocking()
 		SyncParameters();
 
 		DisplayMemoryUsageStats(params);
-		DisplayDistributedProgress(params, exportedStep);
+
+		// the progress block redraw would overwrite the error a failed stage just reported
+		if (runOk) { DisplayDistributedProgress(params, exportedStep); }
 	}
 
-	const auto paramsFinal = simParams_;
+	auto paramsFinal = simParams_;
+	paramsFinal.maxSteps = paramsInit.maxSteps;
 	if (mpiContext_.IsRoot())
 	{
 		std::printf("\n");
@@ -969,7 +987,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 	running_.store(false, std::memory_order_release);
 	EndRunLogging();
 
-	SPDLOG_INFO_MPI("Distributed simulation stopped running", mpiContext_);
+	SPDLOG_INFO_MPI("Distributed simulation stopped running ({})", mpiContext_, stopReason);
 	DistDiagnosticsMgr::PrintFinalProgressPeakRam(
 		mpiContext_, BuildRankStepReport(paramsFinal, false));
 
@@ -1529,6 +1547,9 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 
 	if (!gatherOk)
 	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to gather the distributed export snapshot on the root rank.",
+			mpiContext_.Rank(), mpiContext_.Size());
 		localSimState_.fluidParticles = {};
 		localSimState_.boundaryParticles = {};
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);

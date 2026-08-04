@@ -955,7 +955,7 @@ namespace
 		char line[256];
 		std::snprintf(line, sizeof(line),
 			"%-2s | %8s | %8s | %8s | %8s | %8s | %8s | %9s",
-			"r", "backend", "metadata", "exchange", "misc", "total", "process", "");
+			"r", "backend", "metadata", "exchange", "misc", "total", "HWM", "");
 		table += line;
 		table += '\n';
 		table += CLI_SECTION_SEPARATOR;

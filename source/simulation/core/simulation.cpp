@@ -319,7 +319,10 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		SyncParameters(true);
 
 		// local copy for thread safety
-		const auto params = simParams_;
+		auto params = simParams_;
+
+		// the run length is fixed at launch, so progress reports match the step limit below
+		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// explicit maximum number of steps reached
@@ -458,7 +461,10 @@ void SimulationMgr::RunSim_Blocking()
 		SyncParameters(true);
 
 		// local copy for thread safety
-		const auto params = simParams_;
+		auto params = simParams_;
+
+		// the run length is fixed at launch, so progress reports match the step limit below
+		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
 		// explicit maximum number of steps reached

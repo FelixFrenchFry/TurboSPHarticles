@@ -187,7 +187,7 @@ bool Dist::BuildActiveRigidParticleLocalIdxs(
 		if (ownerRank < 0 || ownerRank >= N_ranks)
 		{
 			if (failMsg) { *failMsg =
-				"rigid particle world position is outside the distributed domain."; }
+				"rigid particle world position has no owner rank."; }
 			return false;
 		}
 		if (ownerRank == rank)

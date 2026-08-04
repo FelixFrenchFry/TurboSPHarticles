@@ -44,17 +44,18 @@ namespace
 			}
 
 			const float splitCoordinate = particles.x[localIdx];
-			if (!std::isfinite(splitCoordinate) ||
-				splitCoordinate < splitMin || splitCoordinate > splitMax)
+			if (!std::isfinite(splitCoordinate))
 			{
 				throw std::runtime_error(
 					std::string("Cannot build a dynamic AABB repartition profile from an invalid ") +
 					particleType + " particle position.");
 			}
 
-			const double normalizedCoordinate =
+			// particles that left the global domain count towards the nearest bin
+			const double normalizedCoordinate = std::clamp(
 				static_cast<double>(splitCoordinate - splitMin) /
-				static_cast<double>(splitLength);
+				static_cast<double>(splitLength),
+				0.0, 1.0);
 			const uint32_t bin = std::min(
 				static_cast<uint32_t>(normalizedCoordinate * profileBinCount),
 				profileBinCount - 1);

@@ -152,15 +152,20 @@ const AABB& AABBSlabLayout::GlobalExtentAABB() const
 int AABBSlabLayout::OwnerRank(const glm::vec3& position) const
 {
 	const int N_ranks = static_cast<int>(splitPositions_.size()) - 1;
-	if (N_ranks <= 0 || !globalBounds_.Contains(position)) { return -1; }
+	if (N_ranks <= 0) { return -1; }
+
+	// only the split axis decides ownership, so it is the one coordinate that has to be usable
+	const float splitPosition = position[splitAxis_];
+	if (!std::isfinite(splitPosition)) { return -1; }
 
 	// split positions tile the split axis, so shared faces go to the higher rank
 	const auto it = std::upper_bound(
 		splitPositions_.begin(),
 		splitPositions_.end(),
-		position[splitAxis_]);
+		splitPosition);
 	const int ownerRank = static_cast<int>(it - splitPositions_.begin()) - 1;
 
+	// particles that left the global domain stay owned by the nearest slab
 	return std::clamp(ownerRank, 0, N_ranks - 1);
 }
 
