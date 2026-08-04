@@ -61,74 +61,20 @@ namespace
 		return checksum;
 	}
 
-	void IncludePoint(AABB& box, const glm::vec3& point)
-	{
-		box.min.x = std::min(box.min.x, point.x);
-		box.min.y = std::min(box.min.y, point.y);
-		box.min.z = std::min(box.min.z, point.z);
-
-		box.max.x = std::max(box.max.x, point.x);
-		box.max.y = std::max(box.max.y, point.y);
-		box.max.z = std::max(box.max.z, point.z);
-	}
-
-	// scenarios use OBBs, while decomp starts from one global AABB
-	AABB ComputeAABBFromOBB(const Scene::OBB& box)
-	{
-		const glm::vec3 u = box.uHat * box.uLen;
-		const glm::vec3 v = box.vHat * box.vLen;
-		const glm::vec3 w = box.wHat * box.wLen;
-
-		const std::array<glm::vec3, 8> corners =
-		{
-			box.origin,
-			box.origin + u,
-			box.origin + v,
-			box.origin + w,
-			box.origin + u + v,
-			box.origin + u + w,
-			box.origin + v + w,
-			box.origin + u + v + w
-		};
-
-		AABB boxAABB
-		{
-			.min = corners[0],
-			.max = corners[0]
-		};
-
-		for (const glm::vec3& corner : corners)
-		{
-			IncludePoint(boxAABB, corner);
-		}
-
-		return boxAABB;
-	}
-
 	// build the global domain AABB that will be split between MPI ranks
+	// (decomp starts from one global AABB, while scenarios describe their bounds with OBBs)
 	AABB ComputeGlobalDomainBounds(
 		const std::vector<Scene::OBB>& boundaryBoxes,
 		const Sim::SimParams& params)
 	{
-		if (boundaryBoxes.empty())
+		AABB globalBounds{};
+		if (!Scene::ComputeSimDomainBounds(
+			boundaryBoxes, params, globalBounds.min, globalBounds.max))
 		{
 			throw std::runtime_error("Scenario does not provide boundary boxes.");
 		}
 
-		AABB globalBounds = ComputeAABBFromOBB(boundaryBoxes.front());
-
-		for (uint64_t i = 1; i < boundaryBoxes.size(); i++)
-		{
-			const AABB boxBounds = ComputeAABBFromOBB(boundaryBoxes[i]);
-			IncludePoint(globalBounds, boxBounds.min);
-			IncludePoint(globalBounds, boxBounds.max);
-		}
-
-		const float boundaryPad = params.boundaryLayers > 0
-			? (static_cast<float>(params.boundaryLayers) - 0.5f) * params.particleSizeB
-			: 0.0f;
-
-		return globalBounds.Expanded(boundaryPad);
+		return globalBounds;
 	}
 
 	std::string FormatNeighborRanks(const std::vector<int>& neighborRanks)

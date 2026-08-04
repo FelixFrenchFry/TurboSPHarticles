@@ -36,4 +36,13 @@ namespace Scene
 												  Base::ScenarioType type,
 												  const std::string& profile);
 
+	// reduces the boundary boxes of a scenario to the axis-aligned domain the simulation is meant
+	// to stay inside, padded by the boundary particle layers placed outside of the boxes
+	// (reports false and leaves the bounds untouched when the scenario provides no boxes)
+	bool ComputeSimDomainBounds(
+		const std::vector<OBB>& boundaryBoxes,
+		const Sim::SimParams& params,
+		glm::vec3& min,
+		glm::vec3& max);
+
 } // namespace Scene

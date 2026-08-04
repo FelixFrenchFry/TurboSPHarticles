@@ -140,6 +140,8 @@ void SimulationMgr::SelectSimBackend(
 	{
 		std::scoped_lock lock(stateMutex_);
 
+		ApplySimDomainBoundsToBackend();
+
 		// transfer universal state into backend-specific data structures
 		simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
 	}
@@ -198,6 +200,8 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	if (simBackend_)
 	{
+		ApplySimDomainBoundsToBackend();
+
 		// transfer universal state into backend-specific data structures
 		simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
 		return;
@@ -205,6 +209,21 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	lock.unlock();
 	SelectSimBackend(simParams_.backendVersion);
+}
+
+void SimulationMgr::ApplySimDomainBoundsToBackend()
+{
+	if (!simScenario_ || !simBackend_) { return; }
+
+	glm::vec3 domainMin{};
+	glm::vec3 domainMax{};
+	if (!Scene::ComputeSimDomainBounds(
+		simScenario_->GetBoundaryBoxes(), simParams_, domainMin, domainMax))
+	{
+		return;
+	}
+
+	simBackend_->SetSimDomainBounds(domainMin, domainMax);
 }
 
 void SimulationMgr::Launch_Async()

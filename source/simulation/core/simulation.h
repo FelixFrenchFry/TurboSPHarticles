@@ -96,6 +96,10 @@ namespace Sim
 
 		friend class DiagnosticsMgr;
 
+		// reports the domain of the selected scenario to the backend, so its spatial acceleration
+		// structures stay bounded by it (no-op while no scenario, backend, or domain is known)
+		void ApplySimDomainBoundsToBackend();
+
 		// configuration profile
 		std::string configProfile_ = "default";
 		std::string paramsFile_ = "default/params.json";
