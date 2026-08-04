@@ -94,7 +94,7 @@ namespace Dist
 		// builds the full scenario state before rank-local compaction
 		bool BuildGlobalSimState();
 
-		// keeps owned + halo particles for this rank
+		// keeps owned + halo particles for this rank and releases the replicated scenario payload
 		bool BuildRankLocalSimState();
 
 		// validates rank-local [ owned ][ halo ] state

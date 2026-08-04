@@ -1203,6 +1203,11 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 
 	localSimState_.ShrinkToFitAll();
 
+	// the replicated scenario payload was only a build-time source, so
+	// only the replicated rigid state is kept past the rank-local build
+	globalSimState_.fluidParticles = {};
+	globalSimState_.boundaryParticles = {};
+
 	return true;
 }
 
@@ -1458,11 +1463,6 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 			// fluid and boundary payloads remain backend-resident after startup
 			localSimState_.fluidParticles = {};
 			localSimState_.boundaryParticles = {};
-
-			// the replicated scenario payload is only a build-time source and the check above
-			// is its last reader, so only the replicated rigid state is kept past startup
-			globalSimState_.fluidParticles = {};
-			globalSimState_.boundaryParticles = {};
 		}
 	}
 	catch (const std::exception& ex)
