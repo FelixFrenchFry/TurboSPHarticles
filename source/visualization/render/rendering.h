@@ -109,7 +109,7 @@ namespace Render
 		GLuint vboInstances_ = 0;           // instance data
 		GLuint progSphereImpostors_ = 0;    // impostor sphere shader program
 		GLuint texColorMap_ = 0;            // color lookup-table
-		Base::ColorMap colorMap_ = Base::ColorMap::Blues; // currently uploaded color map
+		Base::ColorMap colorMap_ = Base::ColorMap::Coolwarm; // currently uploaded color map
 
 		// addresses of GL objects (cuboids -> rigid body centers of mass)
 		GLuint vaoCenterOfMass_ = 0;

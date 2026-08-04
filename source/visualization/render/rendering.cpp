@@ -108,7 +108,7 @@ void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
 	#endif
 
 	// upload default color map for scalar particle data
-	UpdateColorMap(GetColorMap_Blues());
+	UpdateColorMap(GetColorMap_Coolwarm());
 
 	// enable alpha blending for transparency
 	glEnable(GL_BLEND);
