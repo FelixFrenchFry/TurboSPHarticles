@@ -218,7 +218,7 @@ namespace Dist
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
 			std::vector<uint32_t> globalIdx_;
-			Sync::FluidParticles particles_; // fields left out of the payload stay allocated, but are not filled
+			Sync::FluidParticles particles_; // fields left out of the payload stay empty
 		};
 
 		// packed SoA payload for migrated or halo boundary particles

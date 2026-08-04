@@ -69,16 +69,47 @@ namespace
 			static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())));
 	}
 
-	void EnsureFluidParticleCapacityWithExtra(
+	// only the fields carried by the fluid payload are reserved and sized,
+	// (the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+	// because the following solver step re-writes them before reading them)
+	// TODO: keep it like this or reserve and size them too, if solver step behavior changes?
+	void EnsureFluidPayloadCapacityWithExtra(
 		Sync::FluidParticles& particles,
 		const uint32_t N_particles,
 		const float extraAllocCapacityPct)
 	{
 		if (particles.id.capacity() >= N_particles) { return; }
 
-		particles.reserveAll(ParticleCapacityWithExtra(
+		const uint32_t N_capacity = ParticleCapacityWithExtra(
 			N_particles,
-			extraAllocCapacityPct));
+			extraAllocCapacityPct);
+
+		particles.id.reserve(N_capacity);
+
+		particles.xPos.reserve(N_capacity);
+		particles.yPos.reserve(N_capacity);
+		particles.zPos.reserve(N_capacity);
+
+		particles.xVel.reserve(N_capacity);
+		particles.yVel.reserve(N_capacity);
+		particles.zVel.reserve(N_capacity);
+	}
+
+	void ResizeFluidPayloadFields(
+		Sync::FluidParticles& particles,
+		const uint32_t N_particles)
+	{
+		particles.N_ = N_particles;
+
+		particles.id.resize(N_particles);
+
+		particles.xPos.resize(N_particles);
+		particles.yPos.resize(N_particles);
+		particles.zPos.resize(N_particles);
+
+		particles.xVel.resize(N_particles);
+		particles.yVel.resize(N_particles);
+		particles.zVel.resize(N_particles);
 	}
 
 	void EnsureBoundaryParticleCapacityWithExtra(
@@ -470,10 +501,10 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::Resize(
 	{
 		EnsureVectorCapacityWithExtra(
 			globalIdx_, N, exchangeBufferExtraAllocCapacityPct_);
-		EnsureFluidParticleCapacityWithExtra(
+		EnsureFluidPayloadCapacityWithExtra(
 			particles_, N, exchangeBufferExtraAllocCapacityPct_);
 		globalIdx_.resize(N);
-		particles_.resizeAll(N);
+		ResizeFluidPayloadFields(particles_, N);
 	}
 
 	N_particles_ = N;
@@ -2112,11 +2143,11 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 			return false;
 		}
 
-		EnsureFluidParticleCapacityWithExtra(
+		EnsureFluidPayloadCapacityWithExtra(
 			appendedParticles,
 			N_appended,
 			scratchBufferExtraAllocCapacityPct_);
-		appendedParticles.resizeAll(N_appended);
+		ResizeFluidPayloadFields(appendedParticles, N_appended);
 		PrepareRebuiltParticleState(
 			rebuiltParticleState,
 			N_owned,

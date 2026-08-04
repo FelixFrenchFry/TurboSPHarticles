@@ -454,12 +454,19 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	{
 		return values.size() == appendedFluidParticles.N_;
 	};
+	const auto fluidFieldOmitted = [](const auto& values)
+	{
+		return values.empty();
+	};
 	const auto boundarySizeValid = [&appendedBoundaryParticles](const auto& values)
 	{
 		return values.size() == appendedBoundaryParticles.N_;
 	};
 
 	// check that the appended particle blocks have the expected sizes
+	// (the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+	// because the following solver step re-writes them before reading them)
+	// TODO: keep it like this or copy them too, if solver step behavior changes?
 	if (!fluidSizeValid(appendedFluidParticles.id) ||
 		!fluidSizeValid(appendedFluidParticles.xPos) ||
 		!fluidSizeValid(appendedFluidParticles.yPos) ||
@@ -467,16 +474,16 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 		!fluidSizeValid(appendedFluidParticles.xVel) ||
 		!fluidSizeValid(appendedFluidParticles.yVel) ||
 		!fluidSizeValid(appendedFluidParticles.zVel) ||
-		!fluidSizeValid(appendedFluidParticles.xVelPred) ||
-		!fluidSizeValid(appendedFluidParticles.yVelPred) ||
-		!fluidSizeValid(appendedFluidParticles.zVelPred) ||
-		!fluidSizeValid(appendedFluidParticles.xAccPress) ||
-		!fluidSizeValid(appendedFluidParticles.yAccPress) ||
-		!fluidSizeValid(appendedFluidParticles.zAccPress) ||
-		!fluidSizeValid(appendedFluidParticles.sourceTerm) ||
-		!fluidSizeValid(appendedFluidParticles.diagElem) ||
-		!fluidSizeValid(appendedFluidParticles.pressure) ||
-		!fluidSizeValid(appendedFluidParticles.density) ||
+		!fluidFieldOmitted(appendedFluidParticles.xVelPred) ||
+		!fluidFieldOmitted(appendedFluidParticles.yVelPred) ||
+		!fluidFieldOmitted(appendedFluidParticles.zVelPred) ||
+		!fluidFieldOmitted(appendedFluidParticles.xAccPress) ||
+		!fluidFieldOmitted(appendedFluidParticles.yAccPress) ||
+		!fluidFieldOmitted(appendedFluidParticles.zAccPress) ||
+		!fluidFieldOmitted(appendedFluidParticles.sourceTerm) ||
+		!fluidFieldOmitted(appendedFluidParticles.diagElem) ||
+		!fluidFieldOmitted(appendedFluidParticles.pressure) ||
+		!fluidFieldOmitted(appendedFluidParticles.density) ||
 		!boundarySizeValid(appendedBoundaryParticles.id) ||
 		!boundarySizeValid(appendedBoundaryParticles.xPos) ||
 		!boundarySizeValid(appendedBoundaryParticles.yPos) ||
@@ -650,16 +657,10 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 			AppendParticleField(xVelF_, src.xVel, fluidAppendBegin, blockRange);
 			AppendParticleField(yVelF_, src.yVel, fluidAppendBegin, blockRange);
 			AppendParticleField(zVelF_, src.zVel, fluidAppendBegin, blockRange);
-			AppendParticleField(xVelPredF_, src.xVelPred, fluidAppendBegin, blockRange);
-			AppendParticleField(yVelPredF_, src.yVelPred, fluidAppendBegin, blockRange);
-			AppendParticleField(zVelPredF_, src.zVelPred, fluidAppendBegin, blockRange);
-			AppendParticleField(xAccPressF_, src.xAccPress, fluidAppendBegin, blockRange);
-			AppendParticleField(yAccPressF_, src.yAccPress, fluidAppendBegin, blockRange);
-			AppendParticleField(zAccPressF_, src.zAccPress, fluidAppendBegin, blockRange);
-			AppendParticleField(sourceTermF_, src.sourceTerm, fluidAppendBegin, blockRange);
-			AppendParticleField(diagElemF_, src.diagElem, fluidAppendBegin, blockRange);
-			AppendParticleField(pressureF_, src.pressure, fluidAppendBegin, blockRange);
-			AppendParticleField(densityF_, src.density, fluidAppendBegin, blockRange);
+
+			// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+			// because the following solver step re-writes them before reading them
+			// TODO: keep it like this or copy them too, if solver step behavior changes?
 		},
 		tbb::auto_partitioner{});
 
