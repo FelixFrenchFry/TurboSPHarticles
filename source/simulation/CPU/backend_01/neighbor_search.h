@@ -175,6 +175,9 @@ namespace Sim
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const;
+
+		inline bool IsInsideSimDomain(float x, float y, float z) const noexcept;
+		inline bool IsInsideCellFrame(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToCellId_Morton(int cx, int cy, int cz) const noexcept;
 		inline uint64_t MapToDenseCellIdx(int cx, int cy, int cz) const noexcept;

@@ -192,6 +192,25 @@ namespace
 		return sceneAABB;
 	}
 
+	// clips the scene AABB to the simulation domain (an empty domain extent clips nothing)
+	inline void ClipSceneAABB_ToSimDomain(
+		SceneAABB& sceneAABB,
+		const glm::vec3& simDomainMin,
+		const glm::vec3& simDomainMax)
+	{
+		if (simDomainMax.x <= simDomainMin.x ||
+			simDomainMax.y <= simDomainMin.y ||
+			simDomainMax.z <= simDomainMin.z) { return; }
+
+		// clamping every bound keeps the AABB well formed, even with all particles on one side
+		sceneAABB.minX = std::clamp(sceneAABB.minX, simDomainMin.x, simDomainMax.x);
+		sceneAABB.minY = std::clamp(sceneAABB.minY, simDomainMin.y, simDomainMax.y);
+		sceneAABB.minZ = std::clamp(sceneAABB.minZ, simDomainMin.z, simDomainMax.z);
+		sceneAABB.maxX = std::clamp(sceneAABB.maxX, simDomainMin.x, simDomainMax.x);
+		sceneAABB.maxY = std::clamp(sceneAABB.maxY, simDomainMin.y, simDomainMax.y);
+		sceneAABB.maxZ = std::clamp(sceneAABB.maxZ, simDomainMin.z, simDomainMax.z);
+	}
+
 	inline CellCoordFrame ComputeCellCoordFrame_FromAABB(
 		const SceneAABB& sceneAABB,
 		float cellSizeInv)
@@ -857,7 +876,9 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 						const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
 						const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
-						cellIdF_[i] = MapToCellId(cx, cy, cz);
+						// particles outside the frame left the domain and stay out of the grid
+						cellIdF_[i] = IsInsideCellFrame(cx, cy, cz)
+							? MapToCellId(cx, cy, cz) : EMPTY_64;
 					}
 				},
 				tbb::auto_partitioner{}
@@ -876,7 +897,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 						const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
 						const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
-						cellIdB_[i] = MapToCellId(cx, cy, cz);
+						cellIdB_[i] = IsInsideCellFrame(cx, cy, cz)
+							? MapToCellId(cx, cy, cz) : EMPTY_64;
 					}
 				},
 				tbb::auto_partitioner{}
@@ -900,7 +922,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 					const int cx = FloorToInt(be_.xPosR_[i] * cellSizeInv_);
 					const int cy = FloorToInt(be_.yPosR_[i] * cellSizeInv_);
 					const int cz = FloorToInt(be_.zPosR_[i] * cellSizeInv_);
-					cellIdR_[i] = MapToCellId(cx, cy, cz);
+					cellIdR_[i] = IsInsideCellFrame(cx, cy, cz)
+						? MapToCellId(cx, cy, cz) : EMPTY_64;
 					particleOrderR_[i] = i;
 				}
 			},
@@ -967,6 +990,10 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 						const int cx = FloorToInt(xPos[begin] * cellSizeInv_);
 						const int cy = FloorToInt(yPos[begin] * cellSizeInv_);
 						const int cz = FloorToInt(zPos[begin] * cellSizeInv_);
+
+						// the sentinel cell of the particles that left the domain has no slot
+						if (!IsInsideCellFrame(cx, cy, cz)) [[unlikely]] { continue; }
+
 						const uint64_t idx = MapToDenseCellIdx(cx, cy, cz);
 						cellTable[idx] = c;
 					}
@@ -988,6 +1015,10 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 		const int cx = FloorToInt(be_.xPosR_[rigidParticleIdx] * cellSizeInv_);
 		const int cy = FloorToInt(be_.yPosR_[rigidParticleIdx] * cellSizeInv_);
 		const int cz = FloorToInt(be_.zPosR_[rigidParticleIdx] * cellSizeInv_);
+
+		// the sentinel cell of the particles that left the domain has no slot
+		if (!IsInsideCellFrame(cx, cy, cz)) [[unlikely]] { continue; }
+
 		cellTableR_[MapToDenseCellIdx(cx, cy, cz)] = c;
 	}
 }
@@ -1000,13 +1031,21 @@ void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
 	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
 	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const
 {
+	// keeps the dense table lookups in bounds for boxes reaching past the clipped frame
+	const int cxLo = std::max(cxBegin, cellOrigX_);
+	const int cyLo = std::max(cyBegin, cellOrigY_);
+	const int czLo = std::max(czBegin, cellOrigZ_);
+	const int cxHi = std::min(cxEnd, cellOrigX_ + static_cast<int>(N_dimX_) - 1);
+	const int cyHi = std::min(cyEnd, cellOrigY_ + static_cast<int>(N_dimY_) - 1);
+	const int czHi = std::min(czEnd, cellOrigZ_ + static_cast<int>(N_dimZ_) - 1);
+
 	// direct local-frame lookup for the compact-cell index of every queried cell
 	// (every cell coordinate is visited once, so the appended ranges are distinct)
-	for (int oz = czBegin; oz <= czEnd; oz++)
+	for (int oz = czLo; oz <= czHi; oz++)
 	{
-		for (int oy = cyBegin; oy <= cyEnd; oy++)
+		for (int oy = cyLo; oy <= cyHi; oy++)
 		{
-			for (int ox = cxBegin; ox <= cxEnd; ox++)
+			for (int ox = cxLo; ox <= cxHi; ox++)
 			{
 				const uint64_t tableIdx = MapToDenseCellIdx(ox, oy, oz);
 
@@ -1084,11 +1123,15 @@ void NS_CellLinkedList_Compact_CPU01::GatherChunkQueryRanges(
 	int cellZ[CPU::N_SIMD_WIDTH]{};
 	uint32_t N_cells = 0;
 
+	// TODO: parallelize with TBB?
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
 		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
 		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+
+		// particles that left the domain query no cells, the frame cannot address them
+		if (!IsInsideCellFrame(cx, cy, cz)) [[unlikely]] { continue; }
 
 		bool alreadyVisited = false;
 		for (uint32_t cell = 0; cell < N_cells; cell++)
@@ -1336,7 +1379,11 @@ void NS_CellLinkedList_Compact_CPU01::Query_Count(const SimParams& params)
 					const int cx = FloorToInt(xPosR[i] * cellSizeInv_);
 					const int cy = FloorToInt(yPosR[i] * cellSizeInv_);
 					const int cz = FloorToInt(zPosR[i] * cellSizeInv_);
-					GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+					// particles that left the domain query no cells, the frame cannot address them
+					if (IsInsideCellFrame(cx, cy, cz)) [[likely]]
+					{
+						GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+					}
 					uint32_t countRF = 0;
 					uint32_t countRB = 0;
 					uint32_t countRR = 0;
@@ -1556,7 +1603,11 @@ void NS_CellLinkedList_Compact_CPU01::Query_Fill(const SimParams& params)
 					const int cx = FloorToInt(xPosR[i] * cellSizeInv_);
 					const int cy = FloorToInt(yPosR[i] * cellSizeInv_);
 					const int cz = FloorToInt(zPosR[i] * cellSizeInv_);
-					GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+					// particles that left the domain query no cells, the frame cannot address them
+					if (IsInsideCellFrame(cx, cy, cz)) [[likely]]
+					{
+						GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
+					}
 
 					neighbors.clear();
 					for (const ActiveCellRange& cellRange : fluidRanges)
@@ -1664,7 +1715,8 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 					const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
 					const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 
-					cellIdF_[i] = MapToCellId(cx, cy, cz);
+					cellIdF_[i] = IsInsideCellFrame(cx, cy, cz)
+						? MapToCellId(cx, cy, cz) : EMPTY_64;
 					particleOrderF_[i] = i;
 				}
 			},
@@ -1724,7 +1776,8 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 					const int cy = FloorToInt(be_.yPosB_[i] * cellSizeInv_);
 					const int cz = FloorToInt(be_.zPosB_[i] * cellSizeInv_);
 
-					cellIdB_[i] = MapToCellId(cx, cy, cz);
+					cellIdB_[i] = IsInsideCellFrame(cx, cy, cz)
+						? MapToCellId(cx, cy, cz) : EMPTY_64;
 					particleOrderB_[i] = i;
 				}
 			},
@@ -1837,6 +1890,10 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 					{
 						for (uint32_t i = r.begin(); i != r.end() && !exceeded; i++)
 						{
+							// particles that left the domain sit outside the clipped frame
+							// permanently, so they must not keep triggering rebuilds
+							if (!IsInsideSimDomain(xPos[i], yPos[i], zPos[i])) { continue; }
+
 							const int cx = FloorToInt(xPos[i] * cellSizeInv_);
 							const int cy = FloorToInt(yPos[i] * cellSizeInv_);
 							const int cz = FloorToInt(zPos[i] * cellSizeInv_);
@@ -1860,10 +1917,15 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	if (!rebuildFrame) { return; }
 
 	// rebuild cell frame from current occupied cell AABB
-	const SceneAABB sceneAABB = ComputeSceneAABB_Combined(
+	SceneAABB sceneAABB = ComputeSceneAABB_Combined(
 		be_.xPosF_.data(), be_.yPosF_.data(), be_.zPosF_.data(), N_F,
 		be_.xPosB_.data(), be_.yPosB_.data(), be_.zPosB_.data(), N_B,
 		be_.xPosR_.data(), be_.yPosR_.data(), be_.zPosR_.data(), N_R);
+
+	// particles that left the simulation domain must not stretch the frame, because the dense
+	// cell tables scale with its volume (they are dropped from the grid by the cell ID build)
+	ClipSceneAABB_ToSimDomain(sceneAABB, be_.simDomainMin_, be_.simDomainMax_);
+
 	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
 
 	const int margin = static_cast<int>(cellQueryReach_ + N_CELL_FRAME_REBUILD_MARGIN);
@@ -1885,6 +1947,30 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	}
 
 	cellFrameValid_ = true;
+}
+
+inline bool NS_CellLinkedList_Compact_CPU01::IsInsideSimDomain(
+	const float x, const float y, const float z) const noexcept
+{
+	const glm::vec3& min = be_.simDomainMin_;
+	const glm::vec3& max = be_.simDomainMax_;
+	if (max.x <= min.x || max.y <= min.y || max.z <= min.z) { return true; }
+
+	return x >= min.x && x <= max.x
+		&& y >= min.y && y <= max.y
+		&& z >= min.z && z <= max.z;
+}
+
+inline bool NS_CellLinkedList_Compact_CPU01::IsInsideCellFrame(
+	int cx, int cy, int cz) const noexcept
+{
+	const int lx = cx - cellOrigX_;
+	const int ly = cy - cellOrigY_;
+	const int lz = cz - cellOrigZ_;
+
+	return lx >= 0 && lx < static_cast<int>(N_dimX_)
+		&& ly >= 0 && ly < static_cast<int>(N_dimY_)
+		&& lz >= 0 && lz < static_cast<int>(N_dimZ_);
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId(

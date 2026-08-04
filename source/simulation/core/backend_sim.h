@@ -112,6 +112,10 @@ namespace Sim
 
 		virtual void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) = 0;
 
+		// reports the simulation domain, so spatial acceleration structures can stay bounded by it
+		// instead of by particles that left it (an empty extent leaves the backend unbounded)
+		virtual void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) {}
+
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) = 0;
 

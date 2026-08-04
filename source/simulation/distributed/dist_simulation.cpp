@@ -1114,6 +1114,12 @@ bool DistSimulationMgr::BuildDomainDecomp()
 
 			domainDecomp_->Build(input);
 
+			// used to keep the backend spatial data structures bounded by the domain
+			if (simBackend_)
+			{
+				simBackend_->SetSimDomainBounds(globalBounds.min, globalBounds.max);
+			}
+
 			if (!domainDecomp_->IsValidForRankCount(mpiContext_.Size()))
 			{
 				SPDLOG_ERROR("[rank {}/{}] Invalid distributed domain decomp.",

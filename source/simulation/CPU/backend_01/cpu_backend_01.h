@@ -32,6 +32,9 @@ namespace Sim
 		void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) override
 			{ neighborSearch_ = std::move(ns); }
 
+		void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) override
+			{ simDomainMin_ = min; simDomainMax_ = max; }
+
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) override;
 
@@ -164,6 +167,10 @@ namespace Sim
 		uint32_t N_R_ = 0; // number of rigid particles
 		uint32_t N_RB_ = 0; // number of rigid bodies
 		uint32_t N_solverIters_ = 0;
+
+		// simulation domain reported by the manager, empty extent while it is unknown
+		glm::vec3 simDomainMin_ = glm::vec3(0.0f);
+		glm::vec3 simDomainMax_ = glm::vec3(0.0f);
 
 		// persistent parallelization partitioner for TBB
 		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;
