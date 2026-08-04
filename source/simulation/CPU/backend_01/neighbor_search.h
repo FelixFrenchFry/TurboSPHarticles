@@ -107,6 +107,8 @@ namespace Sim
 		uint32_t N_dimY_ = 0;
 		uint32_t N_dimZ_ = 0;
 		bool cellFrameValid_ = false;
+
+		// also marks the cell frame as current, and only holds until a particle moves
 		bool cellIdsMatchCurrentParticleOrder_ = false;
 
 		struct ActiveCellRange
@@ -124,21 +126,18 @@ namespace Sim
 		mutable tbb::enumerable_thread_specific<QueryMetaScratch> queryMetaScratch_;
 
 		// data structures
-		std::vector<uint64_t> uniqueCellIdF_; // unique cell IDs of non-empty cells
 		std::vector<uint32_t> cellStartIdxF_; // per-cell start index in the re-ordered particle arrays
 		std::vector<uint64_t> cellIdF_; // per-particle cell ID array
 		std::vector<uint64_t> cellIdScratchF_; // resident permutation scratch for the cell ID array
 		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
 		std::vector<uint32_t> cellTableF_; // dense local-frame lookup table for compact cell indices
 
-		std::vector<uint64_t> uniqueCellIdB_;
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint64_t> cellIdB_;
 		std::vector<uint64_t> cellIdScratchB_;
 		std::vector<uint32_t> particleOrderB_;
 		std::vector<uint32_t> cellTableB_;
 
-		std::vector<uint64_t> uniqueCellIdR_;
 		std::vector<uint32_t> cellStartIdxR_;
 		std::vector<uint64_t> cellIdR_;
 		std::vector<uint64_t> cellIdScratchR_;
@@ -150,7 +149,9 @@ namespace Sim
 		// (only valid because the fluid, boundary, and rigid builds run one after another)
 		std::vector<uint32_t> cellRunStartCounts_ByChunk_;
 
-		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
+		// dense cell table slots hold the compact cell index biased by one, so an empty slot is
+		// zero and a whole table is cleared with a plain zero fill (which lowers to memset)
+		static constexpr uint32_t CELL_TABLE_EMPTY = 0u;
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 
 		// helpers

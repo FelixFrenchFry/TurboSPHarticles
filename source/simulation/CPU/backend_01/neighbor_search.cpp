@@ -139,55 +139,59 @@ namespace
 		uint32_t N_dimZ = 0;
 	};
 
-	// TODO: parallelize this with TBB?
+	// merges one AABB into another (default bounds are the identity, so an empty one is a no-op)
+	inline void MergeSceneAABB(SceneAABB& dst, const SceneAABB& src)
+	{
+		dst.minX = std::min(dst.minX, src.minX);
+		dst.minY = std::min(dst.minY, src.minY);
+		dst.minZ = std::min(dst.minZ, src.minZ);
+		dst.maxX = std::max(dst.maxX, src.maxX);
+		dst.maxY = std::max(dst.maxY, src.maxY);
+		dst.maxZ = std::max(dst.maxZ, src.maxZ);
+	}
+
+	// reduces the positions of one particle class into its occupied AABB
+	inline SceneAABB ComputeSceneAABB_ParticleClass(
+		const float* xPos, const float* yPos, const float* zPos, uint32_t N)
+	{
+		return tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(0, N),
+			SceneAABB{},
+			[&](const tbb::blocked_range<uint32_t>& r, SceneAABB classAABB) -> SceneAABB
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const float x = xPos[i];
+					const float y = yPos[i];
+					const float z = zPos[i];
+
+					classAABB.minX = std::min(classAABB.minX, x);
+					classAABB.minY = std::min(classAABB.minY, y);
+					classAABB.minZ = std::min(classAABB.minZ, z);
+					classAABB.maxX = std::max(classAABB.maxX, x);
+					classAABB.maxY = std::max(classAABB.maxY, y);
+					classAABB.maxZ = std::max(classAABB.maxZ, z);
+				}
+
+				return classAABB;
+			},
+			[](SceneAABB a, const SceneAABB& b) -> SceneAABB
+			{
+				MergeSceneAABB(a, b);
+				return a;
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
 	inline SceneAABB ComputeSceneAABB_Combined(
 		const float* xPosF, const float* yPosF, const float* zPosF, uint32_t N_F,
 		const float* xPosB, const float* yPosB, const float* zPosB, uint32_t N_B,
 		const float* xPosR, const float* yPosR, const float* zPosR, uint32_t N_R)
 	{
-		SceneAABB sceneAABB{};
-
-		for (uint32_t i = 0; i < N_F; i++)
-		{
-			const float x = xPosF[i];
-			const float y = yPosF[i];
-			const float z = zPosF[i];
-
-			sceneAABB.minX = std::min(sceneAABB.minX, x);
-			sceneAABB.minY = std::min(sceneAABB.minY, y);
-			sceneAABB.minZ = std::min(sceneAABB.minZ, z);
-			sceneAABB.maxX = std::max(sceneAABB.maxX, x);
-			sceneAABB.maxY = std::max(sceneAABB.maxY, y);
-			sceneAABB.maxZ = std::max(sceneAABB.maxZ, z);
-		}
-
-		for (uint32_t i = 0; i < N_B; i++)
-		{
-			const float x = xPosB[i];
-			const float y = yPosB[i];
-			const float z = zPosB[i];
-
-			sceneAABB.minX = std::min(sceneAABB.minX, x);
-			sceneAABB.minY = std::min(sceneAABB.minY, y);
-			sceneAABB.minZ = std::min(sceneAABB.minZ, z);
-			sceneAABB.maxX = std::max(sceneAABB.maxX, x);
-			sceneAABB.maxY = std::max(sceneAABB.maxY, y);
-			sceneAABB.maxZ = std::max(sceneAABB.maxZ, z);
-		}
-
-		for (uint32_t i = 0; i < N_R; i++)
-		{
-			const float x = xPosR[i];
-			const float y = yPosR[i];
-			const float z = zPosR[i];
-
-			sceneAABB.minX = std::min(sceneAABB.minX, x);
-			sceneAABB.minY = std::min(sceneAABB.minY, y);
-			sceneAABB.minZ = std::min(sceneAABB.minZ, z);
-			sceneAABB.maxX = std::max(sceneAABB.maxX, x);
-			sceneAABB.maxY = std::max(sceneAABB.maxY, y);
-			sceneAABB.maxZ = std::max(sceneAABB.maxZ, z);
-		}
+		SceneAABB sceneAABB = ComputeSceneAABB_ParticleClass(xPosF, yPosF, zPosF, N_F);
+		MergeSceneAABB(sceneAABB, ComputeSceneAABB_ParticleClass(xPosB, yPosB, zPosB, N_B));
+		MergeSceneAABB(sceneAABB, ComputeSceneAABB_ParticleClass(xPosR, yPosR, zPosR, N_R));
 
 		return sceneAABB;
 	}
@@ -236,12 +240,11 @@ namespace
 
 	constexpr uint64_t N_CELL_TABLE_CHUNK = 4096;
 
-	// finds the start of every cell run in the sorted per-particle cell ID array using a
-	// parallel count -> prefix sum -> parallel fill pipeline
+	// finds the start of every cell run in the sorted per-particle cell ID array
+	// using a "parallel count -> prefix sum -> parallel fill" pipeline
 	// (runStartCounts_ByChunk is caller-owned scratch and is overwritten on every call)
 	void BuildCompactCellTable(
 		const std::vector<uint64_t>& cellId,
-		std::vector<uint64_t>& uniqueCellId,
 		std::vector<uint32_t>& cellStartIdx,
 		std::vector<uint32_t>& runStartCounts_ByChunk)
 	{
@@ -249,7 +252,6 @@ namespace
 		const uint64_t N = cellId.size();
 		if (N == 0)
 		{
-			uniqueCellId.clear();
 			cellStartIdx.clear();
 			return;
 		}
@@ -294,10 +296,9 @@ namespace
 		}
 
 		// (not cleared beforehand, so a stable cell count avoids re-initializing the storage)
-		uniqueCellId.resize(N_cells);
 		cellStartIdx.resize(static_cast<uint64_t>(N_cells) + 1ull); // +1 for sentinel
 
-		// fill the compact cell arrays while preserving the sorted cell run order
+		// fill the compact cell array while preserving the sorted cell run order
 		tbb::parallel_for(
 			tbb::blocked_range<uint64_t>(0, N_chunks),
 			[&](const tbb::blocked_range<uint64_t>& r)
@@ -312,7 +313,6 @@ namespace
 					// or the chunk write offsets do not line up
 					if (beginIdx == 0)
 					{
-						uniqueCellId[writeIdx] = cellId[0];
 						cellStartIdx[writeIdx] = 0;
 						writeIdx++;
 					}
@@ -320,10 +320,9 @@ namespace
 					const uint64_t firstIdx = (beginIdx == 0) ? 1u : beginIdx;
 					for (uint64_t i = firstIdx; i != endIdx; i++)
 					{
-						const uint64_t cid = cellId[i];
-						if (cid == cellId[i - 1]) { continue; } // still inside the same cell
+						// still inside the same cell
+						if (cellId[i] == cellId[i - 1]) { continue; }
 
-						uniqueCellId[writeIdx] = cid;
 						cellStartIdx[writeIdx] = static_cast<uint32_t>(i);
 						writeIdx++;
 					}
@@ -765,21 +764,18 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellFrameValid_ = false;
 	cellIdsMatchCurrentParticleOrder_ = false;
 
-	uniqueCellIdF_.clear();
 	cellStartIdxF_.clear();
 	cellIdF_.clear();
 	cellIdScratchF_.clear();
 	particleOrderF_.clear();
 	cellTableF_.clear();
 
-	uniqueCellIdB_.clear();
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
 	cellIdScratchB_.clear();
 	particleOrderB_.clear();
 	cellTableB_.clear();
 
-	uniqueCellIdR_.clear();
 	cellStartIdxR_.clear();
 	cellIdR_.clear();
 	cellIdScratchR_.clear();
@@ -807,19 +803,16 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellFrameValid_ = false;
 		cellIdsMatchCurrentParticleOrder_ = false;
 
-		uniqueCellIdF_.clear();
 		cellStartIdxF_.clear();
 		cellIdF_.clear();
 		particleOrderF_.clear();
 		cellTableF_.clear();
 
-		uniqueCellIdB_.clear();
 		cellStartIdxB_.clear();
 		cellIdB_.clear();
 		particleOrderB_.clear();
 		cellTableB_.clear();
 
-		uniqueCellIdR_.clear();
 		cellStartIdxR_.clear();
 		cellIdR_.clear();
 		particleOrderR_.clear();
@@ -846,17 +839,21 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		? 0.0f : (1.0f / cellSize);
 	cellQueryReach_ = cellQueryReach;
 
-	if (cellSizeChanged || cellQueryReachChanged) { cellFrameValid_ = false; }
-	UpdateCellFrame();
-
-	// --- [ cell coordinates and indices for fluid and boundary particles ] --------------------------
+	const bool cellFrameInvalidated = cellSizeChanged || cellQueryReachChanged;
+	if (cellFrameInvalidated) { cellFrameValid_ = false; }
 
 	// if DataReOrder() already computed and permuted the per-particle cell IDs for
 	// this step, then they can be reused directly here and no re-computation is needed
 	const bool canReuseCellIds =
-		cellIdsMatchCurrentParticleOrder_
+		!cellFrameInvalidated
+		&& cellIdsMatchCurrentParticleOrder_
 		&& cellIdF_.size() == N_F
 		&& cellIdB_.size() == N_B;
+
+	// re-usable cell IDs imply a current cell frame, because DataReOrder() built them under it
+	if (!canReuseCellIds) { UpdateCellFrame(); }
+
+	// --- [ cell coordinates and indices for fluid and boundary particles ] --------------------------
 
 	// fluid
 	if (!canReuseCellIds)
@@ -941,16 +938,13 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
 
 	// fluid
-	BuildCompactCellTable(
-		cellIdF_, uniqueCellIdF_, cellStartIdxF_, cellRunStartCounts_ByChunk_);
+	BuildCompactCellTable(cellIdF_, cellStartIdxF_, cellRunStartCounts_ByChunk_);
 
 	// boundary
-	BuildCompactCellTable(
-		cellIdB_, uniqueCellIdB_, cellStartIdxB_, cellRunStartCounts_ByChunk_);
+	BuildCompactCellTable(cellIdB_, cellStartIdxB_, cellRunStartCounts_ByChunk_);
 
 	// rigid
-	BuildCompactCellTable(
-		cellIdR_, uniqueCellIdR_, cellStartIdxR_, cellRunStartCounts_ByChunk_);
+	BuildCompactCellTable(cellIdR_, cellStartIdxR_, cellRunStartCounts_ByChunk_);
 
 	BuildDenseCellTables();
 }
@@ -963,10 +957,31 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 		throw std::runtime_error("CPU01 dense compact CLL cell table too large.");
 	}
 
-	// TODO: parallelize with TBB?
-	cellTableF_.assign(static_cast<size_t>(N_tableCells), EMPTY_32);
-	cellTableB_.assign(static_cast<size_t>(N_tableCells), EMPTY_32);
-	cellTableR_.assign(static_cast<size_t>(N_tableCells), EMPTY_32);
+	// resets one dense cell table in parallel and leaves empty particle classes without a table
+	const auto clearTable = [&](std::vector<uint32_t>& cellTable, const uint32_t N_particles)
+		{
+			const uint64_t N_entries = (N_particles == 0) ? 0ull : N_tableCells;
+
+			// a changed entry count re-initializes the storage anyway
+			if (cellTable.size() != N_entries)
+			{
+				cellTable.assign(static_cast<size_t>(N_entries), CELL_TABLE_EMPTY);
+				return;
+			}
+
+			tbb::parallel_for(
+				tbb::blocked_range<uint64_t>(0, N_entries),
+				[&](const tbb::blocked_range<uint64_t>& r)
+				{
+					std::fill_n(cellTable.data() + r.begin(), r.size(), CELL_TABLE_EMPTY);
+				},
+				tbb::auto_partitioner{}
+			);
+		};
+
+	clearTable(cellTableF_, be_.N_F_);
+	clearTable(cellTableB_, be_.N_B_);
+	clearTable(cellTableR_, be_.N_R_);
 
 	const auto buildTable = [&](const std::vector<uint32_t>& cellStartIdx,
 		const std::vector<float>& xPos,
@@ -995,7 +1010,7 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 						if (!IsInsideCellFrame(cx, cy, cz)) [[unlikely]] { continue; }
 
 						const uint64_t idx = MapToDenseCellIdx(cx, cy, cz);
-						cellTable[idx] = c;
+						cellTable[idx] = c + 1; // biased, so an empty slot stays zero
 					}
 				},
 				tbb::auto_partitioner{}
@@ -1019,7 +1034,7 @@ void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 		// the sentinel cell of the particles that left the domain has no slot
 		if (!IsInsideCellFrame(cx, cy, cz)) [[unlikely]] { continue; }
 
-		cellTableR_[MapToDenseCellIdx(cx, cy, cz)] = c;
+		cellTableR_[MapToDenseCellIdx(cx, cy, cz)] = c + 1; // biased, so an empty slot stays zero
 	}
 }
 
@@ -1039,6 +1054,11 @@ void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
 	const int cyHi = std::min(cyEnd, cellOrigY_ + static_cast<int>(N_dimY_) - 1);
 	const int czHi = std::min(czEnd, cellOrigZ_ + static_cast<int>(N_dimZ_) - 1);
 
+	// an empty particle class has no table to look its cells up in
+	const bool queryFluidCells = !cellTableF_.empty();
+	const bool queryBoundaryCells = !cellTableB_.empty();
+	const bool queryRigidCells = !cellTableR_.empty();
+
 	// direct local-frame lookup for the compact-cell index of every queried cell
 	// (every cell coordinate is visited once, so the appended ranges are distinct)
 	for (int oz = czLo; oz <= czHi; oz++)
@@ -1050,11 +1070,11 @@ void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
 				const uint64_t tableIdx = MapToDenseCellIdx(ox, oy, oz);
 
 				// fluid neighbors
-				const uint32_t cF_nbr = cellTableF_[tableIdx];
-				if (cF_nbr != EMPTY_32)
+				const uint32_t cF_nbr = queryFluidCells ? cellTableF_[tableIdx] : CELL_TABLE_EMPTY;
+				if (cF_nbr != CELL_TABLE_EMPTY)
 				{
-					const uint32_t sF_nbr = cellStartIdxF_[cF_nbr];
-					const uint32_t eF_nbr = cellStartIdxF_[cF_nbr + 1];
+					const uint32_t sF_nbr = cellStartIdxF_[cF_nbr - 1];
+					const uint32_t eF_nbr = cellStartIdxF_[cF_nbr];
 					if (sF_nbr < eF_nbr)
 					{
 						fluidRanges.push_back(ActiveCellRange{ sF_nbr, eF_nbr });
@@ -1062,11 +1082,11 @@ void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
 				}
 
 				// boundary neighbors
-				const uint32_t cB_nbr = cellTableB_[tableIdx];
-				if (cB_nbr != EMPTY_32)
+				const uint32_t cB_nbr = queryBoundaryCells ? cellTableB_[tableIdx] : CELL_TABLE_EMPTY;
+				if (cB_nbr != CELL_TABLE_EMPTY)
 				{
-					const uint32_t sB_nbr = cellStartIdxB_[cB_nbr];
-					const uint32_t eB_nbr = cellStartIdxB_[cB_nbr + 1];
+					const uint32_t sB_nbr = cellStartIdxB_[cB_nbr - 1];
+					const uint32_t eB_nbr = cellStartIdxB_[cB_nbr];
 					if (sB_nbr < eB_nbr)
 					{
 						boundaryRanges.push_back(ActiveCellRange{ sB_nbr, eB_nbr });
@@ -1074,11 +1094,11 @@ void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
 				}
 
 				// rigid neighbors
-				const uint32_t cR_nbr = cellTableR_[tableIdx];
-				if (cR_nbr != EMPTY_32)
+				const uint32_t cR_nbr = queryRigidCells ? cellTableR_[tableIdx] : CELL_TABLE_EMPTY;
+				if (cR_nbr != CELL_TABLE_EMPTY)
 				{
-					const uint32_t sR_nbr = cellStartIdxR_[cR_nbr];
-					const uint32_t eR_nbr = cellStartIdxR_[cR_nbr + 1];
+					const uint32_t sR_nbr = cellStartIdxR_[cR_nbr - 1];
+					const uint32_t eR_nbr = cellStartIdxR_[cR_nbr];
 					if (sR_nbr < eR_nbr)
 					{
 						rigidRanges.push_back(ActiveCellRange{ sR_nbr, eR_nbr });
@@ -1826,7 +1846,6 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 
 	// F
 	// (the shared cell run start scratch is booked here, because the fluid particles dominate)
-	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdScratchF_));
@@ -1835,7 +1854,6 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellRunStartCounts_ByChunk_));
 
 	// B
-	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdScratchB_));
@@ -1843,7 +1861,6 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellTableB_));
 
 	// R
-	Mem::Add(usageR, Mem::MemUsageOf_Vector(uniqueCellIdR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellStartIdxR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdScratchR_));
@@ -1882,10 +1899,11 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 		const int zMaxInner = cellOrigZ_ + static_cast<int>(N_dimZ_) - 1 - margin;
 
 		const auto particlesExceeded = [&](const std::vector<float>& xPos,
-			const std::vector<float>& yPos, const std::vector<float>& zPos) -> bool
+			const std::vector<float>& yPos, const std::vector<float>& zPos,
+			const uint32_t N) -> bool
 			{
 				return tbb::parallel_reduce(
-					tbb::blocked_range<uint32_t>(0, static_cast<uint32_t>(xPos.size())), false,
+					tbb::blocked_range<uint32_t>(0, N), false,
 					[&](const tbb::blocked_range<uint32_t>& r, bool exceeded) -> bool
 					{
 						for (uint32_t i = r.begin(); i != r.end() && !exceeded; i++)
@@ -1909,9 +1927,9 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 			};
 
 		rebuildFrame = xMinInner > xMaxInner || yMinInner > yMaxInner || zMinInner > zMaxInner ||
-			particlesExceeded(be_.xPosF_, be_.yPosF_, be_.zPosF_) ||
-			particlesExceeded(be_.xPosB_, be_.yPosB_, be_.zPosB_) ||
-			particlesExceeded(be_.xPosR_, be_.yPosR_, be_.zPosR_);
+			particlesExceeded(be_.xPosF_, be_.yPosF_, be_.zPosF_, N_F) ||
+			particlesExceeded(be_.xPosB_, be_.yPosB_, be_.zPosB_, N_B) ||
+			particlesExceeded(be_.xPosR_, be_.yPosR_, be_.zPosR_, N_R);
 	}
 
 	if (!rebuildFrame) { return; }
@@ -1929,22 +1947,26 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
 
 	const int margin = static_cast<int>(cellQueryReach_ + N_CELL_FRAME_REBUILD_MARGIN);
+	const uint32_t N_dimX = cellFrame.N_dimX + static_cast<uint32_t>(2 * margin);
+	const uint32_t N_dimY = cellFrame.N_dimY + static_cast<uint32_t>(2 * margin);
+	const uint32_t N_dimZ = cellFrame.N_dimZ + static_cast<uint32_t>(2 * margin);
+
+	// the Morton cell IDs hold 21 bits per axis, so an oversized frame is dropped uncommitted
+	static constexpr uint32_t MaxAxisCells = (1u << 21);
+	if (N_dimX > MaxAxisCells || N_dimY > MaxAxisCells || N_dimZ > MaxAxisCells)
+	{
+		SPDLOG_ERROR("Compact CLL cell frame exceeds the 21-bit axis limit [{}, {}, {}].",
+			N_dimX, N_dimY, N_dimZ);
+		assert(false);
+		return;
+	}
+
 	cellOrigX_ = cellFrame.cellOrigX - margin;
 	cellOrigY_ = cellFrame.cellOrigY - margin;
 	cellOrigZ_ = cellFrame.cellOrigZ - margin;
-	N_dimX_ = cellFrame.N_dimX + static_cast<uint32_t>(2 * margin);
-	N_dimY_ = cellFrame.N_dimY + static_cast<uint32_t>(2 * margin);
-	N_dimZ_ = cellFrame.N_dimZ + static_cast<uint32_t>(2 * margin);
-
-	static constexpr uint32_t MaxAxisCells = (1u << 21);
-	if (N_dimX_ > MaxAxisCells || N_dimY_ > MaxAxisCells || N_dimZ_ > MaxAxisCells)
-	{
-		SPDLOG_ERROR("Compact CLL cell frame exceeds the 21-bit axis limit [{}, {}, {}].",
-			N_dimX_, N_dimY_, N_dimZ_);
-		assert(false);
-		cellFrameValid_ = false;
-		return;
-	}
+	N_dimX_ = N_dimX;
+	N_dimY_ = N_dimY;
+	N_dimZ_ = N_dimZ;
 
 	cellFrameValid_ = true;
 }
