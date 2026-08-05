@@ -90,7 +90,8 @@ namespace Sim
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
 			const std::vector<uint32_t>& activeFluidParticleLocalIdxs,
-			const std::vector<uint32_t>& activeRigidParticleLocalIdxs) override;
+			const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
+			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
 		// classifies local fluid particles against the export near-surface threshold
 		bool FillFluidParticleNearSurfaceFlags(
@@ -113,6 +114,7 @@ namespace Sim
 
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams&) override;
+		void Step_IISPH_Distributed(const SimParams& params);
 
 		bool TerminationConditionSatisfied(const SimParams& params) const;
 
@@ -233,8 +235,10 @@ namespace Sim
 
 		// optional distributed integration filtering
 		std::vector<uint32_t> activeFluidParticleLocalIdxs_;
+		std::vector<uint8_t> activeFluidParticleFlags_;
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_;
 		std::vector<uint8_t> activeRigidParticleFlags_;
+		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;
 		bool useActiveFluidParticleLocalIdxs_ = false;
 		bool useActiveRigidParticleLocalIdxs_ = false;
 		bool integrateRigidBodies_ = true;

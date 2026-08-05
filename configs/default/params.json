@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "ConvergingDam",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 1,
@@ -8,7 +8,7 @@
   "loadBalanceTrigger": 0,
   "loadBalanceWeightModel": 0,
 
-  "maxSteps": 100,
+  "maxSteps": -1,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -51,8 +51,8 @@
   "byteUnit": "MB",
   "statGroupsEnabled": {
     "particles": false,
-    "density": false,
-    "velocity": false
+    "density": true,
+    "velocity": true
   },
 
   "exportEnabled": false,

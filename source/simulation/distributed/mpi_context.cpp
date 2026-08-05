@@ -197,6 +197,20 @@ void MpiContext::AllReduceSumUint64s(
 		"MPI_Allreduce(uint64 sum)");
 }
 
+void MpiContext::AllReduceSumDoubles(
+	std::array<double, 3>& values) const
+{
+	CheckMpiResult(
+		MPI_Allreduce(
+			MPI_IN_PLACE,
+			values.data(),
+			static_cast<int>(values.size()),
+			MPI_DOUBLE,
+			MPI_SUM,
+			MPI_COMM_WORLD),
+		"MPI_Allreduce(double sum)");
+}
+
 uint32_t MpiContext::AllReduceMaxUint32(const uint32_t value) const
 {
 	uint32_t result = 0;

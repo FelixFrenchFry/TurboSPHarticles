@@ -1509,8 +1509,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
 
 				const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(ownerRank);
-				const uint32_t N_neighborRanks =
-					static_cast<uint32_t>(neighborRanks.size());
+				const uint32_t N_neighborRanks = static_cast<uint32_t>(neighborRanks.size());
 				uint32_t haloNeighborMask = 0;
 				for (uint32_t neighborIdx = 0; neighborIdx != N_neighborRanks; neighborIdx++)
 				{

@@ -22,6 +22,7 @@
 #include "dist_particle_state.h"
 #include "dist_redistribution_diagnostics.h"
 #include "dist_snapshots.h"
+#include "fluid_solver_sync.h"
 #include "load_balance.h"
 #include "mpi_context.h"
 #include "particle_redistribution.h"
@@ -195,6 +196,7 @@ namespace Dist
 		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
 		ParticleReOrderWorkBuffers boundaryParticleReOrderWorkBuffers_{};
 		ParticleRedistributionMgr particleRedistributionMgr_{};
+		FluidSolverSyncMgr fluidSolverSyncMgr_{};
 		LoadBalanceMgr loadBalanceMgr_{};
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_{};
 		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};

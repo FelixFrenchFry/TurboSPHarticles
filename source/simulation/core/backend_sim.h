@@ -62,6 +62,35 @@ namespace Sim
 		}
 	};
 
+	struct PressureSolveErrorSums
+	{
+		double raw = 0.0;
+		double pos = 0.0;
+		double abs = 0.0;
+	};
+
+	// optional owner-to-halo synchronization used by distributed fluid solvers
+	class I_DistributedFluidSolverSync
+	{
+	public:
+
+		virtual ~I_DistributedFluidSolverSync() = default;
+
+		// an empty permutation means that particle storage was not re-ordered
+		virtual void ApplyFluidParticleReOrder(
+			std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx) = 0;
+
+		virtual void SynchronizeFluidScalarField(std::span<float> values) = 0;
+		virtual void SynchronizeFluidVectorField(
+			std::span<float> xValues,
+			std::span<float> yValues,
+			std::span<float> zValues) = 0;
+
+		virtual PressureSolveErrorSums GlobalizePressureSolveErrorSums(
+			const PressureSolveErrorSums& localSums) const = 0;
+		virtual uint64_t GetGlobalFluidParticleCount() const = 0;
+	};
+
 	// shared export surface criterion, so every backend classifies fluid particles identically
 	inline bool IsNearSurfaceFluidParticle(
 		const uint32_t nbrCountFF,
@@ -180,7 +209,8 @@ namespace Sim
 		// configures rank-authoritative particle work for distributed execution
 		virtual bool ConfigureDistributedStep(
 			const std::vector<uint32_t>&,
-			const std::vector<uint32_t>&)
+			const std::vector<uint32_t>&,
+			I_DistributedFluidSolverSync&)
 		{
 			return false;
 		}

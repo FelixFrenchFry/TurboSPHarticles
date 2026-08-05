@@ -150,13 +150,11 @@ namespace CPU01
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensity, float massF,
 		float jacobiOmega,
-		uint32_t N_F,
 		tbb::affinity_partitioner& affPart,
 		// destinations
 		float* RESTRICT pressureF,
-		float& avgRelDensityErrorF_raw,
-		float& avgRelDensityErrorF_pos,
-		float& avgRelDensityErrorF_abs);
+		const uint8_t* RESTRICT errorParticleFlags,
+		Sim::PressureSolveErrorSums& errorSums);
 
 	void AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 		const float* RESTRICT xPosF,

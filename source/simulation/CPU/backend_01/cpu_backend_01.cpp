@@ -177,6 +177,15 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	Sync::UniversalSimState& src, const SimParams& params)
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+	distributedFluidSolverSync_ = nullptr;
+	activeFluidParticleLocalIdxs_.clear();
+	activeFluidParticleFlags_.clear();
+	activeRigidParticleLocalIdxs_.clear();
+	activeRigidParticleFlags_.clear();
+	useActiveFluidParticleLocalIdxs_ = false;
+	useActiveRigidParticleLocalIdxs_ = false;
+	integrateRigidBodies_ = true;
+	applyRigidBodyExternalForces_ = true;
 
 	auto& F = src.fluidParticles;
 	auto& B = src.boundaryParticles;
@@ -1153,7 +1162,10 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRF.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRB.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRR.histogram));
+		Add(usage, MemUsageOf_Vector(activeFluidParticleLocalIdxs_));
+		Add(usage, MemUsageOf_Vector(activeFluidParticleFlags_));
 		Add(usage, MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
+		Add(usage, MemUsageOf_Vector(activeRigidParticleFlags_));
 		Add(usage, MemUsageOf_Vector(idRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleBeginRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
@@ -1529,7 +1541,8 @@ bool SimBackend_CPU01::TryGetLastParticleReOrder(
 
 bool SimBackend_CPU01::ConfigureDistributedStep(
 	const std::vector<uint32_t>& activeFluidParticleLocalIdxs,
-	const std::vector<uint32_t>& activeRigidParticleLocalIdxs)
+	const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
+	I_DistributedFluidSolverSync& distributedFluidSolverSync)
 {
 	std::vector<uint8_t> activeFluidParticleFlags(N_F_, 0);
 	for (const uint32_t localIdx : activeFluidParticleLocalIdxs)
@@ -1568,8 +1581,10 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 	}
 
 	activeFluidParticleLocalIdxs_ = activeFluidParticleLocalIdxs;
+	activeFluidParticleFlags_ = std::move(activeFluidParticleFlags);
 	activeRigidParticleLocalIdxs_ = activeRigidParticleLocalIdxs;
 	activeRigidParticleFlags_ = std::move(activeRigidParticleFlags);
+	distributedFluidSolverSync_ = &distributedFluidSolverSync;
 	useActiveFluidParticleLocalIdxs_ = true;
 	useActiveRigidParticleLocalIdxs_ = true;
 	integrateRigidBodies_ = false;
@@ -1619,6 +1634,10 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
 		oldFluidLocalIdx_FromNewLocalIdx,
 		oldBoundaryLocalIdx_FromNewLocalIdx))
 	{
+		if (distributedFluidSolverSync_)
+		{
+			distributedFluidSolverSync_->ApplyFluidParticleReOrder({});
+		}
 		return;
 	}
 
@@ -1663,6 +1682,18 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs()
 		}
 
 		localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
+	}
+
+	activeFluidParticleFlags_.assign(N_F_, 0);
+	for (const uint32_t localIdx : activeFluidParticleLocalIdxs_)
+	{
+		activeFluidParticleFlags_[localIdx] = 1;
+	}
+
+	if (distributedFluidSolverSync_)
+	{
+		distributedFluidSolverSync_->ApplyFluidParticleReOrder(
+			oldFluidLocalIdx_FromNewLocalIdx);
 	}
 }
 
@@ -1904,7 +1935,7 @@ void SimBackend_CPU01::ExecuteFullSimStep(
 	const SimParams& params,
 	const uint32_t N_steps)
 {
-	if (N_F_ == 0) // empty sim
+	if (N_F_ == 0 && !distributedFluidSolverSync_) // empty serial sim
 	{
 		simStep_ += N_steps;
 		simTime_ += static_cast<double>(N_steps) * params.timeStep;

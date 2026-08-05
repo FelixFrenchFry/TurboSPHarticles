@@ -43,6 +43,7 @@ namespace Dist
 		bool AllTrue(bool localValue) const;
 		uint64_t AllReduceSumUint64(uint64_t value) const;
 		void AllReduceSumUint64s(std::array<uint64_t, 4>& values) const;
+		void AllReduceSumDoubles(std::array<double, 3>& values) const;
 		uint32_t AllReduceMaxUint32(uint32_t value) const;
 		double AllReduceSumDouble(double value) const;
 		float AllReduceMinFloat(float value) const;

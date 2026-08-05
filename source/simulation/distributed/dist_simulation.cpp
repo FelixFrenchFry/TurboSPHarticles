@@ -1704,10 +1704,12 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 
 	Mem::MemUsage exchangeBufferUsage{};
 	Mem::Add(exchangeBufferUsage, particleRedistributionMgr_.GetExchangeBufferMemoryUsage());
+	Mem::Add(exchangeBufferUsage, fluidSolverSyncMgr_.GetExchangeBufferMemoryUsage());
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_ExchangeBuffers, exchangeBufferUsage);
 
 	Mem::MemUsage miscUsage{};
 	Mem::Add(miscUsage, particleRedistributionMgr_.GetScratchMemoryUsage());
+	Mem::Add(miscUsage, fluidSolverSyncMgr_.GetPlanMemoryUsage());
 	Mem::Add(miscUsage, GetParticleMemoryUsage(fluidParticleReOrderWorkBuffers_));
 	Mem::Add(miscUsage, GetParticleMemoryUsage(boundaryParticleReOrderWorkBuffers_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
@@ -2215,13 +2217,31 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
 	try
 	{
+		std::string failMsg{};
+		if (!fluidSolverSyncMgr_.Rebuild(
+			distParticleBackend_->GetFluidParticleView(),
+			fluidParticleState_,
+			*domainDecomp_,
+			N_expectedGlobalF_,
+			mpiContext_,
+			*benchmarksTracker_,
+			&failMsg))
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to prepare distributed fluid solver synchronization: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
+			localOk = false;
+		}
+
 		bool configured = false;
+		if (localOk)
 		{
 			configured = simBackend_->ConfigureDistributedStep(
 				fluidParticleState_.particleLocalIdx_Owned,
-				activeRigidParticleLocalIdxs_);
+				activeRigidParticleLocalIdxs_,
+				fluidSolverSyncMgr_);
 		}
-		if (!configured)
+		if (localOk && !configured)
 		{
 			SPDLOG_ERROR(
 				"[rank {}/{}] Failed to configure rank-local distributed backend step.",
