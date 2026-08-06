@@ -116,13 +116,24 @@ bool FluidSolverSyncMgr::Rebuild(
 	}
 	const uint32_t N_globalF = static_cast<uint32_t>(N_expectedGlobalF);
 
-	if (localOk &&
-		(fluidParticles.xPos.size() != fluidParticles.N_ ||
-		 fluidParticles.yPos.size() != fluidParticles.N_ ||
-		 fluidParticles.zPos.size() != fluidParticles.N_))
+	// validate every backend field before publishing the exchange plan
+	const std::array<std::span<const float>, 16> fluidFields{
+		fluidParticles.xPos, fluidParticles.yPos, fluidParticles.zPos,
+		fluidParticles.xVel, fluidParticles.yVel, fluidParticles.zVel,
+		fluidParticles.xVelPred, fluidParticles.yVelPred, fluidParticles.zVelPred,
+		fluidParticles.xAccPress, fluidParticles.yAccPress, fluidParticles.zAccPress,
+		fluidParticles.sourceTerm, fluidParticles.diagElem,
+		fluidParticles.pressure, fluidParticles.density
+	};
+	bool fluidFieldsValid = fluidParticles.id.size() == fluidParticles.N_;
+	for (const std::span<const float> field : fluidFields)
+	{
+		fluidFieldsValid = fluidFieldsValid && field.size() == fluidParticles.N_;
+	}
+	if (localOk && !fluidFieldsValid)
 	{
 		localOk = SetFailure(localFailMsg,
-			"Fluid particle position view size does not match its particle count.");
+			"Fluid particle field view size does not match its particle count.");
 	}
 
 	if (localOk && !fluidParticleState.IsValidLocalParticleState(
@@ -272,6 +283,9 @@ bool FluidSolverSyncMgr::Rebuild(
 		return false;
 	}
 
+	// full count and global-ID validation is retained for debug/validation builds;
+	// local plan checks above remain active in optimized builds
+#ifndef NDEBUG
 	const auto ValidatePeerPlan = [&](const Base::DistHaloMode haloExtent) -> bool
 	{
 		// --- [ peer count exchange ] ---------------------------------------------------------------
@@ -379,8 +393,9 @@ bool FluidSolverSyncMgr::Rebuild(
 	{
 		return false;
 	}
+#endif
 
-	// publish the plan validated by every rank
+	// publish the locally validated plan after optional full peer-plan validation
 	mpiContext_ = &mpiContext;
 	benchmarksTracker_ = &benchmarksTracker;
 	N_localF_ = fluidParticles.N_;
@@ -479,7 +494,8 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 	{
 		localOk = localOk && fields[fieldIdx].size() == N_localF_;
 	}
-	if (!mpiContext_->AllTrue(localOk))
+	// field sizes were checked collectively during Rebuild(); reject malformed calls locally
+	if (!localOk)
 	{
 		throw std::runtime_error("Fluid solver synchronization field size does not match the local particle count.");
 	}

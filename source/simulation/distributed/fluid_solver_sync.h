@@ -37,7 +37,7 @@ namespace Dist
 	public:
 
 		// builds the peer exchange plan from the current owned and remote particles
-		// (collective, and validated against the plan built by every neighboring rank)
+		// (collective, full peer-plan validation is enabled in debug/validation builds)
 		bool Rebuild(
 			const Sync::FluidConstView& fluidParticles,
 			const DistParticleState& fluidParticleState,
