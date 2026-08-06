@@ -1637,6 +1637,7 @@ void CPU01::AccumulateRigidParticlePressureForces_ChunkedSELL(
 }
 
 // TODO: create separate optimized versions of this kernel, instead of having flags affect behavior?
+// TODO: overlap the pressure exchange with the Jacobi solver compute of inner particles?
 void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,

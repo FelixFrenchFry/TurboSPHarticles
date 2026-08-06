@@ -22,6 +22,15 @@
 
 namespace Dist
 {
+	// separate tags for plan counts, global-index validation, and solver payloads
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_COUNT = 6200;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS = 6201;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_PAYLOAD = 6202;
+
+	// particles packed per block, keeping one block of every field cache resident
+	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
+	inline constexpr uint32_t FLUID_SOLVER_SYNC_BLOCK_SIZE = 2048;
+
 	// owner-to-halo fluid field synchronization over a cached per-neighbor exchange plan
 	class FluidSolverSyncMgr final : public Sim::I_DistributedFluidSolverSync
 	{

@@ -9,6 +9,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 
 // internal
 #include "fluid_solver_sync.h"
@@ -19,11 +21,6 @@ using namespace Dist;
 
 namespace
 {
-	// separate tags for plan counts, global-index validation, and solver payloads
-	constexpr int FLUID_SOLVER_SYNC_TAG_COUNT = 6200;
-	constexpr int FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS = 6201;
-	constexpr int FLUID_SOLVER_SYNC_TAG_PAYLOAD = 6202;
-
 	// retain the first local validation failure for rank-wide reporting
 	bool SetFailure(std::string& localFailMsg, const std::string& failMsg)
 	{
@@ -493,23 +490,28 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
 		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
+		const uint32_t N_send = static_cast<uint32_t>(particlePlan.sendLocalIdxs.size());
 
 		// pack owned values in field-major order for each peer
-		peerPlan.sendBuffer.resize(
-			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size());
+		peerPlan.sendBuffer.resize(static_cast<uint64_t>(N_fields) * N_send);
 		peerPlan.recvBuffer.resize(
 			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size());
 
-		for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
+		// gather every field sequentially within each parallel block
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_send, FLUID_SOLVER_SYNC_BLOCK_SIZE),
+			[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			const uint64_t fieldOffset =
-				static_cast<uint64_t>(fieldIdx) * particlePlan.sendLocalIdxs.size();
-			for (uint32_t particleIdx = 0; particleIdx != particlePlan.sendLocalIdxs.size(); particleIdx++)
+			for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
 			{
-				peerPlan.sendBuffer[fieldOffset + particleIdx] =
-					fields[fieldIdx][particlePlan.sendLocalIdxs[particleIdx]];
+				const uint64_t fieldOffset = static_cast<uint64_t>(fieldIdx) * N_send;
+				for (uint32_t particleIdx = blockRange.begin(); particleIdx != blockRange.end(); particleIdx++)
+				{
+					peerPlan.sendBuffer[fieldOffset + particleIdx] =
+						fields[fieldIdx][particlePlan.sendLocalIdxs[particleIdx]];
+				}
 			}
-		}
+		});
 	}
 
 	// receives are posted before sends on every rank
@@ -537,16 +539,23 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
 		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
-		for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
+		const uint32_t N_recv = static_cast<uint32_t>(particlePlan.recvLocalIdxs.size());
+
+		// scatter every field sequentially within each parallel block
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_recv, FLUID_SOLVER_SYNC_BLOCK_SIZE),
+			[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			const uint64_t fieldOffset =
-				static_cast<uint64_t>(fieldIdx) * particlePlan.recvLocalIdxs.size();
-			for (uint32_t particleIdx = 0; particleIdx != particlePlan.recvLocalIdxs.size(); particleIdx++)
+			for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
 			{
-				fields[fieldIdx][particlePlan.recvLocalIdxs[particleIdx]] =
-					peerPlan.recvBuffer[fieldOffset + particleIdx];
+				const uint64_t fieldOffset = static_cast<uint64_t>(fieldIdx) * N_recv;
+				for (uint32_t particleIdx = blockRange.begin(); particleIdx != blockRange.end(); particleIdx++)
+				{
+					fields[fieldIdx][particlePlan.recvLocalIdxs[particleIdx]] =
+						peerPlan.recvBuffer[fieldOffset + particleIdx];
+				}
 			}
-		}
+		});
 	}
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 }

@@ -4,7 +4,7 @@
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 1,
-  "distHaloMode": "DoubleHalo",
+  "distHaloMode": 0,
   "loadBalanceMetric": 1,
   "loadBalanceTrigger": 0,
   "loadBalanceWeightModel": 0,
