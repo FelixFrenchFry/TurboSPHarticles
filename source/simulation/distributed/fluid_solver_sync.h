@@ -27,12 +27,14 @@ namespace Dist
 	{
 	public:
 
-		// builds the peer exchange plan from the current owned and halo particles
+		// builds the peer exchange plan from the current owned and remote particles
 		// (collective, and validated against the plan built by every neighboring rank)
 		bool Rebuild(
 			const Sync::FluidConstView& fluidParticles,
 			const DistParticleState& fluidParticleState,
 			const IDomainDecomp& domainDecomp,
+			float singleHaloRadius,
+			Base::DistHaloMode distHaloMode,
 			uint64_t N_expectedGlobalF,
 			MpiContext& mpiContext,
 			Bench::BenchmarksTracker& benchmarksTracker,
@@ -42,12 +44,15 @@ namespace Dist
 		void ApplyFluidParticleReOrder(
 			std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx) override;
 
-		// overwrites halo values with the ones held by their owning rank
-		void SynchronizeFluidScalarField(std::span<float> values) override;
+		// overwrites remote values with the ones held by their owning rank
+		void SynchronizeFluidScalarField(
+			std::span<float> values,
+			Base::DistHaloMode haloExtent) override;
 		void SynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
-			std::span<float> zValues) override;
+			std::span<float> zValues,
+			Base::DistHaloMode haloExtent) override;
 
 		// sums rank-local solver errors, normalization happens in the solver
 		Sim::PressureSolveErrorSums GlobalizePressureSolveErrorSums(
@@ -59,11 +64,9 @@ namespace Dist
 
 	private:
 
-		// exchange plan and payload storage for one neighboring rank
-		struct PeerPlan
+		// particle slots shared with one neighboring rank for one halo extent
+		struct ParticlePlan
 		{
-			int rank = -1;
-
 			// local slots read from and written to, sorted by global particle ID
 			std::vector<uint32_t> sendLocalIdxs;
 			std::vector<uint32_t> recvLocalIdxs;
@@ -71,6 +74,14 @@ namespace Dist
 			// global particle IDs matching the local index lists
 			std::vector<uint32_t> sendGlobalIdxs;
 			std::vector<uint32_t> recvGlobalIdxs;
+		};
+
+		// narrow/wide plans and reusable payload storage for one neighboring rank
+		struct PeerPlan
+		{
+			int rank = -1;
+			ParticlePlan singleHalo;
+			ParticlePlan doubleHalo;
 
 			// reusable payload storage
 			std::vector<float> sendBuffer;
@@ -80,7 +91,17 @@ namespace Dist
 		// packs, exchanges, and unpacks up to three fields in one round of messages
 		void SynchronizeFluidFields(
 			const std::array<std::span<float>, 3>& fields,
-			uint32_t N_fields);
+			uint32_t N_fields,
+			Base::DistHaloMode haloExtent);
+
+		// selects the narrow or wide exchange plan for one peer,
+		// overloads allow for mutable or read-only access as needed
+		static ParticlePlan& ParticlePlanFor(
+			PeerPlan& peerPlan,
+			Base::DistHaloMode haloExtent);
+		static const ParticlePlan& ParticlePlanFor(
+			const PeerPlan& peerPlan,
+			Base::DistHaloMode haloExtent);
 
 		// set when Rebuild() publishes a validated plan
 		MpiContext* mpiContext_ = nullptr;
@@ -89,6 +110,7 @@ namespace Dist
 		// particle counts the current plan was built for
 		uint64_t N_globalF_ = 0;
 		uint32_t N_localF_ = 0;
+		Base::DistHaloMode distHaloMode_ = Base::DistHaloMode::SingleHalo;
 
 		// peer exchange plans and reusable MPI requests
 		std::vector<PeerPlan> peerPlans_;

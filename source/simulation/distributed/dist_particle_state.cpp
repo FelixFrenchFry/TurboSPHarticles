@@ -63,7 +63,7 @@ namespace
 		const PositionAtLocalIdx& positionAtLocalIdx,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float kernelRadius,
+		const float haloRadius,
 		ParticleClassificationWorkBuffers& workBuffers)
 	{
 		PrepareParticleClassification(particleState, N_particles);
@@ -101,7 +101,7 @@ namespace
 						chunkClassBase + PARTICLE_CLASSIFICATION_CLASS_OWNED]++;
 
 					// inner owned particles do not need to be exchanged as halo data
-					if (domainDecomp.IsInnerOwnedParticle(rank, position, kernelRadius))
+					if (domainDecomp.IsInnerOwnedParticle(rank, position, haloRadius))
 					{
 						particleState.particleClasses[localIdx] = DistParticleClass::Inner;
 						workBuffers.classCounts_ByChunkClass[
@@ -438,7 +438,7 @@ namespace
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float kernelRadius,
+		const float haloRadius,
 		const uint32_t N_globalF)
 	{
 		const Sync::FluidParticles& globalFluid = globalState.fluidParticles;
@@ -491,9 +491,8 @@ namespace
 
 		// classify the compact prefix as inner or outer, then mark the suffix as halo
 		ClassifyOwnedFluidParticlesIntoInnerOuter(
-			particleState, localFluid, domainDecomp, rank, kernelRadius);
-		ClassifyHaloParticleRange(
-			particleState, N_owned, N_local);
+			particleState, localFluid, domainDecomp, rank, haloRadius);
+		ClassifyHaloParticleRange(particleState, N_owned, N_local);
 	}
 
 	// build compact rank-local boundary storage as [ owned particles ][ halo particles ]
@@ -503,7 +502,7 @@ namespace
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float kernelRadius,
+		const float haloRadius,
 		const uint32_t N_globalB)
 	{
 		const Sync::BoundaryParticles& globalBoundary = globalState.boundaryParticles;
@@ -556,9 +555,8 @@ namespace
 
 		// classify the compact prefix as inner or outer, then mark the suffix as halo
 		ClassifyOwnedBoundaryParticlesIntoInnerOuter(
-			particleState, localBoundary, domainDecomp, rank, kernelRadius);
-		ClassifyHaloParticleRange(
-			particleState, N_owned, N_local);
+			particleState, localBoundary, domainDecomp, rank, haloRadius);
+		ClassifyHaloParticleRange(particleState, N_owned, N_local);
 	}
 
 } // namespace anonymous
@@ -826,7 +824,6 @@ bool DistParticleState::IsValidLocalParticleState(
 
 		activeLocalIdxs[localIdx] = 1;
 	}
-
 	// check that every active local index appears in either owned or halo
 	for (uint32_t localIdx = 0; localIdx != N_local; localIdx++)
 	{
@@ -1235,7 +1232,7 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 	const Sync::FluidParticles& fluidParticles,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius,
+	const float haloRadius,
 	ParticleClassificationWorkBuffers* workBuffers)
 {
 	// use caller-owned scratch when available to retain allocations across calls
@@ -1252,7 +1249,7 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 		},
 		domainDecomp,
 		rank,
-		kernelRadius,
+		haloRadius,
 		classificationWorkBuffers);
 }
 
@@ -1261,7 +1258,7 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 	const Sync::BoundaryParticles& boundaryParticles,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius,
+	const float haloRadius,
 	ParticleClassificationWorkBuffers* workBuffers)
 {
 	// use caller-owned scratch when available to retain allocations across calls
@@ -1278,7 +1275,7 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		},
 		domainDecomp,
 		rank,
-		kernelRadius,
+		haloRadius,
 		classificationWorkBuffers);
 }
 
@@ -1289,7 +1286,7 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	const Sync::UniversalSimState& globalState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius,
+	const float haloRadius,
 	const uint32_t N_globalF,
 	const uint32_t N_globalB)
 {
@@ -1303,8 +1300,8 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	// build compact rank-local fluid and boundary particle layouts
 	BuildLocalFluidParticlesFromGlobalState(
 		fluidParticleState, localState, globalState,
-		domainDecomp, rank, kernelRadius, N_globalF);
+		domainDecomp, rank, haloRadius, N_globalF);
 	BuildLocalBoundaryParticlesFromGlobalState(
 		boundaryParticleState, localState, globalState,
-		domainDecomp, rank, kernelRadius, N_globalB);
+		domainDecomp, rank, haloRadius, N_globalB);
 }

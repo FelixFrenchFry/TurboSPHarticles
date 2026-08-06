@@ -48,9 +48,9 @@ int Decomp_AABB_Uniform::OwnerRank(const glm::vec3& position) const
 bool Decomp_AABB_Uniform::IsInnerOwnedParticle(
 	const int rank,
 	const glm::vec3& position,
-	const float kernelRadius) const
+	const float haloRadius) const
 {
-	return slabLayout_.IsInnerOwnedParticle(rank, position, kernelRadius);
+	return slabLayout_.IsInnerOwnedParticle(rank, position, haloRadius);
 }
 
 const std::vector<int>& Decomp_AABB_Uniform::NeighborRanks(const int rank) const

@@ -394,6 +394,8 @@ namespace Export
 					simParams.neighborListMethod) },
 			{ "domainDecompMethod", static_cast<int>(simParams.domainDecompMethod) },
 			{ "domainDecompMethodName", Base::ToCString(simParams.domainDecompMethod) },
+			{ "distHaloMode", static_cast<int>(simParams.distHaloMode) },
+			{ "distHaloModeName", Base::ToCString(simParams.distHaloMode) },
 			{ "loadBalanceMetric", static_cast<int>(simParams.loadBalanceMetric) },
 			{ "loadBalanceMetricName", Base::ToCString(simParams.loadBalanceMetric) },
 			{ "loadBalanceTrigger", static_cast<int>(simParams.loadBalanceTrigger) },

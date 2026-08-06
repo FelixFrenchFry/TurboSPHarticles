@@ -77,10 +77,30 @@ namespace
 
 } // namespace anonymous
 
+FluidSolverSyncMgr::ParticlePlan& FluidSolverSyncMgr::ParticlePlanFor(
+	PeerPlan& peerPlan,
+	const Base::DistHaloMode haloExtent)
+{
+	return haloExtent == Base::DistHaloMode::DoubleHalo
+		? peerPlan.doubleHalo
+		: peerPlan.singleHalo;
+}
+
+const FluidSolverSyncMgr::ParticlePlan& FluidSolverSyncMgr::ParticlePlanFor(
+	const PeerPlan& peerPlan,
+	const Base::DistHaloMode haloExtent)
+{
+	return haloExtent == Base::DistHaloMode::DoubleHalo
+		? peerPlan.doubleHalo
+		: peerPlan.singleHalo;
+}
+
 bool FluidSolverSyncMgr::Rebuild(
 	const Sync::FluidConstView& fluidParticles,
 	const DistParticleState& fluidParticleState,
 	const IDomainDecomp& domainDecomp,
+	const float singleHaloRadius,
+	const Base::DistHaloMode distHaloMode,
 	const uint64_t N_expectedGlobalF,
 	MpiContext& mpiContext,
 	Bench::BenchmarksTracker& benchmarksTracker,
@@ -161,7 +181,11 @@ bool FluidSolverSyncMgr::Rebuild(
 			: nullptr;
 	};
 
-	// send owned particles to every neighboring rank whose halo contains them
+	const bool useDoubleHalo = distHaloMode == Base::DistHaloMode::DoubleHalo;
+	const AABB singleHaloBounds =
+		domainDecomp.OwnedExtentAABB(mpiContext.Rank()).Expanded(singleHaloRadius);
+
+	// send owned particles to every neighboring rank whose selected halo extent contains them
 	for (const uint32_t localIdx : fluidParticleState.particleLocalIdx_Owned)
 	{
 		const glm::vec3 position{
@@ -174,14 +198,22 @@ bool FluidSolverSyncMgr::Rebuild(
 
 		for (PeerPlan& peerPlan : newPeerPlans)
 		{
-			if (!domainDecomp.HaloExtentAABB(peerPlan.rank).Contains(position)) { continue; }
-
-			peerPlan.sendLocalIdxs.push_back(localIdx);
-			peerPlan.sendGlobalIdxs.push_back(globalIdx);
+			if (domainDecomp.OwnedExtentAABB(peerPlan.rank)
+				.Expanded(singleHaloRadius).Contains(position))
+			{
+				peerPlan.singleHalo.sendLocalIdxs.push_back(localIdx);
+				peerPlan.singleHalo.sendGlobalIdxs.push_back(globalIdx);
+			}
+			if (useDoubleHalo &&
+				domainDecomp.HaloExtentAABB(peerPlan.rank).Contains(position))
+			{
+				peerPlan.doubleHalo.sendLocalIdxs.push_back(localIdx);
+				peerPlan.doubleHalo.sendGlobalIdxs.push_back(globalIdx);
+			}
 		}
 	}
 
-	// receive halo particles from their owning rank
+	// receive halo particles from their owning rank over the matching narrow/wide plans
 	for (const uint32_t localIdx : fluidParticleState.particleLocalIdx_Halo)
 	{
 		const glm::vec3 position{
@@ -194,25 +226,46 @@ bool FluidSolverSyncMgr::Rebuild(
 		if (!peerPlan)
 		{
 			localOk = SetFailure(localFailMsg,
-				"Halo fluid particle owner is not a neighboring rank.");
+				"Remote fluid particle owner is not a neighboring rank.");
 			continue;
 		}
 
-		peerPlan->recvLocalIdxs.push_back(localIdx);
-		peerPlan->recvGlobalIdxs.push_back(
-			fluidParticleState.particleGlobalIdx_FromLocalIdx[localIdx]);
+		const uint32_t globalIdx =
+			fluidParticleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		if (singleHaloBounds.Contains(position))
+		{
+			peerPlan->singleHalo.recvLocalIdxs.push_back(localIdx);
+			peerPlan->singleHalo.recvGlobalIdxs.push_back(globalIdx);
+		}
+		else if (!useDoubleHalo)
+		{
+			localOk = SetFailure(localFailMsg,
+				"Single-halo fluid particle lies outside the narrow halo extent.");
+			continue;
+		}
+
+		if (useDoubleHalo)
+		{
+			peerPlan->doubleHalo.recvLocalIdxs.push_back(localIdx);
+			peerPlan->doubleHalo.recvGlobalIdxs.push_back(globalIdx);
+		}
 	}
 
-	// sort by global ID and reject duplicate entries before exchanging the plan
+	// sort both plans by global ID and reject duplicate entries before exchanging them
 	for (PeerPlan& peerPlan : newPeerPlans)
 	{
-		SortPeerParticleIdxs(peerPlan.sendLocalIdxs, peerPlan.sendGlobalIdxs);
-		SortPeerParticleIdxs(peerPlan.recvLocalIdxs, peerPlan.recvGlobalIdxs);
-		if (HasDuplicateGlobalIdxs(peerPlan.sendGlobalIdxs) ||
-			HasDuplicateGlobalIdxs(peerPlan.recvGlobalIdxs))
+		for (ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
 		{
-			localOk = SetFailure(localFailMsg,
-				"Fluid solver synchronization plan contains duplicate global indices.");
+			SortPeerParticleIdxs(
+				particlePlan->sendLocalIdxs, particlePlan->sendGlobalIdxs);
+			SortPeerParticleIdxs(
+				particlePlan->recvLocalIdxs, particlePlan->recvGlobalIdxs);
+			if (HasDuplicateGlobalIdxs(particlePlan->sendGlobalIdxs) ||
+				HasDuplicateGlobalIdxs(particlePlan->recvGlobalIdxs))
+			{
+				localOk = SetFailure(localFailMsg,
+					"Fluid solver synchronization plan contains duplicate global indices.");
+			}
 		}
 	}
 
@@ -222,99 +275,110 @@ bool FluidSolverSyncMgr::Rebuild(
 		return false;
 	}
 
-	// --- [ peer count exchange ] -------------------------------------------------------------------
-
-	// pack local send counts, rejecting values beyond the MPI int range
-	std::vector<int> sendCounts(newPeerPlans.size(), 0);
-	std::vector<int> recvCounts(newPeerPlans.size(), 0);
-	requests_.clear();
-	requests_.reserve(newPeerPlans.size() * 2);
-	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	const auto ValidatePeerPlan = [&](const Base::DistHaloMode haloExtent) -> bool
 	{
-		const uint64_t N_send = newPeerPlans[peerIdx].sendGlobalIdxs.size();
-		if (N_send > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+		// --- [ peer count exchange ] ---------------------------------------------------------------
+
+		std::vector<int> sendCounts(newPeerPlans.size(), 0);
+		std::vector<int> recvCounts(newPeerPlans.size(), 0);
+		requests_.clear();
+		requests_.reserve(newPeerPlans.size() * 2);
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
-			localOk = SetFailure(localFailMsg,
-				"Fluid solver synchronization count exceeds the MPI int range.");
-			continue;
+			const ParticlePlan& particlePlan =
+				ParticlePlanFor(newPeerPlans[peerIdx], haloExtent);
+			const uint64_t N_send = particlePlan.sendGlobalIdxs.size();
+			if (N_send > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+			{
+				localOk = SetFailure(localFailMsg,
+					"Fluid solver synchronization count exceeds the MPI int range.");
+				continue;
+			}
+			sendCounts[peerIdx] = static_cast<int>(N_send);
 		}
-		sendCounts[peerIdx] = static_cast<int>(N_send);
-	}
-	if (!FinishCollectiveValidation(
-		mpiContext, localOk, localFailMsg, failMsg))
-	{
-		return false;
-	}
-
-	// exchange particle counts before comparing global-index lists
-	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-	{
-		requests_.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.IRecvInt(
-			recvCounts[peerIdx], newPeerPlans[peerIdx].rank,
-			FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
-	}
-	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-	{
-		requests_.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendInt(
-			sendCounts[peerIdx], newPeerPlans[peerIdx].rank,
-			FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
-	}
-	mpiContext.WaitAll(requests_);
-
-	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-	{
-		if (recvCounts[peerIdx] < 0 ||
-			static_cast<uint64_t>(recvCounts[peerIdx]) !=
-			newPeerPlans[peerIdx].recvGlobalIdxs.size())
+		if (!FinishCollectiveValidation(
+			mpiContext, localOk, localFailMsg, failMsg))
 		{
-			localOk = SetFailure(localFailMsg,
-				"Fluid solver synchronization peer particle count does not match the local halo plan.");
+			return false;
 		}
-	}
-	if (!FinishCollectiveValidation(
-		mpiContext, localOk, localFailMsg, failMsg))
-	{
-		return false;
-	}
 
-	// --- [ peer global-index exchange ] ------------------------------------------------------------
-
-	// exchange global IDs to verify both ranks built the same plan
-	std::vector<std::vector<uint32_t>> receivedGlobalIdxs(newPeerPlans.size());
-	requests_.clear();
-	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-	{
-		receivedGlobalIdxs[peerIdx].resize(static_cast<uint32_t>(recvCounts[peerIdx]));
-		mpiContext.IRecvBytesChunked(
-			receivedGlobalIdxs[peerIdx].data(),
-			static_cast<uint64_t>(receivedGlobalIdxs[peerIdx].size()) * sizeof(uint32_t),
-			newPeerPlans[peerIdx].rank,
-			FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
-			requests_);
-	}
-	for (const PeerPlan& peerPlan : newPeerPlans)
-	{
-		mpiContext.ISendBytesChunked(
-			peerPlan.sendGlobalIdxs.data(),
-			static_cast<uint64_t>(peerPlan.sendGlobalIdxs.size()) * sizeof(uint32_t),
-			peerPlan.rank,
-			FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
-			requests_);
-	}
-	mpiContext.WaitAll(requests_);
-
-	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-	{
-		if (receivedGlobalIdxs[peerIdx] != newPeerPlans[peerIdx].recvGlobalIdxs)
+		// exchange particle counts before comparing global-index lists
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
-			localOk = SetFailure(localFailMsg,
-				"Fluid solver synchronization peer global indices do not match the local halo plan.");
+			requests_.emplace_back(MPI_REQUEST_NULL);
+			mpiContext.IRecvInt(
+				recvCounts[peerIdx], newPeerPlans[peerIdx].rank,
+				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
 		}
-	}
-	if (!FinishCollectiveValidation(
-		mpiContext, localOk, localFailMsg, failMsg))
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			requests_.emplace_back(MPI_REQUEST_NULL);
+			mpiContext.ISendInt(
+				sendCounts[peerIdx], newPeerPlans[peerIdx].rank,
+				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
+		}
+		mpiContext.WaitAll(requests_);
+
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			const ParticlePlan& particlePlan =
+				ParticlePlanFor(newPeerPlans[peerIdx], haloExtent);
+			if (recvCounts[peerIdx] < 0 ||
+				static_cast<uint64_t>(recvCounts[peerIdx]) !=
+				particlePlan.recvGlobalIdxs.size())
+			{
+				localOk = SetFailure(localFailMsg,
+					"Fluid solver synchronization peer particle count does not match the local halo plan.");
+			}
+		}
+		if (!FinishCollectiveValidation(
+			mpiContext, localOk, localFailMsg, failMsg))
+		{
+			return false;
+		}
+
+		// --- [ peer global-index exchange ] --------------------------------------------------------
+
+		std::vector<std::vector<uint32_t>> receivedGlobalIdxs(newPeerPlans.size());
+		requests_.clear();
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			receivedGlobalIdxs[peerIdx].resize(static_cast<uint32_t>(recvCounts[peerIdx]));
+			mpiContext.IRecvBytesChunked(
+				receivedGlobalIdxs[peerIdx].data(),
+				static_cast<uint64_t>(receivedGlobalIdxs[peerIdx].size()) * sizeof(uint32_t),
+				newPeerPlans[peerIdx].rank,
+				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
+				requests_);
+		}
+		for (const PeerPlan& peerPlan : newPeerPlans)
+		{
+			const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
+			mpiContext.ISendBytesChunked(
+				particlePlan.sendGlobalIdxs.data(),
+				static_cast<uint64_t>(particlePlan.sendGlobalIdxs.size()) * sizeof(uint32_t),
+				peerPlan.rank,
+				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
+				requests_);
+		}
+		mpiContext.WaitAll(requests_);
+
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			const ParticlePlan& particlePlan =
+				ParticlePlanFor(newPeerPlans[peerIdx], haloExtent);
+			if (receivedGlobalIdxs[peerIdx] != particlePlan.recvGlobalIdxs)
+			{
+				localOk = SetFailure(localFailMsg,
+					"Fluid solver synchronization peer global indices do not match the local halo plan.");
+			}
+		}
+		return FinishCollectiveValidation(
+			mpiContext, localOk, localFailMsg, failMsg);
+	};
+
+	if (!ValidatePeerPlan(Base::DistHaloMode::SingleHalo) ||
+		(useDoubleHalo && !ValidatePeerPlan(Base::DistHaloMode::DoubleHalo)))
 	{
 		return false;
 	}
@@ -324,6 +388,7 @@ bool FluidSolverSyncMgr::Rebuild(
 	benchmarksTracker_ = &benchmarksTracker;
 	N_localF_ = fluidParticles.N_;
 	N_globalF_ = N_expectedGlobalF;
+	distHaloMode_ = distHaloMode;
 	peerPlans_ = std::move(newPeerPlans);
 	return true;
 }
@@ -369,41 +434,50 @@ void FluidSolverSyncMgr::ApplyFluidParticleReOrder(
 	// remap send and receive indices, global particle IDs remain unchanged
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
-		for (uint32_t& localIdx : peerPlan.sendLocalIdxs)
+		for (ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
 		{
-			localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
-		}
-		for (uint32_t& localIdx : peerPlan.recvLocalIdxs)
-		{
-			localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
+			for (uint32_t& localIdx : particlePlan->sendLocalIdxs)
+			{
+				localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
+			}
+			for (uint32_t& localIdx : particlePlan->recvLocalIdxs)
+			{
+				localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
+			}
 		}
 	}
 }
 
 void FluidSolverSyncMgr::SynchronizeFluidScalarField(
-	const std::span<float> values)
+	const std::span<float> values,
+	const Base::DistHaloMode haloExtent)
 {
-	SynchronizeFluidFields({ values, {}, {} }, 1);
+	SynchronizeFluidFields({ values, {}, {} }, 1, haloExtent);
 }
 
 void FluidSolverSyncMgr::SynchronizeFluidVectorField(
 	const std::span<float> xValues,
 	const std::span<float> yValues,
-	const std::span<float> zValues)
+	const std::span<float> zValues,
+	const Base::DistHaloMode haloExtent)
 {
-	SynchronizeFluidFields({ xValues, yValues, zValues }, 3);
+	SynchronizeFluidFields({ xValues, yValues, zValues }, 3, haloExtent);
 }
 
 void FluidSolverSyncMgr::SynchronizeFluidFields(
 	const std::array<std::span<float>, 3>& fields,
-	const uint32_t N_fields)
+	const uint32_t N_fields,
+	const Base::DistHaloMode haloExtent)
 {
 	if (!mpiContext_ || !benchmarksTracker_)
 	{
 		throw std::runtime_error("Fluid solver synchronization plan is not initialized.");
 	}
 
-	bool localOk = N_fields > 0 && N_fields <= fields.size();
+	bool localOk = N_fields > 0 && N_fields <= fields.size() &&
+		(haloExtent == Base::DistHaloMode::SingleHalo ||
+			(haloExtent == Base::DistHaloMode::DoubleHalo &&
+				distHaloMode_ == Base::DistHaloMode::DoubleHalo));
 	for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
 	{
 		localOk = localOk && fields[fieldIdx].size() == N_localF_;
@@ -418,20 +492,22 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 	requests_.clear();
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
+		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
+
 		// pack owned values in field-major order for each peer
 		peerPlan.sendBuffer.resize(
-			static_cast<uint64_t>(N_fields) * peerPlan.sendLocalIdxs.size());
+			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size());
 		peerPlan.recvBuffer.resize(
-			static_cast<uint64_t>(N_fields) * peerPlan.recvLocalIdxs.size());
+			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size());
 
 		for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
 		{
 			const uint64_t fieldOffset =
-				static_cast<uint64_t>(fieldIdx) * peerPlan.sendLocalIdxs.size();
-			for (uint32_t particleIdx = 0; particleIdx != peerPlan.sendLocalIdxs.size(); particleIdx++)
+				static_cast<uint64_t>(fieldIdx) * particlePlan.sendLocalIdxs.size();
+			for (uint32_t particleIdx = 0; particleIdx != particlePlan.sendLocalIdxs.size(); particleIdx++)
 			{
 				peerPlan.sendBuffer[fieldOffset + particleIdx] =
-					fields[fieldIdx][peerPlan.sendLocalIdxs[particleIdx]];
+					fields[fieldIdx][particlePlan.sendLocalIdxs[particleIdx]];
 			}
 		}
 	}
@@ -460,13 +536,14 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 	// unpack halo values
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
+		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
 		for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
 		{
 			const uint64_t fieldOffset =
-				static_cast<uint64_t>(fieldIdx) * peerPlan.recvLocalIdxs.size();
-			for (uint32_t particleIdx = 0; particleIdx != peerPlan.recvLocalIdxs.size(); particleIdx++)
+				static_cast<uint64_t>(fieldIdx) * particlePlan.recvLocalIdxs.size();
+			for (uint32_t particleIdx = 0; particleIdx != particlePlan.recvLocalIdxs.size(); particleIdx++)
 			{
-				fields[fieldIdx][peerPlan.recvLocalIdxs[particleIdx]] =
+				fields[fieldIdx][particlePlan.recvLocalIdxs[particleIdx]] =
 					peerPlan.recvBuffer[fieldOffset + particleIdx];
 			}
 		}
@@ -515,10 +592,13 @@ Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
-		Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.sendLocalIdxs));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.recvLocalIdxs));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.sendGlobalIdxs));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.recvGlobalIdxs));
+		for (const ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
+		{
+			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendLocalIdxs));
+			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvLocalIdxs));
+			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendGlobalIdxs));
+			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvGlobalIdxs));
+		}
 	}
 
 	return usage;

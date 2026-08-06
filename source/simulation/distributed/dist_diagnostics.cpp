@@ -1196,6 +1196,7 @@ namespace Dist
 			setup.neighborListStorage);
 
 		std::printf("%-30s = %s\n", "domain decomp method", setup.domainDecompMethod);
+		std::printf("%-30s = %s\n", "distributed halo mode", setup.distHaloMode);
 		std::printf("%-30s = %s\n", "load balance metric", setup.loadBalanceMetric);
 		std::printf("%-30s = %s\n", "load balance trigger", setup.loadBalanceTrigger);
 		std::printf("%-30s = %s\n", "load balance weight model",

@@ -4,6 +4,7 @@
 
 // external
 #include <cstdint>
+#include <span>
 
 // internal
 #include "source/simulation/sync/state_sim.h"
@@ -126,7 +127,9 @@ namespace CPU01
 		// destinations
 		float* RESTRICT xAccPressF,
 		float* RESTRICT yAccPressF,
-		float* RESTRICT zAccPressF);
+		float* RESTRICT zAccPressF,
+		std::span<const uint32_t> selectedChunkIdxs = {},
+		bool useSelectedChunks = false);
 
 	void PressureRelaxedJacobiSolver_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -154,7 +157,9 @@ namespace CPU01
 		// destinations
 		float* RESTRICT pressureF,
 		const uint8_t* RESTRICT errorParticleFlags,
-		Sim::PressureSolveErrorSums& errorSums);
+		Sim::PressureSolveErrorSums& errorSums,
+		std::span<const uint32_t> selectedChunkIdxs = {},
+		bool useSelectedChunks = false);
 
 	void AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 		const float* RESTRICT xPosF,

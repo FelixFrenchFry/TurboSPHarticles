@@ -21,7 +21,7 @@ namespace Dist
 	struct DomainDecompInput
 	{
 		AABB globalBounds;
-		float haloRadius = 0.0f;
+		float haloRadius = 0.0f; // complete stored halo extent
 		int N_ranks = 1;
 	};
 
@@ -77,7 +77,7 @@ namespace Dist
 		virtual bool IsInnerOwnedParticle(
 			int rank,
 			const glm::vec3& position,
-			float kernelRadius) const = 0;
+			float haloRadius) const = 0;
 
 		virtual const std::vector<int>& NeighborRanks(int rank) const = 0;
 

@@ -172,11 +172,11 @@ int AABBSlabLayout::OwnerRank(const glm::vec3& position) const
 bool AABBSlabLayout::IsInnerOwnedParticle(
 	const int rank,
 	const glm::vec3& position,
-	const float kernelRadius) const
+	const float haloRadius) const
 {
-	// stored halo bounds already expand each subdomain by the build radius,
+	// stored halo bounds already expand each subdomain by the build halo radius,
 	// so they only answer this query for the radius used to build the decomp
-	if (std::max(0.0f, kernelRadius) != haloRadius_)
+	if (std::max(0.0f, haloRadius) != haloRadius_)
 	{
 		throw std::runtime_error(
 			"AABBSlabLayout inner particle query radius does not match the build halo radius.");

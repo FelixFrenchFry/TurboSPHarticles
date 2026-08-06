@@ -90,6 +90,7 @@ namespace Sim
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
 			const std::vector<uint32_t>& activeFluidParticleLocalIdxs,
+			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
 			const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
@@ -142,7 +143,8 @@ namespace Sim
 			const SimParams& simParams,
 			bool useActiveParticleLocalIdxs) const;
 
-		void ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
+		void ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
+		void BuildDistributedSolverChunkIdxs();
 
 		void ClassifyExportSurfaceParticles(const std::vector<uint8_t>& nearSurfaceFlags) const;
 
@@ -233,9 +235,12 @@ namespace Sim
 		std::vector<float> iBodyInv10RB_, iBodyInv11RB_, iBodyInv12RB_;
 		std::vector<float> iBodyInv20RB_, iBodyInv21RB_, iBodyInv22RB_;
 
-		// optional distributed integration filtering
+		// flags for particle filtering in distributed execution
 		std::vector<uint32_t> activeFluidParticleLocalIdxs_;
 		std::vector<uint8_t> activeFluidParticleFlags_;
+		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_;
+		std::vector<uint32_t> pressureAccChunkIdxs_;
+		std::vector<uint32_t> ownedFluidChunkIdxs_;
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_;
 		std::vector<uint8_t> activeRigidParticleFlags_;
 		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;

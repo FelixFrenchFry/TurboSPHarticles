@@ -716,6 +716,7 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 	report.mpiThreadSupport = mpiContext_.ThreadSupport();
 
 	report.domainDecompMethod = Base::ToCString(simParams_.domainDecompMethod);
+	report.distHaloMode = Base::ToCString(simParams_.distHaloMode);
 	report.loadBalanceMetric = Base::ToCString(simParams_.loadBalanceMetric);
 	report.loadBalanceTrigger = Base::ToCString(simParams_.loadBalanceTrigger);
 	report.loadBalanceWeightModel = Base::ToCString(simParams_.loadBalanceWeightModel);
@@ -1061,11 +1062,11 @@ bool DistSimulationMgr::BuildDomainDecomp()
 			const AABB globalBounds =
 				ComputeGlobalDomainBounds(simScenario_->GetBoundaryBoxes(), simParams_);
 
-			// kernel radius defines initial halo thickness for ownership queries
+			// selected distributed halo mode defines the complete stored remote extent
 			const DomainDecompInput input
 			{
 				.globalBounds = globalBounds,
-				.haloRadius = simParams_.kernelRadius,
+				.haloRadius = simParams_.distHaloRadius,
 				.N_ranks = mpiContext_.Size()
 			};
 
@@ -1146,8 +1147,8 @@ bool DistSimulationMgr::BuildGlobalSimState()
 	globalSimState_.step = 0;
 	globalSimState_.time = 0.0;
 
-	// every rank builds the same scenario but keeps only the slice it needs, expanded by one
-	// kernel radius so boundary coefficient computations (psiB) still see complete neighborhoods
+	// expand the stored remote extent by one physical kernel radius so boundary
+	// coefficient computations (psiB) still see complete halo neighborhoods
 	const AABB buildRegion = domainDecomp_->HaloExtentAABB(mpiContext_.Rank())
 		.Expanded(simParams_.kernelRadius);
 
@@ -1186,6 +1187,7 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 	localSimState_ = {};
 	fluidParticleState_.Clear();
 	boundaryParticleState_.Clear();
+	pressureAccFluidParticleLocalIdxs_.clear();
 	activeRigidParticleLocalIdxs_.clear();
 	rigidBodyForceTorque_ = {};
 
@@ -1197,7 +1199,7 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 		globalSimState_,
 		*domainDecomp_,
 		mpiContext_.Rank(),
-		simParams_.kernelRadius,
+		simParams_.distHaloRadius,
 		static_cast<uint32_t>(N_expectedGlobalF_),
 		static_cast<uint32_t>(N_expectedGlobalB_));
 
@@ -1712,6 +1714,7 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, fluidSolverSyncMgr_.GetPlanMemoryUsage());
 	Mem::Add(miscUsage, GetParticleMemoryUsage(fluidParticleReOrderWorkBuffers_));
 	Mem::Add(miscUsage, GetParticleMemoryUsage(boundaryParticleReOrderWorkBuffers_));
+	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(pressureAccFluidParticleLocalIdxs_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(activeRigidParticleRankCountScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodyForceTorque(rigidBodyForceTorque_));
@@ -2157,10 +2160,43 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		globalSimState_.rigidBodies.N_ > 0;
 
 	bool localOk = true;
+	const bool computeFirstHaloLayerPressureAcc =
+		simParams_.distHaloMode == Base::DistHaloMode::DoubleHalo;
+	if (computeFirstHaloLayerPressureAcc)
+	{
+		// upper bound for the owned indices plus the appended first halo layer
+		pressureAccFluidParticleLocalIdxs_.reserve(
+			fluidParticleState_.N_owned + fluidParticleState_.N_halo);
+	}
+	pressureAccFluidParticleLocalIdxs_ =
+		fluidParticleState_.particleLocalIdx_Owned;
 	activeRigidParticleLocalIdxs_.clear();
 
 	try
 	{
+		// computes pressure acceleration for the first halo layer locally
+		if (computeFirstHaloLayerPressureAcc)
+		{
+			const Sync::FluidConstView fluidParticles =
+				distParticleBackend_->GetFluidParticleView();
+			const AABB singleHaloBounds =
+				domainDecomp_->OwnedExtentAABB(mpiContext_.Rank())
+					.Expanded(simParams_.kernelRadius);
+
+			for (const uint32_t localIdx : fluidParticleState_.particleLocalIdx_Halo)
+			{
+				const glm::vec3 position{
+					fluidParticles.xPos[localIdx],
+					fluidParticles.yPos[localIdx],
+					fluidParticles.zPos[localIdx]
+				};
+				if (singleHaloBounds.Contains(position))
+				{
+					pressureAccFluidParticleLocalIdxs_.push_back(localIdx);
+				}
+			}
+		}
+
 		std::string failMsg{};
 		if (hasRigidBodies && !BuildActiveRigidParticleLocalIdxs(
 			activeRigidParticleLocalIdxs_,
@@ -2222,6 +2258,8 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 			distParticleBackend_->GetFluidParticleView(),
 			fluidParticleState_,
 			*domainDecomp_,
+			simParams_.kernelRadius,
+			simParams_.distHaloMode,
 			N_expectedGlobalF_,
 			mpiContext_,
 			*benchmarksTracker_,
@@ -2238,6 +2276,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		{
 			configured = simBackend_->ConfigureDistributedStep(
 				fluidParticleState_.particleLocalIdx_Owned,
+				pressureAccFluidParticleLocalIdxs_,
 				activeRigidParticleLocalIdxs_,
 				fluidSolverSyncMgr_);
 		}

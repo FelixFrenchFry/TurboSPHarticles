@@ -135,6 +135,23 @@ namespace Base
 		return "DomainDecompMethod::<unknown>";
 	}
 
+	enum class DistHaloMode : uint8_t
+	{
+		SingleHalo, // 0 remote particles within 2h
+		DoubleHalo  // 1 remote particles within 4h (allows local computation of pressure acceleration for the first halo layer)
+	};
+	constexpr const char* ToCString(const DistHaloMode v) noexcept
+	{
+		switch (v)
+		{
+		case DistHaloMode::SingleHalo:
+			return "SingleHalo";
+		case DistHaloMode::DoubleHalo:
+			return "DoubleHalo";
+		}
+		return "DistHaloMode::<unknown>";
+	}
+
 	enum class LoadBalanceMetric : uint8_t
 	{
 		Disabled,               // 0

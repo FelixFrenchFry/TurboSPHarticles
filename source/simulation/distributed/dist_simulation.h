@@ -198,6 +198,7 @@ namespace Dist
 		ParticleRedistributionMgr particleRedistributionMgr_{};
 		FluidSolverSyncMgr fluidSolverSyncMgr_{};
 		LoadBalanceMgr loadBalanceMgr_{};
+		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_{};
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_{};
 		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};

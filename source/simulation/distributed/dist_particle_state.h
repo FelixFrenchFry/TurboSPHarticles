@@ -32,7 +32,7 @@ namespace Dist
 	{
 		Inner,  // particle owned by this rank, NOT exported to other ranks
 		Outer,  // particle owned by this rank, exported to other ranks
-		Halo,   // particle NOT owned by this rank, received from a neighbor rank
+		Halo,   // particle NOT owned by this rank, received from neighbor domains within the selected halo radius
 		None    // particle is not active in this rank (e.g. outside owned AND halo bounds)
 	};
 
@@ -118,23 +118,23 @@ namespace Dist
 		ParticleReOrderWorkBuffers* workBuffers = nullptr);
 
 	// rebuilds fluid particle class lists by keeping particles owned by this
-	// rank and splitting them into inner / outer by domain boundary distance
+	// rank and splitting them into inner / outer by selected halo extent
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
 		const Sync::FluidParticles& fluidParticles,
 		const IDomainDecomp& domainDecomp,
 		int rank,
-		float kernelRadius,
+		float haloRadius,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
 	// rebuilds boundary particle class lists by keeping particles owned by this
-	// rank and splitting them into inner / outer by domain boundary distance
+	// rank and splitting them into inner / outer by selected halo extent
 	void ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		DistParticleState& particleState,
 		const Sync::BoundaryParticles& boundaryParticles,
 		const IDomainDecomp& domainDecomp,
 		int rank,
-		float kernelRadius,
+		float haloRadius,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
 	// extracts the fluid/boundary particles needed by this rank and
@@ -145,7 +145,7 @@ namespace Dist
 		DistParticleState& boundaryParticleState,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
-		int rank, float kernelRadius,
+		int rank, float haloRadius,
 		uint32_t N_globalF, uint32_t N_globalB);
 
 } // namespace Dist

@@ -200,6 +200,35 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		};
 
+	auto ParseDistHaloMode = [](const nlohmann::json& v, Base::DistHaloMode& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "SingleHalo")
+					{ out = Base::DistHaloMode::SingleHalo; return true; }
+				if (s == "DoubleHalo")
+					{ out = Base::DistHaloMode::DoubleHalo; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::DistHaloMode::SingleHalo;
+					return true;
+				case 1:
+					out = Base::DistHaloMode::DoubleHalo;
+					return true;
+				default:
+					return false;
+				}
+			}
+			return false;
+		};
+
 	auto ParseLoadBalanceMetric = [](const nlohmann::json& v, Base::LoadBalanceMetric& out) -> bool
 		{
 			if (v.is_string())
@@ -359,6 +388,22 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'domainDecompMethod' value in JSON.");
+				EndWrite();
+				return false;
+			}
+		}
+
+		if (auto it = j.find("distHaloMode"); it != j.end())
+		{
+			Base::DistHaloMode distHaloMode;
+			if (ParseDistHaloMode(*it, distHaloMode))
+			{
+				params_.distHaloMode = distHaloMode;
+				UpdateDistHaloRadius_();
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'distHaloMode' value in JSON.");
 				EndWrite();
 				return false;
 			}
@@ -1168,6 +1213,7 @@ void SimParamsMgr::Set_ParticleSize(
 		params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 		UpdateSurfaceSamplingDistances_();
 	}
+	UpdateDistHaloRadius_();
 
 	EndWrite();
 }
@@ -1198,6 +1244,7 @@ void SimParamsMgr::Set_KernelSuppRatio(
 	params_.kernelSuppRatio = kernelSuppRatio;
 	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
 	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
+	UpdateDistHaloRadius_();
 	UpdateNeighborCountHeuristics_();
 	EndWrite();
 }
@@ -1235,6 +1282,7 @@ void SimParamsMgr::Set_KernelRadius(
 	params_.kernelRadius = kernelRadius;
 	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
 	params_.kernelSuppRatio = kernelSuppRatio;
+	UpdateDistHaloRadius_();
 	UpdateNeighborCountHeuristics_();
 	EndWrite();
 }
@@ -1637,6 +1685,13 @@ void SimParamsMgr::UpdateNeighborCountHeuristics_()
 	UpdateSurfaceNbrCountThreshold_();
 }
 
+void SimParamsMgr::UpdateDistHaloRadius_()
+{
+	params_.distHaloRadius = params_.distHaloMode == Base::DistHaloMode::DoubleHalo
+		? 2.0f * params_.kernelRadius
+		: params_.kernelRadius;
+}
+
 void SimParamsMgr::UpdateSurfaceSamplingDistances_()
 {
 	params_.surfaceSamplingMinDistance =
@@ -1862,6 +1917,13 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	{
 		float expect = par.kernelRadius * par.kernelRadius;
 		return Base::ApproxEqu(par.kernelRadiusSqu, expect);
+	});
+	ok &= Check("distHaloRadius derivation mismatch", true, [&]()
+	{
+		const float expect = par.distHaloMode == Base::DistHaloMode::DoubleHalo
+			? 2.0f * par.kernelRadius
+			: par.kernelRadius;
+		return Base::ApproxEqu(par.distHaloRadius, expect);
 	});
 	ok &= Check("expctdNbrCountSoftMax_FF heuristic mismatch", true, [&]()
 	{

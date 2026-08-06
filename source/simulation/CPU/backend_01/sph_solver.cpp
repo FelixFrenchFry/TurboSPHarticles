@@ -93,7 +93,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	neighborSearch_->DataReOrder_SolverStep(params);
-	ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
+	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
@@ -345,13 +345,15 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 {
 	I_DistributedFluidSolverSync& sync = *distributedFluidSolverSync_;
+	const bool computeFirstHaloLayerPressureAcc =
+		params.distHaloMode == Base::DistHaloMode::DoubleHalo;
 
 	// ranks without local fluid particles still participate in every sync phase
 	if (N_F_ == 0)
 	{
 		// keep the re-ordering and density phases aligned across ranks
 		sync.ApplyFluidParticleReOrder({});
-		sync.SynchronizeFluidScalarField({});
+		sync.SynchronizeFluidScalarField({}, Base::DistHaloMode::SingleHalo);
 
 		if (N_RB_ > 0)
 		{
@@ -361,8 +363,8 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		}
 
 		// participate in predicted-velocity and initial-pressure sync
-		sync.SynchronizeFluidVectorField({}, {}, {});
-		sync.SynchronizeFluidScalarField({});
+		sync.SynchronizeFluidVectorField({}, {}, {}, Base::DistHaloMode::SingleHalo);
+		sync.SynchronizeFluidScalarField({}, params.distHaloMode);
 
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
@@ -374,13 +376,16 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 
 		do
 		{
-			// participate in pressure-acceleration and pressure sync
-			sync.SynchronizeFluidVectorField({}, {}, {});
-			sync.SynchronizeFluidScalarField({});
+			// SingleHalo receives halo acceleration; DoubleHalo computes it locally
+			if (!computeFirstHaloLayerPressureAcc)
+			{
+				sync.SynchronizeFluidVectorField(
+					{}, {}, {}, Base::DistHaloMode::SingleHalo);
+			}
+			sync.SynchronizeFluidScalarField({}, params.distHaloMode);
 
 			// use the global owned-particle error for the shared termination decision
-			const PressureSolveErrorSums errorSums =
-				sync.GlobalizePressureSolveErrorSums({});
+			const PressureSolveErrorSums errorSums = sync.GlobalizePressureSolveErrorSums({});
 			const uint64_t N_globalF = sync.GetGlobalFluidParticleCount();
 			if (N_globalF > 0)
 			{
@@ -416,7 +421,7 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	neighborSearch_->DataReOrder_SolverStep(params);
 	// update owned indices and the synchronization plan for the reordered storage
-	ApplyLastParticleReOrderToActiveFluidParticleLocalIdxs();
+	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
@@ -498,8 +503,10 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		densityF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Density_Computation);
 
-	// synced halo densities needed for the following solver stages
-	sync.SynchronizeFluidScalarField(std::span<float>(densityF_.data(), N_F_));
+	// synced remote densities needed for the following solver stages
+	sync.SynchronizeFluidScalarField(
+		std::span<float>(densityF_.data(), N_F_),
+		Base::DistHaloMode::SingleHalo);
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
@@ -527,11 +534,12 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		xVelPredF, yVelPredF, zVelPredF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
 
-	// synced halo predicted velocities needed for the source and diagonal terms
+	// synced remote predicted velocities needed for the source and diagonal terms
 	sync.SynchronizeFluidVectorField(
 		std::span<float>(xVelPredF_.data(), N_F_),
 		std::span<float>(yVelPredF_.data(), N_F_),
-		std::span<float>(zVelPredF_.data(), N_F_));
+		std::span<float>(zVelPredF_.data(), N_F_),
+		Base::DistHaloMode::SingleHalo);
 
 	if (N_RB_ > 0)
 	{
@@ -567,8 +575,9 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		sourceTermF, diagElemF, pressureF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 
-	// initialize halo pressure before the first Jacobi iteration
-	sync.SynchronizeFluidScalarField(std::span<float>(pressureF_.data(), N_F_));
+	// initialize remote pressure before the first Jacobi iteration
+	sync.SynchronizeFluidScalarField(
+		std::span<float>(pressureF_.data(), N_F_), params.distHaloMode);
 
 	// --- [ relaxed Jacobi solver for pressure ] ----------------------------------------------------
 
@@ -594,13 +603,19 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
 			massF, params.pressGamma, N_F_, *affinityPart_,
-			xAccPressF, yAccPressF, zAccPressF);
+			xAccPressF, yAccPressF, zAccPressF,
+			pressureAccChunkIdxs_, true);
 
-		// synced halo pressure accelerations needed for the Jacobi update
-		sync.SynchronizeFluidVectorField(
-			std::span<float>(xAccPressF_.data(), N_F_),
-			std::span<float>(yAccPressF_.data(), N_F_),
-			std::span<float>(zAccPressF_.data(), N_F_));
+		// receives pressure acceleration for first halo layer (when in "SingleHalo" mode),
+		// OR computes it locally using the second halo layer (when in "DoubleHalo" mode)
+		if (!computeFirstHaloLayerPressureAcc)
+		{
+			sync.SynchronizeFluidVectorField(
+				std::span<float>(xAccPressF_.data(), N_F_),
+				std::span<float>(yAccPressF_.data(), N_F_),
+				std::span<float>(zAccPressF_.data(), N_F_),
+				Base::DistHaloMode::SingleHalo);
+		}
 
 		// update pressure and accumulate convergence error over owned particles
 		CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
@@ -614,10 +629,12 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensity, massF, params.jacobiOmega,
 			*affinityPart_, pressureF,
-			activeFluidParticleFlags_.data(), localErrorSums);
+			activeFluidParticleFlags_.data(), localErrorSums,
+			ownedFluidChunkIdxs_, true);
 
-		// restore owner-authoritative halo pressure for the next iteration
-		sync.SynchronizeFluidScalarField(std::span<float>(pressureF_.data(), N_F_));
+		// restore owner-authoritative remote pressure for the next iteration
+		sync.SynchronizeFluidScalarField(
+			std::span<float>(pressureF_.data(), N_F_), params.distHaloMode);
 
 		// make every rank use the same global convergence criterion
 		const PressureSolveErrorSums errorSums =
@@ -654,7 +671,8 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		neighborList,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
 		massF, params.pressGamma, N_F_, *affinityPart_,
-		xAccPressF, yAccPressF, zAccPressF);
+		xAccPressF, yAccPressF, zAccPressF,
+		ownedFluidChunkIdxs_, true);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 
 	if (N_RB_ > 0)
@@ -1385,6 +1403,7 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	);
 }
 
+// TODO: create separate optimized versions of this kernel, instead of having flags affect behavior?
 void CPU01::PressureAcceleration_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
@@ -1407,11 +1426,15 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 	// destinations
 	float* RESTRICT xAccPressF,
 	float* RESTRICT yAccPressF,
-	float* RESTRICT zAccPressF)
+	float* RESTRICT zAccPressF,
+	const std::span<const uint32_t> selectedChunkIdxs,
+	const bool useSelectedChunks)
 {
 	(void)N_F;
 
-	const uint32_t N_chunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = useSelectedChunks
+		? static_cast<uint32_t>(selectedChunkIdxs.size())
+		: neighborList.ChunkNumTotal();
 	const float densiInvSqu = 1.0f / (restDensity * restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 	const CPU::Float32xSIMD densiInvSquV = CPU::SetFloat32xSIMD(densiInvSqu);
@@ -1422,8 +1445,11 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
 			{
+				const uint32_t chunk = useSelectedChunks
+					? selectedChunkIdxs[workIdx]
+					: workIdx;
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
@@ -1610,6 +1636,7 @@ void CPU01::AccumulateRigidParticlePressureForces_ChunkedSELL(
 	);
 }
 
+// TODO: create separate optimized versions of this kernel, instead of having flags affect behavior?
 void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
@@ -1636,7 +1663,9 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	// destinations
 	float* RESTRICT pressureF,
 	const uint8_t* RESTRICT errorParticleFlags,
-	PressureSolveErrorSums& errorSums)
+	PressureSolveErrorSums& errorSums,
+	const std::span<const uint32_t> selectedChunkIdxs,
+	const bool useSelectedChunks)
 {
 	struct DensityErrorAccum
 	{
@@ -1653,7 +1682,9 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 		}
 	};
 
-	const uint32_t N_chunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = useSelectedChunks
+		? static_cast<uint32_t>(selectedChunkIdxs.size())
+		: neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
 	const CPU::Float32xSIMD restDensityV = CPU::SetFloat32xSIMD(restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
@@ -1667,8 +1698,11 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 		{
 			alignas(CPU::N_SIMD_ALIGNMENT) float relErrTmp[CPU::N_SIMD_WIDTH]{};
 
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
 			{
+				const uint32_t chunk = useSelectedChunks
+					? selectedChunkIdxs[workIdx]
+					: workIdx;
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);

@@ -80,11 +80,15 @@ namespace Sim
 		virtual void ApplyFluidParticleReOrder(
 			std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx) = 0;
 
-		virtual void SynchronizeFluidScalarField(std::span<float> values) = 0;
+		// synchronizes owner-authoritative fluid values over the selected halo extent
+		virtual void SynchronizeFluidScalarField(
+			std::span<float> values,
+			Base::DistHaloMode haloExtent) = 0;
 		virtual void SynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
-			std::span<float> zValues) = 0;
+			std::span<float> zValues,
+			Base::DistHaloMode haloExtent) = 0;
 
 		virtual PressureSolveErrorSums GlobalizePressureSolveErrorSums(
 			const PressureSolveErrorSums& localSums) const = 0;
@@ -208,6 +212,7 @@ namespace Sim
 
 		// configures rank-authoritative particle work for distributed execution
 		virtual bool ConfigureDistributedStep(
+			const std::vector<uint32_t>&,
 			const std::vector<uint32_t>&,
 			const std::vector<uint32_t>&,
 			I_DistributedFluidSolverSync&)

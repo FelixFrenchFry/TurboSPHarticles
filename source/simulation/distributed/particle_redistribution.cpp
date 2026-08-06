@@ -2085,7 +2085,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 	const DistParticleState& oldParticleState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius,
+	const float haloRadius,
 	const uint32_t N_global,
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
@@ -2200,7 +2200,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 					appendedParticles.zPos[appendLocalIdx]
 				};
 				const DistParticleClass particleClass =
-					domainDecomp.IsInnerOwnedParticle(rank, position, kernelRadius)
+					domainDecomp.IsInnerOwnedParticle(rank, position, haloRadius)
 						? DistParticleClass::Inner
 						: DistParticleClass::Outer;
 				if (!AddParticleMetadata(
@@ -2309,6 +2309,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 			timingReport, ParticleRedistributionTimingOp::Prep);
+
 		if (appendLocalIdx != N_appended ||
 			dstLocalIdx != N_local ||
 			retainedFluidOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
@@ -2326,7 +2327,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 	const DistParticleState& oldParticleState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float kernelRadius,
+	const float haloRadius,
 	const uint32_t N_global,
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
@@ -2441,7 +2442,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 					appendedParticles.zPos[appendLocalIdx]
 				};
 				const DistParticleClass particleClass =
-					domainDecomp.IsInnerOwnedParticle(rank, position, kernelRadius)
+					domainDecomp.IsInnerOwnedParticle(rank, position, haloRadius)
 						? DistParticleClass::Inner
 						: DistParticleClass::Outer;
 				if (!AddParticleMetadata(
@@ -2464,8 +2465,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 		// halos occupy one contiguous local index range, so every particle knows its
 		// destination slot up front and the index list needs no shared append
-		const uint32_t N_localHalo =
-			static_cast<uint32_t>(routes_.localHaloBoundaryLocalIdxs.size());
+		const uint32_t N_localHalo = static_cast<uint32_t>(routes_.localHaloBoundaryLocalIdxs.size());
 		const uint32_t haloDstLocalIdxBase = dstLocalIdx;
 		const uint32_t haloAppendLocalIdxBase = appendLocalIdx;
 		rebuiltParticleState.particleLocalIdx_Halo.resize(N_halo);
@@ -2700,13 +2700,13 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	{
 		localOk = PrepareFluidParticleMutation(
 			fluidParticles, fluidParticleState,
-			domainDecomp, rank, simParams.kernelRadius,
+			domainDecomp, rank, simParams.distHaloRadius,
 			N_globalF, failMsg, timingReport);
 		if (localOk)
 		{
 			localOk = PrepareBoundaryParticleMutation(
 				boundaryParticles, boundaryParticleState,
-				domainDecomp, rank, simParams.kernelRadius,
+				domainDecomp, rank, simParams.distHaloRadius,
 				N_globalB, failMsg, timingReport);
 		}
 	}

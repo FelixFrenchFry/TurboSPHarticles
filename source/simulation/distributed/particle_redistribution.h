@@ -398,7 +398,7 @@ namespace Dist
 			const DistParticleState& oldParticleState,
 			const IDomainDecomp& domainDecomp,
 			int rank,
-			float kernelRadius,
+			float haloRadius,
 			uint32_t N_global,
 			std::string* failMsg,
 			ParticleRedistributionTimingReport* timingReport);
@@ -407,7 +407,7 @@ namespace Dist
 			const DistParticleState& oldParticleState,
 			const IDomainDecomp& domainDecomp,
 			int rank,
-			float kernelRadius,
+			float haloRadius,
 			uint32_t N_global,
 			std::string* failMsg,
 			ParticleRedistributionTimingReport* timingReport);

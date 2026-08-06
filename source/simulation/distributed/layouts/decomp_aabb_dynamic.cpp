@@ -108,9 +108,9 @@ int Decomp_AABB_Dynamic::OwnerRank(const glm::vec3& position) const
 bool Decomp_AABB_Dynamic::IsInnerOwnedParticle(
 	const int rank,
 	const glm::vec3& position,
-	const float kernelRadius) const
+	const float haloRadius) const
 {
-	return slabLayout_.IsInnerOwnedParticle(rank, position, kernelRadius);
+	return slabLayout_.IsInnerOwnedParticle(rank, position, haloRadius);
 }
 
 const std::vector<int>& Decomp_AABB_Dynamic::NeighborRanks(const int rank) const

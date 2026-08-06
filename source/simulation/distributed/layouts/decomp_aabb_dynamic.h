@@ -27,7 +27,7 @@ namespace Dist
 		bool IsInnerOwnedParticle(
 			int rank,
 			const glm::vec3& position,
-			float kernelRadius) const override;
+			float haloRadius) const override;
 
 		const std::vector<int>& NeighborRanks(int rank) const override;
 		AABB OwnedExtentAABB(int rank) const override;

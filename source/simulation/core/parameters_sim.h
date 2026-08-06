@@ -35,6 +35,8 @@ namespace Sim
 			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
 		Base::DomainDecompMethod domainDecompMethod =
 			Base::DomainDecompMethod::AABB_Uniform; // (distributed only)
+		Base::DistHaloMode distHaloMode =
+			Base::DistHaloMode::SingleHalo; // (distributed only)
 		Base::LoadBalanceMetric loadBalanceMetric =
 			Base::LoadBalanceMetric::Disabled; // (distributed only)
 		Base::LoadBalanceTrigger loadBalanceTrigger =
@@ -61,6 +63,7 @@ namespace Sim
 		float kernelSuppRatio   = CubicSplineKernelSuppRatio;
 		float kernelRadius      = 0.02f; // radius = size * supp ratio
 		float kernelRadiusSqu   = 0.0004f;
+		float distHaloRadius    = 0.02f; // selected distributed halo extent
 
 		// neighbor count heuristics
 		// TODO: use p99 values for heuristics?
@@ -216,6 +219,7 @@ namespace Sim
 		static constexpr float surfaceNbrCountRatioMax_ = 0.85f;
 
 		void UpdateNeighborCountHeuristics_();
+		void UpdateDistHaloRadius_();
 		void UpdateSurfaceSamplingDistances_();
 		void UpdateSurfaceNbrCountThreshold_();
 		static bool SurfaceSamplingDistanceRatiosValid_(

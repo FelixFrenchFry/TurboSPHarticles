@@ -37,6 +37,7 @@ namespace Dist
 		int mpiThreadSupport = 0;
 
 		const char* domainDecompMethod = "";
+		const char* distHaloMode = "";
 		const char* loadBalanceMetric = "";
 		const char* loadBalanceTrigger = "";
 		const char* loadBalanceWeightModel = "";
