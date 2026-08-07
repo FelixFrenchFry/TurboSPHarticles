@@ -130,18 +130,21 @@ namespace Sim
 		std::vector<uint64_t> cellIdF_; // per-particle cell ID array
 		std::vector<uint64_t> cellIdScratchF_; // resident permutation scratch for the cell ID array
 		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
+		std::vector<uint32_t> particleOrderScratchF_; // resident sort scratch for the permutation
 		std::vector<uint32_t> cellTableF_; // dense local-frame lookup table for compact cell indices
 
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint64_t> cellIdB_;
 		std::vector<uint64_t> cellIdScratchB_;
 		std::vector<uint32_t> particleOrderB_;
+		std::vector<uint32_t> particleOrderScratchB_;
 		std::vector<uint32_t> cellTableB_;
 
 		std::vector<uint32_t> cellStartIdxR_;
 		std::vector<uint64_t> cellIdR_;
 		std::vector<uint64_t> cellIdScratchR_;
 		std::vector<uint32_t> particleOrderR_;
+		std::vector<uint32_t> particleOrderScratchR_;
 		std::vector<uint32_t> cellTableR_;
 
 		// scratch shared by the compact cell table builds, holding per-chunk cell run start
@@ -149,10 +152,9 @@ namespace Sim
 		// (only valid because the fluid, boundary, and rigid builds run one after another)
 		std::vector<uint32_t> cellRunStartCounts_ByChunk_;
 
-		// scratch shared by the cell ID sorts, holding the permutation ping-pong target and
-		// the per-chunk digit counts that are prefixed into per-chunk write offsets
+		// scratch shared by the cell ID sorts, holding per-chunk digit counts that are
+		// prefixed into per-chunk write offsets
 		// (only valid because the fluid, boundary, and rigid sorts run one after another)
-		std::vector<uint32_t> particleOrderScratch_;
 		std::vector<uint32_t> radixDigitCounts_ByChunk_;
 
 		// dense cell table slots hold the compact cell index biased by one, so an empty slot is

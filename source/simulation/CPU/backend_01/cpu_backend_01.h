@@ -245,6 +245,8 @@ namespace Sim
 		std::vector<uint8_t> activeRigidParticleFlags_;
 		// inverted particle re-order, kept between steps and handed to the solver sync
 		std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx_;
+		// marks the SIMD chunks holding at least one selected particle during the chunk build
+		std::vector<uint8_t> chunkFlagsScratch_;
 		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;
 		bool useActiveFluidParticleLocalIdxs_ = false;
 		bool useActiveRigidParticleLocalIdxs_ = false;

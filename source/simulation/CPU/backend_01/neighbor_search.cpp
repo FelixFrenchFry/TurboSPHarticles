@@ -960,22 +960,24 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellIdF_.clear();
 	cellIdScratchF_.clear();
 	particleOrderF_.clear();
+	particleOrderScratchF_.clear();
 	cellTableF_.clear();
 
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
 	cellIdScratchB_.clear();
 	particleOrderB_.clear();
+	particleOrderScratchB_.clear();
 	cellTableB_.clear();
 
 	cellStartIdxR_.clear();
 	cellIdR_.clear();
 	cellIdScratchR_.clear();
 	particleOrderR_.clear();
+	particleOrderScratchR_.clear();
 	cellTableR_.clear();
 
 	cellRunStartCounts_ByChunk_.clear();
-	particleOrderScratch_.clear();
 	radixDigitCounts_ByChunk_.clear();
 }
 
@@ -1000,20 +1002,22 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellStartIdxF_.clear();
 		cellIdF_.clear();
 		particleOrderF_.clear();
+		particleOrderScratchF_.clear();
 		cellTableF_.clear();
 
 		cellStartIdxB_.clear();
 		cellIdB_.clear();
 		particleOrderB_.clear();
+		particleOrderScratchB_.clear();
 		cellTableB_.clear();
 
 		cellStartIdxR_.clear();
 		cellIdR_.clear();
 		particleOrderR_.clear();
+		particleOrderScratchR_.clear();
 		cellTableR_.clear();
 
 		cellRunStartCounts_ByChunk_.clear();
-		particleOrderScratch_.clear();
 		radixDigitCounts_ByChunk_.clear();
 
 		return;
@@ -1123,7 +1127,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 			tbb::auto_partitioner{}
 		);
 		SortParticleOrderByCellId(
-			cellIdR_, particleOrderR_, cellIdScratchR_, particleOrderScratch_,
+			cellIdR_, particleOrderR_, cellIdScratchR_, particleOrderScratchR_,
 			radixDigitCounts_ByChunk_, CellIdKeyBits(N_dimX_, N_dimY_, N_dimZ_));
 	}
 
@@ -1940,7 +1944,7 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 		// keeps the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 		// so Construct() can reuse them instead of re-computing them right away
 		SortParticleOrderByCellId(
-			cellIdF_, particleOrderF_, cellIdScratchF_, particleOrderScratch_,
+			cellIdF_, particleOrderF_, cellIdScratchF_, particleOrderScratchF_,
 			radixDigitCounts_ByChunk_, N_keyBits);
 
 		ApplyPermutation(particleOrderF_, be_.idF_, be_.workBufferIdF_);
@@ -1999,7 +2003,7 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 		if (!IsNonDecreasing(cellIdB_))
 		{
 			SortParticleOrderByCellId(
-				cellIdB_, particleOrderB_, cellIdScratchB_, particleOrderScratch_,
+				cellIdB_, particleOrderB_, cellIdScratchB_, particleOrderScratchB_,
 				radixDigitCounts_ByChunk_, N_keyBits);
 
 			// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
@@ -2036,15 +2040,15 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::MemUsage usageR{};
 
 	// F
-	// (the shared cell run start, permutation, and digit count scratches are booked here,
+	// (the shared cell run start and digit count scratches are booked here,
 	// because the fluid particles dominate)
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdScratchF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderScratchF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellTableF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellRunStartCounts_ByChunk_));
-	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderScratch_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(radixDigitCounts_ByChunk_));
 
 	// B
@@ -2052,6 +2056,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdScratchB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderB_));
+	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderScratchB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellTableB_));
 
 	// R
@@ -2059,6 +2064,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdScratchR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(particleOrderR_));
+	Mem::Add(usageR, Mem::MemUsageOf_Vector(particleOrderScratchR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellTableR_));
 
 	return { usageF, usageB, usageR };

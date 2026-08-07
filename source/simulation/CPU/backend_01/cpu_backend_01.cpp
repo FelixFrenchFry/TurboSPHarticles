@@ -187,6 +187,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	activeRigidParticleLocalIdxs_.clear();
 	activeRigidParticleFlags_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
+	chunkFlagsScratch_.clear();
 	useActiveFluidParticleLocalIdxs_ = false;
 	useActiveRigidParticleLocalIdxs_ = false;
 	integrateRigidBodies_ = true;
@@ -701,6 +702,7 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	pressureAccChunkIdxs_.clear();
 	ownedFluidChunkIdxs_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
+	chunkFlagsScratch_.clear();
 	useActiveFluidParticleLocalIdxs_ = false;
 	neighborList_->Resize(N_F_, N_B_, N_R_, params);
 	return true;
@@ -1183,6 +1185,7 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
 		Add(usage, MemUsageOf_Vector(activeRigidParticleFlags_));
 		Add(usage, MemUsageOf_Vector(newFluidLocalIdx_FromOldLocalIdx_));
+		Add(usage, MemUsageOf_Vector(chunkFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(idRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleBeginRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
@@ -1761,17 +1764,26 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 
 void SimBackend_CPU01::BuildDistributedSolverChunkIdxs()
 {
-	auto buildChunkIdxs = [](const std::vector<uint32_t>& particleLocalIdxs,
+	// marking the chunks that hold at least one of the particles yields the chunk indices
+	// in ascending order without sorting them
+	// (the callers validate the local indices against the fluid particle count)
+	const uint32_t N_chunks = (N_F_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
+
+	auto buildChunkIdxs = [this, N_chunks](const std::vector<uint32_t>& particleLocalIdxs,
 		std::vector<uint32_t>& chunkIdxs)
 	{
-		chunkIdxs.clear();
-		chunkIdxs.reserve(particleLocalIdxs.size());
+		chunkFlagsScratch_.assign(N_chunks, 0);
 		for (const uint32_t localIdx : particleLocalIdxs)
 		{
-			chunkIdxs.push_back(localIdx / CPU::N_SIMD_WIDTH);
+			chunkFlagsScratch_[localIdx / CPU::N_SIMD_WIDTH] = 1;
 		}
-		std::ranges::sort(chunkIdxs);
-		chunkIdxs.erase(std::unique(chunkIdxs.begin(), chunkIdxs.end()), chunkIdxs.end());
+
+		chunkIdxs.clear();
+		chunkIdxs.reserve(N_chunks);
+		for (uint32_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
+		{
+			if (chunkFlagsScratch_[chunkIdx] != 0) { chunkIdxs.push_back(chunkIdx); }
+		}
 	};
 
 	buildChunkIdxs(
