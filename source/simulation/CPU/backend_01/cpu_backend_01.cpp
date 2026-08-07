@@ -1159,7 +1159,11 @@ void SimBackend_CPU01::FillMemoryRecord(
 		MemUsage usage{};
 
 		Add(usage, MemUsageOf_Vector(workBufferF_));
+		Add(usage, MemUsageOf_Vector(workBufferF2_));
+		Add(usage, MemUsageOf_Vector(workBufferF3_));
 		Add(usage, MemUsageOf_Vector(workBufferB_));
+		Add(usage, MemUsageOf_Vector(workBufferB2_));
+		Add(usage, MemUsageOf_Vector(workBufferB3_));
 		Add(usage, MemUsageOf_Vector(workBufferIdF_));
 		Add(usage, MemUsageOf_Vector(workBufferIdB_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));

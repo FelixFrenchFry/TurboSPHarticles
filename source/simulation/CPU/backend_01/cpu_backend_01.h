@@ -256,8 +256,14 @@ namespace Sim
 
 		// re-usable work (scratch) buffers for temp storage
 		// TODO: rework this?
+		// (the second and third float buffers hold the remaining components while a whole
+		// vector field is permuted in one pass)
 		mutable std::vector<float> workBufferF_;
+		mutable std::vector<float> workBufferF2_;
+		mutable std::vector<float> workBufferF3_;
 		mutable std::vector<float> workBufferB_;
+		mutable std::vector<float> workBufferB2_;
+		mutable std::vector<float> workBufferB3_;
 		mutable std::vector<uint32_t> workBufferIdF_;
 		mutable std::vector<uint32_t> workBufferIdB_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;

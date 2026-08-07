@@ -85,6 +85,49 @@ namespace
 		}
 	}
 
+	// gathers the three components of a vector field in one pass over the permutation,
+	// so the sorted keys are streamed once instead of once per component
+	template<typename TIdx, typename TData>
+	void ApplyPermutation_Vec3(
+		const std::vector<TIdx>& sortedKeys,
+		std::vector<TData>& xData,
+		std::vector<TData>& yData,
+		std::vector<TData>& zData,
+		std::vector<TData>& xScratch,
+		std::vector<TData>& yScratch,
+		std::vector<TData>& zScratch)
+	{
+		// (capped at uint32_t to correspond to max particle count)
+		const uint32_t N = static_cast<uint32_t>(sortedKeys.size());
+		if (N == 0) { return; }
+
+		assert(xData.size() == N && "Permutation and data vector size mismatch");
+		assert(yData.size() == N && "Permutation and data vector size mismatch");
+		assert(zData.size() == N && "Permutation and data vector size mismatch");
+		xScratch.resize(N);
+		yScratch.resize(N);
+		zScratch.resize(N);
+
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					const uint32_t srcIdx = static_cast<uint32_t>(sortedKeys[i]);
+					xScratch[i] = xData[srcIdx];
+					yScratch[i] = yData[srcIdx];
+					zScratch[i] = zData[srcIdx];
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+
+		xData.swap(xScratch);
+		yData.swap(yScratch);
+		zData.swap(zScratch);
+	}
+
 	// checks whether the per-particle cell IDs are already in ascending order
 	bool IsNonDecreasing(const std::vector<uint64_t>& cellIds)
 	{
@@ -1901,25 +1944,25 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 			radixDigitCounts_ByChunk_, N_keyBits);
 
 		ApplyPermutation(particleOrderF_, be_.idF_, be_.workBufferIdF_);
-		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.zPosF_, be_.workBufferF_);
+		ApplyPermutation_Vec3(particleOrderF_,
+			be_.xPosF_, be_.yPosF_, be_.zPosF_,
+			be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
 
-		ApplyPermutation(particleOrderF_, be_.xVelF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.yVelF_, be_.workBufferF_);
-		ApplyPermutation(particleOrderF_, be_.zVelF_, be_.workBufferF_);
+		ApplyPermutation_Vec3(particleOrderF_,
+			be_.xVelF_, be_.yVelF_, be_.zVelF_,
+			be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
 
 		// the remaining fluid particle fields only need to be permuted after backend-only neighbor searches,
 		// because a following full solver step re-initializes them (TODO: update if solver step behavior changes)
 		if (permuteSolverFields)
 		{
-			ApplyPermutation(particleOrderF_, be_.xVelPredF_, be_.workBufferF_);
-			ApplyPermutation(particleOrderF_, be_.yVelPredF_, be_.workBufferF_);
-			ApplyPermutation(particleOrderF_, be_.zVelPredF_, be_.workBufferF_);
+			ApplyPermutation_Vec3(particleOrderF_,
+				be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
+				be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
 
-			ApplyPermutation(particleOrderF_, be_.xAccPressF_, be_.workBufferF_);
-			ApplyPermutation(particleOrderF_, be_.yAccPressF_, be_.workBufferF_);
-			ApplyPermutation(particleOrderF_, be_.zAccPressF_, be_.workBufferF_);
+			ApplyPermutation_Vec3(particleOrderF_,
+				be_.xAccPressF_, be_.yAccPressF_, be_.zAccPressF_,
+				be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
 
 			ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
 			ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
@@ -1962,9 +2005,9 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 			// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 			// so Construct() can reuse them instead of re-computing them right away
 			ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
-			ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
-			ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
-			ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
+			ApplyPermutation_Vec3(particleOrderB_,
+				be_.xPosB_, be_.yPosB_, be_.zPosB_,
+				be_.workBufferB_, be_.workBufferB2_, be_.workBufferB3_);
 			ApplyPermutation(particleOrderB_, be_.volB_, be_.workBufferB_);
 			ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
 		}
