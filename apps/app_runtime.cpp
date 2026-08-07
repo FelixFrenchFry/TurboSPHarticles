@@ -92,13 +92,15 @@ namespace
 	void NormalizeProfile(std::string& p)
 	{
 		if (p.empty()) { p = "default"; return; }
-		if (p == "Default") { p = "default"; return; }
 
 		// letters -> uppercase
 		for (char& c : p)
 		{
 			c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 		}
+
+		// the only profile directory that is not upper case
+		if (p == "DEFAULT") { p = "default"; }
 	}
 
 	bool IsValidProfile(const std::string& p)
