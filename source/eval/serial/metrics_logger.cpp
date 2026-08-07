@@ -73,6 +73,7 @@ namespace Export
 		const std::string& paramsFile,
 		const std::string& scenariosFile,
 		const Sim::SimParams& simParams,
+		const nlohmann::json& cliOverrides,
 		const bool logStatus)
 	{
 		EndRun();
@@ -82,7 +83,7 @@ namespace Export
 			return false;
 		}
 
-		if (!WriteRunMeta(configProfile, paramsFile, scenariosFile, simParams))
+		if (!WriteRunMeta(configProfile, paramsFile, scenariosFile, simParams, cliOverrides))
 		{
 			SPDLOG_ERROR("Failed to write run metadata for '{}'.",
 				runDir_.string());
@@ -330,7 +331,8 @@ namespace Export
 		const std::string& configProfile,
 		const std::string& paramsFile,
 		const std::string& scenariosFile,
-		const Sim::SimParams& simParams) const
+		const Sim::SimParams& simParams,
+		const nlohmann::json& cliOverrides) const
 	{
 		nlohmann::json paramsJson = nullptr;
 		nlohmann::json scenariosJson = nullptr;
@@ -346,6 +348,16 @@ namespace Export
 		meta["configProfile"] = configProfile;
 		meta["createdAt"] = MakeTimestampString();
 		meta["runDir"] = runDir_.string();
+
+		// omitted entirely for non-distributed runs
+		if (loggingOptions_.N_mpiRanks > 0)
+		{
+			meta["mpi"] =
+			{
+				{ "rank", loggingOptions_.mpiRank },
+				{ "size", loggingOptions_.N_mpiRanks }
+			};
+		}
 
 		meta["buildConfig"] =
 		{
@@ -378,42 +390,8 @@ namespace Export
 			{ "json", scenariosJson }
 		};
 
-		meta["simSetup"] =
-		{
-			{ "backendVersion", static_cast<int>(simParams.backendVersion) },
-			{ "backendVersionName", Base::ToCString(simParams.backendVersion) },
-			{ "scenarioType", static_cast<int>(simParams.scenarioType) },
-			{ "scenarioTypeName", Base::ToCString(simParams.scenarioType) },
-			{ "neighborSearchMethod", static_cast<int>(simParams.neighborSearchMethod) },
-			{ "neighborSearchMethodName", Base::ToCString(simParams.neighborSearchMethod) },
-			{ "neighborListStorage", static_cast<int>(simParams.neighborListMethod) },
-			{ "neighborListStorageName", Base::ToCString(simParams.neighborListMethod) },
-			{ "neighborListStorageEffectiveName",
-				Base::ToEffectiveNeighborListStorageCString(
-					simParams.backendVersion,
-					simParams.neighborListMethod) },
-			{ "domainDecompMethod", static_cast<int>(simParams.domainDecompMethod) },
-			{ "domainDecompMethodName", Base::ToCString(simParams.domainDecompMethod) },
-			{ "distHaloMode", static_cast<int>(simParams.distHaloMode) },
-			{ "distHaloModeName", Base::ToCString(simParams.distHaloMode) },
-			{ "loadBalanceMetric", static_cast<int>(simParams.loadBalanceMetric) },
-			{ "loadBalanceMetricName", Base::ToCString(simParams.loadBalanceMetric) },
-			{ "loadBalanceTrigger", static_cast<int>(simParams.loadBalanceTrigger) },
-			{ "loadBalanceTriggerName", Base::ToCString(simParams.loadBalanceTrigger) },
-			{ "loadBalanceWeightModel", static_cast<int>(simParams.loadBalanceWeightModel) },
-			{ "loadBalanceWeightModelName", Base::ToCString(simParams.loadBalanceWeightModel) },
-			{ "exportEnabled", simParams.exportEnabled },
-			{ "exportDir", simParams.exportDir },
-			{ "exportInterval", simParams.exportInterval },
-			{ "expctdAvgNbrCountHardMax_FF", simParams.expctdAvgNbrCountHardMax_FF },
-			{ "expctdAvgNbrCountHardMax_FB", simParams.expctdAvgNbrCountHardMax_FB },
-			{ "gridCellSizeRatio", simParams.gridCellSizeRatio },
-			{ "loadBalanceThreshold", simParams.loadBalanceThreshold },
-			{ "loadBalanceSustainSteps", simParams.loadBalanceSustainSteps },
-			{ "loadBalanceCooldownSteps", simParams.loadBalanceCooldownSteps },
-			{ "loadBalanceIntervalSteps", simParams.loadBalanceIntervalSteps },
-			{ "maxThreadsSim", simParams.maxThreadsSim }
-		};
+		meta["simParams"] = Sim::ToJson(simParams);
+		meta["cliOverrides"] = cliOverrides;
 
 		const std::filesystem::path metaPath = runDir_ / "run_meta.json";
 		std::ofstream out(metaPath, std::ios::out | std::ios::trunc);
@@ -424,8 +402,50 @@ namespace Export
 
 		out.imbue(std::locale::classic());
 		out << std::setw(4) << meta << '\n';
+		if (!out.good())
+		{
+			return false;
+		}
 
-		return out.good();
+		// second copy next to the exported particle data
+		if (loggingOptions_.writeRunMetaToExportDir && simParams.exportEnabled)
+		{
+			WriteRunMetaToExportDir(meta, simParams.exportDir);
+		}
+
+		return true;
+	}
+
+	void LoggingMgr::WriteRunMetaToExportDir(
+		const nlohmann::json& meta,
+		const std::string& exportDir) const
+	{
+		const std::filesystem::path dirPath = loggingOptions_.exportBaseDir / exportDir;
+
+		std::error_code ec;
+		std::filesystem::create_directories(dirPath, ec);
+		if (ec)
+		{
+			SPDLOG_WARN("Failed to create export directory '{}': {}.",
+				dirPath.string(), ec.message());
+			return;
+		}
+
+		const std::filesystem::path metaPath = dirPath / "run_meta.json";
+		std::ofstream out(metaPath, std::ios::out | std::ios::trunc);
+		if (!out.is_open())
+		{
+			SPDLOG_WARN("Failed to write run metadata to '{}'.", metaPath.string());
+			return;
+		}
+
+		out.imbue(std::locale::classic());
+		out << std::setw(4) << meta << '\n';
+
+		if (!out.good())
+		{
+			SPDLOG_WARN("Failed to write run metadata to '{}'.", metaPath.string());
+		}
 	}
 
 	void LoggingMgr::WriteMemoryMetricsHeader()

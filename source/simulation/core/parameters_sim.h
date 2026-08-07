@@ -158,6 +158,9 @@ namespace Sim
 		uint32_t surfaceNbrCountThreshold = 27; // fluid neighbor count derived from the ratio
 	};
 
+	// serializes the resolved parameters (inverse of LoadSimParamsFromJson)
+	nlohmann::json ToJson(const SimParams& par);
+
 	class SimParamsMgr
 	{
 	public: // ---------------------------------------------------------------------------------------
@@ -174,6 +177,9 @@ namespace Sim
 		bool LoadSimParamsFromProfile(const std::string& profile, bool verbose = false);
 		bool LoadSimParamsFromCliOverrides(
 			const std::vector<std::string>& overrides, bool verbose = false);
+
+		// returns the accumulated CLI override patch (empty object if none were applied)
+		const nlohmann::json& CliOverrides() const { return cliOverrides_; }
 
 		// setters for individual parameters and their dependent values
 		void Set_SimRunning(bool simRunning, bool verbose = false);
@@ -214,6 +220,9 @@ namespace Sim
 
 		alignas(64) SimParams params_{}; // current active copy of visualization parameters
 		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
+
+		// CLI override patch as applied on top of the profile
+		nlohmann::json cliOverrides_ = nlohmann::json::object();
 
 		// keeps the dilated export surface selection from covering the whole fluid domain
 		static constexpr float surfaceNbrCountRatioMax_ = 0.85f;

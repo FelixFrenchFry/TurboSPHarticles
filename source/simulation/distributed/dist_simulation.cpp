@@ -108,6 +108,10 @@ namespace
 		Export::LoggingOptions loggingOptions{};
 		// each rank writes its own CSV files to avoid shared log-file writes
 		loggingOptions.baseDir /= FormatRankLogDirName(mpiContext.Rank());
+		// the export directory is written by the root rank only
+		loggingOptions.writeRunMetaToExportDir = mpiContext.IsRoot();
+		loggingOptions.mpiRank = mpiContext.Rank();
+		loggingOptions.N_mpiRanks = mpiContext.Size();
 		return loggingOptions;
 	}
 
@@ -1650,7 +1654,8 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
 	loggingMgr_.BeginRun(
-		configProfile_, paramsFile_, scenariosFile_, params, mpiContext_.IsRoot());
+		configProfile_, paramsFile_, scenariosFile_, params,
+		simParamsMgr_.CliOverrides(), mpiContext_.IsRoot());
 }
 
 void DistSimulationMgr::EndRunLogging()

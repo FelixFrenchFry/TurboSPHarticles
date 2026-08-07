@@ -964,6 +964,143 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	return true;
 }
 
+nlohmann::json Sim::ToJson(const SimParams& par)
+{
+	nlohmann::json j = nlohmann::json::object();
+
+	// --- [ modes ] ---------------------------------------------------------------------------------
+
+	j["backendVersion"] = Base::ToCString(par.backendVersion);
+	j["scenarioType"] = Base::ToCString(par.scenarioType);
+	j["neighborSearchMethod"] = Base::ToCString(par.neighborSearchMethod);
+	j["neighborListStorage"] = Base::ToCString(par.neighborListMethod);
+	j["neighborListStorageEffective"] = Base::ToEffectiveNeighborListStorageCString(
+		par.backendVersion, par.neighborListMethod);
+	j["domainDecompMethod"] = Base::ToCString(par.domainDecompMethod);
+	j["distHaloMode"] = Base::ToCString(par.distHaloMode);
+	j["loadBalanceMetric"] = Base::ToCString(par.loadBalanceMetric);
+	j["loadBalanceTrigger"] = Base::ToCString(par.loadBalanceTrigger);
+	j["loadBalanceWeightModel"] = Base::ToCString(par.loadBalanceWeightModel);
+
+	// --- [ simulation state ] ----------------------------------------------------------------------
+
+	// (simRunning and simRunNextStep are momentary run-loop flags)
+	j["maxSteps"] = par.maxSteps;
+
+	// --- [ time step ] -----------------------------------------------------------------------------
+
+	j["timeStep"] = par.timeStep;
+
+	// --- [ particle size ] -------------------------------------------------------------------------
+
+	j["particleSizeF"] = par.particleSizeF;
+	j["particleSizeB"] = par.particleSizeB;
+	j["particleSizeInvF"] = par.particleSizeInvF;
+	j["particleSizeInvB"] = par.particleSizeInvB;
+
+	// --- [ kernel support ratio ] ------------------------------------------------------------------
+
+	j["kernelSuppRatio"] = par.kernelSuppRatio;
+	j["kernelRadius"] = par.kernelRadius;
+	j["kernelRadiusSqu"] = par.kernelRadiusSqu;
+	j["distHaloRadius"] = par.distHaloRadius;
+
+	// --- [ neighbor count heuristics ] -------------------------------------------------------------
+
+	j["expctdNbrCountSoftMax_FF"] = par.expctdNbrCountSoftMax_FF;
+	j["expctdNbrCountSoftMax_FB"] = par.expctdNbrCountSoftMax_FB;
+	j["expctdNbrCountHardMax_FF"] = par.expctdNbrCountHardMax_FF;
+	j["expctdNbrCountHardMax_FB"] = par.expctdNbrCountHardMax_FB;
+	j["expctdAvgNbrCountHardMax_FF"] = par.expctdAvgNbrCountHardMax_FF;
+	j["expctdAvgNbrCountHardMax_FB"] = par.expctdAvgNbrCountHardMax_FB;
+
+	// --- [ rest density ] --------------------------------------------------------------------------
+
+	j["restDensity"] = par.restDensity;
+	j["massF"] = par.massF;
+	j["massB"] = par.massB;
+
+	// --- [ non-pressure accelerations ] ------------------------------------------------------------
+
+	j["viscosityF"] = par.viscosityF;
+	j["viscosityB"] = par.viscosityB;
+	j["gravity"] = { par.gravity.x, par.gravity.y, par.gravity.z };
+
+	// --- [ pressure ] ------------------------------------------------------------------------------
+
+	j["pressGamma"] = par.pressGamma;
+	j["jacobiOmega"] = par.jacobiOmega;
+	j["densityDevTarget"] = par.densityDevTarget;
+	j["fixedIters"] = par.fixedIters;
+	j["minSolverIters"] = par.minSolverIters;
+	j["maxSolverIters"] = par.maxSolverIters;
+	j["solverTerminationCond"] = Base::ToCString(par.solverTerminationCond);
+
+	// --- [ data structuring ] ----------------------------------------------------------------------
+
+	j["gridCellSizeRatio"] = par.gridCellSizeRatio;
+
+	// --- [ jitter ] --------------------------------------------------------------------------------
+
+	j["jitterFracF"] = par.jitterFracF;
+	j["jitterSeedF"] = par.jitterSeedF;
+	j["jitterFracB"] = par.jitterFracB;
+	j["jitterSeedB"] = par.jitterSeedB;
+
+	// --- [ boundary layers ] -----------------------------------------------------------------------
+
+	j["boundaryLayers"] = par.boundaryLayers;
+
+	// --- [ distributed load balancing ] ------------------------------------------------------------
+
+	j["loadBalanceThreshold"] = par.loadBalanceThreshold;
+	j["loadBalanceSustainSteps"] = par.loadBalanceSustainSteps;
+	j["loadBalanceCooldownSteps"] = par.loadBalanceCooldownSteps;
+	j["loadBalanceIntervalSteps"] = par.loadBalanceIntervalSteps;
+
+	// --- [ surface sampling ] ----------------------------------------------------------------------
+
+	j["surfaceSamplingMinDistanceRatio"] = par.surfaceSamplingMinDistanceRatio;
+	j["surfaceSamplingMaxDistanceRatio"] = par.surfaceSamplingMaxDistanceRatio;
+	j["surfaceSamplingCoverageProbeSpacingRatio"] = par.surfaceSamplingCoverageProbeSpacingRatio;
+	j["surfaceSamplingMinDistance"] = par.surfaceSamplingMinDistance;
+	j["surfaceSamplingMaxDistance"] = par.surfaceSamplingMaxDistance;
+	j["surfaceSamplingCoverageProbeSpacing"] = par.surfaceSamplingCoverageProbeSpacing;
+	j["surfaceSamplingCandidateMultiplier"] = par.surfaceSamplingCandidateMultiplier;
+	j["surfaceSamplingMaxTrialsPerCell"] = par.surfaceSamplingMaxTrialsPerCell;
+	j["surfaceSamplingSeed"] = par.surfaceSamplingSeed;
+
+	// --- [ threading ] -----------------------------------------------------------------------------
+
+	j["maxThreadsSim"] = par.maxThreadsSim;
+
+	// --- [ statistics, benchmarks, and exports ] ---------------------------------------------------
+
+	// (time and byte units have no name helper and stay numeric)
+	j["maxBenchRecs"] = par.maxBenchRecs;
+	j["timeUnit"] = static_cast<int>(par.timeUnit);
+	j["maxMemRecs"] = par.maxMemRecs;
+	j["byteUnit"] = static_cast<int>(par.byteUnit);
+	j["maxStatRecs"] = par.maxStatRecs;
+	j["statGroupsEnabled"] =
+	{
+		{ "particles", par.statGroupsEnabled[static_cast<uint8_t>(Stats::StatGroup::Particles)] },
+		{ "density", par.statGroupsEnabled[static_cast<uint8_t>(Stats::StatGroup::Density)] },
+		{ "velocity", par.statGroupsEnabled[static_cast<uint8_t>(Stats::StatGroup::Velocity)] }
+	};
+
+	j["exportEnabled"] = par.exportEnabled;
+	j["exportDir"] = par.exportDir;
+	j["exportInterval"] = par.exportInterval;
+
+	// --- [ export surface classification ] ---------------------------------------------------------
+
+	j["surfaceNbrCountRatio"] = par.surfaceNbrCountRatio;
+	j["surfaceNbrCountThreshold"] = par.surfaceNbrCountThreshold;
+
+	return j;
+}
+
 bool SimParamsMgr::LoadSimParamsFromProfile(const std::string& profile, bool verbose)
 {
 	nlohmann::json j;
@@ -1075,6 +1212,8 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 			begin = iDot + 1;
 		}
 	}
+
+	cliOverrides_.merge_patch(j);
 
 	return LoadSimParamsFromJson(j, verbose);
 }

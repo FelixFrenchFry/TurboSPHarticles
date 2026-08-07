@@ -28,6 +28,19 @@ namespace Export
 	#else
 		std::filesystem::path baseDir = "logs";
 	#endif
+
+	#ifdef TSP_EXPORT_DIR
+		std::filesystem::path exportBaseDir = TSP_EXPORT_DIR;
+	#else
+		std::filesystem::path exportBaseDir = "exports";
+	#endif
+
+		// disabled on non-root ranks, which write no export snapshots
+		bool writeRunMetaToExportDir = true;
+
+		// a zero rank count marks a non-distributed run
+		int mpiRank = 0;
+		int N_mpiRanks = 0;
 	};
 
 	class LoggingMgr
@@ -41,6 +54,7 @@ namespace Export
 					  const std::string& paramsFile,
 					  const std::string& scenariosFile,
 					  const Sim::SimParams& simParams,
+					  const nlohmann::json& cliOverrides,
 					  bool logStatus = true);
 
 		void EndRun();
@@ -70,7 +84,10 @@ namespace Export
 		bool WriteRunMeta(const std::string& configProfile,
 						  const std::string& paramsFile,
 						  const std::string& scenariosFile,
-						  const Sim::SimParams& simParams) const;
+						  const Sim::SimParams& simParams,
+						  const nlohmann::json& cliOverrides) const;
+		void WriteRunMetaToExportDir(const nlohmann::json& meta,
+									 const std::string& exportDir) const;
 		void WriteBenchmarkMetricsHeader();
 		void WriteMemoryMetricsHeader();
 		void Disable();

@@ -697,7 +697,8 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 
 void SimulationMgr::BeginRunLogging(const SimParams& params)
 {
-	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params);
+	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params,
+		simParamsMgr_.CliOverrides());
 }
 
 void SimulationMgr::EndRunLogging()
