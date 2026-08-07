@@ -7,18 +7,18 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.0,
-        "vLen": 1.0,
-        "wLen": 1.0
+        "uLen": 0.6,
+        "vLen": 0.6,
+        "wLen": 0.6
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 0.5,
-        "vLen": 1.0,
-        "wLen": 0.5
+        "uLen": 0.3,
+        "vLen": 0.3,
+        "wLen": 0.3
       }
     },
     "ConvergingDam": {
@@ -59,27 +59,27 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 5.0,
-        "vLen": 5.0,
-        "wLen": 6.0
+        "uLen": 1.0,
+        "vLen": 3.0,
+        "wLen": 4.0
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 5.0,
-        "vLen": 2.0,
-        "wLen": 5.0
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 3.0
       },
       "rigidBody": {
-        "origin": [ 2.5, 2.25, 2.5 ],
+        "origin": [ 0.3, 1.1, 1.1 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.2,
-        "vLen": 1.4,
-        "wLen": 1.2
+        "uLen": 0.4,
+        "vLen": 0.8,
+        "wLen": 0.4
       },
       "rigidDensity": 400.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
@@ -88,32 +88,32 @@
     "SampledMesh": {
       "type": "SampledMesh",
       "model": "HouseBoat",
-      "modelTargetExtent": 1.2,
+      "modelTargetExtent": 1.0,
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.6,
-        "vLen": 1.6,
-        "wLen": 1.2
+        "uLen": 2.0,
+        "vLen": 1.5,
+        "wLen": 1.5
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.6,
-        "vLen": 0.3,
-        "wLen": 1.2
+        "uLen": 2.0,
+        "vLen": 0.4,
+        "wLen": 1.5
       },
       "rigidBody": {
-        "centerOfMass": [ 0.8, 0.6, 0.6 ],
+        "centerOfMass": [ 1.0, 0.8, 0.75 ],
         "yawDeg": 0.0,
-        "pitchDeg": -10.0,
-        "rollDeg": 20.0
+        "pitchDeg": -15.0,
+        "rollDeg": 45.0
       },
-      "rigidDensity": 300.0,
+      "rigidDensity": 400.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }

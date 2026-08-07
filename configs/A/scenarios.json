@@ -7,18 +7,18 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 22.0,
-        "vLen": 22.0,
-        "wLen": 22.0
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 11.0,
-        "vLen": 11.0,
-        "wLen": 11.0
+        "uLen": 0.5,
+        "vLen": 0.5,
+        "wLen": 0.5
       }
     },
     "ConvergingDam": {
@@ -28,12 +28,12 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 22.0,
-        "vLen": 22.0,
-        "wLen": 22.0
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
       },
-      "fluidHeight": 4.0,
-      "holeSize": 12.0
+      "fluidHeight": 1.0,
+      "holeSize": 0.25
     },
     "BigDroplet": {
       "type": "BigDroplet",
@@ -42,15 +42,80 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 22.0,
-        "vLen": 22.0,
-        "wLen": 22.0
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
       },
-      "poolDepth": 2.4,
-      "dropletRadius": 3.4,
+      "poolDepth": 0.5,
+      "dropletRadius": 0.25,
       "dropletGap": 0.0,
-      "dropletOffset": [ 0.0, 0.0 ],
-      "dropletInitVel": [ 0.0, -0.1, 0.0 ]
+      "dropletOffset": [ 0.5, 0.5 ],
+      "dropletInitVel": [ 0.0, 0.0, 0.0 ]
+    },
+    "RigidCube": {
+      "type": "RigidCube",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
+      },
+      "rigidBody": {
+        "origin": [ 0.5, 0.5, 0.5 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 0.2,
+        "vLen": 0.2,
+        "wLen": 0.2
+      },
+      "rigidDensity": 200.0,
+      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+      "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+    },
+    "SampledMesh": {
+      "type": "SampledMesh",
+      "model": "HouseBoat",
+      "modelTargetExtent": 5.0,
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 10.0,
+        "vLen": 7.5,
+        "wLen": 7.5
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 10.0,
+        "vLen": 2.0,
+        "wLen": 7.5
+      },
+      "rigidBody": {
+        "centerOfMass": [ 5.0, 4.0, 3.75 ],
+        "yawDeg": 0.0,
+        "pitchDeg": -15.0,
+        "rollDeg": 45.0
+      },
+      "rigidDensity": 400.0,
+      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+      "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }
   }
 }

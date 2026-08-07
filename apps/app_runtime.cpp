@@ -94,17 +94,23 @@ namespace
 		if (p.empty()) { p = "default"; return; }
 		if (p == "Default") { p = "default"; return; }
 
-		// single letter -> uppercase
-		if (p.size() == 1 && std::isalpha(static_cast<unsigned char>(p[0])))
+		// letters -> uppercase
+		for (char& c : p)
 		{
-			p[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(p[0])));
+			c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 		}
 	}
 
 	bool IsValidProfile(const std::string& p)
 	{
 		if (p == "default") { return true; }
-		return (p.size() == 1 && p[0] >= 'A' && p[0] <= 'Z');
+		if (p.empty()) { return false; }
+
+		// letters and digits only, which also keeps the name a single path segment
+		return std::all_of(p.begin(), p.end(), [](const char c)
+		{
+			return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+		});
 	}
 
 } // namespace anonymous
@@ -135,7 +141,8 @@ App::ParseResult App::ParseMainOptions(
 	MainOptions options{};
 
 	application.add_option("-p,--profile", options.profile,
-			"Name of configuration profile /configs/<...> with 'A-Z' or 'default'");
+			"Name of configuration profile /configs/<...> with 'A-Z' and '0-9' "
+			"(e.g. 'A' or 'A2') or 'default'");
 	application.add_option("--sim", options.simOverrides,
 		"Master override simulation parameter via key=value "
 		"(repeatable, CLI wins over config file)");
@@ -188,7 +195,7 @@ App::ParseResult App::ParseMainOptions(
 	{
 		if (logErrors)
 		{
-			SPDLOG_ERROR("Invalid --profile arg '{}'. Use a single letter 'A-Z' "
+			SPDLOG_ERROR("Invalid --profile arg '{}'. Use letters 'A-Z' and digits '0-9' "
 				"or leave empty for 'default'.", options.profile);
 		}
 

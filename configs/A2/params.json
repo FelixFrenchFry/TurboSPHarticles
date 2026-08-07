@@ -1,11 +1,16 @@
 {
-  "backendVersion": "GPU01",
-  "scenarioType": "BreakingDam",
-  "neighborSearchMethod": 5,
+  "backendVersion": "CPU01",
+  "scenarioType": "SampledMesh",
+  "neighborSearchMethod": 1,
   "neighborListStorage": 1,
+  "domainDecompMethod": 1,
+  "distHaloMode": 0,
+  "loadBalanceMetric": 1,
+  "loadBalanceTrigger": 0,
+  "loadBalanceWeightModel": 0,
 
   "maxSteps": -1,
-  "timeStep": 0.0006,
+  "timeStep": 0.0005,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensity": 1000.0,
@@ -16,7 +21,7 @@
   "pressGamma": 0.5,
   "jacobiOmega": 0.5,
   "densityDevTarget": 0.01,
-  "fixedIters": 3,
+  "fixedIters": 5,
   "minSolverIters": 3,
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
@@ -28,10 +33,15 @@
   "jitterSeedB": 67,
   "boundaryLayers": 2,
 
-  "surfaceSamplingMinDistanceRatio": 0.8,
+  "loadBalanceThreshold": 0.01,
+  "loadBalanceSustainSteps": 3,
+  "loadBalanceCooldownSteps": 20,
+  "loadBalanceIntervalSteps": 50,
+
+  "surfaceSamplingMinDistanceRatio": 0.5,
   "surfaceSamplingMaxDistanceRatio": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatio": 0.2,
-  "surfaceSamplingCandidateMultiplier": 8,
+  "surfaceSamplingCandidateMultiplier": 20,
   "surfaceSamplingMaxTrialsPerCell": 10,
   "surfaceSamplingSeed": 67,
 
@@ -42,11 +52,12 @@
   "byteUnit": "MB",
   "statGroupsEnabled": {
     "particles": false,
-    "density": false,
-    "velocity": false
+    "density": true,
+    "velocity": true
   },
 
   "exportEnabled": true,
-  "exportDir": "S",
-  "exportInterval": 30
+  "exportDir": "A2",
+  "exportInterval": 10,
+  "surfaceNbrCountRatio": 0.75
 }

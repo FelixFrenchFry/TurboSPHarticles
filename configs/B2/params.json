@@ -1,8 +1,13 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "BreakingDam",
-  "neighborSearchMethod": 5,
+  "scenarioType": "RigidCube",
+  "neighborSearchMethod": 1,
   "neighborListStorage": 1,
+  "domainDecompMethod": 1,
+  "distHaloMode": 0,
+  "loadBalanceMetric": 1,
+  "loadBalanceTrigger": 0,
+  "loadBalanceWeightModel": 0,
 
   "maxSteps": -1,
   "timeStep": 0.0005,
@@ -21,31 +26,38 @@
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
 
+  "gridCellSizeRatio": 1.0,
   "jitterFracF": 0.0,
   "jitterSeedF": 67,
   "jitterFracB": 0.0,
   "jitterSeedB": 67,
   "boundaryLayers": 2,
 
-  "surfaceSamplingMinDistanceRatio": 0.8,
+  "loadBalanceThreshold": 0.01,
+  "loadBalanceSustainSteps": 3,
+  "loadBalanceCooldownSteps": 20,
+  "loadBalanceIntervalSteps": 50,
+
+  "surfaceSamplingMinDistanceRatio": 0.5,
   "surfaceSamplingMaxDistanceRatio": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatio": 0.2,
-  "surfaceSamplingCandidateMultiplier": 8,
+  "surfaceSamplingCandidateMultiplier": 20,
   "surfaceSamplingMaxTrialsPerCell": 10,
   "surfaceSamplingSeed": 67,
 
   "maxThreadsSim": -1,
-  "maxBenchRecs": 1000000,
-  "maxStatRecs": 1000000,
+  "maxBenchRecs": 100000,
+  "maxStatRecs": 100000,
   "timeUnit": "ms",
   "byteUnit": "MB",
   "statGroupsEnabled": {
     "particles": false,
-    "density": false,
-    "velocity": false
+    "density": true,
+    "velocity": true
   },
 
   "exportEnabled": true,
-  "exportDir": "H",
-  "exportInterval": 10
+  "exportDir": "B2",
+  "exportInterval": 10,
+  "surfaceNbrCountRatio": 0.75
 }
