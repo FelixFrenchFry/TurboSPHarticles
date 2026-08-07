@@ -85,6 +85,27 @@ namespace
 		}
 	}
 
+	// checks whether the per-particle cell IDs are already in ascending order
+	bool IsNonDecreasing(const std::vector<uint64_t>& cellIds)
+	{
+		const uint32_t N = static_cast<uint32_t>(cellIds.size());
+		if (N < 2) { return true; }
+
+		return tbb::parallel_reduce(
+			tbb::blocked_range<uint32_t>(1, N), true,
+			[&](const tbb::blocked_range<uint32_t>& r, bool sorted) -> bool
+			{
+				for (uint32_t i = r.begin(); i != r.end() && sorted; i++)
+				{
+					sorted = cellIds[i - 1] <= cellIds[i];
+				}
+				return sorted;
+			},
+			[](const bool a, const bool b) -> bool { return a && b; },
+			tbb::auto_partitioner{}
+		);
+	}
+
 	inline int FloorToInt(float v) noexcept
 	{
 		int i = static_cast<int>(v);
@@ -1804,22 +1825,29 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 			tbb::auto_partitioner{}
 		);
 
-		tbb::parallel_sort(particleOrderB_.begin(), particleOrderB_.end(),
-			[&](const uint32_t a, const uint32_t b)
-			{
-				if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
-				return a < b; // deterministic tie-break within the same cell
-			});
-
 		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 		// so Construct() can reuse them instead of re-computing them right away
-		ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB_);
-		ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
-		ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.volB_, be_.workBufferB_);
-		ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
+		// (an already sorted cell ID array re-produces the identity permutation written above)
+		// TODO: find less expensive but 100% realiable condition for skipping the sort?
+		if (!IsNonDecreasing(cellIdB_))
+		{
+			tbb::parallel_sort(particleOrderB_.begin(), particleOrderB_.end(),
+				[&](const uint32_t a, const uint32_t b)
+				{
+					if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
+					return a < b; // deterministic tie-break within the same cell
+				});
+
+			// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
+			// so Construct() can reuse them instead of re-computing them right away
+			ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB_);
+			ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
+			ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
+			ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
+			ApplyPermutation(particleOrderB_, be_.zPosB_, be_.workBufferB_);
+			ApplyPermutation(particleOrderB_, be_.volB_, be_.workBufferB_);
+			ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
+		}
 	}
 
 	cellIdsMatchCurrentParticleOrder_ = true;
