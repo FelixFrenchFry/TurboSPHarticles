@@ -2029,6 +2029,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateHandoff);
 		try
 		{
 			// skip solver step if no fluid particles to avoid neighbor search particle re-order
@@ -2044,11 +2045,14 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 			localOk = false;
 		}
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateHandoff);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateHandoff);
 		const bool finishOk = FinishRankLocalBackendStep(params);
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateHandoff);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 		if (!finishOk) { return false; }
 
@@ -2251,6 +2255,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateHandoff);
 	try
 	{
 		std::string failMsg{};
@@ -2295,6 +2300,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 		localOk = false;
 	}
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateHandoff);
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 
 	return mpiContext_.AllTrue(localOk);

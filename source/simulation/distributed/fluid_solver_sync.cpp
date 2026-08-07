@@ -502,6 +502,7 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 
 	// pack and exchange field values with every neighboring rank
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSync);
 	requests_.clear();
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
@@ -573,6 +574,7 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 			}
 		});
 	}
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSync);
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 }
 

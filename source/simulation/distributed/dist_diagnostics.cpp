@@ -674,9 +674,9 @@ namespace
 		int rank = 0;
 
 		uint64_t backendAvgNs = 0;
-		uint64_t distParticleRedistributionAvgNs = 0;
-		uint64_t distStateSyncAvgNs = 0;
-		uint64_t otherAvgNs = 0;
+		uint64_t redistributionAvgNs = 0;
+		uint64_t solverSyncAvgNs = 0;
+		uint64_t stateHandoffAvgNs = 0;
 	};
 
 	std::vector<DistRankTimingSummary> BuildRankTimingSummaries(
@@ -686,8 +686,7 @@ namespace
 		std::vector<DistRankTimingSummary> summaries{};
 		if (reports.empty() || benchOps.empty()) { return summaries; }
 
-		const int totalIdx = FindTotalOpIdx(benchOps);
-		if (totalIdx < 0) { return summaries; }
+		if (FindTotalOpIdx(benchOps) < 0) { return summaries; }
 
 		summaries.reserve(reports.size());
 
@@ -696,39 +695,15 @@ namespace
 			DistRankTimingSummary summary{};
 			summary.rank = report.rank;
 
-			uint64_t totalAvgNs = 0;
-
-			for (uint32_t i = 0; i < benchOps.size(); i++)
-			{
-				const Bench::BenchOp op = benchOps[i];
-				const uint64_t avgNs = BenchOpTimeNs(report, op, true);
-
-				if (static_cast<int>(i) == totalIdx)
-				{
-					totalAvgNs = avgNs;
-					continue;
-				}
-
-				if (op == Bench::BenchOp::Dist_ParticleRedistribution)
-				{
-					summary.distParticleRedistributionAvgNs += avgNs;
-				}
-				else if (op == Bench::BenchOp::Dist_StateSync)
-				{
-					summary.distStateSyncAvgNs += avgNs;
-				}
-				else if (!IsDistBenchOp(op))
-				{
-					summary.backendAvgNs += avgNs;
-				}
-			}
-
-			const uint64_t displayedAvgNs =
-				summary.backendAvgNs +
-				summary.distParticleRedistributionAvgNs +
-				summary.distStateSyncAvgNs;
-			summary.otherAvgNs =
-				SaturatingSubtract(totalAvgNs, displayedAvgNs);
+			// use the inclusive distributed step timer instead of summing overlapping backend kernels
+			summary.backendAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_RankBackendStep, true);
+			summary.redistributionAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_ParticleRedistribution, true);
+			summary.solverSyncAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_SolverSync, true);
+			summary.stateHandoffAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_StateHandoff, true);
 
 			summaries.push_back(summary);
 		}
@@ -915,13 +890,13 @@ namespace
 			BuildRankTimingSummaries(reports, benchOps);
 		if (summaries.empty()) { return; }
 
-		char unitLabel[8];
-		std::snprintf(unitLabel, sizeof(unitLabel), "[%s]", Bench::UnitLabel(unit));
+		char unitLabel[32];
+		std::snprintf(unitLabel, sizeof(unitLabel), "avg [%s]", Bench::UnitLabel(unit));
 
 		PrintLine(N_lines,
-			"%-2s | %10s | %22s | %13s | %9s %4s",
-			"r", "backend", "distRedistribution",
-			"distStateSync", "other", "avg");
+			"%-2s | %10s | %15s | %11s | %13s | %9s",
+			"r", "backend", "redistribution", "solver sync",
+			"state handoff", "");
 		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
@@ -930,14 +905,14 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %10.2f | %22.2f | %13.2f | %9.2f %4s",
+				"%-2s | %10.2f | %15.2f | %11.2f | %13.2f | %9s",
 				rankLabel,
 				Bench::ConvertFromNs(unit, summary.backendAvgNs),
 				Bench::ConvertFromNs(
 					unit,
-					summary.distParticleRedistributionAvgNs),
-				Bench::ConvertFromNs(unit, summary.distStateSyncAvgNs),
-				Bench::ConvertFromNs(unit, summary.otherAvgNs),
+					summary.redistributionAvgNs),
+				Bench::ConvertFromNs(unit, summary.solverSyncAvgNs),
+				Bench::ConvertFromNs(unit, summary.stateHandoffAvgNs),
 				unitLabel);
 		}
 	}
