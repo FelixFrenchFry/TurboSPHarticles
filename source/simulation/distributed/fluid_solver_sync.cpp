@@ -406,35 +406,17 @@ bool FluidSolverSyncMgr::Rebuild(
 }
 
 void FluidSolverSyncMgr::ApplyFluidParticleReOrder(
-	const std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx)
+	const std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx)
 {
 	if (!mpiContext_)
 	{
 		throw std::runtime_error("Fluid solver synchronization plan is not initialized.");
 	}
 
-	// validate and invert the storage permutation
-	const bool storageWasReOrdered = !oldFluidLocalIdx_FromNewLocalIdx.empty();
-	bool localOk = !storageWasReOrdered ||
-		oldFluidLocalIdx_FromNewLocalIdx.size() == N_localF_;
-	std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx;
-	std::vector<uint8_t> oldFluidLocalIdxUsed;
-	if (localOk && storageWasReOrdered)
-	{
-		newFluidLocalIdx_FromOldLocalIdx.resize(N_localF_);
-		oldFluidLocalIdxUsed.assign(N_localF_, 0);
-		for (uint32_t newLocalIdx = 0; newLocalIdx != N_localF_; newLocalIdx++)
-		{
-			const uint32_t oldLocalIdx = oldFluidLocalIdx_FromNewLocalIdx[newLocalIdx];
-			if (oldLocalIdx >= N_localF_ || oldFluidLocalIdxUsed[oldLocalIdx] != 0)
-			{
-				localOk = false;
-				break;
-			}
-			oldFluidLocalIdxUsed[oldLocalIdx] = 1;
-			newFluidLocalIdx_FromOldLocalIdx[oldLocalIdx] = newLocalIdx;
-		}
-	}
+	// the caller inverted and validated the storage permutation, so only its size is checked
+	const bool storageWasReOrdered = !newFluidLocalIdx_FromOldLocalIdx.empty();
+	const bool localOk = !storageWasReOrdered ||
+		newFluidLocalIdx_FromOldLocalIdx.size() == N_localF_;
 
 	if (!mpiContext_->AllTrue(localOk))
 	{

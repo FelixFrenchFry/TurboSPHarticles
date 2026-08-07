@@ -51,7 +51,7 @@ namespace Dist
 
 		// remaps the plan onto re-ordered backend storage, leaving global particle IDs unchanged
 		void ApplyFluidParticleReOrder(
-			std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx) override;
+			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) override;
 
 		// overwrites remote values with the ones held by their owning rank
 		void SynchronizeFluidScalarField(

@@ -77,8 +77,9 @@ namespace Sim
 		virtual ~I_DistributedFluidSolverSync() = default;
 
 		// an empty permutation means that particle storage was not re-ordered
+		// (inverted by the caller, which needs it for its own index remapping anyway)
 		virtual void ApplyFluidParticleReOrder(
-			std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx) = 0;
+			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) = 0;
 
 		// synchronizes owner-authoritative fluid values over the selected halo extent
 		virtual void SynchronizeFluidScalarField(
