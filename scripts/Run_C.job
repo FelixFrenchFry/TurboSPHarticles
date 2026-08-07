@@ -1,0 +1,26 @@
+#!/bin/bash -x
+#SBATCH --job-name=Run_C
+#SBATCH --partition=cpu_il
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=64
+#SBATCH --time=72:00:00
+#SBATCH --mem=249600mb
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
+
+# module
+module load compiler/intel/2025.0
+module load mpi/impi/2021.14-intel-2025.0
+
+# toolchain vars
+unset CFLAGS CXXFLAGS CPPFLAGS FFLAGS FCFLAGS LDFLAGS
+export CC=gcc
+export CXX=g++
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+# build location
+cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
+
+# run
+mpiexec.hydra -bootstrap slurm -n 8 ./out/build/Linux-x64-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=16 -p C
