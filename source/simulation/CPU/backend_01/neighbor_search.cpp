@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <limits>
 #include <spdlog/spdlog.h>
+#include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
-#include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
 #include <vector>
 
@@ -354,6 +354,134 @@ namespace
 
 		// end of the last cell's range as sentinel
 		cellStartIdx[N_cells] = static_cast<uint32_t>(N);
+	}
+
+	// (larger than the cell table chunk, so the serial digit prefix below stays short)
+	constexpr uint64_t N_RADIX_SORT_CHUNK = 65536;
+	constexpr uint32_t N_RADIX_SORT_BITS = 8;
+	constexpr uint32_t N_RADIX_SORT_BINS = 1u << N_RADIX_SORT_BITS;
+
+	// number of significant bits in the Morton cell IDs of a cell frame,
+	// plus one bit that keeps the empty cell ID above every valid one
+	uint32_t CellIdKeyBits(
+		const uint32_t N_dimX,
+		const uint32_t N_dimY,
+		const uint32_t N_dimZ)
+	{
+		const uint32_t N_dimMax = std::max(N_dimX, std::max(N_dimY, N_dimZ));
+		const uint32_t N_axisBits = (N_dimMax < 2)
+			? 1u : static_cast<uint32_t>(std::bit_width(N_dimMax - 1u));
+
+		return 3u * N_axisBits + 1u; // three interleaved axes plus the empty key bit
+	}
+
+	// sorts the particle permutation by cell ID using a stable LSD radix sort
+	// with a "parallel count -> prefix sum -> parallel scatter" pipeline per digit
+	// (the cell IDs are carried along, so every pass reads them sequentially instead of
+	// gathering them through the permutation, and both scratches are overwritten)
+	void SortParticleOrderByCellId(
+		std::vector<uint64_t>& cellId,
+		std::vector<uint32_t>& particleOrder,
+		std::vector<uint64_t>& cellIdScratch,
+		std::vector<uint32_t>& particleOrderScratch,
+		std::vector<uint32_t>& digitCounts_ByChunk,
+		const uint32_t N_keyBits)
+	{
+		// (particle counts are capped at uint32_t, so digit counts and write offsets are too)
+		const uint64_t N = cellId.size();
+		if (N < 2) { return; }
+
+		assert(particleOrder.size() == N && "Permutation and cell ID vector size mismatch");
+		cellIdScratch.resize(N);
+		particleOrderScratch.resize(N);
+
+		const uint64_t N_chunks = (N + N_RADIX_SORT_CHUNK - 1) / N_RADIX_SORT_CHUNK;
+
+		// empty cell IDs sort behind every valid one without sorting all 64 bits
+		const uint64_t emptyKey = 1ull << (N_keyBits - 1u);
+
+		std::vector<uint64_t>* srcCellId = &cellId;
+		std::vector<uint32_t>* srcOrder = &particleOrder;
+		std::vector<uint64_t>* dstCellId = &cellIdScratch;
+		std::vector<uint32_t>* dstOrder = &particleOrderScratch;
+
+		for (uint32_t shift = 0; shift < N_keyBits; shift += N_RADIX_SORT_BITS)
+		{
+			digitCounts_ByChunk.assign(N_chunks * N_RADIX_SORT_BINS, 0);
+
+			// count digits per chunk without shared counters
+			tbb::parallel_for(
+				tbb::blocked_range<uint64_t>(0, N_chunks),
+				[&](const tbb::blocked_range<uint64_t>& r)
+				{
+					for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
+					{
+						const uint64_t beginIdx = chunkIdx * N_RADIX_SORT_CHUNK;
+						const uint64_t endIdx = std::min(beginIdx + N_RADIX_SORT_CHUNK, N);
+						uint32_t* counts = &digitCounts_ByChunk[chunkIdx * N_RADIX_SORT_BINS];
+
+						for (uint64_t i = beginIdx; i != endIdx; i++)
+						{
+							const uint64_t key = std::min((*srcCellId)[i], emptyKey);
+							counts[(key >> shift) & (N_RADIX_SORT_BINS - 1)]++;
+						}
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+
+			// prefix the counts digit-major and chunk-minor, so particles with an equal
+			// cell ID keep their relative order and the sort stays stable
+			uint32_t writeIdx = 0;
+			for (uint32_t digit = 0; digit != N_RADIX_SORT_BINS; digit++)
+			{
+				for (uint64_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
+				{
+					uint32_t& count = digitCounts_ByChunk[chunkIdx * N_RADIX_SORT_BINS + digit];
+					const uint32_t N_digit = count;
+					count = writeIdx; // now the chunk's write offset for this digit
+					writeIdx += N_digit;
+				}
+			}
+
+			// scatter cell IDs and particle indices into their digit buckets
+			tbb::parallel_for(
+				tbb::blocked_range<uint64_t>(0, N_chunks),
+				[&](const tbb::blocked_range<uint64_t>& r)
+				{
+					for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
+					{
+						const uint64_t beginIdx = chunkIdx * N_RADIX_SORT_CHUNK;
+						const uint64_t endIdx = std::min(beginIdx + N_RADIX_SORT_CHUNK, N);
+						uint32_t* offsets = &digitCounts_ByChunk[chunkIdx * N_RADIX_SORT_BINS];
+
+						// must mirror the counting pass exactly,
+						// or the chunk write offsets do not line up
+						for (uint64_t i = beginIdx; i != endIdx; i++)
+						{
+							const uint64_t cellIdValue = (*srcCellId)[i];
+							const uint64_t key = std::min(cellIdValue, emptyKey);
+							uint32_t& offset = offsets[(key >> shift) & (N_RADIX_SORT_BINS - 1)];
+
+							(*dstCellId)[offset] = cellIdValue;
+							(*dstOrder)[offset] = (*srcOrder)[i];
+							offset++;
+						}
+					}
+				},
+				tbb::auto_partitioner{}
+			);
+
+			std::swap(srcCellId, dstCellId);
+			std::swap(srcOrder, dstOrder);
+		}
+
+		// an odd pass count leaves the sorted result in the scratch buffers
+		if (srcCellId != &cellId)
+		{
+			cellId.swap(cellIdScratch);
+			particleOrder.swap(particleOrderScratch);
+		}
 	}
 
 } // namespace anonymous
@@ -804,6 +932,8 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellTableR_.clear();
 
 	cellRunStartCounts_ByChunk_.clear();
+	particleOrderScratch_.clear();
+	radixDigitCounts_ByChunk_.clear();
 }
 
 void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
@@ -840,6 +970,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		cellTableR_.clear();
 
 		cellRunStartCounts_ByChunk_.clear();
+		particleOrderScratch_.clear();
+		radixDigitCounts_ByChunk_.clear();
 
 		return;
 	}
@@ -947,13 +1079,9 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 			},
 			tbb::auto_partitioner{}
 		);
-		tbb::parallel_sort(particleOrderR_.begin(), particleOrderR_.end(),
-			[&](const uint32_t a, const uint32_t b)
-			{
-				if (cellIdR_[a] != cellIdR_[b]) { return cellIdR_[a] < cellIdR_[b]; }
-				return a < b;
-			});
-		ApplyPermutation(particleOrderR_, cellIdR_, cellIdScratchR_);
+		SortParticleOrderByCellId(
+			cellIdR_, particleOrderR_, cellIdScratchR_, particleOrderScratch_,
+			radixDigitCounts_ByChunk_, CellIdKeyBits(N_dimX_, N_dimY_, N_dimZ_));
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
@@ -1742,6 +1870,8 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 	if (cellSizeChanged || cellQueryReachChanged) { cellFrameValid_ = false; }
 	UpdateCellFrame();
 
+	const uint32_t N_keyBits = CellIdKeyBits(N_dimX_, N_dimY_, N_dimZ_);
+
 	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
 	cellIdF_.resize(N_F);
 	particleOrderF_.resize(N_F);
@@ -1764,16 +1894,12 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 			tbb::auto_partitioner{}
 		);
 
-		tbb::parallel_sort(particleOrderF_.begin(), particleOrderF_.end(),
-			[&](const uint32_t a, const uint32_t b)
-			{
-				if (cellIdF_[a] != cellIdF_[b]) { return cellIdF_[a] < cellIdF_[b]; }
-				return a < b; // deterministic tie-break within the same cell
-			});
-
-		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
+		// keeps the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 		// so Construct() can reuse them instead of re-computing them right away
-		ApplyPermutation(particleOrderF_, cellIdF_, cellIdScratchF_);
+		SortParticleOrderByCellId(
+			cellIdF_, particleOrderF_, cellIdScratchF_, particleOrderScratch_,
+			radixDigitCounts_ByChunk_, N_keyBits);
+
 		ApplyPermutation(particleOrderF_, be_.idF_, be_.workBufferIdF_);
 		ApplyPermutation(particleOrderF_, be_.xPosF_, be_.workBufferF_);
 		ApplyPermutation(particleOrderF_, be_.yPosF_, be_.workBufferF_);
@@ -1825,22 +1951,16 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 			tbb::auto_partitioner{}
 		);
 
-		// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
-		// so Construct() can reuse them instead of re-computing them right away
 		// (an already sorted cell ID array re-produces the identity permutation written above)
-		// TODO: find less expensive but 100% realiable condition for skipping the sort?
+		// TODO: find less expensive but 100% reliable condition for skipping the sort?
 		if (!IsNonDecreasing(cellIdB_))
 		{
-			tbb::parallel_sort(particleOrderB_.begin(), particleOrderB_.end(),
-				[&](const uint32_t a, const uint32_t b)
-				{
-					if (cellIdB_[a] != cellIdB_[b]) { return cellIdB_[a] < cellIdB_[b]; }
-					return a < b; // deterministic tie-break within the same cell
-				});
+			SortParticleOrderByCellId(
+				cellIdB_, particleOrderB_, cellIdScratchB_, particleOrderScratch_,
+				radixDigitCounts_ByChunk_, N_keyBits);
 
 			// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 			// so Construct() can reuse them instead of re-computing them right away
-			ApplyPermutation(particleOrderB_, cellIdB_, cellIdScratchB_);
 			ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
 			ApplyPermutation(particleOrderB_, be_.xPosB_, be_.workBufferB_);
 			ApplyPermutation(particleOrderB_, be_.yPosB_, be_.workBufferB_);
@@ -1873,13 +1993,16 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU01::GetMemUsage(
 	Mem::MemUsage usageR{};
 
 	// F
-	// (the shared cell run start scratch is booked here, because the fluid particles dominate)
+	// (the shared cell run start, permutation, and digit count scratches are booked here,
+	// because the fluid particles dominate)
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdScratchF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellTableF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellRunStartCounts_ByChunk_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderScratch_));
+	Mem::Add(usageF, Mem::MemUsageOf_Vector(radixDigitCounts_ByChunk_));
 
 	// B
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxB_));

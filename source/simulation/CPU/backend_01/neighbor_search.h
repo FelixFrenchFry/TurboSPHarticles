@@ -149,6 +149,12 @@ namespace Sim
 		// (only valid because the fluid, boundary, and rigid builds run one after another)
 		std::vector<uint32_t> cellRunStartCounts_ByChunk_;
 
+		// scratch shared by the cell ID sorts, holding the permutation ping-pong target and
+		// the per-chunk digit counts that are prefixed into per-chunk write offsets
+		// (only valid because the fluid, boundary, and rigid sorts run one after another)
+		std::vector<uint32_t> particleOrderScratch_;
+		std::vector<uint32_t> radixDigitCounts_ByChunk_;
+
 		// dense cell table slots hold the compact cell index biased by one, so an empty slot is
 		// zero and a whole table is cleared with a plain zero fill (which lowers to memset)
 		static constexpr uint32_t CELL_TABLE_EMPTY = 0u;
