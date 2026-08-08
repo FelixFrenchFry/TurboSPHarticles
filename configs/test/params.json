@@ -10,7 +10,7 @@
   "loadBalanceWeightModel": 0,
 
   "maxSteps": -1,
-  "timeStep": 0.0005,
+  "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensity": 1000.0,
@@ -58,6 +58,6 @@
 
   "exportEnabled": true,
   "exportDir": "test",
-  "exportInterval": 20,
+  "exportInterval": 10,
   "surfaceNbrCountRatio": 0.75
 }
