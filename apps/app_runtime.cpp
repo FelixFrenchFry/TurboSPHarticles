@@ -5,7 +5,6 @@
 #include <atomic>
 #include <chrono>
 #include <CLI/CLI.hpp>
-#include <cctype>
 #include <csignal>
 #include <cstddef>
 #include <cstdio>
@@ -91,16 +90,7 @@ namespace
 
 	void NormalizeProfile(std::string& p)
 	{
-		if (p.empty()) { p = "default"; return; }
-
-		// letters -> uppercase
-		for (char& c : p)
-		{
-			c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-		}
-
-		// the only profile directory that is not upper case
-		if (p == "DEFAULT") { p = "default"; }
+		if (p.empty()) { p = "default"; }
 	}
 
 	bool IsValidProfile(const std::string& p)
@@ -111,7 +101,7 @@ namespace
 		// letters and digits only, which also keeps the name a single path segment
 		return std::all_of(p.begin(), p.end(), [](const char c)
 		{
-			return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+			return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
 		});
 	}
 
@@ -143,8 +133,8 @@ App::ParseResult App::ParseMainOptions(
 	MainOptions options{};
 
 	application.add_option("-p,--profile", options.profile,
-			"Name of configuration profile /configs/<...> with 'A-Z' and '0-9' "
-			"(e.g. 'A' or 'A2') or 'default'");
+			"Name of configuration profile /configs/<...> with 'A-Z', 'a-z' and '0-9', "
+			"matching the directory name (e.g. 'A2' or 'test') or 'default'");
 	application.add_option("--sim", options.simOverrides,
 		"Master override simulation parameter via key=value "
 		"(repeatable, CLI wins over config file)");
@@ -197,8 +187,9 @@ App::ParseResult App::ParseMainOptions(
 	{
 		if (logErrors)
 		{
-			SPDLOG_ERROR("Invalid --profile arg '{}'. Use letters 'A-Z' and digits '0-9' "
-				"or leave empty for 'default'.", options.profile);
+			SPDLOG_ERROR("Invalid --profile arg '{}'. Use letters 'A-Z', 'a-z' and digits "
+				"'0-9' matching the directory name, or leave empty for 'default'.",
+				options.profile);
 		}
 
 		return ParseResult
