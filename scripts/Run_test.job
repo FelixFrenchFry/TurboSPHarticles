@@ -2,7 +2,7 @@
 #SBATCH --job-name=Run_test
 #SBATCH --partition=dev_cpu_il
 #SBATCH --nodes=8
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-node=2
 #SBATCH --cpus-per-task=64
 #SBATCH --time=00:30:00
 #SBATCH --mem=249600mb

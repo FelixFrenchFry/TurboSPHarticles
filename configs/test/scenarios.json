@@ -94,26 +94,26 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 10.0,
-        "vLen": 7.5,
-        "wLen": 7.5
+        "uLen": 8.0,
+        "vLen": 6.0,
+        "wLen": 6.0
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 10.0,
-        "vLen": 2.0,
-        "wLen": 7.5
+        "uLen": 8.0,
+        "vLen": 1.0,
+        "wLen": 6.0
       },
       "rigidBody": {
-        "centerOfMass": [ 5.0, 3.5, 3.75 ],
+        "centerOfMass": [ 4.0, 2.5, 3.0 ],
         "yawDeg": 0.0,
         "pitchDeg": -15.0,
         "rollDeg": 45.0
       },
-      "rigidDensity": 400.0,
+      "rigidDensity": 300.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }
