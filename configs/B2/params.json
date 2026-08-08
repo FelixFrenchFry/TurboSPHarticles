@@ -36,7 +36,7 @@
   "loadBalanceThreshold": 0.01,
   "loadBalanceSustainSteps": 3,
   "loadBalanceCooldownSteps": 20,
-  "loadBalanceIntervalSteps": 50,
+  "loadBalanceIntervalSteps": 100,
 
   "surfaceSamplingMinDistanceRatio": 0.5,
   "surfaceSamplingMaxDistanceRatio": 1.0,
@@ -58,6 +58,6 @@
 
   "exportEnabled": true,
   "exportDir": "B2",
-  "exportInterval": 10,
+  "exportInterval": 20,
   "surfaceNbrCountRatio": 0.75
 }
