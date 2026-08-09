@@ -59,44 +59,44 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.0,
-        "vLen": 3.0,
-        "wLen": 4.0
+        "uLen": 6.0,
+        "vLen": 2.0,
+        "wLen": 0.7
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.0,
-        "vLen": 1.0,
-        "wLen": 3.0
+        "uLen": 2.0,
+        "vLen": 0.7,
+        "wLen": 0.7
       },
       "rigidBody": {
-        "origin": [ 0.3, 1.1, 1.1 ],
+        "origin": [ 1.0, 1.0, 0.2 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 0.4,
-        "vLen": 0.8,
-        "wLen": 0.4
+        "uLen": 0.3,
+        "vLen": 0.6,
+        "wLen": 0.3
       },
-      "rigidDensity": 400.0,
+      "rigidDensity": 300.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     },
     "SampledMesh": {
       "type": "SampledMesh",
       "model": "HouseBoat",
-      "modelTargetExtent": 1.0,
+      "modelTargetExtent": 0.7,
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 2.0,
-        "vLen": 1.5,
-        "wLen": 1.5
+        "uLen": 6.0,
+        "vLen": 2.0,
+        "wLen": 0.7
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
@@ -104,17 +104,17 @@
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
         "uLen": 2.0,
-        "vLen": 0.4,
-        "wLen": 1.5
+        "vLen": 0.7,
+        "wLen": 0.7
       },
       "rigidBody": {
-        "centerOfMass": [ 1.0, 0.8, 0.75 ],
+        "centerOfMass": [ 0.5, 0.9, 0.35 ],
         "yawDeg": 0.0,
-        "pitchDeg": -15.0,
-        "rollDeg": 45.0
+        "pitchDeg": 0.0,
+        "rollDeg": 0.0
       },
       "rigidDensity": 400.0,
-      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+      "rigidInitVel": [ 1.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     }
   }
