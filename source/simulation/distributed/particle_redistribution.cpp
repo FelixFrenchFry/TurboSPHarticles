@@ -255,7 +255,7 @@ namespace
 		ParticleClassificationWorkBuffers& workBuffers,
 		const std::vector<uint32_t>& retainedOldLocalIdxs,
 		const DistParticleState& oldParticleState,
-		const std::vector<uint32_t>& haloNeighborMask_ByLocalIdx,
+		const std::vector<uint8_t>& isOuterOwned_ByLocalIdx,
 		const uint32_t N_global,
 		const float extraAllocCapacityPct,
 		const char* const invalidGlobalIdxMsg,
@@ -327,7 +327,7 @@ namespace
 
 					// routing tested retained particles against their owner-rank neighbor halo bounds,
 					// so a particle that no neighbor requested is inner
-					const bool isInner = haloNeighborMask_ByLocalIdx[oldLocalIdx] == 0;
+					const bool isInner = isOuterOwned_ByLocalIdx[oldLocalIdx] == 0;
 					rebuiltParticleState.particleClasses[localIdx] = isInner
 						? DistParticleClass::Inner
 						: DistParticleClass::Outer;
@@ -822,8 +822,8 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.routeWriteOffsets_ByChunkBucket));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.routeTotals));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.ownerRank_ByOwnedIdx));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.fluidHaloNeighborMask_ByLocalIdx));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.boundaryHaloNeighborMask_ByLocalIdx));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.fluidIsOuterOwned_ByLocalIdx));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.boundaryIsOuterOwned_ByLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionCounts_ByChunkKind));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionWriteOffsets_ByChunkKind));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionTotals));
@@ -1454,11 +1454,11 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 
 	// kept for the retained particle classification, so it outlives this routing pass
 	// and is indexed by local particle index instead of owned list position
-	auto& haloNeighborMask_ByLocalIdx = routes_.fluidHaloNeighborMask_ByLocalIdx;
+	auto& isOuterOwned_ByLocalIdx = routes_.fluidIsOuterOwned_ByLocalIdx;
 	AssignVectorWithExtraCapacity(
-		haloNeighborMask_ByLocalIdx,
+		isOuterOwned_ByLocalIdx,
 		fluidParticles.N_,
-		uint32_t{ 0 },
+		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
 	// first failure seen by the counting pass, reported once it completes
@@ -1508,13 +1508,9 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
 				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
 
-				const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(ownerRank);
-				const uint32_t N_neighborRanks = static_cast<uint32_t>(neighborRanks.size());
-				uint32_t haloNeighborMask = 0;
-				for (uint32_t neighborIdx = 0; neighborIdx != N_neighborRanks; neighborIdx++)
+				uint8_t isOuterOwned = 0;
+				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
-					const int haloRank = neighborRanks[neighborIdx];
-
 					#if defined(_DEBUG)
 					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
 					{
@@ -1526,11 +1522,11 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 
 					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
 
-					haloNeighborMask |= (1u << neighborIdx);
+					isOuterOwned = 1;
 					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
 				}
 
-				haloNeighborMask_ByLocalIdx[localIdx] = haloNeighborMask;
+				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
 			}
 		}
 	});
@@ -1602,16 +1598,14 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 					: routes_.ownedFluidLocalIdxs_ByDstRank[ownerRank];
 				ownedDstLocalIdxs[chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
 
-				const uint32_t haloNeighborMask = haloNeighborMask_ByLocalIdx[localIdx];
-				if (haloNeighborMask == 0) { continue; }
+				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
-				const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(ownerRank);
-				const uint32_t N_neighborRanks = static_cast<uint32_t>(neighborRanks.size());
-				for (uint32_t neighborIdx = 0; neighborIdx != N_neighborRanks; neighborIdx++)
+				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
+				const glm::vec3 position = FluidPositionAtLocalIdx(fluidParticles, localIdx);
+				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
-					if ((haloNeighborMask & (1u << neighborIdx)) == 0) { continue; }
+					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
 
-					const int haloRank = neighborRanks[neighborIdx];
 					std::vector<uint32_t>& haloDstLocalIdxs = (haloRank == rank)
 						? routes_.localHaloFluidLocalIdxs
 						: routes_.haloFluidLocalIdxs_ByDstRank[haloRank];
@@ -1665,11 +1659,11 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 
 	// kept for the retained particle classification, so it outlives this routing pass
 	// and is indexed by local particle index instead of owned list position
-	auto& haloNeighborMask_ByLocalIdx = routes_.boundaryHaloNeighborMask_ByLocalIdx;
+	auto& isOuterOwned_ByLocalIdx = routes_.boundaryIsOuterOwned_ByLocalIdx;
 	AssignVectorWithExtraCapacity(
-		haloNeighborMask_ByLocalIdx,
+		isOuterOwned_ByLocalIdx,
 		boundaryParticles.N_,
-		uint32_t{ 0 },
+		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
 	// first failure seen by the counting pass, reported once it completes
@@ -1719,14 +1713,9 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
 				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
 
-				const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(ownerRank);
-				const uint32_t N_neighborRanks =
-					static_cast<uint32_t>(neighborRanks.size());
-				uint32_t haloNeighborMask = 0;
-				for (uint32_t neighborIdx = 0; neighborIdx != N_neighborRanks; neighborIdx++)
+				uint8_t isOuterOwned = 0;
+				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
-					const int haloRank = neighborRanks[neighborIdx];
-
 					#if defined(_DEBUG)
 					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
 					{
@@ -1738,11 +1727,11 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 
 					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
 
-					haloNeighborMask |= (1u << neighborIdx);
+					isOuterOwned = 1;
 					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
 				}
 
-				haloNeighborMask_ByLocalIdx[localIdx] = haloNeighborMask;
+				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
 			}
 		}
 	});
@@ -1814,16 +1803,14 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 					: routes_.ownedBoundaryLocalIdxs_ByDstRank[ownerRank];
 				ownedDstLocalIdxs[chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
 
-				const uint32_t haloNeighborMask = haloNeighborMask_ByLocalIdx[localIdx];
-				if (haloNeighborMask == 0) { continue; }
+				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
-				const std::vector<int>& neighborRanks = domainDecomp.NeighborRanks(ownerRank);
-				const uint32_t N_neighborRanks = static_cast<uint32_t>(neighborRanks.size());
-				for (uint32_t neighborIdx = 0; neighborIdx != N_neighborRanks; neighborIdx++)
+				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
+				const glm::vec3 position = BoundaryPositionAtLocalIdx(boundaryParticles, localIdx);
+				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
-					if ((haloNeighborMask & (1u << neighborIdx)) == 0) { continue; }
+					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
 
-					const int haloRank = neighborRanks[neighborIdx];
 					std::vector<uint32_t>& haloDstLocalIdxs = (haloRank == rank)
 						? routes_.localHaloBoundaryLocalIdxs
 						: routes_.haloBoundaryLocalIdxs_ByDstRank[haloRank];
@@ -1847,16 +1834,6 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
 {
-	// halo destinations are cached as one bit per neighbor list entry
-	for (int otherRank = 0; otherRank != N_ranks; otherRank++)
-	{
-		if (domainDecomp.NeighborRanks(otherRank).size() > PARTICLE_ROUTING_MAX_NEIGHBOR_COUNT)
-		{
-			if (failMsg) { *failMsg = "Domain decomp exceeds the supported neighbor rank count."; }
-			return false;
-		}
-	}
-
 	// route fluid migration and halos
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
@@ -2168,7 +2145,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 			retainedClassificationWorkBuffers_,
 			retainedFluidOldLocalIdx_FromNewLocalIdx_,
 			oldParticleState,
-			routes_.fluidHaloNeighborMask_ByLocalIdx,
+			routes_.fluidIsOuterOwned_ByLocalIdx,
 			N_global,
 			scratchBufferExtraAllocCapacityPct_,
 			"Duplicate or invalid owned fluid global index.", failMsg))
@@ -2410,7 +2387,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 			retainedClassificationWorkBuffers_,
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
 			oldParticleState,
-			routes_.boundaryHaloNeighborMask_ByLocalIdx,
+			routes_.boundaryIsOuterOwned_ByLocalIdx,
 			N_global,
 			scratchBufferExtraAllocCapacityPct_,
 			"Duplicate or invalid owned boundary global index.", failMsg))

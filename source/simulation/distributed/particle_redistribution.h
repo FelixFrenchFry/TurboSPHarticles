@@ -17,8 +17,6 @@
 
 namespace Dist
 {
-	// halo destinations are cached as one bit per neighbor list entry
-	inline constexpr uint32_t PARTICLE_ROUTING_MAX_NEIGHBOR_COUNT = 32;
 	// chunks prefixed per block to keep parallel work tied to the chunk count
 	inline constexpr uint32_t PARTICLE_PREFIX_BLOCK_CHUNK_COUNT = 32;
 	// minimum block stride keeping neighboring worker totals on separate cache lines
@@ -77,9 +75,9 @@ namespace Dist
 		std::vector<uint32_t> keptOwnedBoundaryLocalIdxs;
 		std::vector<uint32_t> localHaloBoundaryLocalIdxs;
 
-		// set when that neighbor needs the particle as halo data, so a zero marks an inner owned particle
-		std::vector<uint32_t> fluidHaloNeighborMask_ByLocalIdx;
-		std::vector<uint32_t> boundaryHaloNeighborMask_ByLocalIdx;
+		// set when any neighbor needs the particle as halo data, so a zero marks an inner owned particle
+		std::vector<uint8_t> fluidIsOuterOwned_ByLocalIdx;
+		std::vector<uint8_t> boundaryIsOuterOwned_ByLocalIdx;
 	};
 
 	// reusable scratch for parallel owned-particle routing
