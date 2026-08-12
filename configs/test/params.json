@@ -38,7 +38,7 @@
   "loadBalanceCooldownSteps": 20,
   "loadBalanceIntervalSteps": 50,
 
-  "surfaceSamplingMinDistanceRatio": 0.5,
+  "surfaceSamplingMinDistanceRatio": 0.4,
   "surfaceSamplingMaxDistanceRatio": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatio": 0.2,
   "surfaceSamplingCandidateMultiplier": 20,

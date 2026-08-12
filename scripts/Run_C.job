@@ -1,11 +1,12 @@
 #!/bin/bash -x
 #SBATCH --job-name=Run_C
-#SBATCH --partition=cpu_il
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=64
+#SBATCH --partition=cpu
+#SBATCH --nodes=3
+#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=24
+#SBATCH --threads-per-core=1
 #SBATCH --time=72:00:00
-#SBATCH --mem=249600mb
+#SBATCH --mem=380000mb
 #SBATCH --output=job_%j.out
 #SBATCH --error=job_%j.err
 
@@ -23,4 +24,5 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
 
 # run
-mpiexec.hydra -bootstrap slurm -n 8 ./out/build/Linux-x64-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=16 -p C
+mpiexec.hydra -bootstrap slurm -n 12 ./out/build/Linux-x64-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=24 -p C
+rc=$?; if [ $rc -ne 0 ]; then exit $rc; fi

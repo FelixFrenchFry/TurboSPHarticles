@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "BreakingDam",
+  "scenarioType": "BigDroplet",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 0,
@@ -36,9 +36,9 @@
   "loadBalanceThreshold": 0.01,
   "loadBalanceSustainSteps": 3,
   "loadBalanceCooldownSteps": 20,
-  "loadBalanceIntervalSteps": 50,
+  "loadBalanceIntervalSteps": 40,
 
-  "surfaceSamplingMinDistanceRatio": 0.5,
+  "surfaceSamplingMinDistanceRatio": 0.4,
   "surfaceSamplingMaxDistanceRatio": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatio": 0.2,
   "surfaceSamplingCandidateMultiplier": 20,
@@ -58,6 +58,6 @@
 
   "exportEnabled": true,
   "exportDir": "D",
-  "exportInterval": 50,
+  "exportInterval": 20,
   "surfaceNbrCountRatio": 0.75
 }

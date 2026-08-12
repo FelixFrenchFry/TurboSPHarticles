@@ -7,18 +7,18 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 22.0,
-        "vLen": 22.0,
-        "wLen": 22.0
+        "uLen": 1.0,
+        "vLen": 1.0,
+        "wLen": 1.0
       },
       "fluid": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 11.0,
-        "vLen": 11.0,
-        "wLen": 11.0
+        "uLen": 0.5,
+        "vLen": 0.5,
+        "wLen": 0.5
       }
     },
     "ConvergingDam": {
@@ -42,12 +42,12 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 22.0,
-        "vLen": 22.0,
-        "wLen": 22.0
+        "uLen": 24.0,
+        "vLen": 24.0,
+        "wLen": 24.0
       },
-      "poolDepth": 2.4,
-      "dropletRadius": 3.4,
+      "poolDepth": 4.8,
+      "dropletRadius": 6.7,
       "dropletGap": 0.0,
       "dropletOffset": [ 0.0, 0.0 ],
       "dropletInitVel": [ 0.0, -0.1, 0.0 ]
