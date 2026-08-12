@@ -90,6 +90,9 @@ namespace Dist
 
 		// destinations decided by the counting pass, indexed by position in the owned index list
 		std::vector<int> ownerRank_ByOwnedIdx;
+
+		// rank halo bounds re-read by the halo destination test of every routed particle
+		std::vector<AABB> haloExtentAABB_ByRank;
 	};
 
 	// reusable scratch for building the dense compaction map in parallel

@@ -822,6 +822,7 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.routeWriteOffsets_ByChunkBucket));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.routeTotals));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.ownerRank_ByOwnedIdx));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.haloExtentAABB_ByRank));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.fluidIsOuterOwned_ByLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.boundaryIsOuterOwned_ByLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionCounts_ByChunkKind));
@@ -1461,6 +1462,9 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
+	// filled by the caller
+	const std::vector<AABB>& haloExtentAABB_ByRank = routingWorkBuffers_.haloExtentAABB_ByRank;
+
 	// first failure seen by the counting pass, reported once it completes
 	std::atomic<const char*> routeFailMsg{ nullptr };
 
@@ -1520,7 +1524,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 					}
 					#endif
 
-					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
+					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
 
 					isOuterOwned = 1;
 					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
@@ -1604,7 +1608,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				const glm::vec3 position = FluidPositionAtLocalIdx(fluidParticles, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
-					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
+					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
 
 					std::vector<uint32_t>& haloDstLocalIdxs = (haloRank == rank)
 						? routes_.localHaloFluidLocalIdxs
@@ -1666,6 +1670,9 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
+	// filled by the caller
+	const std::vector<AABB>& haloExtentAABB_ByRank = routingWorkBuffers_.haloExtentAABB_ByRank;
+
 	// first failure seen by the counting pass, reported once it completes
 	std::atomic<const char*> routeFailMsg{ nullptr };
 
@@ -1725,7 +1732,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 					}
 					#endif
 
-					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
+					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
 
 					isOuterOwned = 1;
 					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
@@ -1809,7 +1816,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 				const glm::vec3 position = BoundaryPositionAtLocalIdx(boundaryParticles, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
-					if (!domainDecomp.HaloExtentAABB(haloRank).Contains(position)) { continue; }
+					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
 
 					std::vector<uint32_t>& haloDstLocalIdxs = (haloRank == rank)
 						? routes_.localHaloBoundaryLocalIdxs
@@ -1834,6 +1841,14 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
 {
+	// halo bounds stay fixed for both routing passes, which read them per particle and destination
+	routingWorkBuffers_.haloExtentAABB_ByRank.resize(static_cast<uint64_t>(N_ranks));
+	for (int haloRank = 0; haloRank != N_ranks; haloRank++)
+	{
+		routingWorkBuffers_.haloExtentAABB_ByRank[haloRank] =
+			domainDecomp.HaloExtentAABB(haloRank);
+	}
+
 	// route fluid migration and halos
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
