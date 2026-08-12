@@ -23,7 +23,7 @@
         "wLen": 15.0
       },
       "rigidBody": {
-        "centerOfMass": [ 10.0, 8.0, 7.5 ],
+        "centerOfPosition": [ 10.0, 8.0, 7.5 ],
         "yawDeg": 0.0,
         "pitchDeg": -15.0,
         "rollDeg": 45.0

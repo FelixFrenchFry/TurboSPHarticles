@@ -1,6 +1,6 @@
 {
   "backendVersion": "GPU01",
-  "scenarioType": "SampledMeshCollection",
+  "scenarioType": "SampledMesh",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 0,
@@ -38,7 +38,7 @@
   "loadBalanceCooldownSteps": 20,
   "loadBalanceIntervalSteps": 10,
 
-  "surfaceSamplingMinDistanceRatio": 0.4,
+  "surfaceSamplingMinDistanceRatio": 0.3,
   "surfaceSamplingMaxDistanceRatio": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatio": 0.2,
   "surfaceSamplingCandidateMultiplier": 20,

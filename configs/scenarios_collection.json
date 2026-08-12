@@ -108,7 +108,7 @@
         "wLen": 0.8
       },
       "rigidBody": {
-        "centerOfMass": [ 0.5, 0.25, 0.5 ],
+        "centerOfPosition": [ 0.5, 0.25, 0.5 ],
         "yawDeg": 0.0,
         "pitchDeg": 0.0,
         "rollDeg": 0.0
@@ -142,7 +142,7 @@
           "model": "CorvetteShip",
           "modelTargetExtent": 0.45,
           "rigidBody": {
-            "centerOfMass": [ 0.375, 0.6, 0.25 ],
+            "centerOfPosition": [ 0.375, 0.6, 0.25 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -155,7 +155,7 @@
           "model": "CruiserShip",
           "modelTargetExtent": 0.45,
           "rigidBody": {
-            "centerOfMass": [ 1.125, 0.6, 0.25 ],
+            "centerOfPosition": [ 1.125, 0.6, 0.25 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -168,7 +168,7 @@
           "model": "DestroyerShip",
           "modelTargetExtent": 0.45,
           "rigidBody": {
-            "centerOfMass": [ 0.375, 0.6, 0.75 ],
+            "centerOfPosition": [ 0.375, 0.6, 0.75 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -181,7 +181,7 @@
           "model": "FrigateShip",
           "modelTargetExtent": 0.45,
           "rigidBody": {
-            "centerOfMass": [ 1.125, 0.6, 0.75 ],
+            "centerOfPosition": [ 1.125, 0.6, 0.75 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0

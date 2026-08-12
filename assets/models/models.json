@@ -2,6 +2,9 @@
   "models": {
     "UnitCube": {
       "file": "unit_cube.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "metadata": {
         "vertexCount": 8,
         "triangleCount": 12,
@@ -12,6 +15,9 @@
     },
     "CorvetteShip": {
       "file": "corvette_ship.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.05, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ -1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, 1.0 ],
@@ -27,6 +33,9 @@
     },
     "CruiserShip": {
       "file": "cruiser_ship.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.04, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ -1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, 1.0 ],
@@ -42,6 +51,9 @@
     },
     "DestroyerShip": {
       "file": "destroyer_ship.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.045, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, -1.0 ],
@@ -57,6 +69,9 @@
     },
     "FrigateShip": {
       "file": "frigate_ship.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.03, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, -1.0 ],
         "vDir": [ -1.0, 0.0, 0.0 ],
@@ -72,6 +87,9 @@
     },
     "PassengerShip": {
       "file": "passenger_ship.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.03, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, -1.0 ],
@@ -87,6 +105,9 @@
     },
     "TitanicShip": {
       "file": "titanic_ship.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.025, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, -1.0 ],
         "vDir": [ -1.0, 0.0, 0.0 ],
@@ -102,6 +123,9 @@
     },
     "CoracleBoat": {
       "file": "coracle_boat.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.01, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, -1.0 ],
@@ -117,6 +141,9 @@
     },
     "DinghyBoat": {
       "file": "dinghy_boat.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.01, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, 1.0 ],
         "vDir": [ 1.0, 0.0, 0.0 ],
@@ -132,6 +159,9 @@
     },
     "HouseBoat": {
       "file": "house_boat.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, -1.0 ],
@@ -147,6 +177,9 @@
     },
     "HydroPlane": {
       "file": "hydro_plane.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, 1.0 ],
         "vDir": [ 1.0, 0.0, 0.0 ],
@@ -162,6 +195,9 @@
     },
     "ScrapBoat": {
       "file": "scrap_boat.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.045, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, -1.0 ],
         "vDir": [ -1.0, 0.0, 0.0 ],
@@ -177,6 +213,9 @@
     },
     "TugBoat": {
       "file": "tug_boat.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ -0.045, -0.035, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ -1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, 1.0 ],
@@ -192,6 +231,9 @@
     },
     "LongTorpedo": {
       "file": "long_torpedo.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ -1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
@@ -207,6 +249,9 @@
     },
     "ShortSubmarine": {
       "file": "short_submarine.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, -0.005, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, 1.0 ],
         "vDir": [ 1.0, 0.0, 0.0 ],
@@ -222,6 +267,9 @@
     },
     "ToyJetski": {
       "file": "toy_jetski.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ -1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, 1.0 ],
@@ -237,6 +285,9 @@
     },
     "WoodenBarrel": {
       "file": "wooden_barrel.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "metadata": {
         "vertexCount": 11030,
         "triangleCount": 21952,
@@ -247,6 +298,9 @@
     },
     "BaskingShark": {
       "file": "basking_shark.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, 1.0 ],
         "vDir": [ 1.0, 0.0, 0.0 ],
@@ -262,6 +316,9 @@
     },
     "HammerShark": {
       "file": "hammer_shark.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, -1.0 ],
@@ -277,6 +334,9 @@
     },
     "HumpbackWhale": {
       "file": "humpback_whale.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ -1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, 1.0 ],
@@ -292,6 +352,9 @@
     },
     "SawFish": {
       "file": "saw_fish.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, -1.0 ],
         "vDir": [ -1.0, 0.0, 0.0 ],
@@ -307,6 +370,9 @@
     },
     "SmallDolphin": {
       "file": "small_dolphin.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, -1.0 ],
         "vDir": [ -1.0, 0.0, 0.0 ],
@@ -322,6 +388,9 @@
     },
     "SquidFish": {
       "file": "squid_fish.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 0.0, 0.0, 1.0 ],
         "vDir": [ 1.0, 0.0, 0.0 ],
@@ -337,6 +406,9 @@
     },
     "AsteroidVesta": {
       "file": "asteroid_vesta.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
@@ -352,6 +424,9 @@
     },
     "AsteroidBennu": {
       "file": "asteroid_bennu.obj",
+      "massProperties": {
+        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+      },
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],

@@ -42,9 +42,10 @@ namespace Scene
 		std::string modelFile;
 		float modelTargetExtent = 1.0f; // target length of the largest local bounding box extent
 		glm::mat3 modelSourceToCanonical{ 1.0f }; // local to canonical body orientation
+		glm::vec3 modelCenterOfMassOffset{ 0.0f }; // canonical offset relative to target extent
 
 		// initial rigid body pose
-		glm::vec3 rigidBodyCenterOfMass{ 0.0f };
+		glm::vec3 rigidBodyCenterOfPosition{ 0.0f };
 		float rigidBodyYawDeg = 0.0f; // turn around world Y
 		float rigidBodyPitchDeg = 0.0f; // tilt around local Z
 		float rigidBodyRollDeg = 0.0f; // tilt around local X
@@ -93,6 +94,12 @@ namespace Scene
 					rigidBody.modelTargetExtent <= 0.0f)
 				{
 					throw std::runtime_error("Rigid mesh model target extent must be > 0.");
+				}
+				if (!std::isfinite(rigidBody.modelCenterOfMassOffset.x) ||
+					!std::isfinite(rigidBody.modelCenterOfMassOffset.y) ||
+					!std::isfinite(rigidBody.modelCenterOfMassOffset.z))
+				{
+					throw std::runtime_error("Rigid mesh center-of-mass offset must be finite.");
 				}
 
 				const glm::mat3 scenarioOrientation =
@@ -144,10 +151,18 @@ namespace Scene
 				const RigidBodyPhysicalProperties properties =
 					propertyComputer.Compute(mesh, rigidBody.rigidDensity);
 
-				// shift the sampled model into its center-of-mass frame
+				// keep the mesh-derived centroidal inertia as the effective body inertia
+				// shift the sampled model into its effective center-of-mass frame
+				const glm::vec3 centerOfMassOffset =
+					glm::transpose(rigidBody.modelSourceToCanonical) *
+					(rigidBody.modelCenterOfMassOffset * rigidBody.modelTargetExtent);
+				const glm::vec3 centerOfMass = properties.centerOfMass + centerOfMassOffset;
+				const glm::vec3 rigidBodyCenterOfMass = rigidBody.rigidBodyCenterOfPosition +
+					scenarioOrientation *
+					(rigidBody.modelCenterOfMassOffset * rigidBody.modelTargetExtent);
 				for (glm::vec3& vertex : mesh.vertices)
 				{
-					vertex -= properties.centerOfMass;
+					vertex -= centerOfMass;
 				}
 
 				SPDLOG_INFO("Sampling model '{}' surfaces...", rigidBody.modelName);
@@ -155,7 +170,7 @@ namespace Scene
 				const SurfaceSamplingResult sampling = sampler.Sample();
 				const uint32_t bodyIdx = scenarioMgr_.BuildRigidBody_FromSurfaceSamples(
 					sampling.samples,
-					rigidBody.rigidBodyCenterOfMass,
+					rigidBodyCenterOfMass,
 					rigidBodyOrientation,
 					properties.mass,
 					properties.bodyInertiaInv,
@@ -232,7 +247,7 @@ namespace Scene
 		cfg.modelName = "UnitCube";
 		cfg.modelFile = "unit_cube.obj";
 		cfg.modelTargetExtent = 0.16f;
-		cfg.rigidBodyCenterOfMass = { 0.5f, 0.25f, 0.5f };
+		cfg.rigidBodyCenterOfPosition = { 0.5f, 0.25f, 0.5f };
 		cfg.rigidBodyYawDeg = 0.0f;
 		cfg.rigidBodyPitchDeg = 0.0f;
 		cfg.rigidBodyRollDeg = 0.0f;
@@ -279,7 +294,7 @@ namespace Scene
 		for (uint32_t bodyIdx = 0; bodyIdx != cfg.rigidBodies.size(); bodyIdx++)
 		{
 			cfg.rigidBodies[bodyIdx] = MakeSampledMeshCollectionRigidBodyConfig_Default();
-			cfg.rigidBodies[bodyIdx].rigidBodyCenterOfMass = centers[bodyIdx];
+			cfg.rigidBodies[bodyIdx].rigidBodyCenterOfPosition = centers[bodyIdx];
 		}
 
 		return cfg;
@@ -368,17 +383,23 @@ namespace Scene
 				throw std::runtime_error(
 					"SampledMeshCollection rigid body requires a 'rigidBody' object.");
 			}
-			auto centerOfMass = rigidBodyState->find("centerOfMass");
-			if (centerOfMass == rigidBodyState->end() ||
-				!centerOfMass->is_array() || centerOfMass->size() != 3 ||
-				!(*centerOfMass)[0].is_number() ||
-				!(*centerOfMass)[1].is_number() ||
-				!(*centerOfMass)[2].is_number())
+			if (rigidBodyState->contains("centerOfMass"))
 			{
 				throw std::runtime_error(
-					"SampledMeshCollection rigid body requires a three-value 'centerOfMass'.");
+					"SampledMeshCollection rigidBody uses 'centerOfMass'; "
+					"use 'centerOfPosition' instead.");
 			}
-			ReadVec3(*centerOfMass, rigidBody.rigidBodyCenterOfMass);
+			auto centerOfPosition = rigidBodyState->find("centerOfPosition");
+			if (centerOfPosition == rigidBodyState->end() ||
+				!centerOfPosition->is_array() || centerOfPosition->size() != 3 ||
+				!(*centerOfPosition)[0].is_number() ||
+				!(*centerOfPosition)[1].is_number() ||
+				!(*centerOfPosition)[2].is_number())
+			{
+				throw std::runtime_error(
+					"SampledMeshCollection rigid body requires a three-value 'centerOfPosition'.");
+			}
+			ReadVec3(*centerOfPosition, rigidBody.rigidBodyCenterOfPosition);
 
 			if (rigidBodyState->contains("uDir") ||
 				rigidBodyState->contains("vDir") ||
@@ -500,6 +521,7 @@ namespace Scene
 				}
 				cfg.modelFile = model["file"].get<std::string>();
 				cfg.modelSourceToCanonical = glm::mat3{ 1.0f };
+				cfg.modelCenterOfMassOffset = glm::vec3{ 0.0f };
 
 				if (auto it = model.find("sourceToCanonical"); it != model.end())
 				{
@@ -544,6 +566,44 @@ namespace Scene
 						ReadAxis("uDir"),
 						ReadAxis("vDir"),
 						ReadAxis("wDir"));
+				}
+
+				if (auto it = model.find("massProperties"); it != model.end())
+				{
+					if (!it->is_object())
+					{
+						throw std::runtime_error(
+							"SampledMeshCollection model '" + cfg.modelName +
+							"' massProperties must be an object.");
+					}
+
+					if (auto offset = it->find("centerOfMassOffset"); offset != it->end())
+					{
+						if (!offset->is_array() || offset->size() != 3 ||
+							!(*offset)[0].is_number() ||
+							!(*offset)[1].is_number() ||
+							!(*offset)[2].is_number())
+						{
+							throw std::runtime_error(
+								"SampledMeshCollection model '" + cfg.modelName +
+								"' centerOfMassOffset must contain 3 values.");
+						}
+
+						cfg.modelCenterOfMassOffset =
+						{
+							(*offset)[0].get<float>(),
+							(*offset)[1].get<float>(),
+							(*offset)[2].get<float>(),
+						};
+						if (!std::isfinite(cfg.modelCenterOfMassOffset.x) ||
+							!std::isfinite(cfg.modelCenterOfMassOffset.y) ||
+							!std::isfinite(cfg.modelCenterOfMassOffset.z))
+						{
+							throw std::runtime_error(
+								"SampledMeshCollection model '" + cfg.modelName +
+								"' centerOfMassOffset values must be finite.");
+						}
+					}
 				}
 
 				return true;

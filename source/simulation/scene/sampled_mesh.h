@@ -47,9 +47,10 @@ namespace Scene
 		std::string modelFile;
 		float modelTargetExtent = 1.0f; // target length of the largest local bounding box extent
 		glm::mat3 modelSourceToCanonical{ 1.0f }; // local to canonical body orientation
+		glm::vec3 modelCenterOfMassOffset{ 0.0f }; // canonical offset relative to target extent
 
 		// initial rigid body pose
-		glm::vec3 rigidBodyCenterOfMass{ 0.0f };
+		glm::vec3 rigidBodyCenterOfPosition{ 0.0f };
 		float rigidBodyYawDeg = 0.0f; // turn around world Y
 		float rigidBodyPitchDeg = 0.0f; // tilt around local Z
 		float rigidBodyRollDeg = 0.0f; // tilt around local X
@@ -78,6 +79,12 @@ namespace Scene
 			if (!std::isfinite(cfg_.modelTargetExtent) || cfg_.modelTargetExtent <= 0.0f)
 			{
 				throw std::runtime_error("Rigid mesh model target extent must be > 0.");
+			}
+			if (!std::isfinite(cfg_.modelCenterOfMassOffset.x) ||
+				!std::isfinite(cfg_.modelCenterOfMassOffset.y) ||
+				!std::isfinite(cfg_.modelCenterOfMassOffset.z))
+			{
+				throw std::runtime_error("Rigid mesh center-of-mass offset must be finite.");
 			}
 
 			const glm::mat3 scenarioOrientation =
@@ -133,10 +140,17 @@ namespace Scene
 			const RigidBodyPhysicalProperties properties =
 				propertyComputer.Compute(mesh, cfg_.rigidDensity);
 
-			// shift the sampled model into its center-of-mass frame
+			// keep the mesh-derived centroidal inertia as the effective body inertia
+			// shift the sampled model into its effective center-of-mass frame
+			const glm::vec3 centerOfMassOffset =
+				glm::transpose(cfg_.modelSourceToCanonical) *
+				(cfg_.modelCenterOfMassOffset * cfg_.modelTargetExtent);
+			const glm::vec3 centerOfMass = properties.centerOfMass + centerOfMassOffset;
+			const glm::vec3 rigidBodyCenterOfMass = cfg_.rigidBodyCenterOfPosition +
+				scenarioOrientation * (cfg_.modelCenterOfMassOffset * cfg_.modelTargetExtent);
 			for (glm::vec3& vertex : mesh.vertices)
 			{
-				vertex -= properties.centerOfMass;
+				vertex -= centerOfMass;
 			}
 
 			SPDLOG_INFO("Sampling model surfaces...");
@@ -144,7 +158,7 @@ namespace Scene
 			const SurfaceSamplingResult sampling = sampler.Sample();
 			const uint32_t bodyIdx = scenarioMgr_.BuildRigidBody_FromSurfaceSamples(
 				sampling.samples,
-				cfg_.rigidBodyCenterOfMass,
+				rigidBodyCenterOfMass,
 				rigidBodyOrientation,
 				properties.mass,
 				properties.bodyInertiaInv,
@@ -233,7 +247,7 @@ namespace Scene
 		cfg.modelName = "UnitCube";
 		cfg.modelFile = "unit_cube.obj";
 		cfg.modelTargetExtent = 0.16f;
-		cfg.rigidBodyCenterOfMass = { 0.5f, 0.25f, 0.5f };
+		cfg.rigidBodyCenterOfPosition = { 0.5f, 0.25f, 0.5f };
 		cfg.rigidBodyYawDeg = 0.0f;
 		cfg.rigidBodyPitchDeg = 0.0f;
 		cfg.rigidBodyRollDeg = 0.0f;
@@ -297,9 +311,14 @@ namespace Scene
 				};
 
 			const auto& rigidBody = *it;
-			if (auto value = rigidBody.find("centerOfMass"); value != rigidBody.end())
+			if (rigidBody.contains("centerOfMass"))
 			{
-				ReadVec3(*value, cfg.rigidBodyCenterOfMass);
+				throw std::runtime_error(
+					"SampledMesh rigidBody uses 'centerOfMass'; use 'centerOfPosition' instead.");
+			}
+			if (auto value = rigidBody.find("centerOfPosition"); value != rigidBody.end())
+			{
+				ReadVec3(*value, cfg.rigidBodyCenterOfPosition);
 			}
 			if (rigidBody.contains("uDir") ||
 				rigidBody.contains("vDir") ||
@@ -416,6 +435,7 @@ namespace Scene
 				}
 				cfg.modelFile = model["file"].get<std::string>();
 				cfg.modelSourceToCanonical = glm::mat3{ 1.0f };
+				cfg.modelCenterOfMassOffset = glm::vec3{ 0.0f };
 
 				if (auto it = model.find("sourceToCanonical"); it != model.end())
 				{
@@ -460,6 +480,44 @@ namespace Scene
 						ReadAxis("uDir"),
 						ReadAxis("vDir"),
 						ReadAxis("wDir"));
+				}
+
+				if (auto it = model.find("massProperties"); it != model.end())
+				{
+					if (!it->is_object())
+					{
+						throw std::runtime_error(
+							"SampledMesh model '" + cfg.modelName +
+							"' massProperties must be an object.");
+					}
+
+					if (auto offset = it->find("centerOfMassOffset"); offset != it->end())
+					{
+						if (!offset->is_array() || offset->size() != 3 ||
+							!(*offset)[0].is_number() ||
+							!(*offset)[1].is_number() ||
+							!(*offset)[2].is_number())
+						{
+							throw std::runtime_error(
+								"SampledMesh model '" + cfg.modelName +
+								"' centerOfMassOffset must contain 3 values.");
+						}
+
+						cfg.modelCenterOfMassOffset =
+						{
+							(*offset)[0].get<float>(),
+							(*offset)[1].get<float>(),
+							(*offset)[2].get<float>(),
+						};
+						if (!std::isfinite(cfg.modelCenterOfMassOffset.x) ||
+							!std::isfinite(cfg.modelCenterOfMassOffset.y) ||
+							!std::isfinite(cfg.modelCenterOfMassOffset.z))
+						{
+							throw std::runtime_error(
+								"SampledMesh model '" + cfg.modelName +
+								"' centerOfMassOffset values must be finite.");
+						}
+					}
 				}
 
 				return true;
