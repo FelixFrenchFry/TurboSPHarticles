@@ -7,9 +7,11 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <vector>
 
 // internal
 #include "source/base/enum_hub.h"
+#include "source/eval/memory/metrics_mem.h"
 #include "domain_decomp.h"
 
 
@@ -150,12 +152,18 @@ namespace Dist
 
 		bool Enabled() const { return loadMetric_ != nullptr; }
 
+		Mem::MemUsage GetScratchMemoryUsage() const;
+
 	private:
 
 		std::unique_ptr<ILoadMetric> loadMetric_{ nullptr };
 		std::unique_ptr<IRebalanceTrigger> rebalanceTrigger_{ nullptr };
 		Base::LoadBalanceWeightModel weightModel_ =
 			Base::LoadBalanceWeightModel::OwnedParticleCount;
+
+		// reusable gathered rank loads and spatial particle profile
+		std::vector<double> loadByRank_;
+		DomainDecompRepartitionProfile repartitionProfile_;
 	};
 
 } // namespace Dist

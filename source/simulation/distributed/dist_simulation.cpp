@@ -1735,6 +1735,7 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::MemUsage miscUsage{};
 	Mem::Add(miscUsage, particleRedistributionMgr_.GetScratchMemoryUsage());
 	Mem::Add(miscUsage, fluidSolverSyncMgr_.GetPlanMemoryUsage());
+	Mem::Add(miscUsage, loadBalanceMgr_.GetScratchMemoryUsage());
 	Mem::Add(miscUsage, GetParticleMemoryUsage(fluidParticleReOrderWorkBuffers_));
 	Mem::Add(miscUsage, GetParticleMemoryUsage(boundaryParticleReOrderWorkBuffers_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(pressureAccFluidParticleLocalIdxs_));

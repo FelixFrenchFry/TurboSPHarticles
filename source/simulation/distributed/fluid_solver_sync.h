@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 // internal
@@ -112,6 +113,9 @@ namespace Dist
 			const PeerPlan& peerPlan,
 			Base::DistHaloMode haloExtent);
 
+		// clears one plan for the next rebuild
+		static void ClearParticlePlan(ParticlePlan& particlePlan);
+
 		// set when Rebuild() publishes a validated plan
 		MpiContext* mpiContext_ = nullptr;
 		Bench::BenchmarksTracker* benchmarksTracker_ = nullptr;
@@ -124,6 +128,10 @@ namespace Dist
 		// peer exchange plans and reusable MPI requests
 		std::vector<PeerPlan> peerPlans_;
 		std::vector<MPI_Request> requests_;
+
+		// reusable rebuild storage
+		std::vector<PeerPlan> nextPeerPlans_;
+		std::vector<std::pair<uint32_t, uint32_t>> peerIdxSortScratch_;
 	};
 
 } // namespace Dist

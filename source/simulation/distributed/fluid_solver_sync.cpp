@@ -49,9 +49,10 @@ namespace
 	// sort local indices into the global ID order shared by both peer plans
 	void SortPeerParticleIdxs(
 		std::vector<uint32_t>& localIdxs,
-		std::vector<uint32_t>& globalIdxs)
+		std::vector<uint32_t>& globalIdxs,
+		std::vector<std::pair<uint32_t, uint32_t>>& idxPairs)
 	{
-		std::vector<std::pair<uint32_t, uint32_t>> idxPairs;
+		idxPairs.clear();
 		idxPairs.reserve(localIdxs.size());
 		for (uint32_t i = 0; i != localIdxs.size(); i++)
 		{
@@ -90,6 +91,14 @@ const FluidSolverSyncMgr::ParticlePlan& FluidSolverSyncMgr::ParticlePlanFor(
 	return haloExtent == Base::DistHaloMode::DoubleHalo
 		? peerPlan.doubleHalo
 		: peerPlan.singleHalo;
+}
+
+void FluidSolverSyncMgr::ClearParticlePlan(ParticlePlan& particlePlan)
+{
+	particlePlan.sendLocalIdxs.clear();
+	particlePlan.recvLocalIdxs.clear();
+	particlePlan.sendGlobalIdxs.clear();
+	particlePlan.recvGlobalIdxs.clear();
 }
 
 bool FluidSolverSyncMgr::Rebuild(
@@ -170,11 +179,14 @@ bool FluidSolverSyncMgr::Rebuild(
 
 	// --- [ local peer-plan construction ] ----------------------------------------------------------
 
-	// peer plans ordered by rank, looked up by binary search
-	std::vector<PeerPlan> newPeerPlans(sortedNeighborRanks.size());
+	// peer plans ordered by rank, looked up by binary search, refilled from the replaced plan
+	std::vector<PeerPlan>& newPeerPlans = nextPeerPlans_;
+	newPeerPlans.resize(sortedNeighborRanks.size());
 	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 	{
 		newPeerPlans[peerIdx].rank = sortedNeighborRanks[peerIdx];
+		ClearParticlePlan(newPeerPlans[peerIdx].singleHalo);
+		ClearParticlePlan(newPeerPlans[peerIdx].doubleHalo);
 	}
 
 	auto findPeerPlan = [&](const int peerRank) -> PeerPlan*
@@ -265,9 +277,11 @@ bool FluidSolverSyncMgr::Rebuild(
 		for (ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
 		{
 			SortPeerParticleIdxs(
-				particlePlan->sendLocalIdxs, particlePlan->sendGlobalIdxs);
+				particlePlan->sendLocalIdxs, particlePlan->sendGlobalIdxs,
+				peerIdxSortScratch_);
 			SortPeerParticleIdxs(
-				particlePlan->recvLocalIdxs, particlePlan->recvGlobalIdxs);
+				particlePlan->recvLocalIdxs, particlePlan->recvGlobalIdxs,
+				peerIdxSortScratch_);
 			if (HasDuplicateGlobalIdxs(particlePlan->sendGlobalIdxs) ||
 				HasDuplicateGlobalIdxs(particlePlan->recvGlobalIdxs))
 			{
@@ -401,7 +415,8 @@ bool FluidSolverSyncMgr::Rebuild(
 	N_localF_ = fluidParticles.N_;
 	N_globalF_ = N_expectedGlobalF;
 	distHaloMode_ = distHaloMode;
-	peerPlans_ = std::move(newPeerPlans);
+	// the replaced plan is retained as storage space for the next rebuild
+	peerPlans_.swap(nextPeerPlans_);
 	return true;
 }
 
@@ -581,13 +596,16 @@ Sim::PressureSolveErrorSums FluidSolverSyncMgr::GlobalizePressureSolveErrorSums(
 
 Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const
 {
-	// exchange payload buffers and MPI requests
+	// exchange payload buffers and MPI requests of the published and recycled plans
 	Mem::MemUsage usage{};
 
-	for (const PeerPlan& peerPlan : peerPlans_)
+	for (const std::vector<PeerPlan>* peerPlans : { &peerPlans_, &nextPeerPlans_ })
 	{
-		Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.sendBuffer));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.recvBuffer));
+		for (const PeerPlan& peerPlan : *peerPlans)
+		{
+			Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.sendBuffer));
+			Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.recvBuffer));
+		}
 	}
 	Mem::Add(usage, Mem::MemUsageOf_Vector(requests_));
 
@@ -596,17 +614,22 @@ Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const
 
 Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 {
-	// peer plans and their local/global index lists
+	// published and recycled peer plans with their local/global index lists
 	Mem::MemUsage usage = Mem::MemUsageOf_Vector(peerPlans_);
+	Mem::Add(usage, Mem::MemUsageOf_Vector(nextPeerPlans_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(peerIdxSortScratch_));
 
-	for (const PeerPlan& peerPlan : peerPlans_)
+	for (const std::vector<PeerPlan>* peerPlans : { &peerPlans_, &nextPeerPlans_ })
 	{
-		for (const ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
+		for (const PeerPlan& peerPlan : *peerPlans)
 		{
-			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendLocalIdxs));
-			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvLocalIdxs));
-			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendGlobalIdxs));
-			Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvGlobalIdxs));
+			for (const ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
+			{
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendLocalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvLocalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendGlobalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvGlobalIdxs));
+			}
 		}
 	}
 

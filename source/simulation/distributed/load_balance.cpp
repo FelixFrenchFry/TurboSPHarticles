@@ -214,7 +214,7 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 
 	// gather loads in rank order
-	std::vector<double> loadByRank{};
+	std::vector<double>& loadByRank = loadByRank_;
 	mpiContext.AllGatherDouble(localLoad, loadByRank);
 
 	// build trigger inputs from the gathered loads
@@ -253,7 +253,7 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	if (shouldRebalance == 0) { return true; }
 
 	// build and combine the strategy-defined spatial particle profile
-	DomainDecompRepartitionProfile profile{};
+	DomainDecompRepartitionProfile& profile = repartitionProfile_;
 	try
 	{
 		DomainDecompRepartitionParticleInput profileInput = localParticleInput;
@@ -292,4 +292,15 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 
 	// reduce the domain repartition result across ranks
 	return mpiContext.AllTrue(localOk);
+}
+
+Mem::MemUsage LoadBalanceMgr::GetScratchMemoryUsage() const
+{
+	Mem::MemUsage usage{};
+
+	Mem::Add(usage, Mem::MemUsageOf_Vector(loadByRank_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(repartitionProfile_.ownedFluidByUnit));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(repartitionProfile_.ownedBoundaryByUnit));
+
+	return usage;
 }

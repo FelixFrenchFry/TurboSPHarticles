@@ -87,7 +87,7 @@
     },
     "SampledMesh": {
       "type": "SampledMesh",
-      "model": "HouseBoat",
+      "model": "TugBoat",
       "modelTargetExtent": 1.2,
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
@@ -111,7 +111,7 @@
         "centerOfMass": [ 0.75, 0.6, 0.5 ],
         "yawDeg": 0.0,
         "pitchDeg": 0.0,
-        "rollDeg": 45.0
+        "rollDeg": 0.0
       },
       "rigidDensity": 400.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
