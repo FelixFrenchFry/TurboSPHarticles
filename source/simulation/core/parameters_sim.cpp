@@ -102,6 +102,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				if (s == "BigDroplet") { out = Base::ScenarioType::BigDroplet; return true; }
 				if (s == "RigidCube") { out = Base::ScenarioType::RigidCube; return true; }
 				if (s == "SampledMesh") { out = Base::ScenarioType::SampledMesh; return true; }
+				if (s == "SampledMeshCollection")
+					{ out = Base::ScenarioType::SampledMeshCollection; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())

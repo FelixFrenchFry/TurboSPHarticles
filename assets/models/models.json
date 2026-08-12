@@ -70,8 +70,8 @@
         "watertight": true
       }
     },
-    "FerryShip": {
-      "file": "ferry_ship.obj",
+    "PassengerShip": {
+      "file": "passenger_ship.obj",
       "sourceToCanonical": {
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 0.0, -1.0 ],

@@ -13,6 +13,7 @@
 #include "big_droplet.h"
 #include "rigid_cube.h"
 #include "sampled_mesh.h"
+#include "sampled_mesh_collection.h"
 
 
 
@@ -98,6 +99,13 @@ namespace Scene
 			cfg = LoadSampledMeshConfigFromProfile(profile, scenarioMgr);
 
 			return std::make_unique<SampledMeshScene>(scenarioMgr, cfg);
+		}
+		case Base::ScenarioType::SampledMeshCollection:
+		{
+			SampledMeshCollectionConfig cfg;
+			cfg = LoadSampledMeshCollectionConfigFromProfile(profile, scenarioMgr);
+
+			return std::make_unique<SampledMeshCollectionScene>(scenarioMgr, cfg);
 		}
 		default:
 			throw std::runtime_error("Unsupported simulation scenario type requested.");

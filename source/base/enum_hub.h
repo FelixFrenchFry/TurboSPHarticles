@@ -40,6 +40,7 @@ namespace Base
 		BigDroplet,         // 2
 		RigidCube,          // 3
 		SampledMesh,        // 4
+		SampledMeshCollection, // 5
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
@@ -55,6 +56,8 @@ namespace Base
 			return "RigidCube";
 		case ScenarioType::SampledMesh:
 			return "SampledMesh";
+		case ScenarioType::SampledMeshCollection:
+			return "SampledMeshCollection";
 		}
 		return "ScenarioType::<unknown>";
 	}
