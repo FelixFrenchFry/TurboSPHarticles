@@ -100,21 +100,6 @@
         "watertight": true
       }
     },
-    "TransportShip": {
-      "file": "transport_ship.obj",
-      "sourceToCanonical": {
-        "uDir": [-1.0, 0.0, 0.0],
-        "vDir": [0.0, 0.0, 1.0],
-        "wDir": [0.0, 1.0, 0.0]
-      },
-      "metadata": {
-        "vertexCount": 70850,
-        "triangleCount": 141580,
-        "sourceExtent": [102.5633, 23.898200000000003, 22.7342],
-        "enclosedVolume": 26815.469627253704,
-        "watertight": true
-      }
-    },
     "CoracleBoat": {
       "file": "coracle_boat.obj",
       "sourceToCanonical": {
@@ -142,21 +127,6 @@
         "triangleCount": 65100,
         "sourceExtent": [95.33519999999999, 186.86579999999998, 43.3697],
         "enclosedVolume": 271092.45490653213,
-        "watertight": true
-      }
-    },
-    "FireBoat": {
-      "file": "fire_boat.obj",
-      "sourceToCanonical": {
-        "uDir": [1.0, 0.0, 0.0],
-        "vDir": [0.0, 0.0, -1.0],
-        "wDir": [0.0, 1.0, 0.0]
-      },
-      "metadata": {
-        "vertexCount": 64212,
-        "triangleCount": 128164,
-        "sourceExtent": [562.148, 245.4516, 352.5598],
-        "enclosedVolume": 11852806.462752689,
         "watertight": true
       }
     },
@@ -202,21 +172,6 @@
         "triangleCount": 66936,
         "sourceExtent": [250.9456, 481.91769999999997, 180.6176],
         "enclosedVolume": 12106424.7912155,
-        "watertight": true
-      }
-    },
-    "ToyBoat": {
-      "file": "toy_boat.obj",
-      "sourceToCanonical": {
-        "uDir": [0.0, 0.0, -1.0],
-        "vDir": [-1.0, 0.0, 0.0],
-        "wDir": [0.0, 1.0, 0.0]
-      },
-      "metadata": {
-        "vertexCount": 3485,
-        "triangleCount": 6966,
-        "sourceExtent": [98.980099, 254.0000125014, 72.8118396],
-        "enclosedVolume": 734989.5476918041,
         "watertight": true
       }
     },
