@@ -1,15 +1,15 @@
 {
-  "backendVersion": "CPU01",
-  "scenarioType": "RigidCube",
+  "backendVersion": "GPU01",
+  "scenarioType": "SampledMesh",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
-  "domainDecompMethod": 1,
+  "domainDecompMethod": 0,
   "distHaloMode": 0,
   "loadBalanceMetric": 1,
   "loadBalanceTrigger": 0,
   "loadBalanceWeightModel": 0,
 
-  "maxSteps": 3000,
+  "maxSteps": -1,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -36,7 +36,7 @@
   "loadBalanceThreshold": 0.01,
   "loadBalanceSustainSteps": 3,
   "loadBalanceCooldownSteps": 20,
-  "loadBalanceIntervalSteps": 100,
+  "loadBalanceIntervalSteps": 10,
 
   "surfaceSamplingMinDistanceRatio": 0.4,
   "surfaceSamplingMaxDistanceRatio": 1.0,
@@ -56,8 +56,8 @@
     "velocity": true
   },
 
-  "exportEnabled": true,
-  "exportDir": "Z",
+  "exportEnabled": false,
+  "exportDir": "test",
   "exportInterval": 10,
   "surfaceNbrCountRatio": 0.75
 }

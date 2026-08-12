@@ -379,6 +379,36 @@
         "enclosedVolume": 1260.2863022653426,
         "watertight": true
       }
+    },
+    "AsteroidVesta": {
+      "file": "asteroid_vesta.obj",
+      "sourceToCanonical": {
+        "uDir": [1.0, 0.0, 0.0],
+        "vDir": [0.0, 1.0, 0.0],
+        "wDir": [0.0, 0.0, 1.0]
+      },
+      "metadata": {
+        "vertexCount": 90002,
+        "triangleCount": 180000,
+        "sourceExtent": [354.985808, 356.327195, 322.534581],
+        "enclosedVolume": 20843531.95293528,
+        "watertight": true
+      }
+    },
+    "AsteroidBennu": {
+      "file": "asteroid_bennu.obj",
+      "sourceToCanonical": {
+        "uDir": [1.0, 0.0, 0.0],
+        "vDir": [0.0, 1.0, 0.0],
+        "wDir": [0.0, 0.0, 1.0]
+      },
+      "metadata": {
+        "vertexCount": 9122,
+        "triangleCount": 18240,
+        "sourceExtent": [1350.706055, 1301.637573, 1309.633911],
+        "enclosedVolume": 1157631118.9165447,
+        "watertight": true
+      }
     }
   }
 }
