@@ -25,7 +25,7 @@ namespace
 
 } // namespace anonymous
 
-std::vector<float> Dist::MakeUniformSplitPositions(
+std::vector<float> Dist::MakeUniformSlabSplitPositions(
 	const AABB& globalBounds,
 	const int N_ranks,
 	const int splitAxis)
@@ -58,6 +58,81 @@ std::vector<float> Dist::MakeUniformSplitPositions(
 		splitPositions[rank] = splitMin + static_cast<float>(rank) * slabLen;
 	}
 	splitPositions[N_ranks] = splitMax;
+
+	return splitPositions;
+}
+
+std::vector<float> Dist::MakeBalancedSlabSplitPositions(
+	const std::vector<uint64_t>& weightByBin,
+	const AABB& globalBounds,
+	const int N_ranks,
+	const int splitAxis)
+{
+	if (weightByBin.empty())
+	{
+		throw std::runtime_error(
+			"Cannot make balanced split positions from an empty weight profile.");
+	}
+
+	// axis bounds and rank count are validated by the uniform positions this starts from
+	std::vector<float> splitPositions =
+		MakeUniformSlabSplitPositions(globalBounds, N_ranks, splitAxis);
+
+	uint64_t totalWeight = 0;
+	for (const uint64_t binWeight : weightByBin) { totalWeight += binWeight; }
+
+	// an empty profile carries no balancing information, so the slabs stay uniform
+	if (totalWeight == 0) { return splitPositions; }
+
+	// place interior walls at equal cumulative weight targets
+	const uint64_t N_bins = weightByBin.size();
+	const uint64_t rankCount = static_cast<uint64_t>(N_ranks);
+	const float splitMin = splitPositions.front();
+	const float splitMax = splitPositions.back();
+	const double binLength = static_cast<double>(splitMax - splitMin) /
+		static_cast<double>(N_bins);
+	uint64_t weightBin = 0;
+	uint64_t cumulativeWeight = 0;
+	for (int splitIdx = 1; splitIdx < N_ranks; splitIdx++)
+	{
+		const uint64_t targetWeight =
+			(totalWeight / rankCount) * static_cast<uint64_t>(splitIdx) +
+			(totalWeight % rankCount) * static_cast<uint64_t>(splitIdx) / rankCount;
+
+		// find the histogram bin containing this cumulative target
+		while (weightBin < N_bins && cumulativeWeight + weightByBin[weightBin] < targetWeight)
+		{
+			cumulativeWeight += weightByBin[weightBin];
+			weightBin += 1;
+		}
+		if (weightBin >= N_bins)
+		{
+			throw std::runtime_error(
+				"Cannot derive balanced split positions from the supplied weights.");
+		}
+
+		const uint64_t targetWithinBin = targetWeight - cumulativeWeight;
+		const double binWeight = static_cast<double>(weightByBin[weightBin]);
+		const double binFraction = binWeight > 0.0
+			? static_cast<double>(targetWithinBin) / binWeight
+			: 0.0;
+		const double newWall = static_cast<double>(splitMin) +
+			(static_cast<double>(weightBin) + std::clamp(binFraction, 0.0, 1.0)) * binLength;
+
+		// keep walls strictly increasing when several targets share a position
+		const float previousWall = splitPositions[splitIdx - 1];
+		float newWallFloat = static_cast<float>(newWall);
+		if (!(newWallFloat > previousWall))
+		{
+			newWallFloat = std::nextafter(previousWall, splitMax);
+		}
+		if (!(newWallFloat < splitMax))
+		{
+			throw std::runtime_error(
+				"Cannot derive strictly increasing balanced split positions.");
+		}
+		splitPositions[splitIdx] = newWallFloat;
+	}
 
 	return splitPositions;
 }

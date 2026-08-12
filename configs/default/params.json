@@ -1,6 +1,6 @@
 {
   "backendVersion": "CPU01",
-  "scenarioType": "ConvergingDam",
+  "scenarioType": "RigidCube",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 1,
@@ -9,7 +9,7 @@
   "loadBalanceTrigger": 0,
   "loadBalanceWeightModel": 0,
 
-  "maxSteps": 20,
+  "maxSteps": 3000,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
@@ -36,7 +36,7 @@
   "loadBalanceThreshold": 0.01,
   "loadBalanceSustainSteps": 3,
   "loadBalanceCooldownSteps": 20,
-  "loadBalanceIntervalSteps": 10,
+  "loadBalanceIntervalSteps": 100,
 
   "surfaceSamplingMinDistanceRatio": 0.4,
   "surfaceSamplingMaxDistanceRatio": 1.0,
@@ -56,8 +56,8 @@
     "velocity": true
   },
 
-  "exportEnabled": false,
-  "exportDir": "test",
+  "exportEnabled": true,
+  "exportDir": "Z",
   "exportInterval": 10,
   "surfaceNbrCountRatio": 0.75
 }

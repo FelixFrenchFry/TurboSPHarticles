@@ -145,7 +145,6 @@ std::unique_ptr<IRebalanceTrigger> Dist::MakeRebalanceTrigger(
 
 bool LoadBalanceMgr::Configure(
 	const Sim::SimParams& params,
-	const IDomainDecomp& domainDecomp,
 	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
@@ -159,17 +158,6 @@ bool LoadBalanceMgr::Configure(
 	{
 		loadMetric_ = MakeLoadMetric(params.loadBalanceMetric);
 		if (!loadMetric_) { return true; }
-
-		// verify repartition support before creating the trigger
-		if (!domainDecomp.SupportsRepartition(weightModel_))
-		{
-			if (failMsg)
-			{
-				*failMsg = "Selected domain decomposition does not support load balancing.";
-			}
-			loadMetric_.reset();
-			return false;
-		}
 
 		// create trigger with the configured limits
 		rebalanceTrigger_ = MakeRebalanceTrigger(
@@ -201,8 +189,7 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	if (!Enabled()) { return true; }
 
 	// evaluate and validate load of this rank
-	bool localOk = rebalanceTrigger_ != nullptr &&
-		domainDecomp.SupportsRepartition(weightModel_);
+	bool localOk = rebalanceTrigger_ != nullptr;
 	double localLoad = 0.0;
 	if (localOk)
 	{
@@ -222,7 +209,7 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	}
 	else if (failMsg)
 	{
-		*failMsg = "Load balance manager is not configured for the selected domain decomposition.";
+		*failMsg = "Load balance manager has no rebalance trigger.";
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 

@@ -1,4 +1,4 @@
-// decomp_aabb_uniform.h
+// decomp_aabb_slabs.h
 
 #pragma once
 
@@ -13,12 +13,12 @@
 
 namespace Dist
 {
-	// uniform AABB slab decomp, split along the global X axis
-	class Decomp_AABB_Uniform final : public IDomainDecomp
+	// dynamically sized AABB slabs, split along the global X axis
+	class Decomp_AABB_Slabs final : public IDomainDecomp
 	{
 	public:
 
-		const char* Name() const override { return "Decomp_AABB_Uniform"; }
+		const char* Name() const override { return "Decomp_AABB_Slabs"; }
 
 		void Build(const DomainDecompInput& input) override;
 		const AABB& GlobalExtentAABB() const override;
@@ -34,12 +34,15 @@ namespace Dist
 		AABB HaloExtentAABB(int rank) const override;
 
 		bool IsValidForRankCount(int N_ranks) const override;
-		bool SupportsRepartition(Base::LoadBalanceWeightModel) const override { return false; }
+		void BuildRepartitionProfile(
+			const DomainDecompRepartitionParticleInput& input,
+			DomainDecompRepartitionProfile& profile) const override;
 		void Repartition(const DomainDecompRepartitionInput& input) override;
 
 	private:
 
 		static constexpr int SPLIT_AXIS = 0;
+		static constexpr uint32_t PROFILE_BIN_COUNT = 256;
 
 		AABBSlabLayout slabLayout_;
 	};

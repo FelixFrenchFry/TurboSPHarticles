@@ -137,7 +137,6 @@ namespace Dist
 
 		bool Configure(
 			const Sim::SimParams& params,
-			const IDomainDecomp& domainDecomp,
 			std::string* failMsg = nullptr);
 
 		// [ rank-reduced ] evaluates the local metric and broadcasts the trigger decision

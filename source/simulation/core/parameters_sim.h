@@ -34,7 +34,7 @@ namespace Sim
 		Base::NeighborListMethod neighborListMethod =
 			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
 		Base::DomainDecompMethod domainDecompMethod =
-			Base::DomainDecompMethod::AABB_Uniform; // (distributed only)
+			Base::DomainDecompMethod::AABB_Slabs; // (distributed only)
 		Base::DistHaloMode distHaloMode =
 			Base::DistHaloMode::SingleHalo; // (distributed only)
 		Base::LoadBalanceMetric loadBalanceMetric =

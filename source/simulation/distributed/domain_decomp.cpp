@@ -6,8 +6,8 @@
 
 // internal
 #include "domain_decomp.h"
-#include "layouts/decomp_aabb_dynamic.h"
-#include "layouts/decomp_aabb_uniform.h"
+#include "layouts/decomp_aabb_columns.h"
+#include "layouts/decomp_aabb_slabs.h"
 
 
 
@@ -17,13 +17,13 @@ namespace Dist
 	{
 		switch (method)
 		{
-		case Base::DomainDecompMethod::AABB_Uniform:
+		case Base::DomainDecompMethod::AABB_Slabs:
 		{
-			return std::make_unique<Decomp_AABB_Uniform>();
+			return std::make_unique<Decomp_AABB_Slabs>();
 		}
-		case Base::DomainDecompMethod::AABB_Dynamic:
+		case Base::DomainDecompMethod::AABB_Columns:
 		{
-			return std::make_unique<Decomp_AABB_Dynamic>();
+			return std::make_unique<Decomp_AABB_Columns>();
 		}
 		}
 

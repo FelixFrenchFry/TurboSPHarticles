@@ -3,7 +3,7 @@
   "scenarioType": "RigidCube",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
-  "domainDecompMethod": 1,
+  "domainDecompMethod": 0,
   "distHaloMode": 0,
   "loadBalanceMetric": 1,
   "loadBalanceTrigger": 0,

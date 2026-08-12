@@ -605,7 +605,7 @@ void DistSimulationMgr::SelectDomainDecomp(const Base::DomainDecompMethod method
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to create distributed domain decomp ({}): {} "
-			"AABB_Uniform is currently the only domain decomp.",
+			"AABB_Slabs and AABB_Columns are the domain decomps.",
 			mpiContext_.Rank(), mpiContext_.Size(),
 			static_cast<int>(method), ex.what());
 		return;
@@ -614,7 +614,7 @@ void DistSimulationMgr::SelectDomainDecomp(const Base::DomainDecompMethod method
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to create distributed domain decomp ({}). "
-			"AABB_Uniform is currently the only domain decomp.",
+			"AABB_Slabs and AABB_Columns are the domain decomps.",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(method));
 		return;
 	}
@@ -1088,6 +1088,29 @@ bool DistSimulationMgr::BuildDomainDecomp()
 					mpiContext_.Rank(), mpiContext_.Size());
 				localOk = false;
 			}
+			else
+			{
+				// the initial layout is uniform, so every rank holds the same subdomain extent
+				constexpr const char* axisNames[] = { "X", "Y", "Z" };
+				const glm::vec3 ownedExtents = domainDecomp_->OwnedExtentAABB(mpiContext_.Rank()).Extents();
+				const glm::vec3 globalExtents = globalBounds.Extents();
+
+				for (int axis = 0; axis < 3; axis++)
+				{
+					// only split axes shrink below the global extent
+					if (ownedExtents[axis] >= globalExtents[axis] ||
+						ownedExtents[axis] >= simParams_.distHaloRadius)
+					{
+						continue;
+					}
+
+					SPDLOG_WARN_MPI(
+						"Distributed subdomains are thinner than the halo radius on the {} axis "
+						"({:.4f} < {:.4f}), so their halos reach past the direct neighbors.",
+						mpiContext_, axisNames[axis], ownedExtents[axis],
+						simParams_.distHaloRadius);
+				}
+			}
 		}
 	}
 	catch (const std::exception& ex)
@@ -1107,12 +1130,7 @@ bool DistSimulationMgr::ConfigureLoadBalancing()
 
 	try
 	{
-		if (!domainDecomp_)
-		{
-			failMsg = "No domain decomposition selected.";
-			localOk = false;
-		}
-		else if (!loadBalanceMgr_.Configure(simParams_, *domainDecomp_, &failMsg))
+		if (!loadBalanceMgr_.Configure(simParams_, &failMsg))
 		{
 			localOk = false;
 		}

@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <stdexcept>
 #include <vector>
 
 // internal
@@ -87,23 +86,13 @@ namespace Dist
 
 		virtual bool IsValidForRankCount(int N_ranks) const = 0;
 
-		// reports whether the strategy supports the selected repartition weight model
-		virtual bool SupportsRepartition(Base::LoadBalanceWeightModel) const { return false; }
-
 		// builds the local strategy-defined spatial weight profile
 		virtual void BuildRepartitionProfile(
-			const DomainDecompRepartitionParticleInput&,
-			DomainDecompRepartitionProfile&) const
-		{
-			throw std::runtime_error(
-				"This domain decomp does not support repartition weight profiles.");
-		}
+			const DomainDecompRepartitionParticleInput& input,
+			DomainDecompRepartitionProfile& profile) const = 0;
 
-		// strategies that do not support repartitioning must not silently ignore a request
-		virtual void Repartition(const DomainDecompRepartitionInput&)
-		{
-			throw std::runtime_error("This domain decomp strategy does not support repartitioning.");
-		}
+		// re-derives the rank subdomains from the globally reduced weight profile
+		virtual void Repartition(const DomainDecompRepartitionInput& input) = 0;
 	};
 
 	// domain decomp factory

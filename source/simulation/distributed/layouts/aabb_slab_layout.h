@@ -3,6 +3,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <vector>
 
 // internal
@@ -13,7 +14,14 @@
 namespace Dist
 {
 	// create uniformly spaced split positions for an AABB slab layout
-	std::vector<float> MakeUniformSplitPositions(
+	std::vector<float> MakeUniformSlabSplitPositions(
+		const AABB& globalBounds,
+		int N_ranks,
+		int splitAxis);
+
+	// create split positions placing equal cumulative weight into every slab
+	std::vector<float> MakeBalancedSlabSplitPositions(
+		const std::vector<uint64_t>& weightByBin,
 		const AABB& globalBounds,
 		int N_ranks,
 		int splitAxis);
