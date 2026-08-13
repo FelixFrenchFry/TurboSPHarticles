@@ -127,6 +127,7 @@ namespace Sim
 			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
 			const Sync::FluidParticles& appendedFluidParticles,
 			const Sync::BoundaryParticles& appendedBoundaryParticles,
+			bool redistributeBoundaryParticles,
 			const SimParams& params) = 0;
 
 		// copies/applies only dynamic rigid-body state used by distributed synchronization

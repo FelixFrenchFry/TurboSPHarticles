@@ -196,6 +196,7 @@ namespace Dist
 		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
 		ParticleReOrderWorkBuffers boundaryParticleReOrderWorkBuffers_{};
 		ParticleRedistributionMgr particleRedistributionMgr_{};
+		bool boundaryRedistributionRequired_ = true;
 		FluidSolverSyncMgr fluidSolverSyncMgr_{};
 		LoadBalanceMgr loadBalanceMgr_{};
 		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_{};

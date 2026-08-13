@@ -519,6 +519,7 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::SetBulkFromParticleView(
 	if (localIdxs.empty()) { return; }
 
 	// gather particle fields sequentially within each parallel block
+	// TODO: use explicit SIMD similarly to sph_solver.cpp?
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
@@ -563,6 +564,7 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::CopyBulkToLocalParticles(
 	if (IsEmpty()) { return; }
 
 	// copy particle fields sequentially within each parallel block
+	// TODO: use explicit SIMD similarly to sph_solver.cpp?
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
@@ -1837,6 +1839,7 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
 	const IDomainDecomp& domainDecomp,
+	const bool redistributeBoundaryParticles,
 	const int rank, const int N_ranks,
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
@@ -1863,6 +1866,8 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	}
 
 	// route boundary migration and halos
+	// (only if needed, since boundary particles are static)
+	if (redistributeBoundaryParticles)
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 			timingReport, ParticleRedistributionTimingOp::Route);
@@ -1883,6 +1888,7 @@ bool ParticleRedistributionMgr::PackSendBuffers(
 	const Sync::BoundaryConstView& boundaryParticles,
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
+	const bool redistributeBoundaryParticles,
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
@@ -1898,29 +1904,32 @@ bool ParticleRedistributionMgr::PackSendBuffers(
 		auto& rankBuffers = rankBuffers_[dstRank];
 		if (dstRank == rank) { continue; }
 
+		// fluid particles
 		const auto& ownedFluidLocalIdxs =
 			routes_.ownedFluidLocalIdxs_ByDstRank[dstRank];
 		const auto& haloFluidLocalIdxs =
 			routes_.haloFluidLocalIdxs_ByDstRank[dstRank];
-		const auto& ownedBoundaryLocalIdxs =
-			routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank];
-		const auto& haloBoundaryLocalIdxs =
-			routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank];
-
-		// TODO: use explicit SIMD for particle field gathers similarly to sph_solver.cpp?
 		rankBuffers.sendOwnedFluidParticles.SetBulkFromParticleView(
 			fluidParticles, fluidParticleState, ownedFluidLocalIdxs);
 		rankBuffers.sendHaloFluidParticles.SetBulkFromParticleView(
 			fluidParticles, fluidParticleState, haloFluidLocalIdxs);
-		rankBuffers.sendOwnedBoundaryParticles.SetBulkFromParticleView(
-			boundaryParticles, boundaryParticleState, ownedBoundaryLocalIdxs);
-		rankBuffers.sendHaloBoundaryParticles.SetBulkFromParticleView(
-			boundaryParticles, boundaryParticleState, haloBoundaryLocalIdxs);
-
 		rankBuffers.N_sendOwnedF = rankBuffers.sendOwnedFluidParticles.CheckedCount();
 		rankBuffers.N_sendHaloF = rankBuffers.sendHaloFluidParticles.CheckedCount();
-		rankBuffers.N_sendOwnedB = rankBuffers.sendOwnedBoundaryParticles.CheckedCount();
-		rankBuffers.N_sendHaloB = rankBuffers.sendHaloBoundaryParticles.CheckedCount();
+
+		// boundary particles
+		if (redistributeBoundaryParticles) // (only if required)
+		{
+			const auto& ownedBoundaryLocalIdxs =
+				routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank];
+			const auto& haloBoundaryLocalIdxs =
+				routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank];
+			rankBuffers.sendOwnedBoundaryParticles.SetBulkFromParticleView(
+				boundaryParticles, boundaryParticleState, ownedBoundaryLocalIdxs);
+			rankBuffers.sendHaloBoundaryParticles.SetBulkFromParticleView(
+				boundaryParticles, boundaryParticleState, haloBoundaryLocalIdxs);
+			rankBuffers.N_sendOwnedB = rankBuffers.sendOwnedBoundaryParticles.CheckedCount();
+			rankBuffers.N_sendHaloB = rankBuffers.sendHaloBoundaryParticles.CheckedCount();
+		}
 
 		const uint64_t countBase = static_cast<uint64_t>(dstRank) * PARTICLE_REDISTRIBUTION_LANE_COUNT;
 		sendCounts_[
@@ -2559,6 +2568,7 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 	const DistParticleState& fluidParticleState,
 	const DistParticleState& boundaryParticleState,
 	const IDomainDecomp& domainDecomp,
+	const bool redistributeBoundaryParticles,
 	const int rank,
 	const int N_ranks,
 	std::string* failMsg,
@@ -2588,7 +2598,8 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 	return RouteOwnedParticles(
 		fluidParticles, boundaryParticles,
 		fluidParticleState, boundaryParticleState,
-		domainDecomp, rank, N_ranks, failMsg, timingReport);
+		domainDecomp, redistributeBoundaryParticles,
+		rank, N_ranks, failMsg, timingReport);
 }
 
 bool ParticleRedistributionMgr::RedistributeParticles(
@@ -2598,6 +2609,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	const IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
 	const Sim::SimParams& simParams,
+	const bool redistributeBoundaryParticles,
 	const uint32_t N_globalF,
 	const uint32_t N_globalB,
 	std::string* failMsg,
@@ -2636,7 +2648,8 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		localOk = BuildExchangeRoutes(
 			fluidParticles, boundaryParticles,
 			fluidParticleState, boundaryParticleState,
-			domainDecomp, rank, N_ranks, failMsg, timingReport);
+			domainDecomp, redistributeBoundaryParticles,
+			rank, N_ranks, failMsg, timingReport);
 
 		// pack outgoing migration and halo payloads
 		if (localOk)
@@ -2646,6 +2659,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 			localOk = PackSendBuffers(
 				fluidParticles, boundaryParticles,
 				fluidParticleState, boundaryParticleState,
+				redistributeBoundaryParticles,
 				rank, N_ranks, failMsg);
 		}
 	}
@@ -2686,7 +2700,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		ExchangePayloads(rank, N_ranks, mpiContext);
 	}
 
-	// prepare retained compaction maps, appended particle storage, and matching metadata
+	// prepare retained compaction, appended storage, and matching metadata
 	// (backend mutation starts only after every rank completes this preparation)
 	try
 	{
@@ -2694,7 +2708,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 			fluidParticles, fluidParticleState,
 			domainDecomp, rank, simParams.distHaloRadius,
 			N_globalF, failMsg, timingReport);
-		if (localOk)
+		if (localOk && redistributeBoundaryParticles)
 		{
 			localOk = PrepareBoundaryParticleMutation(
 				boundaryParticles, boundaryParticleState,
@@ -2711,7 +2725,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		localOk,
 		ParticleRedistributionTimingOp::SyncRebuild)) { return false; }
 
-	// compact retained particles and append migrated and halo particles in the backend
+	// compact and append fluid particles, and static boundaries only when required
 	try
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
@@ -2721,6 +2735,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
 			appendedFluidParticles_,
 			appendedBoundaryParticles_,
+			redistributeBoundaryParticles,
 			simParams);
 		if (!localOk && failMsg)
 		{
@@ -2738,7 +2753,10 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 
 	// publish matching metadata only after every backend mutation succeeded
 	std::swap(fluidParticleState, rebuiltFluidParticleState_);
-	std::swap(boundaryParticleState, rebuiltBoundaryParticleState_);
+	if (redistributeBoundaryParticles)
+	{
+		std::swap(boundaryParticleState, rebuiltBoundaryParticleState_);
+	}
 
 	return true;
 }

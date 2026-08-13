@@ -404,6 +404,7 @@ bool DistSimulationMgr::Init(
 	const std::vector<std::string>& simOverrides,
 	const bool logParamStatus)
 {
+	boundaryRedistributionRequired_ = true;
 	if (!LoadParamsFromProfileBroadcast(profile, logParamStatus))
 	{
 		return false;
@@ -1974,12 +1975,18 @@ bool DistSimulationMgr::UpdateLoadBalancing()
 	};
 
 	std::string failMsg{};
+	bool repartitioned = false;
 	const bool ok = loadBalanceMgr_.EvaluateLoadAndRebalance(
 		localSample,
 		localParticleInput,
 		*domainDecomp_,
 		mpiContext_,
+		repartitioned,
 		&failMsg);
+	if (ok && repartitioned)
+	{
+		boundaryRedistributionRequired_ = true;
+	}
 	if (!ok)
 	{
 		SPDLOG_ERROR(
@@ -2116,6 +2123,7 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 		if (!AllRanksTrue(localOk)) { return false; }
 
 		std::string failMsg{};
+		const bool redistributeBoundaryParticles = boundaryRedistributionRequired_;
 		if (localOk && !particleRedistributionMgr_.RedistributeParticles(
 			*distParticleBackend_,
 			fluidParticleState_,
@@ -2123,6 +2131,7 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 			*domainDecomp_,
 			mpiContext_,
 			params,
+			redistributeBoundaryParticles,
 			static_cast<uint32_t>(N_expectedGlobalF_),
 			static_cast<uint32_t>(N_expectedGlobalB_),
 			&failMsg,
@@ -2132,6 +2141,10 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 				"[rank {}/{}] Failed to redistribute particles: {}",
 				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 			localOk = false;
+		}
+		else if (localOk && redistributeBoundaryParticles)
+		{
+			boundaryRedistributionRequired_ = false;
 		}
 	}
 	catch (const std::exception& ex)

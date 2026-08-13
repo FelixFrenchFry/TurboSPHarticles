@@ -148,6 +148,7 @@ namespace Dist
 			const DomainDecompRepartitionParticleInput& localParticleInput,
 			IDomainDecomp& domainDecomp,
 			const MpiContext& mpiContext,
+			bool& repartitioned,
 			std::string* failMsg = nullptr);
 
 		bool Enabled() const { return loadMetric_ != nullptr; }

@@ -110,10 +110,10 @@
       "rigidBody": {
         "centerOfPosition": [ 0.75, 0.6, 0.5 ],
         "yawDeg": 0.0,
-        "pitchDeg": 0.0,
+        "pitchDeg": -15.0,
         "rollDeg": 0.0
       },
-      "rigidDensity": 400.0,
+      "rigidDensity": 600.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     },

@@ -136,6 +136,7 @@ namespace Dist
 			const DistParticleState& fluidParticleState,
 			const DistParticleState& boundaryParticleState,
 			const IDomainDecomp& domainDecomp,
+			bool redistributeBoundaryParticles,
 			int rank, int N_ranks,
 			std::string* failMsg = nullptr,
 			ParticleRedistributionTimingReport* timingReport = nullptr);
@@ -148,6 +149,7 @@ namespace Dist
 			const IDomainDecomp& domainDecomp,
 			const MpiContext& mpiContext,
 			const Sim::SimParams& simParams,
+			bool redistributeBoundaryParticles,
 			uint32_t N_globalF,
 			uint32_t N_globalB,
 			std::string* failMsg = nullptr,
@@ -378,6 +380,7 @@ namespace Dist
 			const DistParticleState& fluidParticleState,
 			const DistParticleState& boundaryParticleState,
 			const IDomainDecomp& domainDecomp,
+			bool redistributeBoundaryParticles,
 			int rank, int N_ranks,
 			std::string* failMsg,
 			ParticleRedistributionTimingReport* timingReport);
@@ -386,6 +389,7 @@ namespace Dist
 			const Sync::BoundaryConstView& boundaryParticles,
 			const DistParticleState& fluidParticleState,
 			const DistParticleState& boundaryParticleState,
+			bool redistributeBoundaryParticles,
 			int rank, int N_ranks,
 			std::string* failMsg);
 		bool PrepareReceiveBuffers(

@@ -183,8 +183,10 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	const DomainDecompRepartitionParticleInput& localParticleInput,
 	IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
+	bool& repartitioned,
 	std::string* failMsg)
 {
+	repartitioned = false;
 	if (failMsg) { failMsg->clear(); }
 	if (!Enabled()) { return true; }
 
@@ -291,7 +293,9 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	}
 
 	// reduce the domain repartition result across ranks
-	return mpiContext.AllTrue(localOk);
+	const bool repartitionOk = mpiContext.AllTrue(localOk);
+	repartitioned = repartitionOk;
+	return repartitionOk;
 }
 
 Mem::MemUsage LoadBalanceMgr::GetScratchMemoryUsage() const
