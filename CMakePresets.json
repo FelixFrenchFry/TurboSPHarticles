@@ -154,6 +154,16 @@
       }
     },
     {
+      "name": "Linux-x64-Release-CUDA",
+      "inherits": "base-linux",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "TSP_CUDA_ARCHITECTURE": "80;90",
+        "ENABLE_VIS": "OFF"
+      }
+    },
+    {
       "name": "Linux-x64-Debug-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
@@ -218,6 +228,10 @@
     {
       "name": "Linux-Release",
       "configurePreset": "Linux-x64-Release"
+    },
+    {
+      "name": "Linux-Release-CUDA",
+      "configurePreset": "Linux-x64-Release-CUDA"
     },
     {
       "name": "Linux-Debug-MPI",
