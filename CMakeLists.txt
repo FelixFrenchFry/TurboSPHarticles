@@ -14,8 +14,36 @@ option(ENABLE_VIS "Build window with visual interface and particle rendering" ON
 option(ENABLE_MPI "Build distributed headless application with MPI" OFF)
 
 set(TSP_CUDA_ARCHITECTURE "native" CACHE STRING "CUDA architecture")
-set(TSP_CPU_SIMD_ARCH "AVX256" CACHE STRING "CPU SIMD architecture")
-set_property(CACHE TSP_CPU_SIMD_ARCH PROPERTY STRINGS AVX256 AVX512)
+set(TSP_CPU_SIMD_ARCH "auto" CACHE STRING "CPU SIMD architecture")
+set_property(CACHE TSP_CPU_SIMD_ARCH PROPERTY STRINGS auto AVX256 AVX512)
+
+# 'auto' resolves against the configure host, not the run host
+if(TSP_CPU_SIMD_ARCH STREQUAL "auto")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        # MSVC has no __builtin_cpu_supports
+        set(TSP_HOST_HAS_AVX512 OFF)
+    else()
+        include(CheckCXXSourceRuns)
+        check_cxx_source_runs("
+int main()
+{
+    __builtin_cpu_init();
+    return (__builtin_cpu_supports(\"avx512f\")
+        && __builtin_cpu_supports(\"avx512cd\")
+        && __builtin_cpu_supports(\"avx512dq\")
+        && __builtin_cpu_supports(\"avx512bw\")) ? 0 : 1;
+}
+" TSP_HOST_HAS_AVX512)
+    endif()
+
+    if(TSP_HOST_HAS_AVX512)
+        set(TSP_CPU_SIMD_ARCH "AVX512")
+    else()
+        set(TSP_CPU_SIMD_ARCH "AVX256")
+    endif()
+
+    set(TSP_CPU_SIMD_ARCH_ORIGIN " [auto-detected]")
+endif()
 
 if(TSP_CPU_SIMD_ARCH STREQUAL "AVX256")
     set(TSP_CPU_SIMD_WIDTH 8)
@@ -30,7 +58,7 @@ elseif(TSP_CPU_SIMD_ARCH STREQUAL "AVX512")
 else()
     message(FATAL_ERROR
         "Unsupported TSP_CPU_SIMD_ARCH='${TSP_CPU_SIMD_ARCH}'. "
-        "Expected AVX256 or AVX512.")
+        "Expected auto, AVX256 or AVX512.")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -39,7 +67,7 @@ else()
     set(TSP_CPU_ISA_COMPILER_FLAGS "${TSP_CPU_ISA_COMPILER_FLAGS_GNU}")
 endif()
 
-message(STATUS "CPU SIMD: ${TSP_CPU_SIMD_ARCH} (${TSP_CPU_SIMD_WIDTH} lanes)")
+message(STATUS "CPU SIMD: ${TSP_CPU_SIMD_ARCH} (${TSP_CPU_SIMD_WIDTH} lanes)${TSP_CPU_SIMD_ARCH_ORIGIN}")
 
 # default build type
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
