@@ -73,7 +73,7 @@ namespace Inter
 		float gravity;
 	};
 
-	// own and manage the ImGui and ImPlot lifecycle
+	// own and manage the ImGui lifecycle
 	class UserInterfaceMgr
 	{
 	public: // ---------------------------------------------------------------------------------------
@@ -87,7 +87,7 @@ namespace Inter
 				  const char* iniFilename = "TSP_visual_gui.ini",
 				  float dpiScale = 1.0f);
 
-		// destroy ImGui and ImPlot contexts and free up resources
+		// destroy ImGui context and free up resources
 		void Shutdown();
 
 		// per-frame user interface lifecycle

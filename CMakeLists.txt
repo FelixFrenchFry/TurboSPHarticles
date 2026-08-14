@@ -139,7 +139,6 @@ if(ENABLE_VIS)
     find_package(glfw3 CONFIG REQUIRED)
     find_package(glad CONFIG REQUIRED)
     find_package(imgui CONFIG REQUIRED)
-    find_package(implot CONFIG REQUIRED)
 endif()
 
 if(ENABLE_MPI)
@@ -346,7 +345,6 @@ if(ENABLE_VIS)
         glad::glad
         glfw
         imgui::imgui
-        implot::implot
     )
     # avoid GLFW including <GL/gl.h> before glad
     target_compile_definitions(TSP_V PUBLIC

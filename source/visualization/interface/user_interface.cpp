@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
-#include <implot.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
@@ -49,7 +48,7 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 	window_ = window;
 	iniFilename_ = iniFilename ? iniFilename : "";
 
-	// create ImGui and ImPlot contexts
+	// create ImGui context
 	CreateContexts(iniFilename_.c_str());
 
 	// overwrite ImGui backends
@@ -85,7 +84,7 @@ void UserInterfaceMgr::Shutdown()
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 
-	// ImGui and ImPlot second
+	// ImGui second
 	DestroyContexts();
 
 	window_ = nullptr;
@@ -1176,10 +1175,9 @@ void UserInterfaceMgr::SetDockingEnabled(bool enabled)
 
 void UserInterfaceMgr::CreateContexts(const char* iniFilename)
 {
-	// ImGui & ImPlot context
+	// ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImPlot::CreateContext();
 
 	ImGuiIO& io = ImGui::GetIO();
 	io.IniFilename = iniFilename && *iniFilename ? iniFilename : nullptr;
@@ -1189,7 +1187,6 @@ void UserInterfaceMgr::CreateContexts(const char* iniFilename)
 
 void UserInterfaceMgr::DestroyContexts()
 {
-	ImPlot::DestroyContext();
 	ImGui::DestroyContext();
 }
 
