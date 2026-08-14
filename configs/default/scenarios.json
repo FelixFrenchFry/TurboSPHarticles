@@ -88,13 +88,13 @@
     "SampledMesh": {
       "type": "SampledMesh",
       "model": "TugBoat",
-      "modelTargetExtent": 1.2,
+      "modelTargetExtent": 1.5,
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.5,
+        "uLen": 2.0,
         "vLen": 1.0,
         "wLen": 1.0
       },
@@ -103,17 +103,17 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.5,
+        "uLen": 2.0,
         "vLen": 0.3,
         "wLen": 1.0
       },
       "rigidBody": {
-        "centerOfPosition": [ 0.75, 0.6, 0.5 ],
+        "centerOfPosition": [ 1.0, 0.5, 0.5 ],
         "yawDeg": 0.0,
-        "pitchDeg": -15.0,
+        "pitchDeg": 0.0,
         "rollDeg": 0.0
       },
-      "rigidDensity": 600.0,
+      "rigidDensity": 500.0,
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     },

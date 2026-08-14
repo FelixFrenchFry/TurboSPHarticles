@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <spdlog/spdlog.h>
+#include <tbb/info.h>
 #include <thread>
 #include <utility>
 #if defined(_WIN32)
@@ -263,7 +264,9 @@ App::ThreadBudget App::ResolveThreadBudget(
 	const int64_t maxThreadsSim,
 	const uint32_t N_visThreads)
 {
-	const uint32_t N_totalThreads = std::max<uint32_t>(1, std::thread::hardware_concurrency());
+	const int N_defaultConcurrency = tbb::info::default_concurrency();
+	const uint32_t N_totalThreads = N_defaultConcurrency > 0
+		? static_cast<uint32_t>(N_defaultConcurrency) : 1u;
 	const uint32_t N_simThreadsDefault = N_totalThreads > N_visThreads
 									   ? N_totalThreads - N_visThreads : 1;
 

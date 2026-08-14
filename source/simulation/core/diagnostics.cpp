@@ -158,7 +158,7 @@ namespace Sim
 		#endif
 
         printf("%-30s = %s\n", "host name", hostname);
-        printf("%-30s = %u\n", "total threads", N_totalThreads);
+        printf("%-30s = %u\n", "avail threads", N_totalThreads);
         printf("%-30s = %u\n", "sim budget", N_simThreads);
         printf("%-30s = %u\n", "vis budget", N_visThreads);
         printf("\n");

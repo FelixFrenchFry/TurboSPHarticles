@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -281,18 +282,32 @@ namespace
 		PrintCliSectionHeader("distributed hardware specifications");
 		PrintCliSeparator();
 
-		std::printf("%-2s | %-30s | %13s | %10s | %10s\n",
-			"r", "host name", "total threads",
+		std::printf("%-2s | %8s | %-21s | %13s | %10s | %10s\n",
+			"r", "host r/n", "host name", "avail threads",
 			"sim budget", "vis budget");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
 
 		for (const DistHardwareReport& report : reports)
 		{
-			char rankLabel[32];
-			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+			int hostRank = 0;
+			int N_hostRanks = 0;
+			for (const DistHardwareReport& candidate : reports)
+			{
+				if (std::strcmp(candidate.host, report.host) != 0) { continue; }
 
-			std::printf("%-2s | %-30s | %13u | %10u | %10u\n",
+				if (candidate.rank < report.rank) { hostRank++; }
+				N_hostRanks++;
+			}
+
+			char rankLabel[32];
+			char hostRankLabel[32];
+			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+			std::snprintf(hostRankLabel, sizeof(hostRankLabel), "%d/%d",
+				hostRank + 1, N_hostRanks);
+
+			std::printf("%-2s | %8s | %-21.21s | %13u | %10u | %10u\n",
 				rankLabel,
+				hostRankLabel,
 				report.host,
 				report.N_totalThreads,
 				report.N_simThreads,
