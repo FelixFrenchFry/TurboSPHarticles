@@ -272,7 +272,7 @@ void SimBackend_CPU01::Step_IISPH(const SimParams& params)
 			neighborList,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensity, massF, params.jacobiOmega,
-			*affinityPart_, pressureF, nullptr, errorSums);
+			N_F_, *affinityPart_, pressureF, nullptr, errorSums);
 
 		if (N_F_ > 0)
 		{
@@ -347,60 +347,6 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 	I_DistributedFluidSolverSync& sync = *distributedFluidSolverSync_;
 	const bool computeFirstHaloLayerPressureAcc =
 		params.distHaloMode == Base::DistHaloMode::DoubleHalo;
-
-	// ranks without local fluid particles still participate in every sync phase
-	if (N_F_ == 0)
-	{
-		// keep the re-ordering and density phases aligned across ranks
-		sync.ApplyFluidParticleReOrder({});
-		sync.SynchronizeFluidScalarField({}, Base::DistHaloMode::SingleHalo);
-
-		if (N_RB_ > 0)
-		{
-			benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
-			ClearRigidForcesAndAddGravity(params);
-			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
-		}
-
-		// participate in predicted-velocity and initial-pressure sync
-		sync.SynchronizeFluidVectorField({}, {}, {}, Base::DistHaloMode::SingleHalo);
-		sync.SynchronizeFluidScalarField({}, params.distHaloMode);
-
-		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
-
-		// reset solver-related variables
-		N_solverIters_ = 1;
-		avgRelDensityErrorF_raw_ = 0.0f;
-		avgRelDensityErrorF_pos_ = 0.0f;
-		avgRelDensityErrorF_abs_ = 0.0f;
-
-		do
-		{
-			// SingleHalo receives halo acceleration; DoubleHalo computes it locally
-			if (!computeFirstHaloLayerPressureAcc)
-			{
-				sync.SynchronizeFluidVectorField(
-					{}, {}, {}, Base::DistHaloMode::SingleHalo);
-			}
-			sync.SynchronizeFluidScalarField({}, params.distHaloMode);
-
-			// use the global owned-particle error for the shared termination decision
-			const PressureSolveErrorSums errorSums = sync.GlobalizePressureSolveErrorSums({});
-			const uint64_t N_globalF = sync.GetGlobalFluidParticleCount();
-			if (N_globalF > 0)
-			{
-				const double N_globalF_inv = 1.0 / static_cast<double>(N_globalF);
-				avgRelDensityErrorF_raw_ = static_cast<float>(errorSums.raw * N_globalF_inv);
-				avgRelDensityErrorF_pos_ = static_cast<float>(errorSums.pos * N_globalF_inv);
-				avgRelDensityErrorF_abs_ = static_cast<float>(errorSums.abs * N_globalF_inv);
-			}
-
-			N_solverIters_++;
-		} while (!TerminationConditionSatisfied(params));
-
-		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
-		return;
-	}
 
 	// --- [ temporary pre-computed constants ] ------------------------------------------------------
 
@@ -491,22 +437,30 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	// --- [ density computations ] ------------------------------------------------------------------
+	// exported outer values are complete before Begin; inner work cannot require halo results,
+	// and every consumer of received values runs only after End
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Density_Computation);
-	CPU01::Density_ChunkedSELL(
-		xPosF, yPosF, zPosF,
-		xPosB, yPosB, zPosB,
-		xPosR, yPosR, zPosR,
-		psiB, psiR,
-		neighborList,
-		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, massF, N_F_,
-		densityF);
+	const auto computeDensity = [&](const std::span<const uint32_t> chunkIdxs)
+	{
+		CPU01::Density_ChunkedSELL(
+			xPosF, yPosF, zPosF,
+			xPosB, yPosB, zPosB,
+			xPosR, yPosR, zPosR,
+			psiB, psiR,
+			neighborList,
+			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, massF, N_ownedF_,
+			densityF, chunkIdxs, true);
+	};
+	computeDensity(outerFluidChunkIdxs_);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Density_Computation);
-
-	// synced remote densities needed for the following solver stages
-	sync.SynchronizeFluidScalarField(
+	sync.BeginSynchronizeFluidScalarField(
 		std::span<float>(densityF_.data(), N_F_),
 		Base::DistHaloMode::SingleHalo);
+	benchmarksTracker_.StartBench(Bench::BenchOp::Density_Computation);
+	computeDensity(innerFluidChunkIdxs_);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Density_Computation);
+	sync.EndSynchronizeFluidFields();
 
 	// --- [ non-pressure accelerations ] ------------------------------------------------------------
 
@@ -518,28 +472,35 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 	}
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::NonPressure_Acceleration);
-	CPU01::NonPressureAcceleration_ChunkedSELL(
-		xPosF, yPosF, zPosF,
-		xPosB, yPosB, zPosB,
-		xPosR, yPosR, zPosR,
-		xVelF, yVelF, zVelF,
-		xVelR, yVelR, zVelR,
-		densityF,
-		volB, volR,
-		neighborList,
-		timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
-		cubicSplineAlpha, params.restDensity, massF,
-		params.viscosityF, params.viscosityB,
-		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
-		xVelPredF, yVelPredF, zVelPredF);
+	const auto computeNonPressureAcceleration =
+		[&](const std::span<const uint32_t> chunkIdxs)
+	{
+		CPU01::NonPressureAcceleration_ChunkedSELL(
+			xPosF, yPosF, zPosF,
+			xPosB, yPosB, zPosB,
+			xPosR, yPosR, zPosR,
+			xVelF, yVelF, zVelF,
+			xVelR, yVelR, zVelR,
+			densityF,
+			volB, volR,
+			neighborList,
+			timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
+			cubicSplineAlpha, params.restDensity, massF,
+			params.viscosityF, params.viscosityB,
+			params.gravity.x, params.gravity.y, params.gravity.z, N_ownedF_,
+			xVelPredF, yVelPredF, zVelPredF, chunkIdxs, true);
+	};
+	computeNonPressureAcceleration(outerFluidChunkIdxs_);
 	benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
-
-	// synced remote predicted velocities needed for the source and diagonal terms
-	sync.SynchronizeFluidVectorField(
+	sync.BeginSynchronizeFluidVectorField(
 		std::span<float>(xVelPredF_.data(), N_F_),
 		std::span<float>(yVelPredF_.data(), N_F_),
 		std::span<float>(zVelPredF_.data(), N_F_),
 		Base::DistHaloMode::SingleHalo);
+	benchmarksTracker_.StartBench(Bench::BenchOp::NonPressure_Acceleration);
+	computeNonPressureAcceleration(innerFluidChunkIdxs_);
+	benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
+	sync.EndSynchronizeFluidFields();
 
 	if (N_RB_ > 0)
 	{
@@ -560,24 +521,30 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 	// --- [ source-term (density invariance) and diagonal elements ] --------------------------------
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
-	CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
-		xPosF, yPosF, zPosF,
-		xPosB, yPosB, zPosB,
-		xPosR, yPosR, zPosR,
-		xVelPredF, yVelPredF, zVelPredF,
-		xVelR, yVelR, zVelR,
-		densityF,
-		psiB, psiR,
-		neighborList,
-		timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-		params.restDensity, restDensitySquInv,
-		massF, params.pressGamma, params.jacobiOmega, N_F_,
-		sourceTermF, diagElemF, pressureF);
+	const auto computeSourceAndDiagonal = [&](const std::span<const uint32_t> chunkIdxs)
+	{
+		CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
+			xPosF, yPosF, zPosF,
+			xPosB, yPosB, zPosB,
+			xPosR, yPosR, zPosR,
+			xVelPredF, yVelPredF, zVelPredF,
+			xVelR, yVelR, zVelR,
+			densityF,
+			psiB, psiR,
+			neighborList,
+			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+			params.restDensity, restDensitySquInv,
+			massF, params.pressGamma, params.jacobiOmega, N_ownedF_,
+			sourceTermF, diagElemF, pressureF, chunkIdxs, true);
+	};
+	computeSourceAndDiagonal(outerFluidChunkIdxs_);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
-
-	// initialize remote pressure before the first Jacobi iteration
-	sync.SynchronizeFluidScalarField(
+	sync.BeginSynchronizeFluidScalarField(
 		std::span<float>(pressureF_.data(), N_F_), params.distHaloMode);
+	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
+	computeSourceAndDiagonal(innerFluidChunkIdxs_);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
+	sync.EndSynchronizeFluidFields();
 
 	// --- [ relaxed Jacobi solver for pressure ] ----------------------------------------------------
 
@@ -591,50 +558,68 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 
 	do // Jacobi iteration loop
 	{
-		PressureSolveErrorSums localErrorSums{};
-
-		// compute pressure acceleration from current pressure field
-		CPU01::PressureAcceleration_ChunkedSELL(
-			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			xPosR, yPosR, zPosR,
-			pressureF,
-			psiB, psiR,
-			neighborList,
-			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-			massF, params.pressGamma, N_F_, *affinityPart_,
-			xAccPressF, yAccPressF, zAccPressF,
-			pressureAccChunkIdxs_, true);
-
-		// receives pressure acceleration for first halo layer (when in "SingleHalo" mode),
-		// OR computes it locally using the second halo layer (when in "DoubleHalo" mode)
-		if (!computeFirstHaloLayerPressureAcc)
+		const auto computePressureAcceleration = [&](
+			const std::span<const uint32_t> chunkIdxs,
+			const uint32_t N_fluidCenters,
+			const uint8_t* particleFlags)
 		{
-			sync.SynchronizeFluidVectorField(
+			CPU01::PressureAcceleration_ChunkedSELL(
+				xPosF, yPosF, zPosF,
+				xPosB, yPosB, zPosB,
+				xPosR, yPosR, zPosR,
+				pressureF,
+				psiB, psiR,
+				neighborList,
+				sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
+				massF, params.pressGamma, N_fluidCenters, *affinityPart_,
+				xAccPressF, yAccPressF, zAccPressF,
+				chunkIdxs, true, particleFlags);
+		};
+
+		if (computeFirstHaloLayerPressureAcc)
+		{
+			computePressureAcceleration(
+				pressureAccChunkIdxs_, N_F_, pressureAccFluidParticleFlags_.data());
+		}
+		else
+		{
+			computePressureAcceleration(outerFluidChunkIdxs_, N_ownedF_, nullptr);
+			sync.BeginSynchronizeFluidVectorField(
 				std::span<float>(xAccPressF_.data(), N_F_),
 				std::span<float>(yAccPressF_.data(), N_F_),
 				std::span<float>(zAccPressF_.data(), N_F_),
 				Base::DistHaloMode::SingleHalo);
+			computePressureAcceleration(innerFluidChunkIdxs_, N_ownedF_, nullptr);
+			sync.EndSynchronizeFluidFields();
 		}
 
-		// update pressure and accumulate convergence error over owned particles
-		CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
-			xPosF, yPosF, zPosF,
-			xPosB, yPosB, zPosB,
-			xPosR, yPosR, zPosR,
-			xAccPressF, yAccPressF, zAccPressF,
-			sourceTermF, diagElemF,
-			psiB, psiR,
-			neighborList,
-			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
-			params.restDensity, massF, params.jacobiOmega,
-			*affinityPart_, pressureF,
-			activeFluidParticleFlags_.data(), localErrorSums,
-			ownedFluidChunkIdxs_, true);
+		const auto updatePressure = [&](const std::span<const uint32_t> chunkIdxs)
+		{
+			PressureSolveErrorSums errorSums{};
+			CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
+				xPosF, yPosF, zPosF,
+				xPosB, yPosB, zPosB,
+				xPosR, yPosR, zPosR,
+				xAccPressF, yAccPressF, zAccPressF,
+				sourceTermF, diagElemF,
+				psiB, psiR,
+				neighborList,
+				timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+				params.restDensity, massF, params.jacobiOmega,
+				N_ownedF_, *affinityPart_, pressureF,
+				nullptr, errorSums,
+				chunkIdxs, true);
+			return errorSums;
+		};
 
-		// restore owner-authoritative remote pressure for the next iteration
-		sync.SynchronizeFluidScalarField(
+		PressureSolveErrorSums localErrorSums = updatePressure(outerFluidChunkIdxs_);
+		sync.BeginSynchronizeFluidScalarField(
 			std::span<float>(pressureF_.data(), N_F_), params.distHaloMode);
+		const PressureSolveErrorSums innerErrorSums = updatePressure(innerFluidChunkIdxs_);
+		localErrorSums.raw += innerErrorSums.raw;
+		localErrorSums.pos += innerErrorSums.pos;
+		localErrorSums.abs += innerErrorSums.abs;
+		sync.EndSynchronizeFluidFields();
 
 		// make every rank use the same global convergence criterion
 		const PressureSolveErrorSums errorSums =
@@ -670,9 +655,8 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		psiB, psiR,
 		neighborList,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-		massF, params.pressGamma, N_F_, *affinityPart_,
-		xAccPressF, yAccPressF, zAccPressF,
-		ownedFluidChunkIdxs_, true);
+		massF, params.pressGamma, N_ownedF_, *affinityPart_,
+		xAccPressF, yAccPressF, zAccPressF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 
 	if (N_RB_ > 0)
@@ -697,11 +681,10 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 
 	// integrate owned fluid particles only
 	benchmarksTracker_.StartBench(Bench::BenchOp::Particle_Integration);
-	CPU01::Integration_Indexed(
+	CPU01::Integration(
 		xVelPredF, yVelPredF, zVelPredF,
 		xAccPressF, yAccPressF, zAccPressF,
-		activeFluidParticleLocalIdxs_.data(),
-		timeStep, static_cast<uint32_t>(activeFluidParticleLocalIdxs_.size()),
+		timeStep, N_ownedF_,
 		xPosF, yPosF, zPosF,
 		xVelF, yVelF, zVelF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Particle_Integration);
@@ -774,24 +757,29 @@ void CPU01::Density_ChunkedSELL(
 	const float cubicSplineAlpha, const float massF,
 	const uint32_t N_F,
 	// destinations
-	float* RESTRICT densityF)
+	float* RESTRICT densityF,
+	const std::span<const uint32_t> selectedChunkIdxs,
+	const bool useSelectedChunks)
 {
-	(void)N_F;
-
-	const uint32_t N_chunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = useSelectedChunks
+		? static_cast<uint32_t>(selectedChunkIdxs.size())
+		: neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
 			{
+				const uint32_t chunk = useSelectedChunks
+					? selectedChunkIdxs[workIdx] : workIdx;
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
-				const uint32_t end = nbrFF.end;
+				const uint32_t end = std::min(nbrFF.end, N_F);
+				if (begin >= end) { continue; }
 
 				// one SELL chunk, covering up to CPU::N_SIMD_WIDTH consecutive fluid particles
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
@@ -913,12 +901,15 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 	// destinations
 	float* RESTRICT xVelPredF,
 	float* RESTRICT yVelPredF,
-	float* RESTRICT zVelPredF)
+	float* RESTRICT zVelPredF,
+	const std::span<const uint32_t> selectedChunkIdxs,
+	const bool useSelectedChunks)
 {
 	(void)restDensity;
-	(void)N_F;
 
-	const uint32_t N_chunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = useSelectedChunks
+		? static_cast<uint32_t>(selectedChunkIdxs.size())
+		: neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 	const CPU::Float32xSIMD particleSizeSquEps = CPU::SetFloat32xSIMD(0.01f * particleSizeSquF);
@@ -933,13 +924,16 @@ void CPU01::NonPressureAcceleration_ChunkedSELL(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
 			{
+				const uint32_t chunk = useSelectedChunks
+					? selectedChunkIdxs[workIdx] : workIdx;
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
-				const uint32_t end = nbrFF.end;
+				const uint32_t end = std::min(nbrFF.end, N_F);
+				if (begin >= end) { continue; }
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
@@ -1201,11 +1195,13 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	// destinations
 	float* RESTRICT sourceTermF,
 	float* RESTRICT diagElemF,
-	float* RESTRICT pressureF)
+	float* RESTRICT pressureF,
+	const std::span<const uint32_t> selectedChunkIdxs,
+	const bool useSelectedChunks)
 {
-	(void)N_F;
-
-	const uint32_t N_chunks = neighborList.ChunkNumTotal();
+	const uint32_t N_chunks = useSelectedChunks
+		? static_cast<uint32_t>(selectedChunkIdxs.size())
+		: neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD timeStepV = CPU::SetFloat32xSIMD(timeStep);
 	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
 	const CPU::Float32xSIMD restDensityV = CPU::SetFloat32xSIMD(restDensity);
@@ -1221,13 +1217,16 @@ void CPU01::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
 			{
+				const uint32_t chunk = useSelectedChunks
+					? selectedChunkIdxs[workIdx] : workIdx;
 				const ChunkedSELLNeighborSpan_Read nbrFF = neighborList.FFChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
-				const uint32_t end = nbrFF.end;
+				const uint32_t end = std::min(nbrFF.end, N_F);
+				if (begin >= end) { continue; }
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
@@ -1428,13 +1427,12 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 	float* RESTRICT yAccPressF,
 	float* RESTRICT zAccPressF,
 	const std::span<const uint32_t> selectedChunkIdxs,
-	const bool useSelectedChunks)
+	const bool useSelectedChunks,
+	const uint8_t* RESTRICT activeParticleFlags)
 {
-	(void)N_F;
-
 	const uint32_t N_chunks = useSelectedChunks
 		? static_cast<uint32_t>(selectedChunkIdxs.size())
-		: neighborList.ChunkNumTotal();
+		: (N_F + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 	const float densiInvSqu = 1.0f / (restDensity * restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
 	const CPU::Float32xSIMD densiInvSquV = CPU::SetFloat32xSIMD(densiInvSqu);
@@ -1454,7 +1452,8 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
-				const uint32_t end = nbrFF.end;
+				const uint32_t end = std::min(nbrFF.end, N_F);
+				if (begin >= end) { continue; }
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
@@ -1566,9 +1565,12 @@ void CPU01::PressureAcceleration_ChunkedSELL(
 				}
 
 				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
-				CPU::StoreFloat32xSIMDPartial(xAccPressF, begin, end, zero - tmp_xAccPressF);
-				CPU::StoreFloat32xSIMDPartial(yAccPressF, begin, end, zero - tmp_yAccPressF);
-				CPU::StoreFloat32xSIMDPartial(zAccPressF, begin, end, zero - tmp_zAccPressF);
+				CPU::StoreFloat32xSIMDPartialSelected(
+					xAccPressF, begin, end, zero - tmp_xAccPressF, activeParticleFlags);
+				CPU::StoreFloat32xSIMDPartialSelected(
+					yAccPressF, begin, end, zero - tmp_yAccPressF, activeParticleFlags);
+				CPU::StoreFloat32xSIMDPartialSelected(
+					zAccPressF, begin, end, zero - tmp_zAccPressF, activeParticleFlags);
 			}
 		},
 		affPart
@@ -1637,7 +1639,6 @@ void CPU01::AccumulateRigidParticlePressureForces_ChunkedSELL(
 }
 
 // TODO: create separate optimized versions of this kernel, instead of having flags affect behavior?
-// TODO: overlap the pressure exchange with the Jacobi solver compute of inner particles?
 void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT xPosF,
 	const float* RESTRICT yPosF,
@@ -1660,6 +1661,7 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float restDensity, const float massF,
 	const float jacobiOmega,
+	const uint32_t N_F,
 	tbb::affinity_partitioner& affPart,
 	// destinations
 	float* RESTRICT pressureF,
@@ -1708,7 +1710,8 @@ void CPU01::PressureRelaxedJacobiSolver_ChunkedSELL(
 				const ChunkedSELLNeighborSpan_Read nbrFB = neighborList.FBChunk(chunk);
 				const ChunkedSELLNeighborSpan_Read nbrFR = neighborList.FRChunk(chunk);
 				const uint32_t begin = nbrFF.begin;
-				const uint32_t end = nbrFF.end;
+				const uint32_t end = std::min(nbrFF.end, N_F);
+				if (begin >= end) { continue; }
 				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
@@ -1894,50 +1897,6 @@ void CPU01::Integration(
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
-				// explicit Euler integration
-				// (refining predicted velocity with pressure acc)
-				xVelF[i] = std::fmaf(timeStep, xAccPressF[i], xVelPredF[i]);
-				yVelF[i] = std::fmaf(timeStep, yAccPressF[i], yVelPredF[i]);
-				zVelF[i] = std::fmaf(timeStep, zAccPressF[i], zVelPredF[i]);
-
-				// semi-implicit Euler integration
-				// (using updated velocity for position update)
-				xPosF[i] = std::fmaf(timeStep, xVelF[i], xPosF[i]);
-				yPosF[i] = std::fmaf(timeStep, yVelF[i], yPosF[i]);
-				zPosF[i] = std::fmaf(timeStep, zVelF[i], zPosF[i]);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-void CPU01::Integration_Indexed(
-	const float* RESTRICT xVelPredF,
-	const float* RESTRICT yVelPredF,
-	const float* RESTRICT zVelPredF,
-	const float* RESTRICT xAccPressF,
-	const float* RESTRICT yAccPressF,
-	const float* RESTRICT zAccPressF,
-	const uint32_t* RESTRICT fluidParticleLocalIdxs,
-	const float timeStep,
-	const uint32_t N_activeF,
-	// destinations
-	float* RESTRICT xPosF,
-	float* RESTRICT yPosF,
-	float* RESTRICT zPosF,
-	float* RESTRICT xVelF,
-	float* RESTRICT yVelF,
-	float* RESTRICT zVelF)
-{
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_activeF),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t ii = r.begin(); ii != r.end(); ii++)
-			{
-				// accessing only fluid particles in the provided index list
-				const uint32_t i = fluidParticleLocalIdxs[ii];
-
 				// explicit Euler integration
 				// (refining predicted velocity with pressure acc)
 				xVelF[i] = std::fmaf(timeStep, xAccPressF[i], xVelPredF[i]);

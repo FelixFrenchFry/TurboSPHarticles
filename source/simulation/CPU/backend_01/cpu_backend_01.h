@@ -87,11 +87,16 @@ namespace Sim
 		bool TryGetLastParticleReOrder(
 			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+		bool ConfigureDistributedParticleLayout(
+			uint32_t N_ownedFluidParticles,
+			uint32_t N_ownedBoundaryParticles) override;
 
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
-			const std::vector<uint32_t>& activeFluidParticleLocalIdxs,
+			const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
+			const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
 			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
+			uint32_t N_ownedBoundaryParticles,
 			const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
@@ -171,6 +176,8 @@ namespace Sim
 		uint32_t N_B_ = 0; // number of boundary particles
 		uint32_t N_R_ = 0; // number of rigid particles
 		uint32_t N_RB_ = 0; // number of rigid bodies
+		uint32_t N_ownedF_ = 0; // prefix of owned fluid particles (distributed execution)
+		uint32_t N_ownedB_ = 0; // prefix of owned boundary particles (distributed execution)
 		uint32_t N_solverIters_ = 0;
 
 		// simulation domain reported by the manager, empty extent while it is unknown
@@ -237,19 +244,24 @@ namespace Sim
 		std::vector<float> iBodyInv20RB_, iBodyInv21RB_, iBodyInv22RB_;
 
 		// flags for particle filtering in distributed execution
-		std::vector<uint32_t> activeFluidParticleLocalIdxs_;
-		std::vector<uint8_t> activeFluidParticleFlags_;
+		// TODO: rework this?
+		std::vector<uint32_t> outerFluidParticleLocalIdxs_;
 		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_;
+		std::vector<uint8_t> pressureAccFluidParticleFlags_;
 		std::vector<uint32_t> pressureAccChunkIdxs_;
-		std::vector<uint32_t> ownedFluidChunkIdxs_;
+		std::vector<uint32_t> innerFluidChunkIdxs_;
+		std::vector<uint32_t> outerFluidChunkIdxs_;
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_;
 		std::vector<uint8_t> activeRigidParticleFlags_;
+		bool useDistributedParticleLayout_ = false;
 		// inverted particle re-order, kept between steps and handed to the solver sync
 		std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx_;
 		// marks the SIMD chunks holding at least one selected particle during the chunk build
 		std::vector<uint8_t> chunkFlagsScratch_;
+		// marks claimed particle indices while validating distributed work lists
+		std::vector<uint8_t> particleFlagsScratch_;
 		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;
-		bool useActiveFluidParticleLocalIdxs_ = false;
+		bool useDistributedStepWork_ = false;
 		bool useActiveRigidParticleLocalIdxs_ = false;
 		bool integrateRigidBodies_ = true;
 		bool applyRigidBodyExternalForces_ = true;
@@ -261,8 +273,7 @@ namespace Sim
 
 		// re-usable work (scratch) buffers for temp storage
 		// TODO: rework this?
-		// (the second and third float buffers hold the remaining components while a whole
-		// vector field is permuted in one pass)
+		// (buffers 2 and 3 hold the remaining components while a whole vector field is permuted in one pass)
 		mutable std::vector<float> workBufferF_;
 		mutable std::vector<float> workBufferF2_;
 		mutable std::vector<float> workBufferF3_;

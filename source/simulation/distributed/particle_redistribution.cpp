@@ -2310,15 +2310,13 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 			timingReport, ParticleRedistributionTimingOp::Prep);
-
-		if (appendLocalIdx != N_appended ||
-			dstLocalIdx != N_local ||
+		if (appendLocalIdx != N_appended || dstLocalIdx != N_local ||
 			retainedFluidOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
 		{
 			if (failMsg) { *failMsg = "Prepared fluid particle mutation count is inconsistent."; }
 			return false;
 		}
-		return rebuiltParticleState.IsValidLocalLayout(N_local, failMsg);
+		return rebuiltParticleState.IsValidLocalParticleLayout(N_local, failMsg);
 	}
 }
 
@@ -2551,14 +2549,13 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 			timingReport, ParticleRedistributionTimingOp::Prep);
-		if (appendLocalIdx != N_appended ||
-			dstLocalIdx != N_local ||
+		if (appendLocalIdx != N_appended || dstLocalIdx != N_local ||
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
 		{
 			if (failMsg) { *failMsg = "Prepared boundary particle mutation count is inconsistent."; }
 			return false;
 		}
-		return rebuiltParticleState.IsValidLocalLayout(N_local, failMsg);
+		return rebuiltParticleState.IsValidLocalParticleLayout(N_local, failMsg);
 	}
 }
 

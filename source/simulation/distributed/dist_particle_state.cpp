@@ -593,7 +593,8 @@ bool DistParticleState::HasMetadataAtLocalIdx(const uint32_t localIdx) const
 		localIdx < particleGlobalIdx_FromLocalIdx.size();
 }
 
-bool DistParticleState::IsValidLocalLayout(
+// TODO: find opportunities for parallelization with TBB?
+bool DistParticleState::IsValidLocalParticleLayout(
 	const uint32_t N_local,
 	std::string* failMsg) const
 {
@@ -633,8 +634,28 @@ bool DistParticleState::IsValidLocalLayout(
 			"does not match ownedParticleCount.");
 	}
 
-	#if defined(_DEBUG)
 	const uint32_t haloStartLocalIdx = N_owned;
+
+	// check that particle class layout adheres to [ owned ][ halo ] in every build
+	// TODO: parallelize with TBB?
+	for (uint32_t localIdx = 0; localIdx != haloStartLocalIdx; localIdx++)
+	{
+		const DistParticleClass particleClass = particleClasses[localIdx];
+		if (particleClass != DistParticleClass::Inner &&
+			particleClass != DistParticleClass::Outer)
+		{
+			return fail("owned local index range contains a particle class that is not Inner or Outer.");
+		}
+	}
+	for (uint32_t localIdx = haloStartLocalIdx; localIdx != N_local; localIdx++)
+	{
+		if (particleClasses[localIdx] != DistParticleClass::Halo)
+		{
+			return fail("halo local index range contains a particle class that is not Halo.");
+		}
+	}
+
+	#if defined(_DEBUG)
 
 	// check that index lists cover the compact owned and halo ranges
 	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, haloStartLocalIdx))
@@ -650,29 +671,8 @@ bool DistParticleState::IsValidLocalLayout(
 		return fail("particleLocalIdx_Inner and particleLocalIdx_Outer do not cover the owned local index range.");
 	}
 
-	// check that the compact owned range contains only inner or outer particles
-	for (uint32_t localIdx = 0; localIdx != haloStartLocalIdx; localIdx++)
-	{
-		const DistParticleClass particleClass = particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer)
-		{
-			return fail("owned local index range contains a particle class that is not Inner or Outer.");
-		}
-	}
-
-	// check that the compact halo range contains only halo particles
-	for (uint32_t localIdx = haloStartLocalIdx;
-		 localIdx != N_local;
-		 localIdx++)
-	{
-		if (particleClasses[localIdx] != DistParticleClass::Halo)
-		{
-			return fail("halo local index range contains a particle class that is not Halo.");
-		}
-	}
-
 	// check that owned list entries point into the compact owned range
+	// TODO: parallelize with TBB?
 	for (const uint32_t localIdx : particleLocalIdx_Owned)
 	{
 		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
@@ -688,6 +688,7 @@ bool DistParticleState::IsValidLocalLayout(
 	}
 
 	// check that inner list entries point to owned particles marked inner
+	// TODO: parallelize with TBB?
 	for (const uint32_t localIdx : particleLocalIdx_Inner)
 	{
 		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
@@ -701,6 +702,7 @@ bool DistParticleState::IsValidLocalLayout(
 	}
 
 	// check that outer list entries point to owned particles marked outer
+	// TODO: parallelize with TBB?
 	for (const uint32_t localIdx : particleLocalIdx_Outer)
 	{
 		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
@@ -714,6 +716,7 @@ bool DistParticleState::IsValidLocalLayout(
 	}
 
 	// check that halo list entries point to non-owned particles marked halo
+	// TODO: parallelize with TBB?
 	for (const uint32_t localIdx : particleLocalIdx_Halo)
 	{
 		if (!IsLocalIdxInRange(localIdx, haloStartLocalIdx, N_local))

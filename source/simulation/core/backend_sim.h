@@ -81,7 +81,18 @@ namespace Sim
 		virtual void ApplyFluidParticleReOrder(
 			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) = 0;
 
-		// synchronizes owner-authoritative fluid values over the selected halo extent
+		// split owner-to-halo exchange of fluid values over the selected halo extent
+		virtual void BeginSynchronizeFluidScalarField(
+			std::span<float> values,
+			Base::DistHaloMode haloExtent) = 0;
+		virtual void BeginSynchronizeFluidVectorField(
+			std::span<float> xValues,
+			std::span<float> yValues,
+			std::span<float> zValues,
+			Base::DistHaloMode haloExtent) = 0;
+		virtual void EndSynchronizeFluidFields() = 0;
+
+		// blocking form of the split exchange
 		virtual void SynchronizeFluidScalarField(
 			std::span<float> values,
 			Base::DistHaloMode haloExtent) = 0;
@@ -212,10 +223,18 @@ namespace Sim
 			return false;
 		}
 
+		// configures the compact ownership boundary before any distributed backend re-order
+		virtual bool ConfigureDistributedParticleLayout(uint32_t, uint32_t)
+		{
+			return false;
+		}
+
 		// configures rank-authoritative particle work for distributed execution
 		virtual bool ConfigureDistributedStep(
 			const std::vector<uint32_t>&,
 			const std::vector<uint32_t>&,
+			const std::vector<uint32_t>&,
+			uint32_t,
 			const std::vector<uint32_t>&,
 			I_DistributedFluidSolverSync&)
 		{

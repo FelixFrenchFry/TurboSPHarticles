@@ -42,7 +42,9 @@ namespace CPU01
 		float cubicSplineAlpha, float massF,
 		uint32_t N_F,
 		// destinations
-		float* RESTRICT densityF);
+		float* RESTRICT densityF,
+		std::span<const uint32_t> selectedChunkIdxs = {},
+		bool useSelectedChunks = false);
 
 	void NonPressureAcceleration_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -73,7 +75,9 @@ namespace CPU01
 		// destinations
 		float* RESTRICT xVelPredF,
 		float* RESTRICT yVelPredF,
-		float* RESTRICT zVelPredF);
+		float* RESTRICT zVelPredF,
+		std::span<const uint32_t> selectedChunkIdxs = {},
+		bool useSelectedChunks = false);
 
 	void SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -103,7 +107,9 @@ namespace CPU01
 		// destinations
 		float* RESTRICT sourceTermF,
 		float* RESTRICT diagElemF,
-		float* RESTRICT pressureF);
+		float* RESTRICT pressureF,
+		std::span<const uint32_t> selectedChunkIdxs = {},
+		bool useSelectedChunks = false);
 
 	void PressureAcceleration_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -129,7 +135,8 @@ namespace CPU01
 		float* RESTRICT yAccPressF,
 		float* RESTRICT zAccPressF,
 		std::span<const uint32_t> selectedChunkIdxs = {},
-		bool useSelectedChunks = false);
+		bool useSelectedChunks = false,
+		const uint8_t* RESTRICT activeParticleFlags = nullptr);
 
 	void PressureRelaxedJacobiSolver_ChunkedSELL(
 		const float* RESTRICT xPosF,
@@ -153,6 +160,7 @@ namespace CPU01
 		float kernelRadiusSqu, float cubicSplineAlpha,
 		float restDensity, float massF,
 		float jacobiOmega,
+		uint32_t N_F,
 		tbb::affinity_partitioner& affPart,
 		// destinations
 		float* RESTRICT pressureF,
@@ -213,24 +221,6 @@ namespace CPU01
 		const float* RESTRICT zAccPressF,
 		float timeStep,
 		uint32_t N_F,
-		// destinations
-		float* RESTRICT xPosF,
-		float* RESTRICT yPosF,
-		float* RESTRICT zPosF,
-		float* RESTRICT xVelF,
-		float* RESTRICT yVelF,
-		float* RESTRICT zVelF);
-
-	void Integration_Indexed(
-		const float* RESTRICT xVelPredF,
-		const float* RESTRICT yVelPredF,
-		const float* RESTRICT zVelPredF,
-		const float* RESTRICT xAccPressF,
-		const float* RESTRICT yAccPressF,
-		const float* RESTRICT zAccPressF,
-		const uint32_t* RESTRICT fluidParticleLocalIdxs,
-		float timeStep,
-		uint32_t N_activeF,
 		// destinations
 		float* RESTRICT xPosF,
 		float* RESTRICT yPosF,

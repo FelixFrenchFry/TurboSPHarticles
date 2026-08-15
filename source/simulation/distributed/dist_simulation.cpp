@@ -1245,14 +1245,14 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 	const uint32_t N_localB = localSimState_.boundaryParticles.N_;
 
 	std::string failMsg{};
-	if (!fluidParticleState_.IsValidLocalLayout(N_localF, &failMsg))
+	if (!fluidParticleState_.IsValidLocalParticleLayout(N_localF, &failMsg))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local fluid particle layout: {}",
 			mpiContext_.Rank(), mpiContext_.Size(), failMsg);
 		localOk = false;
 	}
 
-	if (!boundaryParticleState_.IsValidLocalLayout(N_localB, &failMsg))
+	if (!boundaryParticleState_.IsValidLocalParticleLayout(N_localB, &failMsg))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local boundary particle layout: {}",
 			mpiContext_.Rank(), mpiContext_.Size(), failMsg);
@@ -1473,9 +1473,24 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 		}
 		else
 		{
-			// first backend smoke test on compact [ owned ][ halo ] particle data
-			simBackend_->ExecuteNeighborSearch(simParams_);
-			if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
+			// configure compact [ owned ][ halo ] layout before the startup neighbor search
+			const bool configured = simBackend_->ConfigureDistributedParticleLayout(
+				fluidParticleState_.N_owned,
+				boundaryParticleState_.N_owned);
+			if (!configured)
+			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Failed to configure rank-local backend startup check.",
+					mpiContext_.Rank(), mpiContext_.Size());
+				localOk = false;
+			}
+
+			// first backend smoke test on compact [ owned ][ halo ] layout
+			if (localOk)
+			{
+				simBackend_->ExecuteNeighborSearch(simParams_);
+				if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
+			}
 
 			Sync::UniversalSimState backendSimState{};
 			simBackend_->PushToUniversalSimState(backendSimState, false);
@@ -2318,7 +2333,9 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		{
 			configured = simBackend_->ConfigureDistributedStep(
 				fluidParticleState_.particleLocalIdx_Owned,
+				fluidParticleState_.particleLocalIdx_Outer,
 				pressureAccFluidParticleLocalIdxs_,
+				boundaryParticleState_.N_owned,
 				activeRigidParticleLocalIdxs_,
 				fluidSolverSyncMgr_);
 		}
@@ -2542,6 +2559,18 @@ bool DistSimulationMgr::ApplyLastBackendParticleReOrder()
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
+	else
+	{
+		std::string failMsg{};
+		if (!fluidParticleState_.IsValidLocalParticleLayout(
+			static_cast<uint32_t>(oldFluidLocalIdx_FromNewLocalIdx.size()), &failMsg))
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Backend fluid particle re-order broke compact layout: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
+			localOk = false;
+		}
+	}
 
 	if (!ApplyLocalParticleReOrder(
 		boundaryParticleState_,
@@ -2552,6 +2581,18 @@ bool DistSimulationMgr::ApplyLastBackendParticleReOrder()
 		SPDLOG_ERROR("[rank {}/{}] Failed to apply backend boundary particle re-order.",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
+	}
+	else
+	{
+		std::string failMsg{};
+		if (!boundaryParticleState_.IsValidLocalParticleLayout(
+			static_cast<uint32_t>(oldBoundaryLocalIdx_FromNewLocalIdx.size()), &failMsg))
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Backend boundary particle re-order broke compact layout: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
+			localOk = false;
+		}
 	}
 
 	return localOk;

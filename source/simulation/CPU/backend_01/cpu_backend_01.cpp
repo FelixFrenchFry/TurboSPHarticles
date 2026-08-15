@@ -179,16 +179,21 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 {
 	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
 	distributedFluidSolverSync_ = nullptr;
-	activeFluidParticleLocalIdxs_.clear();
-	activeFluidParticleFlags_.clear();
+	useDistributedParticleLayout_ = false;
+	N_ownedF_ = 0;
+	N_ownedB_ = 0;
+	outerFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleLocalIdxs_.clear();
+	pressureAccFluidParticleFlags_.clear();
 	pressureAccChunkIdxs_.clear();
-	ownedFluidChunkIdxs_.clear();
+	innerFluidChunkIdxs_.clear();
+	outerFluidChunkIdxs_.clear();
 	activeRigidParticleLocalIdxs_.clear();
 	activeRigidParticleFlags_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
-	useActiveFluidParticleLocalIdxs_ = false;
+	particleFlagsScratch_.clear();
+	useDistributedStepWork_ = false;
 	useActiveRigidParticleLocalIdxs_ = false;
 	integrateRigidBodies_ = true;
 	applyRigidBodyExternalForces_ = true;
@@ -717,13 +722,19 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 			tbb::auto_partitioner{});
 	}
 
-	activeFluidParticleLocalIdxs_.clear();
+	useDistributedParticleLayout_ = false;
+	N_ownedF_ = 0;
+	N_ownedB_ = 0;
+	outerFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleLocalIdxs_.clear();
+	pressureAccFluidParticleFlags_.clear();
 	pressureAccChunkIdxs_.clear();
-	ownedFluidChunkIdxs_.clear();
+	innerFluidChunkIdxs_.clear();
+	outerFluidChunkIdxs_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
-	useActiveFluidParticleLocalIdxs_ = false;
+	particleFlagsScratch_.clear();
+	useDistributedStepWork_ = false;
 	neighborList_->Resize(N_F_, N_B_, N_R_, params);
 	return true;
 }
@@ -1197,15 +1208,17 @@ void SimBackend_CPU01::FillMemoryRecord(
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRF.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRB.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRR.histogram));
-		Add(usage, MemUsageOf_Vector(activeFluidParticleLocalIdxs_));
-		Add(usage, MemUsageOf_Vector(activeFluidParticleFlags_));
+		Add(usage, MemUsageOf_Vector(outerFluidParticleLocalIdxs_));
 		Add(usage, MemUsageOf_Vector(pressureAccFluidParticleLocalIdxs_));
+		Add(usage, MemUsageOf_Vector(pressureAccFluidParticleFlags_));
 		Add(usage, MemUsageOf_Vector(pressureAccChunkIdxs_));
-		Add(usage, MemUsageOf_Vector(ownedFluidChunkIdxs_));
+		Add(usage, MemUsageOf_Vector(innerFluidChunkIdxs_));
+		Add(usage, MemUsageOf_Vector(outerFluidChunkIdxs_));
 		Add(usage, MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
 		Add(usage, MemUsageOf_Vector(activeRigidParticleFlags_));
 		Add(usage, MemUsageOf_Vector(newFluidLocalIdx_FromOldLocalIdx_));
 		Add(usage, MemUsageOf_Vector(chunkFlagsScratch_));
+		Add(usage, MemUsageOf_Vector(particleFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(idRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleBeginRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
@@ -1279,9 +1292,7 @@ void SimBackend_CPU01::ComputeStatisticsPartial(
 
 	partial.Clear();
 
-	const uint32_t N_F = useActiveParticleLocalIdxs
-		? static_cast<uint32_t>(activeFluidParticleLocalIdxs_.size())
-		: N_F_;
+	const uint32_t N_F = useActiveParticleLocalIdxs ? N_ownedF_ : N_F_;
 	const uint32_t N_R = useActiveParticleLocalIdxs
 		? static_cast<uint32_t>(activeRigidParticleLocalIdxs_.size())
 		: N_R_;
@@ -1291,12 +1302,7 @@ void SimBackend_CPU01::ComputeStatisticsPartial(
 	partial.N_R = N_R;
 	partial.N_solverIters = N_solverIters_;
 
-	const auto getFluidLocalIdx = [&](const uint32_t i)
-	{
-		return useActiveParticleLocalIdxs
-			? activeFluidParticleLocalIdxs_[i]
-			: i;
-	};
+	const auto getFluidLocalIdx = [](const uint32_t i) { return i; };
 	const auto getRigidLocalIdx = [&](const uint32_t i)
 	{
 		return useActiveParticleLocalIdxs
@@ -1579,34 +1585,69 @@ bool SimBackend_CPU01::TryGetLastParticleReOrder(
 		oldBoundaryLocalIdx_FromNewLocalIdx);
 }
 
+bool SimBackend_CPU01::ConfigureDistributedParticleLayout(
+	const uint32_t N_ownedFluidParticles,
+	const uint32_t N_ownedBoundaryParticles)
+{
+	if (N_ownedFluidParticles > N_F_ || N_ownedBoundaryParticles > N_B_)
+	{
+		SPDLOG_ERROR(
+			"Invalid CPU01 distributed particle layout (owned fluid={}, boundary={}).",
+			N_ownedFluidParticles, N_ownedBoundaryParticles);
+		return false;
+	}
+
+	N_ownedF_ = N_ownedFluidParticles;
+	N_ownedB_ = N_ownedBoundaryParticles;
+	useDistributedParticleLayout_ = true;
+	return true;
+}
+
 bool SimBackend_CPU01::ConfigureDistributedStep(
-	const std::vector<uint32_t>& activeFluidParticleLocalIdxs,
+	const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
+	const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
 	const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
+	const uint32_t N_ownedBoundaryParticles,
 	const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 	I_DistributedFluidSolverSync& distributedFluidSolverSync)
 {
-	std::vector<uint8_t> activeFluidParticleFlags(N_F_, 0);
-	for (const uint32_t localIdx : activeFluidParticleLocalIdxs)
+	// TODO: parallelize with TBB?
+	const uint32_t N_ownedF = static_cast<uint32_t>(ownedFluidParticleLocalIdxs.size());
+	for (uint32_t ownedIdx = 0; ownedIdx != N_ownedF; ownedIdx++)
 	{
-		if (localIdx >= N_F_)
+		const uint32_t localIdx = ownedFluidParticleLocalIdxs[ownedIdx];
+		if (localIdx != ownedIdx || localIdx >= N_F_)
 		{
 			SPDLOG_ERROR(
-				"Invalid active fluid particle local index {}.",
-				localIdx);
+				"Invalid owned fluid particle local index {} at prefix position {}.",
+				localIdx, ownedIdx);
 			return false;
 		}
-
-		if (activeFluidParticleFlags[localIdx] != 0)
-		{
-			SPDLOG_ERROR(
-				"Duplicate active fluid particle local index {}.",
-				localIdx);
-			return false;
-		}
-
-		activeFluidParticleFlags[localIdx] = 1;
 	}
 
+	particleFlagsScratch_.assign(N_F_, 0);
+	for (const uint32_t localIdx : outerFluidParticleLocalIdxs)
+	{
+		if (localIdx >= N_ownedF)
+		{
+			SPDLOG_ERROR(
+				"Invalid outer fluid particle local index {}.",
+				localIdx);
+			return false;
+		}
+
+		if (particleFlagsScratch_[localIdx] != 0)
+		{
+			SPDLOG_ERROR(
+				"Duplicate outer fluid particle local index {}.",
+				localIdx);
+			return false;
+		}
+
+		particleFlagsScratch_[localIdx] = 1;
+	}
+
+	particleFlagsScratch_.assign(N_F_, 0);
 	for (const uint32_t localIdx : pressureAccelerationFluidParticleLocalIdxs)
 	{
 		if (localIdx >= N_F_)
@@ -1616,6 +1657,24 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 				localIdx);
 			return false;
 		}
+
+		if (particleFlagsScratch_[localIdx] != 0)
+		{
+			SPDLOG_ERROR(
+				"Duplicate pressure-acceleration fluid particle local index {}.",
+				localIdx);
+			return false;
+		}
+
+		particleFlagsScratch_[localIdx] = 1;
+	}
+
+	if (N_ownedBoundaryParticles > N_B_)
+	{
+		SPDLOG_ERROR(
+			"Invalid owned boundary particle count {} for {} local particles.",
+			N_ownedBoundaryParticles, N_B_);
+		return false;
 	}
 
 	std::vector<uint8_t> activeRigidParticleFlags(N_R_, 0);
@@ -1640,14 +1699,16 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 		activeRigidParticleFlags[localIdx] = 1;
 	}
 
-	activeFluidParticleLocalIdxs_ = activeFluidParticleLocalIdxs;
-	activeFluidParticleFlags_ = std::move(activeFluidParticleFlags);
+	N_ownedF_ = N_ownedF;
+	N_ownedB_ = N_ownedBoundaryParticles;
+	useDistributedParticleLayout_ = true;
+	outerFluidParticleLocalIdxs_ = outerFluidParticleLocalIdxs;
 	pressureAccFluidParticleLocalIdxs_ = pressureAccelerationFluidParticleLocalIdxs;
 	BuildDistributedSolverChunkIdxs();
 	activeRigidParticleLocalIdxs_ = activeRigidParticleLocalIdxs;
 	activeRigidParticleFlags_ = std::move(activeRigidParticleFlags);
 	distributedFluidSolverSync_ = &distributedFluidSolverSync;
-	useActiveFluidParticleLocalIdxs_ = true;
+	useDistributedStepWork_ = true;
 	useActiveRigidParticleLocalIdxs_ = true;
 	integrateRigidBodies_ = false;
 	applyRigidBodyExternalForces_ = false;
@@ -1687,7 +1748,7 @@ bool SimBackend_CPU01::ApplyRigidBodyForceTorque(
 
 void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs()
 {
-	if (!useActiveFluidParticleLocalIdxs_) { return; }
+	if (!useDistributedStepWork_) { return; }
 	if (!neighborSearch_) { return; }
 
 	std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
@@ -1708,19 +1769,47 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 	{
 		throw std::runtime_error("Invalid CPU01 fluid particle re-order size.");
 	}
+	if (oldBoundaryLocalIdx_FromNewLocalIdx.size() != N_B_)
+	{
+		throw std::runtime_error("Invalid CPU01 boundary particle re-order size.");
+	}
 
 	#if defined(_DEBUG)
 	// exhaustively validate that the re-order contains no duplicates, so the inversion
 	// below can write every old local index without claiming it first
+	// TODO: parallelize with TBB?
 	std::vector<uint8_t> oldFluidLocalIdxUsed(N_F_, 0);
-	for (const uint32_t oldLocalIdx : oldFluidLocalIdx_FromNewLocalIdx)
+	for (uint32_t newLocalIdx = 0; newLocalIdx != N_F_; newLocalIdx++)
 	{
+		const uint32_t oldLocalIdx = oldFluidLocalIdx_FromNewLocalIdx[newLocalIdx];
 		if (oldLocalIdx >= N_F_ || oldFluidLocalIdxUsed[oldLocalIdx] != 0)
 		{
 			throw std::runtime_error("Invalid CPU01 fluid particle re-order index.");
 		}
+		if ((newLocalIdx < N_ownedF_) != (oldLocalIdx < N_ownedF_))
+		{
+			throw std::runtime_error(
+				"CPU01 fluid particle re-order crosses the owned/halo boundary.");
+		}
 
 		oldFluidLocalIdxUsed[oldLocalIdx] = 1;
+	}
+
+	std::vector<uint8_t> oldBoundaryLocalIdxUsed(N_B_, 0);
+	for (uint32_t newLocalIdx = 0; newLocalIdx != N_B_; newLocalIdx++)
+	{
+		const uint32_t oldLocalIdx = oldBoundaryLocalIdx_FromNewLocalIdx[newLocalIdx];
+		if (oldLocalIdx >= N_B_ || oldBoundaryLocalIdxUsed[oldLocalIdx] != 0)
+		{
+			throw std::runtime_error("Invalid CPU01 boundary particle re-order index.");
+		}
+		if ((newLocalIdx < N_ownedB_) != (oldLocalIdx < N_ownedB_))
+		{
+			throw std::runtime_error(
+				"CPU01 boundary particle re-order crosses the owned/halo boundary.");
+		}
+
+		oldBoundaryLocalIdxUsed[oldLocalIdx] = 1;
 	}
 	#endif
 
@@ -1745,7 +1834,10 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 		tbb::auto_partitioner{}
 	);
 
-	auto remapLocalIdxs = [this](std::vector<uint32_t>& localIdxs, const char* failMsg)
+	auto remapLocalIdxs = [this](
+		std::vector<uint32_t>& localIdxs,
+		const uint32_t N_validLocalIdxs,
+		const char* failMsg)
 	{
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, static_cast<uint32_t>(localIdxs.size())),
@@ -1756,23 +1848,21 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 					uint32_t& localIdx = localIdxs[i];
 					if (localIdx >= N_F_) { throw std::runtime_error(failMsg); }
 
-					localIdx = newFluidLocalIdx_FromOldLocalIdx_[localIdx];
+					const uint32_t newLocalIdx = newFluidLocalIdx_FromOldLocalIdx_[localIdx];
+					if (newLocalIdx >= N_validLocalIdxs) { throw std::runtime_error(failMsg); }
+
+					localIdx = newLocalIdx;
 				}
 			},
 			tbb::auto_partitioner{}
 		);
 	};
 
-	remapLocalIdxs(activeFluidParticleLocalIdxs_,
-		"Invalid active CPU01 fluid particle local index.");
-	remapLocalIdxs(pressureAccFluidParticleLocalIdxs_,
+	remapLocalIdxs(outerFluidParticleLocalIdxs_, N_ownedF_,
+		"Invalid outer CPU01 fluid particle local index.");
+	remapLocalIdxs(pressureAccFluidParticleLocalIdxs_, N_F_,
 		"Invalid pressure-acceleration CPU01 fluid particle local index.");
 
-	activeFluidParticleFlags_.assign(N_F_, 0);
-	for (const uint32_t localIdx : activeFluidParticleLocalIdxs_)
-	{
-		activeFluidParticleFlags_[localIdx] = 1;
-	}
 	BuildDistributedSolverChunkIdxs();
 
 	if (distributedFluidSolverSync_)
@@ -1784,11 +1874,11 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 
 void SimBackend_CPU01::BuildDistributedSolverChunkIdxs()
 {
-	// marking the chunks that hold at least one of the particles yields the chunk indices
-	// in ascending order without sorting them
+	// marking chunks that hold at least one of the particles yields the chunk indices in ascending order
 	// (the callers validate the local indices against the fluid particle count)
 	const uint32_t N_chunks = (N_F_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 
+	// TODO: parallelize with TBB?
 	auto buildChunkIdxs = [this, N_chunks](const std::vector<uint32_t>& particleLocalIdxs,
 		std::vector<uint32_t>& chunkIdxs)
 	{
@@ -1806,10 +1896,34 @@ void SimBackend_CPU01::BuildDistributedSolverChunkIdxs()
 		}
 	};
 
+	pressureAccFluidParticleFlags_.assign(N_F_, 0);
+	for (const uint32_t localIdx : pressureAccFluidParticleLocalIdxs_)
+	{
+		pressureAccFluidParticleFlags_[localIdx] = 1;
+	}
+
 	buildChunkIdxs(
 		pressureAccFluidParticleLocalIdxs_,
 		pressureAccChunkIdxs_);
-	buildChunkIdxs(activeFluidParticleLocalIdxs_, ownedFluidChunkIdxs_);
+
+	const uint32_t N_ownedChunks =
+		(N_ownedF_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
+	chunkFlagsScratch_.assign(N_ownedChunks, 0);
+	for (const uint32_t localIdx : outerFluidParticleLocalIdxs_)
+	{
+		chunkFlagsScratch_[localIdx / CPU::N_SIMD_WIDTH] = 1;
+	}
+
+	innerFluidChunkIdxs_.clear();
+	outerFluidChunkIdxs_.clear();
+	innerFluidChunkIdxs_.reserve(N_ownedChunks);
+	outerFluidChunkIdxs_.reserve(N_ownedChunks);
+	for (uint32_t chunkIdx = 0; chunkIdx != N_ownedChunks; chunkIdx++)
+	{
+		std::vector<uint32_t>& dst = chunkFlagsScratch_[chunkIdx] != 0
+			? outerFluidChunkIdxs_ : innerFluidChunkIdxs_;
+		dst.push_back(chunkIdx);
+	}
 }
 
 void SimBackend_CPU01::UpdateRigidParticles()

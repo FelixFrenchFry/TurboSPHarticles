@@ -116,9 +116,14 @@ bool FluidSolverSyncMgr::Rebuild(
 	bool localOk = true;
 
 	// --- [ input validation ] ----------------------------------------------------------------------
+	if (fluidFieldExchangePending_)
+	{
+		localOk = SetFailure(localFailMsg,
+			"Cannot rebuild a fluid solver synchronization plan while an exchange is pending.");
+	}
 
 	// validate the global count, particle view, and rank-local metadata
-	if (N_expectedGlobalF > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
+	if (localOk && N_expectedGlobalF > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
 	{
 		localOk = SetFailure(localFailMsg,
 			"Global fluid particle count exceeds the supported index range.");
@@ -427,6 +432,11 @@ void FluidSolverSyncMgr::ApplyFluidParticleReOrder(
 	{
 		throw std::runtime_error("Fluid solver synchronization plan is not initialized.");
 	}
+	if (fluidFieldExchangePending_)
+	{
+		throw std::runtime_error(
+			"Cannot re-order a fluid solver synchronization plan while an exchange is pending.");
+	}
 
 	// the caller inverted and validated the storage permutation, so only its size is checked
 	const bool storageWasReOrdered = !newFluidLocalIdx_FromOldLocalIdx.empty();
@@ -457,11 +467,28 @@ void FluidSolverSyncMgr::ApplyFluidParticleReOrder(
 	}
 }
 
+void FluidSolverSyncMgr::BeginSynchronizeFluidScalarField(
+	const std::span<float> values,
+	const Base::DistHaloMode haloExtent)
+{
+	BeginSynchronizeFluidFields({ values, {}, {} }, 1, haloExtent);
+}
+
+void FluidSolverSyncMgr::BeginSynchronizeFluidVectorField(
+	const std::span<float> xValues,
+	const std::span<float> yValues,
+	const std::span<float> zValues,
+	const Base::DistHaloMode haloExtent)
+{
+	BeginSynchronizeFluidFields({ xValues, yValues, zValues }, 3, haloExtent);
+}
+
 void FluidSolverSyncMgr::SynchronizeFluidScalarField(
 	const std::span<float> values,
 	const Base::DistHaloMode haloExtent)
 {
-	SynchronizeFluidFields({ values, {}, {} }, 1, haloExtent);
+	BeginSynchronizeFluidScalarField(values, haloExtent);
+	EndSynchronizeFluidFields();
 }
 
 void FluidSolverSyncMgr::SynchronizeFluidVectorField(
@@ -470,10 +497,11 @@ void FluidSolverSyncMgr::SynchronizeFluidVectorField(
 	const std::span<float> zValues,
 	const Base::DistHaloMode haloExtent)
 {
-	SynchronizeFluidFields({ xValues, yValues, zValues }, 3, haloExtent);
+	BeginSynchronizeFluidVectorField(xValues, yValues, zValues, haloExtent);
+	EndSynchronizeFluidFields();
 }
 
-void FluidSolverSyncMgr::SynchronizeFluidFields(
+void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	const std::array<std::span<float>, 3>& fields,
 	const uint32_t N_fields,
 	const Base::DistHaloMode haloExtent)
@@ -481,6 +509,10 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 	if (!mpiContext_ || !benchmarksTracker_)
 	{
 		throw std::runtime_error("Fluid solver synchronization plan is not initialized.");
+	}
+	if (fluidFieldExchangePending_)
+	{
+		throw std::runtime_error("A fluid solver synchronization exchange is already pending.");
 	}
 
 	bool localOk = N_fields > 0 && N_fields <= fields.size() &&
@@ -547,12 +579,33 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 			FLUID_SOLVER_SYNC_TAG_PAYLOAD,
 			requests_);
 	}
+	pendingFields_ = fields;
+	N_pendingFields_ = N_fields;
+	pendingHaloExtent_ = haloExtent;
+	fluidFieldExchangePending_ = true;
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSync);
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
+}
+
+void FluidSolverSyncMgr::EndSynchronizeFluidFields()
+{
+	if (!mpiContext_ || !benchmarksTracker_)
+	{
+		throw std::runtime_error("Fluid solver synchronization plan is not initialized.");
+	}
+	if (!fluidFieldExchangePending_)
+	{
+		throw std::runtime_error("No fluid solver synchronization exchange is pending.");
+	}
+
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSync);
 	mpiContext_->WaitAll(requests_);
 
 	// unpack halo values
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
-		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
+		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, pendingHaloExtent_);
 		const uint32_t N_recv = static_cast<uint32_t>(particlePlan.recvLocalIdxs.size());
 
 		// scatter every field sequentially within each parallel block
@@ -560,17 +613,20 @@ void FluidSolverSyncMgr::SynchronizeFluidFields(
 			tbb::blocked_range<uint32_t>(0, N_recv, FLUID_SOLVER_SYNC_BLOCK_SIZE),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
+			for (uint32_t fieldIdx = 0; fieldIdx != N_pendingFields_; fieldIdx++)
 			{
 				const uint64_t fieldOffset = static_cast<uint64_t>(fieldIdx) * N_recv;
 				for (uint32_t particleIdx = blockRange.begin(); particleIdx != blockRange.end(); particleIdx++)
 				{
-					fields[fieldIdx][particlePlan.recvLocalIdxs[particleIdx]] =
+					pendingFields_[fieldIdx][particlePlan.recvLocalIdxs[particleIdx]] =
 						peerPlan.recvBuffer[fieldOffset + particleIdx];
 				}
 			}
 		});
 	}
+	pendingFields_ = {};
+	N_pendingFields_ = 0;
+	fluidFieldExchangePending_ = false;
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSync);
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
 }

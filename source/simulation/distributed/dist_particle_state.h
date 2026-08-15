@@ -57,10 +57,10 @@ namespace Dist
 	};
 
 	// stores all classification of particles (F/B) based on the domain decomp,
-	// local SoA layout is [ owned particles ][ halo particles ]
+	// backend re-ordering preserves [ owned particles ][ halo particles ] layouts
 	struct DistParticleState
 	{
-		// compact local SoA ranges (before backend data re-ordering)
+		// compact local SoA ranges, preserved by backend data re-ordering
 		uint32_t N_owned = 0;
 		uint32_t N_halo = 0;
 
@@ -88,15 +88,8 @@ namespace Dist
 		// checks that all per-local-particle metadata is present at the given index
 		bool HasMetadataAtLocalIdx(uint32_t localIdx) const;
 
-		// validates metadata for compact pre-backend-reorder layout [ owned particles ][ halo particles ]
-		bool IsValidLocalLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
-
-		// validates local metadata after backend data re-ordering, where owned
-		// and halo particles may no longer be stored in compact contiguous ranges
-		bool IsValidLocalParticleState(
-			uint32_t N_local,
-			uint32_t N_global,
-			std::string* failMsg = nullptr) const;
+		bool IsValidLocalParticleLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
+		bool IsValidLocalParticleState(uint32_t N_local, uint32_t N_global, std::string* failMsg = nullptr) const;
 	};
 
 	// TODO: move these functions into the DistParticleState class?
@@ -109,8 +102,8 @@ namespace Dist
 	Mem::MemUsage GetParticleMemoryUsage(const DistParticleState& particleState);
 	Mem::MemUsage GetParticleMemoryUsage(const ParticleReOrderWorkBuffers& workBuffers);
 
-	// rebuilds particle classes, class index lists, and local/global maps after
-	// the backend changes local particle order
+	// rebuilds particle classes, class index lists, and local/global maps
+	// after the backend changes local particle order
 	bool ApplyLocalParticleReOrder(
 		DistParticleState& particleState,
 		std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
@@ -129,6 +122,7 @@ namespace Dist
 
 	// rebuilds boundary particle class lists by keeping particles owned by this
 	// rank and splitting them into inner / outer by selected halo extent
+	// TODO: unify with fluid version of this function?
 	void ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		DistParticleState& particleState,
 		const Sync::BoundaryParticles& boundaryParticles,

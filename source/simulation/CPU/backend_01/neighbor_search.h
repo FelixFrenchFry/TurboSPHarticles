@@ -132,6 +132,8 @@ namespace Sim
 		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
 		std::vector<uint32_t> particleOrderScratchF_; // resident sort scratch for the permutation
 		std::vector<uint32_t> cellTableF_; // dense local-frame lookup table for compact cell indices
+		std::vector<uint32_t> cellStartIdxHaloF_;
+		std::vector<uint32_t> cellTableHaloF_;
 
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint64_t> cellIdB_;
@@ -139,6 +141,8 @@ namespace Sim
 		std::vector<uint32_t> particleOrderB_;
 		std::vector<uint32_t> particleOrderScratchB_;
 		std::vector<uint32_t> cellTableB_;
+		std::vector<uint32_t> cellStartIdxHaloB_;
+		std::vector<uint32_t> cellTableHaloB_;
 
 		std::vector<uint32_t> cellStartIdxR_;
 		std::vector<uint64_t> cellIdR_;

@@ -135,6 +135,23 @@ namespace CPU
 		return SelectMask32xSIMD(LoadUInt32xSIMD(lanes) < SetUInt32xSIMD(end - begin));
 	}
 
+	// return selected particle lanes for one full or partial SIMD chunk
+	inline Mask32xSIMD ParticleFlagsMask32xSIMD(
+		const uint8_t* particleFlags,
+		const uint32_t begin,
+		const uint32_t end) noexcept
+	{
+		if (!particleFlags) { return ValidLaneMask32xSIMD(begin, end); }
+
+		alignas(N_SIMD_ALIGNMENT) uint32_t flags[N_SIMD_WIDTH]{};
+		for (uint32_t lane = 0; lane < end - begin; lane++)
+		{
+			flags[lane] = particleFlags[begin + lane];
+		}
+
+		return SelectMask32xSIMD(LoadUInt32xSIMD(flags) > SetUInt32xSIMD(0u));
+	}
+
 	// select per lane between two float SIMD vectors
 	inline Float32xSIMD SelectFloat32xSIMD(
 		const Mask32xSIMD mask,
@@ -209,6 +226,39 @@ namespace CPU
 		for (uint32_t i = begin; i < end; i++)
 		{
 			dst[i] = tmp[i - begin];
+		}
+	}
+
+	// store only selected particle lanes, keeping the full-store fast path for dense chunks
+	inline void StoreFloat32xSIMDPartialSelected(
+		float* dst,
+		const uint32_t begin,
+		const uint32_t end,
+		const Float32xSIMD v,
+		const uint8_t* particleFlags) noexcept
+	{
+		if (!particleFlags)
+		{
+			StoreFloat32xSIMDPartial(dst, begin, end, v);
+			return;
+		}
+
+		bool allSelected = true;
+		for (uint32_t i = begin; i < end; i++)
+		{
+			allSelected = allSelected && particleFlags[i] != 0;
+		}
+		if (allSelected)
+		{
+			StoreFloat32xSIMDPartial(dst, begin, end, v);
+			return;
+		}
+
+		alignas(N_SIMD_ALIGNMENT) float tmp[N_SIMD_WIDTH]{};
+		v.store_aligned(tmp);
+		for (uint32_t i = begin; i < end; i++)
+		{
+			if (particleFlags[i] != 0) { dst[i] = tmp[i - begin]; }
 		}
 	}
 

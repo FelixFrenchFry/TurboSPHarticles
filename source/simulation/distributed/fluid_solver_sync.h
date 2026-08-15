@@ -55,6 +55,16 @@ namespace Dist
 			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) override;
 
 		// overwrites remote values with the ones held by their owning rank
+		void BeginSynchronizeFluidScalarField(
+			std::span<float> values,
+			Base::DistHaloMode haloExtent) override;
+		void BeginSynchronizeFluidVectorField(
+			std::span<float> xValues,
+			std::span<float> yValues,
+			std::span<float> zValues,
+			Base::DistHaloMode haloExtent) override;
+		void EndSynchronizeFluidFields() override;
+
 		void SynchronizeFluidScalarField(
 			std::span<float> values,
 			Base::DistHaloMode haloExtent) override;
@@ -98,8 +108,8 @@ namespace Dist
 			std::vector<float> recvBuffer;
 		};
 
-		// packs, exchanges, and unpacks up to three fields in one round of messages
-		void SynchronizeFluidFields(
+		// packs and posts exchange of up to three fields in one round of messages
+		void BeginSynchronizeFluidFields(
 			const std::array<std::span<float>, 3>& fields,
 			uint32_t N_fields,
 			Base::DistHaloMode haloExtent);
@@ -128,6 +138,10 @@ namespace Dist
 		// peer exchange plans and reusable MPI requests
 		std::vector<PeerPlan> peerPlans_;
 		std::vector<MPI_Request> requests_;
+		std::array<std::span<float>, 3> pendingFields_{};
+		uint32_t N_pendingFields_ = 0;
+		Base::DistHaloMode pendingHaloExtent_ = Base::DistHaloMode::SingleHalo;
+		bool fluidFieldExchangePending_ = false;
 
 		// reusable rebuild storage
 		std::vector<PeerPlan> nextPeerPlans_;
