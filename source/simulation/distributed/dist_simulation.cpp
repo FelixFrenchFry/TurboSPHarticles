@@ -1222,9 +1222,7 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 		globalSimState_,
 		*domainDecomp_,
 		mpiContext_.Rank(),
-		simParams_.distHaloRadius,
-		static_cast<uint32_t>(N_expectedGlobalF_),
-		static_cast<uint32_t>(N_expectedGlobalB_));
+		simParams_.distHaloRadius);
 
 	localSimState_.ShrinkToFitAll();
 
@@ -1267,24 +1265,10 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 		localOk = false;
 	}
 
-	if (fluidParticleState_.activeGlobalIdxFlags.size() != N_expectedGlobalF_)
-	{
-		SPDLOG_ERROR("[rank {}/{}] Invalid fluid active global index flags.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		localOk = false;
-	}
-
 	if (boundaryParticleState_.particleGlobalIdx_FromLocalIdx.size() !=
 		static_cast<uint64_t>(N_localB))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid boundary local-to-global index map.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		localOk = false;
-	}
-
-	if (boundaryParticleState_.activeGlobalIdxFlags.size() != N_expectedGlobalB_)
-	{
-		SPDLOG_ERROR("[rank {}/{}] Invalid boundary active global index flags.",
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}

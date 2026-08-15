@@ -39,9 +39,9 @@ namespace Dist
 	// reusable scratch for parallelized classification process of owned particles
 	struct ParticleClassificationWorkBuffers
 	{
-		std::vector<uint32_t> classCounts_ByChunkClass;
-		std::vector<uint32_t> classWriteOffsets_ByChunkClass;
-		std::vector<uint32_t> classTotals;
+		std::vector<uint32_t> classCounts_ByChunkClass; // how many owned/inner/outer particles each chunk contains
+		std::vector<uint32_t> classWriteOffsets_ByChunkClass; // where each chunk writes into the final list
+		std::vector<uint32_t> classTotals; // total owned/inner/outer counts across all chunks
 	};
 
 	// reusable scratch for parallelized local particle re-ordering
@@ -57,17 +57,17 @@ namespace Dist
 	};
 
 	// stores all classification of particles (F/B) based on the domain decomp,
-	// backend re-ordering preserves [ owned particles ][ halo particles ] layouts
+	// backend re-ordering preserves [ owned particles ][ halo particles ] SoA layouts
 	struct DistParticleState
 	{
-		// compact local SoA ranges, preserved by backend data re-ordering
+		// compact local SoA ranges
 		uint32_t N_owned = 0;
 		uint32_t N_halo = 0;
 
 		// per-local-particle class flag, indexed by localIdx
 		std::vector<DistParticleClass> particleClasses;
 
-		// cached local indices for each class
+		// cached local particle indices for each class
 		std::vector<uint32_t> particleLocalIdx_Owned;
 		std::vector<uint32_t> particleLocalIdx_Inner;
 		std::vector<uint32_t> particleLocalIdx_Outer;
@@ -76,18 +76,11 @@ namespace Dist
 		// index map from the compact rank-local state to the full scenario state
 		std::vector<uint32_t> particleGlobalIdx_FromLocalIdx;
 
-		// per-global-particle active flag, set while that particle is held by this rank
-		std::vector<uint8_t> activeGlobalIdxFlags;
-
 		// clears all particle classification metadata, compact range counts, and local/global index maps
 		void Clear();
 
-		// clears only particle class lists and compact range counts while preserving local/global index maps
-		void ClearParticleClasses();
-
-		// checks that all per-local-particle metadata is present at the given index
+		// validation helpers
 		bool HasMetadataAtLocalIdx(uint32_t localIdx) const;
-
 		bool IsValidLocalParticleLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
 		bool IsValidLocalParticleState(uint32_t N_local, uint32_t N_global, std::string* failMsg = nullptr) const;
 	};
@@ -139,7 +132,6 @@ namespace Dist
 		DistParticleState& boundaryParticleState,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
-		int rank, float haloRadius,
-		uint32_t N_globalF, uint32_t N_globalB);
+		int rank, float haloRadius);
 
 } // namespace Dist

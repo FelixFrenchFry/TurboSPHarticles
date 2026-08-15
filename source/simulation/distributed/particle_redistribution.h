@@ -138,6 +138,7 @@ namespace Dist
 			const IDomainDecomp& domainDecomp,
 			bool redistributeBoundaryParticles,
 			int rank, int N_ranks,
+			uint32_t N_globalF, uint32_t N_globalB,
 			std::string* failMsg = nullptr,
 			ParticleRedistributionTimingReport* timingReport = nullptr);
 
@@ -334,8 +335,7 @@ namespace Dist
 			DistParticleState& particleState,
 			uint32_t N_owned,
 			uint32_t N_halo,
-			uint32_t N_local,
-			uint32_t N_global);
+			uint32_t N_local);
 		static bool AddParticleMetadata(
 			DistParticleState& particleState,
 			DistParticleClass particleClass,
@@ -358,6 +358,7 @@ namespace Dist
 			const Sync::BoundaryConstView& boundaryParticles,
 			const DistParticleState& fluidParticleState,
 			const DistParticleState& boundaryParticleState,
+			uint32_t N_globalF, uint32_t N_globalB,
 			std::string* failMsg);
 
 		// routing and communication phases
@@ -430,6 +431,7 @@ namespace Dist
 		std::vector<uint32_t> retainedFluidOldLocalIdx_FromNewLocalIdx_;
 		std::vector<uint32_t> retainedBoundaryOldLocalIdx_FromNewLocalIdx_;
 		std::vector<uint8_t> retainedOldLocalIdxFlags_;
+		std::vector<uint32_t> migratedGlobalIdxScratch_;
 		Sync::FluidParticles appendedFluidParticles_;
 		Sync::BoundaryParticles appendedBoundaryParticles_;
 

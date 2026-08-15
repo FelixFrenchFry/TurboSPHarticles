@@ -8,6 +8,7 @@
 #include <utility>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_sort.h>
 
 // internal
 #include "dist_particle_state.h"
@@ -42,14 +43,19 @@ namespace
 		};
 	}
 
-	// reset class metadata and reserve each index list for its largest possible result
+	// reset class metadata and reserve each index list
 	void PrepareParticleClassification(
 		DistParticleState& particleState,
 		const uint32_t N_particles)
 	{
-		particleState.ClearParticleClasses();
-
-		particleState.particleClasses.resize(N_particles, DistParticleClass::None);
+		particleState.N_owned = 0;
+		particleState.N_halo = 0;
+		particleState.particleClasses.assign(N_particles, DistParticleClass::None);
+		particleState.particleLocalIdx_Owned.clear();
+		particleState.particleLocalIdx_Inner.clear();
+		particleState.particleLocalIdx_Outer.clear();
+		particleState.particleLocalIdx_Halo.clear();
+		
 		particleState.particleLocalIdx_Owned.reserve(N_particles);
 		particleState.particleLocalIdx_Inner.reserve(N_particles);
 		particleState.particleLocalIdx_Outer.reserve(N_particles);
@@ -438,8 +444,7 @@ namespace
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float haloRadius,
-		const uint32_t N_globalF)
+		const float haloRadius)
 	{
 		const Sync::FluidParticles& globalFluid = globalState.fluidParticles;
 		Sync::FluidParticles& localFluid = localState.fluidParticles;
@@ -454,7 +459,6 @@ namespace
 		localState.ResizeFluid(N_local);
 		particleState.Clear();
 		particleState.particleGlobalIdx_FromLocalIdx.reserve(N_local);
-		particleState.activeGlobalIdxFlags.assign(N_globalF, 0);
 
 		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
@@ -467,9 +471,7 @@ namespace
 
 			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
 
-			const uint32_t globalIdx = globalFluid.id[srcIdx];
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
-			particleState.activeGlobalIdxFlags[globalIdx] = 1;
+			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalFluid.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -483,9 +485,7 @@ namespace
 
 			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
 
-			const uint32_t globalIdx = globalFluid.id[srcIdx];
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
-			particleState.activeGlobalIdxFlags[globalIdx] = 1;
+			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalFluid.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -502,8 +502,7 @@ namespace
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
-		const float haloRadius,
-		const uint32_t N_globalB)
+		const float haloRadius)
 	{
 		const Sync::BoundaryParticles& globalBoundary = globalState.boundaryParticles;
 		Sync::BoundaryParticles& localBoundary = localState.boundaryParticles;
@@ -518,7 +517,6 @@ namespace
 		localState.ResizeBoundary(N_local);
 		particleState.Clear();
 		particleState.particleGlobalIdx_FromLocalIdx.reserve(N_local);
-		particleState.activeGlobalIdxFlags.assign(N_globalB, 0);
 
 		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
@@ -531,9 +529,7 @@ namespace
 
 			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
 
-			const uint32_t globalIdx = globalBoundary.id[srcIdx];
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
-			particleState.activeGlobalIdxFlags[globalIdx] = 1;
+			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalBoundary.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -547,9 +543,7 @@ namespace
 
 			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
 
-			const uint32_t globalIdx = globalBoundary.id[srcIdx];
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalIdx);
-			particleState.activeGlobalIdxFlags[globalIdx] = 1;
+			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalBoundary.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -572,19 +566,6 @@ void DistParticleState::Clear()
 	particleLocalIdx_Outer.clear();
 	particleLocalIdx_Halo.clear();
 	particleGlobalIdx_FromLocalIdx.clear();
-	activeGlobalIdxFlags.clear();
-}
-
-void DistParticleState::ClearParticleClasses()
-{
-	N_owned = 0;
-	N_halo = 0;
-
-	particleClasses.clear();
-	particleLocalIdx_Owned.clear();
-	particleLocalIdx_Inner.clear();
-	particleLocalIdx_Outer.clear();
-	particleLocalIdx_Halo.clear();
 }
 
 bool DistParticleState::HasMetadataAtLocalIdx(const uint32_t localIdx) const
@@ -779,10 +760,6 @@ bool DistParticleState::IsValidLocalParticleState(
 	{
 		return fail("particleGlobalIdx_FromLocalIdx.size() does not match localParticleCount.");
 	}
-	if (activeGlobalIdxFlags.size() != N_global)
-	{
-		return fail("activeGlobalIdxFlags.size() does not match globalParticleCount.");
-	}
 
 	#if defined(_DEBUG)
 	std::vector<uint8_t> activeLocalIdxs(N_local, 0);
@@ -885,31 +862,24 @@ bool DistParticleState::IsValidLocalParticleState(
 		}
 	}
 
-	// check that every local-to-global entry lands on a flagged global index
+	// check that every local-to-global entry lands inside the global particle range
 	for (uint32_t localIdx = 0; localIdx != N_local; localIdx++)
 	{
-		const uint32_t globalIdx = particleGlobalIdx_FromLocalIdx[localIdx];
-		if (globalIdx >= N_global)
+		if (particleGlobalIdx_FromLocalIdx[localIdx] >= N_global)
 		{
 			return fail("particleGlobalIdx_FromLocalIdx contains an index outside the global particle range.");
 		}
-		if (activeGlobalIdxFlags[globalIdx] == 0)
-		{
-			return fail("activeGlobalIdxFlags does not mark an active globalIdx.");
-		}
 	}
 
-	// count active global flags to detect duplicate local-to-global mappings
-	// (distinct mappings produce exactly one active flag per local particle)
-	uint32_t N_activeGlobal = 0;
-	for (uint32_t globalIdx = 0; globalIdx != N_global; globalIdx++)
+	// sort a copy of the local-to-global map to detect duplicate mappings
+	std::vector<uint32_t> sortedGlobalIdxs = particleGlobalIdx_FromLocalIdx;
+	tbb::parallel_sort(sortedGlobalIdxs.begin(), sortedGlobalIdxs.end());
+	if (std::adjacent_find(sortedGlobalIdxs.begin(), sortedGlobalIdxs.end()) != sortedGlobalIdxs.end())
 	{
-		if (activeGlobalIdxFlags[globalIdx] != 0) { N_activeGlobal++; }
+		return fail("particleGlobalIdx_FromLocalIdx contains a duplicate global index.");
 	}
-	if (N_activeGlobal != N_local)
-	{
-		return fail("activeGlobalIdxFlags count does not match localParticleCount.");
-	}
+	#else
+	(void)N_global;
 	#endif
 
 	return true;
@@ -995,7 +965,6 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Outer));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Halo));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleGlobalIdx_FromLocalIdx));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.activeGlobalIdxFlags));
 
 	return usage;
 }
@@ -1091,7 +1060,6 @@ bool Dist::ApplyLocalParticleReOrder(
 				const DistParticleClass particleClass =
 					particleState.particleClasses[oldLocalIdx];
 				if (globalIdx >= N_global ||
-					particleState.activeGlobalIdxFlags[globalIdx] == 0 ||
 					(particleClass != DistParticleClass::Inner &&
 					particleClass != DistParticleClass::Outer &&
 					particleClass != DistParticleClass::Halo))
@@ -1289,9 +1257,7 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	const Sync::UniversalSimState& globalState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
-	const float haloRadius,
-	const uint32_t N_globalF,
-	const uint32_t N_globalB)
+	const float haloRadius)
 {
 	// reset the rank-local state while preserving global step and time
 	localState = {};
@@ -1303,8 +1269,8 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	// build compact rank-local fluid and boundary particle layouts
 	BuildLocalFluidParticlesFromGlobalState(
 		fluidParticleState, localState, globalState,
-		domainDecomp, rank, haloRadius, N_globalF);
+		domainDecomp, rank, haloRadius);
 	BuildLocalBoundaryParticlesFromGlobalState(
 		boundaryParticleState, localState, globalState,
-		domainDecomp, rank, haloRadius, N_globalB);
+		domainDecomp, rank, haloRadius);
 }
