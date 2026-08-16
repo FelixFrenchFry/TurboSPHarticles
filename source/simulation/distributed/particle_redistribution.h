@@ -37,12 +37,12 @@ namespace Dist
 	inline constexpr uint32_t PARTICLE_COMPACTION_KIND_HOLE = 0;
 	inline constexpr uint32_t PARTICLE_COMPACTION_KIND_SOURCE = 1;
 
-	// retained particles classified per chunk, so workers fill disjoint output ranges
+	// owned particles classified per chunk, so workers fill disjoint output ranges
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
-	inline constexpr uint32_t RETAINED_CLASSIFICATION_CHUNK_SIZE = 4096;
-	inline constexpr uint32_t RETAINED_CLASSIFICATION_CLASS_COUNT = 2;
-	inline constexpr uint32_t RETAINED_CLASSIFICATION_CLASS_INNER = 0;
-	inline constexpr uint32_t RETAINED_CLASSIFICATION_CLASS_OUTER = 1;
+	inline constexpr uint32_t OWNED_CLASSIFICATION_CHUNK_SIZE = 4096;
+	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_COUNT = 2;
+	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_INNER = 0;
+	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_OUTER = 1;
 
 	// packed particle count lanes exchanged once per redistribution
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_COUNT = 4;
@@ -332,13 +332,6 @@ namespace Dist
 			uint32_t N_owned,
 			uint32_t N_halo,
 			uint32_t N_local);
-		static bool AddParticleMetadata(
-			DistParticleState& particleState,
-			DistParticleClass particleClass,
-			uint32_t N_global,
-			uint32_t globalIdx,
-			uint32_t particleId,
-			uint32_t localIdx);
 		static bool AddHaloParticleMetadata(
 			DistParticleState& particleState,
 			uint32_t N_global,
@@ -417,7 +410,7 @@ namespace Dist
 		ParticleRedistributionRoutes routes_;
 		ParticleRoutingWorkBuffers routingWorkBuffers_;
 		ParticleCompactionWorkBuffers compactionWorkBuffers_;
-		ParticleClassificationWorkBuffers retainedClassificationWorkBuffers_;
+		ParticleClassificationWorkBuffers ownedClassificationWorkBuffers_;
 		std::vector<int> sendCounts_;
 		std::vector<int> recvCounts_;
 
