@@ -106,7 +106,7 @@ namespace Dist
 		std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
 		ParticleReOrderWorkBuffers* workBuffers = nullptr);
 
-	// rebuilds fluid particle class lists by keeping particles owned by this
+	// rebuilds fluid/boundary particle class lists by keeping particles owned by this
 	// rank and splitting them into inner / outer by selected halo extent
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
@@ -115,10 +115,6 @@ namespace Dist
 		int rank,
 		float haloRadius,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
-
-	// rebuilds boundary particle class lists by keeping particles owned by this
-	// rank and splitting them into inner / outer by selected halo extent
-	// TODO: unify with fluid version of this function?
 	void ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		DistParticleState& particleState,
 		const Sync::BoundaryParticles& particlesB,

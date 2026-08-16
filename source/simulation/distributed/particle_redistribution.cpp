@@ -2215,7 +2215,8 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 
 				if (!AddHaloParticleMetadata(
 					rebuiltParticleState, N_global,
-					oldParticles.id[oldLocalIdx], oldParticles.id[oldLocalIdx],
+					oldParticles.id[oldLocalIdx],
+					appendedParticles.id[haloAppendLocalIdxBase + haloIdx],
 					haloDstLocalIdxBase + haloIdx,
 					haloIdx))
 				{
@@ -2464,7 +2465,8 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 				if (!AddHaloParticleMetadata(
 					rebuiltParticleState, N_global,
-					oldParticles.id[oldLocalIdx], oldParticles.id[oldLocalIdx],
+					oldParticles.id[oldLocalIdx],
+					appendedParticles.id[haloAppendLocalIdxBase + haloIdx],
 					haloDstLocalIdxBase + haloIdx,
 					haloIdx))
 				{

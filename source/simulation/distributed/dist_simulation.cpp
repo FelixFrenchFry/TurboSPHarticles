@@ -1445,7 +1445,7 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 			localSimState_.step = simStep_;
 			localSimState_.time = simTime_;
 
-			if (localOk && !ValidateRankLocalBackendParticleOrder()) { localOk = false; }
+			if (localOk && !ValidateRankLocalBackendParticleState()) { localOk = false; }
 
 			// fluid and boundary payloads remain backend-resident after startup
 			localSimState_.particlesF = {};
@@ -2508,16 +2508,16 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 	return mpiContext_.AllTrue(localOk);
 }
 
-bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder() const
+bool DistSimulationMgr::ValidateRankLocalBackendParticleState() const
 {
 	std::string fluidFailMsg{};
-	const bool fluidOrderStable =
+	const bool fluidStateValid =
 		particleStateF_.IsValidLocalParticleState(
 			localSimState_.particlesF.id,
 			static_cast<uint32_t>(N_expectedGlobalF_),
 			&fluidFailMsg);
 	std::string boundaryFailMsg{};
-	const bool boundaryOrderStable =
+	const bool boundaryStateValid =
 		particleStateB_.IsValidLocalParticleState(
 			localSimState_.particlesB.id,
 			static_cast<uint32_t>(N_expectedGlobalB_),
@@ -2525,14 +2525,14 @@ bool DistSimulationMgr::ValidateRankLocalBackendParticleOrder() const
 	const bool rigidStateStable =
 		RigidStateMatchesGlobalState(localSimState_, globalSimState_);
 
-	if (!fluidOrderStable || !boundaryOrderStable || !rigidStateStable)
+	if (!fluidStateValid || !boundaryStateValid || !rigidStateStable)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Rank-local backend particle identity/layout validation failed "
 			"(fluid={}, boundary={}, rigid={}).",
 			mpiContext_.Rank(), mpiContext_.Size(),
-			fluidOrderStable ? "stable" : "changed",
-			boundaryOrderStable ? "stable" : "changed",
+			fluidStateValid ? "valid" : fluidFailMsg,
+			boundaryStateValid ? "valid" : boundaryFailMsg,
 			rigidStateStable ? "stable" : "changed");
 		return false;
 	}
