@@ -213,14 +213,13 @@ namespace Dist
 			uint32_t Size() const { return N_particles_; }
 			bool IsEmpty() const { return Size() == 0; }
 			int CheckedCount() const;
-			uint32_t GlobalIdxAt(uint32_t bufferIdx) const;
+			uint32_t GlobalIdxAt(uint32_t bufferIdx) const; // particle IDs are the global indices
 			Mem::MemUsage GetMemoryUsage() const;
 
 		private:
 
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
-			std::vector<uint32_t> globalIdx_;
 			Sync::FluidParticles particles_; // fields left out of the payload stay empty
 		};
 
@@ -263,14 +262,13 @@ namespace Dist
 			uint32_t Size() const { return N_particles_; }
 			bool IsEmpty() const { return Size() == 0; }
 			int CheckedCount() const;
-			uint32_t GlobalIdxAt(uint32_t bufferIdx) const;
+			uint32_t GlobalIdxAt(uint32_t bufferIdx) const; // particle IDs are the global indices
 			Mem::MemUsage GetMemoryUsage() const;
 
 		private:
 
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
-			std::vector<uint32_t> globalIdx_;
 			Sync::BoundaryParticles particles_;
 		};
 

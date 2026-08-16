@@ -283,20 +283,20 @@ namespace
 			? 1 + (N_retained - 1) / RETAINED_CLASSIFICATION_CHUNK_SIZE
 			: 0;
 
+		// buffers storing counts need to be zero-initialized,
+		// while the others can be resized since they will be fully overwritten
 		AssignVectorWithExtraCapacity(
 			workBuffers.classCounts_ByChunkClass,
 			static_cast<uint64_t>(N_chunks) * RETAINED_CLASSIFICATION_CLASS_COUNT,
 			uint32_t{ 0 },
 			extraAllocCapacityPct);
-		AssignVectorWithExtraCapacity(
+		ResizeVectorWithExtraCapacity(
 			workBuffers.classWriteOffsets_ByChunkClass,
 			static_cast<uint64_t>(N_chunks) * RETAINED_CLASSIFICATION_CLASS_COUNT,
-			uint32_t{ 0 },
 			extraAllocCapacityPct);
-		AssignVectorWithExtraCapacity(
+		ResizeVectorWithExtraCapacity(
 			workBuffers.classTotals,
 			RETAINED_CLASSIFICATION_CLASS_COUNT,
-			uint32_t{ 0 },
 			extraAllocCapacityPct);
 		ResizeVectorWithExtraCapacity(
 			rebuiltParticleState.particleLocalIdx_Owned,
@@ -510,13 +510,10 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::Resize(
 	const uint32_t N)
 {
 	// grow reusable storage to the largest requested particle count
-	if (globalIdx_.size() < N)
+	if (particles_.id.size() < N)
 	{
-		EnsureVectorCapacityWithExtra(
-			globalIdx_, N, exchangeBufferExtraAllocCapacityPct_);
 		EnsureFluidPayloadCapacityWithExtra(
 			particles_, N, exchangeBufferExtraAllocCapacityPct_);
-		globalIdx_.resize(N);
 		ResizeFluidPayloadFields(particles_, N);
 	}
 
@@ -536,7 +533,6 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::SetBulkFromParticleView(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 	{
-		GatherParticleField(globalIdx_, src.id, localIdxs, blockRange);
 		GatherParticleField(particles_.id, src.id, localIdxs, blockRange);
 		GatherParticleField(particles_.xPos, src.xPos, localIdxs, blockRange);
 		GatherParticleField(particles_.yPos, src.yPos, localIdxs, blockRange);
@@ -603,7 +599,6 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::QueueIRecvPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueIRecvVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
 	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
 	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
 	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
@@ -625,7 +620,6 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::QueueISendPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueISendVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
 	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
 	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
 	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
@@ -652,12 +646,12 @@ int ParticleRedistributionMgr::FluidExchangeBuffer::CheckedCount() const
 uint32_t ParticleRedistributionMgr::FluidExchangeBuffer::GlobalIdxAt(
 	const uint32_t bufferIdx) const
 {
-	return globalIdx_[bufferIdx];
+	return particles_.id[bufferIdx];
 }
 
 Mem::MemUsage ParticleRedistributionMgr::FluidExchangeBuffer::GetMemoryUsage() const
 {
-	Mem::MemUsage usage = Mem::MemUsageOf_Vector(globalIdx_);
+	Mem::MemUsage usage{};
 
 	Mem::Add(usage, GetParticleMemoryUsage(particles_));
 
@@ -673,13 +667,10 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::Resize(
 	const uint32_t N)
 {
 	// grow reusable storage to the largest requested particle count
-	if (globalIdx_.size() < N)
+	if (particles_.id.size() < N)
 	{
-		EnsureVectorCapacityWithExtra(
-			globalIdx_, N, exchangeBufferExtraAllocCapacityPct_);
 		EnsureBoundaryParticleCapacityWithExtra(
 			particles_, N, exchangeBufferExtraAllocCapacityPct_);
-		globalIdx_.resize(N);
 		particles_.resizeAll(N);
 	}
 
@@ -698,7 +689,6 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::SetBulkFromParticleView(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 	{
-		GatherParticleField(globalIdx_, src.id, localIdxs, blockRange);
 		GatherParticleField(particles_.id, src.id, localIdxs, blockRange);
 		GatherParticleField(particles_.xPos, src.xPos, localIdxs, blockRange);
 		GatherParticleField(particles_.yPos, src.yPos, localIdxs, blockRange);
@@ -749,7 +739,6 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueIRecvPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueIRecvVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
 	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
 	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
 	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
@@ -766,7 +755,6 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueISendPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueISendVector(mpiContext, globalIdx_, N_particles_, peerRank, tagBase + 1, requests);
 	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
 	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
 	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
@@ -788,12 +776,12 @@ int ParticleRedistributionMgr::BoundaryExchangeBuffer::CheckedCount() const
 uint32_t ParticleRedistributionMgr::BoundaryExchangeBuffer::GlobalIdxAt(
 	const uint32_t bufferIdx) const
 {
-	return globalIdx_[bufferIdx];
+	return particles_.id[bufferIdx];
 }
 
 Mem::MemUsage ParticleRedistributionMgr::BoundaryExchangeBuffer::GetMemoryUsage() const
 {
-	Mem::MemUsage usage = Mem::MemUsageOf_Vector(globalIdx_);
+	Mem::MemUsage usage{};
 
 	Mem::Add(usage, GetParticleMemoryUsage(particles_));
 
@@ -991,20 +979,20 @@ bool ParticleRedistributionMgr::BuildDenseCompactionMap(
 	const uint64_t N_chunkKinds =
 		static_cast<uint64_t>(N_chunks) * PARTICLE_COMPACTION_KIND_COUNT;
 
+	// buffers storing counts need to be zero-initialized,
+	// while the others can be resized since they will be fully overwritten
 	AssignVectorWithExtraCapacity(
 		workBuffers.compactionCounts_ByChunkKind,
 		N_chunkKinds,
 		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		workBuffers.compactionWriteOffsets_ByChunkKind,
 		N_chunkKinds,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		workBuffers.compactionTotals,
 		PARTICLE_COMPACTION_KIND_COUNT,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
 	// count compact-prefix holes and retained tail sources per chunk
@@ -1393,34 +1381,33 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
 
+	// buffers storing counts need to be zero-initialized,
+	// while the others can be resized since they will be fully overwritten
 	AssignVectorWithExtraCapacity(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		N_chunkBuckets,
 		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		N_chunkBuckets,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeTotals,
 		N_buckets,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.ownerRank_ByOwnedIdx,
 		N_owned,
-		-1,
 		scratchBufferExtraAllocCapacityPct_);
 
 	// kept for the retained particle classification, so it outlives this routing pass
 	// and is indexed by local particle index instead of owned list position
+	// (only owned entries carry a value)
 	auto& isOuterOwned_ByLocalIdx = routes_.fluidIsOuterOwned_ByLocalIdx;
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		isOuterOwned_ByLocalIdx,
 		particlesF.N_,
-		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
 	// filled by the caller
@@ -1555,8 +1542,6 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				if (ownerRank < 0) { continue; }
-
 				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
 				std::vector<uint32_t>& ownedDstLocalIdxs = (ownerRank == rank)
 					? routes_.keptOwnedFluidLocalIdxs
@@ -1601,34 +1586,33 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
 
+	// buffers storing counts need to be zero-initialized,
+	// while the others can be resized since they will be fully overwritten
 	AssignVectorWithExtraCapacity(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		N_chunkBuckets,
 		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		N_chunkBuckets,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeTotals,
 		N_buckets,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.ownerRank_ByOwnedIdx,
 		N_owned,
-		-1,
 		scratchBufferExtraAllocCapacityPct_);
 
 	// kept for the retained particle classification, so it outlives this routing pass
 	// and is indexed by local particle index instead of owned list position
+	// (only owned entries carry a value)
 	auto& isOuterOwned_ByLocalIdx = routes_.boundaryIsOuterOwned_ByLocalIdx;
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		isOuterOwned_ByLocalIdx,
 		particlesB.N_,
-		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
 	// filled by the caller
@@ -1763,8 +1747,6 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				if (ownerRank < 0) { continue; }
-
 				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
 				std::vector<uint32_t>& ownedDstLocalIdxs = (ownerRank == rank)
 					? routes_.keptOwnedBoundaryLocalIdxs
