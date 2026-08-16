@@ -1627,48 +1627,54 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 		return false;
 	}
 
-	particleFlagsScratch_.assign(N_F_, 0);
-	for (const uint32_t localIdx : outerFluidParticleLocalIdxs)
+	const uint32_t N_outerF = static_cast<uint32_t>(outerFluidParticleLocalIdxs.size());
+	const auto isInvalidOuterIdx = [&](const uint32_t outerIdx)
 	{
-		if (localIdx >= N_ownedF)
-		{
-			SPDLOG_ERROR(
-				"Invalid outer fluid particle local index {}.",
-				localIdx);
-			return false;
-		}
-
-		if (particleFlagsScratch_[localIdx] != 0)
-		{
-			SPDLOG_ERROR(
-				"Duplicate outer fluid particle local index {}.",
-				localIdx);
-			return false;
-		}
-
-		particleFlagsScratch_[localIdx] = 1;
+		return outerFluidParticleLocalIdxs[outerIdx] >= N_ownedF;
+	};
+	if (Check::CountViolations(0, N_outerF, isInvalidOuterIdx) != 0)
+	{
+		const uint32_t outerIdx = Check::FindFirstViolation(0, N_outerF, isInvalidOuterIdx);
+		SPDLOG_ERROR(
+			"Invalid outer fluid particle local index {}.",
+			outerFluidParticleLocalIdxs[outerIdx]);
+		return false;
 	}
 
-	particleFlagsScratch_.assign(N_F_, 0);
-	for (const uint32_t localIdx : pressureAccelerationFluidParticleLocalIdxs)
+	const uint32_t duplicateOuterIdx = Check::FindFirstDuplicateIdx(
+		outerFluidParticleLocalIdxs, N_ownedF, particleFlagsScratch_);
+	if (duplicateOuterIdx != N_outerF)
 	{
-		if (localIdx >= N_F_)
-		{
-			SPDLOG_ERROR(
-				"Invalid pressure-acceleration fluid particle local index {}.",
-				localIdx);
-			return false;
-		}
+		SPDLOG_ERROR(
+			"Duplicate outer fluid particle local index {}.",
+			outerFluidParticleLocalIdxs[duplicateOuterIdx]);
+		return false;
+	}
 
-		if (particleFlagsScratch_[localIdx] != 0)
-		{
-			SPDLOG_ERROR(
-				"Duplicate pressure-acceleration fluid particle local index {}.",
-				localIdx);
-			return false;
-		}
+	const uint32_t N_pressureAccF = static_cast<uint32_t>(
+		pressureAccelerationFluidParticleLocalIdxs.size());
+	const auto isInvalidPressureAccIdx = [&](const uint32_t pressureAccIdx)
+	{
+		return pressureAccelerationFluidParticleLocalIdxs[pressureAccIdx] >= N_F_;
+	};
+	if (Check::CountViolations(0, N_pressureAccF, isInvalidPressureAccIdx) != 0)
+	{
+		const uint32_t pressureAccIdx = Check::FindFirstViolation(
+			0, N_pressureAccF, isInvalidPressureAccIdx);
+		SPDLOG_ERROR(
+			"Invalid pressure-acceleration fluid particle local index {}.",
+			pressureAccelerationFluidParticleLocalIdxs[pressureAccIdx]);
+		return false;
+	}
 
-		particleFlagsScratch_[localIdx] = 1;
+	const uint32_t duplicatePressureAccIdx = Check::FindFirstDuplicateIdx(
+		pressureAccelerationFluidParticleLocalIdxs, N_F_, particleFlagsScratch_);
+	if (duplicatePressureAccIdx != N_pressureAccF)
+	{
+		SPDLOG_ERROR(
+			"Duplicate pressure-acceleration fluid particle local index {}.",
+			pressureAccelerationFluidParticleLocalIdxs[duplicatePressureAccIdx]);
+		return false;
 	}
 
 	if (N_ownedBoundaryParticles > N_B_)
@@ -1679,26 +1685,29 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 		return false;
 	}
 
-	std::vector<uint8_t> activeRigidParticleFlags(N_R_, 0);
-	for (const uint32_t localIdx : activeRigidParticleLocalIdxs)
+	const uint32_t N_activeR = static_cast<uint32_t>(activeRigidParticleLocalIdxs.size());
+	const auto isInvalidActiveRigidIdx = [&](const uint32_t activeIdx)
 	{
-		if (localIdx >= N_R_)
-		{
-			SPDLOG_ERROR(
-				"Invalid active rigid particle local index {}.",
-				localIdx);
-			return false;
-		}
+		return activeRigidParticleLocalIdxs[activeIdx] >= N_R_;
+	};
+	if (Check::CountViolations(0, N_activeR, isInvalidActiveRigidIdx) != 0)
+	{
+		const uint32_t activeIdx = Check::FindFirstViolation(
+			0, N_activeR, isInvalidActiveRigidIdx);
+		SPDLOG_ERROR(
+			"Invalid active rigid particle local index {}.",
+			activeRigidParticleLocalIdxs[activeIdx]);
+		return false;
+	}
 
-		if (activeRigidParticleFlags[localIdx] != 0)
-		{
-			SPDLOG_ERROR(
-				"Duplicate active rigid particle local index {}.",
-				localIdx);
-			return false;
-		}
-
-		activeRigidParticleFlags[localIdx] = 1;
+	const uint32_t duplicateActiveRigidIdx = Check::FindFirstDuplicateIdx(
+		activeRigidParticleLocalIdxs, N_R_, particleFlagsScratch_);
+	if (duplicateActiveRigidIdx != N_activeR)
+	{
+		SPDLOG_ERROR(
+			"Duplicate active rigid particle local index {}.",
+			activeRigidParticleLocalIdxs[duplicateActiveRigidIdx]);
+		return false;
 	}
 
 	N_ownedF_ = N_ownedF;
@@ -1708,7 +1717,11 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 	pressureAccFluidParticleLocalIdxs_ = pressureAccelerationFluidParticleLocalIdxs;
 	BuildDistributedSolverChunkIdxs();
 	activeRigidParticleLocalIdxs_ = activeRigidParticleLocalIdxs;
-	activeRigidParticleFlags_ = std::move(activeRigidParticleFlags);
+	activeRigidParticleFlags_.assign(N_R_, 0);
+	for (const uint32_t localIdx : activeRigidParticleLocalIdxs)
+	{
+		activeRigidParticleFlags_[localIdx] = 1;
+	}
 	distributedFluidSolverSync_ = &distributedFluidSolverSync;
 	useDistributedStepWork_ = true;
 	useActiveRigidParticleLocalIdxs_ = true;

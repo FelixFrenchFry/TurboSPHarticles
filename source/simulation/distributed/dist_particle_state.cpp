@@ -8,7 +8,6 @@
 #include <utility>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
-#include <tbb/parallel_sort.h>
 
 // internal
 #include "source/base/parallel_checks.h"
@@ -871,16 +870,10 @@ bool DistParticleState::IsValidLocalParticleState(
 		}
 	}
 
-	// sort a copy of the local-to-global map to detect duplicate mappings
-	std::vector<uint32_t> sortedGlobalIdxs = particleGlobalIdx_FromLocalIdx;
-	tbb::parallel_sort(sortedGlobalIdxs.begin(), sortedGlobalIdxs.end());
-	if (Check::CountAdjacentViolations(
-		0,
-		static_cast<uint32_t>(sortedGlobalIdxs.size()),
-		[&](const uint32_t previousIdx, const uint32_t currentIdx)
-		{
-			return sortedGlobalIdxs[previousIdx] == sortedGlobalIdxs[currentIdx];
-		}) != 0)
+	// mark the local-to-global map in a global index bitmap to detect duplicate mappings
+	std::vector<uint32_t> claimBitsScratch{};
+	if (Check::FindFirstDuplicateIdx(
+		particleGlobalIdx_FromLocalIdx, N_global, claimBitsScratch) != N_local)
 	{
 		return fail("particleGlobalIdx_FromLocalIdx contains a duplicate global index.");
 	}
