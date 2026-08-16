@@ -28,6 +28,11 @@ namespace Dist
 	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_INNER = 1;
 	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_OUTER = 2;
 
+	inline constexpr uint32_t PARTICLE_BUILD_CHUNK_SIZE = 16384;
+	inline constexpr uint32_t N_PARTICLE_BUILD_CLASSES = 2;
+	inline constexpr uint32_t PARTICLE_BUILD_CLASS_OWNED = 0;
+	inline constexpr uint32_t PARTICLE_BUILD_CLASS_HALO = 1;
+
 	enum class DistParticleClass : uint8_t
 	{
 		Inner,  // particle owned by this rank, NOT exported to other ranks

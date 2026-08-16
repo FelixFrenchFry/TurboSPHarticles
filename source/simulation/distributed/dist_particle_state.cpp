@@ -186,11 +186,10 @@ namespace
 
 	bool IsHaloParticleForRank(
 		const glm::vec3& position,
-		const IDomainDecomp& domainDecomp,
+		const int ownerRank,
 		const AABB& haloBounds,
 		const int rank)
 	{
-		const int ownerRank = domainDecomp.OwnerRank(position);
 		return ownerRank >= 0 && ownerRank != rank && haloBounds.Contains(position);
 	}
 
@@ -315,90 +314,6 @@ namespace
 	}
 	#endif
 
-	uint32_t CountOwnedFluidParticles(
-		const Sync::FluidParticles& particlesF,
-		const IDomainDecomp& domainDecomp,
-		const int rank)
-	{
-		uint32_t N_owned = 0;
-
-		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != particlesF.N_; particleIdx++)
-		{
-			if (domainDecomp.OwnerRank(FluidPositionAtArrayIdx(
-				particlesF, particleIdx)) == rank)
-			{
-				N_owned++;
-			}
-		}
-
-		return N_owned;
-	}
-
-	uint32_t CountHaloFluidParticles(
-		const Sync::FluidParticles& particlesF,
-		const IDomainDecomp& domainDecomp,
-		const AABB& haloBounds,
-		const int rank)
-	{
-		uint32_t N_halo = 0;
-
-		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != particlesF.N_; particleIdx++)
-		{
-			if (IsHaloParticleForRank(
-				FluidPositionAtArrayIdx(particlesF, particleIdx),
-				domainDecomp, haloBounds, rank))
-			{
-				N_halo++;
-			}
-		}
-
-		return N_halo;
-	}
-
-	uint32_t CountOwnedBoundaryParticles(
-		const Sync::BoundaryParticles& particlesB,
-		const IDomainDecomp& domainDecomp,
-		const int rank)
-	{
-		uint32_t N_owned = 0;
-
-		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != particlesB.N_; particleIdx++)
-		{
-			if (domainDecomp.OwnerRank(BoundaryPositionAtArrayIdx(
-				particlesB, particleIdx)) == rank)
-			{
-				N_owned++;
-			}
-		}
-
-		return N_owned;
-	}
-
-	uint32_t CountHaloBoundaryParticles(
-		const Sync::BoundaryParticles& particlesB,
-		const IDomainDecomp& domainDecomp,
-		const AABB& haloBounds,
-		const int rank)
-	{
-		uint32_t N_halo = 0;
-
-		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != particlesB.N_; particleIdx++)
-		{
-			if (IsHaloParticleForRank(
-				BoundaryPositionAtArrayIdx(particlesB, particleIdx),
-				domainDecomp, haloBounds, rank))
-			{
-				N_halo++;
-			}
-		}
-
-		return N_halo;
-	}
-
 	// TODO: reimplement the callsite of this function with bulk copies of contiguous arrays instead of per-particle copies?
 	void CopyFluidParticle_GlobalToLocal(
 		const Sync::FluidParticles& src,
@@ -440,6 +355,120 @@ namespace
 		dst.psiB[localIdx] = src.psiB[globalIdx];
 	}
 
+	template <typename PositionAtGlobalIdx, typename ResizeLocalParticles, typename CopyParticleGlobalToLocal>
+	void BuildLocalParticleRangesFromGlobalState_Parallel(
+		const uint32_t N_global,
+		const PositionAtGlobalIdx& positionAtGlobalIdx,
+		const ResizeLocalParticles& resizeLocalParticles,
+		const CopyParticleGlobalToLocal& copyParticleGlobalToLocal,
+		const IDomainDecomp& domainDecomp,
+		const AABB& haloBounds,
+		const int rank,
+		uint32_t& N_owned,
+		uint32_t& N_halo)
+	{
+		const uint32_t N_chunks = N_global > 0
+			? 1 + (N_global - 1) / PARTICLE_BUILD_CHUNK_SIZE
+			: 0;
+
+		std::vector<uint32_t> classCounts_ByChunkClass(
+			N_chunks * N_PARTICLE_BUILD_CLASSES, 0u);
+		std::vector<uint32_t> classWriteOffsets_ByChunkClass(
+			N_chunks * N_PARTICLE_BUILD_CLASSES, 0u);
+		uint32_t classTotals[N_PARTICLE_BUILD_CLASSES]{};
+
+		// count owned and halo particles per chunk from one owner query per particle
+		// (chunks processed in parallel, with each worker writing only its own count row)
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			[&](const tbb::blocked_range<uint32_t>& range)
+		{
+			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			{
+				const uint32_t beginGlobalIdx = chunkIdx * PARTICLE_BUILD_CHUNK_SIZE;
+				const uint32_t endGlobalIdx = beginGlobalIdx + std::min(
+					PARTICLE_BUILD_CHUNK_SIZE,
+					N_global - beginGlobalIdx);
+				const uint32_t chunkClassBase = chunkIdx * N_PARTICLE_BUILD_CLASSES;
+
+				for (uint32_t globalIdx = beginGlobalIdx; globalIdx != endGlobalIdx; globalIdx++)
+				{
+					const glm::vec3 position = positionAtGlobalIdx(globalIdx);
+					const int ownerRank = domainDecomp.OwnerRank(position);
+
+					if (ownerRank == rank)
+					{
+						classCounts_ByChunkClass[
+							chunkClassBase + PARTICLE_BUILD_CLASS_OWNED]++;
+					}
+					else if (IsHaloParticleForRank(position, ownerRank, haloBounds, rank))
+					{
+						classCounts_ByChunkClass[
+							chunkClassBase + PARTICLE_BUILD_CLASS_HALO]++;
+					}
+				}
+			}
+		});
+
+		// prefix chunk-local class counts to compute output range of each chunk
+		for (uint32_t classIdx = 0; classIdx != N_PARTICLE_BUILD_CLASSES; classIdx++)
+		{
+			uint32_t N_class = 0;
+
+			for (uint32_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
+			{
+				const uint32_t chunkClassIdx = chunkIdx * N_PARTICLE_BUILD_CLASSES + classIdx;
+				classWriteOffsets_ByChunkClass[chunkClassIdx] = N_class;
+				N_class += classCounts_ByChunkClass[chunkClassIdx];
+			}
+
+			classTotals[classIdx] = N_class;
+		}
+
+		N_owned = classTotals[PARTICLE_BUILD_CLASS_OWNED];
+		N_halo = classTotals[PARTICLE_BUILD_CLASS_HALO];
+
+		// allocate exact local particle storage before the compact ranges are filled
+		resizeLocalParticles(N_owned + N_halo);
+
+		// copy owned particles into the compact prefix and halo particles into the suffix
+		// (chunks processed in parallel, with each worker writing to disjoint ranges)
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			[&](const tbb::blocked_range<uint32_t>& range)
+		{
+			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			{
+				const uint32_t beginGlobalIdx = chunkIdx * PARTICLE_BUILD_CHUNK_SIZE;
+				const uint32_t endGlobalIdx = beginGlobalIdx + std::min(
+					PARTICLE_BUILD_CHUNK_SIZE,
+					N_global - beginGlobalIdx);
+				const uint32_t chunkClassBase = chunkIdx * N_PARTICLE_BUILD_CLASSES;
+				uint32_t ownedLocalIdx =
+					classWriteOffsets_ByChunkClass[
+						chunkClassBase + PARTICLE_BUILD_CLASS_OWNED];
+				uint32_t haloLocalIdx = N_owned +
+					classWriteOffsets_ByChunkClass[
+						chunkClassBase + PARTICLE_BUILD_CLASS_HALO];
+
+				for (uint32_t globalIdx = beginGlobalIdx; globalIdx != endGlobalIdx; globalIdx++)
+				{
+					const glm::vec3 position = positionAtGlobalIdx(globalIdx);
+					const int ownerRank = domainDecomp.OwnerRank(position);
+
+					if (ownerRank == rank)
+					{
+						copyParticleGlobalToLocal(globalIdx, ownedLocalIdx++);
+					}
+					else if (IsHaloParticleForRank(position, ownerRank, haloBounds, rank))
+					{
+						copyParticleGlobalToLocal(globalIdx, haloLocalIdx++);
+					}
+				}
+			}
+		});
+	}
+
 	// build compact rank-local fluid storage as [ owned particles ][ halo particles ]
 	void BuildLocalFluidParticlesFromGlobalState(
 		DistParticleState& particleState,
@@ -452,45 +481,37 @@ namespace
 		const Sync::FluidParticles& globalFluid = globalState.particlesF;
 		Sync::FluidParticles& localFluid = localState.particlesF;
 
-		// count both compact ranges before allocating exact local particle storage
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
-		const uint32_t N_owned = CountOwnedFluidParticles(globalFluid, domainDecomp, rank);
-		const uint32_t N_halo = CountHaloFluidParticles(globalFluid, domainDecomp, haloBounds, rank);
-		const uint32_t N_local = N_owned + N_halo;
 
-		// reset local storage and metadata for the new compact layout
-		localState.ResizeFluid(N_local);
+		// reset metadata for the new compact layout
 		particleState.Clear();
 
 		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
-		// copy particles owned by this rank into the compact prefix
-		// TODO: parallelize this global particle scan with TBB?
-		uint32_t localIdx = 0;
-		for (uint32_t srcIdx = 0; srcIdx != globalFluid.N_; srcIdx++)
-		{
-			if (domainDecomp.OwnerRank(FluidPositionAtArrayIdx(globalFluid, srcIdx)) != rank) { continue; }
-
-			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
-			localIdx++;
-		}
-
-		// append non-owned particles inside the halo bounds of this rank
-		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t srcIdx = 0; srcIdx != globalFluid.N_; srcIdx++)
-		{
-			if (!IsHaloParticleForRank(
-				FluidPositionAtArrayIdx(globalFluid, srcIdx),
-				domainDecomp, haloBounds, rank)) { continue; }
-
-			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
-			localIdx++;
-		}
+		// fill the compact prefix with particles owned by this rank, then append
+		// non-owned particles inside the halo bounds of this rank
+		uint32_t N_owned = 0;
+		uint32_t N_halo = 0;
+		BuildLocalParticleRangesFromGlobalState_Parallel(
+			globalFluid.N_,
+			[&](const uint32_t globalIdx)
+			{
+				return FluidPositionAtArrayIdx(globalFluid, globalIdx);
+			},
+			[&](const uint32_t N_local)
+			{
+				localState.ResizeFluid(N_local);
+			},
+			[&](const uint32_t globalIdx, const uint32_t localIdx)
+			{
+				CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, globalIdx, localIdx);
+			},
+			domainDecomp, haloBounds, rank, N_owned, N_halo);
 
 		// classify the compact prefix as inner or outer, then mark the suffix as halo
 		ClassifyOwnedFluidParticlesIntoInnerOuter(
 			particleState, localFluid, domainDecomp, rank, haloRadius);
-		ClassifyHaloParticleRange(particleState, N_owned, N_local);
+		ClassifyHaloParticleRange(particleState, N_owned, N_owned + N_halo);
 	}
 
 	// build compact rank-local boundary storage as [ owned particles ][ halo particles ]
@@ -505,45 +526,38 @@ namespace
 		const Sync::BoundaryParticles& globalBoundary = globalState.particlesB;
 		Sync::BoundaryParticles& localBoundary = localState.particlesB;
 
-		// count both compact ranges before allocating exact local particle storage
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
-		const uint32_t N_owned = CountOwnedBoundaryParticles(globalBoundary, domainDecomp, rank);
-		const uint32_t N_halo = CountHaloBoundaryParticles(globalBoundary, domainDecomp, haloBounds, rank);
-		const uint32_t N_local = N_owned + N_halo;
 
-		// reset local storage and metadata for the new compact layout
-		localState.ResizeBoundary(N_local);
+		// reset metadata for the new compact layout
 		particleState.Clear();
 
 		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
-		// copy particles owned by this rank into the compact prefix
-		// TODO: parallelize this global particle scan with TBB?
-		uint32_t localIdx = 0;
-		for (uint32_t srcIdx = 0; srcIdx != globalBoundary.N_; srcIdx++)
-		{
-			if (domainDecomp.OwnerRank(BoundaryPositionAtArrayIdx(globalBoundary, srcIdx)) != rank) { continue; }
-
-			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
-			localIdx++;
-		}
-
-		// append non-owned particles inside the halo bounds of this rank
-		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t srcIdx = 0; srcIdx != globalBoundary.N_; srcIdx++)
-		{
-			if (!IsHaloParticleForRank(
-				BoundaryPositionAtArrayIdx(globalBoundary, srcIdx),
-				domainDecomp, haloBounds, rank)) { continue; }
-
-			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
-			localIdx++;
-		}
+		// fill the compact prefix with particles owned by this rank, then append
+		// non-owned particles inside the halo bounds of this rank
+		uint32_t N_owned = 0;
+		uint32_t N_halo = 0;
+		BuildLocalParticleRangesFromGlobalState_Parallel(
+			globalBoundary.N_,
+			[&](const uint32_t globalIdx)
+			{
+				return BoundaryPositionAtArrayIdx(globalBoundary, globalIdx);
+			},
+			[&](const uint32_t N_local)
+			{
+				localState.ResizeBoundary(N_local);
+			},
+			[&](const uint32_t globalIdx, const uint32_t localIdx)
+			{
+				CopyBoundaryParticle_GlobalToLocal(
+					globalBoundary, localBoundary, globalIdx, localIdx);
+			},
+			domainDecomp, haloBounds, rank, N_owned, N_halo);
 
 		// classify the compact prefix as inner or outer, then mark the suffix as halo
 		ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 			particleState, localBoundary, domainDecomp, rank, haloRadius);
-		ClassifyHaloParticleRange(particleState, N_owned, N_local);
+		ClassifyHaloParticleRange(particleState, N_owned, N_owned + N_halo);
 	}
 
 } // namespace anonymous
