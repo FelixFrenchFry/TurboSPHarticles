@@ -7,6 +7,7 @@
 #include <utility>
 
 // internal
+#include "source/base/parallel_checks.h"
 #include "owned_particle_gather.h"
 #include "mpi_context.h"
 
@@ -31,7 +32,8 @@ namespace
 	{
 		if (packets.size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 		{
-			throw std::runtime_error("Owned particle gather packet count exceeds MPI int count range.");
+			throw std::runtime_error(
+				"Owned particle gather packet count exceeds MPI int count range.");
 		}
 
 		return static_cast<int>(packets.size());
@@ -46,7 +48,8 @@ namespace
 
 		if (N_packets > N_max)
 		{
-			throw std::runtime_error("Owned particle gather payload exceeds MPI byte count range.");
+			throw std::runtime_error(
+				"Owned particle gather payload exceeds MPI byte count range.");
 		}
 
 		return static_cast<int>(N_packets * sizeof(T));
@@ -181,12 +184,13 @@ namespace
 
 	bool AllParticlesGathered(const std::vector<uint8_t>& gatheredParticles)
 	{
-		for (const uint8_t gatheredParticle : gatheredParticles)
-		{
-			if (gatheredParticle == 0) { return false; }
-		}
-
-		return true;
+		return Check::CountViolations(
+			0,
+			static_cast<uint32_t>(gatheredParticles.size()),
+			[&](const uint32_t globalIdx)
+			{
+				return gatheredParticles[globalIdx] == 0;
+			}) == 0;
 	}
 
 	void AppendOwnedParticleGatherBuffer(

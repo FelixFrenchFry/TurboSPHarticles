@@ -298,17 +298,20 @@ namespace
 			return false;
 		}
 
-		// mark each old local index once to verify that the reorder map is a permutation
-		// TODO: parallelize the reorder map validation with TBB?
-		std::vector<uint8_t> covered(N_local, 0);
-		for (const uint32_t oldLocalIdx : oldLocalIdx_FromNewLocalIdx)
+		// check that the reorder map is a permutation of the local particle range
+		if (Check::CountViolations(0, N_local, [&](const uint32_t newLocalIdx)
 		{
-			if (oldLocalIdx >= N_local) { return false; }
-			if (covered[oldLocalIdx] != 0) { return false; }
-			covered[oldLocalIdx] = 1;
+			return oldLocalIdx_FromNewLocalIdx[newLocalIdx] >= N_local;
+		}) != 0)
+		{
+			return false;
 		}
 
-		return true;
+		std::vector<uint32_t> claimBitsScratch{};
+		return Check::FindFirstDuplicateIdx(
+			oldLocalIdx_FromNewLocalIdx,
+			N_local,
+			claimBitsScratch) == N_local;
 	}
 	#endif
 
@@ -862,12 +865,12 @@ bool DistParticleState::IsValidLocalParticleState(
 	}
 
 	// check that every local-to-global entry lands inside the global particle range
-	for (uint32_t localIdx = 0; localIdx != N_local; localIdx++)
+	if (Check::CountViolations(0, N_local, [&](const uint32_t localIdx)
 	{
-		if (particleGlobalIdx_FromLocalIdx[localIdx] >= N_global)
-		{
-			return fail("particleGlobalIdx_FromLocalIdx contains an index outside the global particle range.");
-		}
+		return particleGlobalIdx_FromLocalIdx[localIdx] >= N_global;
+	}) != 0)
+	{
+		return fail("particleGlobalIdx_FromLocalIdx contains an index outside the global particle range.");
 	}
 
 	// mark the local-to-global map in a global index bitmap to detect duplicate mappings
