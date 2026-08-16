@@ -28,7 +28,7 @@ namespace Dist
 	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_INNER = 1;
 	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_OUTER = 2;
 
-	enum class DistParticleClass
+	enum class DistParticleClass : uint8_t
 	{
 		Inner,  // particle owned by this rank, NOT exported to other ranks
 		Outer,  // particle owned by this rank, exported to other ranks
@@ -52,7 +52,6 @@ namespace Dist
 		std::vector<uint32_t> particleLocalIdx_Inner;
 		std::vector<uint32_t> particleLocalIdx_Outer;
 		std::vector<uint32_t> particleLocalIdx_Halo;
-		std::vector<uint32_t> particleGlobalIdx_FromLocalIdx;
 		ParticleClassificationWorkBuffers classification;
 	};
 
@@ -73,16 +72,16 @@ namespace Dist
 		std::vector<uint32_t> particleLocalIdx_Outer;
 		std::vector<uint32_t> particleLocalIdx_Halo;
 
-		// index map from the compact rank-local state to the full scenario state
-		std::vector<uint32_t> particleGlobalIdx_FromLocalIdx;
-
-		// clears all particle classification metadata, compact range counts, and local/global index maps
+		// clears all particle classification metadata and compact range counts
 		void Clear();
 
 		// validation helpers
 		bool HasMetadataAtLocalIdx(uint32_t localIdx) const;
 		bool IsValidLocalParticleLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
-		bool IsValidLocalParticleState(uint32_t N_local, uint32_t N_global, std::string* failMsg = nullptr) const;
+		bool IsValidLocalParticleState(
+			std::span<const uint32_t> particleIds,
+			uint32_t N_global,
+			std::string* failMsg = nullptr) const;
 	};
 
 	// TODO: move these functions into the DistParticleState class?
@@ -95,12 +94,11 @@ namespace Dist
 	Mem::MemUsage GetParticleMemoryUsage(const DistParticleState& particleState);
 	Mem::MemUsage GetParticleMemoryUsage(const ParticleReOrderWorkBuffers& workBuffers);
 
-	// rebuilds particle classes, class index lists, and local/global maps
+	// rebuilds particle classes and class index lists
 	// after the backend changes local particle order
 	bool ApplyLocalParticleReOrder(
 		DistParticleState& particleState,
 		std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
-		uint32_t N_global,
 		ParticleReOrderWorkBuffers* workBuffers = nullptr);
 
 	// rebuilds fluid particle class lists by keeping particles owned by this

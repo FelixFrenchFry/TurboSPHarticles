@@ -185,7 +185,6 @@ namespace Dist
 			// resizes and gathers the given backend particles into the buffer
 			void SetBulkFromParticleView(
 				const Sync::FluidConstView& src,
-				const DistParticleState& particleState,
 				const std::vector<uint32_t>& localIdxs);
 
 			// copies one particle from the buffer into the backend
@@ -236,7 +235,6 @@ namespace Dist
 			// resizes and gathers the given backend particles into the buffer
 			void SetBulkFromParticleView(
 				const Sync::BoundaryConstView& src,
-				const DistParticleState& particleState,
 				const std::vector<uint32_t>& localIdxs);
 
 			// copies one particle from the buffer into the backend
@@ -341,11 +339,13 @@ namespace Dist
 			DistParticleClass particleClass,
 			uint32_t N_global,
 			uint32_t globalIdx,
+			uint32_t particleId,
 			uint32_t localIdx);
 		static bool AddHaloParticleMetadata(
 			DistParticleState& particleState,
 			uint32_t N_global,
 			uint32_t globalIdx,
+			uint32_t particleId,
 			uint32_t localIdx,
 			uint32_t haloIdx);
 		static bool CheckedUint32(
@@ -388,8 +388,6 @@ namespace Dist
 		bool PackSendBuffers(
 			const Sync::FluidConstView& particlesF,
 			const Sync::BoundaryConstView& particlesB,
-			const DistParticleState& particleStateF,
-			const DistParticleState& particleStateB,
 			bool redistributeParticlesB,
 			int rank, int N_ranks,
 			std::string* failMsg);
@@ -401,7 +399,6 @@ namespace Dist
 			const MpiContext& mpiContext);
 		bool PrepareFluidParticleMutation(
 			const Sync::FluidConstView& oldParticles,
-			const DistParticleState& oldParticleState,
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,
@@ -410,7 +407,6 @@ namespace Dist
 			ParticleRedistributionTimingReport* timingReport);
 		bool PrepareBoundaryParticleMutation(
 			const Sync::BoundaryConstView& oldParticles,
-			const DistParticleState& oldParticleState,
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,

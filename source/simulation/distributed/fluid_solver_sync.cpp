@@ -158,7 +158,7 @@ bool FluidSolverSyncMgr::Rebuild(
 	}
 
 	if (localOk && !particleStateF.IsValidLocalParticleState(
-		particlesF.N_, N_globalF, &localFailMsg))
+		particlesF.id, N_globalF, &localFailMsg))
 	{
 		localOk = false;
 	}
@@ -226,7 +226,7 @@ bool FluidSolverSyncMgr::Rebuild(
 			particlesF.zPos[localIdx]
 		};
 		const uint32_t globalIdx =
-			particleStateF.particleGlobalIdx_FromLocalIdx[localIdx];
+			particlesF.id[localIdx];
 
 		for (PeerPlan& peerPlan : newPeerPlans)
 		{
@@ -263,7 +263,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		}
 
 		const uint32_t globalIdx =
-			particleStateF.particleGlobalIdx_FromLocalIdx[localIdx];
+			particlesF.id[localIdx];
 		if (singleHaloBounds.Contains(position))
 		{
 			peerPlan->singleHalo.recvLocalIdxs.push_back(localIdx);

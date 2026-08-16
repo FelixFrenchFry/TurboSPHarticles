@@ -43,7 +43,6 @@ namespace
 		};
 	}
 
-	// reset class metadata and reserve each index list
 	void PrepareParticleClassification(
 		DistParticleState& particleState,
 		const uint32_t N_particles)
@@ -55,11 +54,6 @@ namespace
 		particleState.particleLocalIdx_Inner.clear();
 		particleState.particleLocalIdx_Outer.clear();
 		particleState.particleLocalIdx_Halo.clear();
-		
-		particleState.particleLocalIdx_Owned.reserve(N_particles);
-		particleState.particleLocalIdx_Inner.reserve(N_particles);
-		particleState.particleLocalIdx_Outer.reserve(N_particles);
-		particleState.particleLocalIdx_Halo.reserve(N_particles);
 	}
 
 	template <typename PositionAtLocalIdx>
@@ -208,12 +202,18 @@ namespace
 		particleState.N_owned = N_owned;
 		particleState.N_halo = N_local - N_owned;
 
-		// TODO: parallelize this with TBB
-		for (uint32_t localIdx = N_owned; localIdx != N_local; localIdx++)
+		particleState.particleLocalIdx_Halo.resize(particleState.N_halo);
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, particleState.N_halo),
+			[&](const tbb::blocked_range<uint32_t>& range)
 		{
-			particleState.particleLocalIdx_Halo.push_back(localIdx);
-			particleState.particleClasses[localIdx] = DistParticleClass::Halo;
-		}
+			for (uint32_t haloIdx = range.begin(); haloIdx != range.end(); haloIdx++)
+			{
+				const uint32_t localIdx = N_owned + haloIdx;
+				particleState.particleLocalIdx_Halo[haloIdx] = localIdx;
+				particleState.particleClasses[localIdx] = DistParticleClass::Halo;
+			}
+		});
 	}
 
 	#if defined(_DEBUG)
@@ -461,7 +461,6 @@ namespace
 		// reset local storage and metadata for the new compact layout
 		localState.ResizeFluid(N_local);
 		particleState.Clear();
-		particleState.particleGlobalIdx_FromLocalIdx.reserve(N_local);
 
 		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
@@ -473,8 +472,6 @@ namespace
 			if (domainDecomp.OwnerRank(FluidPositionAtArrayIdx(globalFluid, srcIdx)) != rank) { continue; }
 
 			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
-
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalFluid.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -487,8 +484,6 @@ namespace
 				domainDecomp, haloBounds, rank)) { continue; }
 
 			CopyFluidParticle_GlobalToLocal(globalFluid, localFluid, srcIdx, localIdx);
-
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalFluid.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -519,7 +514,6 @@ namespace
 		// reset local storage and metadata for the new compact layout
 		localState.ResizeBoundary(N_local);
 		particleState.Clear();
-		particleState.particleGlobalIdx_FromLocalIdx.reserve(N_local);
 
 		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
@@ -531,8 +525,6 @@ namespace
 			if (domainDecomp.OwnerRank(BoundaryPositionAtArrayIdx(globalBoundary, srcIdx)) != rank) { continue; }
 
 			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
-
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalBoundary.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -545,8 +537,6 @@ namespace
 				domainDecomp, haloBounds, rank)) { continue; }
 
 			CopyBoundaryParticle_GlobalToLocal(globalBoundary, localBoundary, srcIdx, localIdx);
-
-			particleState.particleGlobalIdx_FromLocalIdx.push_back(globalBoundary.id[srcIdx]);
 			localIdx++;
 		}
 
@@ -568,13 +558,11 @@ void DistParticleState::Clear()
 	particleLocalIdx_Inner.clear();
 	particleLocalIdx_Outer.clear();
 	particleLocalIdx_Halo.clear();
-	particleGlobalIdx_FromLocalIdx.clear();
 }
 
 bool DistParticleState::HasMetadataAtLocalIdx(const uint32_t localIdx) const
 {
-	return localIdx < particleClasses.size() &&
-		   localIdx < particleGlobalIdx_FromLocalIdx.size();
+	return localIdx < particleClasses.size();
 }
 
 // TODO: find opportunities for parallelization with TBB?
@@ -625,7 +613,7 @@ bool DistParticleState::IsValidLocalParticleLayout(
 	{
 		const DistParticleClass particleClass = particleClasses[localIdx];
 		return particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer;
+			   particleClass != DistParticleClass::Outer;
 	}) != 0)
 	{
 		return fail("owned local index range contains a particle class that is not Inner or Outer.");
@@ -717,7 +705,7 @@ bool DistParticleState::IsValidLocalParticleLayout(
 }
 
 bool DistParticleState::IsValidLocalParticleState(
-	const uint32_t N_local,
+	const std::span<const uint32_t> particleIds,
 	const uint32_t N_global,
 	std::string* failMsg) const
 {
@@ -729,156 +717,33 @@ bool DistParticleState::IsValidLocalParticleState(
 		return false;
 	};
 
-	// check that counts and class storage match the active local range
-	if (particleClasses.size() != N_local)
+	if (particleIds.size() > UINT32_MAX)
 	{
-		return fail("particleClasses.size() does not match localParticleCount.");
-	}
-	if (N_owned > N_local ||
-		N_halo != N_local - N_owned)
-	{
-		return fail("ownedParticleCount + haloParticleCount does not match localParticleCount.");
+		return fail("particleIds.size() exceeds uint32_t range.");
 	}
 
-	// check that class index lists match the owned and halo particle counts
-	if (particleLocalIdx_Owned.size() != N_owned)
+	const uint32_t N_local = static_cast<uint32_t>(particleIds.size());
+	if (!IsValidLocalParticleLayout(N_local, failMsg))
 	{
-		return fail("particleLocalIdx_Owned.size() does not match ownedParticleCount.");
-	}
-	if (particleLocalIdx_Halo.size() != N_halo)
-	{
-		return fail("particleLocalIdx_Halo.size() does not match haloParticleCount.");
-	}
-	if (particleLocalIdx_Inner.size() +
-		particleLocalIdx_Outer.size() != N_owned)
-	{
-		return fail(
-			"particleLocalIdx_Inner.size() + particleLocalIdx_Outer.size() "
-			"does not match ownedParticleCount.");
-	}
-
-	// check that index metadata covers the local and global particle domains
-	if (particleGlobalIdx_FromLocalIdx.size() != N_local)
-	{
-		return fail("particleGlobalIdx_FromLocalIdx.size() does not match localParticleCount.");
+		return false;
 	}
 
 	#if defined(_DEBUG)
-	std::vector<uint8_t> activeLocalIdxs(N_local, 0);
-
-	// check that owned list entries are unique active inner or outer particles
-	for (const uint32_t localIdx : particleLocalIdx_Owned)
-	{
-		if (!IsLocalIdxInRange(localIdx, 0, N_local))
-		{
-			return fail("particleLocalIdx_Owned contains an index outside the local particle range.");
-		}
-		if (activeLocalIdxs[localIdx] != 0)
-		{
-			return fail("particleLocalIdx_Owned contains a duplicate active local index.");
-		}
-
-		const DistParticleClass particleClass = particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer)
-		{
-			return fail("particleLocalIdx_Owned contains an index whose class is not Inner or Outer.");
-		}
-
-		activeLocalIdxs[localIdx] = 1;
-	}
-
-	// check that halo list entries are unique active halo particles
-	for (const uint32_t localIdx : particleLocalIdx_Halo)
-	{
-		if (!IsLocalIdxInRange(localIdx, 0, N_local))
-		{
-			return fail("particleLocalIdx_Halo contains an index outside the local particle range.");
-		}
-		if (activeLocalIdxs[localIdx] != 0)
-		{
-			return fail("particleLocalIdx_Halo contains a duplicate active local index.");
-		}
-		if (particleClasses[localIdx] != DistParticleClass::Halo)
-		{
-			return fail("particleLocalIdx_Halo contains an index whose class is not Halo.");
-		}
-
-		activeLocalIdxs[localIdx] = 1;
-	}
-	// check that every active local index appears in either owned or halo
-	for (uint32_t localIdx = 0; localIdx != N_local; localIdx++)
-	{
-		if (activeLocalIdxs[localIdx] == 0)
-		{
-			return fail("owned and halo local index lists do not cover every active local index.");
-		}
-	}
-
-	std::vector<uint8_t> ownedLocalIdxs(N_local, 0);
-
-	// check that inner list entries are unique owned particles marked inner
-	for (const uint32_t localIdx : particleLocalIdx_Inner)
-	{
-		if (!IsLocalIdxInRange(localIdx, 0, N_local))
-		{
-			return fail("particleLocalIdx_Inner contains an index outside the local particle range.");
-		}
-		if (ownedLocalIdxs[localIdx] != 0)
-		{
-			return fail("particleLocalIdx_Inner contains a duplicate owned local index.");
-		}
-		if (particleClasses[localIdx] != DistParticleClass::Inner)
-		{
-			return fail("particleLocalIdx_Inner contains an index whose class is not Inner.");
-		}
-
-		ownedLocalIdxs[localIdx] = 1;
-	}
-
-	// check that outer list entries are unique owned particles marked outer
-	for (const uint32_t localIdx : particleLocalIdx_Outer)
-	{
-		if (!IsLocalIdxInRange(localIdx, 0, N_local))
-		{
-			return fail("particleLocalIdx_Outer contains an index outside the local particle range.");
-		}
-		if (ownedLocalIdxs[localIdx] != 0)
-		{
-			return fail("particleLocalIdx_Outer contains a duplicate owned local index.");
-		}
-		if (particleClasses[localIdx] != DistParticleClass::Outer)
-		{
-			return fail("particleLocalIdx_Outer contains an index whose class is not Outer.");
-		}
-
-		ownedLocalIdxs[localIdx] = 1;
-	}
-
-	// check that every owned local index appears in either inner or outer
-	for (const uint32_t localIdx : particleLocalIdx_Owned)
-	{
-		if (ownedLocalIdxs[localIdx] == 0)
-		{
-			return fail("inner and outer local index lists do not cover every owned local index.");
-		}
-	}
-
-	// check that every local-to-global entry lands inside the global particle range
+	// check that every particle ID lands inside the global particle range
 	if (Check::CountViolations(0, N_local, [&](const uint32_t localIdx)
 	{
-		return particleGlobalIdx_FromLocalIdx[localIdx] >= N_global;
+		return particleIds[localIdx] >= N_global;
 	}) != 0)
 	{
-		return fail("particleGlobalIdx_FromLocalIdx contains an index outside the global particle range.");
+		return fail("particle id is outside the global particle range.");
 	}
 
-	// mark the local-to-global map in a global index bitmap to detect duplicate mappings
+	// mark the particle IDs in a global index bitmap to detect duplicates
 	std::vector<uint32_t> claimBitsScratch{};
 	if (Check::FindFirstDuplicateIdx(
-		particleGlobalIdx_FromLocalIdx, N_global, claimBitsScratch) != N_local)
+		particleIds, N_global, claimBitsScratch) != N_local)
 	{
-		return fail("particleGlobalIdx_FromLocalIdx contains a duplicate global index.");
+		return fail("particle ids contain a duplicate global index.");
 	}
 	#else
 	(void)N_global;
@@ -966,7 +831,6 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Inner));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Outer));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleLocalIdx_Halo));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(particleState.particleGlobalIdx_FromLocalIdx));
 
 	return usage;
 }
@@ -981,7 +845,6 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.particleLocalIdx_Inner));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.particleLocalIdx_Outer));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.particleLocalIdx_Halo));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.particleGlobalIdx_FromLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classCounts_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classWriteOffsets_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classTotals));
@@ -992,14 +855,13 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 bool Dist::ApplyLocalParticleReOrder(
 	DistParticleState& particleState,
 	const std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
-	const uint32_t N_global,
 	ParticleReOrderWorkBuffers* workBuffers)
 {
 	if (oldLocalIdx_FromNewLocalIdx.size() > UINT32_MAX) { return false; }
 	const uint32_t N_local = static_cast<uint32_t>(oldLocalIdx_FromNewLocalIdx.size());
 
 	// check that source metadata covers every old local index
-	if (!particleState.IsValidLocalParticleState(N_local, N_global))
+	if (!particleState.IsValidLocalParticleLayout(N_local))
 	{
 		return false;
 	}
@@ -1024,7 +886,6 @@ bool Dist::ApplyLocalParticleReOrder(
 		: 0;
 
 	reOrderWorkBuffers.particleClasses.resize(N_local);
-	reOrderWorkBuffers.particleGlobalIdx_FromLocalIdx.resize(N_local);
 	classification.classCounts_ByChunkClass.assign(
 		N_chunks * N_PARTICLE_CLASSIFICATION_CLASSES, 0u);
 	classification.classWriteOffsets_ByChunkClass.assign(
@@ -1033,7 +894,7 @@ bool Dist::ApplyLocalParticleReOrder(
 
 	std::atomic<bool> sourceMetadataValid{ true };
 
-	// re-order particle classes and local-to-global mappings while counting each class per chunk
+	// re-order particle classes while counting each class per chunk
 	// (chunks processed in parallel, with each worker writing only its own output range and count row)
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -1057,21 +918,17 @@ bool Dist::ApplyLocalParticleReOrder(
 					continue;
 				}
 
-				const uint32_t globalIdx =
-					particleState.particleGlobalIdx_FromLocalIdx[oldLocalIdx];
 				const DistParticleClass particleClass =
 					particleState.particleClasses[oldLocalIdx];
-				if (globalIdx >= N_global ||
-					(particleClass != DistParticleClass::Inner &&
+				if (particleClass != DistParticleClass::Inner &&
 					particleClass != DistParticleClass::Outer &&
-					particleClass != DistParticleClass::Halo))
+					particleClass != DistParticleClass::Halo)
 				{
 					sourceMetadataValid.store(false, std::memory_order_relaxed);
 					continue;
 				}
 
 				reOrderWorkBuffers.particleClasses[newLocalIdx] = particleClass;
-				reOrderWorkBuffers.particleGlobalIdx_FromLocalIdx[newLocalIdx] = globalIdx;
 
 				if (particleClass == DistParticleClass::Inner)
 				{
@@ -1180,7 +1037,6 @@ bool Dist::ApplyLocalParticleReOrder(
 		std::swap(particleState.particleLocalIdx_Inner, reOrderWorkBuffers.particleLocalIdx_Inner);
 		std::swap(particleState.particleLocalIdx_Outer, reOrderWorkBuffers.particleLocalIdx_Outer);
 		std::swap(particleState.particleLocalIdx_Halo, reOrderWorkBuffers.particleLocalIdx_Halo);
-		std::swap(particleState.particleGlobalIdx_FromLocalIdx, reOrderWorkBuffers.particleGlobalIdx_FromLocalIdx);
 	};
 
 	// exchange rebuilt metadata with the old arrays retained as scratch for the next re-order
@@ -1188,7 +1044,7 @@ bool Dist::ApplyLocalParticleReOrder(
 	particleState.N_owned = N_owned;
 	particleState.N_halo = N_halo;
 
-	if (!particleState.IsValidLocalParticleState(N_local, N_global))
+	if (!particleState.IsValidLocalParticleLayout(N_local))
 	{
 		// restore the original state if rebuilt metadata validation fails
 		swapParticleMetadata();

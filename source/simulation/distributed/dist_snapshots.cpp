@@ -80,7 +80,6 @@ namespace
 
 	DistExportFluidParticlePacket PackExportFluidParticle(
 		const Sync::FluidParticles& particlesF,
-		const DistParticleState& particleState,
 		const uint32_t localIdx,
 		const int rank)
 	{
@@ -89,7 +88,7 @@ namespace
 		const float zVel = particlesF.zVel[localIdx];
 
 		DistExportFluidParticlePacket packet{};
-		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.globalIdx = particlesF.id[localIdx];
 		packet.id = particlesF.id[localIdx];
 		packet.rank = static_cast<uint32_t>(rank);
 
@@ -103,11 +102,10 @@ namespace
 
 	DistExportBoundaryParticlePacket PackExportBoundaryParticle(
 		const Sync::BoundaryParticles& particlesB,
-		const DistParticleState& particleState,
 		const uint32_t localIdx)
 	{
 		DistExportBoundaryParticlePacket packet{};
-		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.globalIdx = particlesB.id[localIdx];
 		packet.id = particlesB.id[localIdx];
 
 		packet.xPos = particlesB.xPos[localIdx];
@@ -144,7 +142,8 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 	std::vector<uint8_t> localIdxUsed(localState.particlesF.N_, 0);
 	for (const uint32_t localIdx : exportFluidParticleLocalIdxs)
 	{
-		if (localIdx >= localState.particlesF.N_) { return false; }
+		if (localIdx >= localState.particlesF.N_ ||
+			localIdx >= localState.particlesF.id.size()) { return false; }
 		if (!particleStateF.HasMetadataAtLocalIdx(localIdx)) { return false; }
 		if (localIdxUsed[localIdx] != 0) { return false; }
 		localIdxUsed[localIdx] = 1;
@@ -153,34 +152,35 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 		if (particleClass != DistParticleClass::Inner &&
 			particleClass != DistParticleClass::Outer) { continue; }
 
-		if (particleStateF.particleGlobalIdx_FromLocalIdx[localIdx] ==
+		if (localState.particlesF.id[localIdx] ==
 			NO_GLOBAL_PARTICLE_IDX)
 		{
 			return false;
 		}
 
 		gatherBuffer.particlesF.push_back(
-			PackExportFluidParticle(localState.particlesF, particleStateF, localIdx, rank));
+			PackExportFluidParticle(localState.particlesF, localIdx, rank));
 	}
 
 	// boundary particles
 	for (const uint32_t localIdx : particleStateB.particleLocalIdx_Owned)
 	{
-		if (localIdx >= localState.particlesB.N_) { return false; }
+		if (localIdx >= localState.particlesB.N_ ||
+			localIdx >= localState.particlesB.id.size()) { return false; }
 		if (!particleStateB.HasMetadataAtLocalIdx(localIdx)) { return false; }
 
 		const DistParticleClass particleClass = particleStateB.particleClasses[localIdx];
 		if (particleClass != DistParticleClass::Inner &&
 			particleClass != DistParticleClass::Outer) { return false; }
 
-		if (particleStateB.particleGlobalIdx_FromLocalIdx[localIdx] ==
+		if (localState.particlesB.id[localIdx] ==
 			NO_GLOBAL_PARTICLE_IDX)
 		{
 			return false;
 		}
 
 		gatherBuffer.particlesB.push_back(
-			PackExportBoundaryParticle(localState.particlesB, particleStateB, localIdx));
+			PackExportBoundaryParticle(localState.particlesB, localIdx));
 	}
 
 	return true;

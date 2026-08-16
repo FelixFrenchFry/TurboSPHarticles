@@ -69,12 +69,11 @@ namespace
 
 	OwnedFluidParticlePacket PackFluidParticle(
 		const Sync::FluidParticles& particlesF,
-		const DistParticleState& particleState,
 		const uint32_t localIdx)
 	{
 		OwnedFluidParticlePacket packet{};
 
-		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.globalIdx = particlesF.id[localIdx];
 		packet.id = particlesF.id[localIdx];
 		packet.xPos = particlesF.xPos[localIdx];
 		packet.yPos = particlesF.yPos[localIdx];
@@ -98,12 +97,11 @@ namespace
 
 	OwnedBoundaryParticlePacket PackBoundaryParticle(
 		const Sync::BoundaryParticles& particlesB,
-		const DistParticleState& particleState,
 		const uint32_t localIdx)
 	{
 		OwnedBoundaryParticlePacket packet{};
 
-		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
+		packet.globalIdx = particlesB.id[localIdx];
 		packet.id = particlesB.id[localIdx];
 		packet.xPos = particlesB.xPos[localIdx];
 		packet.yPos = particlesB.yPos[localIdx];
@@ -293,11 +291,9 @@ bool Dist::PackOwnedParticleGatherBuffer(
 	if (particleStateF.N_owned > N_localF ||
 		particleStateF.particleClasses.size() != N_localF ||
 		particleStateF.particleLocalIdx_Owned.size() != particleStateF.N_owned ||
-		particleStateF.particleGlobalIdx_FromLocalIdx.size() != N_localF ||
 		particleStateB.N_owned > N_localB ||
 		particleStateB.particleClasses.size() != N_localB ||
-		particleStateB.particleLocalIdx_Owned.size() != particleStateB.N_owned ||
-		particleStateB.particleGlobalIdx_FromLocalIdx.size() != N_localB)
+		particleStateB.particleLocalIdx_Owned.size() != particleStateB.N_owned)
 	{
 		return false;
 	}
@@ -321,7 +317,7 @@ bool Dist::PackOwnedParticleGatherBuffer(
 					particleStateF.particleLocalIdx_Owned[ownedIdx];
 
 				gatherBuffer.particlesF[ownedIdx] =
-					PackFluidParticle(localState.particlesF, particleStateF, localIdx);
+					PackFluidParticle(localState.particlesF, localIdx);
 			}
 		});
 	}
@@ -340,7 +336,7 @@ bool Dist::PackOwnedParticleGatherBuffer(
 					particleStateB.particleLocalIdx_Owned[ownedIdx];
 
 				gatherBuffer.particlesB[ownedIdx] =
-					PackBoundaryParticle(localState.particlesB, particleStateB, localIdx);
+					PackBoundaryParticle(localState.particlesB, localIdx);
 			}
 		});
 	}
