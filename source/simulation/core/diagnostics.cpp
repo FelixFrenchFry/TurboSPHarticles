@@ -237,6 +237,7 @@ namespace Sim
 			params.surfaceNbrCountThreshold);
 
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
+		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "saveFinalState", params.saveFinalState ? "true" : "false");
 		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportInterval", params.exportInterval);

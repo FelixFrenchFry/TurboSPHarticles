@@ -37,6 +37,16 @@ namespace Export
 	static constexpr char kExportSnapshotMagic[8] =
 		{ 'T', 'S', 'P', 'S', 'N', 'A', 'P', '\0' };
 
+	static std::filesystem::path ResolveStatePath(
+		const std::filesystem::path& baseDir,
+		const std::string& path)
+	{
+		const std::filesystem::path requestedPath{ path };
+		return requestedPath.is_absolute()
+			? requestedPath
+			: baseDir / requestedPath;
+	}
+
 	static bool IsLittleEndian()
 	{
 		const uint32_t x = 0x01020304u;
@@ -597,7 +607,22 @@ namespace Export
 	{
 		// file path handling
 		// (full sim state is a fixed-order SoA dump for exact restart)
-		const std::filesystem::path dstPath{ path };
+		const std::filesystem::path dstPath =
+			ResolveStatePath(saveOptions_.baseDir, path);
+
+		const std::filesystem::path parentPath = dstPath.parent_path();
+		if (!parentPath.empty())
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(parentPath, ec);
+			if (ec)
+			{
+				throw std::runtime_error(
+					"Failed to create simulation state directory '" +
+					parentPath.string() + "': " + ec.message() + ".");
+			}
+		}
+
 		const std::filesystem::path tmpPath = saveOptions_.atomicWrite
 			? std::filesystem::path(dstPath.string() + saveOptions_.tempSuffix)
 			: dstPath;
@@ -752,10 +777,14 @@ namespace Export
 		Sync::UniversalSimState& state,
 		const std::string& path) const
 	{
-		std::ifstream ifs(path, std::ios::binary | std::ios::in);
+		const std::filesystem::path srcPath =
+			ResolveStatePath(saveOptions_.baseDir, path);
+
+		std::ifstream ifs(srcPath, std::ios::binary | std::ios::in);
 		if (!ifs)
 		{
-			throw std::runtime_error("Failed to open file for read '" + path + "'.");
+			throw std::runtime_error(
+				"Failed to open file for read '" + srcPath.string() + "'.");
 		}
 
 		// header
@@ -764,23 +793,24 @@ namespace Export
 		if (!ifs)
 		{
 			throw std::runtime_error("Failed to read simulation state header from '" +
-				path + "'.");
+				srcPath.string() + "'.");
 		}
 
 		if (std::memcmp(hdr.magic, kSimStateMagic, sizeof(hdr.magic)) != 0)
 		{
-			throw std::runtime_error("Invalid simulation state file magic in '" + path + "'.");
+			throw std::runtime_error(
+				"Invalid simulation state file magic in '" + srcPath.string() + "'.");
 		}
 
 		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
 		{
-			throw std::runtime_error("Endianness mismatch in '" + path +
+			throw std::runtime_error("Endianness mismatch in '" + srcPath.string() +
 				"': File and host must be little-endian.");
 		}
 		if (hdr.headerBytes != sizeof(BinHeaderSim))
 		{
 			throw std::runtime_error("Unexpected simulation state header size in '" +
-				path + "'.");
+				srcPath.string() + "'.");
 		}
 
 		// metadata
@@ -900,7 +930,7 @@ namespace Export
 			ReadVec(ifs, RB.iBodyInv22);
 		}
 
-		EnsureStreamOk(ifs, "reading", path);
+		EnsureStreamOk(ifs, "reading", srcPath.string());
 		state.ValidateRigidAttachments();
 	}
 

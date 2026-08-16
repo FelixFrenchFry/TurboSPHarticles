@@ -150,6 +150,7 @@ namespace Sim
 
 		// export
 		bool exportEnabled      = true;
+		bool saveFinalState     = false;
 		std::string exportDir   = "A";
 		uint32_t exportInterval = 10;
 

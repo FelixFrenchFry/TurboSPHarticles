@@ -2,6 +2,7 @@
 
 // external
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <spdlog/spdlog.h>
@@ -430,12 +431,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	{
-		// transfer last sim state into the universal state to save it
-		std::scoped_lock lock(stateMutex_);
-		simBackend_->PushToUniversalSimState(universalSimState_, true);
-		simBackend_.reset();
-	}
+	FinalizeRunState(paramsFinal);
 
 	DisplayMemoryUsageStats(paramsFinal, true);
 	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
@@ -549,12 +545,7 @@ void SimulationMgr::RunSim_Blocking()
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	{
-		// transfer last sim state into the universal state to save it
-		std::scoped_lock lock(stateMutex_);
-		simBackend_->PushToUniversalSimState(universalSimState_, true);
-		simBackend_.reset();
-	}
+	FinalizeRunState(paramsFinal);
 
 	DisplayMemoryUsageStats(paramsFinal, true);
 	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
@@ -611,6 +602,27 @@ void SimulationMgr::WriteExportSnapshot(const SimParams& params) const
 	// write export snapshot to files
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
 	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
+}
+
+void SimulationMgr::FinalizeRunState(const SimParams& params)
+{
+	if (!params.saveFinalState)
+	{
+		simBackend_.reset();
+		return;
+	}
+
+	{
+		// transfer last sim state into the universal state to save it
+		std::scoped_lock lock(stateMutex_);
+		simBackend_->PushToUniversalSimState(universalSimState_, true);
+		simBackend_.reset();
+	}
+
+	serializationMgr_.SaveUniversalSimState(
+		universalSimState_,
+		(std::filesystem::path(params.exportDir) /
+			"simulation_state_final.bin").string());
 }
 
 void SimulationMgr::PublishVisualSnapshot()

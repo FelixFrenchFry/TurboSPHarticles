@@ -28,6 +28,7 @@
 #include "dist_helpers.h"
 #include "dist_snapshots.h"
 #include "dist_statistics.h"
+#include "owned_particle_gather.h"
 #include "rigid_body_sync.h"
 
 
@@ -936,6 +937,17 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 	auto paramsFinal = simParams_;
 	paramsFinal.maxSteps = paramsInit.maxSteps;
+	const bool shouldSaveFinalState = mpiContext_.AllTrue(
+		runOk && paramsFinal.saveFinalState);
+	const bool finalStateOk = WriteFinalState(
+		paramsFinal,
+		shouldSaveFinalState);
+	if (runOk && !finalStateOk)
+	{
+		runOk = false;
+		stopReason = "failed final state serialization";
+	}
+
 	if (mpiContext_.IsRoot())
 	{
 		std::printf("\n");
@@ -1569,6 +1581,92 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	return mpiContext_.AllTrue(writeOk);
 }
 
+bool DistSimulationMgr::WriteFinalState(
+	const Sim::SimParams& params,
+	const bool enabled)
+{
+	if (!enabled)
+	{
+		localSimState_.particlesF = {};
+		localSimState_.particlesB = {};
+		simBackend_.reset();
+		distParticleBackend_ = nullptr;
+		return true;
+	}
+
+	if (!MaterializeRankLocalState(true))
+	{
+		localSimState_.particlesF = {};
+		localSimState_.particlesB = {};
+		simBackend_.reset();
+		distParticleBackend_ = nullptr;
+		return false;
+	}
+
+	OwnedParticleGatherBuffer sendBuffer{};
+	const bool packOk = PackOwnedParticleGatherBuffer(
+		sendBuffer,
+		localSimState_,
+		particleStateF_,
+		particleStateB_);
+	const bool allPackOk = mpiContext_.AllTrue(packOk);
+
+	// backend and rank-local particle payloads are not needed after packing
+	localSimState_.particlesF = {};
+	localSimState_.particlesB = {};
+	simBackend_.reset();
+	distParticleBackend_ = nullptr;
+
+	if (!allPackOk)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to pack the distributed final simulation state.",
+			mpiContext_.Rank(), mpiContext_.Size());
+		return false;
+	}
+
+	const bool gatherOk = GatherOwnedParticleBufferToRoot(
+		globalSimState_,
+		sendBuffer,
+		localSimState_,
+		mpiContext_,
+		static_cast<uint32_t>(N_expectedGlobalF_),
+		static_cast<uint32_t>(N_expectedGlobalB_));
+	if (!gatherOk)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to gather the distributed final simulation state.",
+			mpiContext_.Rank(), mpiContext_.Size());
+		globalSimState_.particlesF = {};
+		globalSimState_.particlesB = {};
+		return false;
+	}
+
+	bool writeOk = true;
+	if (mpiContext_.IsRoot())
+	{
+		try
+		{
+			serializationMgr_.SaveUniversalSimState(
+				globalSimState_,
+				(std::filesystem::path(params.exportDir) /
+					"simulation_state_final.bin").string());
+		}
+		catch (const std::exception& ex)
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to write distributed final simulation state: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+			writeOk = false;
+		}
+	}
+
+	const bool allWriteOk = mpiContext_.AllTrue(writeOk);
+	globalSimState_.particlesF = {};
+	globalSimState_.particlesB = {};
+	return allWriteOk;
+}
+
 bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 	std::vector<uint32_t>& localIdxs) const
 {
@@ -2157,7 +2255,7 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 	return AllRanksTrue(localOk);
 }
 
-bool DistSimulationMgr::MaterializeRankLocalState()
+bool DistSimulationMgr::MaterializeRankLocalState(const bool backendWillBeRetired)
 {
 	bool localOk = true;
 
@@ -2174,7 +2272,7 @@ bool DistSimulationMgr::MaterializeRankLocalState()
 		else
 		{
 			Sync::UniversalSimState backendSimState{};
-			simBackend_->PushToUniversalSimState(backendSimState, false);
+			simBackend_->PushToUniversalSimState(backendSimState, backendWillBeRetired);
 			localSimState_ = std::move(backendSimState);
 			localSimState_.step = simStep_;
 			localSimState_.time = simTime_;

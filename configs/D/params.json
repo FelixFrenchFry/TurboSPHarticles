@@ -57,6 +57,7 @@
   },
 
   "exportEnabled": true,
+  "saveFinalState": false,
   "exportDir": "D",
   "exportInterval": 20,
   "surfaceNbrCountRatio": 0.75

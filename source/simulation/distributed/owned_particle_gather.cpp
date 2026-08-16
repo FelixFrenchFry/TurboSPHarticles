@@ -1,10 +1,10 @@
 // owned_particle_gather.cpp
 
 // external
-#include <algorithm>
 #include <limits>
 #include <stdexcept>
-#include <utility>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 
 // internal
 #include "source/base/parallel_checks.h"
@@ -17,15 +17,8 @@ using namespace Dist;
 
 namespace
 {
-	struct RankOwnedParticleGather
-	{
-		int rank = -1;
-
-		OwnedParticleGatherBuffer recvBuffer;
-
-		int N_recvF = 0;
-		int N_recvB = 0;
-	};
+	// particles packed per block, matching the distributed redistribution gather granularity
+	inline constexpr uint32_t OWNED_PARTICLE_GATHER_BLOCK_SIZE = 2048;
 
 	template <typename T>
 	int CheckedPacketCount(const std::vector<T>& packets)
@@ -80,25 +73,21 @@ namespace
 		const uint32_t localIdx)
 	{
 		OwnedFluidParticlePacket packet{};
+
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 		packet.id = particlesF.id[localIdx];
-
 		packet.xPos = particlesF.xPos[localIdx];
 		packet.yPos = particlesF.yPos[localIdx];
 		packet.zPos = particlesF.zPos[localIdx];
-
 		packet.xVel = particlesF.xVel[localIdx];
 		packet.yVel = particlesF.yVel[localIdx];
 		packet.zVel = particlesF.zVel[localIdx];
-
 		packet.xVelPred = particlesF.xVelPred[localIdx];
 		packet.yVelPred = particlesF.yVelPred[localIdx];
 		packet.zVelPred = particlesF.zVelPred[localIdx];
-
 		packet.xAccPress = particlesF.xAccPress[localIdx];
 		packet.yAccPress = particlesF.yAccPress[localIdx];
 		packet.zAccPress = particlesF.zAccPress[localIdx];
-
 		packet.sourceTerm = particlesF.sourceTerm[localIdx];
 		packet.diagElem = particlesF.diagElem[localIdx];
 		packet.pressure = particlesF.pressure[localIdx];
@@ -113,9 +102,9 @@ namespace
 		const uint32_t localIdx)
 	{
 		OwnedBoundaryParticlePacket packet{};
+
 		packet.globalIdx = particleState.particleGlobalIdx_FromLocalIdx[localIdx];
 		packet.id = particlesB.id[localIdx];
-
 		packet.xPos = particlesB.xPos[localIdx];
 		packet.yPos = particlesB.yPos[localIdx];
 		packet.zPos = particlesB.zPos[localIdx];
@@ -135,19 +124,15 @@ namespace
 		dst.xPos[globalIdx] = packet.xPos;
 		dst.yPos[globalIdx] = packet.yPos;
 		dst.zPos[globalIdx] = packet.zPos;
-
 		dst.xVel[globalIdx] = packet.xVel;
 		dst.yVel[globalIdx] = packet.yVel;
 		dst.zVel[globalIdx] = packet.zVel;
-
 		dst.xVelPred[globalIdx] = packet.xVelPred;
 		dst.yVelPred[globalIdx] = packet.yVelPred;
 		dst.zVelPred[globalIdx] = packet.zVelPred;
-
 		dst.xAccPress[globalIdx] = packet.xAccPress;
 		dst.yAccPress[globalIdx] = packet.yAccPress;
 		dst.zAccPress[globalIdx] = packet.zAccPress;
-
 		dst.sourceTerm[globalIdx] = packet.sourceTerm;
 		dst.diagElem[globalIdx] = packet.diagElem;
 		dst.pressure[globalIdx] = packet.pressure;
@@ -193,18 +178,56 @@ namespace
 			}) == 0;
 	}
 
-	void AppendOwnedParticleGatherBuffer(
-		OwnedParticleGatherBuffer& dst,
-		const OwnedParticleGatherBuffer& src)
+	void InitializeGlobalOwnedState(
+		Sync::UniversalSimState& globalOwnedState,
+		const Sync::UniversalSimState& replicatedState,
+		const uint32_t N_globalF, const uint32_t N_globalB,
+		std::vector<uint8_t>& gatheredParticlesF,
+		std::vector<uint8_t>& gatheredParticlesB)
 	{
-		dst.particlesF.insert(
-			dst.particlesF.end(),
-			src.particlesF.begin(),
-			src.particlesF.end());
-		dst.particlesB.insert(
-			dst.particlesB.end(),
-			src.particlesB.begin(),
-			src.particlesB.end());
+		globalOwnedState = {};
+		globalOwnedState.ResizeFluid(N_globalF);
+		globalOwnedState.ResizeBoundary(N_globalB);
+		globalOwnedState.particlesR = replicatedState.particlesR;
+		globalOwnedState.rigidBodies = replicatedState.rigidBodies;
+		globalOwnedState.step = replicatedState.step;
+		globalOwnedState.time = replicatedState.time;
+
+		gatheredParticlesF.assign(N_globalF, 0);
+		gatheredParticlesB.assign(N_globalB, 0);
+	}
+
+	bool CopyOwnedParticleGatherBufferToGlobal(
+		Sync::UniversalSimState& globalOwnedState,
+		const OwnedParticleGatherBuffer& gatherBuffer,
+		std::vector<uint8_t>& gatheredParticlesF,
+		std::vector<uint8_t>& gatheredParticlesB)
+	{
+		bool localOk = true;
+
+		// TODO: parallelize with TBB?
+		for (const OwnedFluidParticlePacket& packet : gatherBuffer.particlesF)
+		{
+			if (!MarkGatheredParticle(gatheredParticlesF, packet.globalIdx))
+			{
+				localOk = false;
+				continue;
+			}
+			CopyFluidPacketToGlobal(packet, globalOwnedState.particlesF);
+		}
+
+		// TODO: parallelize with TBB?
+		for (const OwnedBoundaryParticlePacket& packet : gatherBuffer.particlesB)
+		{
+			if (!MarkGatheredParticle(gatheredParticlesB, packet.globalIdx))
+			{
+				localOk = false;
+				continue;
+			}
+			CopyBoundaryPacketToGlobal(packet, globalOwnedState.particlesB);
+		}
+
+		return localOk;
 	}
 
 } // namespace anonymous
@@ -222,158 +245,168 @@ bool Dist::PackOwnedParticleGatherBuffer(
 	const DistParticleState& particleStateB)
 {
 	gatherBuffer.Clear();
-	gatherBuffer.particlesF.reserve(particleStateF.particleLocalIdx_Owned.size());
-	gatherBuffer.particlesB.reserve(particleStateB.particleLocalIdx_Owned.size());
+	const uint32_t N_localF = localState.particlesF.N_;
+	const uint32_t N_localB = localState.particlesB.N_;
 
-	for (const uint32_t localIdx : particleStateF.particleLocalIdx_Owned)
+	// check that all fluid particle fields have the same size
+	const auto fluidSizeMatches = [N_localF](const auto& values)
 	{
-		if (localIdx >= localState.particlesF.N_) { return false; }
-		if (!particleStateF.HasMetadataAtLocalIdx(localIdx)) { return false; }
-
-		const DistParticleClass particleClass = particleStateF.particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { return false; }
-
-		if (particleStateF.particleGlobalIdx_FromLocalIdx[localIdx] ==
-			NO_GLOBAL_PARTICLE_IDX)
-		{
-			return false;
-		}
-
-		gatherBuffer.particlesF.push_back(
-			PackFluidParticle(localState.particlesF, particleStateF, localIdx));
+		return values.size() == N_localF;
+	};
+	if (!fluidSizeMatches(localState.particlesF.id) ||
+		!fluidSizeMatches(localState.particlesF.xPos) ||
+		!fluidSizeMatches(localState.particlesF.yPos) ||
+		!fluidSizeMatches(localState.particlesF.zPos) ||
+		!fluidSizeMatches(localState.particlesF.xVel) ||
+		!fluidSizeMatches(localState.particlesF.yVel) ||
+		!fluidSizeMatches(localState.particlesF.zVel) ||
+		!fluidSizeMatches(localState.particlesF.xVelPred) ||
+		!fluidSizeMatches(localState.particlesF.yVelPred) ||
+		!fluidSizeMatches(localState.particlesF.zVelPred) ||
+		!fluidSizeMatches(localState.particlesF.xAccPress) ||
+		!fluidSizeMatches(localState.particlesF.yAccPress) ||
+		!fluidSizeMatches(localState.particlesF.zAccPress) ||
+		!fluidSizeMatches(localState.particlesF.sourceTerm) ||
+		!fluidSizeMatches(localState.particlesF.diagElem) ||
+		!fluidSizeMatches(localState.particlesF.pressure) ||
+		!fluidSizeMatches(localState.particlesF.density))
+	{
+		return false;
 	}
 
-	for (const uint32_t localIdx : particleStateB.particleLocalIdx_Owned)
+	// check that all boundary particle fields have the same size
+	const auto boundarySizeMatches = [N_localB](const auto& values)
 	{
-		if (localIdx >= localState.particlesB.N_) { return false; }
-		if (!particleStateB.HasMetadataAtLocalIdx(localIdx)) { return false; }
+		return values.size() == N_localB;
+	};
+	if (!boundarySizeMatches(localState.particlesB.id) ||
+		!boundarySizeMatches(localState.particlesB.xPos) ||
+		!boundarySizeMatches(localState.particlesB.yPos) ||
+		!boundarySizeMatches(localState.particlesB.zPos) ||
+		!boundarySizeMatches(localState.particlesB.volB) ||
+		!boundarySizeMatches(localState.particlesB.psiB))
+	{
+		return false;
+	}
 
-		const DistParticleClass particleClass = particleStateB.particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { return false; }
+	// check metadata storage and owned counts once before the parallel passes
+	if (particleStateF.N_owned > N_localF ||
+		particleStateF.particleClasses.size() != N_localF ||
+		particleStateF.particleLocalIdx_Owned.size() != particleStateF.N_owned ||
+		particleStateF.particleGlobalIdx_FromLocalIdx.size() != N_localF ||
+		particleStateB.N_owned > N_localB ||
+		particleStateB.particleClasses.size() != N_localB ||
+		particleStateB.particleLocalIdx_Owned.size() != particleStateB.N_owned ||
+		particleStateB.particleGlobalIdx_FromLocalIdx.size() != N_localB)
+	{
+		return false;
+	}
 
-		if (particleStateB.particleGlobalIdx_FromLocalIdx[localIdx] ==
-			NO_GLOBAL_PARTICLE_IDX)
+	const uint32_t N_ownedF = particleStateF.N_owned;
+	const uint32_t N_ownedB = particleStateB.N_owned;
+	gatherBuffer.particlesF.resize(N_ownedF);
+	gatherBuffer.particlesB.resize(N_ownedB);
+
+	if (N_ownedF != 0)
+	{
+		// pack particle fields sequentially within each parallel block
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_ownedF, OWNED_PARTICLE_GATHER_BLOCK_SIZE),
+			[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			return false;
-		}
+			for (uint32_t ownedIdx = blockRange.begin();
+				ownedIdx != blockRange.end(); ownedIdx++)
+			{
+				const uint32_t localIdx =
+					particleStateF.particleLocalIdx_Owned[ownedIdx];
 
-		gatherBuffer.particlesB.push_back(
-			PackBoundaryParticle(localState.particlesB, particleStateB, localIdx));
+				gatherBuffer.particlesF[ownedIdx] =
+					PackFluidParticle(localState.particlesF, particleStateF, localIdx);
+			}
+		});
+	}
+
+	if (N_ownedB != 0)
+	{
+		// pack particle fields sequentially within each parallel block
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_ownedB, OWNED_PARTICLE_GATHER_BLOCK_SIZE),
+			[&](const tbb::blocked_range<uint32_t>& blockRange)
+		{
+			for (uint32_t ownedIdx = blockRange.begin();
+				ownedIdx != blockRange.end(); ownedIdx++)
+			{
+				const uint32_t localIdx =
+					particleStateB.particleLocalIdx_Owned[ownedIdx];
+
+				gatherBuffer.particlesB[ownedIdx] =
+					PackBoundaryParticle(localState.particlesB, particleStateB, localIdx);
+			}
+		});
 	}
 
 	return true;
 }
 
-bool Dist::RebuildGlobalOwnedStateFromGatheredParticles(
+bool Dist::GatherOwnedParticleBufferToRoot(
 	Sync::UniversalSimState& globalOwnedState,
-	const OwnedParticleGatherBuffer& gatherBuffer,
-	const uint32_t N_globalF,
-	const uint32_t N_globalB)
-{
-	globalOwnedState = {};
-	globalOwnedState.ResizeFluid(N_globalF);
-	globalOwnedState.ResizeBoundary(N_globalB);
-
-	std::vector<uint8_t> gatheredParticlesF(N_globalF, 0);
-	std::vector<uint8_t> gatheredParticlesB(N_globalB, 0);
-
-	for (const OwnedFluidParticlePacket& packet : gatherBuffer.particlesF)
-	{
-		if (!MarkGatheredParticle(gatheredParticlesF, packet.globalIdx)) { return false; }
-		CopyFluidPacketToGlobal(packet, globalOwnedState.particlesF);
-	}
-
-	for (const OwnedBoundaryParticlePacket& packet : gatherBuffer.particlesB)
-	{
-		if (!MarkGatheredParticle(gatheredParticlesB, packet.globalIdx)) { return false; }
-		CopyBoundaryPacketToGlobal(packet, globalOwnedState.particlesB);
-	}
-
-	if (!AllParticlesGathered(gatheredParticlesF)) { return false; }
-	if (!AllParticlesGathered(gatheredParticlesB)) { return false; }
-
-	return true;
-}
-
-bool Dist::GatherOwnedParticlesToRoot(
-	Sync::UniversalSimState& globalOwnedState,
+	const OwnedParticleGatherBuffer& sendBuffer,
 	const Sync::UniversalSimState& localState,
-	const DistParticleState& particleStateF,
-	const DistParticleState& particleStateB,
 	const MpiContext& mpiContext,
-	const uint32_t N_globalF,
-	const uint32_t N_globalB,
-	OwnedParticleGatherStats* stats)
+	const uint32_t N_globalF, const uint32_t N_globalB)
 {
-	if (stats) { *stats = {}; }
-
-	OwnedParticleGatherBuffer sendBuffer{};
-	bool localOk = PackOwnedParticleGatherBuffer(
-		sendBuffer,
-		localState,
-		particleStateF,
-		particleStateB);
-
 	int N_sendF = 0;
 	int N_sendB = 0;
-	if (localOk)
-	{
-		N_sendF = CheckedPacketCount(sendBuffer.particlesF);
-		N_sendB = CheckedPacketCount(sendBuffer.particlesB);
-	}
+	N_sendF = CheckedPacketCount(sendBuffer.particlesF);
+	N_sendB = CheckedPacketCount(sendBuffer.particlesB);
 
-	if (!mpiContext.AllTrue(localOk)) { return false; }
-
-	OwnedParticleGatherBuffer gatheredBuffer{};
-	std::vector<RankOwnedParticleGather> rankGathers{};
-	rankGathers.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
-
-	if (mpiContext.IsRoot())
-	{
-		gatheredBuffer = sendBuffer;
-
-		for (int rank = 0; rank < mpiContext.Size(); rank++)
-		{
-			if (rank == mpiContext.RootRank()) { continue; }
-
-			RankOwnedParticleGather rankGather{};
-			rankGather.rank = rank;
-			rankGathers.push_back(std::move(rankGather));
-		}
-	}
+	bool localOk = true;
 
 	std::vector<MPI_Request> requests{};
-	requests.reserve(rankGathers.size() * 2);
+	requests.reserve(static_cast<uint64_t>(mpiContext.Size()) * 2);
+	std::vector<int> N_recvF{};
+	std::vector<int> N_recvB{};
+	if (mpiContext.IsRoot())
+	{
+		N_recvF.resize(static_cast<uint64_t>(mpiContext.Size()), 0);
+		N_recvB.resize(static_cast<uint64_t>(mpiContext.Size()), 0);
+	}
 
 	// gather packet counts before gathering raw particle payloads
 	if (mpiContext.IsRoot())
 	{
-		for (RankOwnedParticleGather& rankGather : rankGathers)
+		for (int rank = 0; rank < mpiContext.Size(); rank++)
 		{
+			if (rank == mpiContext.RootRank()) { continue; }
+
+			// receive fluid count from rank
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.IRecvInt(
-				rankGather.N_recvF,
-				rankGather.rank,
+				N_recvF[rank],
+				rank,
 				OWNED_PARTICLE_GATHER_TAG_FLUID_COUNT,
 				requests.back());
+
+			// receive boundary count from rank
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.IRecvInt(
-				rankGather.N_recvB,
-				rankGather.rank,
+				N_recvB[rank],
+				rank,
 				OWNED_PARTICLE_GATHER_TAG_BOUNDARY_COUNT,
 				requests.back());
 		}
 	}
 	else
 	{
+		// send fluid count to root
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendInt(
 			N_sendF,
 			mpiContext.RootRank(),
 			OWNED_PARTICLE_GATHER_TAG_FLUID_COUNT,
 			requests.back());
+
+		// send boundary count to root
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendInt(
 			N_sendB,
@@ -386,47 +419,83 @@ bool Dist::GatherOwnedParticlesToRoot(
 
 	if (mpiContext.IsRoot())
 	{
-		for (RankOwnedParticleGather& rankGather : rankGathers)
+		for (int rank = 0; rank < mpiContext.Size(); rank++)
 		{
-			if (rankGather.N_recvF < 0 || rankGather.N_recvB < 0)
+			if (rank == mpiContext.RootRank()) { continue; }
+
+			if (N_recvF[rank] < 0 || N_recvB[rank] < 0)
 			{
 				localOk = false;
 				break;
 			}
-
-			rankGather.recvBuffer.particlesF.resize(
-				static_cast<uint64_t>(rankGather.N_recvF));
-			rankGather.recvBuffer.particlesB.resize(
-				static_cast<uint64_t>(rankGather.N_recvB));
 		}
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 
-	requests.reserve(rankGathers.size() * 2);
-
-	// gather payloads after all root receive buffers are sized correctly
+	std::vector<uint8_t> gatheredParticlesF{};
+	std::vector<uint8_t> gatheredParticlesB{};
 	if (mpiContext.IsRoot())
 	{
-		for (RankOwnedParticleGather& rankGather : rankGathers)
+		InitializeGlobalOwnedState(
+			globalOwnedState,
+			localState,
+			N_globalF,
+			N_globalB,
+			gatheredParticlesF,
+			gatheredParticlesB);
+
+		localOk = CopyOwnedParticleGatherBufferToGlobal(
+			globalOwnedState,
+			sendBuffer,
+			gatheredParticlesF,
+			gatheredParticlesB);
+	}
+	if (!mpiContext.AllTrue(localOk)) { return false; }
+
+	OwnedParticleGatherBuffer recvBuffer{};
+
+	// gather ranks sequentially to limit root memory usage
+	if (mpiContext.IsRoot())
+	{
+		for (int rank = 0; rank < mpiContext.Size(); rank++)
 		{
+			if (rank == mpiContext.RootRank()) { continue; }
+
+			recvBuffer.particlesF.resize(static_cast<uint64_t>(N_recvF[rank]));
+			recvBuffer.particlesB.resize(static_cast<uint64_t>(N_recvB[rank]));
+			requests.clear();
+			requests.reserve(2);
+
+			// receive fluid payload from rank
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.IRecvBytes(
-				DataOrNull(rankGather.recvBuffer.particlesF),
-				CheckedByteCount(rankGather.recvBuffer.particlesF),
-				rankGather.rank,
+				DataOrNull(recvBuffer.particlesF),
+				CheckedByteCount(recvBuffer.particlesF),
+				rank,
 				OWNED_PARTICLE_GATHER_TAG_FLUID_PAYLOAD,
 				requests.back());
+
+			// receive boundary payload from rank
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.IRecvBytes(
-				DataOrNull(rankGather.recvBuffer.particlesB),
-				CheckedByteCount(rankGather.recvBuffer.particlesB),
-				rankGather.rank,
+				DataOrNull(recvBuffer.particlesB),
+				CheckedByteCount(recvBuffer.particlesB),
+				rank,
 				OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD,
 				requests.back());
+			mpiContext.WaitAll(requests);
+
+			localOk = CopyOwnedParticleGatherBufferToGlobal(
+				globalOwnedState,
+				recvBuffer,
+				gatheredParticlesF,
+				gatheredParticlesB) && localOk;
+			recvBuffer.Clear();
 		}
 	}
 	else
 	{
+		// send fluid paylod to root
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendBytes(
 			DataOrNull(sendBuffer.particlesF),
@@ -434,6 +503,8 @@ bool Dist::GatherOwnedParticlesToRoot(
 			mpiContext.RootRank(),
 			OWNED_PARTICLE_GATHER_TAG_FLUID_PAYLOAD,
 			requests.back());
+
+		// send boundary payload to root
 		requests.emplace_back(MPI_REQUEST_NULL);
 		mpiContext.ISendBytes(
 			DataOrNull(sendBuffer.particlesB),
@@ -441,35 +512,15 @@ bool Dist::GatherOwnedParticlesToRoot(
 			mpiContext.RootRank(),
 			OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD,
 			requests.back());
-	}
-	mpiContext.WaitAll(requests);
 
+		mpiContext.WaitAll(requests);
+	}
+
+	// check that all particles are now present at the root
 	if (mpiContext.IsRoot())
 	{
-		for (const RankOwnedParticleGather& rankGather : rankGathers)
-		{
-			AppendOwnedParticleGatherBuffer(gatheredBuffer, rankGather.recvBuffer);
-		}
-
-		localOk = RebuildGlobalOwnedStateFromGatheredParticles(
-			globalOwnedState,
-			gatheredBuffer,
-			N_globalF,
-			N_globalB);
-
-		if (localOk)
-		{
-			globalOwnedState.step = localState.step;
-			globalOwnedState.time = localState.time;
-
-			if (stats)
-			{
-				stats->N_gatheredF =
-					static_cast<uint32_t>(gatheredBuffer.particlesF.size());
-				stats->N_gatheredB =
-					static_cast<uint32_t>(gatheredBuffer.particlesB.size());
-			}
-		}
+		localOk = AllParticlesGathered(gatheredParticlesF) && localOk;
+		localOk = AllParticlesGathered(gatheredParticlesB) && localOk;
 	}
 
 	return mpiContext.AllTrue(localOk);

@@ -113,6 +113,9 @@ namespace Dist
 		// [ rank-reduced ] gathers and serializes an export snapshot on the root rank
 		bool WriteExportSnapshot(const Sim::SimParams& params);
 
+		// [ rank-reduced ] materializes, gathers, and serializes the final full state
+		bool WriteFinalState(const Sim::SimParams& params, bool enabled);
+
 		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
 		bool BuildExportFluidParticleLocalIdxs(std::vector<uint32_t>& localIdxs) const;
 
@@ -147,7 +150,7 @@ namespace Dist
 		bool RedistributeRankLocalParticles(const Sim::SimParams& params);
 
 		// [ rank-reduced ] copies backend state only for export, gather, and diagnostics
-		bool MaterializeRankLocalState();
+		bool MaterializeRankLocalState(bool backendWillBeRetired = false);
 
 		// [ rank-reduced ] prepares rank-authoritative particle work and backend state for the next step
 		bool PrepareRankLocalBackendStep();

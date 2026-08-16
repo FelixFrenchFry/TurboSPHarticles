@@ -70,6 +70,7 @@ namespace Sim
 		void SetConfigProfile(std::string profile);
 
 		void WriteExportSnapshot(const SimParams& params) const;
+		void FinalizeRunState(const SimParams& params);
 		void PublishVisualSnapshot();
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;

@@ -921,6 +921,11 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			params_.exportEnabled = it->get<bool>();
 		}
 
+		if (auto it = j.find("saveFinalState"); it != j.end())
+		{
+			params_.saveFinalState = it->get<bool>();
+		}
+
 		if (auto it = j.find("exportDir"); it != j.end())
 		{
 			params_.exportDir = it->get<std::string>();
@@ -1092,6 +1097,7 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 	};
 
 	j["exportEnabled"] = par.exportEnabled;
+	j["saveFinalState"] = par.saveFinalState;
 	j["exportDir"] = par.exportDir;
 	j["exportInterval"] = par.exportInterval;
 
