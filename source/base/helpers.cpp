@@ -17,12 +17,12 @@ namespace Base
 		const std::string& fileName,
 		nlohmann::json& out)
 	{
-		const std::filesystem::path path =
-			std::filesystem::path(TSP_CONFIG_DIR) / fileName;
+		const std::filesystem::path path = std::filesystem::path(TSP_CONFIG_DIR) / fileName;
 		std::ifstream in(path);
 		if (!in)
 		{
-			SPDLOG_ERROR("Failed to open JSON file '{}'.", path.string());
+			SPDLOG_ERROR("Failed to open JSON file '{}'.",
+				path.string());
 			return false;
 		}
 
@@ -32,7 +32,8 @@ namespace Base
 		}
 		catch (const std::exception& ex)
 		{
-			SPDLOG_ERROR("Failed to parse JSON file '{}': {}", path.string(), ex.what());
+			SPDLOG_ERROR("Failed to parse JSON file '{}': {}",
+				path.string(), ex.what());
 			return false;
 		}
 

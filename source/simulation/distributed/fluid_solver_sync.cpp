@@ -13,6 +13,7 @@
 #include <tbb/parallel_for.h>
 
 // internal
+#include "source/base/parallel_checks.h"
 #include "fluid_solver_sync.h"
 
 
@@ -70,7 +71,13 @@ namespace
 	// duplicate global IDs indicate an invalid one-to-one exchange plan
 	bool HasDuplicateGlobalIdxs(const std::vector<uint32_t>& globalIdxs)
 	{
-		return std::adjacent_find(globalIdxs.begin(), globalIdxs.end()) != globalIdxs.end();
+		return Check::CountAdjacentViolations(
+			0,
+			static_cast<uint32_t>(globalIdxs.size()),
+			[&](const uint32_t previousIdx, const uint32_t currentIdx)
+			{
+				return globalIdxs[previousIdx] == globalIdxs[currentIdx];
+			}) != 0;
 	}
 
 } // namespace anonymous

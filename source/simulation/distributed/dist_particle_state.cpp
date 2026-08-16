@@ -11,6 +11,7 @@
 #include <tbb/parallel_sort.h>
 
 // internal
+#include "source/base/parallel_checks.h"
 #include "dist_particle_state.h"
 
 
@@ -571,7 +572,7 @@ void DistParticleState::Clear()
 bool DistParticleState::HasMetadataAtLocalIdx(const uint32_t localIdx) const
 {
 	return localIdx < particleClasses.size() &&
-		localIdx < particleGlobalIdx_FromLocalIdx.size();
+		   localIdx < particleGlobalIdx_FromLocalIdx.size();
 }
 
 // TODO: find opportunities for parallelization with TBB?
@@ -617,23 +618,22 @@ bool DistParticleState::IsValidLocalParticleLayout(
 
 	const uint32_t haloStartLocalIdx = N_owned;
 
-	// check that particle class layout adheres to [ owned ][ halo ] in every build
-	// TODO: parallelize with TBB?
-	for (uint32_t localIdx = 0; localIdx != haloStartLocalIdx; localIdx++)
+	// check that particle class layout is [ owned ][ halo ] in every build
+	if (Check::CountViolations(0, haloStartLocalIdx, [&](const uint32_t localIdx)
 	{
 		const DistParticleClass particleClass = particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer)
-		{
-			return fail("owned local index range contains a particle class that is not Inner or Outer.");
-		}
-	}
-	for (uint32_t localIdx = haloStartLocalIdx; localIdx != N_local; localIdx++)
+		return particleClass != DistParticleClass::Inner &&
+			particleClass != DistParticleClass::Outer;
+	}) != 0)
 	{
-		if (particleClasses[localIdx] != DistParticleClass::Halo)
-		{
-			return fail("halo local index range contains a particle class that is not Halo.");
-		}
+		return fail("owned local index range contains a particle class that is not Inner or Outer.");
+	}
+	if (Check::CountViolations(haloStartLocalIdx, N_local, [&](const uint32_t localIdx)
+	{
+		return particleClasses[localIdx] != DistParticleClass::Halo;
+	}) != 0)
+	{
+		return fail("halo local index range contains a particle class that is not Halo.");
 	}
 
 	#if defined(_DEBUG)
@@ -874,7 +874,13 @@ bool DistParticleState::IsValidLocalParticleState(
 	// sort a copy of the local-to-global map to detect duplicate mappings
 	std::vector<uint32_t> sortedGlobalIdxs = particleGlobalIdx_FromLocalIdx;
 	tbb::parallel_sort(sortedGlobalIdxs.begin(), sortedGlobalIdxs.end());
-	if (std::adjacent_find(sortedGlobalIdxs.begin(), sortedGlobalIdxs.end()) != sortedGlobalIdxs.end())
+	if (Check::CountAdjacentViolations(
+		0,
+		static_cast<uint32_t>(sortedGlobalIdxs.size()),
+		[&](const uint32_t previousIdx, const uint32_t currentIdx)
+		{
+			return sortedGlobalIdxs[previousIdx] == sortedGlobalIdxs[currentIdx];
+		}) != 0)
 	{
 		return fail("particleGlobalIdx_FromLocalIdx contains a duplicate global index.");
 	}

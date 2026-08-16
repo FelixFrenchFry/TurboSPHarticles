@@ -16,6 +16,7 @@
 
 // internal
 #include "source/base/helpers.h"
+#include "source/base/parallel_checks.h"
 #include "source/simulation/CPU/simd.h"
 #include "cpu_backend_01.h"
 #include "neighbor_lists.h"
@@ -1611,18 +1612,19 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 	const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 	I_DistributedFluidSolverSync& distributedFluidSolverSync)
 {
-	// TODO: parallelize with TBB?
 	const uint32_t N_ownedF = static_cast<uint32_t>(ownedFluidParticleLocalIdxs.size());
-	for (uint32_t ownedIdx = 0; ownedIdx != N_ownedF; ownedIdx++)
+	const auto isInvalidOwnedIdx = [&](const uint32_t ownedIdx)
 	{
 		const uint32_t localIdx = ownedFluidParticleLocalIdxs[ownedIdx];
-		if (localIdx != ownedIdx || localIdx >= N_F_)
-		{
-			SPDLOG_ERROR(
-				"Invalid owned fluid particle local index {} at prefix position {}.",
-				localIdx, ownedIdx);
-			return false;
-		}
+		return localIdx != ownedIdx || localIdx >= N_F_;
+	};
+	if (Check::CountViolations(0, N_ownedF, isInvalidOwnedIdx) != 0)
+	{
+		const uint32_t ownedIdx = Check::FindFirstViolation(0, N_ownedF, isInvalidOwnedIdx);
+		SPDLOG_ERROR(
+			"Invalid owned fluid particle local index {} at prefix position {}.",
+			ownedFluidParticleLocalIdxs[ownedIdx], ownedIdx);
+		return false;
 	}
 
 	particleFlagsScratch_.assign(N_F_, 0);

@@ -12,6 +12,7 @@
 
 // internal
 #include "source/base/helpers.h"
+#include "source/base/parallel_checks.h"
 #include "particle_redistribution.h"
 #include "dist_redistribution_diagnostics.h"
 #include "mpi_context.h"
@@ -159,7 +160,13 @@ namespace
 			sortScratch.begin());
 
 		tbb::parallel_sort(sortScratch.begin(), sortScratch.end());
-		return std::adjacent_find(sortScratch.begin(), sortScratch.end()) != sortScratch.end();
+		return Check::CountAdjacentViolations(
+			0,
+			static_cast<uint32_t>(sortScratch.size()),
+			[&](const uint32_t previousIdx, const uint32_t currentIdx)
+			{
+				return sortScratch[previousIdx] == sortScratch[currentIdx];
+			}) != 0;
 	}
 
 	// prefix chunk-local bucket counts into disjoint output ranges
