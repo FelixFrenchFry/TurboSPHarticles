@@ -99,8 +99,8 @@ namespace Vis
 		float scalarMax;
 		Base::ColorMap colorMap;
 		Base::ColorCodingMode scalarModeF;
-		bool showFluidParticles;
-		bool showRigidParticles;
+		bool showParticlesF;
+		bool showParticlesR;
 		bool showRigidBodyCentersOfMass;
 		float rigidParticleRadiusScale;
 

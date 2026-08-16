@@ -259,23 +259,23 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 	{
 		ImGui::Spacing();
 
-		bool showFluidParticles = visParams.render.showFluidParticles;
+		bool showParticlesF = visParams.render.showParticlesF;
 		if (ImGui::Checkbox("show fluid particles",
-			&showFluidParticles))
+			&showParticlesF))
 		{
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
-					.showFluidParticles = showFluidParticles
+					.showParticlesF = showParticlesF
 				});
 		}
 
-		bool showRigidParticles = visParams.render.showRigidParticles;
+		bool showParticlesR = visParams.render.showParticlesR;
 		if (ImGui::Checkbox("show rigid particles",
-			&showRigidParticles))
+			&showParticlesR))
 		{
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
-					.showRigidParticles = showRigidParticles
+					.showParticlesR = showParticlesR
 				});
 		}
 

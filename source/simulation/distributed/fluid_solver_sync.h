@@ -40,8 +40,8 @@ namespace Dist
 		// builds the peer exchange plan from the current owned and remote particles
 		// (collective, full peer-plan validation is enabled in debug/validation builds)
 		bool Rebuild(
-			const Sync::FluidConstView& fluidParticles,
-			const DistParticleState& fluidParticleState,
+			const Sync::FluidConstView& particlesF,
+			const DistParticleState& particleStateF,
 			const IDomainDecomp& domainDecomp,
 			float singleHaloRadius,
 			Base::DistHaloMode distHaloMode,

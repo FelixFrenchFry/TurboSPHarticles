@@ -561,7 +561,7 @@ namespace Export
 		assert(B.volB.size() == N && B.psiB.size() == N);
 	}
 
-	static void CheckRigidParticleStateConsistent(const Sync::RigidParticles& R)
+	static void CheckRigidConsistent(const Sync::RigidParticles& R)
 	{
 		[[maybe_unused]] const auto N = static_cast<size_t>(R.N_);
 
@@ -570,23 +570,23 @@ namespace Export
 		assert(R.volR.size() == N && R.psiR.size() == N);
 	}
 
-	static void CheckRigidBodyStateConsistent(const Sync::RigidBodies& R)
+	static void CheckRigidBodiesConsistent(const Sync::RigidBodies& RB)
 	{
-		[[maybe_unused]] const auto N = static_cast<size_t>(R.N_);
+		[[maybe_unused]] const auto N = static_cast<size_t>(RB.N_);
 
-		assert(R.id.size() == N);
-		assert(R.rigidParticleBegin.size() == N && R.rigidParticleCount.size() == N);
-		assert(R.xCM.size() == N && R.yCM.size() == N && R.zCM.size() == N);
-		assert(R.xVel.size() == N && R.yVel.size() == N && R.zVel.size() == N);
-		assert(R.xOmega.size() == N && R.yOmega.size() == N && R.zOmega.size() == N);
-		assert(R.xAngMom.size() == N && R.yAngMom.size() == N && R.zAngMom.size() == N);
-		assert(R.a00.size() == N && R.a01.size() == N && R.a02.size() == N);
-		assert(R.a10.size() == N && R.a11.size() == N && R.a12.size() == N);
-		assert(R.a20.size() == N && R.a21.size() == N && R.a22.size() == N);
-		assert(R.mass.size() == N && R.massInv.size() == N);
-		assert(R.iBodyInv00.size() == N && R.iBodyInv01.size() == N && R.iBodyInv02.size() == N);
-		assert(R.iBodyInv10.size() == N && R.iBodyInv11.size() == N && R.iBodyInv12.size() == N);
-		assert(R.iBodyInv20.size() == N && R.iBodyInv21.size() == N && R.iBodyInv22.size() == N);
+		assert(RB.id.size() == N);
+		assert(RB.rigidParticleBegin.size() == N && RB.rigidParticleCount.size() == N);
+		assert(RB.xCM.size() == N && RB.yCM.size() == N && RB.zCM.size() == N);
+		assert(RB.xVel.size() == N && RB.yVel.size() == N && RB.zVel.size() == N);
+		assert(RB.xOmega.size() == N && RB.yOmega.size() == N && RB.zOmega.size() == N);
+		assert(RB.xAngMom.size() == N && RB.yAngMom.size() == N && RB.zAngMom.size() == N);
+		assert(RB.a00.size() == N && RB.a01.size() == N && RB.a02.size() == N);
+		assert(RB.a10.size() == N && RB.a11.size() == N && RB.a12.size() == N);
+		assert(RB.a20.size() == N && RB.a21.size() == N && RB.a22.size() == N);
+		assert(RB.mass.size() == N && RB.massInv.size() == N);
+		assert(RB.iBodyInv00.size() == N && RB.iBodyInv01.size() == N && RB.iBodyInv02.size() == N);
+		assert(RB.iBodyInv10.size() == N && RB.iBodyInv11.size() == N && RB.iBodyInv12.size() == N);
+		assert(RB.iBodyInv20.size() == N && RB.iBodyInv21.size() == N && RB.iBodyInv22.size() == N);
 	}
 
 	// --- [ UniversalSimState <-> .bin ] ----------------------------------------------------------
@@ -603,10 +603,10 @@ namespace Export
 			: dstPath;
 
 		// sanity check before writing
-		CheckFluidConsistent(state.fluidParticles);
-		CheckBoundaryConsistent(state.boundaryParticles);
-		CheckRigidParticleStateConsistent(state.rigidParticles);
-		CheckRigidBodyStateConsistent(state.rigidBodies);
+		CheckFluidConsistent(state.particlesF);
+		CheckBoundaryConsistent(state.particlesB);
+		CheckRigidConsistent(state.particlesR);
+		CheckRigidBodiesConsistent(state.rigidBodies);
 		state.ValidateRigidAttachments();
 
 		// open scope for writer
@@ -627,16 +627,16 @@ namespace Export
 			hdr.step = state.step;
 			hdr.time = state.time;
 
-			hdr.NF = state.fluidParticles.N_;
-			hdr.NB = state.boundaryParticles.N_;
-			hdr.NR = state.rigidParticles.N_;
+			hdr.NF = state.particlesF.N_;
+			hdr.NB = state.particlesB.N_;
+			hdr.NR = state.particlesR.N_;
 			hdr.NRB = state.rigidBodies.N_;
 
 			WritePod(ofs, hdr);
 
 			// fluid particle data (fixed order)
 			{
-				const auto& F = state.fluidParticles;
+				const auto& F = state.particlesF;
 
 				WriteVec(ofs, F.id);
 
@@ -664,7 +664,7 @@ namespace Export
 
 			// boundary particle data (fixed order)
 			{
-				const auto& B = state.boundaryParticles;
+				const auto& B = state.particlesB;
 
 				WriteVec(ofs, B.id);
 
@@ -678,7 +678,7 @@ namespace Export
 
 			// rigid particle data (fixed order)
 			{
-				const auto& R = state.rigidParticles;
+				const auto& R = state.particlesR;
 
 				WriteVec(ofs, R.id);
 				WriteVec(ofs, R.bodyId);
@@ -795,7 +795,7 @@ namespace Export
 
 		// fluid particle data (read order must match SaveUniversalSimState)
 		{
-			auto& F = state.fluidParticles;
+			auto& F = state.particlesF;
 
 			ReadVec(ifs, F.id);
 			ReadVec(ifs, F.xPos);
@@ -825,7 +825,7 @@ namespace Export
 
 		// boundary particle data (fixed order)
 		{
-			auto& B = state.boundaryParticles;
+			auto& B = state.particlesB;
 
 			ReadVec(ifs, B.id);
 
@@ -839,7 +839,7 @@ namespace Export
 
 		// rigid particle data (fixed order)
 		{
-			auto& R = state.rigidParticles;
+			auto& R = state.particlesR;
 
 			ReadVec(ifs, R.id);
 			ReadVec(ifs, R.bodyId);

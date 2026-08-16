@@ -65,8 +65,8 @@ namespace Dist
 
 	struct OwnedParticleGatherBuffer
 	{
-		std::vector<OwnedFluidParticlePacket> fluidParticles;
-		std::vector<OwnedBoundaryParticlePacket> boundaryParticles;
+		std::vector<OwnedFluidParticlePacket> particlesF;
+		std::vector<OwnedBoundaryParticlePacket> particlesB;
 
 		void Clear();
 	};
@@ -80,8 +80,8 @@ namespace Dist
 	bool PackOwnedParticleGatherBuffer(
 		OwnedParticleGatherBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
-		const DistParticleState& fluidParticleState,
-		const DistParticleState& boundaryParticleState);
+		const DistParticleState& particleStateF,
+		const DistParticleState& particleStateB);
 
 	bool RebuildGlobalOwnedStateFromGatheredParticles(
 		Sync::UniversalSimState& globalOwnedState,
@@ -92,8 +92,8 @@ namespace Dist
 	bool GatherOwnedParticlesToRoot(
 		Sync::UniversalSimState& globalOwnedState,
 		const Sync::UniversalSimState& localState,
-		const DistParticleState& fluidParticleState,
-		const DistParticleState& boundaryParticleState,
+		const DistParticleState& particleStateF,
+		const DistParticleState& particleStateB,
 		const MpiContext& mpiContext,
 		uint32_t N_globalF,
 		uint32_t N_globalB,

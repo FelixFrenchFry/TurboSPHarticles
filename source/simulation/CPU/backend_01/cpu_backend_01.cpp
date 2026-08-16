@@ -199,9 +199,9 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	integrateRigidBodies_ = true;
 	applyRigidBodyExternalForces_ = true;
 
-	auto& F = src.fluidParticles;
-	auto& B = src.boundaryParticles;
-	auto& R = src.rigidParticles;
+	auto& F = src.particlesF;
+	auto& B = src.particlesB;
+	auto& R = src.particlesR;
 	auto& RB = src.rigidBodies;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
@@ -323,9 +323,9 @@ void SimBackend_CPU01::PushToUniversalSimState(
 	Sync::UniversalSimState& dst,
 	const bool backendWillBeRetired)
 {
-	auto& F = dst.fluidParticles;
-	auto& B = dst.boundaryParticles;
-	auto& R = dst.rigidParticles;
+	auto& F = dst.particlesF;
+	auto& B = dst.particlesB;
+	auto& R = dst.particlesR;
 	auto& RB = dst.rigidBodies;
 	F.N_ = N_F_;
 	B.N_ = N_B_;
@@ -467,52 +467,52 @@ Sync::RigidConstView SimBackend_CPU01::GetRigidParticleView() const
 bool SimBackend_CPU01::ApplyParticleRedistribution(
 	const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
 	const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
-	const Sync::FluidParticles& appendedFluidParticles,
-	const Sync::BoundaryParticles& appendedBoundaryParticles,
-	const bool redistributeBoundaryParticles,
+	const Sync::FluidParticles& appendedParticlesF,
+	const Sync::BoundaryParticles& appendedParticlesB,
+	const bool redistributeParticlesB,
 	const SimParams& params)
 {
-	const auto fluidSizeValid = [&appendedFluidParticles](const auto& values)
+	const auto fluidSizeValid = [&appendedParticlesF](const auto& values)
 	{
-		return values.size() == appendedFluidParticles.N_;
+		return values.size() == appendedParticlesF.N_;
 	};
 	const auto fluidFieldOmitted = [](const auto& values)
 	{
 		return values.empty();
 	};
-	const auto boundarySizeValid = [&appendedBoundaryParticles](const auto& values)
+	const auto boundarySizeValid = [&appendedParticlesB](const auto& values)
 	{
-		return values.size() == appendedBoundaryParticles.N_;
+		return values.size() == appendedParticlesB.N_;
 	};
 
 	// check that the appended particle blocks have the expected sizes
 	// (the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
 	// because the following solver step re-writes them before reading them)
 	// TODO: keep it like this or copy them too, if solver step behavior changes?
-	if (!fluidSizeValid(appendedFluidParticles.id) ||
-		!fluidSizeValid(appendedFluidParticles.xPos) ||
-		!fluidSizeValid(appendedFluidParticles.yPos) ||
-		!fluidSizeValid(appendedFluidParticles.zPos) ||
-		!fluidSizeValid(appendedFluidParticles.xVel) ||
-		!fluidSizeValid(appendedFluidParticles.yVel) ||
-		!fluidSizeValid(appendedFluidParticles.zVel) ||
-		!fluidFieldOmitted(appendedFluidParticles.xVelPred) ||
-		!fluidFieldOmitted(appendedFluidParticles.yVelPred) ||
-		!fluidFieldOmitted(appendedFluidParticles.zVelPred) ||
-		!fluidFieldOmitted(appendedFluidParticles.xAccPress) ||
-		!fluidFieldOmitted(appendedFluidParticles.yAccPress) ||
-		!fluidFieldOmitted(appendedFluidParticles.zAccPress) ||
-		!fluidFieldOmitted(appendedFluidParticles.sourceTerm) ||
-		!fluidFieldOmitted(appendedFluidParticles.diagElem) ||
-		!fluidFieldOmitted(appendedFluidParticles.pressure) ||
-		!fluidFieldOmitted(appendedFluidParticles.density) ||
-		(redistributeBoundaryParticles &&
-			(!boundarySizeValid(appendedBoundaryParticles.id) ||
-			 !boundarySizeValid(appendedBoundaryParticles.xPos) ||
-			 !boundarySizeValid(appendedBoundaryParticles.yPos) ||
-			 !boundarySizeValid(appendedBoundaryParticles.zPos) ||
-			 !boundarySizeValid(appendedBoundaryParticles.volB) ||
-			 !boundarySizeValid(appendedBoundaryParticles.psiB))))
+	if (!fluidSizeValid(appendedParticlesF.id) ||
+		!fluidSizeValid(appendedParticlesF.xPos) ||
+		!fluidSizeValid(appendedParticlesF.yPos) ||
+		!fluidSizeValid(appendedParticlesF.zPos) ||
+		!fluidSizeValid(appendedParticlesF.xVel) ||
+		!fluidSizeValid(appendedParticlesF.yVel) ||
+		!fluidSizeValid(appendedParticlesF.zVel) ||
+		!fluidFieldOmitted(appendedParticlesF.xVelPred) ||
+		!fluidFieldOmitted(appendedParticlesF.yVelPred) ||
+		!fluidFieldOmitted(appendedParticlesF.zVelPred) ||
+		!fluidFieldOmitted(appendedParticlesF.xAccPress) ||
+		!fluidFieldOmitted(appendedParticlesF.yAccPress) ||
+		!fluidFieldOmitted(appendedParticlesF.zAccPress) ||
+		!fluidFieldOmitted(appendedParticlesF.sourceTerm) ||
+		!fluidFieldOmitted(appendedParticlesF.diagElem) ||
+		!fluidFieldOmitted(appendedParticlesF.pressure) ||
+		!fluidFieldOmitted(appendedParticlesF.density) ||
+		(redistributeParticlesB &&
+			(!boundarySizeValid(appendedParticlesB.id) ||
+			 !boundarySizeValid(appendedParticlesB.xPos) ||
+			 !boundarySizeValid(appendedParticlesB.yPos) ||
+			 !boundarySizeValid(appendedParticlesB.zPos) ||
+			 !boundarySizeValid(appendedParticlesB.volB) ||
+			 !boundarySizeValid(appendedParticlesB.psiB))))
 	{
 		return false;
 	}
@@ -548,7 +548,7 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 
 	// check that the compaction maps are valid
 	if (!compactionMapValid(retainedFluidOldLocalIdx_FromNewLocalIdx, N_F_) ||
-		(redistributeBoundaryParticles &&
+		(redistributeParticlesB &&
 		 !compactionMapValid(retainedBoundaryOldLocalIdx_FromNewLocalIdx, N_B_)))
 	{
 		return false;
@@ -556,19 +556,19 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 
 	// check that the final particle counts do not exceed the max
 	const uint32_t N_retainedF = static_cast<uint32_t>(retainedFluidOldLocalIdx_FromNewLocalIdx.size());
-	const uint32_t N_retainedB = redistributeBoundaryParticles
+	const uint32_t N_retainedB = redistributeParticlesB
 		? static_cast<uint32_t>(retainedBoundaryOldLocalIdx_FromNewLocalIdx.size())
 		: N_B_;
-	if (appendedFluidParticles.N_ > std::numeric_limits<uint32_t>::max() - N_retainedF ||
-		(redistributeBoundaryParticles &&
-		 appendedBoundaryParticles.N_ > std::numeric_limits<uint32_t>::max() - N_retainedB))
+	if (appendedParticlesF.N_ > std::numeric_limits<uint32_t>::max() - N_retainedF ||
+		(redistributeParticlesB &&
+		 appendedParticlesB.N_ > std::numeric_limits<uint32_t>::max() - N_retainedB))
 	{
 		return false;
 	}
 
-	const uint32_t N_finalF = N_retainedF + appendedFluidParticles.N_;
-	const uint32_t N_finalB = redistributeBoundaryParticles
-		? N_retainedB + appendedBoundaryParticles.N_
+	const uint32_t N_finalF = N_retainedF + appendedParticlesF.N_;
+	const uint32_t N_finalB = redistributeParticlesB
+		? N_retainedB + appendedParticlesB.N_
 		: N_B_;
 
 	// reserve all required field capacity before compacting particles in place,
@@ -590,7 +590,7 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	ReserveParticleFieldWithExtra(diagElemF_, N_finalF, particleFieldExtraAllocCapacityPct_);
 	ReserveParticleFieldWithExtra(pressureF_, N_finalF, particleFieldExtraAllocCapacityPct_);
 	ReserveParticleFieldWithExtra(densityF_, N_finalF, particleFieldExtraAllocCapacityPct_);
-	if (redistributeBoundaryParticles)
+	if (redistributeParticlesB)
 	{
 		ReserveParticleFieldWithExtra(idB_, N_finalB, particleFieldExtraAllocCapacityPct_);
 		ReserveParticleFieldWithExtra(xPosB_, N_finalB, particleFieldExtraAllocCapacityPct_);
@@ -628,7 +628,7 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 		},
 		tbb::auto_partitioner{});
 
-	if (redistributeBoundaryParticles)
+	if (redistributeParticlesB)
 	{
 		// compact retained boundary particles into a dense prefix, filling its holes with particles from the old tail
 		// (index blocks processed in parallel, and fields sequentially within each block)
@@ -668,7 +668,7 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	diagElemF_.resize(N_F_);
 	pressureF_.resize(N_F_);
 	densityF_.resize(N_F_);
-	if (redistributeBoundaryParticles)
+	if (redistributeParticlesB)
 	{
 		N_B_ = N_finalB;
 		idB_.resize(N_B_);
@@ -683,10 +683,10 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	// (index blocks processed in parallel, and fields sequentially within each block)
 	const uint32_t fluidAppendBegin = N_retainedF;
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, appendedFluidParticles.N_, particleAppendBlockSize_),
+		tbb::blocked_range<uint32_t>(0, appendedParticlesF.N_, particleAppendBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			const Sync::FluidParticles& src = appendedFluidParticles;
+			const Sync::FluidParticles& src = appendedParticlesF;
 
 			AppendParticleField(idF_, src.id, fluidAppendBegin, blockRange);
 			AppendParticleField(xPosF_, src.xPos, fluidAppendBegin, blockRange);
@@ -702,16 +702,16 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 		},
 		tbb::auto_partitioner{});
 
-	if (redistributeBoundaryParticles)
+	if (redistributeParticlesB)
 	{
 		// append migrated and halo boundary particles after the retained prefix to complete the new local layout
 		// (index blocks processed in parallel, and fields sequentially within each block)
 		const uint32_t boundaryAppendBegin = N_retainedB;
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, appendedBoundaryParticles.N_, particleAppendBlockSize_),
+			tbb::blocked_range<uint32_t>(0, appendedParticlesB.N_, particleAppendBlockSize_),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
 			{
-				const Sync::BoundaryParticles& src = appendedBoundaryParticles;
+				const Sync::BoundaryParticles& src = appendedParticlesB;
 
 				AppendParticleField(idB_, src.id, boundaryAppendBegin, blockRange);
 				AppendParticleField(xPosB_, src.xPos, boundaryAppendBegin, blockRange);

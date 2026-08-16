@@ -132,13 +132,13 @@ namespace Scene
 		// computes the non-uniform boundary contribution coefficients ("pseudo-mass") for boundary particles
 		// (inspired by "Versatile Rigid-Fluid Coupling for Incompressible SPH" Akinci et al. 2012)
 		static void ComputeBoundaryCoefficients(
-			Sync::BoundaryParticles& boundaryParticles,
+			Sync::BoundaryParticles& particlesB,
 			const Sim::SimParams& params,
 			uint32_t beginB,
 			uint32_t endB);
 
 		static void ComputeRigidCoefficients(
-			Sync::RigidParticles& rigidParticles,
+			Sync::RigidParticles& particlesR,
 			const Sim::SimParams& params,
 			uint32_t beginR,
 			uint32_t endR);

@@ -109,8 +109,8 @@ void FluidSolverSyncMgr::ClearParticlePlan(ParticlePlan& particlePlan)
 }
 
 bool FluidSolverSyncMgr::Rebuild(
-	const Sync::FluidConstView& fluidParticles,
-	const DistParticleState& fluidParticleState,
+	const Sync::FluidConstView& particlesF,
+	const DistParticleState& particleStateF,
 	const IDomainDecomp& domainDecomp,
 	const float singleHaloRadius,
 	const Base::DistHaloMode distHaloMode,
@@ -139,17 +139,17 @@ bool FluidSolverSyncMgr::Rebuild(
 
 	// validate every backend field before publishing the exchange plan
 	const std::array<std::span<const float>, 16> fluidFields{
-		fluidParticles.xPos, fluidParticles.yPos, fluidParticles.zPos,
-		fluidParticles.xVel, fluidParticles.yVel, fluidParticles.zVel,
-		fluidParticles.xVelPred, fluidParticles.yVelPred, fluidParticles.zVelPred,
-		fluidParticles.xAccPress, fluidParticles.yAccPress, fluidParticles.zAccPress,
-		fluidParticles.sourceTerm, fluidParticles.diagElem,
-		fluidParticles.pressure, fluidParticles.density
+		particlesF.xPos, particlesF.yPos, particlesF.zPos,
+		particlesF.xVel, particlesF.yVel, particlesF.zVel,
+		particlesF.xVelPred, particlesF.yVelPred, particlesF.zVelPred,
+		particlesF.xAccPress, particlesF.yAccPress, particlesF.zAccPress,
+		particlesF.sourceTerm, particlesF.diagElem,
+		particlesF.pressure, particlesF.density
 	};
-	bool fluidFieldsValid = fluidParticles.id.size() == fluidParticles.N_;
+	bool fluidFieldsValid = particlesF.id.size() == particlesF.N_;
 	for (const std::span<const float> field : fluidFields)
 	{
-		fluidFieldsValid = fluidFieldsValid && field.size() == fluidParticles.N_;
+		fluidFieldsValid = fluidFieldsValid && field.size() == particlesF.N_;
 	}
 	if (localOk && !fluidFieldsValid)
 	{
@@ -157,8 +157,8 @@ bool FluidSolverSyncMgr::Rebuild(
 			"Fluid particle field view size does not match its particle count.");
 	}
 
-	if (localOk && !fluidParticleState.IsValidLocalParticleState(
-		fluidParticles.N_, N_globalF, &localFailMsg))
+	if (localOk && !particleStateF.IsValidLocalParticleState(
+		particlesF.N_, N_globalF, &localFailMsg))
 	{
 		localOk = false;
 	}
@@ -218,15 +218,15 @@ bool FluidSolverSyncMgr::Rebuild(
 		domainDecomp.OwnedExtentAABB(mpiContext.Rank()).Expanded(singleHaloRadius);
 
 	// send owned particles to every neighboring rank whose selected halo extent contains them
-	for (const uint32_t localIdx : fluidParticleState.particleLocalIdx_Owned)
+	for (const uint32_t localIdx : particleStateF.particleLocalIdx_Owned)
 	{
 		const glm::vec3 position{
-			fluidParticles.xPos[localIdx],
-			fluidParticles.yPos[localIdx],
-			fluidParticles.zPos[localIdx]
+			particlesF.xPos[localIdx],
+			particlesF.yPos[localIdx],
+			particlesF.zPos[localIdx]
 		};
 		const uint32_t globalIdx =
-			fluidParticleState.particleGlobalIdx_FromLocalIdx[localIdx];
+			particleStateF.particleGlobalIdx_FromLocalIdx[localIdx];
 
 		for (PeerPlan& peerPlan : newPeerPlans)
 		{
@@ -246,12 +246,12 @@ bool FluidSolverSyncMgr::Rebuild(
 	}
 
 	// receive halo particles from their owning rank over the matching narrow/wide plans
-	for (const uint32_t localIdx : fluidParticleState.particleLocalIdx_Halo)
+	for (const uint32_t localIdx : particleStateF.particleLocalIdx_Halo)
 	{
 		const glm::vec3 position{
-			fluidParticles.xPos[localIdx],
-			fluidParticles.yPos[localIdx],
-			fluidParticles.zPos[localIdx]
+			particlesF.xPos[localIdx],
+			particlesF.yPos[localIdx],
+			particlesF.zPos[localIdx]
 		};
 		const int ownerRank = domainDecomp.OwnerRank(position);
 		PeerPlan* peerPlan = findPeerPlan(ownerRank);
@@ -263,7 +263,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		}
 
 		const uint32_t globalIdx =
-			fluidParticleState.particleGlobalIdx_FromLocalIdx[localIdx];
+			particleStateF.particleGlobalIdx_FromLocalIdx[localIdx];
 		if (singleHaloBounds.Contains(position))
 		{
 			peerPlan->singleHalo.recvLocalIdxs.push_back(localIdx);
@@ -424,7 +424,7 @@ bool FluidSolverSyncMgr::Rebuild(
 	// publish the locally validated plan after optional full peer-plan validation
 	mpiContext_ = &mpiContext;
 	benchmarksTracker_ = &benchmarksTracker;
-	N_localF_ = fluidParticles.N_;
+	N_localF_ = particlesF.N_;
 	N_globalF_ = N_expectedGlobalF;
 	distHaloMode_ = distHaloMode;
 	// the replaced plan is retained as storage space for the next rebuild

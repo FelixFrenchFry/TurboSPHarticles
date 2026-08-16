@@ -73,9 +73,9 @@ namespace Sim
 		bool ApplyParticleRedistribution(
 			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
 			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
-			const Sync::FluidParticles& appendedFluidParticles,
-			const Sync::BoundaryParticles& appendedBoundaryParticles,
-			bool redistributeBoundaryParticles,
+			const Sync::FluidParticles& appendedParticlesF,
+			const Sync::BoundaryParticles& appendedParticlesB,
+			bool redistributeParticlesB,
 			const SimParams& params) override;
 
 		void CopyRigidBodyStateTo(Sync::RigidBodies& rigidBodies) const override;

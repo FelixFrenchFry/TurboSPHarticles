@@ -50,8 +50,8 @@ namespace Dist
 
 	struct DistExportSnapshotBuffer
 	{
-		std::vector<DistExportFluidParticlePacket> fluidParticles;
-		std::vector<DistExportBoundaryParticlePacket> boundaryParticles;
+		std::vector<DistExportFluidParticlePacket> particlesF;
+		std::vector<DistExportBoundaryParticlePacket> particlesB;
 
 		void Clear();
 	};
@@ -66,8 +66,8 @@ namespace Dist
 	bool PackOwnedExportSnapshotBuffer(
 		DistExportSnapshotBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
-		const DistParticleState& fluidParticleState,
-		const DistParticleState& boundaryParticleState,
+		const DistParticleState& particleStateF,
+		const DistParticleState& particleStateB,
 		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 		int rank);
 
@@ -88,8 +88,8 @@ namespace Dist
 		Sync::ExportSnapshot& exportSnap,
 		DistExportSnapshotBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
-		const DistParticleState& fluidParticleState,
-		const DistParticleState& boundaryParticleState,
+		const DistParticleState& particleStateF,
+		const DistParticleState& particleStateB,
 		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 		const MpiContext& mpiContext,
 		uint64_t simStep,

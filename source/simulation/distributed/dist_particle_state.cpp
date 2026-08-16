@@ -20,26 +20,26 @@ using namespace Dist;
 namespace
 {
 	glm::vec3 FluidPositionAtArrayIdx(
-		const Sync::FluidParticles& fluidParticles,
+		const Sync::FluidParticles& particlesF,
 		const uint32_t arrayIdx)
 	{
 		return
 		{
-			fluidParticles.xPos[arrayIdx],
-			fluidParticles.yPos[arrayIdx],
-			fluidParticles.zPos[arrayIdx]
+			particlesF.xPos[arrayIdx],
+			particlesF.yPos[arrayIdx],
+			particlesF.zPos[arrayIdx]
 		};
 	}
 
 	glm::vec3 BoundaryPositionAtArrayIdx(
-		const Sync::BoundaryParticles& boundaryParticles,
+		const Sync::BoundaryParticles& particlesB,
 		const uint32_t arrayIdx)
 	{
 		return
 		{
-			boundaryParticles.xPos[arrayIdx],
-			boundaryParticles.yPos[arrayIdx],
-			boundaryParticles.zPos[arrayIdx]
+			particlesB.xPos[arrayIdx],
+			particlesB.yPos[arrayIdx],
+			particlesB.zPos[arrayIdx]
 		};
 	}
 
@@ -316,17 +316,17 @@ namespace
 	#endif
 
 	uint32_t CountOwnedFluidParticles(
-		const Sync::FluidParticles& fluidParticles,
+		const Sync::FluidParticles& particlesF,
 		const IDomainDecomp& domainDecomp,
 		const int rank)
 	{
 		uint32_t N_owned = 0;
 
 		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != fluidParticles.N_; particleIdx++)
+		for (uint32_t particleIdx = 0; particleIdx != particlesF.N_; particleIdx++)
 		{
 			if (domainDecomp.OwnerRank(FluidPositionAtArrayIdx(
-				fluidParticles, particleIdx)) == rank)
+				particlesF, particleIdx)) == rank)
 			{
 				N_owned++;
 			}
@@ -336,7 +336,7 @@ namespace
 	}
 
 	uint32_t CountHaloFluidParticles(
-		const Sync::FluidParticles& fluidParticles,
+		const Sync::FluidParticles& particlesF,
 		const IDomainDecomp& domainDecomp,
 		const AABB& haloBounds,
 		const int rank)
@@ -344,10 +344,10 @@ namespace
 		uint32_t N_halo = 0;
 
 		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != fluidParticles.N_; particleIdx++)
+		for (uint32_t particleIdx = 0; particleIdx != particlesF.N_; particleIdx++)
 		{
 			if (IsHaloParticleForRank(
-				FluidPositionAtArrayIdx(fluidParticles, particleIdx),
+				FluidPositionAtArrayIdx(particlesF, particleIdx),
 				domainDecomp, haloBounds, rank))
 			{
 				N_halo++;
@@ -358,17 +358,17 @@ namespace
 	}
 
 	uint32_t CountOwnedBoundaryParticles(
-		const Sync::BoundaryParticles& boundaryParticles,
+		const Sync::BoundaryParticles& particlesB,
 		const IDomainDecomp& domainDecomp,
 		const int rank)
 	{
 		uint32_t N_owned = 0;
 
 		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != boundaryParticles.N_; particleIdx++)
+		for (uint32_t particleIdx = 0; particleIdx != particlesB.N_; particleIdx++)
 		{
 			if (domainDecomp.OwnerRank(BoundaryPositionAtArrayIdx(
-				boundaryParticles, particleIdx)) == rank)
+				particlesB, particleIdx)) == rank)
 			{
 				N_owned++;
 			}
@@ -378,7 +378,7 @@ namespace
 	}
 
 	uint32_t CountHaloBoundaryParticles(
-		const Sync::BoundaryParticles& boundaryParticles,
+		const Sync::BoundaryParticles& particlesB,
 		const IDomainDecomp& domainDecomp,
 		const AABB& haloBounds,
 		const int rank)
@@ -386,10 +386,10 @@ namespace
 		uint32_t N_halo = 0;
 
 		// TODO: parallelize this global particle scan with TBB?
-		for (uint32_t particleIdx = 0; particleIdx != boundaryParticles.N_; particleIdx++)
+		for (uint32_t particleIdx = 0; particleIdx != particlesB.N_; particleIdx++)
 		{
 			if (IsHaloParticleForRank(
-				BoundaryPositionAtArrayIdx(boundaryParticles, particleIdx),
+				BoundaryPositionAtArrayIdx(particlesB, particleIdx),
 				domainDecomp, haloBounds, rank))
 			{
 				N_halo++;
@@ -449,8 +449,8 @@ namespace
 		const int rank,
 		const float haloRadius)
 	{
-		const Sync::FluidParticles& globalFluid = globalState.fluidParticles;
-		Sync::FluidParticles& localFluid = localState.fluidParticles;
+		const Sync::FluidParticles& globalFluid = globalState.particlesF;
+		Sync::FluidParticles& localFluid = localState.particlesF;
 
 		// count both compact ranges before allocating exact local particle storage
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
@@ -507,8 +507,8 @@ namespace
 		const int rank,
 		const float haloRadius)
 	{
-		const Sync::BoundaryParticles& globalBoundary = globalState.boundaryParticles;
-		Sync::BoundaryParticles& localBoundary = localState.boundaryParticles;
+		const Sync::BoundaryParticles& globalBoundary = globalState.particlesB;
+		Sync::BoundaryParticles& localBoundary = localState.particlesB;
 
 		// count both compact ranges before allocating exact local particle storage
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
@@ -949,9 +949,9 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 {
 	Mem::MemUsage usage{};
 
-	Mem::Add(usage, GetParticleMemoryUsage(state.fluidParticles));
-	Mem::Add(usage, GetParticleMemoryUsage(state.boundaryParticles));
-	Mem::Add(usage, GetParticleMemoryUsage(state.rigidParticles));
+	Mem::Add(usage, GetParticleMemoryUsage(state.particlesF));
+	Mem::Add(usage, GetParticleMemoryUsage(state.particlesB));
+	Mem::Add(usage, GetParticleMemoryUsage(state.particlesR));
 
 	return usage;
 }
@@ -1202,7 +1202,7 @@ bool Dist::ApplyLocalParticleReOrder(
 
 void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 	DistParticleState& particleState,
-	const Sync::FluidParticles& fluidParticles,
+	const Sync::FluidParticles& particlesF,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
 	const float haloRadius,
@@ -1215,10 +1215,10 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 
 	ClassifyOwnedParticlesIntoInnerOuter_Parallel(
 		particleState,
-		fluidParticles.N_,
+		particlesF.N_,
 		[&](const uint32_t localIdx)
 		{
-			return FluidPositionAtArrayIdx(fluidParticles, localIdx);
+			return FluidPositionAtArrayIdx(particlesF, localIdx);
 		},
 		domainDecomp,
 		rank,
@@ -1228,7 +1228,7 @@ void Dist::ClassifyOwnedFluidParticlesIntoInnerOuter(
 
 void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 	DistParticleState& particleState,
-	const Sync::BoundaryParticles& boundaryParticles,
+	const Sync::BoundaryParticles& particlesB,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
 	const float haloRadius,
@@ -1241,10 +1241,10 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 
 	ClassifyOwnedParticlesIntoInnerOuter_Parallel(
 		particleState,
-		boundaryParticles.N_,
+		particlesB.N_,
 		[&](const uint32_t localIdx)
 		{
-			return BoundaryPositionAtArrayIdx(boundaryParticles, localIdx);
+			return BoundaryPositionAtArrayIdx(particlesB, localIdx);
 		},
 		domainDecomp,
 		rank,
@@ -1254,8 +1254,8 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 
 void Dist::BuildLocalParticlesFromGlobalState(
 	Sync::UniversalSimState& localState,
-	DistParticleState& fluidParticleState,
-	DistParticleState& boundaryParticleState,
+	DistParticleState& particleStateF,
+	DistParticleState& particleStateB,
 	const Sync::UniversalSimState& globalState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
@@ -1265,14 +1265,14 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	localState = {};
 	localState.step = globalState.step;
 	localState.time = globalState.time;
-	localState.rigidParticles = globalState.rigidParticles;
+	localState.particlesR = globalState.particlesR;
 	localState.rigidBodies = globalState.rigidBodies;
 
 	// build compact rank-local fluid and boundary particle layouts
 	BuildLocalFluidParticlesFromGlobalState(
-		fluidParticleState, localState, globalState,
+		particleStateF, localState, globalState,
 		domainDecomp, rank, haloRadius);
 	BuildLocalBoundaryParticlesFromGlobalState(
-		boundaryParticleState, localState, globalState,
+		particleStateB, localState, globalState,
 		domainDecomp, rank, haloRadius);
 }

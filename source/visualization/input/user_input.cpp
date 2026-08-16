@@ -145,20 +145,20 @@ bool UserInputMgr::OnKey(const Sim::SimParams& simParams,
 		}
 		case GLFW_KEY_1: // toggle fluid particle rendering
 		{
-			bool toggle = !render.showFluidParticles;
+			bool toggle = !render.showParticlesF;
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
-					.showFluidParticles = toggle
+					.showParticlesF = toggle
 				});
 
 			return true;
 		}
 		case GLFW_KEY_2: // toggle rigid particle rendering
 		{
-			bool toggle = !render.showRigidParticles;
+			bool toggle = !render.showParticlesR;
 			visParamsMgr_.SetParam(Vis::RenderPatch
 				{
-					.showRigidParticles = toggle
+					.showParticlesR = toggle
 				});
 
 			return true;

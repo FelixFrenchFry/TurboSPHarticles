@@ -125,9 +125,9 @@ SimBackend_GPU01::~SimBackend_GPU01()
 void SimBackend_GPU01::PullFromUniversalSimState(
 	Sync::UniversalSimState& src, const SimParams& params)
 {
-	auto& F = src.fluidParticles;
-	auto& B = src.boundaryParticles;
-	auto& R = src.rigidParticles;
+	auto& F = src.particlesF;
+	auto& B = src.particlesB;
+	auto& R = src.particlesR;
 	auto& RB = src.rigidBodies;
 	N_F_ = F.N_;
 	N_B_ = B.N_;
@@ -262,9 +262,9 @@ void SimBackend_GPU01::PushToUniversalSimState(
 	Sync::UniversalSimState& dst,
 	const bool backendWillBeRetired)
 {
-	auto& F = dst.fluidParticles;
-	auto& B = dst.boundaryParticles;
-	auto& R = dst.rigidParticles;
+	auto& F = dst.particlesF;
+	auto& B = dst.particlesB;
+	auto& R = dst.particlesR;
 	auto& RB = dst.rigidBodies;
 	(void)backendWillBeRetired; // device storage is released by the owning manager after synchronization
 

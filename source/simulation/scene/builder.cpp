@@ -123,26 +123,26 @@ namespace
 } // namespace anonymous
 
 void ScenarioMgr::ComputeBoundaryCoefficients(
-	Sync::BoundaryParticles& boundaryParticles,
+	Sync::BoundaryParticles& particlesB,
 	const Sim::SimParams& params,
 	const uint32_t beginB,
 	const uint32_t endB)
 {
 	ComputeParticleCoefficients(
-		boundaryParticles.xPos, boundaryParticles.yPos, boundaryParticles.zPos,
-		boundaryParticles.volB, boundaryParticles.psiB, boundaryParticles.N_,
+		particlesB.xPos, particlesB.yPos, particlesB.zPos,
+		particlesB.volB, particlesB.psiB, particlesB.N_,
 		params, beginB, endB);
 }
 
 void ScenarioMgr::ComputeRigidCoefficients(
-	Sync::RigidParticles& rigidParticles,
+	Sync::RigidParticles& particlesR,
 	const Sim::SimParams& params,
 	const uint32_t beginR,
 	const uint32_t endR)
 {
 	ComputeParticleCoefficients(
-		rigidParticles.xRelPos, rigidParticles.yRelPos, rigidParticles.zRelPos,
-		rigidParticles.volR, rigidParticles.psiR, rigidParticles.N_,
+		particlesR.xRelPos, particlesR.yRelPos, particlesR.zRelPos,
+		particlesR.volR, particlesR.psiR, particlesR.N_,
 		params, beginR, endR);
 }
 
@@ -362,7 +362,7 @@ void ScenarioMgr::BuildBoundaryContainer_OBB(const OBB& box,
 		BuildBoundaryLayersOnFace(face, dst, params);
 	}
 
-	ComputeBoundaryCoefficients(dst.boundaryParticles, params, 0, dst.boundaryParticles.N_);
+	ComputeBoundaryCoefficients(dst.particlesB, params, 0, dst.particlesB.N_);
 }
 
 void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
@@ -384,7 +384,7 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	const uint32_t N_w = TilesCount(wLen_i, size);
 	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
 
-	auto& F = dst.fluidParticles;
+	auto& F = dst.particlesF;
 
 	// dense generation index of the first particle, so IDs stay the global scenario indices
 	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
@@ -564,7 +564,7 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 	const float vOff = radius + StartOffset(vLen_i, size, static_cast<int>(N_v));
 	const float wOff = radius + StartOffset(wLen_i, size, static_cast<int>(N_w));
 
-	auto& F = dst.fluidParticles;
+	auto& F = dst.particlesF;
 
 	// dense generation index of the first particle, so IDs stay the global scenario indices
 	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
@@ -730,7 +730,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
 	if (N_keep <= 0) { return; }
 
-	auto& B = dst.boundaryParticles;
+	auto& B = dst.particlesB;
 
 	// resize boundary particle data structures
 	const uint32_t N_base = B.N_;
@@ -796,7 +796,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	}
 
 	assert(idx == (N_base + N_add));
-	ComputeBoundaryCoefficients(dst.boundaryParticles, params, 0, dst.boundaryParticles.N_);
+	ComputeBoundaryCoefficients(dst.particlesB, params, 0, dst.particlesB.N_);
 }
 
 uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
@@ -829,8 +829,8 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
 	if (N_keep <= 0) { return Sync::InvalidRigidBodyId; }
 
-	auto& B = dst.boundaryParticles;
-	auto& R = dst.rigidParticles;
+	auto& B = dst.particlesB;
+	auto& R = dst.particlesR;
 	auto& RB = dst.rigidBodies;
 
 	const uint32_t bodyIdx = RB.N_;
@@ -964,8 +964,8 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	}
 
 	// validate state growth before resizing any arrays
-	auto& B = dst.boundaryParticles;
-	auto& R = dst.rigidParticles;
+	auto& B = dst.particlesB;
+	auto& R = dst.particlesR;
 	auto& RB = dst.rigidBodies;
 	const uint32_t N_add = static_cast<uint32_t>(bodyLocalSamples.size());
 	if (RB.N_ == std::numeric_limits<uint32_t>::max() ||
@@ -1162,7 +1162,7 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	{
 		dst.ReserveBoundaryAdditional(N_u * N_v * params.boundaryLayers);
 	}
-	auto& B = dst.boundaryParticles;
+	auto& B = dst.particlesB;
 
 	for (uint32_t layer = 0; layer < params.boundaryLayers; layer++)
 	{
@@ -1205,7 +1205,7 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	}
 
 	// update boundary particle count
-	dst.boundaryParticles.N_ = static_cast<uint32_t>(dst.boundaryParticles.xPos.size());
+	dst.particlesB.N_ = static_cast<uint32_t>(dst.particlesB.xPos.size());
 }
 
 // deterministic hash-based jitter, safe for parallel use

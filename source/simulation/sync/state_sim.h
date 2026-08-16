@@ -582,50 +582,50 @@ namespace Sync
 		double time = 0.0;			// simulation time in seconds
 
 		// particle data
-		FluidParticles fluidParticles;
-		BoundaryParticles boundaryParticles;
-		RigidParticles rigidParticles;
+		FluidParticles particlesF;
+		BoundaryParticles particlesB;
+		RigidParticles particlesR;
 		RigidBodies rigidBodies;
 
 		// convenience methods for reserve/resizing
-		void ReserveFluid(uint32_t N) { fluidParticles.reserveAll(N); }
-		void ReserveBoundary(uint32_t N) { boundaryParticles.reserveAll(N); }
-		void ReserveRigid(uint32_t N) { rigidParticles.reserveAll(N); }
+		void ReserveFluid(uint32_t N) { particlesF.reserveAll(N); }
+		void ReserveBoundary(uint32_t N) { particlesB.reserveAll(N); }
+		void ReserveRigid(uint32_t N) { particlesR.reserveAll(N); }
 		void ReserveRigidBodies(uint32_t N) { rigidBodies.reserveAll(N); }
-		void ResizeFluid(uint32_t N) { fluidParticles.resizeAll(N); }
-		void ResizeBoundary(uint32_t N) { boundaryParticles.resizeAll(N); }
-		void ResizeRigid(uint32_t N) { rigidParticles.resizeAll(N); }
+		void ResizeFluid(uint32_t N) { particlesF.resizeAll(N); }
+		void ResizeBoundary(uint32_t N) { particlesB.resizeAll(N); }
+		void ResizeRigid(uint32_t N) { particlesR.resizeAll(N); }
 		void ResizeRigidBodies(uint32_t N) { rigidBodies.resizeAll(N); }
 		void ShrinkToFitAll()
 		{
-			fluidParticles.shrinkToFitAll();
-			boundaryParticles.shrinkToFitAll();
-			rigidParticles.shrinkToFitAll();
+			particlesF.shrinkToFitAll();
+			particlesB.shrinkToFitAll();
+			particlesR.shrinkToFitAll();
 			rigidBodies.shrinkToFitAll();
 		}
 
 		void ReserveFluidAdditional(uint32_t add)
 		{
-			const auto current = static_cast<uint32_t>(fluidParticles.xPos.size());
-			fluidParticles.reserveAll(current + add);
+			const auto current = static_cast<uint32_t>(particlesF.xPos.size());
+			particlesF.reserveAll(current + add);
 		}
 
 		void ReserveBoundaryAdditional(uint32_t add)
 		{
-			const auto current = static_cast<uint32_t>(boundaryParticles.xPos.size());
-			boundaryParticles.reserveAll(current + add);
+			const auto current = static_cast<uint32_t>(particlesB.xPos.size());
+			particlesB.reserveAll(current + add);
 		}
 
 		void ReserveRigidAdditional(uint32_t add)
 		{
-			const auto current = static_cast<uint32_t>(rigidParticles.xRelPos.size());
-			rigidParticles.reserveAll(current + add);
+			const auto current = static_cast<uint32_t>(particlesR.xRelPos.size());
+			particlesR.reserveAll(current + add);
 		}
 
 		// validates rigid particle ownership before backend hot loops perform updates
 		void ValidateRigidAttachments() const
 		{
-			const auto& R = rigidParticles;
+			const auto& R = particlesR;
 			const auto& bodies = rigidBodies;
 
 			if (R.id.size() != static_cast<size_t>(R.N_) ||

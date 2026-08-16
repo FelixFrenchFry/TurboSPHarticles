@@ -137,8 +137,8 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	Base::MarkIfChanged(patch.scalarMax, params_.render.scalarMax, changed);
 	Base::MarkIfChanged(patch.colorMap, params_.render.colorMap, changed);
 	Base::MarkIfChanged(patch.scalarModeF, params_.render.scalarModeF, changed);
-	Base::MarkIfChanged(patch.showFluidParticles, params_.render.showFluidParticles, changed);
-	Base::MarkIfChanged(patch.showRigidParticles, params_.render.showRigidParticles, changed);
+	Base::MarkIfChanged(patch.showParticlesF, params_.render.showParticlesF, changed);
+	Base::MarkIfChanged(patch.showParticlesR, params_.render.showParticlesR, changed);
 	Base::MarkIfChanged(patch.showRigidBodyCentersOfMass, params_.render.showRigidBodyCentersOfMass, changed);
 	Base::MarkIfChanged(patch.rigidParticleRadiusScale, params_.render.rigidParticleRadiusScale, changed);
 
@@ -158,8 +158,8 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (patch.scalarMax) { params_.render.scalarMax = *patch.scalarMax; }
 	if (patch.colorMap) { params_.render.colorMap = *patch.colorMap; }
 	if (patch.scalarModeF) { params_.render.scalarModeF = *patch.scalarModeF; }
-	if (patch.showFluidParticles) { params_.render.showFluidParticles = *patch.showFluidParticles; }
-	if (patch.showRigidParticles) { params_.render.showRigidParticles = *patch.showRigidParticles; }
+	if (patch.showParticlesF) { params_.render.showParticlesF = *patch.showParticlesF; }
+	if (patch.showParticlesR) { params_.render.showParticlesR = *patch.showParticlesR; }
 	if (patch.showRigidBodyCentersOfMass) { params_.render.showRigidBodyCentersOfMass = *patch.showRigidBodyCentersOfMass; }
 	if (patch.rigidParticleRadiusScale) { params_.render.rigidParticleRadiusScale = *patch.rigidParticleRadiusScale; }
 	EndWrite();

@@ -405,7 +405,7 @@ namespace Sim
 				d_iBodyInv00RB_.Size() != N_newRB || d_iBodyInv01RB_.Size() != N_newRB || d_iBodyInv02RB_.Size() != N_newRB ||
 				d_iBodyInv10RB_.Size() != N_newRB || d_iBodyInv11RB_.Size() != N_newRB || d_iBodyInv12RB_.Size() != N_newRB ||
 				d_iBodyInv20RB_.Size() != N_newRB || d_iBodyInv21RB_.Size() != N_newRB || d_iBodyInv22RB_.Size() != N_newRB;
-			const bool needRigidParticles = force || N_newR != N_R_ ||
+			const bool needParticlesR = force || N_newR != N_R_ ||
 				d_idR_.Size() != N_newR || d_bodyIdR_.Size() != N_newR ||
 				d_xPosR_.Size() != N_newR || d_yPosR_.Size() != N_newR || d_zPosR_.Size() != N_newR ||
 				d_xRelPosR_.Size() != N_newR || d_yRelPosR_.Size() != N_newR || d_zRelPosR_.Size() != N_newR ||
@@ -417,7 +417,7 @@ namespace Sim
 				d_nbrOffsetsRF_.Size() != static_cast<size_t>(N_newR) + 1 ||
 				d_nbrOffsetsRB_.Size() != static_cast<size_t>(N_newR) + 1 ||
 				d_nbrOffsetsRR_.Size() != static_cast<size_t>(N_newR) + 1;
-			if (!(needRigidBodies || needRigidParticles)) { return; }
+			if (!(needRigidBodies || needParticlesR)) { return; }
 
 			N_RB_ = N_newRB;
 			N_R_ = N_newR;

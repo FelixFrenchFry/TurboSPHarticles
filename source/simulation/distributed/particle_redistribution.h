@@ -131,12 +131,12 @@ namespace Dist
 
 		// builds rank-indexed routes from the current owned particles without communication
 		bool BuildExchangeRoutes(
-			const Sync::FluidConstView& fluidParticles,
-			const Sync::BoundaryConstView& boundaryParticles,
-			const DistParticleState& fluidParticleState,
-			const DistParticleState& boundaryParticleState,
+			const Sync::FluidConstView& particlesF,
+			const Sync::BoundaryConstView& particlesB,
+			const DistParticleState& particleStateF,
+			const DistParticleState& particleStateB,
 			const IDomainDecomp& domainDecomp,
-			bool redistributeBoundaryParticles,
+			bool redistributeParticlesB,
 			int rank, int N_ranks,
 			uint32_t N_globalF, uint32_t N_globalB,
 			std::string* failMsg = nullptr,
@@ -145,12 +145,12 @@ namespace Dist
 		// orchestrator that compacts kept particles in place and appends the next migrated / halo particles
 		bool RedistributeParticles(
 			Sim::I_DistributedParticleBackend& distParticleBackend,
-			DistParticleState& fluidParticleState,
-			DistParticleState& boundaryParticleState,
+			DistParticleState& particleStateF,
+			DistParticleState& particleStateB,
 			const IDomainDecomp& domainDecomp,
 			const MpiContext& mpiContext,
 			const Sim::SimParams& simParams,
-			bool redistributeBoundaryParticles,
+			bool redistributeParticlesB,
 			uint32_t N_globalF,
 			uint32_t N_globalB,
 			std::string* failMsg = nullptr,
@@ -280,16 +280,16 @@ namespace Dist
 		struct RankBuffers
 		{
 			// fluid migration and halo payloads
-			FluidExchangeBuffer sendOwnedFluidParticles;
-			FluidExchangeBuffer recvOwnedFluidParticles;
-			FluidExchangeBuffer sendHaloFluidParticles;
-			FluidExchangeBuffer recvHaloFluidParticles;
+			FluidExchangeBuffer sendOwnedParticlesF;
+			FluidExchangeBuffer recvOwnedParticlesF;
+			FluidExchangeBuffer sendHaloParticlesF;
+			FluidExchangeBuffer recvHaloParticlesF;
 
 			// boundary migration and halo payloads
-			BoundaryExchangeBuffer sendOwnedBoundaryParticles;
-			BoundaryExchangeBuffer recvOwnedBoundaryParticles;
-			BoundaryExchangeBuffer sendHaloBoundaryParticles;
-			BoundaryExchangeBuffer recvHaloBoundaryParticles;
+			BoundaryExchangeBuffer sendOwnedParticlesB;
+			BoundaryExchangeBuffer recvOwnedParticlesB;
+			BoundaryExchangeBuffer sendHaloParticlesB;
+			BoundaryExchangeBuffer recvHaloParticlesB;
 
 			// packed count lanes
 			int N_sendOwnedF = 0;
@@ -354,43 +354,43 @@ namespace Dist
 			const char* valueName,
 			std::string* failMsg);
 		static bool ValidateParticleViews(
-			const Sync::FluidConstView& fluidParticles,
-			const Sync::BoundaryConstView& boundaryParticles,
-			const DistParticleState& fluidParticleState,
-			const DistParticleState& boundaryParticleState,
+			const Sync::FluidConstView& particlesF,
+			const Sync::BoundaryConstView& particlesB,
+			const DistParticleState& particleStateF,
+			const DistParticleState& particleStateB,
 			uint32_t N_globalF, uint32_t N_globalB,
 			std::string* failMsg);
 
 		// routing and communication phases
 		void PrepareBuffers(int N_ranks);
 		bool RouteOwnedFluidParticles(
-			const Sync::FluidConstView& fluidParticles,
-			const DistParticleState& fluidParticleState,
+			const Sync::FluidConstView& particlesF,
+			const DistParticleState& particleStateF,
 			const IDomainDecomp& domainDecomp,
 			int rank, int N_ranks,
 			std::string* failMsg);
 		bool RouteOwnedBoundaryParticles(
-			const Sync::BoundaryConstView& boundaryParticles,
-			const DistParticleState& boundaryParticleState,
+			const Sync::BoundaryConstView& particlesB,
+			const DistParticleState& particleStateB,
 			const IDomainDecomp& domainDecomp,
 			int rank, int N_ranks,
 			std::string* failMsg);
 		bool RouteOwnedParticles(
-			const Sync::FluidConstView& fluidParticles,
-			const Sync::BoundaryConstView& boundaryParticles,
-			const DistParticleState& fluidParticleState,
-			const DistParticleState& boundaryParticleState,
+			const Sync::FluidConstView& particlesF,
+			const Sync::BoundaryConstView& particlesB,
+			const DistParticleState& particleStateF,
+			const DistParticleState& particleStateB,
 			const IDomainDecomp& domainDecomp,
-			bool redistributeBoundaryParticles,
+			bool redistributeParticlesB,
 			int rank, int N_ranks,
 			std::string* failMsg,
 			ParticleRedistributionTimingReport* timingReport);
 		bool PackSendBuffers(
-			const Sync::FluidConstView& fluidParticles,
-			const Sync::BoundaryConstView& boundaryParticles,
-			const DistParticleState& fluidParticleState,
-			const DistParticleState& boundaryParticleState,
-			bool redistributeBoundaryParticles,
+			const Sync::FluidConstView& particlesF,
+			const Sync::BoundaryConstView& particlesB,
+			const DistParticleState& particleStateF,
+			const DistParticleState& particleStateB,
+			bool redistributeParticlesB,
 			int rank, int N_ranks,
 			std::string* failMsg);
 		bool PrepareReceiveBuffers(
@@ -432,12 +432,12 @@ namespace Dist
 		std::vector<uint32_t> retainedBoundaryOldLocalIdx_FromNewLocalIdx_;
 		std::vector<uint8_t> retainedOldLocalIdxFlags_;
 		std::vector<uint32_t> migratedGlobalIdxScratch_;
-		Sync::FluidParticles appendedFluidParticles_;
-		Sync::BoundaryParticles appendedBoundaryParticles_;
+		Sync::FluidParticles appendedParticlesF_;
+		Sync::BoundaryParticles appendedParticlesB_;
 
 		// metadata matching the compacted and appended backend state
-		DistParticleState rebuiltFluidParticleState_;
-		DistParticleState rebuiltBoundaryParticleState_;
+		DistParticleState rebuiltParticleStateF_;
+		DistParticleState rebuiltParticleStateB_;
 
 		// latest per-step network traffic
 		ParticleRedistributionStats redistStats_{};

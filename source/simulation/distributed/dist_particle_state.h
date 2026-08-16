@@ -107,7 +107,7 @@ namespace Dist
 	// rank and splitting them into inner / outer by selected halo extent
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
-		const Sync::FluidParticles& fluidParticles,
+		const Sync::FluidParticles& particlesF,
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		float haloRadius,
@@ -118,7 +118,7 @@ namespace Dist
 	// TODO: unify with fluid version of this function?
 	void ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		DistParticleState& particleState,
-		const Sync::BoundaryParticles& boundaryParticles,
+		const Sync::BoundaryParticles& particlesB,
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		float haloRadius,
@@ -128,8 +128,8 @@ namespace Dist
 	// replicates rigid particles and bodies into the rank-local sim state
 	void BuildLocalParticlesFromGlobalState(
 		Sync::UniversalSimState& localState,
-		DistParticleState& fluidParticleState,
-		DistParticleState& boundaryParticleState,
+		DistParticleState& particleStateF,
+		DistParticleState& particleStateB,
 		const Sync::UniversalSimState& globalState,
 		const IDomainDecomp& domainDecomp,
 		int rank, float haloRadius);

@@ -516,7 +516,7 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 
 		// draw 4-vertex quads (2 triangles), instanced N times
 		glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-		if (render.showFluidParticles && N_fluidImpostorInstances_ > 0)
+		if (render.showParticlesF && N_fluidImpostorInstances_ > 0)
 		{
 			// render fluid particle instances
 			UpdateParamsUBO(render);
@@ -525,7 +525,7 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 				0, 4,
 				static_cast<GLsizei>(N_fluidImpostorInstances_));
 		}
-		if (render.showRigidParticles && N_rigidImpostorInstances_ > 0)
+		if (render.showParticlesR && N_rigidImpostorInstances_ > 0)
 		{
 			Vis::RenderConfig rigidRender = render;
 			rigidRender.baseColor = render.rigidParticleColor;

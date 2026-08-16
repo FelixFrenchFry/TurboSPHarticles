@@ -79,7 +79,7 @@ namespace Scene
 			cube.vLen = 2.0f * cfg_.dropletRadius;
 			cube.wLen = 2.0f * cfg_.dropletRadius;
 
-			const uint32_t startIdx = dst.fluidParticles.N_;
+			const uint32_t startIdx = dst.particlesF.N_;
 
 			// effective radius to prevent particle centers on the sphere edge
 			const float effRadius = std::max(0.0f, cfg_.dropletRadius - params.particleSizeF * 0.5f);
@@ -96,12 +96,12 @@ namespace Scene
 
 			scenarioMgr_.BuildFluidBlock_OBB_Filtered(cube, dst, params, keep);
 
-			const uint32_t endIdx = dst.fluidParticles.N_;
+			const uint32_t endIdx = dst.particlesF.N_;
 
 			// apply initial velocity to droplet particles (override 0.0 init)
 			if (endIdx > startIdx)
 			{
-				auto& F = dst.fluidParticles;
+				auto& F = dst.particlesF;
 
 				tbb::parallel_for(
 					tbb::blocked_range<uint32_t>(startIdx, endIdx),

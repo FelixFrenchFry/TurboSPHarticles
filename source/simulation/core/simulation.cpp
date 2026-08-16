@@ -186,12 +186,12 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);
-	universalSimState_.fluidParticles.ensureParticleIdsPresent();
-	universalSimState_.boundaryParticles.ensureParticleIdsPresent();
-	universalSimState_.rigidParticles.ensureParticleIdsPresent();
-	universalSimState_.boundaryParticles.ensureBoundaryCoefficientsPresent(
+	universalSimState_.particlesF.ensureParticleIdsPresent();
+	universalSimState_.particlesB.ensureParticleIdsPresent();
+	universalSimState_.particlesR.ensureParticleIdsPresent();
+	universalSimState_.particlesB.ensureBoundaryCoefficientsPresent(
 		simParams_.massB, simParams_.restDensity);
-	universalSimState_.rigidParticles.ensureRigidCoefficientsPresent(
+	universalSimState_.particlesR.ensureRigidCoefficientsPresent(
 		simParams_.massB, simParams_.restDensity);
 	universalSimState_.ValidateRigidAttachments();
 

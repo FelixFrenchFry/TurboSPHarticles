@@ -79,8 +79,8 @@ namespace Vis
 			.scalarMax              = 3.0f,
 			.colorMap               = Base::ColorMap::Coolwarm,
 			.scalarModeF            = Base::ColorCodingMode::VelocityMag,
-			.showFluidParticles     = true,
-			.showRigidParticles     = true,
+			.showParticlesF         = true,
+			.showParticlesR         = true,
 			.showRigidBodyCentersOfMass = false,
 			.rigidParticleRadiusScale = 1.0f,
 			.lineWidth              = 0.02f
@@ -130,8 +130,8 @@ namespace Vis
 		std::optional<float> scalarMax;
 		std::optional<Base::ColorMap> colorMap;
 		std::optional<Base::ColorCodingMode> scalarModeF;
-		std::optional<bool> showFluidParticles;
-		std::optional<bool> showRigidParticles;
+		std::optional<bool> showParticlesF;
+		std::optional<bool> showParticlesR;
 		std::optional<bool> showRigidBodyCentersOfMass;
 		std::optional<float> rigidParticleRadiusScale;
 	};

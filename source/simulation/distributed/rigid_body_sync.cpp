@@ -151,7 +151,7 @@ bool Dist::BuildActiveRigidParticleLocalIdxs(
 		return false;
 	}
 
-	const auto& R = localState.rigidParticles;
+	const auto& R = localState.particlesR;
 	const auto& RB = localState.rigidBodies;
 	activeRigidParticleLocalIdxs.clear();
 	activeRigidParticleLocalIdxs.reserve(R.N_);

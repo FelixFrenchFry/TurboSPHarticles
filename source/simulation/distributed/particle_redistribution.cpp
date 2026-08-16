@@ -803,14 +803,14 @@ Mem::MemUsage ParticleRedistributionMgr::GetExchangeBufferMemoryUsage() const
 
 	for (const RankBuffers& rankBuffers : rankBuffers_)
 	{
-		Mem::Add(usage, rankBuffers.sendOwnedFluidParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.recvOwnedFluidParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.sendHaloFluidParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.recvHaloFluidParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.sendOwnedBoundaryParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.recvOwnedBoundaryParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.sendHaloBoundaryParticles.GetMemoryUsage());
-		Mem::Add(usage, rankBuffers.recvHaloBoundaryParticles.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.sendOwnedParticlesF.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.recvOwnedParticlesF.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.sendHaloParticlesF.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.recvHaloParticlesF.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.sendOwnedParticlesB.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.recvOwnedParticlesB.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.sendHaloParticlesB.GetMemoryUsage());
+		Mem::Add(usage, rankBuffers.recvHaloParticlesB.GetMemoryUsage());
 	}
 
 	return usage;
@@ -849,10 +849,10 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedBoundaryOldLocalIdx_FromNewLocalIdx_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedOldLocalIdxFlags_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(migratedGlobalIdxScratch_));
-	Mem::Add(usage, GetParticleMemoryUsage(appendedFluidParticles_));
-	Mem::Add(usage, GetParticleMemoryUsage(appendedBoundaryParticles_));
-	Mem::Add(usage, GetParticleMemoryUsage(rebuiltFluidParticleState_));
-	Mem::Add(usage, GetParticleMemoryUsage(rebuiltBoundaryParticleState_));
+	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesF_));
+	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesB_));
+	Mem::Add(usage, GetParticleMemoryUsage(rebuiltParticleStateF_));
+	Mem::Add(usage, GetParticleMemoryUsage(rebuiltParticleStateB_));
 
 	return usage;
 }
@@ -1265,39 +1265,39 @@ bool ParticleRedistributionMgr::CheckedUint32(
 }
 
 bool ParticleRedistributionMgr::ValidateParticleViews(
-	const Sync::FluidConstView& fluidParticles,
-	const Sync::BoundaryConstView& boundaryParticles,
-	const DistParticleState& fluidParticleState,
-	const DistParticleState& boundaryParticleState,
+	const Sync::FluidConstView& particlesF,
+	const Sync::BoundaryConstView& particlesB,
+	const DistParticleState& particleStateF,
+	const DistParticleState& particleStateB,
 	const uint32_t N_globalF,
 	const uint32_t N_globalB,
 	std::string* failMsg)
 {
-	const uint32_t N_localF = fluidParticles.N_;
-	const uint32_t N_localB = boundaryParticles.N_;
+	const uint32_t N_localF = particlesF.N_;
+	const uint32_t N_localB = particlesB.N_;
 
 	// check that all fluid particle fields have the same size
 	const auto fluidSizeMatches = [N_localF](const auto& values)
 	{
 		return values.size() == N_localF;
 	};
-	if (!fluidSizeMatches(fluidParticles.id) ||
-		!fluidSizeMatches(fluidParticles.xPos) ||
-		!fluidSizeMatches(fluidParticles.yPos) ||
-		!fluidSizeMatches(fluidParticles.zPos) ||
-		!fluidSizeMatches(fluidParticles.xVel) ||
-		!fluidSizeMatches(fluidParticles.yVel) ||
-		!fluidSizeMatches(fluidParticles.zVel) ||
-		!fluidSizeMatches(fluidParticles.xVelPred) ||
-		!fluidSizeMatches(fluidParticles.yVelPred) ||
-		!fluidSizeMatches(fluidParticles.zVelPred) ||
-		!fluidSizeMatches(fluidParticles.xAccPress) ||
-		!fluidSizeMatches(fluidParticles.yAccPress) ||
-		!fluidSizeMatches(fluidParticles.zAccPress) ||
-		!fluidSizeMatches(fluidParticles.sourceTerm) ||
-		!fluidSizeMatches(fluidParticles.diagElem) ||
-		!fluidSizeMatches(fluidParticles.pressure) ||
-		!fluidSizeMatches(fluidParticles.density))
+	if (!fluidSizeMatches(particlesF.id) ||
+		!fluidSizeMatches(particlesF.xPos) ||
+		!fluidSizeMatches(particlesF.yPos) ||
+		!fluidSizeMatches(particlesF.zPos) ||
+		!fluidSizeMatches(particlesF.xVel) ||
+		!fluidSizeMatches(particlesF.yVel) ||
+		!fluidSizeMatches(particlesF.zVel) ||
+		!fluidSizeMatches(particlesF.xVelPred) ||
+		!fluidSizeMatches(particlesF.yVelPred) ||
+		!fluidSizeMatches(particlesF.zVelPred) ||
+		!fluidSizeMatches(particlesF.xAccPress) ||
+		!fluidSizeMatches(particlesF.yAccPress) ||
+		!fluidSizeMatches(particlesF.zAccPress) ||
+		!fluidSizeMatches(particlesF.sourceTerm) ||
+		!fluidSizeMatches(particlesF.diagElem) ||
+		!fluidSizeMatches(particlesF.pressure) ||
+		!fluidSizeMatches(particlesF.density))
 	{
 		if (failMsg) { *failMsg = "Backend fluid particle view has inconsistent field sizes."; }
 		return false;
@@ -1308,12 +1308,12 @@ bool ParticleRedistributionMgr::ValidateParticleViews(
 	{
 		return values.size() == N_localB;
 	};
-	if (!boundarySizeMatches(boundaryParticles.id) ||
-		!boundarySizeMatches(boundaryParticles.xPos) ||
-		!boundarySizeMatches(boundaryParticles.yPos) ||
-		!boundarySizeMatches(boundaryParticles.zPos) ||
-		!boundarySizeMatches(boundaryParticles.volB) ||
-		!boundarySizeMatches(boundaryParticles.psiB))
+	if (!boundarySizeMatches(particlesB.id) ||
+		!boundarySizeMatches(particlesB.xPos) ||
+		!boundarySizeMatches(particlesB.yPos) ||
+		!boundarySizeMatches(particlesB.zPos) ||
+		!boundarySizeMatches(particlesB.volB) ||
+		!boundarySizeMatches(particlesB.psiB))
 	{
 		if (failMsg) { *failMsg = "Backend boundary particle view has inconsistent field sizes."; }
 		return false;
@@ -1321,13 +1321,13 @@ bool ParticleRedistributionMgr::ValidateParticleViews(
 
 	#if defined(_DEBUG)
 	// exhaustively validate distributed particle metadata
-	if (!fluidParticleState.IsValidLocalParticleState(
+	if (!particleStateF.IsValidLocalParticleState(
 		N_localF, N_globalF, failMsg)) { return false; }
-	if (!boundaryParticleState.IsValidLocalParticleState(
+	if (!particleStateB.IsValidLocalParticleState(
 		N_localB, N_globalB, failMsg)) { return false; }
 	#else
-	(void)fluidParticleState;
-	(void)boundaryParticleState;
+	(void)particleStateF;
+	(void)particleStateB;
 	(void)N_globalF;
 	(void)N_globalB;
 	#endif
@@ -1347,14 +1347,14 @@ void ParticleRedistributionMgr::PrepareBuffers(const int N_ranks)
 	for (int rank = 0; rank != N_ranks; rank++)
 	{
 		auto& rankBuffers = rankBuffers_[rank];
-		rankBuffers.sendOwnedFluidParticles.Clear();
-		rankBuffers.recvOwnedFluidParticles.Clear();
-		rankBuffers.sendHaloFluidParticles.Clear();
-		rankBuffers.recvHaloFluidParticles.Clear();
-		rankBuffers.sendOwnedBoundaryParticles.Clear();
-		rankBuffers.recvOwnedBoundaryParticles.Clear();
-		rankBuffers.sendHaloBoundaryParticles.Clear();
-		rankBuffers.recvHaloBoundaryParticles.Clear();
+		rankBuffers.sendOwnedParticlesF.Clear();
+		rankBuffers.recvOwnedParticlesF.Clear();
+		rankBuffers.sendHaloParticlesF.Clear();
+		rankBuffers.recvHaloParticlesF.Clear();
+		rankBuffers.sendOwnedParticlesB.Clear();
+		rankBuffers.recvOwnedParticlesB.Clear();
+		rankBuffers.sendHaloParticlesB.Clear();
+		rankBuffers.recvHaloParticlesB.Clear();
 		rankBuffers.N_sendOwnedF = 0;
 		rankBuffers.N_recvOwnedF = 0;
 		rankBuffers.N_sendHaloF = 0;
@@ -1379,14 +1379,14 @@ void ParticleRedistributionMgr::PrepareBuffers(const int N_ranks)
 }
 
 bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
-	const Sync::FluidConstView& fluidParticles,
-	const DistParticleState& fluidParticleState,
+	const Sync::FluidConstView& particlesF,
+	const DistParticleState& particleStateF,
 	const IDomainDecomp& domainDecomp,
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
 	const std::vector<uint32_t>& ownedLocalIdxs =
-		fluidParticleState.particleLocalIdx_Owned;
+		particleStateF.particleLocalIdx_Owned;
 	const uint32_t N_owned = static_cast<uint32_t>(ownedLocalIdxs.size());
 	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
 	const uint32_t N_buckets = 2 * N_ranks_U32;
@@ -1421,7 +1421,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 	auto& isOuterOwned_ByLocalIdx = routes_.fluidIsOuterOwned_ByLocalIdx;
 	AssignVectorWithExtraCapacity(
 		isOuterOwned_ByLocalIdx,
-		fluidParticles.N_,
+		particlesF.N_,
 		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
@@ -1452,10 +1452,10 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
 
 				#if defined(_DEBUG)
-				if (localIdx >= fluidParticles.N_ ||
-					!fluidParticleState.HasMetadataAtLocalIdx(localIdx) ||
-					(fluidParticleState.particleClasses[localIdx] != DistParticleClass::Inner &&
-					 fluidParticleState.particleClasses[localIdx] != DistParticleClass::Outer))
+				if (localIdx >= particlesF.N_ ||
+					!particleStateF.HasMetadataAtLocalIdx(localIdx) ||
+					(particleStateF.particleClasses[localIdx] != DistParticleClass::Inner &&
+					 particleStateF.particleClasses[localIdx] != DistParticleClass::Outer))
 				{
 					routeFailMsg.store(
 						"Invalid owned fluid particle metadata.", std::memory_order_relaxed);
@@ -1463,7 +1463,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				}
 				#endif
 
-				const glm::vec3 position = FluidPositionAtLocalIdx(fluidParticles, localIdx);
+				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
 				const int ownerRank = domainDecomp.OwnerRank(position);
 				if (ownerRank < 0 || ownerRank >= N_ranks)
 				{
@@ -1568,7 +1568,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
 				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
-				const glm::vec3 position = FluidPositionAtLocalIdx(fluidParticles, localIdx);
+				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
 					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
@@ -1587,14 +1587,14 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 }
 
 bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
-	const Sync::BoundaryConstView& boundaryParticles,
-	const DistParticleState& boundaryParticleState,
+	const Sync::BoundaryConstView& particlesB,
+	const DistParticleState& particleStateB,
 	const IDomainDecomp& domainDecomp,
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
 	const std::vector<uint32_t>& ownedLocalIdxs =
-		boundaryParticleState.particleLocalIdx_Owned;
+		particleStateB.particleLocalIdx_Owned;
 	const uint32_t N_owned = static_cast<uint32_t>(ownedLocalIdxs.size());
 	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
 	const uint32_t N_buckets = 2 * N_ranks_U32;
@@ -1629,7 +1629,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 	auto& isOuterOwned_ByLocalIdx = routes_.boundaryIsOuterOwned_ByLocalIdx;
 	AssignVectorWithExtraCapacity(
 		isOuterOwned_ByLocalIdx,
-		boundaryParticles.N_,
+		particlesB.N_,
 		uint8_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 
@@ -1660,10 +1660,10 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
 
 				#if defined(_DEBUG)
-				if (localIdx >= boundaryParticles.N_ ||
-					!boundaryParticleState.HasMetadataAtLocalIdx(localIdx) ||
-					(boundaryParticleState.particleClasses[localIdx] != DistParticleClass::Inner &&
-					 boundaryParticleState.particleClasses[localIdx] != DistParticleClass::Outer))
+				if (localIdx >= particlesB.N_ ||
+					!particleStateB.HasMetadataAtLocalIdx(localIdx) ||
+					(particleStateB.particleClasses[localIdx] != DistParticleClass::Inner &&
+					 particleStateB.particleClasses[localIdx] != DistParticleClass::Outer))
 				{
 					routeFailMsg.store(
 						"Invalid owned boundary particle metadata.", std::memory_order_relaxed);
@@ -1671,7 +1671,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 				}
 				#endif
 
-				const glm::vec3 position = BoundaryPositionAtLocalIdx(boundaryParticles, localIdx);
+				const glm::vec3 position = BoundaryPositionAtLocalIdx(particlesB, localIdx);
 				const int ownerRank = domainDecomp.OwnerRank(position);
 				if (ownerRank < 0 || ownerRank >= N_ranks)
 				{
@@ -1776,7 +1776,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
 				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
-				const glm::vec3 position = BoundaryPositionAtLocalIdx(boundaryParticles, localIdx);
+				const glm::vec3 position = BoundaryPositionAtLocalIdx(particlesB, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
 					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
@@ -1795,12 +1795,12 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 }
 
 bool ParticleRedistributionMgr::RouteOwnedParticles(
-	const Sync::FluidConstView& fluidParticles,
-	const Sync::BoundaryConstView& boundaryParticles,
-	const DistParticleState& fluidParticleState,
-	const DistParticleState& boundaryParticleState,
+	const Sync::FluidConstView& particlesF,
+	const Sync::BoundaryConstView& particlesB,
+	const DistParticleState& particleStateF,
+	const DistParticleState& particleStateB,
 	const IDomainDecomp& domainDecomp,
-	const bool redistributeBoundaryParticles,
+	const bool redistributeParticlesB,
 	const int rank, const int N_ranks,
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
@@ -1819,7 +1819,7 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 			timingReport, ParticleRedistributionTimingOp::Route);
 
 		if (!RouteOwnedFluidParticles(
-			fluidParticles, fluidParticleState,
+			particlesF, particleStateF,
 			domainDecomp, rank, N_ranks, failMsg))
 		{
 			return false;
@@ -1828,13 +1828,13 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 
 	// route boundary migration and halos
 	// (only if needed, since boundary particles are static)
-	if (redistributeBoundaryParticles)
+	if (redistributeParticlesB)
 	{
 		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 			timingReport, ParticleRedistributionTimingOp::Route);
 
 		if (!RouteOwnedBoundaryParticles(
-			boundaryParticles, boundaryParticleState,
+			particlesB, particleStateB,
 			domainDecomp, rank, N_ranks, failMsg))
 		{
 			return false;
@@ -1845,11 +1845,11 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 }
 
 bool ParticleRedistributionMgr::PackSendBuffers(
-	const Sync::FluidConstView& fluidParticles,
-	const Sync::BoundaryConstView& boundaryParticles,
-	const DistParticleState& fluidParticleState,
-	const DistParticleState& boundaryParticleState,
-	const bool redistributeBoundaryParticles,
+	const Sync::FluidConstView& particlesF,
+	const Sync::BoundaryConstView& particlesB,
+	const DistParticleState& particleStateF,
+	const DistParticleState& particleStateB,
+	const bool redistributeParticlesB,
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
@@ -1870,26 +1870,26 @@ bool ParticleRedistributionMgr::PackSendBuffers(
 			routes_.ownedFluidLocalIdxs_ByDstRank[dstRank];
 		const auto& haloFluidLocalIdxs =
 			routes_.haloFluidLocalIdxs_ByDstRank[dstRank];
-		rankBuffers.sendOwnedFluidParticles.SetBulkFromParticleView(
-			fluidParticles, fluidParticleState, ownedFluidLocalIdxs);
-		rankBuffers.sendHaloFluidParticles.SetBulkFromParticleView(
-			fluidParticles, fluidParticleState, haloFluidLocalIdxs);
-		rankBuffers.N_sendOwnedF = rankBuffers.sendOwnedFluidParticles.CheckedCount();
-		rankBuffers.N_sendHaloF = rankBuffers.sendHaloFluidParticles.CheckedCount();
+		rankBuffers.sendOwnedParticlesF.SetBulkFromParticleView(
+			particlesF, particleStateF, ownedFluidLocalIdxs);
+		rankBuffers.sendHaloParticlesF.SetBulkFromParticleView(
+			particlesF, particleStateF, haloFluidLocalIdxs);
+		rankBuffers.N_sendOwnedF = rankBuffers.sendOwnedParticlesF.CheckedCount();
+		rankBuffers.N_sendHaloF = rankBuffers.sendHaloParticlesF.CheckedCount();
 
 		// boundary particles
-		if (redistributeBoundaryParticles) // (only if required)
+		if (redistributeParticlesB) // (only if required)
 		{
 			const auto& ownedBoundaryLocalIdxs =
 				routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank];
 			const auto& haloBoundaryLocalIdxs =
 				routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank];
-			rankBuffers.sendOwnedBoundaryParticles.SetBulkFromParticleView(
-				boundaryParticles, boundaryParticleState, ownedBoundaryLocalIdxs);
-			rankBuffers.sendHaloBoundaryParticles.SetBulkFromParticleView(
-				boundaryParticles, boundaryParticleState, haloBoundaryLocalIdxs);
-			rankBuffers.N_sendOwnedB = rankBuffers.sendOwnedBoundaryParticles.CheckedCount();
-			rankBuffers.N_sendHaloB = rankBuffers.sendHaloBoundaryParticles.CheckedCount();
+			rankBuffers.sendOwnedParticlesB.SetBulkFromParticleView(
+				particlesB, particleStateB, ownedBoundaryLocalIdxs);
+			rankBuffers.sendHaloParticlesB.SetBulkFromParticleView(
+				particlesB, particleStateB, haloBoundaryLocalIdxs);
+			rankBuffers.N_sendOwnedB = rankBuffers.sendOwnedParticlesB.CheckedCount();
+			rankBuffers.N_sendHaloB = rankBuffers.sendHaloParticlesB.CheckedCount();
 		}
 
 		const uint64_t countBase = static_cast<uint64_t>(dstRank) * PARTICLE_REDISTRIBUTION_LANE_COUNT;
@@ -1962,13 +1962,13 @@ bool ParticleRedistributionMgr::PrepareReceiveBuffers(
 			return false;
 		}
 
-		rankBuffers.recvOwnedFluidParticles.Resize(
+		rankBuffers.recvOwnedParticlesF.Resize(
 			static_cast<uint32_t>(rankBuffers.N_recvOwnedF));
-		rankBuffers.recvHaloFluidParticles.Resize(
+		rankBuffers.recvHaloParticlesF.Resize(
 			static_cast<uint32_t>(rankBuffers.N_recvHaloF));
-		rankBuffers.recvOwnedBoundaryParticles.Resize(
+		rankBuffers.recvOwnedParticlesB.Resize(
 			static_cast<uint32_t>(rankBuffers.N_recvOwnedB));
-		rankBuffers.recvHaloBoundaryParticles.Resize(
+		rankBuffers.recvHaloParticlesB.Resize(
 			static_cast<uint32_t>(rankBuffers.N_recvHaloB));
 
 		N_recvOwnedF += rankBuffers.N_recvOwnedF;
@@ -2005,16 +2005,16 @@ void ParticleRedistributionMgr::ExchangePayloads(
 		if (srcRank == rank) { continue; }
 
 		auto& rankBuffers = rankBuffers_[srcRank];
-		rankBuffers.recvOwnedFluidParticles.QueueIRecvPayload(
+		rankBuffers.recvOwnedParticlesF.QueueIRecvPayload(
 			mpiContext, srcRank, PARTICLE_REDISTRIBUTION_TAG_OWNED_FLUID,
 			requests);
-		rankBuffers.recvHaloFluidParticles.QueueIRecvPayload(
+		rankBuffers.recvHaloParticlesF.QueueIRecvPayload(
 			mpiContext, srcRank, PARTICLE_REDISTRIBUTION_TAG_HALO_FLUID,
 			requests);
-		rankBuffers.recvOwnedBoundaryParticles.QueueIRecvPayload(
+		rankBuffers.recvOwnedParticlesB.QueueIRecvPayload(
 			mpiContext, srcRank, PARTICLE_REDISTRIBUTION_TAG_OWNED_BOUNDARY,
 			requests);
-		rankBuffers.recvHaloBoundaryParticles.QueueIRecvPayload(
+		rankBuffers.recvHaloParticlesB.QueueIRecvPayload(
 			mpiContext, srcRank, PARTICLE_REDISTRIBUTION_TAG_HALO_BOUNDARY,
 			requests);
 	}
@@ -2025,16 +2025,16 @@ void ParticleRedistributionMgr::ExchangePayloads(
 		if (dstRank == rank) { continue; }
 
 		const auto& rankBuffers = rankBuffers_[dstRank];
-		rankBuffers.sendOwnedFluidParticles.QueueISendPayload(
+		rankBuffers.sendOwnedParticlesF.QueueISendPayload(
 			mpiContext, dstRank, PARTICLE_REDISTRIBUTION_TAG_OWNED_FLUID,
 			requests);
-		rankBuffers.sendHaloFluidParticles.QueueISendPayload(
+		rankBuffers.sendHaloParticlesF.QueueISendPayload(
 			mpiContext, dstRank, PARTICLE_REDISTRIBUTION_TAG_HALO_FLUID,
 			requests);
-		rankBuffers.sendOwnedBoundaryParticles.QueueISendPayload(
+		rankBuffers.sendOwnedParticlesB.QueueISendPayload(
 			mpiContext, dstRank, PARTICLE_REDISTRIBUTION_TAG_OWNED_BOUNDARY,
 			requests);
-		rankBuffers.sendHaloBoundaryParticles.QueueISendPayload(
+		rankBuffers.sendHaloParticlesB.QueueISendPayload(
 			mpiContext, dstRank, PARTICLE_REDISTRIBUTION_TAG_HALO_BOUNDARY,
 			requests);
 	}
@@ -2052,8 +2052,8 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
 {
-	auto& appendedParticles = appendedFluidParticles_;
-	auto& rebuiltParticleState = rebuiltFluidParticleState_;
+	auto& appendedParticles = appendedParticlesF_;
+	auto& rebuiltParticleState = rebuiltParticleStateF_;
 	uint32_t N_retained = 0;
 	uint32_t N_appended = 0;
 	uint32_t N_owned = 0;
@@ -2152,7 +2152,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 		{
 			// TODO: parallelize migrated particle copies across receive buffers with TBB?
 			// TODO: use explicit SIMD for particle field gathers similarly to sph_solver.cpp?
-			const auto& recvParticles = rankBuffers.recvOwnedFluidParticles;
+			const auto& recvParticles = rankBuffers.recvOwnedParticlesF;
 			for (uint32_t bufferIdx = 0; bufferIdx != recvParticles.Size(); bufferIdx++)
 			{
 				recvParticles.CopyToLocalParticle( appendedParticles, bufferIdx, appendLocalIdx);
@@ -2237,7 +2237,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 		uint32_t recvHaloIdxBase = N_localHalo;
 		for (const auto& rankBuffers : rankBuffers_)
 		{
-			const auto& recvParticles = rankBuffers.recvHaloFluidParticles;
+			const auto& recvParticles = rankBuffers.recvHaloParticlesF;
 			const uint32_t N_recvHalo = recvParticles.Size();
 			if (N_recvHalo == 0) { continue; }
 
@@ -2304,8 +2304,8 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
 {
-	auto& appendedParticles = appendedBoundaryParticles_;
-	auto& rebuiltParticleState = rebuiltBoundaryParticleState_;
+	auto& appendedParticles = appendedParticlesB_;
+	auto& rebuiltParticleState = rebuiltParticleStateB_;
 	uint32_t N_retained = 0;
 	uint32_t N_appended = 0;
 	uint32_t N_owned = 0;
@@ -2404,7 +2404,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		{
 			// TODO: parallelize migrated particle copies across receive buffers with TBB?
 			// TODO: use explicit SIMD for particle field gathers similarly to sph_solver.cpp?
-			const auto& recvParticles = rankBuffers.recvOwnedBoundaryParticles;
+			const auto& recvParticles = rankBuffers.recvOwnedParticlesB;
 			for (uint32_t bufferIdx = 0; bufferIdx != recvParticles.Size(); bufferIdx++)
 			{
 				recvParticles.CopyToLocalParticle(appendedParticles, bufferIdx, appendLocalIdx);
@@ -2488,7 +2488,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		uint32_t recvHaloIdxBase = N_localHalo;
 		for (const auto& rankBuffers : rankBuffers_)
 		{
-			const auto& recvParticles = rankBuffers.recvHaloBoundaryParticles;
+			const auto& recvParticles = rankBuffers.recvHaloParticlesB;
 			const uint32_t N_recvHalo = recvParticles.Size();
 			if (N_recvHalo == 0) { continue; }
 
@@ -2545,12 +2545,12 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 }
 
 bool ParticleRedistributionMgr::BuildExchangeRoutes(
-	const Sync::FluidConstView& fluidParticles,
-	const Sync::BoundaryConstView& boundaryParticles,
-	const DistParticleState& fluidParticleState,
-	const DistParticleState& boundaryParticleState,
+	const Sync::FluidConstView& particlesF,
+	const Sync::BoundaryConstView& particlesB,
+	const DistParticleState& particleStateF,
+	const DistParticleState& particleStateB,
 	const IDomainDecomp& domainDecomp,
-	const bool redistributeBoundaryParticles,
+	const bool redistributeParticlesB,
 	const int rank, const int N_ranks,
 	const uint32_t N_globalF, const uint32_t N_globalB,
 	std::string* failMsg,
@@ -2568,8 +2568,8 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 			return false;
 		}
 		if (!ValidateParticleViews(
-			fluidParticles, boundaryParticles,
-			fluidParticleState, boundaryParticleState,
+			particlesF, particlesB,
+			particleStateF, particleStateB,
 			N_globalF, N_globalB, failMsg))
 		{
 			return false;
@@ -2579,20 +2579,20 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 	}
 
 	return RouteOwnedParticles(
-		fluidParticles, boundaryParticles,
-		fluidParticleState, boundaryParticleState,
-		domainDecomp, redistributeBoundaryParticles,
+		particlesF, particlesB,
+		particleStateF, particleStateB,
+		domainDecomp, redistributeParticlesB,
 		rank, N_ranks, failMsg, timingReport);
 }
 
 bool ParticleRedistributionMgr::RedistributeParticles(
 	Sim::I_DistributedParticleBackend& distParticleBackend,
-	DistParticleState& fluidParticleState,
-	DistParticleState& boundaryParticleState,
+	DistParticleState& particleStateF,
+	DistParticleState& particleStateB,
 	const IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
 	const Sim::SimParams& simParams,
-	const bool redistributeBoundaryParticles,
+	const bool redistributeParticlesB,
 	const uint32_t N_globalF, const uint32_t N_globalB,
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
@@ -2603,8 +2603,8 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	ResetRedistStats();
 	const int rank = mpiContext.Rank();
 	const int N_ranks = mpiContext.Size();
-	Sync::FluidConstView fluidParticles{};
-	Sync::BoundaryConstView boundaryParticles{};
+	Sync::FluidConstView particlesF{};
+	Sync::BoundaryConstView particlesB{};
 	bool localOk = true;
 
 	// time explicit agreement between ranks independently of local work
@@ -2623,14 +2623,14 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		{
 			[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 				timingReport, ParticleRedistributionTimingOp::Route);
-			fluidParticles = distParticleBackend.GetFluidParticleView();
-			boundaryParticles = distParticleBackend.GetBoundaryParticleView();
+			particlesF = distParticleBackend.GetFluidParticleView();
+			particlesB = distParticleBackend.GetBoundaryParticleView();
 		}
 
 		localOk = BuildExchangeRoutes(
-			fluidParticles, boundaryParticles,
-			fluidParticleState, boundaryParticleState,
-			domainDecomp, redistributeBoundaryParticles,
+			particlesF, particlesB,
+			particleStateF, particleStateB,
+			domainDecomp, redistributeParticlesB,
 			rank, N_ranks, N_globalF, N_globalB, failMsg, timingReport);
 
 		// pack outgoing migration and halo payloads
@@ -2639,9 +2639,9 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 			[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
 				timingReport, ParticleRedistributionTimingOp::Pack);
 			localOk = PackSendBuffers(
-				fluidParticles, boundaryParticles,
-				fluidParticleState, boundaryParticleState,
-				redistributeBoundaryParticles,
+				particlesF, particlesB,
+				particleStateF, particleStateB,
+				redistributeParticlesB,
 				rank, N_ranks, failMsg);
 		}
 	}
@@ -2687,13 +2687,13 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	try
 	{
 		localOk = PrepareFluidParticleMutation(
-			fluidParticles, fluidParticleState,
+			particlesF, particleStateF,
 			domainDecomp, rank, simParams.distHaloRadius,
 			N_globalF, failMsg, timingReport);
-		if (localOk && redistributeBoundaryParticles)
+		if (localOk && redistributeParticlesB)
 		{
 			localOk = PrepareBoundaryParticleMutation(
-				boundaryParticles, boundaryParticleState,
+				particlesB, particleStateB,
 				domainDecomp, rank, simParams.distHaloRadius,
 				N_globalB, failMsg, timingReport);
 		}
@@ -2715,9 +2715,9 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		localOk = distParticleBackend.ApplyParticleRedistribution(
 			retainedFluidOldLocalIdx_FromNewLocalIdx_,
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
-			appendedFluidParticles_,
-			appendedBoundaryParticles_,
-			redistributeBoundaryParticles,
+			appendedParticlesF_,
+			appendedParticlesB_,
+			redistributeParticlesB,
 			simParams);
 		if (!localOk && failMsg)
 		{
@@ -2734,10 +2734,10 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		ParticleRedistributionTimingOp::SyncBackend)) { return false; }
 
 	// publish matching metadata only after every backend mutation succeeded
-	std::swap(fluidParticleState, rebuiltFluidParticleState_);
-	if (redistributeBoundaryParticles)
+	std::swap(particleStateF, rebuiltParticleStateF_);
+	if (redistributeParticlesB)
 	{
-		std::swap(boundaryParticleState, rebuiltBoundaryParticleState_);
+		std::swap(particleStateB, rebuiltParticleStateB_);
 	}
 
 	return true;
