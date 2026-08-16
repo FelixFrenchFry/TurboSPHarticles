@@ -47,17 +47,6 @@ namespace
 		values.resize(N_elements);
 	}
 
-	template <typename T>
-	void AssignVectorWithExtraCapacity(
-		std::vector<T>& values,
-		const uint64_t N_elements,
-		const T& value,
-		const float extraAllocCapacityPct)
-	{
-		EnsureVectorCapacityWithExtra(values, N_elements, extraAllocCapacityPct);
-		values.assign(N_elements, value);
-	}
-
 	uint32_t ParticleCapacityWithExtra(
 		const uint32_t N_particles,
 		const float extraAllocCapacityPct)
@@ -151,6 +140,7 @@ namespace
 		std::vector<uint32_t>& sortScratch,
 		const float extraAllocCapacityPct)
 	{
+		#if defined(_DEBUG)
 		ResizeVectorWithExtraCapacity(
 			sortScratch,
 			lastLocalIdx_Excl - firstLocalIdx,
@@ -168,6 +158,14 @@ namespace
 			{
 				return sortScratch[previousIdx] == sortScratch[currentIdx];
 			}) != 0;
+		#else
+		(void)particleIds;
+		(void)firstLocalIdx;
+		(void)lastLocalIdx_Excl;
+		(void)sortScratch;
+		(void)extraAllocCapacityPct;
+		return false;
+		#endif
 	}
 
 	// prefix chunk-local bucket counts into disjoint output ranges
@@ -332,12 +330,9 @@ namespace
 			? 1 + (N_owned - 1) / OWNED_CLASSIFICATION_CHUNK_SIZE
 			: 0;
 
-		// buffers storing counts need to be zero-initialized,
-		// while the others can be resized since they will be fully overwritten
-		AssignVectorWithExtraCapacity(
+		ResizeVectorWithExtraCapacity(
 			workBuffers.classCounts_ByChunkClass,
 			static_cast<uint64_t>(N_chunks) * OWNED_CLASSIFICATION_CLASS_COUNT,
-			uint32_t{ 0 },
 			extraAllocCapacityPct);
 		ResizeVectorWithExtraCapacity(
 			workBuffers.classWriteOffsets_ByChunkClass,
@@ -362,17 +357,18 @@ namespace
 					beginLocalIdx + std::min(
 						OWNED_CLASSIFICATION_CHUNK_SIZE,
 						N_owned - beginLocalIdx);
-				const uint64_t chunkClassBase =
+				uint32_t* const chunkCounts =
+					workBuffers.classCounts_ByChunkClass.data() +
 					static_cast<uint64_t>(chunkIdx) * OWNED_CLASSIFICATION_CLASS_COUNT;
+				std::fill(chunkCounts, chunkCounts + OWNED_CLASSIFICATION_CLASS_COUNT, uint32_t{ 0 });
 
 				for (uint32_t localIdx = beginLocalIdx; localIdx != endLocalIdx; localIdx++)
 				{
 					const bool isInner = rebuiltParticleState.particleClasses[localIdx] ==
 						DistParticleClass::Inner;
-					workBuffers.classCounts_ByChunkClass[
-						chunkClassBase + (isInner
-							? OWNED_CLASSIFICATION_CLASS_INNER
-							: OWNED_CLASSIFICATION_CLASS_OUTER)]++;
+					chunkCounts[isInner
+						? OWNED_CLASSIFICATION_CLASS_INNER
+						: OWNED_CLASSIFICATION_CLASS_OUTER]++;
 				}
 			}
 		});
@@ -992,12 +988,9 @@ bool ParticleRedistributionMgr::BuildDenseCompactionMap(
 	const uint64_t N_chunkKinds =
 		static_cast<uint64_t>(N_chunks) * PARTICLE_COMPACTION_KIND_COUNT;
 
-	// buffers storing counts need to be zero-initialized,
-	// while the others can be resized since they will be fully overwritten
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		workBuffers.compactionCounts_ByChunkKind,
 		N_chunkKinds,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 	ResizeVectorWithExtraCapacity(
 		workBuffers.compactionWriteOffsets_ByChunkKind,
@@ -1358,12 +1351,9 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
 
-	// buffers storing counts need to be zero-initialized,
-	// while the others can be resized since they will be fully overwritten
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		N_chunkBuckets,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
@@ -1408,6 +1398,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 			uint32_t* const chunkCounts =
 				routingWorkBuffers_.routeCounts_ByChunkBucket.data() +
 				static_cast<uint64_t>(chunkIdx) * N_buckets;
+			std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
 
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
@@ -1528,6 +1519,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
 				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
+				// TODO: omit this?
 				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
@@ -1563,12 +1555,9 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
 
-	// buffers storing counts need to be zero-initialized,
-	// while the others can be resized since they will be fully overwritten
-	AssignVectorWithExtraCapacity(
+	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		N_chunkBuckets,
-		uint32_t{ 0 },
 		scratchBufferExtraAllocCapacityPct_);
 	ResizeVectorWithExtraCapacity(
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
@@ -1613,6 +1602,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 			uint32_t* const chunkCounts =
 				routingWorkBuffers_.routeCounts_ByChunkBucket.data() +
 				static_cast<uint64_t>(chunkIdx) * N_buckets;
+			std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
 
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
