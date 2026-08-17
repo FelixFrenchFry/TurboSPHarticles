@@ -90,6 +90,9 @@ namespace Dist
 
 		// rank halo bounds re-read by the halo destination test of every routed particle
 		std::vector<AABB> haloExtentAABB_ByRank;
+
+		// rank owned bounds shrunk by the halo radius, holding particles that can not reach neighbor ranks
+		std::vector<AABB> innerExtentAABB_ByRank;
 	};
 
 	struct ParticleRedistributionStats

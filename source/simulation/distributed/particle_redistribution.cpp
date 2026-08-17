@@ -152,6 +152,32 @@ namespace
 		#endif
 	}
 
+	// shrinks the owned bounds of a rank by the halo radius they were expanded by,
+	// leaving faces on the global bounds unshrunk, where no other rank owns particles
+	AABB InnerExtentAABB(
+		const AABB& ownedExtentAABB,
+		const AABB& haloExtentAABB,
+		const AABB& globalExtentAABB)
+	{
+		AABB innerExtentAABB = ownedExtentAABB;
+
+		for (int axis = 0; axis != 3; axis++)
+		{
+			if (ownedExtentAABB.min[axis] > globalExtentAABB.min[axis])
+			{
+				innerExtentAABB.min[axis] +=
+					ownedExtentAABB.min[axis] - haloExtentAABB.min[axis];
+			}
+			if (ownedExtentAABB.max[axis] < globalExtentAABB.max[axis])
+			{
+				innerExtentAABB.max[axis] -=
+					haloExtentAABB.max[axis] - ownedExtentAABB.max[axis];
+			}
+		}
+
+		return innerExtentAABB;
+	}
+
 	// prefix chunk-local bucket counts into disjoint output ranges
 	// (block sums are computed in parallel, short bucket rows are prefixed in parallel,
 	// and every block expands from its bucket offsets in parallel)
@@ -826,6 +852,7 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.routeTotals));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.ownerRank_ByOwnedIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.haloExtentAABB_ByRank));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.innerExtentAABB_ByRank));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.fluidIsOuterOwned_ByLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.boundaryIsOuterOwned_ByLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classCounts_ByChunkClass));
@@ -1236,7 +1263,10 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		scratchBufferExtraAllocCapacityPct_);
 
 	// filled by the caller
-	const std::vector<AABB>& haloExtentAABB_ByRank = routingWorkBuffers_.haloExtentAABB_ByRank;
+	const std::vector<AABB>& haloExtentAABB_ByRank =
+		routingWorkBuffers_.haloExtentAABB_ByRank;
+	const std::vector<AABB>& innerExtentAABB_ByRank =
+		routingWorkBuffers_.innerExtentAABB_ByRank;
 
 	// first failure seen by the counting pass, reported once it completes
 	std::atomic<const char*> routeFailMsg{ nullptr };
@@ -1286,22 +1316,26 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
 				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
 
+				// inner owned particles can not reach neighboring ranks
 				uint8_t isOuterOwned = 0;
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
+				if (!innerExtentAABB_ByRank[ownerRank].Contains(position))
 				{
-					#if defined(_DEBUG)
-					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
+					for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 					{
-						routeFailMsg.store(
-							"Fluid halo destination rank is invalid.", std::memory_order_relaxed);
-						continue;
+						#if defined(_DEBUG)
+						if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
+						{
+							routeFailMsg.store(
+								"Fluid halo destination rank is invalid.", std::memory_order_relaxed);
+							continue;
+						}
+						#endif
+
+						if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
+
+						isOuterOwned = 1;
+						chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
 					}
-					#endif
-
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					isOuterOwned = 1;
-					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
 				}
 
 				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
@@ -1378,7 +1412,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
 				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
-				// TODO: omit this?
+				// TODO: rework this?
 				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
@@ -1441,7 +1475,10 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		scratchBufferExtraAllocCapacityPct_);
 
 	// filled by the caller
-	const std::vector<AABB>& haloExtentAABB_ByRank = routingWorkBuffers_.haloExtentAABB_ByRank;
+	const std::vector<AABB>& haloExtentAABB_ByRank =
+		routingWorkBuffers_.haloExtentAABB_ByRank;
+	const std::vector<AABB>& innerExtentAABB_ByRank =
+		routingWorkBuffers_.innerExtentAABB_ByRank;
 
 	// first failure seen by the counting pass, reported once it completes
 	std::atomic<const char*> routeFailMsg{ nullptr };
@@ -1491,22 +1528,26 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
 				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
 
+				// inner owned particles can not reach neighboring ranks
 				uint8_t isOuterOwned = 0;
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
+				if (!innerExtentAABB_ByRank[ownerRank].Contains(position))
 				{
-					#if defined(_DEBUG)
-					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
+					for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 					{
-						routeFailMsg.store(
-							"Boundary halo destination rank is invalid.", std::memory_order_relaxed);
-						continue;
+						#if defined(_DEBUG)
+						if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
+						{
+							routeFailMsg.store(
+								"Boundary halo destination rank is invalid.", std::memory_order_relaxed);
+							continue;
+						}
+						#endif
+
+						if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
+
+						isOuterOwned = 1;
+						chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
 					}
-					#endif
-
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					isOuterOwned = 1;
-					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
 				}
 
 				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
@@ -1612,13 +1653,45 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	std::string* failMsg,
 	ParticleRedistributionTimingReport* timingReport)
 {
-	// halo bounds stay fixed for both routing passes, which read them per particle and destination
+	// halo bounds stay fixed for both routing passes, which read them per particle and destination,
+	// while inner bounds answer the same test for the owned particles no neighbor rank needs
 	routingWorkBuffers_.haloExtentAABB_ByRank.resize(static_cast<uint64_t>(N_ranks));
+	routingWorkBuffers_.innerExtentAABB_ByRank.resize(static_cast<uint64_t>(N_ranks));
+	const AABB& globalExtentAABB = domainDecomp.GlobalExtentAABB();
 	for (int haloRank = 0; haloRank != N_ranks; haloRank++)
 	{
 		routingWorkBuffers_.haloExtentAABB_ByRank[haloRank] =
 			domainDecomp.HaloExtentAABB(haloRank);
+		routingWorkBuffers_.innerExtentAABB_ByRank[haloRank] = InnerExtentAABB(
+			domainDecomp.OwnedExtentAABB(haloRank),
+			routingWorkBuffers_.haloExtentAABB_ByRank[haloRank],
+			globalExtentAABB);
 	}
+
+	#if defined(_DEBUG)
+	// exhaustively validate that no inner bounds reach into a neighbor rank halo extent
+	for (int ownerRank = 0; ownerRank != N_ranks; ownerRank++)
+	{
+		const AABB& innerExtentAABB = routingWorkBuffers_.innerExtentAABB_ByRank[ownerRank];
+		if (!innerExtentAABB.IsValid()) { continue; }
+
+		for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
+		{
+			const AABB& haloExtentAABB = routingWorkBuffers_.haloExtentAABB_ByRank[haloRank];
+
+			if (innerExtentAABB.min.x < haloExtentAABB.max.x &&
+				innerExtentAABB.max.x > haloExtentAABB.min.x &&
+				innerExtentAABB.min.y < haloExtentAABB.max.y &&
+				innerExtentAABB.max.y > haloExtentAABB.min.y &&
+				innerExtentAABB.min.z < haloExtentAABB.max.z &&
+				innerExtentAABB.max.z > haloExtentAABB.min.z)
+			{
+				if (failMsg) { *failMsg = "Rank inner bounds overlap a neighbor rank halo extent."; }
+				return false;
+			}
+		}
+	}
+	#endif
 
 	// route fluid migration and halos
 	{
