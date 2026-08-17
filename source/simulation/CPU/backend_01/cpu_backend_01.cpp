@@ -78,22 +78,20 @@ namespace
 		}
 	};
 
-	// compacts one field of a particle block, reading retained particles at scattered
+	// compacts a particle block, reading retained particles at scattered
 	// old local indices and writing them to their contiguous new local indices
-	template <typename Values>
-	void CompactParticleField(
-		Values& values,
+	template <typename CopyParticleOldToNew>
+	void CompactParticles(
 		const std::vector<uint32_t>& oldLocalIdxs,
-		const tbb::blocked_range<uint32_t>& blockRange)
+		const tbb::blocked_range<uint32_t>& blockRange,
+		const CopyParticleOldToNew& copyParticleOldToNew)
 	{
-		for (uint32_t newLocalIdx = blockRange.begin();
-			 newLocalIdx < blockRange.end();
-			 newLocalIdx++)
+		for (uint32_t newLocalIdx = blockRange.begin(); newLocalIdx < blockRange.end(); newLocalIdx++)
 		{
 			const uint32_t oldLocalIdx = oldLocalIdxs[newLocalIdx];
 			if (oldLocalIdx == newLocalIdx) { continue; }
 
-			values[newLocalIdx] = values[oldLocalIdx];
+			copyParticleOldToNew(oldLocalIdx, newLocalIdx);
 		}
 	}
 
@@ -600,50 +598,66 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 		ReserveParticleFieldWithExtra(psiB_, N_finalB, particleFieldExtraAllocCapacityPct_);
 	}
 
+	const auto copyFluidParticleOldToNew = [&](
+		const uint32_t oldLocalIdx,
+		const uint32_t newLocalIdx)
+	{
+		idF_[newLocalIdx] = idF_[oldLocalIdx];
+		xPosF_[newLocalIdx] = xPosF_[oldLocalIdx];
+		yPosF_[newLocalIdx] = yPosF_[oldLocalIdx];
+		zPosF_[newLocalIdx] = zPosF_[oldLocalIdx];
+		xVelF_[newLocalIdx] = xVelF_[oldLocalIdx];
+		yVelF_[newLocalIdx] = yVelF_[oldLocalIdx];
+		zVelF_[newLocalIdx] = zVelF_[oldLocalIdx];
+		xVelPredF_[newLocalIdx] = xVelPredF_[oldLocalIdx];
+		yVelPredF_[newLocalIdx] = yVelPredF_[oldLocalIdx];
+		zVelPredF_[newLocalIdx] = zVelPredF_[oldLocalIdx];
+		xAccPressF_[newLocalIdx] = xAccPressF_[oldLocalIdx];
+		yAccPressF_[newLocalIdx] = yAccPressF_[oldLocalIdx];
+		zAccPressF_[newLocalIdx] = zAccPressF_[oldLocalIdx];
+		sourceTermF_[newLocalIdx] = sourceTermF_[oldLocalIdx];
+		diagElemF_[newLocalIdx] = diagElemF_[oldLocalIdx];
+		pressureF_[newLocalIdx] = pressureF_[oldLocalIdx];
+		densityF_[newLocalIdx] = densityF_[oldLocalIdx];
+	};
+
 	// compact retained fluid particles into a dense prefix, filling its holes with particles from the old tail
-	// (index blocks processed in parallel, and fields sequentially within each block)
+	// (index blocks processed in parallel, and all fields of a moved particle together)
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_retainedF, particleCompactionBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			const std::vector<uint32_t>& oldLocalIdxs = retainedFluidOldLocalIdx_FromNewLocalIdx;
-
-			CompactParticleField(idF_, oldLocalIdxs, blockRange);
-			CompactParticleField(xPosF_, oldLocalIdxs, blockRange);
-			CompactParticleField(yPosF_, oldLocalIdxs, blockRange);
-			CompactParticleField(zPosF_, oldLocalIdxs, blockRange);
-			CompactParticleField(xVelF_, oldLocalIdxs, blockRange);
-			CompactParticleField(yVelF_, oldLocalIdxs, blockRange);
-			CompactParticleField(zVelF_, oldLocalIdxs, blockRange);
-			CompactParticleField(xVelPredF_, oldLocalIdxs, blockRange);
-			CompactParticleField(yVelPredF_, oldLocalIdxs, blockRange);
-			CompactParticleField(zVelPredF_, oldLocalIdxs, blockRange);
-			CompactParticleField(xAccPressF_, oldLocalIdxs, blockRange);
-			CompactParticleField(yAccPressF_, oldLocalIdxs, blockRange);
-			CompactParticleField(zAccPressF_, oldLocalIdxs, blockRange);
-			CompactParticleField(sourceTermF_, oldLocalIdxs, blockRange);
-			CompactParticleField(diagElemF_, oldLocalIdxs, blockRange);
-			CompactParticleField(pressureF_, oldLocalIdxs, blockRange);
-			CompactParticleField(densityF_, oldLocalIdxs, blockRange);
+			CompactParticles(
+				retainedFluidOldLocalIdx_FromNewLocalIdx,
+				blockRange,
+				copyFluidParticleOldToNew);
 		},
 		tbb::auto_partitioner{});
 
 	if (redistributeParticlesB)
 	{
+		const auto copyBoundaryParticleOldToNew = [&](
+			const uint32_t oldLocalIdx,
+			const uint32_t newLocalIdx)
+		{
+			idB_[newLocalIdx] = idB_[oldLocalIdx];
+			xPosB_[newLocalIdx] = xPosB_[oldLocalIdx];
+			yPosB_[newLocalIdx] = yPosB_[oldLocalIdx];
+			zPosB_[newLocalIdx] = zPosB_[oldLocalIdx];
+			volB_[newLocalIdx] = volB_[oldLocalIdx];
+			psiB_[newLocalIdx] = psiB_[oldLocalIdx];
+		};
+
 		// compact retained boundary particles into a dense prefix, filling its holes with particles from the old tail
-		// (index blocks processed in parallel, and fields sequentially within each block)
+		// (index blocks processed in parallel, and all fields of a moved particle together)
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N_retainedB, particleCompactionBlockSize_),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
 			{
-				const std::vector<uint32_t>& oldLocalIdxs = retainedBoundaryOldLocalIdx_FromNewLocalIdx;
-
-				CompactParticleField(idB_, oldLocalIdxs, blockRange);
-				CompactParticleField(xPosB_, oldLocalIdxs, blockRange);
-				CompactParticleField(yPosB_, oldLocalIdxs, blockRange);
-				CompactParticleField(zPosB_, oldLocalIdxs, blockRange);
-				CompactParticleField(volB_, oldLocalIdxs, blockRange);
-				CompactParticleField(psiB_, oldLocalIdxs, blockRange);
+				CompactParticles(
+					retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+					blockRange,
+					copyBoundaryParticleOldToNew);
 			},
 			tbb::auto_partitioner{});
 	}
