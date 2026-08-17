@@ -116,22 +116,6 @@ namespace
 			extraAllocCapacityPct));
 	}
 
-	// optimized parallel passes rely on validated particle indices being distinct
-	// (debug passes claim each flag atomically so invalid duplicates fail without races)
-	bool TryClaimParticleFlag(
-		std::vector<uint8_t>& flags,
-		const uint32_t idx)
-	{
-		#if defined(_DEBUG)
-		std::atomic_ref<uint8_t> flag{ flags[idx] };
-		return flag.exchange(1, std::memory_order_relaxed) == 0;
-		#else
-		if (flags[idx] != 0) { return false; }
-		flags[idx] = 1;
-		return true;
-		#endif
-	}
-
 	// checks a rebuilt particle ID range for duplicate global IDs
 	bool HasDuplicateGlobalIdxsInRange(
 		const std::span<const uint32_t> particleIds,
@@ -216,6 +200,7 @@ namespace
 		});
 
 		// prefix one short row per block, which also yields the bucket totals
+		// TODO: parallelize with TBB?
 		for (uint32_t bucketIdx = 0; bucketIdx != N_buckets; bucketIdx++)
 		{
 			uint32_t N_bucket = 0;
@@ -835,11 +820,6 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routingWorkBuffers_.haloExtentAABB_ByRank));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.fluidIsOuterOwned_ByLocalIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(routes_.boundaryIsOuterOwned_ByLocalIdx));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionCounts_ByChunkKind));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionWriteOffsets_ByChunkKind));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.compactionTotals));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.holeOldLocalIdxs));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(compactionWorkBuffers_.sourceOldLocalIdxs));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classCounts_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classWriteOffsets_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classTotals));
@@ -847,7 +827,6 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(recvCounts_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedFluidOldLocalIdx_FromNewLocalIdx_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedBoundaryOldLocalIdx_FromNewLocalIdx_));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedOldLocalIdxFlags_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(migratedGlobalIdxScratch_));
 	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesF_));
 	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesB_));
@@ -918,8 +897,6 @@ bool ParticleRedistributionMgr::BuildDenseCompactionMap(
 	const uint32_t N_oldLocal,
 	const std::vector<uint32_t>& retainedOldLocalIdxs,
 	std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
-	std::vector<uint8_t>& retainedOldLocalIdxFlags,
-	ParticleCompactionWorkBuffers& workBuffers,
 	std::string* failMsg)
 {
 	if (retainedOldLocalIdxs.size() > N_oldLocal)
@@ -929,178 +906,35 @@ bool ParticleRedistributionMgr::BuildDenseCompactionMap(
 	}
 	const uint32_t N_retained = static_cast<uint32_t>(retainedOldLocalIdxs.size());
 
-	ResizeVectorWithExtraCapacity(
-		retainedOldLocalIdxFlags,
-		N_oldLocal,
-		scratchBufferExtraAllocCapacityPct_);
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_oldLocal),
-		[&](const tbb::blocked_range<uint32_t>& range)
+	// routing preserves owned index order, so retained old local indices ascend
+	if (N_retained > 0 && retainedOldLocalIdxs.back() >= N_oldLocal)
 	{
-		std::fill(
-			retainedOldLocalIdxFlags.begin() + range.begin(),
-			retainedOldLocalIdxFlags.begin() + range.end(),
-			uint8_t{ 0 });
-	});
-
-	// first failure seen by the marking pass, reported once it completes
-	std::atomic<const char*> markFailMsg{ nullptr };
-
-	// mark retained particles in the old local range
-	// (validated inputs write distinct flags, while debug claims reject duplicates atomically)
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_retained),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t retainedIdx = range.begin(); retainedIdx != range.end(); retainedIdx++)
-		{
-			const uint32_t oldLocalIdx = retainedOldLocalIdxs[retainedIdx];
-			if (oldLocalIdx >= N_oldLocal)
-			{
-				markFailMsg.store(
-					"Retained particle local index is invalid or duplicated.",
-					std::memory_order_relaxed);
-				continue;
-			}
-
-			if (!TryClaimParticleFlag(
-				retainedOldLocalIdxFlags,
-				oldLocalIdx))
-			{
-				markFailMsg.store(
-					"Retained particle local index is invalid or duplicated.",
-					std::memory_order_relaxed);
-			}
-		}
-	});
-
-	if (const char* const markFail = markFailMsg.load(std::memory_order_relaxed))
-	{
-		if (failMsg) { *failMsg = markFail; }
+		if (failMsg) { *failMsg = "Retained particle local index is invalid or duplicated."; }
 		return false;
 	}
 
-	// every removed slot below the retained prefix takes a retained particle from above
-	// it, so both sides are collected as compacted lists and then paired by position
-	const uint32_t N_chunks = N_oldLocal > 0
-		? 1 + (N_oldLocal - 1) / PARTICLE_COMPACTION_CHUNK_SIZE
-		: 0;
-	const uint64_t N_chunkKinds =
-		static_cast<uint64_t>(N_chunks) * PARTICLE_COMPACTION_KIND_COUNT;
-
-	ResizeVectorWithExtraCapacity(
-		workBuffers.compactionCounts_ByChunkKind,
-		N_chunkKinds,
-		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
-		workBuffers.compactionWriteOffsets_ByChunkKind,
-		N_chunkKinds,
-		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
-		workBuffers.compactionTotals,
-		PARTICLE_COMPACTION_KIND_COUNT,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// count compact-prefix holes and retained tail sources per chunk
-	// (chunks processed in parallel, with each worker writing only its own count row)
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+	#if defined(_DEBUG)
+	// exhaustively validate the ascending order this map is derived from
+	if (Check::CountAdjacentViolations(
+		0,
+		N_retained,
+		[&](const uint32_t previousIdx, const uint32_t currentIdx)
 		{
-			const uint32_t beginOldLocalIdx = chunkIdx * PARTICLE_COMPACTION_CHUNK_SIZE;
-			const uint32_t endOldLocalIdx =
-				beginOldLocalIdx + std::min(
-					PARTICLE_COMPACTION_CHUNK_SIZE,
-					N_oldLocal - beginOldLocalIdx);
-			uint32_t N_holes = 0;
-			uint32_t N_sources = 0;
-
-			for (uint32_t oldLocalIdx = beginOldLocalIdx; oldLocalIdx != endOldLocalIdx; oldLocalIdx++)
-			{
-				const bool retained = retainedOldLocalIdxFlags[oldLocalIdx] != 0;
-
-				if (oldLocalIdx < N_retained)
-				{
-					if (!retained) { N_holes++; }
-				}
-				else if (retained)
-				{
-					N_sources++;
-				}
-			}
-
-			const uint64_t chunkKindBase =
-				static_cast<uint64_t>(chunkIdx) * PARTICLE_COMPACTION_KIND_COUNT;
-			workBuffers.compactionCounts_ByChunkKind[
-				chunkKindBase + PARTICLE_COMPACTION_KIND_HOLE] = N_holes;
-			workBuffers.compactionCounts_ByChunkKind[
-				chunkKindBase + PARTICLE_COMPACTION_KIND_SOURCE] = N_sources;
-		}
-	});
-
-	PrefixChunkCountsPerBucket(
-		workBuffers.compactionCounts_ByChunkKind,
-		workBuffers.compactionWriteOffsets_ByChunkKind,
-		workBuffers.compactionTotals,
-		N_chunks,
-		PARTICLE_COMPACTION_KIND_COUNT);
-
-	const uint32_t N_holes = workBuffers.compactionTotals[PARTICLE_COMPACTION_KIND_HOLE];
-	if (N_holes != workBuffers.compactionTotals[PARTICLE_COMPACTION_KIND_SOURCE])
+			return retainedOldLocalIdxs[previousIdx] >= retainedOldLocalIdxs[currentIdx];
+		}) != 0)
 	{
-		if (failMsg) { *failMsg = "Retained particle compaction map is inconsistent."; }
+		if (failMsg) { *failMsg = "Retained particle local index is invalid or duplicated."; }
 		return false;
 	}
+	#endif
 
-	ResizeVectorWithExtraCapacity(
-		workBuffers.holeOldLocalIdxs,
-		N_holes,
-		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
-		workBuffers.sourceOldLocalIdxs,
-		N_holes,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// fill hole and source lists while preserving ascending old local index order
-	// (chunks processed in parallel, with each worker writing to disjoint ranges)
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
-		{
-			const uint32_t beginOldLocalIdx = chunkIdx * PARTICLE_COMPACTION_CHUNK_SIZE;
-			const uint32_t endOldLocalIdx =
-				beginOldLocalIdx + std::min(
-					PARTICLE_COMPACTION_CHUNK_SIZE,
-					N_oldLocal - beginOldLocalIdx);
-			const uint64_t chunkKindBase =
-				static_cast<uint64_t>(chunkIdx) * PARTICLE_COMPACTION_KIND_COUNT;
-			uint32_t holeWriteIdx = workBuffers.compactionWriteOffsets_ByChunkKind[
-				chunkKindBase + PARTICLE_COMPACTION_KIND_HOLE];
-			uint32_t sourceWriteIdx = workBuffers.compactionWriteOffsets_ByChunkKind[
-				chunkKindBase + PARTICLE_COMPACTION_KIND_SOURCE];
-
-			for (uint32_t oldLocalIdx = beginOldLocalIdx; oldLocalIdx != endOldLocalIdx; oldLocalIdx++)
-			{
-				const bool retained = retainedOldLocalIdxFlags[oldLocalIdx] != 0;
-
-				if (oldLocalIdx < N_retained)
-				{
-					if (!retained)
-					{
-						workBuffers.holeOldLocalIdxs[holeWriteIdx++] = oldLocalIdx;
-					}
-				}
-				else if (retained)
-				{
-					workBuffers.sourceOldLocalIdxs[sourceWriteIdx++] = oldLocalIdx;
-				}
-			}
-		}
-	});
+	// retained particles above the compacted prefix form the tail of the ascending list
+	const uint32_t firstSourceIdx = static_cast<uint32_t>(
+		std::lower_bound(
+			retainedOldLocalIdxs.begin(),
+			retainedOldLocalIdxs.end(),
+			N_retained) - retainedOldLocalIdxs.begin());
+	const uint32_t N_holes = N_retained - firstSourceIdx;
 
 	ResizeVectorWithExtraCapacity(
 		oldLocalIdx_FromNewLocalIdx,
@@ -1114,22 +948,37 @@ bool ParticleRedistributionMgr::BuildDenseCompactionMap(
 	{
 		for (uint32_t newLocalIdx = range.begin(); newLocalIdx != range.end(); newLocalIdx++)
 		{
-			if (retainedOldLocalIdxFlags[newLocalIdx] != 0)
-			{
-				oldLocalIdx_FromNewLocalIdx[newLocalIdx] = newLocalIdx;
-			}
+			oldLocalIdx_FromNewLocalIdx[newLocalIdx] = newLocalIdx;
 		}
 	});
 
-	// the first hole takes the highest retained particle, so the old tail empties first
+	// every removed slot below the retained prefix takes a retained particle from above it,
+	// where the first hole takes the highest one, so the old tail empties first
+	// (the gaps between retained slots are processed in parallel, each holding its own holes)
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_holes),
+		tbb::blocked_range<uint32_t>(0, firstSourceIdx + 1),
 		[&](const tbb::blocked_range<uint32_t>& range)
 	{
-		for (uint32_t holeIdx = range.begin(); holeIdx != range.end(); holeIdx++)
+		for (uint32_t gapIdx = range.begin(); gapIdx != range.end(); gapIdx++)
 		{
-			oldLocalIdx_FromNewLocalIdx[workBuffers.holeOldLocalIdxs[holeIdx]] =
-				workBuffers.sourceOldLocalIdxs[N_holes - 1 - holeIdx];
+			const uint32_t beginHoleOldLocalIdx = gapIdx > 0
+				? retainedOldLocalIdxs[gapIdx - 1] + 1
+				: 0;
+			const uint32_t endHoleOldLocalIdx = gapIdx != firstSourceIdx
+				? retainedOldLocalIdxs[gapIdx]
+				: N_retained;
+
+			// slots below a gap are either retained in place or already filled holes
+			uint32_t holeIdx = beginHoleOldLocalIdx - gapIdx;
+
+			for (uint32_t holeOldLocalIdx = beginHoleOldLocalIdx;
+				 holeOldLocalIdx != endHoleOldLocalIdx;
+				 holeOldLocalIdx++)
+			{
+				oldLocalIdx_FromNewLocalIdx[holeOldLocalIdx] =
+					retainedOldLocalIdxs[firstSourceIdx + (N_holes - 1 - holeIdx)];
+				holeIdx++;
+			}
 		}
 	});
 
@@ -2041,8 +1890,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 				oldParticles.N_,
 				routes_.keptOwnedFluidLocalIdxs,
 				retainedFluidOldLocalIdx_FromNewLocalIdx_,
-				retainedOldLocalIdxFlags_,
-				compactionWorkBuffers_,
 				failMsg))
 		{
 			return false;
@@ -2324,8 +2171,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 				oldParticles.N_,
 				routes_.keptOwnedBoundaryLocalIdxs,
 				retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
-				retainedOldLocalIdxFlags_,
-				compactionWorkBuffers_,
 				failMsg))
 		{
 			return false;

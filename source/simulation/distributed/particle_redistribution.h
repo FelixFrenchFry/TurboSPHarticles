@@ -30,13 +30,6 @@ namespace Dist
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t PARTICLE_GATHER_BLOCK_SIZE = 2048;
 
-	// old local slots scanned per chunk, so workers fill disjoint output ranges
-	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
-	inline constexpr uint32_t PARTICLE_COMPACTION_CHUNK_SIZE = 4096;
-	inline constexpr uint32_t PARTICLE_COMPACTION_KIND_COUNT = 2;
-	inline constexpr uint32_t PARTICLE_COMPACTION_KIND_HOLE = 0;
-	inline constexpr uint32_t PARTICLE_COMPACTION_KIND_SOURCE = 1;
-
 	// owned particles classified per chunk, so workers fill disjoint output ranges
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t OWNED_CLASSIFICATION_CHUNK_SIZE = 4096;
@@ -93,19 +86,6 @@ namespace Dist
 
 		// rank halo bounds re-read by the halo destination test of every routed particle
 		std::vector<AABB> haloExtentAABB_ByRank;
-	};
-
-	// reusable scratch for building the dense compaction map in parallel
-	struct ParticleCompactionWorkBuffers
-	{
-		// per chunk hole/source counts and write offsets, indexed by chunk and compaction kind
-		std::vector<uint32_t> compactionCounts_ByChunkKind;
-		std::vector<uint32_t> compactionWriteOffsets_ByChunkKind;
-		std::vector<uint32_t> compactionTotals;
-
-		// removed slots below the retained prefix, and the retained particles above it
-		std::vector<uint32_t> holeOldLocalIdxs;
-		std::vector<uint32_t> sourceOldLocalIdxs;
 	};
 
 	struct ParticleRedistributionStats
@@ -324,8 +304,6 @@ namespace Dist
 			uint32_t N_oldLocal,
 			const std::vector<uint32_t>& retainedOldLocalIdxs,
 			std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
-			std::vector<uint8_t>& retainedOldLocalIdxFlags,
-			ParticleCompactionWorkBuffers& workBuffers,
 			std::string* failMsg);
 		static void PrepareRebuiltParticleState(
 			DistParticleState& particleState,
@@ -409,7 +387,6 @@ namespace Dist
 		std::vector<RankBuffers> rankBuffers_;
 		ParticleRedistributionRoutes routes_;
 		ParticleRoutingWorkBuffers routingWorkBuffers_;
-		ParticleCompactionWorkBuffers compactionWorkBuffers_;
 		ParticleClassificationWorkBuffers ownedClassificationWorkBuffers_;
 		std::vector<int> sendCounts_;
 		std::vector<int> recvCounts_;
@@ -417,7 +394,6 @@ namespace Dist
 		// dense compaction mappings and append-only particle storage
 		std::vector<uint32_t> retainedFluidOldLocalIdx_FromNewLocalIdx_;
 		std::vector<uint32_t> retainedBoundaryOldLocalIdx_FromNewLocalIdx_;
-		std::vector<uint8_t> retainedOldLocalIdxFlags_;
 		std::vector<uint32_t> migratedGlobalIdxScratch_;
 		Sync::FluidParticles appendedParticlesF_;
 		Sync::BoundaryParticles appendedParticlesB_;
