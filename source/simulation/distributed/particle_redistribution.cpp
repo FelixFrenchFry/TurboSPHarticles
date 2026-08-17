@@ -153,12 +153,13 @@ namespace
 	}
 
 	// prefix chunk-local bucket counts into disjoint output ranges
-	// (block sums are computed in parallel, short bucket rows are prefixed serially,
+	// (block sums are computed in parallel, short bucket rows are prefixed in parallel,
 	// and every block expands from its bucket offsets in parallel)
 	void PrefixChunkCountsPerBucket(
 		const std::vector<uint32_t>& counts_ByChunkBucket,
 		std::vector<uint32_t>& writeOffsets_ByChunkBucket,
 		std::vector<uint32_t>& totals,
+		std::vector<uint32_t>& blockSumsScratch,
 		const uint32_t N_chunks,
 		const uint32_t N_buckets)
 	{
@@ -169,8 +170,7 @@ namespace
 			std::max(N_buckets, PARTICLE_PREFIX_BLOCK_STRIDE_MIN);
 
 		// per block bucket sums, replaced in place by the offset each block starts at
-		std::vector<uint32_t> blockSums_ByBlockBucket(
-			static_cast<uint64_t>(N_blocks) * blockStride, 0);
+		blockSumsScratch.resize(static_cast<uint64_t>(N_blocks) * blockStride);
 
 		// sum every block independently, so each task owns its own row
 		tbb::parallel_for(
@@ -185,8 +185,9 @@ namespace
 						PARTICLE_PREFIX_BLOCK_CHUNK_COUNT,
 						N_chunks - beginChunkIdx);
 				uint32_t* const blockSums =
-					blockSums_ByBlockBucket.data() +
+					blockSumsScratch.data() +
 					static_cast<uint64_t>(blockIdx) * blockStride;
+				std::fill(blockSums, blockSums + N_buckets, uint32_t{ 0 });
 
 				for (uint32_t chunkIdx = beginChunkIdx; chunkIdx != endChunkIdx; chunkIdx++)
 				{
@@ -200,21 +201,26 @@ namespace
 		});
 
 		// prefix one short row per block, which also yields the bucket totals
-		// TODO: parallelize with TBB?
-		for (uint32_t bucketIdx = 0; bucketIdx != N_buckets; bucketIdx++)
+		// (buckets processed in parallel, in groups keeping neighboring worker writes on separate cache lines)
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_buckets, PARTICLE_PREFIX_BUCKET_GRAIN_SIZE),
+			[&](const tbb::blocked_range<uint32_t>& range)
 		{
-			uint32_t N_bucket = 0;
-			for (uint32_t blockIdx = 0; blockIdx != N_blocks; blockIdx++)
+			for (uint32_t bucketIdx = range.begin(); bucketIdx != range.end(); bucketIdx++)
 			{
-				uint32_t& blockSum = blockSums_ByBlockBucket[
-					static_cast<uint64_t>(blockIdx) * blockStride + bucketIdx];
-				const uint32_t N_block = blockSum;
+				uint32_t N_bucket = 0;
+				for (uint32_t blockIdx = 0; blockIdx != N_blocks; blockIdx++)
+				{
+					uint32_t& blockSum = blockSumsScratch[
+						static_cast<uint64_t>(blockIdx) * blockStride + bucketIdx];
+					const uint32_t N_block = blockSum;
 
-				blockSum = N_bucket;
-				N_bucket += N_block;
+					blockSum = N_bucket;
+					N_bucket += N_block;
+				}
+				totals[bucketIdx] = N_bucket;
 			}
-			totals[bucketIdx] = N_bucket;
-		}
+		});
 
 		// expand each block from its own starting offsets, advancing them in place
 		tbb::parallel_for(
@@ -229,7 +235,7 @@ namespace
 						PARTICLE_PREFIX_BLOCK_CHUNK_COUNT,
 						N_chunks - beginChunkIdx);
 				uint32_t* const bucketTotals =
-					blockSums_ByBlockBucket.data() +
+					blockSumsScratch.data() +
 					static_cast<uint64_t>(blockIdx) * blockStride;
 
 				for (uint32_t chunkIdx = beginChunkIdx; chunkIdx != endChunkIdx; chunkIdx++)
@@ -308,6 +314,7 @@ namespace
 	void BuildOwnedClassIndexLists_Parallel(
 		DistParticleState& rebuiltParticleState,
 		ParticleClassificationWorkBuffers& workBuffers,
+		std::vector<uint32_t>& blockSumsScratch,
 		const uint32_t N_owned,
 		const float extraAllocCapacityPct)
 	{
@@ -363,6 +370,7 @@ namespace
 			workBuffers.classCounts_ByChunkClass,
 			workBuffers.classWriteOffsets_ByChunkClass,
 			workBuffers.classTotals,
+			blockSumsScratch,
 			N_chunks,
 			OWNED_CLASSIFICATION_CLASS_COUNT);
 
@@ -823,6 +831,7 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classCounts_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classWriteOffsets_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classTotals));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(prefixBlockSumsScratch_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(sendCounts_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(recvCounts_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedFluidOldLocalIdx_FromNewLocalIdx_));
@@ -1310,6 +1319,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		routingWorkBuffers_.routeTotals,
+		prefixBlockSumsScratch_,
 		N_chunks,
 		N_buckets);
 
@@ -1514,6 +1524,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		routingWorkBuffers_.routeTotals,
+		prefixBlockSumsScratch_,
 		N_chunks,
 		N_buckets);
 
@@ -2007,6 +2018,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 		BuildOwnedClassIndexLists_Parallel(
 			rebuiltParticleState,
 			ownedClassificationWorkBuffers_,
+			prefixBlockSumsScratch_,
 			N_owned,
 			scratchBufferExtraAllocCapacityPct_);
 	}
@@ -2288,6 +2300,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		BuildOwnedClassIndexLists_Parallel(
 			rebuiltParticleState,
 			ownedClassificationWorkBuffers_,
+			prefixBlockSumsScratch_,
 			N_owned,
 			scratchBufferExtraAllocCapacityPct_);
 	}

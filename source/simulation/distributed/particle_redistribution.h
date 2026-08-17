@@ -19,8 +19,12 @@ namespace Dist
 {
 	// chunks prefixed per block to keep parallel work tied to the chunk count
 	inline constexpr uint32_t PARTICLE_PREFIX_BLOCK_CHUNK_COUNT = 32;
-	// minimum block stride keeping neighboring worker totals on separate cache lines
-	inline constexpr uint32_t PARTICLE_PREFIX_BLOCK_STRIDE_MIN = 8;
+	// minimum block stride, keeping neighboring worker totals on separate cache lines
+	// TODO: fine-tune?
+	inline constexpr uint32_t PARTICLE_PREFIX_BLOCK_STRIDE_MIN = 16;
+	// buckets prefixed per worker, keeping neighboring worker writes on separate cache lines
+	// TODO: fine-tune?
+	inline constexpr uint32_t PARTICLE_PREFIX_BUCKET_GRAIN_SIZE = 16;
 
 	// owned particles routed per chunk, so workers fill disjoint output ranges
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
@@ -388,6 +392,7 @@ namespace Dist
 		ParticleRedistributionRoutes routes_;
 		ParticleRoutingWorkBuffers routingWorkBuffers_;
 		ParticleClassificationWorkBuffers ownedClassificationWorkBuffers_;
+		std::vector<uint32_t> prefixBlockSumsScratch_;
 		std::vector<int> sendCounts_;
 		std::vector<int> recvCounts_;
 
