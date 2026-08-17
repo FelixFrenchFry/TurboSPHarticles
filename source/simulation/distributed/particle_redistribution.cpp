@@ -1382,6 +1382,10 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 			scratchBufferExtraAllocCapacityPct_);
 	}
 
+	uint32_t* const keptOwnedDst = routes_.keptOwnedFluidLocalIdxs.data();
+	uint32_t* const localHaloDst = routes_.localHaloFluidLocalIdxs.data();
+	const uint32_t rank_U32 = static_cast<uint32_t>(rank);
+
 	// scatter into the reserved ranges, preserving owned index order within every bucket
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -1404,25 +1408,34 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
 				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
-				std::vector<uint32_t>& ownedDstLocalIdxs = (ownerRank == rank)
-					? routes_.keptOwnedFluidLocalIdxs
-					: routes_.ownedFluidLocalIdxs_ByDstRank[ownerRank];
-				ownedDstLocalIdxs[chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
+
+				if (ownerRank == rank) [[likely]]
+				{
+					keptOwnedDst[chunkWriteIdxs[rank_U32]++] = localIdx;
+				}
+				else
+				{
+					routes_.ownedFluidLocalIdxs_ByDstRank[ownerRank][
+						chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
+				}
 
 				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
-				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
-				// TODO: rework this?
+				// halo destinations are re-tested on the outer boundary subset
 				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
 					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
 
-					std::vector<uint32_t>& haloDstLocalIdxs = (haloRank == rank)
-						? routes_.localHaloFluidLocalIdxs
-						: routes_.haloFluidLocalIdxs_ByDstRank[haloRank];
-					haloDstLocalIdxs[
-						chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
+					if (haloRank == rank)
+					{
+						localHaloDst[chunkWriteIdxs[N_ranks_U32 + rank_U32]++] = localIdx;
+					}
+					else
+					{
+						routes_.haloFluidLocalIdxs_ByDstRank[haloRank][
+							chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
+					}
 				}
 			}
 		}
@@ -1594,6 +1607,10 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 			scratchBufferExtraAllocCapacityPct_);
 	}
 
+	uint32_t* const keptOwnedDst = routes_.keptOwnedBoundaryLocalIdxs.data();
+	uint32_t* const localHaloDst = routes_.localHaloBoundaryLocalIdxs.data();
+	const uint32_t rank_U32 = static_cast<uint32_t>(rank);
+
 	// scatter into the reserved ranges, preserving owned index order within every bucket
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -1616,24 +1633,34 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
 				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
-				std::vector<uint32_t>& ownedDstLocalIdxs = (ownerRank == rank)
-					? routes_.keptOwnedBoundaryLocalIdxs
-					: routes_.ownedBoundaryLocalIdxs_ByDstRank[ownerRank];
-				ownedDstLocalIdxs[chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
+
+				if (ownerRank == rank) [[likely]]
+				{
+					keptOwnedDst[chunkWriteIdxs[rank_U32]++] = localIdx;
+				}
+				else
+				{
+					routes_.ownedBoundaryLocalIdxs_ByDstRank[ownerRank][
+						chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
+				}
 
 				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
 
-				// halo destinations are re-tested instead of cached, so no neighbor count limit applies
+				// halo destinations are re-tested on the outer boundary subset
 				const glm::vec3 position = BoundaryPositionAtLocalIdx(particlesB, localIdx);
 				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
 				{
 					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
 
-					std::vector<uint32_t>& haloDstLocalIdxs = (haloRank == rank)
-						? routes_.localHaloBoundaryLocalIdxs
-						: routes_.haloBoundaryLocalIdxs_ByDstRank[haloRank];
-					haloDstLocalIdxs[
-						chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
+					if (haloRank == rank)
+					{
+						localHaloDst[chunkWriteIdxs[N_ranks_U32 + rank_U32]++] = localIdx;
+					}
+					else
+					{
+						routes_.haloBoundaryLocalIdxs_ByDstRank[haloRank][
+							chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
+					}
 				}
 			}
 		}
