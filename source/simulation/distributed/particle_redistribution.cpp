@@ -116,6 +116,30 @@ namespace
 			extraAllocCapacityPct));
 	}
 
+	std::span<float> PayloadFieldValues(
+		std::vector<float>& fieldValues,
+		const uint32_t fieldIdx,
+		const uint32_t N_particles)
+	{
+		return
+		{
+			fieldValues.data() + static_cast<uint64_t>(fieldIdx) * N_particles,
+			N_particles
+		};
+	}
+
+	std::span<const float> PayloadFieldValues(
+		const std::vector<float>& fieldValues,
+		const uint32_t fieldIdx,
+		const uint32_t N_particles)
+	{
+		return
+		{
+			fieldValues.data() + static_cast<uint64_t>(fieldIdx) * N_particles,
+			N_particles
+		};
+	}
+
 	// checks a rebuilt particle ID range for duplicate global IDs
 	bool HasDuplicateGlobalIdxsInRange(
 		const std::span<const uint32_t> particleIds,
@@ -481,7 +505,7 @@ namespace
 
 	// byte-sized payload helpers for chunked MPI transfers
 	template <typename T>
-	uint64_t CheckedByteSize(const uint32_t N_elements)
+	uint64_t CheckedByteSize(const uint64_t N_elements)
 	{
 		const uint64_t N_max = std::numeric_limits<uint64_t>::max() / sizeof(T);
 
@@ -497,7 +521,7 @@ namespace
 	void QueueIRecvVector(
 		const MpiContext& mpiContext,
 		std::vector<T>& values,
-		const uint32_t N_elements,
+		const uint64_t N_elements,
 		const int peerRank,
 		const int tag,
 		std::vector<MPI_Request>& requests)
@@ -514,7 +538,7 @@ namespace
 	void QueueISendVector(
 		const MpiContext& mpiContext,
 		const std::vector<T>& values,
-		const uint32_t N_elements,
+		const uint64_t N_elements,
 		const int peerRank,
 		const int tag,
 		std::vector<MPI_Request>& requests)
@@ -538,11 +562,17 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::Resize(
 	const uint32_t N)
 {
 	// grow reusable storage to the largest requested particle count
-	if (particles_.id.size() < N)
+	const uint64_t N_fieldValues =
+		static_cast<uint64_t>(FLUID_PAYLOAD_FIELD_COUNT) * N;
+	if (ids_.size() < N)
 	{
-		EnsureFluidPayloadCapacityWithExtra(
-			particles_, N, exchangeBufferExtraAllocCapacityPct_);
-		ResizeFluidPayloadFields(particles_, N);
+		ResizeVectorWithExtraCapacity(
+			ids_, N, exchangeBufferExtraAllocCapacityPct_);
+	}
+	if (fieldValues_.size() < N_fieldValues)
+	{
+		ResizeVectorWithExtraCapacity(
+			fieldValues_, N_fieldValues, exchangeBufferExtraAllocCapacityPct_);
 	}
 
 	N_particles_ = N;
@@ -555,42 +585,38 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::SetBulkFromParticleView(
 	Resize(static_cast<uint32_t>(localIdxs.size()));
 	if (localIdxs.empty()) { return; }
 
+	const std::span<uint32_t> ids{ ids_.data(), N_particles_ };
+	const std::span<float> xPos =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_X_POS, N_particles_);
+	const std::span<float> yPos =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Y_POS, N_particles_);
+	const std::span<float> zPos =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Z_POS, N_particles_);
+	const std::span<float> xVel =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_X_VEL, N_particles_);
+	const std::span<float> yVel =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Y_VEL, N_particles_);
+	const std::span<float> zVel =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Z_VEL, N_particles_);
+
 	// gather particle fields sequentially within each parallel block
 	// TODO: use explicit SIMD similarly to sph_solver.cpp?
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 	{
-		GatherParticleField(particles_.id, src.id, localIdxs, blockRange);
-		GatherParticleField(particles_.xPos, src.xPos, localIdxs, blockRange);
-		GatherParticleField(particles_.yPos, src.yPos, localIdxs, blockRange);
-		GatherParticleField(particles_.zPos, src.zPos, localIdxs, blockRange);
-		GatherParticleField(particles_.xVel, src.xVel, localIdxs, blockRange);
-		GatherParticleField(particles_.yVel, src.yVel, localIdxs, blockRange);
-		GatherParticleField(particles_.zVel, src.zVel, localIdxs, blockRange);
+		GatherParticleField(ids, src.id, localIdxs, blockRange);
+		GatherParticleField(xPos, src.xPos, localIdxs, blockRange);
+		GatherParticleField(yPos, src.yPos, localIdxs, blockRange);
+		GatherParticleField(zPos, src.zPos, localIdxs, blockRange);
+		GatherParticleField(xVel, src.xVel, localIdxs, blockRange);
+		GatherParticleField(yVel, src.yVel, localIdxs, blockRange);
+		GatherParticleField(zVel, src.zVel, localIdxs, blockRange);
 
 		// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
 		// because the following solver step re-writes them before reading them
 		// TODO: keep it like this or copy them too, if solver step behavior changes?
 	});
-}
-
-void ParticleRedistributionMgr::FluidExchangeBuffer::CopyToLocalParticle(
-	Sync::FluidParticles& dst,
-	const uint32_t bufferIdx,
-	const uint32_t localIdx) const
-{
-	dst.id[localIdx] = particles_.id[bufferIdx];
-	dst.xPos[localIdx] = particles_.xPos[bufferIdx];
-	dst.yPos[localIdx] = particles_.yPos[bufferIdx];
-	dst.zPos[localIdx] = particles_.zPos[bufferIdx];
-	dst.xVel[localIdx] = particles_.xVel[bufferIdx];
-	dst.yVel[localIdx] = particles_.yVel[bufferIdx];
-	dst.zVel[localIdx] = particles_.zVel[bufferIdx];
-
-	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
-	// because the following solver step re-writes them before reading them
-	// TODO: keep it like this or copy them too, if solver step behavior changes?
 }
 
 void ParticleRedistributionMgr::FluidExchangeBuffer::CopyBulkToLocalParticles(
@@ -599,19 +625,33 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::CopyBulkToLocalParticles(
 {
 	if (IsEmpty()) { return; }
 
+	const std::span<const uint32_t> ids{ ids_.data(), N_particles_ };
+	const std::span<const float> xPos =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_X_POS, N_particles_);
+	const std::span<const float> yPos =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Y_POS, N_particles_);
+	const std::span<const float> zPos =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Z_POS, N_particles_);
+	const std::span<const float> xVel =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_X_VEL, N_particles_);
+	const std::span<const float> yVel =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Y_VEL, N_particles_);
+	const std::span<const float> zVel =
+		PayloadFieldValues(fieldValues_, FLUID_PAYLOAD_FIELD_Z_VEL, N_particles_);
+
 	// copy particle fields sequentially within each parallel block
 	// TODO: use explicit SIMD similarly to sph_solver.cpp?
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 	{
-		CopyParticleField(dst.id, particles_.id, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.xPos, particles_.xPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.yPos, particles_.yPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.zPos, particles_.zPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.xVel, particles_.xVel, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.yVel, particles_.yVel, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.zVel, particles_.zVel, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.id, ids, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.xPos, xPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.yPos, yPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.zPos, zPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.xVel, xVel, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.yVel, yVel, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.zVel, zVel, dstBeginLocalIdx, blockRange);
 
 		// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
 		// because the following solver step re-writes them before reading them
@@ -627,13 +667,11 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::QueueIRecvPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
-	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueIRecvVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
-	QueueIRecvVector(mpiContext, particles_.xVel, N_particles_, peerRank, tagBase + 6, requests);
-	QueueIRecvVector(mpiContext, particles_.yVel, N_particles_, peerRank, tagBase + 7, requests);
-	QueueIRecvVector(mpiContext, particles_.zVel, N_particles_, peerRank, tagBase + 8, requests);
+	QueueIRecvVector(mpiContext, ids_, N_particles_, peerRank, tagBase + 2, requests);
+	QueueIRecvVector(
+		mpiContext, fieldValues_,
+		static_cast<uint64_t>(FLUID_PAYLOAD_FIELD_COUNT) * N_particles_,
+		peerRank, tagBase + 3, requests);
 
 	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
 	// because the following solver step re-writes them before reading them
@@ -648,13 +686,11 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::QueueISendPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
-	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueISendVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
-	QueueISendVector(mpiContext, particles_.xVel, N_particles_, peerRank, tagBase + 6, requests);
-	QueueISendVector(mpiContext, particles_.yVel, N_particles_, peerRank, tagBase + 7, requests);
-	QueueISendVector(mpiContext, particles_.zVel, N_particles_, peerRank, tagBase + 8, requests);
+	QueueISendVector(mpiContext, ids_, N_particles_, peerRank, tagBase + 2, requests);
+	QueueISendVector(
+		mpiContext, fieldValues_,
+		static_cast<uint64_t>(FLUID_PAYLOAD_FIELD_COUNT) * N_particles_,
+		peerRank, tagBase + 3, requests);
 
 	// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
 	// because the following solver step re-writes them before reading them
@@ -674,14 +710,15 @@ int ParticleRedistributionMgr::FluidExchangeBuffer::CheckedCount() const
 uint32_t ParticleRedistributionMgr::FluidExchangeBuffer::GlobalIdxAt(
 	const uint32_t bufferIdx) const
 {
-	return particles_.id[bufferIdx];
+	return ids_[bufferIdx];
 }
 
 Mem::MemUsage ParticleRedistributionMgr::FluidExchangeBuffer::GetMemoryUsage() const
 {
 	Mem::MemUsage usage{};
 
-	Mem::Add(usage, GetParticleMemoryUsage(particles_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(ids_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(fieldValues_));
 
 	return usage;
 }
@@ -695,11 +732,17 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::Resize(
 	const uint32_t N)
 {
 	// grow reusable storage to the largest requested particle count
-	if (particles_.id.size() < N)
+	const uint64_t N_fieldValues =
+		static_cast<uint64_t>(BOUNDARY_PAYLOAD_FIELD_COUNT) * N;
+	if (ids_.size() < N)
 	{
-		EnsureBoundaryParticleCapacityWithExtra(
-			particles_, N, exchangeBufferExtraAllocCapacityPct_);
-		particles_.resizeAll(N);
+		ResizeVectorWithExtraCapacity(
+			ids_, N, exchangeBufferExtraAllocCapacityPct_);
+	}
+	if (fieldValues_.size() < N_fieldValues)
+	{
+		ResizeVectorWithExtraCapacity(
+			fieldValues_, N_fieldValues, exchangeBufferExtraAllocCapacityPct_);
 	}
 
 	N_particles_ = N;
@@ -712,31 +755,30 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::SetBulkFromParticleView(
 	Resize(static_cast<uint32_t>(localIdxs.size()));
 	if (localIdxs.empty()) { return; }
 
+	const std::span<uint32_t> ids{ ids_.data(), N_particles_ };
+	const std::span<float> xPos =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_X_POS, N_particles_);
+	const std::span<float> yPos =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_Y_POS, N_particles_);
+	const std::span<float> zPos =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_Z_POS, N_particles_);
+	const std::span<float> volB =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_VOL, N_particles_);
+	const std::span<float> psiB =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_PSI, N_particles_);
+
 	// gather particle fields sequentially within each parallel block
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 	{
-		GatherParticleField(particles_.id, src.id, localIdxs, blockRange);
-		GatherParticleField(particles_.xPos, src.xPos, localIdxs, blockRange);
-		GatherParticleField(particles_.yPos, src.yPos, localIdxs, blockRange);
-		GatherParticleField(particles_.zPos, src.zPos, localIdxs, blockRange);
-		GatherParticleField(particles_.volB, src.volB, localIdxs, blockRange);
-		GatherParticleField(particles_.psiB, src.psiB, localIdxs, blockRange);
+		GatherParticleField(ids, src.id, localIdxs, blockRange);
+		GatherParticleField(xPos, src.xPos, localIdxs, blockRange);
+		GatherParticleField(yPos, src.yPos, localIdxs, blockRange);
+		GatherParticleField(zPos, src.zPos, localIdxs, blockRange);
+		GatherParticleField(volB, src.volB, localIdxs, blockRange);
+		GatherParticleField(psiB, src.psiB, localIdxs, blockRange);
 	});
-}
-
-void ParticleRedistributionMgr::BoundaryExchangeBuffer::CopyToLocalParticle(
-	Sync::BoundaryParticles& dst,
-	const uint32_t bufferIdx,
-	const uint32_t localIdx) const
-{
-	dst.id[localIdx] = particles_.id[bufferIdx];
-	dst.xPos[localIdx] = particles_.xPos[bufferIdx];
-	dst.yPos[localIdx] = particles_.yPos[bufferIdx];
-	dst.zPos[localIdx] = particles_.zPos[bufferIdx];
-	dst.volB[localIdx] = particles_.volB[bufferIdx];
-	dst.psiB[localIdx] = particles_.psiB[bufferIdx];
 }
 
 void ParticleRedistributionMgr::BoundaryExchangeBuffer::CopyBulkToLocalParticles(
@@ -745,17 +787,29 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::CopyBulkToLocalParticles
 {
 	if (IsEmpty()) { return; }
 
+	const std::span<const uint32_t> ids{ ids_.data(), N_particles_ };
+	const std::span<const float> xPos =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_X_POS, N_particles_);
+	const std::span<const float> yPos =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_Y_POS, N_particles_);
+	const std::span<const float> zPos =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_Z_POS, N_particles_);
+	const std::span<const float> volB =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_VOL, N_particles_);
+	const std::span<const float> psiB =
+		PayloadFieldValues(fieldValues_, BOUNDARY_PAYLOAD_FIELD_PSI, N_particles_);
+
 	// copy particle fields sequentially within each parallel block
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_particles_, PARTICLE_GATHER_BLOCK_SIZE),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 	{
-		CopyParticleField(dst.id, particles_.id, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.xPos, particles_.xPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.yPos, particles_.yPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.zPos, particles_.zPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.volB, particles_.volB, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.psiB, particles_.psiB, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.id, ids, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.xPos, xPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.yPos, yPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.zPos, zPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.volB, volB, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.psiB, psiB, dstBeginLocalIdx, blockRange);
 	});
 }
 
@@ -767,12 +821,11 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueIRecvPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueIRecvVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
-	QueueIRecvVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueIRecvVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueIRecvVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
-	QueueIRecvVector(mpiContext, particles_.volB, N_particles_, peerRank, tagBase + 6, requests);
-	QueueIRecvVector(mpiContext, particles_.psiB, N_particles_, peerRank, tagBase + 7, requests);
+	QueueIRecvVector(mpiContext, ids_, N_particles_, peerRank, tagBase + 2, requests);
+	QueueIRecvVector(
+		mpiContext, fieldValues_,
+		static_cast<uint64_t>(BOUNDARY_PAYLOAD_FIELD_COUNT) * N_particles_,
+		peerRank, tagBase + 3, requests);
 }
 
 void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueISendPayload(
@@ -783,12 +836,11 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::QueueISendPayload(
 {
 	if (IsEmpty()) { return; }
 
-	QueueISendVector(mpiContext, particles_.id, N_particles_, peerRank, tagBase + 2, requests);
-	QueueISendVector(mpiContext, particles_.xPos, N_particles_, peerRank, tagBase + 3, requests);
-	QueueISendVector(mpiContext, particles_.yPos, N_particles_, peerRank, tagBase + 4, requests);
-	QueueISendVector(mpiContext, particles_.zPos, N_particles_, peerRank, tagBase + 5, requests);
-	QueueISendVector(mpiContext, particles_.volB, N_particles_, peerRank, tagBase + 6, requests);
-	QueueISendVector(mpiContext, particles_.psiB, N_particles_, peerRank, tagBase + 7, requests);
+	QueueISendVector(mpiContext, ids_, N_particles_, peerRank, tagBase + 2, requests);
+	QueueISendVector(
+		mpiContext, fieldValues_,
+		static_cast<uint64_t>(BOUNDARY_PAYLOAD_FIELD_COUNT) * N_particles_,
+		peerRank, tagBase + 3, requests);
 }
 
 int ParticleRedistributionMgr::BoundaryExchangeBuffer::CheckedCount() const
@@ -804,14 +856,15 @@ int ParticleRedistributionMgr::BoundaryExchangeBuffer::CheckedCount() const
 uint32_t ParticleRedistributionMgr::BoundaryExchangeBuffer::GlobalIdxAt(
 	const uint32_t bufferIdx) const
 {
-	return particles_.id[bufferIdx];
+	return ids_[bufferIdx];
 }
 
 Mem::MemUsage ParticleRedistributionMgr::BoundaryExchangeBuffer::GetMemoryUsage() const
 {
 	Mem::MemUsage usage{};
 
-	Mem::Add(usage, GetParticleMemoryUsage(particles_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(ids_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(fieldValues_));
 
 	return usage;
 }

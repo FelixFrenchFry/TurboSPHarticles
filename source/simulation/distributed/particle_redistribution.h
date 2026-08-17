@@ -41,6 +41,21 @@ namespace Dist
 	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_INNER = 0;
 	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_OUTER = 1;
 
+	// packed payload field blocks, ordered as they are gathered, sent, and copied out
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_COUNT = 6;
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_X_POS = 0;
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Y_POS = 1;
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Z_POS = 2;
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_X_VEL = 3;
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Y_VEL = 4;
+	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Z_VEL = 5;
+	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_COUNT = 5;
+	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_X_POS = 0;
+	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_Y_POS = 1;
+	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_Z_POS = 2;
+	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_VOL = 3;
+	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_PSI = 4;
+
 	// packed particle count lanes exchanged once per redistribution
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_COUNT = 4;
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_OWNED_FLUID = 0;
@@ -174,12 +189,6 @@ namespace Dist
 				const Sync::FluidConstView& src,
 				const std::vector<uint32_t>& localIdxs);
 
-			// copies one particle from the buffer into the backend
-			void CopyToLocalParticle(
-				Sync::FluidParticles& dst,
-				uint32_t bufferIdx,
-				uint32_t localIdx) const;
-
 			// copies the whole buffer into a contiguous backend range
 			void CopyBulkToLocalParticles(
 				Sync::FluidParticles& dst,
@@ -207,7 +216,11 @@ namespace Dist
 
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
-			Sync::FluidParticles particles_; // fields left out of the payload stay empty
+
+			// packed payload storage, holding the particle IDs and one contiguous block
+			// per float field, indexed by [fieldIdx * N_particles_ + bufferIdx]
+			std::vector<uint32_t> ids_;
+			std::vector<float> fieldValues_;
 		};
 
 		// packed SoA payload for migrated or halo boundary particles
@@ -223,12 +236,6 @@ namespace Dist
 				const Sync::BoundaryConstView& src,
 				const std::vector<uint32_t>& localIdxs);
 
-			// copies one particle from the buffer into the backend
-			void CopyToLocalParticle(
-				Sync::BoundaryParticles& dst,
-				uint32_t bufferIdx,
-				uint32_t localIdx) const;
-
 			// copies the whole buffer into a contiguous backend range
 			void CopyBulkToLocalParticles(
 				Sync::BoundaryParticles& dst,
@@ -256,7 +263,11 @@ namespace Dist
 
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
-			Sync::BoundaryParticles particles_;
+
+			// packed payload storage, holding the particle IDs and one contiguous block
+			// per float field, indexed by [fieldIdx * N_particles_ + bufferIdx]
+			std::vector<uint32_t> ids_;
+			std::vector<float> fieldValues_;
 		};
 
 		// send and receive storage for exchange with one neighbor rank
