@@ -387,12 +387,17 @@ bool FluidSolverSyncMgr::Rebuild(
 		{
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
+			const uint64_t N_expectedRecv = particlePlan.recvGlobalIdxs.size();
 			if (recvCounts[peerIdx] < 0 ||
 				static_cast<uint64_t>(recvCounts[peerIdx]) !=
-				particlePlan.recvGlobalIdxs.size())
+				N_expectedRecv)
 			{
 				localOk = SetFailure(localFailMsg,
-					"Fluid solver synchronization peer particle count does not match the local halo plan.");
+					"Fluid solver synchronization peer particle count does not match the local halo plan (peer rank " +
+					std::to_string(newPeerPlans[peerIdx].rank) + ", " +
+					(haloExtent == Base::DistHaloMode::SingleHalo ? "single" : "double") +
+					" halo: peer sent " + std::to_string(recvCounts[peerIdx]) +
+					", local plan expects " + std::to_string(N_expectedRecv) + ").");
 			}
 		}
 		if (!FinishCollectiveValidation(
