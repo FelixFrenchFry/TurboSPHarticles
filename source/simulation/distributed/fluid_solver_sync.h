@@ -32,6 +32,9 @@ namespace Dist
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t FLUID_SOLVER_SYNC_BLOCK_SIZE = 2048;
 
+	// one exchange plan and work schedule per halo extent mode
+	inline constexpr uint32_t N_HALO_EXTENTS = 2;
+
 	// owner-to-halo fluid field synchronization over a cached per-neighbor exchange plan
 	class FluidSolverSyncMgr final : public Sim::I_DistributedFluidSolverSync
 	{
@@ -96,16 +99,30 @@ namespace Dist
 			std::vector<uint32_t> recvGlobalIdxs;
 		};
 
-		// narrow/wide plans and reusable payload storage for one neighboring rank
+		// single/double halo plans and reusable payload storage for one neighboring rank
 		struct PeerPlan
 		{
 			int rank = -1;
-			ParticlePlan singleHalo;
-			ParticlePlan doubleHalo;
+			std::array<ParticlePlan, N_HALO_EXTENTS> particlePlans;
 
 			// reusable payload storage
 			std::vector<float> sendBuffer;
 			std::vector<float> recvBuffer;
+		};
+
+		// one contiguous slice of one peer payload, packed or unpacked by a single worker
+		struct FieldSyncWorkItem
+		{
+			uint32_t peerIdx = 0;
+			uint32_t beginParticleIdx = 0;
+			uint32_t endParticleIdx = 0;
+		};
+
+		// flat pack and unpack work covering every peer for one halo extent
+		struct FieldSyncSchedule
+		{
+			std::vector<FieldSyncWorkItem> sendWorkItems;
+			std::vector<FieldSyncWorkItem> recvWorkItems;
 		};
 
 		// packs and posts exchange of up to three fields in one round of messages
@@ -114,14 +131,14 @@ namespace Dist
 			uint32_t N_fields,
 			Base::DistHaloMode haloExtent);
 
-		// selects the narrow or wide exchange plan for one peer,
-		// overloads allow for mutable or read-only access as needed
-		static ParticlePlan& ParticlePlanFor(
-			PeerPlan& peerPlan,
-			Base::DistHaloMode haloExtent);
-		static const ParticlePlan& ParticlePlanFor(
-			const PeerPlan& peerPlan,
-			Base::DistHaloMode haloExtent);
+		// rebuilds both single and double halo work schedules from the published peer plans
+		void BuildFieldSyncSchedules();
+
+		// splits one peer particle range into block-sized work items
+		static void AppendFieldSyncWorkItems(
+			std::vector<FieldSyncWorkItem>& workItems,
+			uint32_t peerIdx,
+			uint32_t N_particles);
 
 		// clears one plan for the next rebuild
 		static void ClearParticlePlan(ParticlePlan& particlePlan);
@@ -137,6 +154,10 @@ namespace Dist
 
 		// peer exchange plans and reusable MPI requests
 		std::vector<PeerPlan> peerPlans_;
+
+		// flat pack and unpack work covering every peer, rebuilt with the plans
+		std::array<FieldSyncSchedule, N_HALO_EXTENTS> fieldSyncSchedules_;
+
 		std::vector<MPI_Request> requests_;
 		std::array<std::span<float>, 3> pendingFields_{};
 		uint32_t N_pendingFields_ = 0;

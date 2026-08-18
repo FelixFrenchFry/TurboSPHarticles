@@ -53,6 +53,7 @@ namespace Bench
 		Dist_ParticleRedistribution,        // particle migration, halo exchange, and rank-local rebuild
 		Dist_StateSync,                     // rank-local state handoff around backend data structures
 		Dist_SolverSync,                    // fluid field halo exchanges during the rank-local solver step (subset of the state sync)
+		Dist_SolverSyncWait,                // wait for the peer field payloads of a solver sync exchange (subset of the solver sync)
 		Dist_StateHandoff,                  // sync plan rebuild, particle-order handoff, and rigid-body sync (subset of the state sync)
 		Dist_RankBackendStep,               // rank-local backend step time used only for load balancing (overlaps with the others)
 
@@ -176,6 +177,12 @@ namespace Bench
 				.op = BenchOp::Dist_SolverSync,
 				.name = "dist solver sync",
 				.alias = "distSolverSync",
+				.unit = "ns"
+			},
+			{
+				.op = BenchOp::Dist_SolverSyncWait,
+				.name = "dist solver sync wait",
+				.alias = "distSolverSyncWait",
 				.unit = "ns"
 			},
 			{

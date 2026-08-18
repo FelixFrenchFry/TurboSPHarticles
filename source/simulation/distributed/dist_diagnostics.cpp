@@ -691,6 +691,7 @@ namespace
 		uint64_t backendAvgNs = 0;
 		uint64_t redistributionAvgNs = 0;
 		uint64_t solverSyncAvgNs = 0;
+		uint64_t solverSyncWaitAvgNs = 0;
 		uint64_t stateHandoffAvgNs = 0;
 	};
 
@@ -717,6 +718,8 @@ namespace
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_ParticleRedistribution, true);
 			summary.solverSyncAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_SolverSync, true);
+			summary.solverSyncWaitAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_SolverSyncWait, true);
 			summary.stateHandoffAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_StateHandoff, true);
 
@@ -909,8 +912,8 @@ namespace
 		std::snprintf(unitLabel, sizeof(unitLabel), "avg [%s]", Bench::UnitLabel(unit));
 
 		PrintLine(N_lines,
-			"%-2s | %10s | %15s | %11s | %13s | %9s",
-			"r", "backend", "redistribution", "solver sync",
+			"%-2s | %10s | %15s | %16s | %13s | %9s",
+			"r", "backend", "redistribution", "solver sync/wait",
 			"state handoff", "");
 		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
@@ -920,13 +923,14 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %10.2f | %15.2f | %11.2f | %13.2f | %9s",
+				"%-2s | %10.2f | %15.2f | %7.2f / %-6.2f | %13.2f | %9s",
 				rankLabel,
 				Bench::ConvertFromNs(unit, summary.backendAvgNs),
 				Bench::ConvertFromNs(
 					unit,
 					summary.redistributionAvgNs),
 				Bench::ConvertFromNs(unit, summary.solverSyncAvgNs),
+				Bench::ConvertFromNs(unit, summary.solverSyncWaitAvgNs),
 				Bench::ConvertFromNs(unit, summary.stateHandoffAvgNs),
 				unitLabel);
 		}

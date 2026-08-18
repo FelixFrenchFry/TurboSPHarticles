@@ -82,22 +82,44 @@ namespace
 
 } // namespace anonymous
 
-FluidSolverSyncMgr::ParticlePlan& FluidSolverSyncMgr::ParticlePlanFor(
-	PeerPlan& peerPlan,
-	const Base::DistHaloMode haloExtent)
+void FluidSolverSyncMgr::AppendFieldSyncWorkItems(
+	std::vector<FieldSyncWorkItem>& workItems,
+	const uint32_t peerIdx,
+	const uint32_t N_particles)
 {
-	return haloExtent == Base::DistHaloMode::DoubleHalo
-		? peerPlan.doubleHalo
-		: peerPlan.singleHalo;
+	for (uint32_t beginParticleIdx = 0; beginParticleIdx < N_particles; beginParticleIdx += FLUID_SOLVER_SYNC_BLOCK_SIZE)
+	{
+		workItems.push_back(FieldSyncWorkItem
+		{
+			.peerIdx = peerIdx,
+			.beginParticleIdx = beginParticleIdx,
+			.endParticleIdx = std::min(
+				beginParticleIdx + FLUID_SOLVER_SYNC_BLOCK_SIZE, N_particles)
+		});
+	}
 }
 
-const FluidSolverSyncMgr::ParticlePlan& FluidSolverSyncMgr::ParticlePlanFor(
-	const PeerPlan& peerPlan,
-	const Base::DistHaloMode haloExtent)
+void FluidSolverSyncMgr::BuildFieldSyncSchedules()
 {
-	return haloExtent == Base::DistHaloMode::DoubleHalo
-		? peerPlan.doubleHalo
-		: peerPlan.singleHalo;
+	for (uint32_t haloExtentIdx = 0; haloExtentIdx != N_HALO_EXTENTS; haloExtentIdx++)
+	{
+		FieldSyncSchedule& schedule = fieldSyncSchedules_[haloExtentIdx];
+		schedule.sendWorkItems.clear();
+		schedule.recvWorkItems.clear();
+
+		for (uint32_t peerIdx = 0; peerIdx != peerPlans_.size(); peerIdx++)
+		{
+			const ParticlePlan& particlePlan =
+				peerPlans_[peerIdx].particlePlans[haloExtentIdx];
+
+			AppendFieldSyncWorkItems(
+				schedule.sendWorkItems, peerIdx,
+				static_cast<uint32_t>(particlePlan.sendLocalIdxs.size()));
+			AppendFieldSyncWorkItems(
+				schedule.recvWorkItems, peerIdx,
+				static_cast<uint32_t>(particlePlan.recvLocalIdxs.size()));
+		}
+	}
 }
 
 void FluidSolverSyncMgr::ClearParticlePlan(ParticlePlan& particlePlan)
@@ -197,8 +219,10 @@ bool FluidSolverSyncMgr::Rebuild(
 	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 	{
 		newPeerPlans[peerIdx].rank = sortedNeighborRanks[peerIdx];
-		ClearParticlePlan(newPeerPlans[peerIdx].singleHalo);
-		ClearParticlePlan(newPeerPlans[peerIdx].doubleHalo);
+		for (ParticlePlan& particlePlan : newPeerPlans[peerIdx].particlePlans)
+		{
+			ClearParticlePlan(particlePlan);
+		}
 	}
 
 	auto findPeerPlan = [&](const int peerRank) -> PeerPlan*
@@ -212,6 +236,10 @@ bool FluidSolverSyncMgr::Rebuild(
 			? &*it
 			: nullptr;
 	};
+
+	// plan slots filled by the send and receive loops below
+	constexpr uint8_t singleHaloIdx = Base::GetIdx(Base::DistHaloMode::SingleHalo);
+	constexpr uint8_t doubleHaloIdx = Base::GetIdx(Base::DistHaloMode::DoubleHalo);
 
 	const bool useDoubleHalo = distHaloMode == Base::DistHaloMode::DoubleHalo;
 	const AABB singleHaloBounds =
@@ -233,19 +261,19 @@ bool FluidSolverSyncMgr::Rebuild(
 			if (domainDecomp.OwnedExtentAABB(peerPlan.rank)
 				.Expanded(singleHaloRadius).Contains(position))
 			{
-				peerPlan.singleHalo.sendLocalIdxs.push_back(localIdx);
-				peerPlan.singleHalo.sendGlobalIdxs.push_back(globalIdx);
+				peerPlan.particlePlans[singleHaloIdx].sendLocalIdxs.push_back(localIdx);
+				peerPlan.particlePlans[singleHaloIdx].sendGlobalIdxs.push_back(globalIdx);
 			}
 			if (useDoubleHalo &&
 				domainDecomp.HaloExtentAABB(peerPlan.rank).Contains(position))
 			{
-				peerPlan.doubleHalo.sendLocalIdxs.push_back(localIdx);
-				peerPlan.doubleHalo.sendGlobalIdxs.push_back(globalIdx);
+				peerPlan.particlePlans[doubleHaloIdx].sendLocalIdxs.push_back(localIdx);
+				peerPlan.particlePlans[doubleHaloIdx].sendGlobalIdxs.push_back(globalIdx);
 			}
 		}
 	}
 
-	// receive halo particles from their owning rank over the matching narrow/wide plans
+	// receive halo particles from their owning rank over the matching single/double halo plans
 	for (const uint32_t localIdx : particleStateF.particleLocalIdx_Halo)
 	{
 		const glm::vec3 position{
@@ -266,36 +294,36 @@ bool FluidSolverSyncMgr::Rebuild(
 			particlesF.id[localIdx];
 		if (singleHaloBounds.Contains(position))
 		{
-			peerPlan->singleHalo.recvLocalIdxs.push_back(localIdx);
-			peerPlan->singleHalo.recvGlobalIdxs.push_back(globalIdx);
+			peerPlan->particlePlans[singleHaloIdx].recvLocalIdxs.push_back(localIdx);
+			peerPlan->particlePlans[singleHaloIdx].recvGlobalIdxs.push_back(globalIdx);
 		}
 		else if (!useDoubleHalo)
 		{
 			localOk = SetFailure(localFailMsg,
-				"Single-halo fluid particle lies outside the narrow halo extent.");
+				"Single-halo fluid particle lies outside the single halo extent.");
 			continue;
 		}
 
 		if (useDoubleHalo)
 		{
-			peerPlan->doubleHalo.recvLocalIdxs.push_back(localIdx);
-			peerPlan->doubleHalo.recvGlobalIdxs.push_back(globalIdx);
+			peerPlan->particlePlans[doubleHaloIdx].recvLocalIdxs.push_back(localIdx);
+			peerPlan->particlePlans[doubleHaloIdx].recvGlobalIdxs.push_back(globalIdx);
 		}
 	}
 
 	// sort both plans by global ID and reject duplicate entries before exchanging them
 	for (PeerPlan& peerPlan : newPeerPlans)
 	{
-		for (ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
+		for (ParticlePlan& particlePlan : peerPlan.particlePlans)
 		{
 			SortPeerParticleIdxs(
-				particlePlan->sendLocalIdxs, particlePlan->sendGlobalIdxs,
+				particlePlan.sendLocalIdxs, particlePlan.sendGlobalIdxs,
 				peerIdxSortScratch_);
 			SortPeerParticleIdxs(
-				particlePlan->recvLocalIdxs, particlePlan->recvGlobalIdxs,
+				particlePlan.recvLocalIdxs, particlePlan.recvGlobalIdxs,
 				peerIdxSortScratch_);
-			if (HasDuplicateGlobalIdxs(particlePlan->sendGlobalIdxs) ||
-				HasDuplicateGlobalIdxs(particlePlan->recvGlobalIdxs))
+			if (HasDuplicateGlobalIdxs(particlePlan.sendGlobalIdxs) ||
+				HasDuplicateGlobalIdxs(particlePlan.recvGlobalIdxs))
 			{
 				localOk = SetFailure(localFailMsg,
 					"Fluid solver synchronization plan contains duplicate global indices.");
@@ -323,7 +351,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			const ParticlePlan& particlePlan =
-				ParticlePlanFor(newPeerPlans[peerIdx], haloExtent);
+				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
 			const uint64_t N_send = particlePlan.sendGlobalIdxs.size();
 			if (N_send > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 			{
@@ -359,7 +387,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			const ParticlePlan& particlePlan =
-				ParticlePlanFor(newPeerPlans[peerIdx], haloExtent);
+				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
 			if (recvCounts[peerIdx] < 0 ||
 				static_cast<uint64_t>(recvCounts[peerIdx]) !=
 				particlePlan.recvGlobalIdxs.size())
@@ -390,7 +418,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		}
 		for (const PeerPlan& peerPlan : newPeerPlans)
 		{
-			const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
+			const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
 			mpiContext.ISendBytesChunked(
 				particlePlan.sendGlobalIdxs.data(),
 				static_cast<uint64_t>(particlePlan.sendGlobalIdxs.size()) * sizeof(uint32_t),
@@ -403,7 +431,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			const ParticlePlan& particlePlan =
-				ParticlePlanFor(newPeerPlans[peerIdx], haloExtent);
+				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
 			if (receivedGlobalIdxs[peerIdx] != particlePlan.recvGlobalIdxs)
 			{
 				localOk = SetFailure(localFailMsg,
@@ -429,6 +457,7 @@ bool FluidSolverSyncMgr::Rebuild(
 	distHaloMode_ = distHaloMode;
 	// the replaced plan is retained as storage space for the next rebuild
 	peerPlans_.swap(nextPeerPlans_);
+	BuildFieldSyncSchedules();
 	return true;
 }
 
@@ -460,13 +489,13 @@ void FluidSolverSyncMgr::ApplyFluidParticleReOrder(
 	// remap send and receive indices, global particle IDs remain unchanged
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
-		for (ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
+		for (ParticlePlan& particlePlan : peerPlan.particlePlans)
 		{
-			for (uint32_t& localIdx : particlePlan->sendLocalIdxs)
+			for (uint32_t& localIdx : particlePlan.sendLocalIdxs)
 			{
 				localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
 			}
-			for (uint32_t& localIdx : particlePlan->recvLocalIdxs)
+			for (uint32_t& localIdx : particlePlan.recvLocalIdxs)
 			{
 				localIdx = newFluidLocalIdx_FromOldLocalIdx[localIdx];
 			}
@@ -540,32 +569,46 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSync);
 	requests_.clear();
+	// size every peer payload before the parallel pass reads their storage
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
-		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, haloExtent);
-		const uint32_t N_send = static_cast<uint32_t>(particlePlan.sendLocalIdxs.size());
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
 
 		// pack owned values in field-major order for each peer
-		peerPlan.sendBuffer.resize(static_cast<uint64_t>(N_fields) * N_send);
+		peerPlan.sendBuffer.resize(
+			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size());
 		peerPlan.recvBuffer.resize(
 			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size());
+	}
 
-		// gather every field sequentially within each parallel block
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_send, FLUID_SOLVER_SYNC_BLOCK_SIZE),
-			[&](const tbb::blocked_range<uint32_t>& blockRange)
+	// gather every field sequentially within each parallel work item
+	// (work items span every peer, so no peer waits for another one to finish packing)
+	const FieldSyncSchedule& schedule = fieldSyncSchedules_[Base::GetIdx(haloExtent)];
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(
+			0, static_cast<uint32_t>(schedule.sendWorkItems.size())),
+		[&](const tbb::blocked_range<uint32_t>& workRange)
+	{
+		for (uint32_t workIdx = workRange.begin(); workIdx != workRange.end(); workIdx++)
 		{
+			const FieldSyncWorkItem& workItem = schedule.sendWorkItems[workIdx];
+			PeerPlan& peerPlan = peerPlans_[workItem.peerIdx];
+			const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
+			const uint32_t N_send = static_cast<uint32_t>(particlePlan.sendLocalIdxs.size());
+
 			for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
 			{
 				const uint64_t fieldOffset = static_cast<uint64_t>(fieldIdx) * N_send;
-				for (uint32_t particleIdx = blockRange.begin(); particleIdx != blockRange.end(); particleIdx++)
+				for (uint32_t particleIdx = workItem.beginParticleIdx;
+					 particleIdx != workItem.endParticleIdx;
+					 particleIdx++)
 				{
 					peerPlan.sendBuffer[fieldOffset + particleIdx] =
 						fields[fieldIdx][particlePlan.sendLocalIdxs[particleIdx]];
 				}
 			}
-		});
-	}
+		}
+	});
 
 	// receives are posted before sends on every rank
 	for (PeerPlan& peerPlan : peerPlans_)
@@ -607,30 +650,40 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSync);
+	// time the peer payload wait separately from the local packing work
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSyncWait);
 	mpiContext_->WaitAll(requests_);
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSyncWait);
 
 	// unpack halo values
-	for (const PeerPlan& peerPlan : peerPlans_)
+	// (every halo slot is owned by exactly one peer, so work items write disjoint slots)
+	const FieldSyncSchedule& schedule = fieldSyncSchedules_[Base::GetIdx(pendingHaloExtent_)];
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(
+			0, static_cast<uint32_t>(schedule.recvWorkItems.size())),
+		[&](const tbb::blocked_range<uint32_t>& workRange)
 	{
-		const ParticlePlan& particlePlan = ParticlePlanFor(peerPlan, pendingHaloExtent_);
-		const uint32_t N_recv = static_cast<uint32_t>(particlePlan.recvLocalIdxs.size());
-
-		// scatter every field sequentially within each parallel block
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_recv, FLUID_SOLVER_SYNC_BLOCK_SIZE),
-			[&](const tbb::blocked_range<uint32_t>& blockRange)
+		for (uint32_t workIdx = workRange.begin(); workIdx != workRange.end(); workIdx++)
 		{
+			const FieldSyncWorkItem& workItem = schedule.recvWorkItems[workIdx];
+			const PeerPlan& peerPlan = peerPlans_[workItem.peerIdx];
+			const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(pendingHaloExtent_)];
+			const uint32_t N_recv = static_cast<uint32_t>(particlePlan.recvLocalIdxs.size());
+
+			// scatter every field sequentially within each parallel work item
 			for (uint32_t fieldIdx = 0; fieldIdx != N_pendingFields_; fieldIdx++)
 			{
 				const uint64_t fieldOffset = static_cast<uint64_t>(fieldIdx) * N_recv;
-				for (uint32_t particleIdx = blockRange.begin(); particleIdx != blockRange.end(); particleIdx++)
+				for (uint32_t particleIdx = workItem.beginParticleIdx;
+					 particleIdx != workItem.endParticleIdx;
+					 particleIdx++)
 				{
 					pendingFields_[fieldIdx][particlePlan.recvLocalIdxs[particleIdx]] =
 						peerPlan.recvBuffer[fieldOffset + particleIdx];
 				}
 			}
-		});
-	}
+		}
+	});
 	pendingFields_ = {};
 	N_pendingFields_ = 0;
 	fluidFieldExchangePending_ = false;
@@ -679,19 +732,25 @@ Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 {
 	// published and recycled peer plans with their local/global index lists
 	Mem::MemUsage usage = Mem::MemUsageOf_Vector(peerPlans_);
+
 	Mem::Add(usage, Mem::MemUsageOf_Vector(nextPeerPlans_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(peerIdxSortScratch_));
+	for (const FieldSyncSchedule& schedule : fieldSyncSchedules_)
+	{
+		Mem::Add(usage, Mem::MemUsageOf_Vector(schedule.sendWorkItems));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(schedule.recvWorkItems));
+	}
 
 	for (const std::vector<PeerPlan>* peerPlans : { &peerPlans_, &nextPeerPlans_ })
 	{
 		for (const PeerPlan& peerPlan : *peerPlans)
 		{
-			for (const ParticlePlan* particlePlan : { &peerPlan.singleHalo, &peerPlan.doubleHalo })
+			for (const ParticlePlan& particlePlan : peerPlan.particlePlans)
 			{
-				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendLocalIdxs));
-				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvLocalIdxs));
-				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->sendGlobalIdxs));
-				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan->recvGlobalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.sendLocalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.recvLocalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.sendGlobalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.recvGlobalIdxs));
 			}
 		}
 	}

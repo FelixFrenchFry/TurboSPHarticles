@@ -154,6 +154,7 @@ namespace Base
 		}
 		return "DistHaloMode::<unknown>";
 	}
+	constexpr inline uint8_t GetIdx(const DistHaloMode v) { return static_cast<uint8_t>(v); }
 
 	enum class LoadBalanceMetric : uint8_t
 	{
