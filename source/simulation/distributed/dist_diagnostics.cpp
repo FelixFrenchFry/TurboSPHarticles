@@ -881,6 +881,11 @@ namespace
 			if (static_cast<int>(i) == tableSummary.totalIdx) { continue; }
 			if (!distSeparatorPrinted && IsDistBenchOp(benchOps[i]))
 			{
+				// the residual of all operations not explicitly measured
+				if (tableSummary.totalIdx >= 0)
+				{
+					PrintBenchRow("other", tableSummary.other, false);
+				}
 				PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 				distSeparatorPrinted = true;
 			}
@@ -891,7 +896,6 @@ namespace
 
 		if (tableSummary.totalIdx >= 0)
 		{
-			PrintBenchRow("other", tableSummary.other, false);
 			PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 			PrintBenchRow(
 				"total",

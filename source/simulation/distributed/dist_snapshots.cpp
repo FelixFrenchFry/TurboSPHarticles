@@ -42,23 +42,23 @@ namespace
 	}
 
 	template <typename T>
-	int CheckedByteCount(const uint64_t N_packets)
+	uint64_t CheckedByteSize(const uint64_t N_packets)
 	{
-		const uint64_t N_max =
-			static_cast<uint64_t>(std::numeric_limits<int>::max()) / sizeof(T);
+		const uint64_t N_max = std::numeric_limits<uint64_t>::max() / sizeof(T);
 
 		if (N_packets > N_max)
 		{
-			throw std::runtime_error("Distributed snapshot payload exceeds MPI byte count range.");
+			throw std::runtime_error(
+				"Distributed snapshot payload byte size exceeds uint64_t range.");
 		}
 
-		return static_cast<int>(N_packets * sizeof(T));
+		return N_packets * sizeof(T);
 	}
 
 	template <typename T>
-	int CheckedByteCount(const std::vector<T>& packets)
+	uint64_t CheckedByteSize(const std::vector<T>& packets)
 	{
-		return CheckedByteCount<T>(packets.size());
+		return CheckedByteSize<T>(packets.size());
 	}
 
 	template <typename T>
@@ -445,40 +445,36 @@ bool Dist::GatherExportSnapshotToRoot(
 			const uint64_t N_recvF = static_cast<uint64_t>(rankGather.N_recvF);
 			const uint64_t N_recvB = static_cast<uint64_t>(rankGather.N_recvB);
 
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvBytes(
+			mpiContext.IRecvBytesChunked(
 				DataAtOrNull(
 					gatherBuffer.particlesF, rankGather.recvFluidBeginIdx, N_recvF),
-				CheckedByteCount<DistExportFluidParticlePacket>(N_recvF),
+				CheckedByteSize<DistExportFluidParticlePacket>(N_recvF),
 				rankGather.rank,
 				DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
-				requests.back());
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvBytes(
+				requests);
+			mpiContext.IRecvBytesChunked(
 				DataAtOrNull(
 					gatherBuffer.particlesB, rankGather.recvBoundaryBeginIdx, N_recvB),
-				CheckedByteCount<DistExportBoundaryParticlePacket>(N_recvB),
+				CheckedByteSize<DistExportBoundaryParticlePacket>(N_recvB),
 				rankGather.rank,
 				DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
-				requests.back());
+				requests);
 		}
 	}
 	else
 	{
-		requests.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendBytes(
+		mpiContext.ISendBytesChunked(
 			DataOrNull(gatherBuffer.particlesF),
-			CheckedByteCount(gatherBuffer.particlesF),
+			CheckedByteSize(gatherBuffer.particlesF),
 			mpiContext.RootRank(),
 			DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
-			requests.back());
-		requests.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendBytes(
+			requests);
+		mpiContext.ISendBytesChunked(
 			DataOrNull(gatherBuffer.particlesB),
-			CheckedByteCount(gatherBuffer.particlesB),
+			CheckedByteSize(gatherBuffer.particlesB),
 			mpiContext.RootRank(),
 			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
-			requests.back());
+			requests);
 	}
 	mpiContext.WaitAll(requests);
 

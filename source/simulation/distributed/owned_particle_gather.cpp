@@ -33,19 +33,18 @@ namespace
 	}
 
 	template <typename T>
-	int CheckedByteCount(const std::vector<T>& packets)
+	uint64_t CheckedByteSize(const std::vector<T>& packets)
 	{
 		const uint64_t N_packets = packets.size();
-		const uint64_t N_max =
-			static_cast<uint64_t>(std::numeric_limits<int>::max()) / sizeof(T);
+		const uint64_t N_max = std::numeric_limits<uint64_t>::max() / sizeof(T);
 
 		if (N_packets > N_max)
 		{
 			throw std::runtime_error(
-				"Owned particle gather payload exceeds MPI byte count range.");
+				"Owned particle gather payload byte size exceeds uint64_t range.");
 		}
 
-		return static_cast<int>(N_packets * sizeof(T));
+		return N_packets * sizeof(T);
 	}
 
 	template <typename T>
@@ -463,22 +462,20 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 			requests.reserve(2);
 
 			// receive fluid payload from rank
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvBytes(
+			mpiContext.IRecvBytesChunked(
 				DataOrNull(recvBuffer.particlesF),
-				CheckedByteCount(recvBuffer.particlesF),
+				CheckedByteSize(recvBuffer.particlesF),
 				rank,
 				OWNED_PARTICLE_GATHER_TAG_FLUID_PAYLOAD,
-				requests.back());
+				requests);
 
 			// receive boundary payload from rank
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvBytes(
+			mpiContext.IRecvBytesChunked(
 				DataOrNull(recvBuffer.particlesB),
-				CheckedByteCount(recvBuffer.particlesB),
+				CheckedByteSize(recvBuffer.particlesB),
 				rank,
 				OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD,
-				requests.back());
+				requests);
 			mpiContext.WaitAll(requests);
 
 			localOk = CopyOwnedParticleGatherBufferToGlobal(
@@ -492,22 +489,20 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	else
 	{
 		// send fluid paylod to root
-		requests.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendBytes(
+		mpiContext.ISendBytesChunked(
 			DataOrNull(sendBuffer.particlesF),
-			CheckedByteCount(sendBuffer.particlesF),
+			CheckedByteSize(sendBuffer.particlesF),
 			mpiContext.RootRank(),
 			OWNED_PARTICLE_GATHER_TAG_FLUID_PAYLOAD,
-			requests.back());
+			requests);
 
 		// send boundary payload to root
-		requests.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendBytes(
+		mpiContext.ISendBytesChunked(
 			DataOrNull(sendBuffer.particlesB),
-			CheckedByteCount(sendBuffer.particlesB),
+			CheckedByteSize(sendBuffer.particlesB),
 			mpiContext.RootRank(),
 			OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD,
-			requests.back());
+			requests);
 
 		mpiContext.WaitAll(requests);
 	}

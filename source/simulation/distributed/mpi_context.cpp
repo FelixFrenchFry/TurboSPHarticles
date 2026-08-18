@@ -476,7 +476,8 @@ void MpiContext::IRecvBytesChunked(
 	uint8_t* recvBytes = static_cast<uint8_t*>(recvData);
 	uint64_t byteOffset = 0;
 
-	// use the same tag for each chunk; MPI preserves ordering for same peer/tag/communicator
+	// using the same tag for each chunk,
+	// MPI preserves FIFO-ordering for same peer/tag/communicator
 	while (byteOffset < N_recvBytes)
 	{
 		const uint64_t N_chunkBytes = std::min(
@@ -510,7 +511,8 @@ void MpiContext::ISendBytesChunked(
 	const uint8_t* sendBytes = static_cast<const uint8_t*>(sendData);
 	uint64_t byteOffset = 0;
 
-	// use the same tag for each chunk; MPI preserves ordering for same peer/tag/communicator
+	// using the same tag for each chunk,
+	// MPI preserves FIFO-ordering for same peer/tag/communicator
 	while (byteOffset < N_sendBytes)
 	{
 		const uint64_t N_chunkBytes = std::min(
