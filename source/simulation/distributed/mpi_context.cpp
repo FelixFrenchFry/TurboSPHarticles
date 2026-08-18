@@ -15,9 +15,6 @@ using namespace Dist;
 
 namespace
 {
-	constexpr uint64_t MPI_CONTEXT_BYTE_CHUNK_SIZE =
-		256ull * 1024ull * 1024ull; // ~ 256 MiB
-
 	int CheckedMpiCount(const uint64_t N_values)
 	{
 		if (N_values > static_cast<uint64_t>(std::numeric_limits<int>::max()))

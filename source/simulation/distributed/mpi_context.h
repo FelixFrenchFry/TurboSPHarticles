@@ -13,6 +13,9 @@
 
 namespace Dist
 {
+	inline constexpr uint64_t MPI_CONTEXT_BYTE_CHUNK_SIZE =
+		1024ull * 1024ull * 1024ull; // ~ 1 GiB
+
 	class MpiContext final
 	{
 	public:
