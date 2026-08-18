@@ -584,13 +584,17 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		else
 		{
 			computePressureAcceleration(outerFluidChunkIdxs_, N_ownedF_, nullptr);
+			benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 			sync.BeginSynchronizeFluidVectorField(
 				std::span<float>(xAccPressF_.data(), N_F_),
 				std::span<float>(yAccPressF_.data(), N_F_),
 				std::span<float>(zAccPressF_.data(), N_F_),
 				Base::DistHaloMode::SingleHalo);
+			benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 			computePressureAcceleration(innerFluidChunkIdxs_, N_ownedF_, nullptr);
+			benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 			sync.EndSynchronizeFluidFields();
+			benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 		}
 
 		const auto updatePressure = [&](const std::span<const uint32_t> chunkIdxs)
@@ -613,13 +617,17 @@ void SimBackend_CPU01::Step_IISPH_Distributed(const SimParams& params)
 		};
 
 		PressureSolveErrorSums localErrorSums = updatePressure(outerFluidChunkIdxs_);
+		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 		sync.BeginSynchronizeFluidScalarField(
 			std::span<float>(pressureF_.data(), N_F_), params.distHaloMode);
+		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 		const PressureSolveErrorSums innerErrorSums = updatePressure(innerFluidChunkIdxs_);
 		localErrorSums.raw += innerErrorSums.raw;
 		localErrorSums.pos += innerErrorSums.pos;
 		localErrorSums.abs += innerErrorSums.abs;
+		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 		sync.EndSynchronizeFluidFields();
+		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 		// make every rank use the same global convergence criterion
 		const PressureSolveErrorSums errorSums =

@@ -502,7 +502,11 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	const Bench::BenchOpList distBenchOps =
 	{
 		Bench::BenchOp::Dist_ParticleRedistribution,
-		Bench::BenchOp::Dist_StateSync
+		Bench::BenchOp::Dist_PlanRebuild,
+		Bench::BenchOp::Dist_HaloFieldExchange,
+		Bench::BenchOp::Dist_ParticlePermutation,
+		Bench::BenchOp::Dist_LoadBalancing,
+		Bench::BenchOp::Dist_Misc
 	};
 	auto distBenchInsertIt = curBenchOps_.end();
 	for (auto it = curBenchOps_.begin(); it != curBenchOps_.end(); it++)
@@ -865,9 +869,12 @@ bool DistSimulationMgr::RunSim_Blocking()
 			runOk = false;
 		}
 
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_LoadBalancing);
+		if (runOk && !UpdateLoadBalancing()) { runOk = false; }
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_LoadBalancing);
+
 		// evaluate the benchmarks and memory usage for this step
 		FinalizeBenchMemMeasurements(params);
-		if (runOk && !UpdateLoadBalancing()) { runOk = false; }
 		AppendLatestMemoryMetricsLog();
 		AppendLatestBenchmarkMetricsLog();
 
@@ -1997,6 +2004,7 @@ bool DistSimulationMgr::UpdateLoadBalancing()
 		.N_ownedB = particleStateB_.N_owned,
 		.N_haloF = particleStateF_.N_halo,
 		.N_haloB = particleStateB_.N_halo,
+		// (measurement is already one step old, since the record is finalized after load balancing)
 		.rankBackendStepTimeNs =
 			benchmarksTracker_->GetBench_Latest(Bench::BenchOp::Dist_RankBackendStep)
 	};
@@ -2076,7 +2084,10 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
-		if (!mpiContext_.AllTrue(localOk)) { return false; }
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
+		const bool inputOk = mpiContext_.AllTrue(localOk);
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
+		if (!inputOk) { return false; }
 
 		// ensure all ranks have the same parameters before redistribution
 		SyncParameters();
@@ -2087,10 +2098,10 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticleRedistribution);
 		if (!redistributionOk) { return false; }
 
-		if (!ValidateGlobalOwnedParticleCounts())
-		{
-			return false;
-		}
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
+		const bool globalCountsOk = ValidateGlobalOwnedParticleCounts();
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
+		if (!globalCountsOk) { return false; }
 
 		if (!PrepareRankLocalBackendStep()) { return false; }
 
@@ -2107,10 +2118,13 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 			localOk = false;
 		}
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_RankBackendStep);
-		if (!mpiContext_.AllTrue(localOk)) { return false; }
 
-		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
-		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateHandoff);
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
+		const bool backendOk = mpiContext_.AllTrue(localOk);
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
+		if (!backendOk) { return false; }
+
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticlePermutation);
 		try
 		{
 			// skip solver step if no fluid particles to avoid neighbor search particle re-order
@@ -2126,18 +2140,21 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 			localOk = false;
 		}
-		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateHandoff);
-		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
-		if (!mpiContext_.AllTrue(localOk)) { return false; }
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
 
-		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
-		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateHandoff);
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
+		const bool reOrderOk = mpiContext_.AllTrue(localOk);
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
+		if (!reOrderOk) { return false; }
+
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
 		const bool finishOk = FinishRankLocalBackendStep(params);
-		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateHandoff);
-		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!finishOk) { return false; }
 
+		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
 		if (!ValidateRankLocalParticleMetadata()) { localOk = false; }
+		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 	}
 	catch (const std::exception& ex)
 	{
@@ -2244,6 +2261,8 @@ bool DistSimulationMgr::MaterializeRankLocalState(const bool backendWillBeRetire
 
 bool DistSimulationMgr::PrepareRankLocalBackendStep()
 {
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticlePermutation);
+
 	// derived from the replicated global topology, so every rank agrees on whether the
 	// rigid body collectives below run at all
 	const bool hasRigidBodies =
@@ -2340,9 +2359,9 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		localOk = false;
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
 
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateHandoff);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 	try
 	{
 		std::string failMsg{};
@@ -2389,8 +2408,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 		localOk = false;
 	}
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateHandoff);
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_PlanRebuild);
 
 	return mpiContext_.AllTrue(localOk);
 }

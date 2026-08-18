@@ -565,9 +565,7 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 		throw std::runtime_error("Fluid solver synchronization field size does not match the local particle count.");
 	}
 
-	// pack and exchange field values with every neighboring rank
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSync);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
 	requests_.clear();
 	// size every peer payload before the parallel pass reads their storage
 	for (PeerPlan& peerPlan : peerPlans_)
@@ -633,8 +631,7 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	N_pendingFields_ = N_fields;
 	pendingHaloExtent_ = haloExtent;
 	fluidFieldExchangePending_ = true;
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSync);
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
 }
 
 void FluidSolverSyncMgr::EndSynchronizeFluidFields()
@@ -648,13 +645,8 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 		throw std::runtime_error("No fluid solver synchronization exchange is pending.");
 	}
 
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_StateSync);
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSync);
-	// time the peer payload wait separately from the local packing work
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_SolverSyncWait);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
 	mpiContext_->WaitAll(requests_);
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSyncWait);
-
 	// unpack halo values
 	// (every halo slot is owned by exactly one peer, so work items write disjoint slots)
 	const FieldSyncSchedule& schedule = fieldSyncSchedules_[Base::GetIdx(pendingHaloExtent_)];
@@ -687,8 +679,7 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 	pendingFields_ = {};
 	N_pendingFields_ = 0;
 	fluidFieldExchangePending_ = false;
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_SolverSync);
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_StateSync);
+	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
 }
 
 Sim::PressureSolveErrorSums FluidSolverSyncMgr::GlobalizePressureSolveErrorSums(

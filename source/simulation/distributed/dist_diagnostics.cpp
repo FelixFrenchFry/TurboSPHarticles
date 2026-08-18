@@ -527,7 +527,11 @@ namespace
 	bool IsDistBenchOp(const Bench::BenchOp op)
 	{
 		return op == Bench::BenchOp::Dist_ParticleRedistribution ||
-			op == Bench::BenchOp::Dist_StateSync;
+			op == Bench::BenchOp::Dist_PlanRebuild ||
+			op == Bench::BenchOp::Dist_HaloFieldExchange ||
+			op == Bench::BenchOp::Dist_ParticlePermutation ||
+			op == Bench::BenchOp::Dist_LoadBalancing ||
+			op == Bench::BenchOp::Dist_Misc;
 	}
 
 	int FindTotalOpIdx(const Bench::BenchOpList& benchOps)
@@ -690,9 +694,8 @@ namespace
 
 		uint64_t backendAvgNs = 0;
 		uint64_t redistributionAvgNs = 0;
-		uint64_t solverSyncAvgNs = 0;
-		uint64_t solverSyncWaitAvgNs = 0;
-		uint64_t stateHandoffAvgNs = 0;
+		uint64_t haloFieldExchangeAvgNs = 0;
+		uint64_t planRebuildAvgNs = 0;
 	};
 
 	std::vector<DistRankTimingSummary> BuildRankTimingSummaries(
@@ -716,12 +719,10 @@ namespace
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_RankBackendStep, true);
 			summary.redistributionAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_ParticleRedistribution, true);
-			summary.solverSyncAvgNs =
-				BenchOpTimeNs(report, Bench::BenchOp::Dist_SolverSync, true);
-			summary.solverSyncWaitAvgNs =
-				BenchOpTimeNs(report, Bench::BenchOp::Dist_SolverSyncWait, true);
-			summary.stateHandoffAvgNs =
-				BenchOpTimeNs(report, Bench::BenchOp::Dist_StateHandoff, true);
+			summary.haloFieldExchangeAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_HaloFieldExchange, true);
+			summary.planRebuildAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_PlanRebuild, true);
 
 			summaries.push_back(summary);
 		}
@@ -874,9 +875,16 @@ namespace
 				avgTime, pctAvgLabel);
 		};
 
+		bool distSeparatorPrinted = false;
 		for (uint32_t i = 0; i < benchOps.size(); i++)
 		{
 			if (static_cast<int>(i) == tableSummary.totalIdx) { continue; }
+			if (!distSeparatorPrinted && IsDistBenchOp(benchOps[i]))
+			{
+				PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+				distSeparatorPrinted = true;
+			}
+
 			const std::string name = BenchOpName(benchOps[i]);
 			PrintBenchRow(name.c_str(), tableSummary.ops[i], false);
 		}
@@ -913,8 +921,8 @@ namespace
 
 		PrintLine(N_lines,
 			"%-2s | %10s | %15s | %16s | %13s | %9s",
-			"r", "backend", "redistribution", "solver sync/wait",
-			"state handoff", "");
+			"r", "backend", "redistribution", "halo exchange",
+			"plan rebuild", "");
 		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
@@ -923,15 +931,14 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %10.2f | %15.2f | %7.2f / %-6.2f | %13.2f | %9s",
+				"%-2s | %10.2f | %15.2f | %16.2f | %13.2f | %9s",
 				rankLabel,
 				Bench::ConvertFromNs(unit, summary.backendAvgNs),
 				Bench::ConvertFromNs(
 					unit,
 					summary.redistributionAvgNs),
-				Bench::ConvertFromNs(unit, summary.solverSyncAvgNs),
-				Bench::ConvertFromNs(unit, summary.solverSyncWaitAvgNs),
-				Bench::ConvertFromNs(unit, summary.stateHandoffAvgNs),
+				Bench::ConvertFromNs(unit, summary.haloFieldExchangeAvgNs),
+				Bench::ConvertFromNs(unit, summary.planRebuildAvgNs),
 				unitLabel);
 		}
 	}
