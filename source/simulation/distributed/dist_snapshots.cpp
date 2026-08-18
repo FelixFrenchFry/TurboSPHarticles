@@ -404,7 +404,7 @@ bool Dist::GatherExportSnapshotToRoot(
 			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT,
 			requests.back());
 	}
-	mpiContext.WaitAll(requests);
+	mpiContext.WaitAll(requests, "distributed snapshot counts");
 	requests.clear();
 
 	if (mpiContext.IsRoot())
@@ -476,7 +476,7 @@ bool Dist::GatherExportSnapshotToRoot(
 			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
 			requests);
 	}
-	mpiContext.WaitAll(requests);
+	mpiContext.WaitAll(requests, "distributed snapshot payloads");
 
 	if (mpiContext.IsRoot())
 	{

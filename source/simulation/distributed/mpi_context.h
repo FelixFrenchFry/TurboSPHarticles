@@ -14,7 +14,7 @@
 namespace Dist
 {
 	inline constexpr uint64_t MPI_CONTEXT_BYTE_CHUNK_SIZE =
-		1024ull * 1024ull * 1024ull; // ~ 1 GiB
+		256ull * 1024ull * 1024ull; // ~ 256 MiB
 
 	class MpiContext final
 	{
@@ -87,7 +87,9 @@ namespace Dist
 			int peerRank,
 			int tag,
 			std::vector<MPI_Request>& requests) const;
-		void WaitAll(std::vector<MPI_Request>& requests) const;
+		void WaitAll(
+			std::vector<MPI_Request>& requests,
+			const char* context = nullptr) const;
 
 		// helpers
 		static const char* ThreadSupportName(int threadSupport);
@@ -102,6 +104,8 @@ namespace Dist
 		int threadSupport_ = MPI_THREAD_SINGLE;
 		// only the context that called MPI_Init_thread is allowed to call MPI_Finalize
 		bool ownsMpiLifetime_ = false;
+		// used by WaitAll(), so request-status diagnostics do not allocate per exchange
+		mutable std::vector<MPI_Status> waitStatuses_;
 	};
 
 } // namespace Dist

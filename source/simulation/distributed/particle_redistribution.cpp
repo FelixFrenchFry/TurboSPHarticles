@@ -1997,7 +1997,7 @@ void ParticleRedistributionMgr::ExchangePayloads(
 			requests);
 	}
 
-	mpiContext.WaitAll(requests);
+	mpiContext.WaitAll(requests, "particle redistribution payloads");
 }
 
 bool ParticleRedistributionMgr::PrepareFluidParticleMutation(

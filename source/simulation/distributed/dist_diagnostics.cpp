@@ -233,7 +233,7 @@ namespace
 				requests.back());
 		}
 
-		mpiContext.WaitAll(requests);
+		mpiContext.WaitAll(requests, "startup diagnostic reports");
 	}
 
 	void GatherHardwareReports(
@@ -273,7 +273,7 @@ namespace
 				requests.back());
 		}
 
-		mpiContext.WaitAll(requests);
+		mpiContext.WaitAll(requests, "hardware diagnostic reports");
 	}
 
 	void PrintHardwareReports(const std::vector<DistHardwareReport>& reports)
@@ -354,7 +354,7 @@ namespace
 				requests.back());
 		}
 
-		mpiContext.WaitAll(requests);
+		mpiContext.WaitAll(requests, "step diagnostic reports");
 	}
 
 	void GatherRankBenchReports(
@@ -394,7 +394,7 @@ namespace
 				requests.back());
 		}
 
-		mpiContext.WaitAll(requests);
+		mpiContext.WaitAll(requests, "benchmark diagnostic reports");
 	}
 
 	void GatherParticleRedistributionTimingReports(
@@ -436,7 +436,7 @@ namespace
 				requests.back());
 		}
 
-		mpiContext.WaitAll(requests);
+		mpiContext.WaitAll(requests, "redistribution timing reports");
 	}
 
 	uint64_t SumReportField(

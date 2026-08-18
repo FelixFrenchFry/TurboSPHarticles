@@ -29,8 +29,19 @@ namespace
 	{
 		if (result == MPI_SUCCESS) { return; }
 
-		throw std::runtime_error(std::string(opName) + " failed with MPI error code " +
-			std::to_string(result) + ".");
+		char errorString[MPI_MAX_ERROR_STRING]{};
+		int errorStringLength = 0;
+		const bool hasErrorString = MPI_Error_string(
+			result, errorString, &errorStringLength) == MPI_SUCCESS &&
+			errorStringLength > 0;
+
+		std::string message = std::string(opName) + " failed with MPI error code " +
+			std::to_string(result);
+		if (hasErrorString)
+		{
+			message += " (" + std::string(errorString, errorStringLength) + ")";
+		}
+		throw std::runtime_error(message + ".");
 	}
 
 	template <typename T, typename MpiOp>
@@ -527,7 +538,9 @@ void MpiContext::ISendBytesChunked(
 	}
 }
 
-void MpiContext::WaitAll(std::vector<MPI_Request>& requests) const
+void MpiContext::WaitAll(
+	std::vector<MPI_Request>& requests,
+	const char* context) const
 {
 	if (requests.empty()) { return; }
 	if (requests.size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
@@ -535,12 +548,29 @@ void MpiContext::WaitAll(std::vector<MPI_Request>& requests) const
 		throw std::runtime_error("MPI request count exceeds int range.");
 	}
 
-	CheckMpiResult(
-		MPI_Waitall(
-			static_cast<int>(requests.size()),
-			requests.data(),
-			MPI_STATUSES_IGNORE),
-		"MPI_Waitall");
+	const std::string opName = context && context[0] != '\0'
+		? "MPI_Waitall (" + std::string(context) + ")"
+		: "MPI_Waitall";
+	waitStatuses_.resize(requests.size());
+	const int result = MPI_Waitall(
+		static_cast<int>(requests.size()),
+		requests.data(),
+		waitStatuses_.data());
+	if (result == MPI_SUCCESS) { return; }
+
+	if (result == MPI_ERR_IN_STATUS)
+	{
+		for (uint64_t requestIdx = 0; requestIdx != requests.size(); requestIdx++)
+		{
+			if (waitStatuses_[requestIdx].MPI_ERROR == MPI_SUCCESS) { continue; }
+
+			const std::string requestOpName = opName + " request " +
+				std::to_string(requestIdx);
+			CheckMpiResult(waitStatuses_[requestIdx].MPI_ERROR, requestOpName.c_str());
+		}
+	}
+
+	CheckMpiResult(result, opName.c_str());
 }
 
 const char* MpiContext::ThreadSupportName(const int threadSupport)

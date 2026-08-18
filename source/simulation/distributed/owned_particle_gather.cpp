@@ -409,7 +409,7 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 			OWNED_PARTICLE_GATHER_TAG_BOUNDARY_COUNT,
 			requests.back());
 	}
-	mpiContext.WaitAll(requests);
+	mpiContext.WaitAll(requests, "owned particle gather counts");
 	requests.clear();
 
 	if (mpiContext.IsRoot())
@@ -476,7 +476,7 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 				rank,
 				OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD,
 				requests);
-			mpiContext.WaitAll(requests);
+			mpiContext.WaitAll(requests, "owned particle gather payloads");
 
 			localOk = CopyOwnedParticleGatherBufferToGlobal(
 				globalOwnedState,
@@ -504,7 +504,7 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 			OWNED_PARTICLE_GATHER_TAG_BOUNDARY_PAYLOAD,
 			requests);
 
-		mpiContext.WaitAll(requests);
+		mpiContext.WaitAll(requests, "owned particle gather payloads");
 	}
 
 	// check that all particles are now present at the root

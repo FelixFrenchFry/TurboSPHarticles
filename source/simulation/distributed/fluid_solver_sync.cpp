@@ -337,9 +337,8 @@ bool FluidSolverSyncMgr::Rebuild(
 		return false;
 	}
 
-	// full count and global-ID validation is retained for debug/validation builds;
-	// local plan checks above remain active in optimized builds
-#ifndef NDEBUG
+	// peer counts validated in every build,
+	// the more expensive global-ID exchange is for debug/validation builds
 	const auto ValidatePeerPlan = [&](const Base::DistHaloMode haloExtent) -> bool
 	{
 		// --- [ peer count exchange ] ---------------------------------------------------------------
@@ -382,7 +381,7 @@ bool FluidSolverSyncMgr::Rebuild(
 				sendCounts[peerIdx], newPeerPlans[peerIdx].rank,
 				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
 		}
-		mpiContext.WaitAll(requests_);
+		mpiContext.WaitAll(requests_, "fluid solver peer particle counts");
 
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
@@ -402,6 +401,7 @@ bool FluidSolverSyncMgr::Rebuild(
 			return false;
 		}
 
+	#ifndef NDEBUG
 		// --- [ peer global-index exchange ] --------------------------------------------------------
 
 		std::vector<std::vector<uint32_t>> receivedGlobalIdxs(newPeerPlans.size());
@@ -426,7 +426,7 @@ bool FluidSolverSyncMgr::Rebuild(
 				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
 				requests_);
 		}
-		mpiContext.WaitAll(requests_);
+		mpiContext.WaitAll(requests_, "fluid solver peer global IDs");
 
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
@@ -440,6 +440,9 @@ bool FluidSolverSyncMgr::Rebuild(
 		}
 		return FinishCollectiveValidation(
 			mpiContext, localOk, localFailMsg, failMsg);
+	#else
+		return true;
+	#endif
 	};
 
 	if (!ValidatePeerPlan(Base::DistHaloMode::SingleHalo) ||
@@ -447,9 +450,8 @@ bool FluidSolverSyncMgr::Rebuild(
 	{
 		return false;
 	}
-#endif
 
-	// publish the locally validated plan after optional full peer-plan validation
+	// publish the locally validated plan after peer-plan validation
 	mpiContext_ = &mpiContext;
 	benchmarksTracker_ = &benchmarksTracker;
 	N_localF_ = particlesF.N_;
@@ -646,7 +648,7 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 	}
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
-	mpiContext_->WaitAll(requests_);
+	mpiContext_->WaitAll(requests_, "fluid solver field payloads");
 	// unpack halo values
 	// (every halo slot is owned by exactly one peer, so work items write disjoint slots)
 	const FieldSyncSchedule& schedule = fieldSyncSchedules_[Base::GetIdx(pendingHaloExtent_)];
