@@ -134,8 +134,6 @@ namespace Sim
 		// benchmarks
 		uint32_t maxBenchRecs = 1'000'000;
 		Bench::TimeUnit timeUnit = Bench::TimeUnit::ms;
-		Base::ProgressReportMode progressReportMode =
-			Base::ProgressReportMode::Auto;
 
 		// memory
 		uint32_t maxMemRecs = 1'000'000;
@@ -159,6 +157,10 @@ namespace Sim
 		// export surface classification
 		float surfaceNbrCountRatio = 0.75f; // near-surface neighborhood fill ratio
 		uint32_t surfaceNbrCountThreshold = 27; // fluid neighbor count derived from the ratio
+
+		// misc
+		Base::ProgressReportMode progressReportMode =
+			Base::ProgressReportMode::Auto;
 	};
 
 	// serializes the resolved parameters (inverse of LoadSimParamsFromJson)

@@ -833,63 +833,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			params_.maxStatRecs = it->get<uint32_t>();
 		}
 
-		auto ParseProgressReportMode = [](const nlohmann::json& v,
-			Base::ProgressReportMode& out) -> bool
-			{
-				if (v.is_string())
-				{
-					const std::string s = v.get<std::string>();
-					if (s == "Auto")
-					{
-						out = Base::ProgressReportMode::Auto;
-						return true;
-					}
-					if (s == "Overwrite")
-					{
-						out = Base::ProgressReportMode::Overwrite;
-						return true;
-					}
-					if (s == "Append")
-					{
-						out = Base::ProgressReportMode::Append;
-						return true;
-					}
-					return false;
-				}
-				else if (v.is_number_integer())
-				{
-					switch (v.get<int>())
-					{
-					case 0:
-						out = Base::ProgressReportMode::Auto;
-						return true;
-					case 1:
-						out = Base::ProgressReportMode::Overwrite;
-						return true;
-					case 2:
-						out = Base::ProgressReportMode::Append;
-						return true;
-					default:
-						return false;
-					}
-				}
-
-				return false;
-			};
-
-		if (auto it = j.find("progressReportMode"); it != j.end())
-		{
-			Base::ProgressReportMode mode;
-			if (ParseProgressReportMode(*it, mode))
-			{
-				params_.progressReportMode = mode;
-			}
-			else
-			{
-				SPDLOG_WARN("Invalid 'progressReportMode' value in JSON.");
-			}
-		}
-
 		auto ParseTimeUnit = [](const nlohmann::json& v, Bench::TimeUnit& out) -> bool
 			{
 				if (v.is_string())
@@ -1019,6 +962,69 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		EndWrite();
 	}
 
+	// --- [ misc ] ----------------------------------------------------------------------------------
+
+	{
+		auto ParseProgressReportMode = [](const nlohmann::json& v,
+			Base::ProgressReportMode& out) -> bool
+			{
+				if (v.is_string())
+				{
+					const std::string s = v.get<std::string>();
+					if (s == "Auto")
+					{
+						out = Base::ProgressReportMode::Auto;
+						return true;
+					}
+					if (s == "Overwrite")
+					{
+						out = Base::ProgressReportMode::Overwrite;
+						return true;
+					}
+					if (s == "Append")
+					{
+						out = Base::ProgressReportMode::Append;
+						return true;
+					}
+					return false;
+				}
+				else if (v.is_number_integer())
+				{
+					switch (v.get<int>())
+					{
+					case 0:
+						out = Base::ProgressReportMode::Auto;
+						return true;
+					case 1:
+						out = Base::ProgressReportMode::Overwrite;
+						return true;
+					case 2:
+						out = Base::ProgressReportMode::Append;
+						return true;
+					default:
+						return false;
+					}
+				}
+
+				return false;
+			};
+
+		if (auto it = j.find("progressReportMode"); it != j.end())
+		{
+			Base::ProgressReportMode mode;
+			if (ParseProgressReportMode(*it, mode))
+			{
+				BeginWrite();
+				params_.progressReportMode = mode;
+				EndWrite();
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'progressReportMode' value in JSON.");
+			}
+		}
+	}
+
 	if (!AssertParamDerivationCorrectness())
 	{
 		SPDLOG_ERROR("Derived simulation parameters are invalid.");
@@ -1142,7 +1148,6 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 
 	// (time and byte units have no name helper and stay numeric)
 	j["maxBenchRecs"] = par.maxBenchRecs;
-	j["progressReportMode"] = Base::ToCString(par.progressReportMode);
 	j["timeUnit"] = static_cast<int>(par.timeUnit);
 	j["maxMemRecs"] = par.maxMemRecs;
 	j["byteUnit"] = static_cast<int>(par.byteUnit);
@@ -1163,6 +1168,10 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 
 	j["surfaceNbrCountRatio"] = par.surfaceNbrCountRatio;
 	j["surfaceNbrCountThreshold"] = par.surfaceNbrCountThreshold;
+
+	// --- [ misc ] ----------------------------------------------------------------------------------
+
+	j["progressReportMode"] = Base::ToCString(par.progressReportMode);
 
 	return j;
 }

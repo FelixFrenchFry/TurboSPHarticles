@@ -263,11 +263,11 @@ namespace Sim
 
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "saveFinalState", params.saveFinalState ? "true" : "false");
-		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS,
-			"progressReportMode", Base::ToCString(params.progressReportMode));
 		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportInterval", params.exportInterval);
+		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"progressReportMode", Base::ToCString(params.progressReportMode));
     }
 
     void DiagnosticsMgr::PrintSimSetup(const Sim::SimulationMgr& simMgr,
