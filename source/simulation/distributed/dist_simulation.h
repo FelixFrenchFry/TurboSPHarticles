@@ -32,6 +32,8 @@
 
 namespace Dist
 {
+	inline constexpr float INITIAL_DOMAIN_DECOMP_PROFILE_PARTICLE_SIZE_MULTIPLIER = 8.0f;
+
 	class DistSimulationMgr final
 	{
 	public:
@@ -88,6 +90,9 @@ namespace Dist
 
 		// [ rank-reduced ] creates the ownership / halo decomp from the selected scenario bounds
 		bool BuildDomainDecomp();
+
+		// [ rank-reduced ] profiles a coarse probe scenario state to balance the initial domain decomposition
+		bool BuildInitialDomainDecomp();
 
 		// [ rank-reduced ] selects load metric and trigger policies for the current domain decomp
 		bool ConfigureLoadBalancing();

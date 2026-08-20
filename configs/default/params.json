@@ -36,7 +36,7 @@
   "loadBalanceThreshold": 0.01,
   "loadBalanceSustainSteps": 3,
   "loadBalanceCooldownSteps": 20,
-  "loadBalanceIntervalSteps": 10,
+  "loadBalanceIntervalSteps": 50,
 
   "surfaceSamplingMinDistanceRatio": 0.3,
   "surfaceSamplingMaxDistanceRatio": 1.0,

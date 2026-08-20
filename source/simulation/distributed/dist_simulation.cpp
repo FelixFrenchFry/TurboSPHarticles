@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
+#include <numeric>
 #include <span>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -78,6 +79,35 @@ namespace
 		}
 
 		return globalBounds;
+	}
+
+	Sim::SimParams MakeInitialDomainDecompProbeParams(const Sim::SimParams& params)
+	{
+		Sim::SimParams probeParams = params;
+		probeParams.particleSizeF *= INITIAL_DOMAIN_DECOMP_PROFILE_PARTICLE_SIZE_MULTIPLIER;
+		probeParams.particleSizeB *= INITIAL_DOMAIN_DECOMP_PROFILE_PARTICLE_SIZE_MULTIPLIER;
+		probeParams.particleSizeInvF = 1.0f / probeParams.particleSizeF;
+		probeParams.particleSizeInvB = 1.0f / probeParams.particleSizeB;
+
+		probeParams.kernelRadius = probeParams.kernelSuppRatio * probeParams.particleSizeF;
+		probeParams.kernelRadiusSqu = probeParams.kernelRadius * probeParams.kernelRadius;
+		probeParams.distHaloRadius = probeParams.distHaloMode == Base::DistHaloMode::DoubleHalo
+			? 2.0f * probeParams.kernelRadius
+			: probeParams.kernelRadius;
+
+		probeParams.massF = probeParams.restDensity * probeParams.particleSizeF
+			* probeParams.particleSizeF * probeParams.particleSizeF;
+		probeParams.massB = probeParams.restDensity * probeParams.particleSizeB
+			* probeParams.particleSizeB * probeParams.particleSizeB;
+
+		probeParams.surfaceSamplingMinDistance =
+			probeParams.surfaceSamplingMinDistanceRatio * probeParams.particleSizeB;
+		probeParams.surfaceSamplingMaxDistance =
+			probeParams.surfaceSamplingMaxDistanceRatio * probeParams.particleSizeB;
+		probeParams.surfaceSamplingCoverageProbeSpacing =
+			probeParams.surfaceSamplingCoverageProbeSpacingRatio * probeParams.particleSizeB;
+
+		return probeParams;
 	}
 
 	std::string FormatNeighborRanks(const std::vector<int>& neighborRanks)
@@ -388,6 +418,9 @@ bool DistSimulationMgr::Init(
 	SelectDomainDecomp(simParams_.domainDecompMethod);
 	if (!BuildDomainDecomp()) { return false; }
 	if (!ConfigureLoadBalancing()) { return false; }
+
+	SPDLOG_INFO_MPI("Init initial domain decomp profile...", mpiContext_);
+	if (!BuildInitialDomainDecomp()) { return false; }
 
 	SPDLOG_INFO_MPI("Init rank-local particle states...", mpiContext_);
 	if (!ReBuildInitialSimState()) { return false; }
@@ -1057,7 +1090,7 @@ bool DistSimulationMgr::BuildDomainDecomp()
 			}
 			else
 			{
-				// the initial layout is uniform, so every rank holds the same subdomain extent
+				// layout is uniform at this stage, initial profile is applied afterwards
 				constexpr const char* axisNames[] = { "X", "Y", "Z" };
 				const glm::vec3 ownedExtents = domainDecomp_->OwnedExtentAABB(mpiContext_.Rank()).Extents();
 				const glm::vec3 globalExtents = globalBounds.Extents();
@@ -1083,6 +1116,120 @@ bool DistSimulationMgr::BuildDomainDecomp()
 	catch (const std::exception& ex)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Failed to build distributed domain decomp: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		localOk = false;
+	}
+
+	return mpiContext_.AllTrue(localOk);
+}
+
+bool DistSimulationMgr::BuildInitialDomainDecomp()
+{
+	bool localOk = true;
+
+	if (!simScenario_)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to build initial distributed domain decomp "
+			"(no scenario selected).",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	else if (!domainDecomp_)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to build initial distributed domain decomp "
+			"(no domain decomp selected).",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
+	}
+	if (!mpiContext_.AllTrue(localOk)) { return false; }
+
+	Sync::UniversalSimState probeState{};
+	std::vector<uint32_t> probeFluidLocalIdxs{};
+	std::vector<uint32_t> probeBoundaryLocalIdxs{};
+
+	try
+	{
+		if (mpiContext_.IsRoot())
+		{
+			const Sim::SimParams probeParams =
+				MakeInitialDomainDecompProbeParams(simParams_);
+			simScenario_->Build(probeState, probeParams);
+
+			probeFluidLocalIdxs.resize(probeState.particlesF.xPos.size());
+			std::iota(probeFluidLocalIdxs.begin(), probeFluidLocalIdxs.end(), 0u);
+			probeBoundaryLocalIdxs.resize(probeState.particlesB.xPos.size());
+			std::iota(probeBoundaryLocalIdxs.begin(), probeBoundaryLocalIdxs.end(), 0u);
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to build initial domain decomp profile: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		localOk = false;
+	}
+	if (!mpiContext_.AllTrue(localOk)) { return false; }
+
+	DomainDecompRepartitionProfile profile{};
+	try
+	{
+		DomainDecompRepartitionParticleInput profileInput{};
+		profileInput.weightModel = simParams_.loadBalanceWeightModel;
+		profileInput.rank = mpiContext_.Rank();
+
+		if (mpiContext_.IsRoot())
+		{
+			// every probe particle contributes to the profile
+			profileInput.fluid.x = probeState.particlesF.xPos;
+			profileInput.fluid.y = probeState.particlesF.yPos;
+			profileInput.fluid.z = probeState.particlesF.zPos;
+			profileInput.fluid.ownedLocalIdx = probeFluidLocalIdxs;
+			profileInput.boundary.x = probeState.particlesB.xPos;
+			profileInput.boundary.y = probeState.particlesB.yPos;
+			profileInput.boundary.z = probeState.particlesB.zPos;
+			profileInput.boundary.ownedLocalIdx = probeBoundaryLocalIdxs;
+		}
+
+		domainDecomp_->BuildRepartitionProfile(profileInput, profile);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to build initial domain decomp profile: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		localOk = false;
+	}
+	if (!mpiContext_.AllTrue(localOk)) { return false; }
+
+	try
+	{
+		mpiContext_.AllReduceSumUint32s(profile.ownedFluidByUnit);
+		mpiContext_.AllReduceSumUint32s(profile.ownedBoundaryByUnit);
+
+		// repartition validates rank loads even though the initial profile supplies
+		// the spatial weights used to place the domain walls
+		const std::vector<double> initialLoadByRank(
+			static_cast<uint64_t>(mpiContext_.Size()), 1.0);
+		domainDecomp_->Repartition(
+			{
+				.weightModel = simParams_.loadBalanceWeightModel,
+				.loadByRank = initialLoadByRank,
+				.ownedFluidByUnit = profile.ownedFluidByUnit,
+				.ownedBoundaryByUnit = profile.ownedBoundaryByUnit
+			});
+
+		if (!domainDecomp_->IsValidForRankCount(mpiContext_.Size()))
+		{
+			throw std::runtime_error(
+				"Initial domain decomposition produced an invalid rank layout.");
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to apply initial domain decomp profile: {}",
 			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 		localOk = false;
 	}
