@@ -32,6 +32,7 @@ namespace
 	struct ProgressState
 	{
 		bool initialized = false;
+		bool overwriteProgress = true;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
 		int N_lastLines = 0;
@@ -146,14 +147,21 @@ namespace
 
 	void PrintLine(int& N_lines)
 	{
-		std::printf("\x1b[2K\n");
+		if (GetProgressState().overwriteProgress)
+		{
+			std::printf("\x1b[2K");
+		}
+		std::printf("\n");
 		N_lines++;
 	}
 
 	template <typename... Args>
 	void PrintLine(int& N_lines, const char* fmt, Args... args)
 	{
-		std::printf("\x1b[2K");
+		if (GetProgressState().overwriteProgress)
+		{
+			std::printf("\x1b[2K");
+		}
 		std::printf(fmt, args...);
 		std::printf("\n");
 		N_lines++;
@@ -1125,6 +1133,8 @@ namespace
 		if (reports.empty()) { return; }
 
 		ProgressState& state = GetProgressState();
+		state.overwriteProgress = Sim::DiagnosticsMgr::ShouldOverwriteProgress(
+			params.progressReportMode);
 		const auto now = steady_clock::now();
 		if (!state.initialized)
 		{
@@ -1138,7 +1148,7 @@ namespace
 		if (step <= state.lastStep) { return; }
 		state.lastStep = step;
 
-		if (state.N_lastLines > 0)
+		if (state.overwriteProgress && state.N_lastLines > 0)
 		{
 			std::printf("\x1b[%dA\r", state.N_lastLines);
 		}

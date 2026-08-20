@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 #include <string>
 #ifdef _WIN32
+	#include <io.h>
 	#include <windows.h>
 #else
 	#include <unistd.h>
@@ -48,6 +49,15 @@ namespace
 	{
 		static ProgressState state{};
 		return state;
+	}
+
+	bool IsStdoutTerminal()
+	{
+		#ifdef _WIN32
+		return _isatty(_fileno(stdout)) != 0;
+		#else
+		return isatty(fileno(stdout)) != 0;
+		#endif
 	}
 
 	std::string FormatRamUsage(
@@ -92,6 +102,21 @@ namespace
 
 namespace Sim
 {
+	bool DiagnosticsMgr::ShouldOverwriteProgress(
+		const Base::ProgressReportMode mode)
+	{
+		switch (mode)
+		{
+		case Base::ProgressReportMode::Auto:
+			return IsStdoutTerminal();
+		case Base::ProgressReportMode::Overwrite:
+			return true;
+		case Base::ProgressReportMode::Append:
+			return false;
+		}
+		return false;
+	}
+
 	void DiagnosticsMgr::ResetProgress()
 	{
 		ProgressState& state = GetProgressState();
@@ -105,7 +130,7 @@ namespace Sim
 		const uint64_t N_peakResidentBytes)
 	{
 		ProgressState& state = GetProgressState();
-		if (state.N_lastLines == 0 || state.lastProgressLine.empty()) { return; }
+		if (state.lastProgressLine.empty()) { return; }
 
 		const std::string marker = " | RSS ";
 		const std::size_t markerPos = state.lastProgressLine.find(marker);
@@ -238,6 +263,8 @@ namespace Sim
 
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "saveFinalState", params.saveFinalState ? "true" : "false");
+		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"progressReportMode", Base::ToCString(params.progressReportMode));
 		const std::string exportDir = MakeDisplayExportDir(params.exportDir);
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportInterval", params.exportInterval);
@@ -273,12 +300,15 @@ namespace Sim
         const Bench::BenchmarksTracker& benchmarksTracker,
         const Bench::BenchOpList& benchOps,
         Bench::TimeUnit unit,
+        const Base::ProgressReportMode progressReportMode,
         uint64_t step,
         int64_t maxSteps,
         const uint64_t N_residentBytes,
         const uint64_t N_peakResidentBytes)
     {
         ProgressState& state = GetProgressState();
+        const bool overwriteProgress =
+            ShouldOverwriteProgress(progressReportMode);
 
         const bool hasTotal = (maxSteps > 0);
         const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
@@ -334,7 +364,7 @@ namespace Sim
         }
 
         // move cursor up to overwrite previous block
-        if (state.N_lastLines > 0)
+        if (overwriteProgress && state.N_lastLines > 0)
         {
             std::printf("\x1b[%dA\r", state.N_lastLines);
         }
@@ -505,11 +535,11 @@ namespace Sim
 
 		std::string line(buf);
 		line += FormatRamUsage(N_residentBytes, N_peakResidentBytes);
-		if (line.size() < state.lastProgressLen)
+		if (overwriteProgress && line.size() < state.lastProgressLen)
 		{
 			line.append(state.lastProgressLen - line.size(), ' ');
 		}
-		state.lastProgressLen = line.size();
+		state.lastProgressLen = overwriteProgress ? line.size() : 0;
 		state.lastProgressLine = line;
 
         printf("%s\n", line.c_str());
@@ -518,7 +548,7 @@ namespace Sim
         fflush(stdout);
 
         // remember how many lines were printed
-        state.N_lastLines = N_lines;
+        state.N_lastLines = overwriteProgress ? N_lines : 0;
     }
 
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(

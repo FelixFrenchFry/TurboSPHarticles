@@ -31,6 +31,8 @@ namespace Sim
 		static void PrintSimSetup(const SimulationMgr& simMgr,
 								  const SimParams& params);
 
+		static bool ShouldOverwriteProgress(Base::ProgressReportMode mode);
+
 		static void ResetProgress();
 
 		static void PrintFinalProgressPeakRam(uint64_t N_residentBytes,
@@ -40,6 +42,7 @@ namespace Sim
 			const Bench::BenchmarksTracker& benchmarksTracker,
 			const Bench::BenchOpList& benchOps,
 			Bench::TimeUnit unit,
+			Base::ProgressReportMode progressReportMode,
 			uint64_t step,
 			int64_t maxSteps = -1,
 			uint64_t N_residentBytes = 0,

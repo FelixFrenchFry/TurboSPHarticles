@@ -134,6 +134,8 @@ namespace Sim
 		// benchmarks
 		uint32_t maxBenchRecs = 1'000'000;
 		Bench::TimeUnit timeUnit = Bench::TimeUnit::ms;
+		Base::ProgressReportMode progressReportMode =
+			Base::ProgressReportMode::Auto;
 
 		// memory
 		uint32_t maxMemRecs = 1'000'000;

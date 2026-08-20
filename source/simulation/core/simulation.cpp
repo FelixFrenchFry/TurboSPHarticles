@@ -722,7 +722,8 @@ void SimulationMgr::DisplayPerformanceStats(
 	const SimParams& params) const
 {
 	DiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
-		benchmarksTracker_, curBenchOps_, params.timeUnit, simStep_, params.maxSteps,
+		benchmarksTracker_, curBenchOps_, params.timeUnit,
+		params.progressReportMode, simStep_, params.maxSteps,
 		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
 		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
 }

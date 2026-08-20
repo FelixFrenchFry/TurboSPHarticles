@@ -33,6 +33,26 @@ namespace Base
 		return "BackendVersion::<unknown>";
 	}
 
+	enum class ProgressReportMode : uint8_t
+	{
+		Auto,                // overwrite only when stdout is a terminal
+		Overwrite,           // always overwrite the previous report
+		Append                // print each report on new lines
+	};
+	constexpr const char* ToCString(const ProgressReportMode v) noexcept
+	{
+		switch (v)
+		{
+		case ProgressReportMode::Auto:
+			return "Auto";
+		case ProgressReportMode::Overwrite:
+			return "Overwrite";
+		case ProgressReportMode::Append:
+			return "Append";
+		}
+		return "ProgressReportMode::<unknown>";
+	}
+
 	enum class ScenarioType : uint8_t
 	{
 		BreakingDam,        // 0
