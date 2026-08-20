@@ -331,36 +331,45 @@ namespace
 		PrintCliSectionHeader("distributed hardware specifications");
 		PrintCliSeparator();
 
-		std::printf("%-2s | %8s | %-16s | %15s | %12s | %12s\n",
-			"r", "host r/n", "host name", "avail threads",
+		std::printf("%-2s | %-19s | %-2s | %14s | %14s | %14s\n",
+			"n", "host name", "r", "avail threads",
 			"sim budget", "vis budget");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
 
-		for (const DistHardwareReport& report : reports)
+		std::vector<std::string> nodeHosts{};
+		nodeHosts.reserve(reports.size());
+
+		for (uint64_t reportIdx = 0; reportIdx < reports.size(); reportIdx++)
 		{
-			int hostRank = 0;
-			int N_hostRanks = 0;
-			for (const DistHardwareReport& candidate : reports)
+			const DistHardwareReport& report = reports[reportIdx];
+			const std::string host = report.host;
+			const auto nodeIt = std::find(nodeHosts.begin(), nodeHosts.end(), host);
+			int node = 0;
+			if (nodeIt == nodeHosts.end())
 			{
-				if (std::strcmp(candidate.host, report.host) != 0) { continue; }
-
-				if (candidate.rank < report.rank) { hostRank++; }
-				N_hostRanks++;
+				node = static_cast<int>(nodeHosts.size());
+				nodeHosts.emplace_back(host);
 			}
+			else
+			{
+				node = static_cast<int>(nodeIt - nodeHosts.begin());
+			}
+			const bool firstRankOnNode = reportIdx == 0 ||
+				std::strcmp(reports[reportIdx - 1].host, report.host) != 0;
 
+			char nodeLabel[32];
 			char rankLabel[32];
-			char hostRankLabel[32];
+			FormatRankLabel(nodeLabel, sizeof(nodeLabel), node);
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
-			std::snprintf(hostRankLabel, sizeof(hostRankLabel), "%d/%d",
-				hostRank + 1, N_hostRanks);
 
-			const std::vector<std::string> hostLines =
-				WrapCliField(report.host, 16);
+			const std::vector<std::string> hostLines = firstRankOnNode
+				? WrapCliField(report.host, 19)
+				: std::vector<std::string>{};
 
-			std::printf("%-2s | %8s | %-16.16s | %15u | %12u | %12u\n",
+			std::printf("%-2s | %-19.19s | %-2s | %14u | %14u | %14u\n",
+				firstRankOnNode ? nodeLabel : "",
+				hostLines.empty() ? "" : hostLines.front().c_str(),
 				rankLabel,
-				hostRankLabel,
-				hostLines.front().c_str(),
 				report.N_totalThreads,
 				report.N_simThreads,
 				report.N_visThreads);
@@ -368,8 +377,8 @@ namespace
 			for (uint64_t hostLineIdx = 1;
 				hostLineIdx < hostLines.size(); hostLineIdx++)
 			{
-				std::printf("%-2s | %8s | %-16s | %15s | %12s | %12s\n",
-					"", "", hostLines[hostLineIdx].c_str(),
+				std::printf("%-2s | %-19s | %-2s | %14s | %14s | %14s\n",
+					"", hostLines[hostLineIdx].c_str(), "",
 					"", "", "");
 			}
 		}
@@ -1281,7 +1290,7 @@ namespace Dist
 			setup.N_globalRB);
 		std::printf("\n");
 
-		std::printf("%-2s | %-16s | %-2s | %-9s | %11s | %11s | %11s\n",
+		std::printf("%-2s | %-19s | %-2s | %-9s | %10s | %10s | %10s\n",
 			"n", "host name", "r", "nbrs",
 			"initial F", "initial B", "initial R");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
@@ -1310,7 +1319,7 @@ namespace Dist
 			char nodeLabel[32];
 			char rankLabel[32];
 			const std::vector<std::string> hostLines = firstRankOnNode
-				? WrapCliField(report.host, 16)
+				? WrapCliField(report.host, 19)
 				: std::vector<std::string>{};
 			const std::vector<std::string> neighborLines =
 				WrapCliField(report.neighborRanks, 9, ", ");
@@ -1319,7 +1328,7 @@ namespace Dist
 			FormatRankLabel(nodeLabel, sizeof(nodeLabel), node);
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
-			std::printf("%-2s | %-16.16s | %-2s | %-9s | %11u | %11u | %11u\n",
+			std::printf("%-2s | %-19.19s | %-2s | %-9s | %10u | %10u | %10u\n",
 				firstRankOnNode ? nodeLabel : "",
 				hostLines.empty() ? "" : hostLines.front().c_str(),
 				rankLabel,
@@ -1338,7 +1347,7 @@ namespace Dist
 					? neighborLines[wrappedLineIdx].c_str()
 					: "";
 
-				std::printf("%-2s | %-16s | %-2s | %-9s | %11s | %11s | %11s\n",
+				std::printf("%-2s | %-19s | %-2s | %-9s | %10s | %10s | %10s\n",
 					"", hostLine, "", neighborLine,
 					"", "", "");
 			}
