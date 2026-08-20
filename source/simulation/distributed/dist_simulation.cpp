@@ -1472,19 +1472,33 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 {
 	benchmarksTracker_->StartBench(Bench::BenchOp::Serialization);
-	if (!MaterializeRankLocalState())
+
+	const bool backendAvailable = distParticleBackend_ != nullptr;
+	if (!backendAvailable)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to write distributed export snapshot "
+			"(no distributed backend selected).",
+			mpiContext_.Rank(), mpiContext_.Size());
+	}
+	if (!mpiContext_.AllTrue(backendAvailable))
 	{
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
 	}
 
+	const Sync::FluidConstView particlesF =
+		distParticleBackend_->GetFluidParticleView();
+	const Sync::BoundaryConstView particlesB =
+		distParticleBackend_->GetBoundaryParticleView();
+	const Sync::RigidConstView particlesR =
+		distParticleBackend_->GetRigidParticleView();
+
 	DistSnapshotGatherStats stats{};
 
 	auto& exportFluidParticleLocalIdxs = exportFluidParticleLocalIdxsScratch_;
-	if (!BuildExportFluidParticleLocalIdxs(exportFluidParticleLocalIdxs))
+	if (!BuildExportFluidParticleLocalIdxs(particlesF, exportFluidParticleLocalIdxs))
 	{
-		localSimState_.particlesF = {};
-		localSimState_.particlesB = {};
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
 	}
@@ -1494,7 +1508,10 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	const bool gatherOk = GatherExportSnapshotToRoot(
 		expSnap,
 		exportSnapGatherScratch_,
-		localSimState_,
+		particlesF,
+		particlesB,
+		particlesR,
+		localSimState_.rigidBodies,
 		particleStateF_,
 		particleStateB_,
 		exportFluidParticleLocalIdxs,
@@ -1508,8 +1525,6 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to gather the distributed export snapshot on the root rank.",
 			mpiContext_.Rank(), mpiContext_.Size());
-		localSimState_.particlesF = {};
-		localSimState_.particlesB = {};
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
 	}
@@ -1533,8 +1548,6 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	}
 
 	benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
-	localSimState_.particlesF = {};
-	localSimState_.particlesB = {};
 
 	return mpiContext_.AllTrue(writeOk);
 }
@@ -1626,6 +1639,7 @@ bool DistSimulationMgr::WriteFinalState(
 }
 
 bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
+	const Sync::FluidConstView& particlesF,
 	std::vector<uint32_t>& localIdxs) const
 {
 	bool localOk = true;
@@ -1643,7 +1657,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 		(!simBackend_->FillFluidParticleNearSurfaceFlags(
 			simParams_, localNearSurfaceFlagsScratch_) ||
 		localNearSurfaceFlagsScratch_.size() !=
-			static_cast<uint64_t>(localSimState_.particlesF.N_)))
+			static_cast<uint64_t>(particlesF.N_)))
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to classify rank-local fluid particles "
@@ -1661,8 +1675,8 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 	{
 		for (const uint32_t localIdx : particleStateF_.particleLocalIdx_Owned)
 		{
-			if (localIdx >= localSimState_.particlesF.N_ ||
-				localIdx >= localSimState_.particlesF.id.size() ||
+			if (localIdx >= particlesF.N_ ||
+				localIdx >= particlesF.id.size() ||
 				!particleStateF_.HasMetadataAtLocalIdx(localIdx))
 			{
 				SPDLOG_ERROR(
@@ -1673,8 +1687,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 				break;
 			}
 
-			const uint32_t globalIdx =
-				localSimState_.particlesF.id[localIdx];
+			const uint32_t globalIdx = particlesF.id[localIdx];
 			if (globalIdx >= N_expectedGlobalF_)
 			{
 				SPDLOG_ERROR(
@@ -1694,16 +1707,16 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 
 	if (localOk)
 	{
-		for (uint32_t localIdx = 0; localIdx < localSimState_.particlesF.N_; localIdx++)
+		for (uint32_t localIdx = 0; localIdx < particlesF.N_; localIdx++)
 		{
 			if (!particleStateF_.HasMetadataAtLocalIdx(localIdx) ||
-				localIdx >= localSimState_.particlesF.id.size())
+				localIdx >= particlesF.id.size())
 			{
 				localOk = false;
 				break;
 			}
 
-			const uint32_t globalIdx = localSimState_.particlesF.id[localIdx];
+			const uint32_t globalIdx = particlesF.id[localIdx];
 			if (globalIdx >= N_expectedGlobalF_)
 			{
 				localOk = false;

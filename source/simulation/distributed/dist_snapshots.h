@@ -65,7 +65,8 @@ namespace Dist
 
 	bool PackOwnedExportSnapshotBuffer(
 		DistExportSnapshotBuffer& gatherBuffer,
-		const Sync::UniversalSimState& localState,
+		const Sync::FluidConstView& particlesF,
+		const Sync::BoundaryConstView& particlesB,
 		const DistParticleState& particleStateF,
 		const DistParticleState& particleStateB,
 		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
@@ -80,14 +81,18 @@ namespace Dist
 
 	void PackReplicatedRigidExportSnapshot(
 		Sync::ExportSnapshot& exportSnap,
-		const Sync::UniversalSimState& localState);
+		const Sync::RigidConstView& particlesR,
+		const Sync::RigidBodies& rigidBodies);
 
 	// reusable caller-owned gather storage, holding the locally packed packets on every rank
 	// and additionally the payloads received from all other ranks on the root rank
 	bool GatherExportSnapshotToRoot(
 		Sync::ExportSnapshot& exportSnap,
 		DistExportSnapshotBuffer& gatherBuffer,
-		const Sync::UniversalSimState& localState,
+		const Sync::FluidConstView& particlesF,
+		const Sync::BoundaryConstView& particlesB,
+		const Sync::RigidConstView& particlesR,
+		const Sync::RigidBodies& rigidBodies,
 		const DistParticleState& particleStateF,
 		const DistParticleState& particleStateB,
 		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,

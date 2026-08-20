@@ -117,7 +117,9 @@ namespace Dist
 		bool WriteFinalState(const Sim::SimParams& params, bool enabled);
 
 		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
-		bool BuildExportFluidParticleLocalIdxs(std::vector<uint32_t>& localIdxs) const;
+		bool BuildExportFluidParticleLocalIdxs(
+			const Sync::FluidConstView& particlesF,
+			std::vector<uint32_t>& localIdxs) const;
 
 		// builds rank-local startup diagnostics gathered by the root rank
 		DistStartupRankReport BuildStartupRankReport() const;
@@ -149,7 +151,7 @@ namespace Dist
 		// [ rank-reduced ] routes owned particles and replaces backend [ owned ][ halo ] storage
 		bool RedistributeRankLocalParticles(const Sim::SimParams& params);
 
-		// [ rank-reduced ] copies backend state only for export, gather, and diagnostics
+		// [ rank-reduced ] copies backend state into localSimState_ for full final-state gathering
 		bool MaterializeRankLocalState(bool backendWillBeRetired = false);
 
 		// [ rank-reduced ] prepares rank-authoritative particle work and backend state for the next step

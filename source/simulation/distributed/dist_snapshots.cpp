@@ -79,7 +79,7 @@ namespace
 	}
 
 	DistExportFluidParticlePacket PackExportFluidParticle(
-		const Sync::FluidParticles& particlesF,
+		const Sync::FluidConstView& particlesF,
 		const uint32_t localIdx,
 		const int rank)
 	{
@@ -101,7 +101,7 @@ namespace
 	}
 
 	DistExportBoundaryParticlePacket PackExportBoundaryParticle(
-		const Sync::BoundaryParticles& particlesB,
+		const Sync::BoundaryConstView& particlesB,
 		const uint32_t localIdx)
 	{
 		DistExportBoundaryParticlePacket packet{};
@@ -126,7 +126,8 @@ void DistExportSnapshotBuffer::Clear()
 
 bool Dist::PackOwnedExportSnapshotBuffer(
 	DistExportSnapshotBuffer& gatherBuffer,
-	const Sync::UniversalSimState& localState,
+	const Sync::FluidConstView& particlesF,
+	const Sync::BoundaryConstView& particlesB,
 	const DistParticleState& particleStateF,
 	const DistParticleState& particleStateB,
 	const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
@@ -139,11 +140,11 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 	gatherBuffer.particlesB.reserve(particleStateB.particleLocalIdx_Owned.size());
 
 	// fluid particles
-	std::vector<uint8_t> localIdxUsed(localState.particlesF.N_, 0);
+	std::vector<uint8_t> localIdxUsed(particlesF.N_, 0);
 	for (const uint32_t localIdx : exportFluidParticleLocalIdxs)
 	{
-		if (localIdx >= localState.particlesF.N_ ||
-			localIdx >= localState.particlesF.id.size()) { return false; }
+		if (localIdx >= particlesF.N_ ||
+			localIdx >= particlesF.id.size()) { return false; }
 		if (!particleStateF.HasMetadataAtLocalIdx(localIdx)) { return false; }
 		if (localIdxUsed[localIdx] != 0) { return false; }
 		localIdxUsed[localIdx] = 1;
@@ -152,35 +153,33 @@ bool Dist::PackOwnedExportSnapshotBuffer(
 		if (particleClass != DistParticleClass::Inner &&
 			particleClass != DistParticleClass::Outer) { continue; }
 
-		if (localState.particlesF.id[localIdx] ==
-			NO_GLOBAL_PARTICLE_IDX)
+		if (particlesF.id[localIdx] == NO_GLOBAL_PARTICLE_IDX)
 		{
 			return false;
 		}
 
 		gatherBuffer.particlesF.push_back(
-			PackExportFluidParticle(localState.particlesF, localIdx, rank));
+			PackExportFluidParticle(particlesF, localIdx, rank));
 	}
 
 	// boundary particles
 	for (const uint32_t localIdx : particleStateB.particleLocalIdx_Owned)
 	{
-		if (localIdx >= localState.particlesB.N_ ||
-			localIdx >= localState.particlesB.id.size()) { return false; }
+		if (localIdx >= particlesB.N_ ||
+			localIdx >= particlesB.id.size()) { return false; }
 		if (!particleStateB.HasMetadataAtLocalIdx(localIdx)) { return false; }
 
 		const DistParticleClass particleClass = particleStateB.particleClasses[localIdx];
 		if (particleClass != DistParticleClass::Inner &&
 			particleClass != DistParticleClass::Outer) { return false; }
 
-		if (localState.particlesB.id[localIdx] ==
-			NO_GLOBAL_PARTICLE_IDX)
+		if (particlesB.id[localIdx] == NO_GLOBAL_PARTICLE_IDX)
 		{
 			return false;
 		}
 
 		gatherBuffer.particlesB.push_back(
-			PackExportBoundaryParticle(localState.particlesB, localIdx));
+			PackExportBoundaryParticle(particlesB, localIdx));
 	}
 
 	return true;
@@ -283,18 +282,19 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 
 void Dist::PackReplicatedRigidExportSnapshot(
 	Sync::ExportSnapshot& exportSnap,
-	const Sync::UniversalSimState& localState)
+	const Sync::RigidConstView& particlesR,
+	const Sync::RigidBodies& rigidBodies)
 {
-	const auto& R = localState.particlesR;
-	const auto& RB = localState.rigidBodies;
+	const Sync::RigidConstView& R = particlesR;
+	const Sync::RigidBodies& RB = rigidBodies;
 
 	exportSnap.N_R = R.N_;
-	exportSnap.idR = R.id;
-	exportSnap.bodyIdR = R.bodyId;
+	exportSnap.idR.assign(R.id.begin(), R.id.end());
+	exportSnap.bodyIdR.assign(R.bodyId.begin(), R.bodyId.end());
 	exportSnap.xPosR.resize(R.N_);
 	exportSnap.yPosR.resize(R.N_);
 	exportSnap.zPosR.resize(R.N_);
-	exportSnap.volR = R.volR;
+	exportSnap.volR.assign(R.volR.begin(), R.volR.end());
 
 	for (uint32_t rigidParticleIdx = 0; rigidParticleIdx < R.N_; rigidParticleIdx++)
 	{
@@ -322,7 +322,10 @@ void Dist::PackReplicatedRigidExportSnapshot(
 bool Dist::GatherExportSnapshotToRoot(
 	Sync::ExportSnapshot& exportSnap,
 	DistExportSnapshotBuffer& gatherBuffer,
-	const Sync::UniversalSimState& localState,
+	const Sync::FluidConstView& particlesF,
+	const Sync::BoundaryConstView& particlesB,
+	const Sync::RigidConstView& particlesR,
+	const Sync::RigidBodies& rigidBodies,
 	const DistParticleState& particleStateF,
 	const DistParticleState& particleStateB,
 	const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
@@ -336,7 +339,8 @@ bool Dist::GatherExportSnapshotToRoot(
 	// locally packed packets occupy the front of the gather storage on every rank
 	bool localOk = PackOwnedExportSnapshotBuffer(
 		gatherBuffer,
-		localState,
+		particlesF,
+		particlesB,
 		particleStateF,
 		particleStateB,
 		exportFluidParticleLocalIdxs,
@@ -487,7 +491,8 @@ bool Dist::GatherExportSnapshotToRoot(
 			simTime);
 		if (localOk)
 		{
-			PackReplicatedRigidExportSnapshot(exportSnap, localState);
+			PackReplicatedRigidExportSnapshot(
+				exportSnap, particlesR, rigidBodies);
 		}
 
 		if (localOk && stats)
@@ -496,7 +501,7 @@ bool Dist::GatherExportSnapshotToRoot(
 				static_cast<uint32_t>(gatherBuffer.particlesF.size());
 			stats->N_gatheredB =
 				static_cast<uint32_t>(gatherBuffer.particlesB.size());
-			stats->N_gatheredR = localState.particlesR.N_;
+			stats->N_gatheredR = particlesR.N_;
 		}
 	}
 
