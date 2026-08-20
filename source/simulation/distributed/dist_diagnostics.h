@@ -5,6 +5,7 @@
 // external
 #include <array>
 #include <cstdint>
+#include <mpi.h>
 #include <vector>
 
 // internal
@@ -56,6 +57,7 @@ namespace Dist
 	struct DistStartupRankReport
 	{
 		int rank = 0;
+		char host[MPI_MAX_PROCESSOR_NAME] = {};
 
 		char neighborRanks[DIST_STARTUP_REPORT_TEXT_CHARS] = {};
 

@@ -164,6 +164,57 @@ namespace
 		std::snprintf(buffer, bufferSize, "%d", rank);
 	}
 
+	template <size_t N>
+	void FillProcessorName(char (&host)[N])
+	{
+		int hostLen = 0;
+		if (MPI_Get_processor_name(host, &hostLen) != MPI_SUCCESS ||
+			hostLen <= 0)
+		{
+			std::snprintf(host, N, "%s", "unknown");
+			return;
+		}
+
+		const int lastIdx = std::min(hostLen, static_cast<int>(N) - 1);
+		host[lastIdx] = '\0';
+	}
+
+	std::vector<std::string> WrapCliField(
+		const char* text,
+		const size_t maxWidth,
+		const char* breakDelimiter = nullptr)
+	{
+		std::vector<std::string> lines{};
+		std::string remaining = text;
+		const std::string delimiter = breakDelimiter ? breakDelimiter : "";
+
+		while (remaining.size() > maxWidth)
+		{
+			const size_t separatorPos = delimiter.empty()
+				? std::string::npos
+				: remaining.rfind(delimiter, maxWidth - 1);
+			size_t lineLength = separatorPos == std::string::npos
+				? maxWidth
+				: separatorPos + delimiter.size();
+			if (separatorPos != std::string::npos &&
+				!delimiter.empty() && delimiter.back() == ' ')
+			{
+				lineLength--;
+			}
+
+			lines.emplace_back(remaining.substr(0, lineLength));
+			remaining.erase(0, lineLength);
+			while (!delimiter.empty() && delimiter.back() == ' ' &&
+				!remaining.empty() && remaining.front() == ' ')
+			{
+				remaining.erase(0, 1);
+			}
+		}
+
+		lines.emplace_back(remaining);
+		return lines;
+	}
+
 	const char* MemSpaceLabel(const Base::BackendVersion backendVersion)
 	{
 		return backendVersion == Base::BackendVersion::GPU01 ? "VRAM" : "RAM";
@@ -181,17 +232,7 @@ namespace
 		report.N_simThreads = N_simThreads;
 		report.N_visThreads = N_visThreads;
 
-		int hostLen = 0;
-		if (MPI_Get_processor_name(report.host, &hostLen) != MPI_SUCCESS ||
-			hostLen <= 0)
-		{
-			std::snprintf(report.host, sizeof(report.host), "%s", "unknown");
-		}
-		else
-		{
-			const int lastIdx = std::min(hostLen, MPI_MAX_PROCESSOR_NAME - 1);
-			report.host[lastIdx] = '\0';
-		}
+		FillProcessorName(report.host);
 
 		return report;
 	}
@@ -282,7 +323,7 @@ namespace
 		PrintCliSectionHeader("distributed hardware specifications");
 		PrintCliSeparator();
 
-		std::printf("%-2s | %8s | %-21s | %13s | %10s | %10s\n",
+		std::printf("%-2s | %8s | %-16s | %15s | %12s | %12s\n",
 			"r", "host r/n", "host name", "avail threads",
 			"sim budget", "vis budget");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
@@ -305,13 +346,24 @@ namespace
 			std::snprintf(hostRankLabel, sizeof(hostRankLabel), "%d/%d",
 				hostRank + 1, N_hostRanks);
 
-			std::printf("%-2s | %8s | %-21.21s | %13u | %10u | %10u\n",
+			const std::vector<std::string> hostLines =
+				WrapCliField(report.host, 16);
+
+			std::printf("%-2s | %8s | %-16.16s | %15u | %12u | %12u\n",
 				rankLabel,
 				hostRankLabel,
-				report.host,
+				hostLines.front().c_str(),
 				report.N_totalThreads,
 				report.N_simThreads,
 				report.N_visThreads);
+
+			for (uint64_t hostLineIdx = 1;
+				hostLineIdx < hostLines.size(); hostLineIdx++)
+			{
+				std::printf("%-2s | %8s | %-16s | %15s | %12s | %12s\n",
+					"", "", hostLines[hostLineIdx].c_str(),
+					"", "", "");
+			}
 		}
 
 		std::printf("\n");
@@ -1184,8 +1236,11 @@ namespace Dist
 		const DistSimSetupReport& setup,
 		const DistStartupRankReport& localReport)
 	{
+		DistStartupRankReport localReportWithHost = localReport;
+		FillProcessorName(localReportWithHost.host);
+
 		std::vector<DistStartupRankReport> reports{};
-		GatherStartupRankReports(mpiContext, localReport, reports);
+		GatherStartupRankReports(mpiContext, localReportWithHost, reports);
 
 		if (!mpiContext.IsRoot()) { return; }
 
@@ -1216,22 +1271,67 @@ namespace Dist
 			setup.N_globalRB);
 		std::printf("\n");
 
-		std::printf("%-2s | %-21s | %15s | %15s | %15s\n",
-			"r", "neighbor ranks",
-			"initial owned F", "initial owned B", "initial owned R");
+		std::printf("%-2s | %-16s | %-2s | %-9s | %11s | %11s | %11s\n",
+			"n", "host name", "r", "nbrs",
+			"initial F", "initial B", "initial R");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
 
-		for (const DistStartupRankReport& report : reports)
+		std::vector<std::string> nodeHosts{};
+		nodeHosts.reserve(reports.size());
+
+		for (uint64_t reportIdx = 0; reportIdx < reports.size(); reportIdx++)
 		{
+			const DistStartupRankReport& report = reports[reportIdx];
+			const std::string host = report.host;
+			const auto nodeIt = std::find(nodeHosts.begin(), nodeHosts.end(), host);
+			int node = 0;
+			if (nodeIt == nodeHosts.end())
+			{
+				node = static_cast<int>(nodeHosts.size());
+				nodeHosts.emplace_back(host);
+			}
+			else
+			{
+				node = static_cast<int>(nodeIt - nodeHosts.begin());
+			}
+			const bool firstRankOnNode = reportIdx == 0 ||
+				std::strcmp(reports[reportIdx - 1].host, report.host) != 0;
+
+			char nodeLabel[32];
 			char rankLabel[32];
+			const std::vector<std::string> hostLines = firstRankOnNode
+				? WrapCliField(report.host, 16)
+				: std::vector<std::string>{};
+			const std::vector<std::string> neighborLines =
+				WrapCliField(report.neighborRanks, 9, ", ");
+			const uint64_t N_wrappedLines = std::max(
+				hostLines.size(), neighborLines.size());
+			FormatRankLabel(nodeLabel, sizeof(nodeLabel), node);
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
-			std::printf("%-2s | %-21s | %15u | %15u | %15u\n",
+			std::printf("%-2s | %-16.16s | %-2s | %-9s | %11u | %11u | %11u\n",
+				firstRankOnNode ? nodeLabel : "",
+				hostLines.empty() ? "" : hostLines.front().c_str(),
 				rankLabel,
-				report.neighborRanks,
+				neighborLines.front().c_str(),
 				report.N_ownedF,
 				report.N_ownedB,
 				report.N_replicatedR);
+
+			for (uint64_t wrappedLineIdx = 1;
+				wrappedLineIdx < N_wrappedLines; wrappedLineIdx++)
+			{
+				const char* hostLine = wrappedLineIdx < hostLines.size()
+					? hostLines[wrappedLineIdx].c_str()
+					: "";
+				const char* neighborLine = wrappedLineIdx < neighborLines.size()
+					? neighborLines[wrappedLineIdx].c_str()
+					: "";
+
+				std::printf("%-2s | %-16s | %-2s | %-9s | %11s | %11s | %11s\n",
+					"", hostLine, "", neighborLine,
+					"", "", "");
+			}
 		}
 
 		std::printf("\n");

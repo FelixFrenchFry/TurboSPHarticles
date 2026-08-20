@@ -1208,7 +1208,7 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 		mpiContext_.AllReduceSumUint32s(profile.ownedFluidByUnit);
 		mpiContext_.AllReduceSumUint32s(profile.ownedBoundaryByUnit);
 
-		// repartition validates rank loads even though the initial profile supplies
+		// repartition validates rank loads, despite the initial profile supplying
 		// the spatial weights used to place the domain walls
 		const std::vector<double> initialLoadByRank(
 			static_cast<uint64_t>(mpiContext_.Size()), 1.0);
