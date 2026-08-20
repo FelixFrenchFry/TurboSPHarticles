@@ -396,6 +396,9 @@ bool DistSimulationMgr::Init(
 	if (!InitRankLocalBackend()) { return false; }
 	if (!RunRankLocalBackendStartupCheck()) { return false; }
 
+	// build the fluid solver synchronization plan required by the initial export
+	if (!mpiContext_.AllTrue(RebuildFluidSolverSyncPlan())) { return false; }
+
 	// updated snapshot
 	initialized_.store(true, std::memory_order_release);
 	SyncParameters(true);
@@ -1469,6 +1472,42 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 	return mpiContext_.AllTrue(localOk);
 }
 
+bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
+{
+	bool localOk = true;
+	std::string failMsg{};
+
+	try
+	{
+		if (!fluidSolverSyncMgr_.Rebuild(
+			distParticleBackend_->GetFluidParticleView(),
+			particleStateF_,
+			*domainDecomp_,
+			simParams_.kernelRadius,
+			simParams_.distHaloMode,
+			N_expectedGlobalF_,
+			mpiContext_,
+			*benchmarksTracker_,
+			&failMsg))
+		{
+			localOk = false;
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		failMsg = ex.what();
+		localOk = false;
+	}
+
+	if (!localOk)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to rebuild distributed fluid solver synchronization: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), failMsg);
+	}
+	return localOk;
+}
+
 bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 {
 	benchmarksTracker_->StartBench(Bench::BenchOp::Serialization);
@@ -1640,7 +1679,7 @@ bool DistSimulationMgr::WriteFinalState(
 
 bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 	const Sync::FluidConstView& particlesF,
-	std::vector<uint32_t>& localIdxs) const
+	std::vector<uint32_t>& localIdxs)
 {
 	bool localOk = true;
 
@@ -1665,11 +1704,6 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 			mpiContext_.Rank(), mpiContext_.Size());
 		localOk = false;
 	}
-
-	// sized from the global count on every rank, so the reconciliation below stays collective
-	// even when a rank has already failed and only contributes its zero-initialized flags
-	auto& globalNearSurfaceFlags = globalNearSurfaceFlagsScratch_;
-	globalNearSurfaceFlags.assign(N_expectedGlobalF_, 0);
 
 	if (localOk)
 	{
@@ -1697,13 +1731,8 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 				localOk = false;
 				break;
 			}
-
-			globalNearSurfaceFlags[globalIdx] =
-				localNearSurfaceFlagsScratch_[localIdx];
 		}
 	}
-
-	mpiContext_.AllReduceMaxUint8s(globalNearSurfaceFlags);
 
 	if (localOk)
 	{
@@ -1722,12 +1751,16 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 				localOk = false;
 				break;
 			}
-
-			localNearSurfaceFlagsScratch_[localIdx] = globalNearSurfaceFlags[globalIdx];
 		}
 	}
 
-	if (localOk && !simBackend_->BuildExportFluidParticleLocalIdxs(
+	// validate local flags on each rank before entering owner-to-halo exchange
+	if (!mpiContext_.AllTrue(localOk)) { return false; }
+
+	fluidSolverSyncMgr_.SynchronizeFluidParticleFlagsToHalos(
+		localNearSurfaceFlagsScratch_, simParams_.distHaloMode);
+
+	if (!simBackend_->BuildExportFluidParticleLocalIdxs(
 		localNearSurfaceFlagsScratch_,
 		localIdxs))
 	{
@@ -1816,7 +1849,6 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodySyncBuffers(rigidBodySyncBuffers_));
 	Mem::Add(miscUsage, MemoryUsageOfStatisticsPartial(statisticsPartialScratch_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(localNearSurfaceFlagsScratch_));
-	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(globalNearSurfaceFlagsScratch_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(exportFluidParticleLocalIdxsScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfExportSnapshot(exportSnapScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfExportSnapshotGatherBuffer(exportSnapGatherScratch_));
@@ -2377,23 +2409,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 	try
 	{
-		std::string failMsg{};
-		if (!fluidSolverSyncMgr_.Rebuild(
-			distParticleBackend_->GetFluidParticleView(),
-			particleStateF_,
-			*domainDecomp_,
-			simParams_.kernelRadius,
-			simParams_.distHaloMode,
-			N_expectedGlobalF_,
-			mpiContext_,
-			*benchmarksTracker_,
-			&failMsg))
-		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed to prepare distributed fluid solver synchronization: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), failMsg);
-			localOk = false;
-		}
+		if (!RebuildFluidSolverSyncPlan()) { localOk = false; }
 
 		bool configured = false;
 		if (localOk)

@@ -102,6 +102,11 @@ namespace Sim
 			std::span<float> zValues,
 			Base::DistHaloMode haloExtent) = 0;
 
+		// overwrites fluid halo flags with the values held by their owning ranks
+		virtual void SynchronizeFluidParticleFlagsToHalos(
+			std::span<uint8_t> flags,
+			Base::DistHaloMode haloExtent) = 0;
+
 		virtual PressureSolveErrorSums GlobalizePressureSolveErrorSums(
 			const PressureSolveErrorSums& localSums) const = 0;
 		virtual uint64_t GetGlobalFluidParticleCount() const = 0;

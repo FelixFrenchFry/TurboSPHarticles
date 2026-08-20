@@ -544,6 +544,84 @@ void FluidSolverSyncMgr::SynchronizeFluidVectorField(
 	EndSynchronizeFluidFields();
 }
 
+void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
+	const std::span<uint8_t> flags,
+	const Base::DistHaloMode haloExtent)
+{
+	if (!mpiContext_)
+	{
+		throw std::runtime_error(
+			"Fluid solver synchronization plan is not initialized.");
+	}
+
+	const bool validHaloExtent =
+		haloExtent == Base::DistHaloMode::SingleHalo ||
+		(haloExtent == Base::DistHaloMode::DoubleHalo &&
+			distHaloMode_ == Base::DistHaloMode::DoubleHalo);
+	const bool localOk = !fluidFieldExchangePending_ && validHaloExtent &&
+		flags.size() == N_localF_;
+	if (!mpiContext_->AllTrue(localOk))
+	{
+		if (fluidFieldExchangePending_)
+		{
+			throw std::runtime_error(
+				"Cannot synchronize fluid particle flags while a fluid field exchange is pending.");
+		}
+		throw std::runtime_error(
+			"Fluid particle flags do not match the local particle plan.");
+	}
+
+	const uint8_t haloExtentIdx = Base::GetIdx(haloExtent);
+	requests_.clear();
+	requests_.reserve(peerPlans_.size() * 2);
+
+	// pack every owned flag before posting communication
+	for (PeerPlan& peerPlan : peerPlans_)
+	{
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[haloExtentIdx];
+		peerPlan.sendByteBuffer.resize(particlePlan.sendLocalIdxs.size());
+		peerPlan.recvByteBuffer.resize(particlePlan.recvLocalIdxs.size());
+
+		for (uint32_t particleIdx = 0; particleIdx != particlePlan.sendLocalIdxs.size(); particleIdx++)
+		{
+			peerPlan.sendByteBuffer[particleIdx] =
+				flags[particlePlan.sendLocalIdxs[particleIdx]];
+		}
+	}
+
+	// receives are posted before sends on every rank
+	for (PeerPlan& peerPlan : peerPlans_)
+	{
+		mpiContext_->IRecvBytesChunked(
+			peerPlan.recvByteBuffer.data(),
+			static_cast<uint64_t>(peerPlan.recvByteBuffer.size()),
+			peerPlan.rank,
+			FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD,
+			requests_);
+	}
+	for (const PeerPlan& peerPlan : peerPlans_)
+	{
+		mpiContext_->ISendBytesChunked(
+			peerPlan.sendByteBuffer.data(),
+			static_cast<uint64_t>(peerPlan.sendByteBuffer.size()),
+			peerPlan.rank,
+			FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD,
+			requests_);
+	}
+	mpiContext_->WaitAll(requests_, "fluid solver particle flag payloads");
+
+	// overwrite only halo slots with their owner-held flags
+	for (const PeerPlan& peerPlan : peerPlans_)
+	{
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[haloExtentIdx];
+		for (uint32_t particleIdx = 0; particleIdx != particlePlan.recvLocalIdxs.size(); particleIdx++)
+		{
+			flags[particlePlan.recvLocalIdxs[particleIdx]] =
+				peerPlan.recvByteBuffer[particleIdx];
+		}
+	}
+}
+
 void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	const std::array<std::span<float>, 3>& fields,
 	const uint32_t N_fields,
@@ -719,6 +797,8 @@ Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const
 		{
 			Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.sendBuffer));
 			Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.recvBuffer));
+			Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.sendByteBuffer));
+			Mem::Add(usage, Mem::MemUsageOf_Vector(peerPlan.recvByteBuffer));
 		}
 	}
 	Mem::Add(usage, Mem::MemUsageOf_Vector(requests_));

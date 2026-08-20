@@ -110,6 +110,9 @@ namespace Dist
 		// [ rank-reduced ] runs a backend startup smoke test on rank-local data
 		bool RunRankLocalBackendStartupCheck();
 
+		// rebuilds the fluid solver synchronization plan from the current rank-local particle state
+		bool RebuildFluidSolverSyncPlan();
+
 		// [ rank-reduced ] gathers and serializes an export snapshot on the root rank
 		bool WriteExportSnapshot(const Sim::SimParams& params);
 
@@ -119,7 +122,7 @@ namespace Dist
 		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
 		bool BuildExportFluidParticleLocalIdxs(
 			const Sync::FluidConstView& particlesF,
-			std::vector<uint32_t>& localIdxs) const;
+			std::vector<uint32_t>& localIdxs);
 
 		// builds rank-local startup diagnostics gathered by the root rank
 		DistStartupRankReport BuildStartupRankReport() const;
@@ -220,7 +223,6 @@ namespace Dist
 		Sim::I_DistributedParticleBackend* distParticleBackend_ = nullptr;
 		mutable Stats::StatisticsPartial statisticsPartialScratch_{};
 		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
-		mutable std::vector<uint8_t> globalNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint32_t> exportFluidParticleLocalIdxsScratch_{};
 		mutable DistExportSnapshotBuffer exportSnapGatherScratch_{};
 

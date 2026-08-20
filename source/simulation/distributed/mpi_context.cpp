@@ -330,23 +330,6 @@ void MpiContext::AllReduceSumFloats(std::vector<float>& values) const
 		});
 }
 
-void MpiContext::AllReduceMaxUint8s(std::vector<uint8_t>& values) const
-{
-	ForEachMpiVectorChunk(
-		values,
-		"MPI_Allreduce(uint8 max)",
-		[](uint8_t* chunkData, const int N_chunkValues)
-		{
-			return MPI_Allreduce(
-				MPI_IN_PLACE,
-				chunkData,
-				N_chunkValues,
-				MPI_UINT8_T,
-				MPI_MAX,
-				MPI_COMM_WORLD);
-		});
-}
-
 void MpiContext::AllToAllInts(
 	const std::vector<int>& sendValues,
 	std::vector<int>& recvValues,

@@ -27,6 +27,7 @@ namespace Dist
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_COUNT = 6200;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS = 6201;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_PAYLOAD = 6202;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD = 6203;
 
 	// particles packed per block, keeping one block of every field cache resident
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
@@ -77,6 +78,9 @@ namespace Dist
 			std::span<float> yValues,
 			std::span<float> zValues,
 			Base::DistHaloMode haloExtent) override;
+		void SynchronizeFluidParticleFlagsToHalos(
+			std::span<uint8_t> flags,
+			Base::DistHaloMode haloExtent) override;
 
 		// sums rank-local solver errors, normalization happens in the solver
 		Sim::PressureSolveErrorSums GlobalizePressureSolveErrorSums(
@@ -109,6 +113,8 @@ namespace Dist
 			// reusable payload storage
 			std::vector<float> sendBuffer;
 			std::vector<float> recvBuffer;
+			std::vector<uint8_t> sendByteBuffer;
+			std::vector<uint8_t> recvByteBuffer;
 		};
 
 		// one contiguous slice of one peer payload, packed or unpacked by a single worker
