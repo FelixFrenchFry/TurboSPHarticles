@@ -11,6 +11,7 @@
 
 // internal
 #include "source/base/parallel_checks.h"
+#include "parallel_utils.h"
 #include "dist_particle_state.h"
 
 
@@ -118,20 +119,13 @@ namespace
 		});
 
 		// prefix chunk-local class counts to compute output range of each chunk
-		// TODO: parallelize this with TBB?
-		for (uint32_t classIdx = 0; classIdx != N_PARTICLE_CLASSIFICATION_CLASSES; classIdx++)
-		{
-			uint32_t N_class = 0;
-
-			for (uint32_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
-			{
-				const uint32_t chunkClassIdx = chunkIdx * N_PARTICLE_CLASSIFICATION_CLASSES + classIdx;
-				workBuffers.classWriteOffsets_ByChunkClass[chunkClassIdx] = N_class;
-				N_class += workBuffers.classCounts_ByChunkClass[chunkClassIdx];
-			}
-
-			workBuffers.classTotals[classIdx] = N_class;
-		}
+		PrefixCountsByChunkAndBucket(
+			workBuffers.classCounts_ByChunkClass,
+			workBuffers.classWriteOffsets_ByChunkClass,
+			workBuffers.classTotals,
+			workBuffers.prefixBlockSumsScratch,
+			N_chunks,
+			N_PARTICLE_CLASSIFICATION_CLASSES);
 
 		particleState.particleLocalIdx_Owned.resize(
 			workBuffers.classTotals[PARTICLE_CLASSIFICATION_CLASS_OWNED]);
@@ -375,7 +369,8 @@ namespace
 			N_chunks * N_PARTICLE_BUILD_CLASSES, 0u);
 		std::vector<uint32_t> classWriteOffsets_ByChunkClass(
 			N_chunks * N_PARTICLE_BUILD_CLASSES, 0u);
-		uint32_t classTotals[N_PARTICLE_BUILD_CLASSES]{};
+		std::vector<uint32_t> classTotals(N_PARTICLE_BUILD_CLASSES, 0u);
+		std::vector<uint32_t> prefixBlockSumsScratch;
 
 		// count owned and halo particles per chunk from one owner query per particle
 		// (chunks processed in parallel, with each worker writing only its own count row)
@@ -411,19 +406,13 @@ namespace
 		});
 
 		// prefix chunk-local class counts to compute output range of each chunk
-		for (uint32_t classIdx = 0; classIdx != N_PARTICLE_BUILD_CLASSES; classIdx++)
-		{
-			uint32_t N_class = 0;
-
-			for (uint32_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
-			{
-				const uint32_t chunkClassIdx = chunkIdx * N_PARTICLE_BUILD_CLASSES + classIdx;
-				classWriteOffsets_ByChunkClass[chunkClassIdx] = N_class;
-				N_class += classCounts_ByChunkClass[chunkClassIdx];
-			}
-
-			classTotals[classIdx] = N_class;
-		}
+		PrefixCountsByChunkAndBucket(
+			classCounts_ByChunkClass,
+			classWriteOffsets_ByChunkClass,
+			classTotals,
+			prefixBlockSumsScratch,
+			N_chunks,
+			N_PARTICLE_BUILD_CLASSES);
 
 		N_owned = classTotals[PARTICLE_BUILD_CLASS_OWNED];
 		N_halo = classTotals[PARTICLE_BUILD_CLASS_HALO];
@@ -862,6 +851,7 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classCounts_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classWriteOffsets_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classTotals));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.prefixBlockSumsScratch));
 
 	return usage;
 }
@@ -968,20 +958,13 @@ bool Dist::ApplyLocalParticleReOrder(
 	}
 
 	// prefix chunk-local class counts to compute output range of each chunk
-	for (uint32_t classIdx = 0; classIdx != N_PARTICLE_CLASSIFICATION_CLASSES; classIdx++)
-	{
-		uint32_t N_class = 0;
-
-		for (uint32_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
-		{
-			const uint32_t chunkClassIdx =
-				chunkIdx * N_PARTICLE_CLASSIFICATION_CLASSES + classIdx;
-			classification.classWriteOffsets_ByChunkClass[chunkClassIdx] = N_class;
-			N_class += classification.classCounts_ByChunkClass[chunkClassIdx];
-		}
-
-		classification.classTotals[classIdx] = N_class;
-	}
+	PrefixCountsByChunkAndBucket(
+		classification.classCounts_ByChunkClass,
+		classification.classWriteOffsets_ByChunkClass,
+		classification.classTotals,
+		classification.prefixBlockSumsScratch,
+		N_chunks,
+		N_PARTICLE_CLASSIFICATION_CLASSES);
 
 	const uint32_t N_owned =
 		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_OWNED];
