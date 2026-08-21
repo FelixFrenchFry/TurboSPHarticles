@@ -7,6 +7,7 @@
 #include <limits>
 #include <stdexcept>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_scan.h>
 #include <tbb/partitioner.h>
 
 // internal
@@ -67,18 +68,65 @@ namespace
 		return static_cast<SELLNeighborCount>(N_nbrs);
 	}
 
+	template<typename ValueAtIdx>
+	uint64_t BuildExclusivePrefixSum_Parallel(
+		const uint32_t N_values,
+		const ValueAtIdx& valueAtIdx,
+		std::vector<uint64_t>& offsets)
+	{
+		offsets.resize(static_cast<uint64_t>(N_values) + 1ull);
+		offsets[0] = 0;
+		if (N_values == 0u)
+		{
+			return 0;
+		}
+
+		return tbb::parallel_scan(
+			tbb::blocked_range<uint32_t>(0, N_values),
+			uint64_t{ 0 },
+			[&](const tbb::blocked_range<uint32_t>& r,
+				const uint64_t prefix,
+				const bool isFinalScan)
+			{
+				uint64_t sum = prefix;
+				for (uint32_t i = r.begin(); i != r.end(); i++)
+				{
+					sum += valueAtIdx(i);
+					if (isFinalScan)
+					{
+						offsets[static_cast<uint64_t>(i) + 1ull] = sum;
+					}
+				}
+				return sum;
+			},
+			[](const uint64_t lhs, const uint64_t rhs)
+			{
+				return lhs + rhs;
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
+	struct ChunkStorageTotals
+	{
+		uint64_t N_delta8 = 0;
+		uint64_t N_delta16 = 0;
+		uint64_t N_abs32 = 0;
+	};
+
 	void FinalizeCSRNeighborStorage(
 		const std::vector<SELLNeighborCount>& nbrCount,
 		std::vector<uint64_t>& nbrOffsets,
 		std::vector<uint32_t>& nbrList)
 	{
-		nbrOffsets.resize(static_cast<uint64_t>(nbrCount.size()) + 1ull);
-		nbrOffsets[0] = 0;
-		for (uint32_t i = 0; i < nbrCount.size(); i++)
-		{
-			nbrOffsets[i + 1] = nbrOffsets[i] + nbrCount[i];
-		}
-		nbrList.resize(nbrOffsets.back());
+		const uint64_t N_total = BuildExclusivePrefixSum_Parallel(
+			static_cast<uint32_t>(nbrCount.size()),
+			[&](const uint32_t i)
+			{
+				return static_cast<uint64_t>(nbrCount[i]);
+			},
+			nbrOffsets);
+		nbrList.resize(N_total);
 	}
 
 } // namespace anonymous
@@ -838,20 +886,14 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinalizeChunkOffsets(
 	std::vector<uint32_t>& nbrList) const
 {
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	nbrChunkOffsets.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
-
-	// TODO: parallelize this with TBB?
-	for (uint32_t chunk = 0; chunk < N_chunks; chunk++)
-	{
-		const uint64_t chunkStorage =
-			static_cast<uint64_t>(nbrChunkMaxCount[chunk]) * chunkWidth;
-
-		// offsets are an exclusive prefix sum over chunk pitch * SIMD-width
-		nbrChunkOffsets[static_cast<uint64_t>(chunk) + 1ull]
-			= nbrChunkOffsets[chunk] + chunkStorage;
-	}
-
-	const uint64_t N_total = nbrChunkOffsets[N_chunks];
+	const uint64_t N_total = BuildExclusivePrefixSum_Parallel(
+		N_chunks,
+		[&](const uint32_t chunk)
+		{
+			// offsets are an exclusive prefix sum over chunk pitch * SIMD-width
+			return static_cast<uint64_t>(nbrChunkMaxCount[chunk]) * chunkWidth;
+		},
+		nbrChunkOffsets);
 	EnsurePackedCSRStorageCapacity(nbrList, N_total, extraAllocCapacityPct_);
 	nbrList.resize(N_total);
 }
@@ -1781,44 +1823,78 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinalizeChunkStorage(
 	std::vector<uint32_t>& nbrListAbs32) const
 {
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	nbrChunkOffsets.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkOffsets.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkOffsets[N_chunks] = 0;
 
-	uint64_t N_delta8 = 0;
-	uint64_t N_delta16 = 0;
-	uint64_t N_abs32 = 0;
-
-	for (uint32_t chunk = 0; chunk < N_chunks; chunk++)
+	ChunkStorageTotals totals{};
+	if (N_chunks > 0u)
 	{
-		const uint32_t pitch = nbrChunkMaxCount[chunk];
-		const uint64_t chunkStorage = ChunkStorageSize(pitch);
-		const SELLChunkFormat format = ChooseChunkFormat(
-			pitch, nbrChunkMinRef[chunk], nbrChunkMaxRef[chunk]);
+		totals = tbb::parallel_scan(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			ChunkStorageTotals{},
+			[&](const tbb::blocked_range<uint32_t>& r,
+				const ChunkStorageTotals& prefix,
+				const bool isFinalScan)
+			{
+				ChunkStorageTotals running = prefix;
+				for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+				{
+					const uint32_t pitch = nbrChunkMaxCount[chunk];
+					const uint64_t chunkStorage = ChunkStorageSize(pitch);
+					const SELLChunkFormat format = ChooseChunkFormat(
+						pitch, nbrChunkMinRef[chunk], nbrChunkMaxRef[chunk]);
 
-		nbrChunkFormat[chunk] = format;
-		nbrChunkBaseIdx[chunk] = (format == SELLChunkFormat::Abs32)
-			? 0u : nbrChunkMinRef[chunk];
+					if (isFinalScan)
+					{
+						nbrChunkFormat[chunk] = format;
+						nbrChunkBaseIdx[chunk] = (format == SELLChunkFormat::Abs32)
+							? 0u : nbrChunkMinRef[chunk];
+					}
 
-		if (format == SELLChunkFormat::Delta8)
-		{
-			nbrChunkOffsets[chunk] = N_delta8;
-			N_delta8 += chunkStorage;
-		}
-		else if (format == SELLChunkFormat::Delta16)
-		{
-			nbrChunkOffsets[chunk] = N_delta16;
-			N_delta16 += chunkStorage;
-		}
-		else
-		{
-			nbrChunkOffsets[chunk] = N_abs32;
-			N_abs32 += chunkStorage;
-		}
+					if (format == SELLChunkFormat::Delta8)
+					{
+						if (isFinalScan)
+						{
+							nbrChunkOffsets[chunk] = running.N_delta8;
+						}
+						running.N_delta8 += chunkStorage;
+					}
+					else if (format == SELLChunkFormat::Delta16)
+					{
+						if (isFinalScan)
+						{
+							nbrChunkOffsets[chunk] = running.N_delta16;
+						}
+						running.N_delta16 += chunkStorage;
+					}
+					else
+					{
+						if (isFinalScan)
+						{
+							nbrChunkOffsets[chunk] = running.N_abs32;
+						}
+						running.N_abs32 += chunkStorage;
+					}
+				}
+				return running;
+			},
+			[](const ChunkStorageTotals& lhs, const ChunkStorageTotals& rhs)
+			{
+				return ChunkStorageTotals
+				{
+					lhs.N_delta8 + rhs.N_delta8,
+					lhs.N_delta16 + rhs.N_delta16,
+					lhs.N_abs32 + rhs.N_abs32
+				};
+			},
+			tbb::auto_partitioner{}
+		);
 	}
 
-	EnsurePackedCSRStorageCapacity(nbrListDelta8, N_delta8, extraAllocCapacityPct_);
-	EnsurePackedCSRStorageCapacity(nbrListDelta16, N_delta16, extraAllocCapacityPct_);
-	EnsurePackedCSRStorageCapacity(nbrListAbs32, N_abs32, extraAllocCapacityPct_);
-	nbrListDelta8.resize(N_delta8);
-	nbrListDelta16.resize(N_delta16);
-	nbrListAbs32.resize(N_abs32);
+	EnsurePackedCSRStorageCapacity(nbrListDelta8, totals.N_delta8, extraAllocCapacityPct_);
+	EnsurePackedCSRStorageCapacity(nbrListDelta16, totals.N_delta16, extraAllocCapacityPct_);
+	EnsurePackedCSRStorageCapacity(nbrListAbs32, totals.N_abs32, extraAllocCapacityPct_);
+	nbrListDelta8.resize(totals.N_delta8);
+	nbrListDelta16.resize(totals.N_delta16);
+	nbrListAbs32.resize(totals.N_abs32);
 }
