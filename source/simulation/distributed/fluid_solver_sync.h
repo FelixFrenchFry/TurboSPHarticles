@@ -155,9 +155,6 @@ namespace Dist
 
 			// owner peer selected during the receive count pass
 			std::vector<int> recvPeerIdx_ByHaloIdx;
-
-			// reusable prefix scratch
-			std::vector<uint32_t> prefixBlockSumsScratch;
 		};
 
 		// packs and posts exchange of up to three fields in one round of messages

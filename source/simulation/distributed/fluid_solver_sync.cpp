@@ -363,11 +363,10 @@ bool FluidSolverSyncMgr::Rebuild(
 			}
 		});
 
-		PrefixCountsByChunkAndBucket(
+		PrefixCountsByChunkAndBucket_ParallelScan(
 			planBuildWorkBuffers.sendCounts_ByChunkBucket,
 			planBuildWorkBuffers.sendWriteOffsets_ByChunkBucket,
 			planBuildWorkBuffers.sendTotals,
-			planBuildWorkBuffers.prefixBlockSumsScratch,
 			N_sendChunks,
 			N_buckets);
 
@@ -515,11 +514,10 @@ bool FluidSolverSyncMgr::Rebuild(
 			}
 		});
 
-		PrefixCountsByChunkAndBucket(
+		PrefixCountsByChunkAndBucket_ParallelScan(
 			planBuildWorkBuffers.recvCounts_ByChunkBucket,
 			planBuildWorkBuffers.recvWriteOffsets_ByChunkBucket,
 			planBuildWorkBuffers.recvTotals,
-			planBuildWorkBuffers.prefixBlockSumsScratch,
 			N_recvChunks,
 			N_buckets);
 
@@ -1133,8 +1131,6 @@ Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 		planBuildWorkBuffers_.sendDoubleBounds_ByPeer));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(
 		planBuildWorkBuffers_.recvPeerIdx_ByHaloIdx));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.prefixBlockSumsScratch));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(peerIdxSortScratch_));
 	for (const FieldSyncSchedule& schedule : fieldSyncSchedules_)
 	{

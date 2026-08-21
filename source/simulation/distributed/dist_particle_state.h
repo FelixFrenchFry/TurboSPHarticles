@@ -47,7 +47,6 @@ namespace Dist
 		std::vector<uint32_t> classCounts_ByChunkClass; // how many owned/inner/outer particles each chunk contains
 		std::vector<uint32_t> classWriteOffsets_ByChunkClass; // where each chunk writes into the final list
 		std::vector<uint32_t> classTotals; // total owned/inner/outer counts across all chunks
-		std::vector<uint32_t> prefixBlockSumsScratch; // scratch for parallel chunk-prefix construction
 	};
 
 	// reusable scratch for parallelized local particle re-ordering

@@ -389,7 +389,6 @@ namespace Dist
 		ParticleRedistributionRoutes routes_;
 		ParticleRoutingWorkBuffers routingWorkBuffers_;
 		ParticleClassificationWorkBuffers ownedClassificationWorkBuffers_;
-		std::vector<uint32_t> prefixBlockSumsScratch_;
 		std::vector<int> sendCounts_;
 		std::vector<int> recvCounts_;
 

@@ -119,11 +119,10 @@ namespace
 		});
 
 		// prefix chunk-local class counts to compute output range of each chunk
-		PrefixCountsByChunkAndBucket(
+		PrefixCountsByChunkAndBucket_ParallelScan(
 			workBuffers.classCounts_ByChunkClass,
 			workBuffers.classWriteOffsets_ByChunkClass,
 			workBuffers.classTotals,
-			workBuffers.prefixBlockSumsScratch,
 			N_chunks,
 			N_PARTICLE_CLASSIFICATION_CLASSES);
 
@@ -370,7 +369,6 @@ namespace
 		std::vector<uint32_t> classWriteOffsets_ByChunkClass(
 			N_chunks * N_PARTICLE_BUILD_CLASSES, 0u);
 		std::vector<uint32_t> classTotals(N_PARTICLE_BUILD_CLASSES, 0u);
-		std::vector<uint32_t> prefixBlockSumsScratch;
 
 		// count owned and halo particles per chunk from one owner query per particle
 		// (chunks processed in parallel, with each worker writing only its own count row)
@@ -406,11 +404,10 @@ namespace
 		});
 
 		// prefix chunk-local class counts to compute output range of each chunk
-		PrefixCountsByChunkAndBucket(
+		PrefixCountsByChunkAndBucket_ParallelScan(
 			classCounts_ByChunkClass,
 			classWriteOffsets_ByChunkClass,
 			classTotals,
-			prefixBlockSumsScratch,
 			N_chunks,
 			N_PARTICLE_BUILD_CLASSES);
 
@@ -851,7 +848,6 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classCounts_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classWriteOffsets_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.classTotals));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(workBuffers.classification.prefixBlockSumsScratch));
 
 	return usage;
 }
@@ -958,11 +954,10 @@ bool Dist::ApplyLocalParticleReOrder(
 	}
 
 	// prefix chunk-local class counts to compute output range of each chunk
-	PrefixCountsByChunkAndBucket(
+	PrefixCountsByChunkAndBucket_ParallelScan(
 		classification.classCounts_ByChunkClass,
 		classification.classWriteOffsets_ByChunkClass,
 		classification.classTotals,
-		classification.prefixBlockSumsScratch,
 		N_chunks,
 		N_PARTICLE_CLASSIFICATION_CLASSES);
 

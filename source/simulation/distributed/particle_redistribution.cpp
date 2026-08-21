@@ -237,7 +237,6 @@ namespace
 	void BuildOwnedClassIndexLists_Parallel(
 		DistParticleState& rebuiltParticleState,
 		ParticleClassificationWorkBuffers& workBuffers,
-		std::vector<uint32_t>& blockSumsScratch,
 		const uint32_t N_owned,
 		const float extraAllocCapacityPct)
 	{
@@ -289,11 +288,10 @@ namespace
 		});
 
 		// prefix chunk-local class counts to compute each chunk's output range
-		PrefixCountsByChunkAndBucket(
+		PrefixCountsByChunkAndBucket_ParallelScan(
 			workBuffers.classCounts_ByChunkClass,
 			workBuffers.classWriteOffsets_ByChunkClass,
 			workBuffers.classTotals,
-			blockSumsScratch,
 			N_chunks,
 			OWNED_CLASSIFICATION_CLASS_COUNT);
 
@@ -783,7 +781,6 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classCounts_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classWriteOffsets_ByChunkClass));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(ownedClassificationWorkBuffers_.classTotals));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(prefixBlockSumsScratch_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(sendCounts_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(recvCounts_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(retainedFluidOldLocalIdx_FromNewLocalIdx_));
@@ -1270,11 +1267,10 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		return false;
 	}
 
-	PrefixCountsByChunkAndBucket(
+	PrefixCountsByChunkAndBucket_ParallelScan(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		routingWorkBuffers_.routeTotals,
-		prefixBlockSumsScratch_,
 		N_chunks,
 		N_buckets);
 
@@ -1491,11 +1487,10 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		return false;
 	}
 
-	PrefixCountsByChunkAndBucket(
+	PrefixCountsByChunkAndBucket_ParallelScan(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		routingWorkBuffers_.routeTotals,
-		prefixBlockSumsScratch_,
 		N_chunks,
 		N_buckets);
 
@@ -1986,7 +1981,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 		BuildOwnedClassIndexLists_Parallel(
 			rebuiltParticleState,
 			ownedClassificationWorkBuffers_,
-			prefixBlockSumsScratch_,
 			N_owned,
 			scratchBufferExtraAllocCapacityPct_);
 	}
@@ -2253,7 +2247,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		BuildOwnedClassIndexLists_Parallel(
 			rebuiltParticleState,
 			ownedClassificationWorkBuffers_,
-			prefixBlockSumsScratch_,
 			N_owned,
 			scratchBufferExtraAllocCapacityPct_);
 	}
