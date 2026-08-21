@@ -718,10 +718,12 @@ namespace
 	{
 		int rank = 0;
 
-		uint64_t backendAvgNs = 0;
 		uint64_t redistributionAvgNs = 0;
-		uint64_t haloFieldExchangeAvgNs = 0;
 		uint64_t planRebuildAvgNs = 0;
+		uint64_t haloFieldExchangeAvgNs = 0;
+		uint64_t particlePermutationAvgNs = 0;
+		uint64_t loadBalancingAvgNs = 0;
+		uint64_t miscAvgNs = 0;
 	};
 
 	std::vector<DistRankTimingSummary> BuildRankTimingSummaries(
@@ -740,15 +742,18 @@ namespace
 			DistRankTimingSummary summary{};
 			summary.rank = report.rank;
 
-			// use the inclusive distributed step timer instead of summing overlapping backend kernels
-			summary.backendAvgNs =
-				BenchOpTimeNs(report, Bench::BenchOp::Dist_RankBackendStep, true);
 			summary.redistributionAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_ParticleRedistribution, true);
-			summary.haloFieldExchangeAvgNs =
-				BenchOpTimeNs(report, Bench::BenchOp::Dist_HaloFieldExchange, true);
 			summary.planRebuildAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_PlanRebuild, true);
+			summary.haloFieldExchangeAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_HaloFieldExchange, true);
+			summary.particlePermutationAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_ParticlePermutation, true);
+			summary.loadBalancingAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_LoadBalancing, true);
+			summary.miscAvgNs =
+				BenchOpTimeNs(report, Bench::BenchOp::Dist_Misc, true);
 
 			summaries.push_back(summary);
 		}
@@ -936,9 +941,8 @@ namespace
 		std::snprintf(unitLabel, sizeof(unitLabel), "avg [%s]", Bench::UnitLabel(unit));
 
 		PrintLine(N_lines,
-			"%-2s | %10s | %15s | %16s | %13s | %9s",
-			"r", "backend", "redistribution", "halo exchange",
-			"plan rebuild", "");
+			"%-2s | %8s | %8s | %8s | %8s | %8s | %8s | %9s",
+			"r", "redist", "plan", "halo", "perm", "load", "misc", "");
 		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
@@ -947,14 +951,16 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %10.2f | %15.2f | %16.2f | %13.2f | %9s",
+				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9s",
 				rankLabel,
-				Bench::ConvertFromNs(unit, summary.backendAvgNs),
 				Bench::ConvertFromNs(
 					unit,
 					summary.redistributionAvgNs),
-				Bench::ConvertFromNs(unit, summary.haloFieldExchangeAvgNs),
 				Bench::ConvertFromNs(unit, summary.planRebuildAvgNs),
+				Bench::ConvertFromNs(unit, summary.haloFieldExchangeAvgNs),
+				Bench::ConvertFromNs(unit, summary.particlePermutationAvgNs),
+				Bench::ConvertFromNs(unit, summary.loadBalancingAvgNs),
+				Bench::ConvertFromNs(unit, summary.miscAvgNs),
 				unitLabel);
 		}
 	}
