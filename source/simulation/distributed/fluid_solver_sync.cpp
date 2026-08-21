@@ -255,12 +255,12 @@ bool FluidSolverSyncMgr::Rebuild(
 		domainDecomp.OwnedExtentAABB(mpiContext.Rank()).Expanded(singleHaloRadius);
 	const uint32_t N_peerPlans = static_cast<uint32_t>(newPeerPlans.size());
 	const uint32_t N_buckets = N_peerPlans * N_HALO_EXTENTS;
-	const uint32_t N_owned = static_cast<uint32_t>(
-		particleStateF.particleLocalIdx_Owned.size());
+	const uint32_t N_outer = static_cast<uint32_t>(
+		particleStateF.particleLocalIdx_Outer.size());
 	const uint32_t N_halo = static_cast<uint32_t>(
 		particleStateF.particleLocalIdx_Halo.size());
-	const uint32_t N_sendChunks = N_owned > 0
-		? 1 + (N_owned - 1) / FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE
+	const uint32_t N_sendChunks = N_outer > 0
+		? 1 + (N_outer - 1) / FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE
 		: 0;
 	const uint32_t N_recvChunks = N_halo > 0
 		? 1 + (N_halo - 1) / FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE
@@ -294,7 +294,7 @@ bool FluidSolverSyncMgr::Rebuild(
 			newPeerPlans[peerIdx].rank] = static_cast<int>(peerIdx);
 	}
 
-	// cache the bounds used by every owned-particle send test
+	// cache the bounds used by every send test
 	planBuildWorkBuffers.sendSingleBounds_ByPeer.resize(N_peerPlans);
 	planBuildWorkBuffers.sendDoubleBounds_ByPeer.resize(N_peerPlans);
 	for (uint32_t peerIdx = 0; peerIdx != N_peerPlans; peerIdx++)
@@ -314,30 +314,30 @@ bool FluidSolverSyncMgr::Rebuild(
 
 	if (N_peerPlans != 0)
 	{
-		// count owned particles per peer and halo extent
+		// count outer owned particles per peer and halo extent
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N_sendChunks),
 			[&](const tbb::blocked_range<uint32_t>& range)
 		{
 			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
 			{
-				const uint32_t beginOwnedIdx =
+				const uint32_t beginOuterIdx =
 					chunkIdx * FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE;
-				const uint32_t endOwnedIdx =
-					beginOwnedIdx + std::min(
+				const uint32_t endOuterIdx =
+					beginOuterIdx + std::min(
 						FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE,
-						N_owned - beginOwnedIdx);
+						N_outer - beginOuterIdx);
 				uint32_t* const chunkCounts =
 					planBuildWorkBuffers.sendCounts_ByChunkBucket.data() +
 					static_cast<uint64_t>(chunkIdx) * N_buckets;
 				std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
 
-				for (uint32_t ownedIdx = beginOwnedIdx;
-					 ownedIdx != endOwnedIdx;
-					 ownedIdx++)
+				for (uint32_t outerIdx = beginOuterIdx;
+					 outerIdx != endOuterIdx;
+					 outerIdx++)
 				{
 					const uint32_t localIdx =
-						particleStateF.particleLocalIdx_Owned[ownedIdx];
+						particleStateF.particleLocalIdx_Outer[outerIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
 						particlesF.yPos[localIdx],
@@ -388,29 +388,29 @@ bool FluidSolverSyncMgr::Rebuild(
 			}
 		}
 
-		// scatter owned particles into disjoint ranges, preserving input order within each bucket
+		// scatter outer owned particles into disjoint ranges, preserving input order within each bucket
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N_sendChunks),
 			[&](const tbb::blocked_range<uint32_t>& range)
 		{
 			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
 			{
-				const uint32_t beginOwnedIdx =
+				const uint32_t beginOuterIdx =
 					chunkIdx * FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE;
-				const uint32_t endOwnedIdx =
-					beginOwnedIdx + std::min(
+				const uint32_t endOuterIdx =
+					beginOuterIdx + std::min(
 						FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE,
-						N_owned - beginOwnedIdx);
+						N_outer - beginOuterIdx);
 				uint32_t* const chunkWriteIdxs =
 					planBuildWorkBuffers.sendWriteOffsets_ByChunkBucket.data() +
 					static_cast<uint64_t>(chunkIdx) * N_buckets;
 
-				for (uint32_t ownedIdx = beginOwnedIdx;
-					 ownedIdx != endOwnedIdx;
-					 ownedIdx++)
+				for (uint32_t outerIdx = beginOuterIdx;
+					 outerIdx != endOuterIdx;
+					 outerIdx++)
 				{
 					const uint32_t localIdx =
-						particleStateF.particleLocalIdx_Owned[ownedIdx];
+						particleStateF.particleLocalIdx_Outer[outerIdx];
 					const uint32_t globalIdx = particlesF.id[localIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
