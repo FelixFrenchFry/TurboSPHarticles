@@ -840,6 +840,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinalizeChunkOffsets(
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
 	nbrChunkOffsets.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 
+	// TODO: parallelize this with TBB?
 	for (uint32_t chunk = 0; chunk < N_chunks; chunk++)
 	{
 		const uint64_t chunkStorage =

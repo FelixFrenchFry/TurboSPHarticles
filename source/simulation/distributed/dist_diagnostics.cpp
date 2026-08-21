@@ -12,7 +12,6 @@
 // internal
 #include "dist_diagnostics.h"
 #include "dist_helpers.h"
-#include "dist_redistribution_diagnostics.h"
 #include "mpi_context.h"
 #include "source/base/enum_hub.h"
 #include "source/base/helpers.h"
@@ -466,48 +465,6 @@ namespace
 		mpiContext.WaitAll(requests, "benchmark diagnostic reports");
 	}
 
-	void GatherParticleRedistributionTimingReports(
-		const MpiContext& mpiContext,
-		const ParticleRedistributionTimingReport& localReport,
-		std::vector<ParticleRedistributionTimingReport>& reports)
-	{
-		std::vector<MPI_Request> requests{};
-
-		if (mpiContext.IsRoot())
-		{
-			reports.assign(
-				static_cast<uint64_t>(mpiContext.Size()),
-				ParticleRedistributionTimingReport{});
-			reports[static_cast<uint64_t>(mpiContext.Rank())] = localReport;
-			requests.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
-
-			for (int rank = 0; rank < mpiContext.Size(); rank++)
-			{
-				if (rank == mpiContext.RootRank()) { continue; }
-
-				requests.emplace_back(MPI_REQUEST_NULL);
-				mpiContext.IRecvBytes(
-					&reports[static_cast<uint64_t>(rank)],
-					static_cast<int>(sizeof(ParticleRedistributionTimingReport)),
-					rank,
-					DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT,
-					requests.back());
-			}
-		}
-		else
-		{
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.ISendBytes(
-				&localReport,
-				static_cast<int>(sizeof(ParticleRedistributionTimingReport)),
-				mpiContext.RootRank(),
-				DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT,
-				requests.back());
-		}
-
-		mpiContext.WaitAll(requests, "redistribution timing reports");
-	}
-
 	uint64_t SumReportField(
 		const std::vector<DistRankStepReport>& reports,
 		uint32_t DistRankStepReport::* field)
@@ -860,20 +817,6 @@ namespace
 		}
 	}
 
-	void PrintParticleRedistributionTimingTable(
-		int& N_lines,
-		const std::vector<ParticleRedistributionTimingReport>& reports,
-		const Bench::TimeUnit unit)
-	{
-		const std::vector<std::string> lines =
-			BuildParticleRedistributionTimingLines(reports, unit);
-
-		for (const std::string& line : lines)
-		{
-			PrintLine(N_lines, "%s", line.c_str());
-		}
-	}
-
 	void PrintBenchmarkSummaryTable(
 		int& N_lines,
 		const std::vector<DistRankBenchReport>& reports,
@@ -1134,8 +1077,6 @@ namespace
 	void PrintDashboard(
 		const std::vector<DistRankStepReport>& reports,
 		const std::vector<DistRankBenchReport>& benchReports,
-		const std::vector<ParticleRedistributionTimingReport>&
-			redistributionTimingReports,
 		const Bench::BenchOpList& benchOps,
 		const Sim::SimParams& params)
 	{
@@ -1172,9 +1113,6 @@ namespace
 			PrintParticleLayoutTable(N_lines, reports);
 			PrintLine(N_lines);
 			PrintParticleExchangeTable(N_lines, reports);
-			PrintLine(N_lines);
-			PrintParticleRedistributionTimingTable(
-				N_lines, redistributionTimingReports, params.timeUnit);
 		}
 		else
 		{
@@ -1401,9 +1339,7 @@ namespace Dist
 		const Sim::SimParams& params,
 		const Bench::BenchOpList& benchOps,
 		const DistRankStepReport& localStepReport,
-		const DistRankBenchReport& localBenchReport,
-		const ParticleRedistributionTimingReport&
-			localParticleRedistributionTimingReport)
+		const DistRankBenchReport& localBenchReport)
 	{
 		std::vector<DistRankStepReport> reports{};
 		GatherRankStepReports(mpiContext, localStepReport, reports);
@@ -1411,18 +1347,10 @@ namespace Dist
 		std::vector<DistRankBenchReport> benchReports{};
 		GatherRankBenchReports(mpiContext, localBenchReport, benchReports);
 
-		std::vector<ParticleRedistributionTimingReport>
-			redistributionTimingReports{};
-		GatherParticleRedistributionTimingReports(
-			mpiContext,
-			localParticleRedistributionTimingReport,
-			redistributionTimingReports);
-
 		if (!mpiContext.IsRoot()) { return; }
 
 		PrintDashboard(
-			reports, benchReports, redistributionTimingReports,
-			benchOps, params);
+			reports, benchReports, benchOps, params);
 	}
 
 	void DistDiagnosticsMgr::PrintMemorySummary(

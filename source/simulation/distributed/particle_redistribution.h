@@ -61,7 +61,6 @@ namespace Dist
 	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_HALO_BOUNDARY = 5610;
 
 	class MpiContext;
-	struct ParticleRedistributionTimingReport;
 
 	struct ParticleRedistributionRoutes
 	{
@@ -130,8 +129,7 @@ namespace Dist
 			bool redistributeParticlesB,
 			int rank, int N_ranks,
 			uint32_t N_globalF, uint32_t N_globalB,
-			std::string* failMsg = nullptr,
-			ParticleRedistributionTimingReport* timingReport = nullptr);
+			std::string* failMsg = nullptr);
 
 		// orchestrator that compacts kept particles in place and appends the next migrated / halo particles
 		bool RedistributeParticles(
@@ -144,8 +142,7 @@ namespace Dist
 			bool redistributeParticlesB,
 			uint32_t N_globalF,
 			uint32_t N_globalB,
-			std::string* failMsg = nullptr,
-			ParticleRedistributionTimingReport* timingReport = nullptr);
+			std::string* failMsg = nullptr);
 
 		// latest routes and traffic statistics
 		const ParticleRedistributionRoutes& GetRoutes() const { return routes_; }
@@ -359,8 +356,7 @@ namespace Dist
 			const IDomainDecomp& domainDecomp,
 			bool redistributeParticlesB,
 			int rank, int N_ranks,
-			std::string* failMsg,
-			ParticleRedistributionTimingReport* timingReport);
+			std::string* failMsg);
 		bool PackSendBuffers(
 			const Sync::FluidConstView& particlesF,
 			const Sync::BoundaryConstView& particlesB,
@@ -379,16 +375,14 @@ namespace Dist
 			int rank,
 			float haloRadius,
 			uint32_t N_global,
-			std::string* failMsg,
-			ParticleRedistributionTimingReport* timingReport);
+			std::string* failMsg);
 		bool PrepareBoundaryParticleMutation(
 			const Sync::BoundaryConstView& oldParticles,
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,
 			uint32_t N_global,
-			std::string* failMsg,
-			ParticleRedistributionTimingReport* timingReport);
+			std::string* failMsg);
 
 		// peer communication routes and storage
 		std::vector<RankBuffers> rankBuffers_;

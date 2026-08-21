@@ -21,14 +21,12 @@ namespace Sim
 namespace Dist
 {
 	class MpiContext;
-	struct ParticleRedistributionTimingReport;
 
 	// MPI tags for distributed diagnostic reports
 	inline constexpr int DIST_DIAGNOSTICS_TAG_HARDWARE_REPORT = 8100;
 	inline constexpr int DIST_DIAGNOSTICS_TAG_STEP_REPORT = 8101;
 	inline constexpr int DIST_DIAGNOSTICS_TAG_STARTUP_REPORT = 8102;
 	inline constexpr int DIST_DIAGNOSTICS_TAG_BENCH_REPORT = 8103;
-	inline constexpr int DIST_DIAGNOSTICS_TAG_REDISTRIBUTION_TIMING_REPORT = 8104;
 
 	constexpr int DIST_STARTUP_REPORT_TEXT_CHARS = 128;
 
@@ -158,9 +156,7 @@ namespace Dist
 			const Sim::SimParams& params,
 			const Bench::BenchOpList& benchOps,
 			const DistRankStepReport& localStepReport,
-			const DistRankBenchReport& localBenchReport,
-			const ParticleRedistributionTimingReport&
-				localParticleRedistributionTimingReport);
+			const DistRankBenchReport& localBenchReport);
 
 		static void PrintMemorySummary(
 			const MpiContext& mpiContext,

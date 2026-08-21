@@ -16,7 +16,6 @@
 #include "source/base/parallel_checks.h"
 #include "parallel_utils.h"
 #include "particle_redistribution.h"
-#include "dist_redistribution_diagnostics.h"
 #include "mpi_context.h"
 
 
@@ -1595,8 +1594,7 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	const IDomainDecomp& domainDecomp,
 	const bool redistributeParticlesB,
 	const int rank, const int N_ranks,
-	std::string* failMsg,
-	ParticleRedistributionTimingReport* timingReport)
+	std::string* failMsg)
 {
 	// halo bounds stay fixed for both routing passes, which read them per particle and destination
 	routingWorkBuffers_.haloExtentAABB_ByRank.resize(static_cast<uint64_t>(N_ranks));
@@ -1608,9 +1606,6 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 
 	// route fluid migration and halos
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Route);
-
 		if (!RouteOwnedFluidParticles(
 			particlesF, particleStateF,
 			domainDecomp, rank, N_ranks, failMsg))
@@ -1623,9 +1618,6 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	// (only if needed, since boundary particles are static)
 	if (redistributeParticlesB)
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Route);
-
 		if (!RouteOwnedBoundaryParticles(
 			particlesB, particleStateB,
 			domainDecomp, rank, N_ranks, failMsg))
@@ -1839,8 +1831,7 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 	const int rank,
 	const float haloRadius,
 	const uint32_t N_global,
-	std::string* failMsg,
-	ParticleRedistributionTimingReport* timingReport)
+	std::string* failMsg)
 {
 	auto& appendedParticles = appendedParticlesF_;
 	auto& rebuiltParticleState = rebuiltParticleStateF_;
@@ -1852,9 +1843,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 
 	// compute sizes and initialize append-only fluid storage and metadata
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Prep);
-
 		const uint64_t N_retained_U64 =
 			routes_.keptOwnedFluidLocalIdxs.size();
 		const uint64_t N_owned_U64 =
@@ -1909,9 +1897,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 
 	// rebuild metadata for owned particles retained in backend storage
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Kept);
-
 		if (!ClassifyRetainedOwnedParticles_Parallel(
 			rebuiltParticleState,
 			retainedFluidOldLocalIdx_FromNewLocalIdx_,
@@ -1929,9 +1914,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 
 	// append owned particles migrated from other ranks
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Migrated);
-
 		// first failure seen by the migrated append pass, reported once it completes
 		std::atomic<const char*> migratedFailMsg{ nullptr };
 
@@ -2011,9 +1993,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 
 	// append local and received fluid halos
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Halo);
-
 		// halos occupy one contiguous local index range, so every particle knows its
 		// destination slot up front and the index list needs no shared append
 		const uint32_t N_localHalo =
@@ -2102,8 +2081,6 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 
 	// validate rebuilt fluid metadata
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Prep);
 		if (appendLocalIdx != N_appended || dstLocalIdx != N_local ||
 			retainedFluidOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
 		{
@@ -2121,8 +2098,7 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 	const int rank,
 	const float haloRadius,
 	const uint32_t N_global,
-	std::string* failMsg,
-	ParticleRedistributionTimingReport* timingReport)
+	std::string* failMsg)
 {
 	auto& appendedParticles = appendedParticlesB_;
 	auto& rebuiltParticleState = rebuiltParticleStateB_;
@@ -2134,9 +2110,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 	// compute sizes and initialize append-only boundary storage and metadata
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Prep);
-
 		const uint64_t N_retained_U64 =
 			routes_.keptOwnedBoundaryLocalIdxs.size();
 		const uint64_t N_owned_U64 =
@@ -2191,9 +2164,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 	// rebuild metadata for owned boundary particles retained in backend storage
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Kept);
-
 		if (!ClassifyRetainedOwnedParticles_Parallel(
 			rebuiltParticleState,
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
@@ -2211,9 +2181,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 	// append owned particles migrated from other ranks
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Migrated);
-
 		// first failure seen by the migrated append pass, reported once it completes
 		std::atomic<const char*> migratedFailMsg{ nullptr };
 
@@ -2293,9 +2260,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 	// append local and received boundary halos
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Halo);
-
 		// halos occupy one contiguous local index range, so every particle knows its
 		// destination slot up front and the index list needs no shared append
 		const uint32_t N_localHalo = static_cast<uint32_t>(routes_.localHaloBoundaryLocalIdxs.size());
@@ -2383,8 +2347,6 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 
 	// validate rebuilt boundary metadata
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Prep);
 		if (appendLocalIdx != N_appended || dstLocalIdx != N_local ||
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
 		{
@@ -2404,14 +2366,10 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 	const bool redistributeParticlesB,
 	const int rank, const int N_ranks,
 	const uint32_t N_globalF, const uint32_t N_globalB,
-	std::string* failMsg,
-	ParticleRedistributionTimingReport* timingReport)
+	std::string* failMsg)
 {
 	// validate the rank and backend views before replacing reusable routes
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Route);
-
 		if (failMsg) { failMsg->clear(); }
 		if (rank < 0 || rank >= N_ranks)
 		{
@@ -2433,7 +2391,7 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 		particlesF, particlesB,
 		particleStateF, particleStateB,
 		domainDecomp, redistributeParticlesB,
-		rank, N_ranks, failMsg, timingReport);
+		rank, N_ranks, failMsg);
 }
 
 bool ParticleRedistributionMgr::RedistributeParticles(
@@ -2445,8 +2403,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	const Sim::SimParams& simParams,
 	const bool redistributeParticlesB,
 	const uint32_t N_globalF, const uint32_t N_globalB,
-	std::string* failMsg,
-	ParticleRedistributionTimingReport* timingReport)
+	std::string* failMsg)
 {
 	if (failMsg) { failMsg->clear(); }
 
@@ -2458,13 +2415,9 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	Sync::BoundaryConstView particlesB{};
 	bool localOk = true;
 
-	// time explicit agreement between ranks independently of local work
-	const auto AllRanksTrue = [&](
-		const bool value,
-		const ParticleRedistributionTimingOp timingOp)
+	// ensure explicit agreement between ranks independently of local work
+	const auto AllRanksTrue = [&](const bool value)
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, timingOp);
 		return mpiContext.AllTrue(value);
 	};
 
@@ -2472,8 +2425,6 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	try
 	{
 		{
-			[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-				timingReport, ParticleRedistributionTimingOp::Route);
 			particlesF = distParticleBackend.GetFluidParticleView();
 			particlesB = distParticleBackend.GetBoundaryParticleView();
 		}
@@ -2482,13 +2433,11 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 			particlesF, particlesB,
 			particleStateF, particleStateB,
 			domainDecomp, redistributeParticlesB,
-			rank, N_ranks, N_globalF, N_globalB, failMsg, timingReport);
+			rank, N_ranks, N_globalF, N_globalB, failMsg);
 
 		// pack outgoing migration and halo payloads
 		if (localOk)
 		{
-			[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-				timingReport, ParticleRedistributionTimingOp::Pack);
 			localOk = PackSendBuffers(
 				particlesF, particlesB,
 				redistributeParticlesB,
@@ -2502,15 +2451,11 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	}
 
 	// no rank may enter the count exchange while another rank failed validation
-	if (!AllRanksTrue(
-		localOk,
-		ParticleRedistributionTimingOp::SyncPack)) { return false; }
+	if (!AllRanksTrue(localOk)) { return false; }
 
 	// exchange migration and halo particle counts and resize all receive buffers accordingly
 	try
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Exchange);
 		mpiContext.AllToAllInts(
 			sendCounts_, recvCounts_,
 			PARTICLE_REDISTRIBUTION_LANE_COUNT);
@@ -2521,14 +2466,10 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		if (failMsg) { *failMsg = ex.what(); }
 		localOk = false;
 	}
-	if (!AllRanksTrue(
-		localOk,
-		ParticleRedistributionTimingOp::SyncCounts)) { return false; }
+	if (!AllRanksTrue(localOk)) { return false; }
 
 	// transfer migration and halo payloads together
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Exchange);
 		ExchangePayloads(rank, N_ranks, mpiContext);
 	}
 
@@ -2539,13 +2480,13 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		localOk = PrepareFluidParticleMutation(
 			particlesF,
 			domainDecomp, rank, simParams.distHaloRadius,
-			N_globalF, failMsg, timingReport);
+			N_globalF, failMsg);
 		if (localOk && redistributeParticlesB)
 		{
 			localOk = PrepareBoundaryParticleMutation(
 				particlesB,
 				domainDecomp, rank, simParams.distHaloRadius,
-				N_globalB, failMsg, timingReport);
+				N_globalB, failMsg);
 		}
 	}
 	catch (const std::exception& ex)
@@ -2553,15 +2494,11 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		if (failMsg) { *failMsg = ex.what(); }
 		localOk = false;
 	}
-	if (!AllRanksTrue(
-		localOk,
-		ParticleRedistributionTimingOp::SyncRebuild)) { return false; }
+	if (!AllRanksTrue(localOk)) { return false; }
 
 	// compact and append fluid particles, and static boundaries only when required
 	try
 	{
-		[[maybe_unused]] const ParticleRedistributionTimingScope timingScope(
-			timingReport, ParticleRedistributionTimingOp::Backend);
 		localOk = distParticleBackend.ApplyParticleRedistribution(
 			retainedFluidOldLocalIdx_FromNewLocalIdx_,
 			retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
@@ -2579,9 +2516,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		if (failMsg) { *failMsg = ex.what(); }
 		localOk = false;
 	}
-	if (!AllRanksTrue(
-		localOk,
-		ParticleRedistributionTimingOp::SyncBackend)) { return false; }
+	if (!AllRanksTrue(localOk)) { return false; }
 
 	// publish matching metadata only after every backend mutation succeeded
 	std::swap(particleStateF, rebuiltParticleStateF_);

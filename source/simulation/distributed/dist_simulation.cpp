@@ -806,7 +806,6 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 	// local copy for consistent maximum-step handling during this run
 	const auto paramsInit = simParams_;
-	particleRedistributionTimingReport_ = {};
 	BeginRunLogging(paramsInit);
 	DistDiagnosticsMgr::ResetProgress();
 	bool runOk = true;
@@ -2173,8 +2172,7 @@ void DistSimulationMgr::DisplayDistributedProgress(
 	DistDiagnosticsMgr::PrintLatestPerformanceSummaryAndProgress(
 		mpiContext_, params, curBenchOps_,
 		BuildRankStepReport(params, exportedStep),
-		BuildRankBenchReport(),
-		particleRedistributionTimingReport_);
+		BuildRankBenchReport());
 }
 
 bool DistSimulationMgr::UpdateLoadBalancing()
@@ -2284,7 +2282,6 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		// ensure all ranks have the same parameters before redistribution
 		SyncParameters();
 
-		BeginParticleRedistributionTimingReport(particleRedistributionTimingReport_, mpiContext_.Rank());
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticleRedistribution);
 		const bool redistributionOk = RedistributeRankLocalParticles(params);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticleRedistribution);
@@ -2393,8 +2390,7 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 			redistributeParticlesB,
 			static_cast<uint32_t>(N_expectedGlobalF_),
 			static_cast<uint32_t>(N_expectedGlobalB_),
-			&failMsg,
-			&particleRedistributionTimingReport_))
+			&failMsg))
 		{
 			SPDLOG_ERROR(
 				"[rank {}/{}] Failed to redistribute particles: {}",

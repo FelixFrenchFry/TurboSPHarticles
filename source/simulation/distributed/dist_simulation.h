@@ -20,7 +20,6 @@
 #include "domain_decomp.h"
 #include "dist_diagnostics.h"
 #include "dist_particle_state.h"
-#include "dist_redistribution_diagnostics.h"
 #include "dist_snapshots.h"
 #include "fluid_solver_sync.h"
 #include "load_balance.h"
@@ -217,7 +216,6 @@ namespace Dist
 		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
 		RigidBodySyncBuffers rigidBodySyncBuffers_{};
-		ParticleRedistributionTimingReport particleRedistributionTimingReport_{};
 
 		// backend over compact rank-local state
 		std::unique_ptr<Bench::BenchmarksTracker> benchmarksTracker_{ nullptr };
