@@ -18,6 +18,9 @@
 #include <stdexcept>
 #include <thread>
 #include <utility>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_scan.h>
+#include <tbb/partitioner.h>
 
 // internal
 #include "source/base/enum_hub.h"
@@ -2480,18 +2483,50 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 			const AABB singleHaloBounds =
 				domainDecomp_->OwnedExtentAABB(mpiContext_.Rank())
 					.Expanded(simParams_.kernelRadius);
+			const auto& haloLocalIdxs = particleStateF_.particleLocalIdx_Halo;
+			const uint32_t N_halo = static_cast<uint32_t>(haloLocalIdxs.size());
 
-			for (const uint32_t localIdx : particleStateF_.particleLocalIdx_Halo)
+			if (N_halo > 0u)
 			{
-				const glm::vec3 position{
-					particlesF.xPos[localIdx],
-					particlesF.yPos[localIdx],
-					particlesF.zPos[localIdx]
-				};
-				if (singleHaloBounds.Contains(position))
+				const uint32_t N_owned = static_cast<uint32_t>(
+					pressureAccFluidParticleLocalIdxs_.size());
+				pressureAccFluidParticleLocalIdxs_.resize(N_owned + N_halo);
+
+				const uint32_t N_firstHalo = tbb::parallel_scan(
+					tbb::blocked_range<uint32_t>(0, N_halo),
+					uint32_t{ 0 },
+					[&](const tbb::blocked_range<uint32_t>& range,
+						const uint32_t prefix,
+						const bool isFinalScan)
 				{
-					pressureAccFluidParticleLocalIdxs_.push_back(localIdx);
-				}
+					uint32_t N_selected = prefix;
+					for (uint32_t haloIdx = range.begin();
+						haloIdx != range.end(); haloIdx++)
+					{
+						const uint32_t localIdx = haloLocalIdxs[haloIdx];
+						const glm::vec3 position{
+							particlesF.xPos[localIdx],
+							particlesF.yPos[localIdx],
+							particlesF.zPos[localIdx]
+						};
+						if (!singleHaloBounds.Contains(position)) { continue; }
+
+						if (isFinalScan)
+						{
+							pressureAccFluidParticleLocalIdxs_[N_owned + N_selected] = localIdx;
+						}
+						N_selected++;
+					}
+					return N_selected;
+				},
+				[](const uint32_t lhs, const uint32_t rhs)
+				{
+					return lhs + rhs;
+				},
+				tbb::auto_partitioner{}
+				);
+
+				pressureAccFluidParticleLocalIdxs_.resize(N_owned + N_firstHalo);
 			}
 		}
 
