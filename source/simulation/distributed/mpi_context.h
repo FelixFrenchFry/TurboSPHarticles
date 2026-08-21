@@ -89,6 +89,10 @@ namespace Dist
 		void WaitAll(
 			std::vector<MPI_Request>& requests,
 			const char* context = nullptr) const;
+		// aborts all ranks after an unrecoverable MPI operation error
+		[[noreturn]] void Abort(
+			const char* context = nullptr,
+			int errorCode = MPI_ERR_OTHER) const;
 
 		// helpers
 		static const char* ThreadSupportName(int threadSupport);

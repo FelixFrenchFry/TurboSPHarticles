@@ -2,7 +2,9 @@
 
 // external
 #include <algorithm>
+#include <cstdio>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <stdexcept>
 
@@ -25,23 +27,54 @@ namespace
 		return static_cast<int>(N_values);
 	}
 
-	void CheckMpiResultImpl(const int result, const char* opName)
+	std::string MpiErrorMessage(
+		const int result,
+		const char* opName,
+		const bool includeErrorString = true)
 	{
-		if (result == MPI_SUCCESS) { return; }
-
 		char errorString[MPI_MAX_ERROR_STRING]{};
 		int errorStringLength = 0;
-		const bool hasErrorString = MPI_Error_string(
+		const bool hasErrorString = includeErrorString && MPI_Error_string(
 			result, errorString, &errorStringLength) == MPI_SUCCESS &&
 			errorStringLength > 0;
 
-		std::string message = std::string(opName) + " failed with MPI error code " +
+		const char* operationName = opName && opName[0] != '\0'
+			? opName
+			: "MPI operation";
+		std::string message = std::string(operationName) + " failed with MPI error code " +
 			std::to_string(result);
 		if (hasErrorString)
 		{
 			message += " (" + std::string(errorString, errorStringLength) + ")";
 		}
-		throw std::runtime_error(message + ".");
+		return message + ".";
+	}
+
+	[[noreturn]] void AbortMpiJob(
+		const std::string& message,
+		const int errorCode)
+	{
+		const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
+		std::fprintf(stderr, "%s Aborting MPI job.\n", message.c_str());
+		std::fflush(stderr);
+
+		(void)MPI_Abort(MPI_COMM_WORLD, abortErrorCode);
+		std::terminate();
+	}
+
+	void CheckMpiResultImpl(
+		const int result,
+		const char* opName,
+		const bool abortOnError = true)
+	{
+		if (result == MPI_SUCCESS) { return; }
+
+		const std::string message = MpiErrorMessage(result, opName, abortOnError);
+		if (abortOnError)
+		{
+			AbortMpiJob(message, result);
+		}
+		throw std::runtime_error(message);
 	}
 
 	template <typename T, typename MpiOp>
@@ -75,13 +108,19 @@ MpiContext::MpiContext(
 	const int requestedThreadSupport)
 {
 	int alreadyInitialized = 0;
-	CheckMpiResult(MPI_Initialized(&alreadyInitialized), "MPI_Initialized");
+	// MPI_Abort is not valid until MPI initialization has succeeded.
+	CheckMpiResultImpl(
+		MPI_Initialized(&alreadyInitialized),
+		"MPI_Initialized",
+		false);
 
 	if (!alreadyInitialized)
 	{
 		// request thread mode once, before any rank metadata is queried
-		CheckMpiResult(MPI_Init_thread(&argc, &argv, requestedThreadSupport, &threadSupport_),
-			"MPI_Init_thread");
+		CheckMpiResultImpl(
+			MPI_Init_thread(&argc, &argv, requestedThreadSupport, &threadSupport_),
+			"MPI_Init_thread",
+			false);
 		ownsMpiLifetime_ = true;
 	}
 	else
@@ -109,6 +148,17 @@ MpiContext::~MpiContext()
 	{
 		(void)MPI_Finalize();
 	}
+}
+
+[[noreturn]] void MpiContext::Abort(
+	const char* context,
+	const int errorCode) const
+{
+	const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
+	const std::string message = "[rank " + std::to_string(rank_) + "/" +
+		std::to_string(N_ranks_) + "] " +
+		MpiErrorMessage(abortErrorCode, context);
+	AbortMpiJob(message, abortErrorCode);
 }
 
 void MpiContext::Barrier() const
@@ -549,11 +599,11 @@ void MpiContext::WaitAll(
 
 			const std::string requestOpName = opName + " request " +
 				std::to_string(requestIdx);
-			CheckMpiResult(waitStatuses_[requestIdx].MPI_ERROR, requestOpName.c_str());
+			Abort(requestOpName.c_str(), waitStatuses_[requestIdx].MPI_ERROR);
 		}
 	}
 
-	CheckMpiResult(result, opName.c_str());
+	Abort(opName.c_str(), result);
 }
 
 const char* MpiContext::ThreadSupportName(const int threadSupport)
