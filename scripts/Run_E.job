@@ -18,6 +18,7 @@ module load mpi/impi/2021.14-intel-2025.0
 unset CFLAGS CXXFLAGS CPPFLAGS FFLAGS FCFLAGS LDFLAGS
 export CC=gcc
 export CXX=g++
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # build location
 cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles

@@ -193,56 +193,56 @@
 
   "buildPresets": [
     {
-      "name": "Windows-Debug",
+      "name": "Windows-x64-Debug",
       "configurePreset": "Windows-x64-Debug"
     },
     {
-      "name": "Windows-RelWithDeb",
+      "name": "Windows-x64-RelWithDeb",
       "configurePreset": "Windows-x64-RelWithDeb"
     },
     {
-      "name": "Windows-Release",
+      "name": "Windows-x64-Release",
       "configurePreset": "Windows-x64-Release"
     },
     {
-      "name": "Windows-Debug-MPI",
+      "name": "Windows-x64-Debug-MPI",
       "configurePreset": "Windows-x64-Debug-MPI"
     },
     {
-      "name": "Windows-RelWithDeb-MPI",
+      "name": "Windows-x64-RelWithDeb-MPI",
       "configurePreset": "Windows-x64-RelWithDeb-MPI"
     },
     {
-      "name": "Windows-Release-MPI",
+      "name": "Windows-x64-Release-MPI",
       "configurePreset": "Windows-x64-Release-MPI"
     },
 
     {
-      "name": "Linux-Debug",
+      "name": "Linux-x64-Debug",
       "configurePreset": "Linux-x64-Debug"
     },
     {
-      "name": "Linux-RelWithDeb",
+      "name": "Linux-x64-RelWithDeb",
       "configurePreset": "Linux-x64-RelWithDeb"
     },
     {
-      "name": "Linux-Release",
+      "name": "Linux-x64-Release",
       "configurePreset": "Linux-x64-Release"
     },
     {
-      "name": "Linux-Release-CUDA",
+      "name": "Linux-x64-Release-CUDA",
       "configurePreset": "Linux-x64-Release-CUDA"
     },
     {
-      "name": "Linux-Debug-MPI",
+      "name": "Linux-x64-Debug-MPI",
       "configurePreset": "Linux-x64-Debug-MPI"
     },
     {
-      "name": "Linux-RelWithDeb-MPI",
+      "name": "Linux-x64-RelWithDeb-MPI",
       "configurePreset": "Linux-x64-RelWithDeb-MPI"
     },
     {
-      "name": "Linux-Release-MPI",
+      "name": "Linux-x64-Release-MPI",
       "configurePreset": "Linux-x64-Release-MPI"
     }
   ]
