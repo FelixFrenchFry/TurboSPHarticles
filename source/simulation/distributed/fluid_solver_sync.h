@@ -33,6 +33,10 @@ namespace Dist
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t FLUID_SOLVER_SYNC_BLOCK_SIZE = 2048;
 
+	// owned and halo particles classified per chunk, so workers fill disjoint plan ranges
+	// TODO: fine-tune chunk size by trying out 2048, 4096, 8192, 16384?
+	inline constexpr uint32_t FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE = 4096;
+
 	// one exchange plan and work schedule per halo extent mode
 	inline constexpr uint32_t N_HALO_EXTENTS = 2;
 
@@ -132,6 +136,30 @@ namespace Dist
 			std::vector<FieldSyncWorkItem> recvWorkItems;
 		};
 
+		// reusable scratch for parallel construction of variable-sized peer plans
+		struct PlanBuildWorkBuffers
+		{
+			// per chunk bucket counts and write offsets,
+			// indexed by [chunkIdx * N_buckets + bucketIdx]
+			std::vector<uint32_t> sendCounts_ByChunkBucket;
+			std::vector<uint32_t> sendWriteOffsets_ByChunkBucket;
+			std::vector<uint32_t> sendTotals;
+			std::vector<uint32_t> recvCounts_ByChunkBucket;
+			std::vector<uint32_t> recvWriteOffsets_ByChunkBucket;
+			std::vector<uint32_t> recvTotals;
+
+			// compact peer lookup and precomputed send bounds
+			std::vector<int> peerIdx_ByRank;
+			std::vector<AABB> sendSingleBounds_ByPeer;
+			std::vector<AABB> sendDoubleBounds_ByPeer;
+
+			// owner peer selected during the receive count pass
+			std::vector<int> recvPeerIdx_ByHaloIdx;
+
+			// reusable prefix scratch
+			std::vector<uint32_t> prefixBlockSumsScratch;
+		};
+
 		// packs and posts exchange of up to three fields in one round of messages
 		void BeginSynchronizeFluidFields(
 			const std::array<std::span<float>, 3>& fields,
@@ -173,6 +201,7 @@ namespace Dist
 
 		// reusable rebuild storage
 		std::vector<PeerPlan> nextPeerPlans_;
+		PlanBuildWorkBuffers planBuildWorkBuffers_;
 		std::vector<std::pair<uint32_t, uint32_t>> peerIdxSortScratch_;
 	};
 
