@@ -27,6 +27,7 @@ namespace
 			static_cast<uint64_t>(N_expectedAvgNbrsHardMax);
 	}
 
+	// payload contents are rebuilt after sizing, so discard stale elements before capacity growth
 	template<typename T>
 	void EnsurePackedCSRStorageCapacity(
 		std::vector<T>& nbrList,
@@ -34,6 +35,7 @@ namespace
 	{
 		if (nbrList.capacity() < N_elements)
 		{
+			nbrList.clear();
 			nbrList.reserve(N_elements);
 		}
 	}
@@ -48,6 +50,7 @@ namespace
 		{
 			const uint64_t capTarget =
 				N_elements + Base::ExtraPercent(N_elements, extraAllocCapacityPct);
+			nbrList.clear();
 			nbrList.reserve(capTarget);
 		}
 	}
@@ -126,6 +129,7 @@ namespace
 				return static_cast<uint64_t>(nbrCount[i]);
 			},
 			nbrOffsets);
+		EnsurePackedCSRStorageCapacity(nbrList, N_total);
 		nbrList.resize(N_total);
 	}
 
@@ -156,9 +160,6 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::Resize(
 	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
-	nbrListFF_.clear();
-	nbrListFB_.clear();
-	nbrListFR_.clear();
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
@@ -168,9 +169,6 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::Resize(
 	nbrOffsetsRF_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 	nbrOffsetsRB_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 	nbrOffsetsRR_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
-	nbrListRF_.clear();
-	nbrListRB_.clear();
-	nbrListRR_.clear();
 
 	// reserve packed storage up front based on the expected neighbor count
 	EnsurePackedCSRStorageCapacity(nbrListFF_,
@@ -939,16 +937,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::Resize(
 	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
 
-	nbrListDelta8FF_.clear();
-	nbrListDelta8FB_.clear();
-	nbrListDelta8FR_.clear();
-	nbrListDelta16FF_.clear();
-	nbrListDelta16FB_.clear();
-	nbrListDelta16FR_.clear();
-	nbrListAbs32FF_.clear();
-	nbrListAbs32FB_.clear();
-	nbrListAbs32FR_.clear();
-
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
 	nbrCountRF_.assign(N_R_, 0);
@@ -957,9 +945,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::Resize(
 	nbrOffsetsRF_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 	nbrOffsetsRB_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 	nbrOffsetsRR_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
-	nbrListRF_.clear();
-	nbrListRB_.clear();
-	nbrListRR_.clear();
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::Finalize_Count()
