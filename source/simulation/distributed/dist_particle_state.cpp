@@ -10,6 +10,7 @@
 #include <tbb/parallel_for.h>
 
 // internal
+#include "source/base/helpers.h"
 #include "source/base/parallel_checks.h"
 #include "parallel_utils.h"
 #include "dist_particle_state.h"
@@ -885,6 +886,7 @@ bool Dist::ApplyLocalParticleReOrder(
 		? 1 + (N_local - 1) / PARTICLE_CLASSIFICATION_CHUNK_SIZE
 		: 0;
 
+	Base::ReserveScratchVector(reOrderWorkBuffers.particleClasses, N_local);
 	reOrderWorkBuffers.particleClasses.resize(N_local);
 	classification.classCounts_ByChunkClass.assign(
 		N_chunks * N_PARTICLE_CLASSIFICATION_CLASSES, 0u);
@@ -964,6 +966,12 @@ bool Dist::ApplyLocalParticleReOrder(
 	const uint32_t N_owned =
 		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_OWNED];
 	const uint32_t N_halo = N_local - N_owned;
+	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Owned, N_owned);
+	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Inner,
+		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_INNER]);
+	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Outer,
+		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_OUTER]);
+	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Halo, N_halo);
 	reOrderWorkBuffers.particleLocalIdx_Owned.resize(N_owned);
 	reOrderWorkBuffers.particleLocalIdx_Inner.resize(
 		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_INNER]);

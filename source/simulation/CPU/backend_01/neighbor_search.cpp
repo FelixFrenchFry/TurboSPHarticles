@@ -442,8 +442,8 @@ namespace
 		if (N < 2) { return; }
 
 		assert(particleOrder.size() == N && "Permutation and cell ID vector size mismatch");
-		if (cellIdScratch.size() < N) { cellIdScratch.resize(N); }
-		if (particleOrderScratch.size() < N) { particleOrderScratch.resize(N); }
+		Base::ResizeGrowScratchVector(cellIdScratch, N);
+		Base::ResizeGrowScratchVector(particleOrderScratch, N);
 
 		const uint64_t N_chunks = (N + N_RADIX_SORT_CHUNK - 1) / N_RADIX_SORT_CHUNK;
 
@@ -458,10 +458,7 @@ namespace
 		for (uint32_t shift = 0; shift < N_keyBits; shift += N_RADIX_SORT_BITS)
 		{
 			const uint64_t N_digitCounts = N_chunks * N_RADIX_SORT_BINS;
-			if (digitCounts_ByChunk.size() < N_digitCounts)
-			{
-				digitCounts_ByChunk.resize(N_digitCounts);
-			}
+			Base::ResizeGrowScratchVector(digitCounts_ByChunk, N_digitCounts);
 
 			// count digits per chunk without shared counters
 			tbb::parallel_for(

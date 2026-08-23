@@ -435,16 +435,10 @@ void ParticleRedistributionMgr::FluidExchangeBuffer::Resize(
 	// grow reusable storage to the largest requested particle count
 	const uint64_t N_fieldValues =
 		static_cast<uint64_t>(FLUID_PAYLOAD_FIELD_COUNT) * N;
-	if (ids_.size() < N)
-	{
-		ResizeVectorWithExtraCapacity(
-			ids_, N, exchangeBufferExtraAllocCapacityPct_);
-	}
-	if (fieldValues_.size() < N_fieldValues)
-	{
-		ResizeVectorWithExtraCapacity(
-			fieldValues_, N_fieldValues, exchangeBufferExtraAllocCapacityPct_);
-	}
+	Base::ResizeGrowScratchVector(
+		ids_, N, exchangeBufferExtraAllocCapacityPct_);
+	Base::ResizeGrowScratchVector(
+		fieldValues_, N_fieldValues, exchangeBufferExtraAllocCapacityPct_);
 
 	N_particles_ = N;
 }
@@ -605,16 +599,10 @@ void ParticleRedistributionMgr::BoundaryExchangeBuffer::Resize(
 	// grow reusable storage to the largest requested particle count
 	const uint64_t N_fieldValues =
 		static_cast<uint64_t>(BOUNDARY_PAYLOAD_FIELD_COUNT) * N;
-	if (ids_.size() < N)
-	{
-		ResizeVectorWithExtraCapacity(
-			ids_, N, exchangeBufferExtraAllocCapacityPct_);
-	}
-	if (fieldValues_.size() < N_fieldValues)
-	{
-		ResizeVectorWithExtraCapacity(
-			fieldValues_, N_fieldValues, exchangeBufferExtraAllocCapacityPct_);
-	}
+	Base::ResizeGrowScratchVector(
+		ids_, N, exchangeBufferExtraAllocCapacityPct_);
+	Base::ResizeGrowScratchVector(
+		fieldValues_, N_fieldValues, exchangeBufferExtraAllocCapacityPct_);
 
 	N_particles_ = N;
 }

@@ -901,6 +901,7 @@ bool SimBackend_CPU01::FillFluidParticleNearSurfaceFlags(
 
 	const uint32_t nbrCountThreshold = simParams.surfaceNbrCountThreshold;
 
+	Base::ReserveScratchVector(nearSurfaceFlags, N_F_);
 	nearSurfaceFlags.resize(N_F_);
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),

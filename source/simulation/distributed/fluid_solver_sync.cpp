@@ -15,6 +15,7 @@
 #include <tbb/parallel_sort.h>
 
 // internal
+#include "source/base/helpers.h"
 #include "source/base/parallel_checks.h"
 #include "parallel_utils.h"
 #include "fluid_solver_sync.h"
@@ -881,8 +882,10 @@ void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
 		const ParticlePlan& particlePlan = peerPlan.particlePlans[haloExtentIdx];
-		peerPlan.sendByteBuffer.resize(particlePlan.sendLocalIdxs.size());
-		peerPlan.recvByteBuffer.resize(particlePlan.recvLocalIdxs.size());
+		Base::ResizeGrowScratchVector(
+			peerPlan.sendByteBuffer, particlePlan.sendLocalIdxs.size());
+		Base::ResizeGrowScratchVector(
+			peerPlan.recvByteBuffer, particlePlan.recvLocalIdxs.size());
 
 		for (uint32_t particleIdx = 0; particleIdx != particlePlan.sendLocalIdxs.size(); particleIdx++)
 		{
@@ -894,18 +897,20 @@ void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 	// receives are posted before sends on every rank
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[haloExtentIdx];
 		mpiContext_->IRecvBytesChunked(
 			peerPlan.recvByteBuffer.data(),
-			static_cast<uint64_t>(peerPlan.recvByteBuffer.size()),
+			particlePlan.recvLocalIdxs.size(),
 			peerPlan.rank,
 			FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD,
 			requests_);
 	}
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[haloExtentIdx];
 		mpiContext_->ISendBytesChunked(
 			peerPlan.sendByteBuffer.data(),
-			static_cast<uint64_t>(peerPlan.sendByteBuffer.size()),
+			particlePlan.sendLocalIdxs.size(),
 			peerPlan.rank,
 			FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD,
 			requests_);
@@ -949,7 +954,8 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	// field sizes were checked collectively during Rebuild(); reject malformed calls locally
 	if (!localOk)
 	{
-		throw std::runtime_error("Fluid solver synchronization field size does not match the local particle count.");
+		throw std::runtime_error(
+			"Fluid solver synchronization field size does not match the local particle count.");
 	}
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
@@ -964,8 +970,8 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size();
 
 		// pack owned values in field-major order for each peer
-		if (peerPlan.sendBuffer.size() < N_sendValues) { peerPlan.sendBuffer.resize(N_sendValues); }
-		if (peerPlan.recvBuffer.size() < N_recvValues) { peerPlan.recvBuffer.resize(N_recvValues); }
+		Base::ResizeGrowScratchVector(peerPlan.sendBuffer, N_sendValues);
+		Base::ResizeGrowScratchVector(peerPlan.recvBuffer, N_recvValues);
 	}
 
 	// gather every field sequentially within each parallel work item

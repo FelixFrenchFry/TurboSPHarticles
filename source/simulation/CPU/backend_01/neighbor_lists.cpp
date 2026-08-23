@@ -27,34 +27,6 @@ namespace
 			static_cast<uint64_t>(N_expectedAvgNbrsHardMax);
 	}
 
-	// payload contents are rebuilt after sizing, so discard stale elements before capacity growth
-	template<typename T>
-	void EnsurePackedCSRStorageCapacity(
-		std::vector<T>& nbrList,
-		const uint64_t N_elements)
-	{
-		if (nbrList.capacity() < N_elements)
-		{
-			nbrList.clear();
-			nbrList.reserve(N_elements);
-		}
-	}
-
-	template<typename T>
-	void EnsurePackedCSRStorageCapacity(
-		std::vector<T>& nbrList,
-		const uint64_t N_elements,
-		const float extraAllocCapacityPct)
-	{
-		if (nbrList.capacity() < N_elements)
-		{
-			const uint64_t capTarget =
-				N_elements + Base::ExtraPercent(N_elements, extraAllocCapacityPct);
-			nbrList.clear();
-			nbrList.reserve(capTarget);
-		}
-	}
-
 	SELLNeighborCount NarrowNeighborCount_Debug(
 		const uint32_t N_nbrs,
 		const char* overflowMsg)
@@ -129,7 +101,7 @@ namespace
 				return static_cast<uint64_t>(nbrCount[i]);
 			},
 			nbrOffsets);
-		EnsurePackedCSRStorageCapacity(nbrList, N_total);
+		Base::ReserveScratchVector(nbrList, N_total, 0.0f);
 		nbrList.resize(N_total);
 	}
 
@@ -172,18 +144,18 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::Resize(
 	nbrOffsetsRR_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 
 	// reserve packed storage up front based on the expected neighbor count
-	EnsurePackedCSRStorageCapacity(nbrListFF_,
-		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF));
-	EnsurePackedCSRStorageCapacity(nbrListFB_,
-		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB));
-	EnsurePackedCSRStorageCapacity(nbrListFR_,
-		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB));
-	EnsurePackedCSRStorageCapacity(nbrListRF_,
-		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FF));
-	EnsurePackedCSRStorageCapacity(nbrListRB_,
-		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FB));
-	EnsurePackedCSRStorageCapacity(nbrListRR_,
-		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FF));
+	Base::ReserveScratchVector(nbrListFF_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FF), 0.0f);
+	Base::ReserveScratchVector(nbrListFB_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB), 0.0f);
+	Base::ReserveScratchVector(nbrListFR_,
+		ExpectedPackedCSRCapacity(N_F_, params.expctdAvgNbrCountHardMax_FB), 0.0f);
+	Base::ReserveScratchVector(nbrListRF_,
+		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FF), 0.0f);
+	Base::ReserveScratchVector(nbrListRB_,
+		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FB), 0.0f);
+	Base::ReserveScratchVector(nbrListRR_,
+		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FF), 0.0f);
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU01::Finalize_Count()
@@ -893,7 +865,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinalizeChunkOffsets(
 			return static_cast<uint64_t>(nbrChunkMaxCount[chunk]) * chunkWidth;
 		},
 		nbrChunkOffsets);
-	EnsurePackedCSRStorageCapacity(nbrList, N_total, extraAllocCapacityPct_);
+	Base::ReserveScratchVector(nbrList, N_total, extraAllocCapacityPct_);
 	nbrList.resize(N_total);
 }
 
@@ -1878,9 +1850,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinalizeChunkStorage(
 		);
 	}
 
-	EnsurePackedCSRStorageCapacity(nbrListDelta8, totals.N_delta8, extraAllocCapacityPct_);
-	EnsurePackedCSRStorageCapacity(nbrListDelta16, totals.N_delta16, extraAllocCapacityPct_);
-	EnsurePackedCSRStorageCapacity(nbrListAbs32, totals.N_abs32, extraAllocCapacityPct_);
+	Base::ReserveScratchVector(nbrListDelta8, totals.N_delta8, extraAllocCapacityPct_);
+	Base::ReserveScratchVector(nbrListDelta16, totals.N_delta16, extraAllocCapacityPct_);
+	Base::ReserveScratchVector(nbrListAbs32, totals.N_abs32, extraAllocCapacityPct_);
 	nbrListDelta8.resize(totals.N_delta8);
 	nbrListDelta16.resize(totals.N_delta16);
 	nbrListAbs32.resize(totals.N_abs32);

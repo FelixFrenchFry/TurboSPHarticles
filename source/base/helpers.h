@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <vector>
 
 
 
@@ -143,16 +144,48 @@ namespace Base
 
     constexpr uint64_t ExtraPercent(const uint64_t n, const float pct) noexcept
 	{
+		if (pct <= 0.0f || ApproxEqu(pct, 0.0f)) { return 0u; }
+
         const float extra = static_cast<float>(n) * pct / 100.0f;
         const uint64_t roundedDown = static_cast<uint64_t>(extra);
 
         return roundedDown + (static_cast<float>(roundedDown) < extra ? 1u : 0u);
     }
 
+    // reserve scratch storage without having to preserve its contents if capacity grows
+    template <class T>
+    inline void ReserveScratchVector(
+        std::vector<T>& values,
+        const uint64_t N_elements,
+        const float extraAllocCapacityPct = 0.0f)
+    {
+        if (values.capacity() < N_elements)
+        {
+            const uint64_t capacityTarget =
+                N_elements + ExtraPercent(N_elements, extraAllocCapacityPct);
+            values.clear();
+            values.reserve(capacityTarget);
+        }
+    }
+
+    // grow scratch storage without shrinking or having to preserve its contents if capacity grows
+    template <class T>
+    inline void ResizeGrowScratchVector(
+        std::vector<T>& values,
+        const uint64_t N_elements,
+        const float extraAllocCapacityPct = 0.0f)
+    {
+        if (values.size() >= N_elements) { return; }
+
+        ReserveScratchVector(values, N_elements, extraAllocCapacityPct);
+        values.resize(N_elements);
+    }
+
+    // release all vector storage
     template <class T>
     static void ReleaseVectorMemory(std::vector<T>& v)
     {
-        std::vector<T>().swap(v); // guarantees capacity is returned to allocator
+        std::vector<T>().swap(v);
     }
 
 } // namespace Base
