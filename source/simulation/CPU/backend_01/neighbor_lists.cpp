@@ -151,15 +151,16 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::Resize(
 	const uint32_t N_padded = N_chunks * chunkWidth;
 
 	// count arrays are padded, tail chunk still has a full SIMD width
+	// (no assign() in cases where because Finalize_Count() overwrites the entries)
 	nbrCountFF_.assign(N_padded, 0);
 	nbrCountFB_.assign(N_padded, 0);
 	nbrCountFR_.assign(N_padded, 0);
-	nbrChunkMaxCountFF_.assign(N_chunks, 0);
-	nbrChunkMaxCountFB_.assign(N_chunks, 0);
-	nbrChunkMaxCountFR_.assign(N_chunks, 0);
-	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
-	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
-	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkMaxCountFF_.resize(N_chunks);
+	nbrChunkMaxCountFB_.resize(N_chunks);
+	nbrChunkMaxCountFR_.resize(N_chunks);
+	nbrChunkOffsetsFF_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkOffsetsFB_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkOffsetsFR_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
@@ -853,7 +854,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::BuildChunkMaxCount(
 	std::vector<SELLNeighborCount>& nbrChunkMaxCount) const
 {
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	nbrChunkMaxCount.assign(N_chunks, 0);
+	nbrChunkMaxCount.resize(N_chunks);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -915,27 +916,28 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::Resize(
 	const uint32_t invalidRef = std::numeric_limits<uint32_t>::max();
 
 	// count arrays are padded, tail chunk still has a full SIMD width
+	// (no assign() in cases where because Finalize_Count() overwrites the entries)
 	nbrCountFF_.assign(N_padded, 0);
 	nbrCountFB_.assign(N_padded, 0);
 	nbrCountFR_.assign(N_padded, 0);
-	nbrChunkMaxCountFF_.assign(N_chunks, 0);
-	nbrChunkMaxCountFB_.assign(N_chunks, 0);
-	nbrChunkMaxCountFR_.assign(N_chunks, 0);
+	nbrChunkMaxCountFF_.resize(N_chunks);
+	nbrChunkMaxCountFB_.resize(N_chunks);
+	nbrChunkMaxCountFR_.resize(N_chunks);
 	nbrChunkMinRefFF_.assign(N_chunks, invalidRef);
 	nbrChunkMinRefFB_.assign(N_chunks, invalidRef);
 	nbrChunkMinRefFR_.assign(N_chunks, invalidRef);
 	nbrChunkMaxRefFF_.assign(N_chunks, 0);
 	nbrChunkMaxRefFB_.assign(N_chunks, 0);
 	nbrChunkMaxRefFR_.assign(N_chunks, 0);
-	nbrChunkBaseIdxFF_.assign(N_chunks, 0);
-	nbrChunkBaseIdxFB_.assign(N_chunks, 0);
-	nbrChunkBaseIdxFR_.assign(N_chunks, 0);
-	nbrChunkFormatFF_.assign(N_chunks, SELLChunkFormat::Abs32);
-	nbrChunkFormatFB_.assign(N_chunks, SELLChunkFormat::Abs32);
-	nbrChunkFormatFR_.assign(N_chunks, SELLChunkFormat::Abs32);
-	nbrChunkOffsetsFF_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
-	nbrChunkOffsetsFB_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
-	nbrChunkOffsetsFR_.assign(static_cast<uint64_t>(N_chunks) + 1ull, 0);
+	nbrChunkBaseIdxFF_.resize(N_chunks);
+	nbrChunkBaseIdxFB_.resize(N_chunks);
+	nbrChunkBaseIdxFR_.resize(N_chunks);
+	nbrChunkFormatFF_.resize(N_chunks);
+	nbrChunkFormatFB_.resize(N_chunks);
+	nbrChunkFormatFR_.resize(N_chunks);
+	nbrChunkOffsetsFF_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkOffsetsFB_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkOffsetsFR_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
@@ -1771,7 +1773,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::BuildChunkMaxCount(
 	std::vector<SELLNeighborCount>& nbrChunkMaxCount) const
 {
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	nbrChunkMaxCount.assign(N_chunks, 0);
+	nbrChunkMaxCount.resize(N_chunks);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
