@@ -336,6 +336,8 @@ namespace Dist
 
 		// routing and communication phases
 		void PrepareBuffers(int N_ranks);
+		void ClearFluidRouteOutputs();
+		void ClearBoundaryRouteOutputs();
 		bool RouteOwnedFluidParticles(
 			const Sync::FluidConstView& particlesF,
 			const DistParticleState& particleStateF,

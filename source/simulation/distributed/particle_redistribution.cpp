@@ -1071,6 +1071,22 @@ bool ParticleRedistributionMgr::ValidateParticleViews(
 	return true;
 }
 
+void ParticleRedistributionMgr::ClearFluidRouteOutputs()
+{
+	for (auto& route : routes_.ownedFluidLocalIdxs_ByDstRank) { route.clear(); }
+	for (auto& route : routes_.haloFluidLocalIdxs_ByDstRank) { route.clear(); }
+	routes_.keptOwnedFluidLocalIdxs.clear();
+	routes_.localHaloFluidLocalIdxs.clear();
+}
+
+void ParticleRedistributionMgr::ClearBoundaryRouteOutputs()
+{
+	for (auto& route : routes_.ownedBoundaryLocalIdxs_ByDstRank) { route.clear(); }
+	for (auto& route : routes_.haloBoundaryLocalIdxs_ByDstRank) { route.clear(); }
+	routes_.keptOwnedBoundaryLocalIdxs.clear();
+	routes_.localHaloBoundaryLocalIdxs.clear();
+}
+
 void ParticleRedistributionMgr::PrepareBuffers(const int N_ranks)
 {
 	rankBuffers_.resize(static_cast<uint64_t>(N_ranks));
@@ -1121,6 +1137,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
+	// self-rank buckets are stored in the retained and local-halo routes
 	routes_.ownedFluidLocalIdxs_ByDstRank[rank].clear();
 	routes_.haloFluidLocalIdxs_ByDstRank[rank].clear();
 
@@ -1342,6 +1359,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
+	// self-rank buckets are stored in the retained and local-halo routes
 	routes_.ownedBoundaryLocalIdxs_ByDstRank[rank].clear();
 	routes_.haloBoundaryLocalIdxs_ByDstRank[rank].clear();
 
@@ -1480,8 +1498,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 			scratchBufferExtraAllocCapacityPct_);
 		Base::ResizeScratchVector(
 			routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[
-				N_ranks_U32 + static_cast<uint32_t>(dstRank)],
+			routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(dstRank)],
 			scratchBufferExtraAllocCapacityPct_);
 	}
 
@@ -1566,13 +1583,7 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	}
 	if (!redistributeParticlesB)
 	{
-		for (int dstRank = 0; dstRank != N_ranks; dstRank++)
-		{
-			routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank].clear();
-			routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank].clear();
-		}
-		routes_.keptOwnedBoundaryLocalIdxs.clear();
-		routes_.localHaloBoundaryLocalIdxs.clear();
+		ClearBoundaryRouteOutputs();
 	}
 
 	// route fluid migration and halos
@@ -2362,11 +2373,26 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 		PrepareBuffers(N_ranks);
 	}
 
-	return RouteOwnedParticles(
-		particlesF, particlesB,
-		particleStateF, particleStateB,
-		domainDecomp, redistributeParticlesB,
-		rank, N_ranks, failMsg);
+	try
+	{
+		const bool routesValid = RouteOwnedParticles(
+			particlesF, particlesB,
+			particleStateF, particleStateB,
+			domainDecomp, redistributeParticlesB,
+			rank, N_ranks, failMsg);
+		if (!routesValid)
+		{
+			ClearFluidRouteOutputs();
+			ClearBoundaryRouteOutputs();
+		}
+		return routesValid;
+	}
+	catch (...)
+	{
+		ClearFluidRouteOutputs();
+		ClearBoundaryRouteOutputs();
+		throw;
+	}
 }
 
 bool ParticleRedistributionMgr::RedistributeParticles(
