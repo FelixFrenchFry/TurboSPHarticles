@@ -439,8 +439,8 @@ namespace
 		if (N < 2) { return; }
 
 		assert(particleOrder.size() == N && "Permutation and cell ID vector size mismatch");
-		cellIdScratch.resize(N);
-		particleOrderScratch.resize(N);
+		if (cellIdScratch.size() < N) { cellIdScratch.resize(N); }
+		if (particleOrderScratch.size() < N) { particleOrderScratch.resize(N); }
 
 		const uint64_t N_chunks = (N + N_RADIX_SORT_CHUNK - 1) / N_RADIX_SORT_CHUNK;
 
