@@ -954,16 +954,18 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
 	requests_.clear();
-	// size every peer payload before the parallel pass reads their storage
+	// grow every peer payload before the parallel pass reads its storage
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
 		const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
+		const uint64_t N_sendValues =
+			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size();
+		const uint64_t N_recvValues =
+			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size();
 
 		// pack owned values in field-major order for each peer
-		peerPlan.sendBuffer.resize(
-			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size());
-		peerPlan.recvBuffer.resize(
-			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size());
+		if (peerPlan.sendBuffer.size() < N_sendValues) { peerPlan.sendBuffer.resize(N_sendValues); }
+		if (peerPlan.recvBuffer.size() < N_recvValues) { peerPlan.recvBuffer.resize(N_recvValues); }
 	}
 
 	// gather every field sequentially within each parallel work item
@@ -995,21 +997,27 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 		}
 	});
 
-	// receives are posted before sends on every rank
+	// receives are posted before sends on every rank; transfer only the active payload prefix
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
+		const uint64_t N_recvValues =
+			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size();
 		mpiContext_->IRecvBytesChunked(
 			peerPlan.recvBuffer.data(),
-			static_cast<uint64_t>(peerPlan.recvBuffer.size()) * sizeof(float),
+			N_recvValues * sizeof(float),
 			peerPlan.rank,
 			FLUID_SOLVER_SYNC_TAG_PAYLOAD,
 			requests_);
 	}
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
+		const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
+		const uint64_t N_sendValues =
+			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size();
 		mpiContext_->ISendBytesChunked(
 			peerPlan.sendBuffer.data(),
-			static_cast<uint64_t>(peerPlan.sendBuffer.size()) * sizeof(float),
+			N_sendValues * sizeof(float),
 			peerPlan.rank,
 			FLUID_SOLVER_SYNC_TAG_PAYLOAD,
 			requests_);
