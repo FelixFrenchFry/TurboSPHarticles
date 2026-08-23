@@ -96,6 +96,7 @@ namespace Sim
 			const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
 			const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
 			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
+			bool pressureAccIsOwnedPrefix,
 			uint32_t N_ownedBoundaryParticles,
 			const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
@@ -253,6 +254,7 @@ namespace Sim
 		std::vector<uint32_t> outerFluidChunkIdxs_;
 		std::vector<uint32_t> activeRigidParticleLocalIdxs_;
 		std::vector<uint8_t> activeRigidParticleFlags_;
+		bool pressureAccIsOwnedPrefix_ = false;
 		bool useDistributedParticleLayout_ = false;
 		// inverted particle re-order, kept between steps and handed to the solver sync
 		std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx_;

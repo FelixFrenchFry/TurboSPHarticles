@@ -2584,6 +2584,10 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
 
+	const bool pressureAccIsOwnedPrefix =
+		pressureAccFluidParticleLocalIdxs_.size() ==
+		particleStateF_.particleLocalIdx_Owned.size();
+
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 	try
 	{
@@ -2596,6 +2600,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 				particleStateF_.particleLocalIdx_Owned,
 				particleStateF_.particleLocalIdx_Outer,
 				pressureAccFluidParticleLocalIdxs_,
+				pressureAccIsOwnedPrefix,
 				particleStateB_.N_owned,
 				activeRigidParticleLocalIdxs_,
 				fluidSolverSyncMgr_);

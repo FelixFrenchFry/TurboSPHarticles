@@ -239,6 +239,7 @@ namespace Sim
 			const std::vector<uint32_t>&,
 			const std::vector<uint32_t>&,
 			const std::vector<uint32_t>&,
+			bool,
 			uint32_t,
 			const std::vector<uint32_t>&,
 			I_DistributedFluidSolverSync&)

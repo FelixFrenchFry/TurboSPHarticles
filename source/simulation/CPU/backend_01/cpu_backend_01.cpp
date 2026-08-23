@@ -187,6 +187,7 @@ void SimBackend_CPU01::PullFromUniversalSimState(
 	pressureAccChunkIdxs_.clear();
 	innerFluidChunkIdxs_.clear();
 	outerFluidChunkIdxs_.clear();
+	pressureAccIsOwnedPrefix_ = false;
 	activeRigidParticleLocalIdxs_.clear();
 	activeRigidParticleFlags_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
@@ -746,6 +747,7 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	pressureAccChunkIdxs_.clear();
 	innerFluidChunkIdxs_.clear();
 	outerFluidChunkIdxs_.clear();
+	pressureAccIsOwnedPrefix_ = false;
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
 	particleFlagsScratch_.clear();
@@ -1622,6 +1624,7 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 	const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
 	const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
 	const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
+	const bool pressureAccIsOwnedPrefix,
 	const uint32_t N_ownedBoundaryParticles,
 	const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
 	I_DistributedFluidSolverSync& distributedFluidSolverSync)
@@ -1667,28 +1670,31 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 
 	const uint32_t N_pressureAccF = static_cast<uint32_t>(
 		pressureAccelerationFluidParticleLocalIdxs.size());
-	const auto isInvalidPressureAccIdx = [&](const uint32_t pressureAccIdx)
+	if (!pressureAccIsOwnedPrefix)
 	{
-		return pressureAccelerationFluidParticleLocalIdxs[pressureAccIdx] >= N_F_;
-	};
-	if (Check::CountViolations(0, N_pressureAccF, isInvalidPressureAccIdx) != 0)
-	{
-		const uint32_t pressureAccIdx = Check::FindFirstViolation(
-			0, N_pressureAccF, isInvalidPressureAccIdx);
-		SPDLOG_ERROR(
-			"Invalid pressure-acceleration fluid particle local index {}.",
-			pressureAccelerationFluidParticleLocalIdxs[pressureAccIdx]);
-		return false;
-	}
+		const auto isInvalidPressureAccIdx = [&](const uint32_t pressureAccIdx)
+		{
+			return pressureAccelerationFluidParticleLocalIdxs[pressureAccIdx] >= N_F_;
+		};
+		if (Check::CountViolations(0, N_pressureAccF, isInvalidPressureAccIdx) != 0)
+		{
+			const uint32_t pressureAccIdx = Check::FindFirstViolation(
+				0, N_pressureAccF, isInvalidPressureAccIdx);
+			SPDLOG_ERROR(
+				"Invalid pressure-acceleration fluid particle local index {}.",
+				pressureAccelerationFluidParticleLocalIdxs[pressureAccIdx]);
+			return false;
+		}
 
-	const uint32_t duplicatePressureAccIdx = Check::FindFirstDuplicateIdx(
-		pressureAccelerationFluidParticleLocalIdxs, N_F_, particleFlagsScratch_);
-	if (duplicatePressureAccIdx != N_pressureAccF)
-	{
-		SPDLOG_ERROR(
-			"Duplicate pressure-acceleration fluid particle local index {}.",
-			pressureAccelerationFluidParticleLocalIdxs[duplicatePressureAccIdx]);
-		return false;
+		const uint32_t duplicatePressureAccIdx = Check::FindFirstDuplicateIdx(
+			pressureAccelerationFluidParticleLocalIdxs, N_F_, particleFlagsScratch_);
+		if (duplicatePressureAccIdx != N_pressureAccF)
+		{
+			SPDLOG_ERROR(
+				"Duplicate pressure-acceleration fluid particle local index {}.",
+				pressureAccelerationFluidParticleLocalIdxs[duplicatePressureAccIdx]);
+			return false;
+		}
 	}
 
 	if (N_ownedBoundaryParticles > N_B_)
@@ -1728,8 +1734,15 @@ bool SimBackend_CPU01::ConfigureDistributedStep(
 	N_ownedB_ = N_ownedBoundaryParticles;
 	useDistributedParticleLayout_ = true;
 	outerFluidParticleLocalIdxs_ = outerFluidParticleLocalIdxs;
-	pressureAccFluidParticleLocalIdxs_ = pressureAccelerationFluidParticleLocalIdxs;
-	BuildDistributedSolverChunkIdxs();
+	pressureAccIsOwnedPrefix_ = pressureAccIsOwnedPrefix;
+	if (pressureAccIsOwnedPrefix_)
+	{
+		pressureAccFluidParticleLocalIdxs_.clear();
+	}
+	else
+	{
+		pressureAccFluidParticleLocalIdxs_ = pressureAccelerationFluidParticleLocalIdxs;
+	}
 	activeRigidParticleLocalIdxs_ = activeRigidParticleLocalIdxs;
 	activeRigidParticleFlags_.assign(N_R_, 0);
 	for (const uint32_t localIdx : activeRigidParticleLocalIdxs)
@@ -1889,8 +1902,11 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 
 	remapLocalIdxs(outerFluidParticleLocalIdxs_, N_ownedF_,
 		"Invalid outer CPU01 fluid particle local index.");
-	remapLocalIdxs(pressureAccFluidParticleLocalIdxs_, N_F_,
-		"Invalid pressure-acceleration CPU01 fluid particle local index.");
+	if (!pressureAccIsOwnedPrefix_)
+	{
+		remapLocalIdxs(pressureAccFluidParticleLocalIdxs_, N_F_,
+			"Invalid pressure-acceleration CPU01 fluid particle local index.");
+	}
 
 	BuildDistributedSolverChunkIdxs();
 
@@ -1906,6 +1922,7 @@ void SimBackend_CPU01::BuildDistributedSolverChunkIdxs()
 	// marking chunks that hold at least one of the particles yields the chunk indices in ascending order
 	// (the callers validate the local indices against the fluid particle count)
 	const uint32_t N_chunks = (N_F_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
+	const uint32_t N_ownedChunks = (N_ownedF_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 
 	// TODO: parallelize with TBB?
 	auto buildChunkIdxs = [this, N_chunks](const std::vector<uint32_t>& particleLocalIdxs,
@@ -1925,18 +1942,30 @@ void SimBackend_CPU01::BuildDistributedSolverChunkIdxs()
 		}
 	};
 
-	pressureAccFluidParticleFlags_.assign(N_F_, 0);
-	for (const uint32_t localIdx : pressureAccFluidParticleLocalIdxs_)
+	if (pressureAccIsOwnedPrefix_)
 	{
-		pressureAccFluidParticleFlags_[localIdx] = 1;
+		pressureAccFluidParticleFlags_.assign(N_ownedF_, 1);
+		pressureAccFluidParticleFlags_.resize(N_F_, 0);
+
+		pressureAccChunkIdxs_.resize(N_ownedChunks);
+		for (uint32_t chunkIdx = 0; chunkIdx != N_ownedChunks; chunkIdx++)
+		{
+			pressureAccChunkIdxs_[chunkIdx] = chunkIdx;
+		}
+	}
+	else
+	{
+		pressureAccFluidParticleFlags_.assign(N_F_, 0);
+		for (const uint32_t localIdx : pressureAccFluidParticleLocalIdxs_)
+		{
+			pressureAccFluidParticleFlags_[localIdx] = 1;
+		}
+
+		buildChunkIdxs(
+			pressureAccFluidParticleLocalIdxs_,
+			pressureAccChunkIdxs_);
 	}
 
-	buildChunkIdxs(
-		pressureAccFluidParticleLocalIdxs_,
-		pressureAccChunkIdxs_);
-
-	const uint32_t N_ownedChunks =
-		(N_ownedF_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 	chunkFlagsScratch_.assign(N_ownedChunks, 0);
 	for (const uint32_t localIdx : outerFluidParticleLocalIdxs_)
 	{
