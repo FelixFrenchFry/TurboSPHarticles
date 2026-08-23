@@ -1146,19 +1146,19 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
 
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		N_chunkBuckets,
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		N_chunkBuckets,
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeTotals,
 		N_buckets,
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.ownerRank_ByOwnedIdx,
 		N_owned,
 		scratchBufferExtraAllocCapacityPct_);
@@ -1366,19 +1366,19 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
 
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
 		N_chunkBuckets,
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
 		N_chunkBuckets,
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeTotals,
 		N_buckets,
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.ownerRank_ByOwnedIdx,
 		N_owned,
 		scratchBufferExtraAllocCapacityPct_);
