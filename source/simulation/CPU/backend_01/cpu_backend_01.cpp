@@ -748,7 +748,6 @@ bool SimBackend_CPU01::ApplyParticleRedistribution(
 	innerFluidChunkIdxs_.clear();
 	outerFluidChunkIdxs_.clear();
 	pressureAccIsOwnedPrefix_ = false;
-	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
 	particleFlagsScratch_.clear();
 	useDistributedStepWork_ = false;
@@ -901,8 +900,7 @@ bool SimBackend_CPU01::FillFluidParticleNearSurfaceFlags(
 
 	const uint32_t nbrCountThreshold = simParams.surfaceNbrCountThreshold;
 
-	Base::ReserveScratchVector(nearSurfaceFlags, N_F_);
-	nearSurfaceFlags.resize(N_F_);
+	Base::ResizeScratchVector(nearSurfaceFlags, N_F_);
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -1857,7 +1855,7 @@ void SimBackend_CPU01::ApplyLastParticleReOrderToDistributedFluidParticleLocalId
 	#endif
 
 	// invert the re-order, so remapping the active indices below is one lookup per particle
-	newFluidLocalIdx_FromOldLocalIdx_.resize(N_F_);
+	Base::ResizeScratchVector(newFluidLocalIdx_FromOldLocalIdx_, N_F_);
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_F_),
 		[&](const tbb::blocked_range<uint32_t>& r)

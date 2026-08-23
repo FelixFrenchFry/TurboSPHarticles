@@ -168,6 +168,17 @@ namespace Base
         }
     }
 
+    // resize scratch storage without having to preserve its contents if capacity grows
+    template <class T>
+    inline void ResizeScratchVector(
+        std::vector<T>& values,
+        const uint64_t N_elements,
+        const float extraAllocCapacityPct = 0.0f)
+    {
+        ReserveScratchVector(values, N_elements, extraAllocCapacityPct);
+        values.resize(N_elements);
+    }
+
     // grow scratch storage without shrinking or having to preserve its contents if capacity grows
     template <class T>
     inline void ResizeGrowScratchVector(
@@ -177,8 +188,7 @@ namespace Base
     {
         if (values.size() >= N_elements) { return; }
 
-        ReserveScratchVector(values, N_elements, extraAllocCapacityPct);
-        values.resize(N_elements);
+        ResizeScratchVector(values, N_elements, extraAllocCapacityPct);
     }
 
     // release all vector storage

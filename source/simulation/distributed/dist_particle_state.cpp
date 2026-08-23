@@ -886,8 +886,7 @@ bool Dist::ApplyLocalParticleReOrder(
 		? 1 + (N_local - 1) / PARTICLE_CLASSIFICATION_CHUNK_SIZE
 		: 0;
 
-	Base::ReserveScratchVector(reOrderWorkBuffers.particleClasses, N_local);
-	reOrderWorkBuffers.particleClasses.resize(N_local);
+	Base::ResizeScratchVector(reOrderWorkBuffers.particleClasses, N_local);
 	classification.classCounts_ByChunkClass.assign(
 		N_chunks * N_PARTICLE_CLASSIFICATION_CLASSES, 0u);
 	classification.classWriteOffsets_ByChunkClass.assign(
@@ -966,18 +965,12 @@ bool Dist::ApplyLocalParticleReOrder(
 	const uint32_t N_owned =
 		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_OWNED];
 	const uint32_t N_halo = N_local - N_owned;
-	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Owned, N_owned);
-	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Inner,
+	Base::ResizeScratchVector(reOrderWorkBuffers.particleLocalIdx_Owned, N_owned);
+	Base::ResizeScratchVector(reOrderWorkBuffers.particleLocalIdx_Inner,
 		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_INNER]);
-	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Outer,
+	Base::ResizeScratchVector(reOrderWorkBuffers.particleLocalIdx_Outer,
 		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_OUTER]);
-	Base::ReserveScratchVector(reOrderWorkBuffers.particleLocalIdx_Halo, N_halo);
-	reOrderWorkBuffers.particleLocalIdx_Owned.resize(N_owned);
-	reOrderWorkBuffers.particleLocalIdx_Inner.resize(
-		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_INNER]);
-	reOrderWorkBuffers.particleLocalIdx_Outer.resize(
-		classification.classTotals[PARTICLE_CLASSIFICATION_CLASS_OUTER]);
-	reOrderWorkBuffers.particleLocalIdx_Halo.resize(N_halo);
+	Base::ResizeScratchVector(reOrderWorkBuffers.particleLocalIdx_Halo, N_halo);
 
 	// fill owned/inner/outer/halo index lists while preserving new local-index order
 	// (chunks processed in parallel, with each worker writing to disjoint ranges)

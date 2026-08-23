@@ -101,8 +101,7 @@ namespace
 				return static_cast<uint64_t>(nbrCount[i]);
 			},
 			nbrOffsets);
-		Base::ReserveScratchVector(nbrList, N_total, 0.0f);
-		nbrList.resize(N_total);
+		Base::ResizeScratchVector(nbrList, N_total, 0.0f);
 	}
 
 } // namespace anonymous
@@ -865,8 +864,7 @@ void NeighborLists_ChunkedSELL_Explicit_CPU01::FinalizeChunkOffsets(
 			return static_cast<uint64_t>(nbrChunkMaxCount[chunk]) * chunkWidth;
 		},
 		nbrChunkOffsets);
-	Base::ReserveScratchVector(nbrList, N_total, extraAllocCapacityPct_);
-	nbrList.resize(N_total);
+	Base::ResizeScratchVector(nbrList, N_total, extraAllocCapacityPct_);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1850,10 +1848,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU01::FinalizeChunkStorage(
 		);
 	}
 
-	Base::ReserveScratchVector(nbrListDelta8, totals.N_delta8, extraAllocCapacityPct_);
-	Base::ReserveScratchVector(nbrListDelta16, totals.N_delta16, extraAllocCapacityPct_);
-	Base::ReserveScratchVector(nbrListAbs32, totals.N_abs32, extraAllocCapacityPct_);
-	nbrListDelta8.resize(totals.N_delta8);
-	nbrListDelta16.resize(totals.N_delta16);
-	nbrListAbs32.resize(totals.N_abs32);
+	Base::ResizeScratchVector(nbrListDelta8, totals.N_delta8, extraAllocCapacityPct_);
+	Base::ResizeScratchVector(nbrListDelta16, totals.N_delta16, extraAllocCapacityPct_);
+	Base::ResizeScratchVector(nbrListAbs32, totals.N_abs32, extraAllocCapacityPct_);
 }

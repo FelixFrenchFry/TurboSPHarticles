@@ -295,11 +295,11 @@ namespace
 			N_chunks,
 			OWNED_CLASSIFICATION_CLASS_COUNT);
 
-		ResizeVectorWithExtraCapacity(
+		Base::ResizeScratchVector(
 			rebuiltParticleState.particleLocalIdx_Inner,
 			workBuffers.classTotals[OWNED_CLASSIFICATION_CLASS_INNER],
 			extraAllocCapacityPct);
-		ResizeVectorWithExtraCapacity(
+		Base::ResizeScratchVector(
 			rebuiltParticleState.particleLocalIdx_Outer,
 			workBuffers.classTotals[OWNED_CLASSIFICATION_CLASS_OUTER],
 			extraAllocCapacityPct);
@@ -940,10 +940,7 @@ void ParticleRedistributionMgr::PrepareRebuiltParticleState(
 	// initialize compact local metadata, while retaining per-particle storage
 	particleState.N_owned = N_owned;
 	particleState.N_halo = N_halo;
-	particleState.particleLocalIdx_Inner.clear();
-	particleState.particleLocalIdx_Outer.clear();
-	particleState.particleLocalIdx_Halo.clear();
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeScratchVector(
 		particleState.particleClasses,
 		N_local,
 		scratchBufferExtraAllocCapacityPct_);
@@ -959,21 +956,9 @@ void ParticleRedistributionMgr::PrepareRebuiltParticleState(
 		}
 	});
 
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeScratchVector(
 		particleState.particleLocalIdx_Owned,
 		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-	EnsureVectorCapacityWithExtra(
-		particleState.particleLocalIdx_Inner,
-		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-	EnsureVectorCapacityWithExtra(
-		particleState.particleLocalIdx_Outer,
-		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-	EnsureVectorCapacityWithExtra(
-		particleState.particleLocalIdx_Halo,
-		N_halo,
 		scratchBufferExtraAllocCapacityPct_);
 }
 
@@ -1114,17 +1099,8 @@ void ParticleRedistributionMgr::PrepareBuffers(const int N_ranks)
 		rankBuffers.N_recvOwnedB = 0;
 		rankBuffers.N_sendHaloB = 0;
 		rankBuffers.N_recvHaloB = 0;
-
-		routes_.ownedFluidLocalIdxs_ByDstRank[rank].clear();
-		routes_.haloFluidLocalIdxs_ByDstRank[rank].clear();
-		routes_.ownedBoundaryLocalIdxs_ByDstRank[rank].clear();
-		routes_.haloBoundaryLocalIdxs_ByDstRank[rank].clear();
 	}
 
-	routes_.keptOwnedFluidLocalIdxs.clear();
-	routes_.localHaloFluidLocalIdxs.clear();
-	routes_.keptOwnedBoundaryLocalIdxs.clear();
-	routes_.localHaloBoundaryLocalIdxs.clear();
 	sendCounts_.assign(static_cast<uint64_t>(N_ranks) * PARTICLE_REDISTRIBUTION_LANE_COUNT, 0);
 	recvCounts_.clear();
 }
@@ -1145,6 +1121,8 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
+	routes_.ownedFluidLocalIdxs_ByDstRank[rank].clear();
+	routes_.haloFluidLocalIdxs_ByDstRank[rank].clear();
 
 	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
@@ -1262,11 +1240,11 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 		N_chunks,
 		N_buckets);
 
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeScratchVector(
 		routes_.keptOwnedFluidLocalIdxs,
 		routingWorkBuffers_.routeTotals[static_cast<uint32_t>(rank)],
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeScratchVector(
 		routes_.localHaloFluidLocalIdxs,
 		routingWorkBuffers_.routeTotals[
 			N_ranks_U32 + static_cast<uint32_t>(rank)],
@@ -1276,14 +1254,13 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 	{
 		if (dstRank == rank) { continue; }
 
-		ResizeVectorWithExtraCapacity(
+		Base::ResizeScratchVector(
 			routes_.ownedFluidLocalIdxs_ByDstRank[dstRank],
 			routingWorkBuffers_.routeTotals[static_cast<uint32_t>(dstRank)],
 			scratchBufferExtraAllocCapacityPct_);
-		ResizeVectorWithExtraCapacity(
+		Base::ResizeScratchVector(
 			routes_.haloFluidLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[
-				N_ranks_U32 + static_cast<uint32_t>(dstRank)],
+			routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(dstRank)],
 			scratchBufferExtraAllocCapacityPct_);
 	}
 
@@ -1365,6 +1342,8 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
 		: 0;
 	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
+	routes_.ownedBoundaryLocalIdxs_ByDstRank[rank].clear();
+	routes_.haloBoundaryLocalIdxs_ByDstRank[rank].clear();
 
 	Base::ResizeGrowScratchVector(
 		routingWorkBuffers_.routeCounts_ByChunkBucket,
@@ -1482,25 +1461,24 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 		N_chunks,
 		N_buckets);
 
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeScratchVector(
 		routes_.keptOwnedBoundaryLocalIdxs,
 		routingWorkBuffers_.routeTotals[static_cast<uint32_t>(rank)],
 		scratchBufferExtraAllocCapacityPct_);
-	ResizeVectorWithExtraCapacity(
+	Base::ResizeScratchVector(
 		routes_.localHaloBoundaryLocalIdxs,
-		routingWorkBuffers_.routeTotals[
-			N_ranks_U32 + static_cast<uint32_t>(rank)],
+		routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(rank)],
 		scratchBufferExtraAllocCapacityPct_);
 
 	for (int dstRank = 0; dstRank != N_ranks; dstRank++)
 	{
 		if (dstRank == rank) { continue; }
 
-		ResizeVectorWithExtraCapacity(
+		Base::ResizeScratchVector(
 			routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank],
 			routingWorkBuffers_.routeTotals[static_cast<uint32_t>(dstRank)],
 			scratchBufferExtraAllocCapacityPct_);
-		ResizeVectorWithExtraCapacity(
+		Base::ResizeScratchVector(
 			routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank],
 			routingWorkBuffers_.routeTotals[
 				N_ranks_U32 + static_cast<uint32_t>(dstRank)],
@@ -1585,6 +1563,16 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	{
 		routingWorkBuffers_.haloExtentAABB_ByRank[haloRank] =
 			domainDecomp.HaloExtentAABB(haloRank);
+	}
+	if (!redistributeParticlesB)
+	{
+		for (int dstRank = 0; dstRank != N_ranks; dstRank++)
+		{
+			routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank].clear();
+			routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank].clear();
+		}
+		routes_.keptOwnedBoundaryLocalIdxs.clear();
+		routes_.localHaloBoundaryLocalIdxs.clear();
 	}
 
 	// route fluid migration and halos
@@ -1981,7 +1969,10 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 			static_cast<uint32_t>(routes_.localHaloFluidLocalIdxs.size());
 		const uint32_t haloDstLocalIdxBase = dstLocalIdx;
 		const uint32_t haloAppendLocalIdxBase = appendLocalIdx;
-		rebuiltParticleState.particleLocalIdx_Halo.resize(N_halo);
+		Base::ResizeScratchVector(
+			rebuiltParticleState.particleLocalIdx_Halo,
+			N_halo,
+			scratchBufferExtraAllocCapacityPct_);
 
 		// first failure seen by the halo append passes, reported once they complete
 		std::atomic<const char*> haloFailMsg{ nullptr };
@@ -2246,7 +2237,10 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		const uint32_t N_localHalo = static_cast<uint32_t>(routes_.localHaloBoundaryLocalIdxs.size());
 		const uint32_t haloDstLocalIdxBase = dstLocalIdx;
 		const uint32_t haloAppendLocalIdxBase = appendLocalIdx;
-		rebuiltParticleState.particleLocalIdx_Halo.resize(N_halo);
+		Base::ResizeScratchVector(
+			rebuiltParticleState.particleLocalIdx_Halo,
+			N_halo,
+			scratchBufferExtraAllocCapacityPct_);
 
 		// first failure seen by the halo append passes, reported once they complete
 		std::atomic<const char*> haloFailMsg{ nullptr };
