@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cassert>
 #include <cstdint>
@@ -10,6 +11,7 @@
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
+#include <tbb/parallel_scan.h>
 #include <tbb/partitioner.h>
 #include <vector>
 
@@ -403,10 +405,11 @@ namespace
 		cellStartIdx[N_cells] = particleLocalIdxOffset + static_cast<uint32_t>(N);
 	}
 
-	// (larger than the cell table chunk, so the serial digit prefix below stays short)
+	// (larger than the cell table chunk, so the digit-count matrix stays compact)
 	constexpr uint64_t N_RADIX_SORT_CHUNK = 65536;
 	constexpr uint32_t N_RADIX_SORT_BITS = 8;
 	constexpr uint32_t N_RADIX_SORT_BINS = 1u << N_RADIX_SORT_BITS;
+	using RadixDigitCounts = std::array<uint32_t, N_RADIX_SORT_BINS>;
 
 	// number of significant bits in the Morton cell IDs of a cell frame,
 	// plus one bit that keeps the empty cell ID above every valid one
@@ -454,7 +457,11 @@ namespace
 
 		for (uint32_t shift = 0; shift < N_keyBits; shift += N_RADIX_SORT_BITS)
 		{
-			digitCounts_ByChunk.assign(N_chunks * N_RADIX_SORT_BINS, 0);
+			const uint64_t N_digitCounts = N_chunks * N_RADIX_SORT_BINS;
+			if (digitCounts_ByChunk.size() < N_digitCounts)
+			{
+				digitCounts_ByChunk.resize(N_digitCounts);
+			}
 
 			// count digits per chunk without shared counters
 			tbb::parallel_for(
@@ -466,6 +473,7 @@ namespace
 						const uint64_t beginIdx = chunkIdx * N_RADIX_SORT_CHUNK;
 						const uint64_t endIdx = std::min(beginIdx + N_RADIX_SORT_CHUNK, N);
 						uint32_t* counts = &digitCounts_ByChunk[chunkIdx * N_RADIX_SORT_BINS];
+						std::fill(counts, counts + N_RADIX_SORT_BINS, uint32_t{ 0 });
 
 						for (uint64_t i = beginIdx; i != endIdx; i++)
 						{
@@ -477,18 +485,45 @@ namespace
 				tbb::auto_partitioner{}
 			);
 
-			// prefix the counts digit-major and chunk-minor, so particles with an equal
+			// prefix each digit across chunks, so particles with an equal
 			// cell ID keep their relative order and the sort stays stable
+			const RadixDigitCounts digitTotals = tbb::parallel_scan(
+				tbb::blocked_range<uint64_t>(0, N_chunks),
+				RadixDigitCounts{},
+				[&](const tbb::blocked_range<uint64_t>& r,
+					RadixDigitCounts prefix,
+					const bool isFinalScan)
+				{
+					for (uint64_t chunkIdx = r.begin(); chunkIdx != r.end(); chunkIdx++)
+					{
+						uint32_t* counts = &digitCounts_ByChunk[chunkIdx * N_RADIX_SORT_BINS];
+						for (uint32_t digit = 0; digit != N_RADIX_SORT_BINS; digit++)
+						{
+							const uint32_t N_digit = counts[digit];
+							if (isFinalScan) { counts[digit] = prefix[digit]; }
+							prefix[digit] += N_digit;
+						}
+					}
+
+					return prefix;
+				},
+				[](RadixDigitCounts lhs, const RadixDigitCounts& rhs)
+				{
+					for (uint32_t digit = 0; digit != N_RADIX_SORT_BINS; digit++)
+					{
+						lhs[digit] += rhs[digit];
+					}
+					return lhs;
+				},
+				tbb::auto_partitioner{}
+			);
+
+			RadixDigitCounts digitWriteBase{};
 			uint32_t writeIdx = 0;
 			for (uint32_t digit = 0; digit != N_RADIX_SORT_BINS; digit++)
 			{
-				for (uint64_t chunkIdx = 0; chunkIdx != N_chunks; chunkIdx++)
-				{
-					uint32_t& count = digitCounts_ByChunk[chunkIdx * N_RADIX_SORT_BINS + digit];
-					const uint32_t N_digit = count;
-					count = writeIdx; // now the chunk's write offset for this digit
-					writeIdx += N_digit;
-				}
+				digitWriteBase[digit] = writeIdx;
+				writeIdx += digitTotals[digit];
 			}
 
 			// scatter cell IDs and particle indices into their digit buckets
@@ -508,11 +543,14 @@ namespace
 						{
 							const uint64_t cellIdValue = srcCellId[i];
 							const uint64_t key = std::min(cellIdValue, emptyKey);
-							uint32_t& offset = offsets[(key >> shift) & (N_RADIX_SORT_BINS - 1)];
+							const uint32_t digit = static_cast<uint32_t>(
+								(key >> shift) & (N_RADIX_SORT_BINS - 1));
+							uint32_t& offsetInDigit = offsets[digit];
+							const uint32_t outputIdx = digitWriteBase[digit] + offsetInDigit;
 
-							dstCellId[offset] = cellIdValue;
-							dstOrder[offset] = srcOrder[i];
-							offset++;
+							dstCellId[outputIdx] = cellIdValue;
+							dstOrder[outputIdx] = srcOrder[i];
+							offsetInDigit++;
 						}
 					}
 				},
@@ -524,11 +562,20 @@ namespace
 		}
 
 		// an odd pass count leaves the sorted result in the scratch buffers
-		// TODO: find way to avoid copy?
 		if (srcCellId.data() != cellId.data())
 		{
-			std::copy(srcCellId.begin(), srcCellId.end(), cellId.begin());
-			std::copy(srcOrder.begin(), srcOrder.end(), particleOrder.begin());
+			tbb::parallel_for(
+				tbb::blocked_range<uint64_t>(0, N),
+				[&](const tbb::blocked_range<uint64_t>& r)
+				{
+					for (uint64_t i = r.begin(); i != r.end(); i++)
+					{
+						cellId[i] = srcCellId[i];
+						particleOrder[i] = srcOrder[i];
+					}
+				},
+				tbb::auto_partitioner{}
+			);
 		}
 	}
 
