@@ -229,13 +229,18 @@ namespace
 		if (localIdxs.size() != N_expected) { return false; }
 
 		std::vector<uint8_t> covered(N_expected, 0);
+		uint32_t previousLocalIdx = 0;
+		bool hasPreviousLocalIdx = false;
 		for (const uint32_t localIdx : localIdxs)
 		{
 			if (!IsLocalIdxInRange(localIdx, firstLocalIdx, lastLocalIdx_Excl)) { return false; }
+			if (hasPreviousLocalIdx && localIdx <= previousLocalIdx) { return false; }
 
 			const uint32_t coveredIdx = localIdx - firstLocalIdx;
 			if (covered[coveredIdx] != 0) { return false; }
 			covered[coveredIdx] = 1;
+			previousLocalIdx = localIdx;
+			hasPreviousLocalIdx = true;
 		}
 
 		return true;
@@ -267,17 +272,22 @@ namespace
 			return true;
 		};
 
-		for (const uint32_t localIdx : localIdxsA)
+		const auto markLocalIdxList = [&](const std::vector<uint32_t>& localIdxs) -> bool
 		{
-			if (!markLocalIdx(localIdx)) { return false; }
-		}
+			uint32_t previousLocalIdx = 0;
+			bool hasPreviousLocalIdx = false;
+			for (const uint32_t localIdx : localIdxs)
+			{
+				if (hasPreviousLocalIdx && localIdx <= previousLocalIdx) { return false; }
+				if (!markLocalIdx(localIdx)) { return false; }
 
-		for (const uint32_t localIdx : localIdxsB)
-		{
-			if (!markLocalIdx(localIdx)) { return false; }
-		}
+				previousLocalIdx = localIdx;
+				hasPreviousLocalIdx = true;
+			}
+			return true;
+		};
 
-		return true;
+		return markLocalIdxList(localIdxsA) && markLocalIdxList(localIdxsB);
 	}
 	#endif
 
@@ -629,18 +639,20 @@ bool DistParticleState::IsValidLocalParticleLayout(
 
 	#if defined(_DEBUG)
 
-	// check that index lists cover the compact owned and halo ranges
+	// check that index lists cover the compact owned and halo ranges in ascending order
 	if (!LocalIdxListCoversRange(particleLocalIdx_Owned, 0, haloStartLocalIdx))
 	{
-		return fail("particleLocalIdx_Owned does not cover the owned local index range.");
+		return fail("particleLocalIdx_Owned does not cover the owned local index range in ascending order.");
 	}
 	if (!LocalIdxListCoversRange(particleLocalIdx_Halo, haloStartLocalIdx, N_local))
 	{
-		return fail("particleLocalIdx_Halo does not cover the halo local index range.");
+		return fail("particleLocalIdx_Halo does not cover the halo local index range in ascending order.");
 	}
 	if (!LocalIdxListsCoverRange(particleLocalIdx_Inner, particleLocalIdx_Outer, 0, haloStartLocalIdx))
 	{
-		return fail("particleLocalIdx_Inner and particleLocalIdx_Outer do not cover the owned local index range.");
+		return fail(
+			"particleLocalIdx_Inner and particleLocalIdx_Outer do not cover the owned "
+			"local index range in ascending order.");
 	}
 
 	// check that owned list entries point into the compact owned range
