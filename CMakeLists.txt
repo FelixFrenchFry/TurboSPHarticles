@@ -214,6 +214,7 @@ endif()
 add_library(Project_Defines INTERFACE)
 target_compile_definitions(Project_Defines INTERFACE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE>
+    $<$<AND:$<CONFIG:Debug>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:_DEBUG>
     TSP_GIT_COMMIT_HASH=\"${TSP_GIT_COMMIT_HASH}\"
     TSP_BUILD_TYPE=\"$<CONFIG>\"
     TSP_CXX_COMPILER_ID=\"${CMAKE_CXX_COMPILER_ID}\"
