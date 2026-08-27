@@ -75,7 +75,7 @@
     },
 
     {
-      "name": "Windows-x64-Debug",
+      "name": "Windows-Debug",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -83,7 +83,7 @@
       }
     },
     {
-      "name": "Windows-x64-RelWithDeb",
+      "name": "Windows-RelWithDeb",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -92,7 +92,7 @@
       }
     },
     {
-      "name": "Windows-x64-Release",
+      "name": "Windows-Release",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -101,7 +101,7 @@
       }
     },
     {
-      "name": "Windows-x64-Debug-MPI",
+      "name": "Windows-Debug-MPI",
       "inherits": "base-win-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -109,7 +109,7 @@
       }
     },
     {
-      "name": "Windows-x64-RelWithDeb-MPI",
+      "name": "Windows-RelWithDeb-MPI",
       "inherits": "base-win-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -118,7 +118,7 @@
       }
     },
     {
-      "name": "Windows-x64-Release-MPI",
+      "name": "Windows-Release-MPI",
       "inherits": "base-win-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -128,7 +128,7 @@
     },
 
     {
-      "name": "Linux-x64-Debug",
+      "name": "Linux-Debug",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -136,7 +136,7 @@
       }
     },
     {
-      "name": "Linux-x64-RelWithDeb",
+      "name": "Linux-RelWithDeb",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -145,7 +145,7 @@
       }
     },
     {
-      "name": "Linux-x64-Release",
+      "name": "Linux-Release",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -154,7 +154,7 @@
       }
     },
     {
-      "name": "Linux-x64-Release-CUDA",
+      "name": "Linux-Release-CUDA",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -164,7 +164,7 @@
       }
     },
     {
-      "name": "Linux-x64-Debug-MPI",
+      "name": "Linux-Debug-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -172,7 +172,7 @@
       }
     },
     {
-      "name": "Linux-x64-RelWithDeb-MPI",
+      "name": "Linux-RelWithDeb-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -181,7 +181,7 @@
       }
     },
     {
-      "name": "Linux-x64-Release-MPI",
+      "name": "Linux-Release-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -193,57 +193,57 @@
 
   "buildPresets": [
     {
-      "name": "Windows-x64-Debug",
-      "configurePreset": "Windows-x64-Debug"
+      "name": "Windows-Debug",
+      "configurePreset": "Windows-Debug"
     },
     {
-      "name": "Windows-x64-RelWithDeb",
-      "configurePreset": "Windows-x64-RelWithDeb"
+      "name": "Windows-RelWithDeb",
+      "configurePreset": "Windows-RelWithDeb"
     },
     {
-      "name": "Windows-x64-Release",
-      "configurePreset": "Windows-x64-Release"
+      "name": "Windows-Release",
+      "configurePreset": "Windows-Release"
     },
     {
-      "name": "Windows-x64-Debug-MPI",
-      "configurePreset": "Windows-x64-Debug-MPI"
+      "name": "Windows-Debug-MPI",
+      "configurePreset": "Windows-Debug-MPI"
     },
     {
-      "name": "Windows-x64-RelWithDeb-MPI",
-      "configurePreset": "Windows-x64-RelWithDeb-MPI"
+      "name": "Windows-RelWithDeb-MPI",
+      "configurePreset": "Windows-RelWithDeb-MPI"
     },
     {
-      "name": "Windows-x64-Release-MPI",
-      "configurePreset": "Windows-x64-Release-MPI"
+      "name": "Windows-Release-MPI",
+      "configurePreset": "Windows-Release-MPI"
     },
 
     {
-      "name": "Linux-x64-Debug",
-      "configurePreset": "Linux-x64-Debug"
+      "name": "Linux-Debug",
+      "configurePreset": "Linux-Debug"
     },
     {
-      "name": "Linux-x64-RelWithDeb",
-      "configurePreset": "Linux-x64-RelWithDeb"
+      "name": "Linux-RelWithDeb",
+      "configurePreset": "Linux-RelWithDeb"
     },
     {
-      "name": "Linux-x64-Release",
-      "configurePreset": "Linux-x64-Release"
+      "name": "Linux-Release",
+      "configurePreset": "Linux-Release"
     },
     {
-      "name": "Linux-x64-Release-CUDA",
-      "configurePreset": "Linux-x64-Release-CUDA"
+      "name": "Linux-Release-CUDA",
+      "configurePreset": "Linux-Release-CUDA"
     },
     {
-      "name": "Linux-x64-Debug-MPI",
-      "configurePreset": "Linux-x64-Debug-MPI"
+      "name": "Linux-Debug-MPI",
+      "configurePreset": "Linux-Debug-MPI"
     },
     {
-      "name": "Linux-x64-RelWithDeb-MPI",
-      "configurePreset": "Linux-x64-RelWithDeb-MPI"
+      "name": "Linux-RelWithDeb-MPI",
+      "configurePreset": "Linux-RelWithDeb-MPI"
     },
     {
-      "name": "Linux-x64-Release-MPI",
-      "configurePreset": "Linux-x64-Release-MPI"
+      "name": "Linux-Release-MPI",
+      "configurePreset": "Linux-Release-MPI"
     }
   ]
 }

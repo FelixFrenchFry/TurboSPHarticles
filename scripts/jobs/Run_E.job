@@ -24,5 +24,5 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
 
 # run
-mpiexec.hydra -bootstrap slurm -n 12 ./out/build/Linux-x64-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=32 -p E
+mpiexec.hydra -bootstrap slurm -n 12 ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=32 -p E
 rc=$?; if [ $rc -ne 0 ]; then exit $rc; fi
