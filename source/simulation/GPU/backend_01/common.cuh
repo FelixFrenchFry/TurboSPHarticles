@@ -12,6 +12,8 @@
 
 namespace GPU01
 {
+	static constexpr uint32_t N_SELL_WIDTH = 32u;
+
 	enum class NbrChunkFormat : uint8_t
 	{
 		Delta8 = 0u,

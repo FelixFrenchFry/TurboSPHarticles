@@ -1,6 +1,7 @@
 // neighbor_search_kernels.cu
 
 // external
+#include <cassert>
 #include <cuda_runtime.h>
 
 // internal
@@ -12,8 +13,6 @@
 
 namespace GPU01
 {
-	static constexpr uint32_t N_SELL_WIDTH = 32u;
-
 	__constant__ uint32_t c_ns_N_F;
 	__constant__ uint32_t c_ns_N_B;
 	__constant__ uint32_t c_ns_N_R;
@@ -25,6 +24,9 @@ namespace GPU01
 	__constant__ float c_ns_xBoxOrig;
 	__constant__ float c_ns_yBoxOrig;
 	__constant__ float c_ns_zBoxOrig;
+	__constant__ int32_t c_ns_cellOrigX;
+	__constant__ int32_t c_ns_cellOrigY;
+	__constant__ int32_t c_ns_cellOrigZ;
 	__constant__ uint32_t c_ns_N_dimX;
 	__constant__ uint32_t c_ns_N_dimY;
 	__constant__ uint32_t c_ns_N_dimZ;
@@ -35,7 +37,7 @@ namespace GPU01
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		const float kernelRadius, const float cellSize, const uint32_t cellQueryReach,
 		const float xBoxOrig, const float yBoxOrig, const float zBoxOrig,
-		const uint32_t N_dimX, const uint32_t N_dimY, const uint32_t N_dimZ,
+		const Sim::CellCoordFrame& cellFrame,
 		const uint32_t N_cells, const uint32_t EMPTY,
 		cudaStream_t stream)
 	{
@@ -54,9 +56,12 @@ namespace GPU01
 		GPU::Check(cudaMemcpyToSymbol(c_ns_xBoxOrig, &xBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_yBoxOrig, &yBoxOrig, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_zBoxOrig, &zBoxOrig, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimX, &N_dimX, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimY, &N_dimY, sizeof(uint32_t)));
-		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimZ, &N_dimZ, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_cellOrigX, &cellFrame.cellOrigX, sizeof(int32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_cellOrigY, &cellFrame.cellOrigY, sizeof(int32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_cellOrigZ, &cellFrame.cellOrigZ, sizeof(int32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimX, &cellFrame.N_dimX, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimY, &cellFrame.N_dimY, sizeof(uint32_t)));
+		GPU::Check(cudaMemcpyToSymbol(c_ns_N_dimZ, &cellFrame.N_dimZ, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_N_cells, &N_cells, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_ns_EMPTY, &EMPTY, sizeof(uint32_t)));
 
@@ -526,17 +531,6 @@ namespace GPU01
 namespace GPU01
 {
 	__device__ __forceinline__
-	uint32_t ZigZag(int v)
-	{
-		// shift left by 1 and XOR with sign bit
-		uint32_t uv = static_cast<uint32_t>(v);
-		uint32_t even = uv << 1;
-		uint32_t sign = static_cast<uint32_t>(-(v < 0)); // 0 or 0xFFFFFFFF
-
-		return even ^ sign;
-	}
-
-	__device__ __forceinline__
 	uint64_t SpreadBitsWithGaps_21to63(uint32_t v)
 	{
 		uint64_t x = static_cast<uint64_t>(v & 0x1fffffU); // lower 21 bits
@@ -552,25 +546,32 @@ namespace GPU01
 
 	__device__ __forceinline__
 	uint64_t MapToCellId_Morton(
-		int cx, int cy, int cz)
+		const uint32_t lx, const uint32_t ly, const uint32_t lz)
 	{
-		// zig-zag encoding of coordinates to handle negative values
-		const uint32_t ux = ZigZag(cx);
-		const uint32_t uy = ZigZag(cy);
-		const uint32_t uz = ZigZag(cz);
-
-		const uint64_t xx = SpreadBitsWithGaps_21to63(ux); // bits at pos 0,3,6,...
-		const uint64_t yy = SpreadBitsWithGaps_21to63(uy) << 1; // bits at pos 1,4,7,...
-		const uint64_t zz = SpreadBitsWithGaps_21to63(uz) << 2; // bits at pos 2,5,8,...
+		const uint64_t xx = SpreadBitsWithGaps_21to63(lx); // bits at pos 0,3,6,...
+		const uint64_t yy = SpreadBitsWithGaps_21to63(ly) << 1; // bits at pos 1,4,7,...
+		const uint64_t zz = SpreadBitsWithGaps_21to63(lz) << 2; // bits at pos 2,5,8,...
 
 		return xx | yy | zz; // interleaved 3D Morton/Z-order code
 	}
 
 	__device__ __forceinline__
 	uint64_t MapToCellId(
-		int cx, int cy, int cz)
+		const int cx, const int cy, const int cz)
 	{
-		return MapToCellId_Morton(cx, cy, cz);
+		const int lx = cx - c_ns_cellOrigX;
+		const int ly = cy - c_ns_cellOrigY;
+		const int lz = cz - c_ns_cellOrigZ;
+
+		// TODO: put this behind debug flag to reduce overhead?
+		assert(lx >= 0 && static_cast<uint32_t>(lx) < c_ns_N_dimX);
+		assert(ly >= 0 && static_cast<uint32_t>(ly) < c_ns_N_dimY);
+		assert(lz >= 0 && static_cast<uint32_t>(lz) < c_ns_N_dimZ);
+
+		return MapToCellId_Morton(
+			static_cast<uint32_t>(lx),
+			static_cast<uint32_t>(ly),
+			static_cast<uint32_t>(lz));
 	}
 
 	__device__

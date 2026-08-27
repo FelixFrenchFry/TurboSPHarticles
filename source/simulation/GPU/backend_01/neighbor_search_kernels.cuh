@@ -7,6 +7,7 @@
 #include <cstdint>
 
 // internal
+#include "source/simulation/core/cell_frame.h"
 
 
 
@@ -16,7 +17,7 @@ namespace GPU01
 		uint32_t N_F, uint32_t N_B, uint32_t N_R,
 		float kernelRadius, float cellSize, uint32_t cellQueryReach,
 		float xBoxOrig, float yBoxOrig, float zBoxOrig,
-		uint32_t N_dimX, uint32_t N_dimY, uint32_t N_dimZ,
+		const Sim::CellCoordFrame& cellFrame,
 		uint32_t N_cells, uint32_t EMPTY,
 		cudaStream_t stream);
 

@@ -12,6 +12,7 @@
 
 // internal
 #include "source/simulation/core/backend_sim.h"
+#include "source/simulation/core/cell_frame.h"
 
 
 
@@ -100,12 +101,7 @@ namespace Sim
 		static constexpr uint32_t N_QUERY_CELL_INLINE = 96;
 
 		// local grid frame in cell coordinates
-		int cellOrigX_ = 0;
-		int cellOrigY_ = 0;
-		int cellOrigZ_ = 0;
-		uint32_t N_dimX_ = 0;
-		uint32_t N_dimY_ = 0;
-		uint32_t N_dimZ_ = 0;
+		CellCoordFrame cellFrame_ = {};
 		bool cellFrameValid_ = false;
 
 		// also marks the cell frame as current, and only holds until a particle moves

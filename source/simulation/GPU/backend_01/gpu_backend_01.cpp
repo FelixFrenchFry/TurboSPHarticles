@@ -26,8 +26,6 @@ using namespace Sim;
 
 namespace
 {
-	static constexpr uint32_t N_SELL_WIDTH = 32u;
-
 	template <typename T>
 	inline Mem::MemUsage MemUsageOf_DeviceBuffer(
 		const DeviceBuffer<T>& src) noexcept
@@ -37,19 +35,9 @@ namespace
 		return Mem::MemUsage{ N_bytes, N_bytes };
 	}
 
-	inline uint32_t SellChunkOfParticle(const uint32_t i) noexcept
-	{
-		return i / N_SELL_WIDTH;
-	}
-
-	inline uint32_t SellLaneOfParticle(const uint32_t i) noexcept
-	{
-		return i % N_SELL_WIDTH;
-	}
-
 	inline uint32_t SellChunkNumTotal(const uint32_t N_F) noexcept
 	{
-		return (N_F == 0u) ? 0u : ((N_F - 1u) / N_SELL_WIDTH) + 1u;
+		return (N_F == 0u) ? 0u : ((N_F - 1u) / GPU01::N_SELL_WIDTH) + 1u;
 	}
 
 	inline uint32_t ReadCompressedSell32Neighbor(
@@ -61,9 +49,10 @@ namespace
 		const std::vector<uint32_t>& nbrListAbs32,
 		const uint32_t i, const uint32_t k) noexcept
 	{
-		const uint32_t chunk = SellChunkOfParticle(i);
-		const uint32_t lane = SellLaneOfParticle(i);
-		const uint64_t linearIdx = static_cast<uint64_t>(k) * N_SELL_WIDTH + lane;
+		const uint32_t chunk = i / GPU01::N_SELL_WIDTH;
+		const uint32_t lane = i % GPU01::N_SELL_WIDTH;
+		const uint64_t linearIdx =
+			static_cast<uint64_t>(k) * GPU01::N_SELL_WIDTH + lane;
 		const uint64_t base = chunkOffsets[chunk];
 
 		if (chunkFormat[chunk] == static_cast<uint8_t>(GPU01::NbrChunkFormat::Delta8))
@@ -112,6 +101,15 @@ SimBackend_GPU01::SimBackend_GPU01(
 	neighborSearch_->Init(params);
 
 	// TODO: select neighbor list method once implemented
+}
+
+void SimBackend_GPU01::SetSimDomainBounds(
+	const glm::vec3& min,
+	const glm::vec3& max)
+{
+	simDomainMin_ = Vec3f{ min.x, min.y, min.z };
+	simDomainMax_ = Vec3f{ max.x, max.y, max.z };
+	simDomainBoundsValid_ = max.x > min.x && max.y > min.y && max.z > min.z;
 }
 
 SimBackend_GPU01::~SimBackend_GPU01()

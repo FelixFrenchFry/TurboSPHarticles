@@ -15,6 +15,7 @@
 #include <stdexcept>
 
 // internal
+#include "common.cuh"
 #include "source/base/helpers.h"
 #include "source/eval/bench/benchmarks.h"
 #include "source/simulation/core/backend_sim.h"
@@ -106,6 +107,8 @@ namespace Sim
 		void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) override
 			{ neighborSearch_ = std::move(ns); }
 
+		void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) override;
+
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) override;
 
@@ -174,6 +177,9 @@ namespace Sim
 		uint32_t N_R_ = 0; // number of rigid particles
 		uint32_t N_RB_ = 0; // number of rigid bodies
 		uint32_t N_solverIters_ = 0;
+		Vec3f simDomainMin_{};
+		Vec3f simDomainMax_{};
+		bool simDomainBoundsValid_ = false;
 
 		// --- [ backend-specific data structures for operating the simulation ] ---
 
@@ -336,7 +342,8 @@ namespace Sim
 		// (does not preserve data)
 		void EnsureCapacity(uint32_t N_newF, uint32_t N_newB, bool force = false)
 		{
-			const uint32_t N_newChunks = (N_newF == 0u) ? 0u : ((N_newF - 1u) / 32u) + 1u;
+			const uint32_t N_newChunks = (N_newF == 0u)
+				? 0u : ((N_newF - 1u) / GPU01::N_SELL_WIDTH) + 1u;
 			const uint32_t N_newReorderScratch = std::max(N_newF, N_newB);
 			const bool needOverflow = d_nbrOverflowFlag_.Size() != 1;
 			const bool needFluid = force || N_newF != N_F_ ||

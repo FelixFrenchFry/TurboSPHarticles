@@ -2,6 +2,7 @@
 #pragma once
 
 // external
+#include <cstdint>
 #include <limits>
 
 // internal
@@ -9,6 +10,7 @@
 #include "gpu_backend_01.h"
 #include "neighbor_search_kernels.cuh"
 #include "source/simulation/core/backend_sim.h"
+#include "source/simulation/core/cell_frame.h"
 
 
 
@@ -81,6 +83,7 @@ namespace Sim
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 		uint32_t cellQueryReach_ = 1;
+		CellCoordFrame cellFrame_ = {};
 		uint32_t N_nonEmptyCellsF_ = 0;
 		uint32_t N_nonEmptyCellsB_ = 0;
 		uint32_t N_nonEmptyCellsR_ = 0;
@@ -113,6 +116,7 @@ namespace Sim
 
 		// helpers
 		void EnsureStorageAllocation();
+		void UpdateCellFrame();
 		void ReOrderParticleData(const SimParams& params, bool permuteSolverFields);
 		void BuildCompactCellList(
 			DeviceBuffer<uint64_t>& d_uniqueCellId,

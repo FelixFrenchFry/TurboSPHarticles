@@ -14,8 +14,6 @@ constexpr float  PI = std::numbers::pi_v<float>;
 
 namespace GPU01
 {
-	static constexpr uint32_t N_SELL_WIDTH = 32u;
-
 	__constant__ uint32_t c_N_F;
 	__constant__ uint32_t c_N_B;
 	__constant__ float c_timeStep;

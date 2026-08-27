@@ -32,8 +32,6 @@ using namespace Sim;
 
 namespace
 {
-	static constexpr uint32_t N_SELL_WIDTH = 32u;
-
 	struct ToU64
 	{
 		__host__ __device__ uint64_t operator()(const uint16_t v) const
@@ -52,7 +50,7 @@ namespace
 		{
 			if (thrust::get<1>(t) != targetFormat_) { return 0u; }
 
-			return static_cast<uint64_t>(thrust::get<0>(t)) * N_SELL_WIDTH;
+			return static_cast<uint64_t>(thrust::get<0>(t)) * GPU01::N_SELL_WIDTH;
 		}
 
 		uint8_t targetFormat_;
@@ -60,7 +58,7 @@ namespace
 
 	__host__ __device__ inline uint32_t SellChunkNumTotal(const uint32_t N_F) noexcept
 	{
-		return (N_F == 0u) ? 0u : ((N_F - 1u) / N_SELL_WIDTH) + 1u;
+		return (N_F == 0u) ? 0u : ((N_F - 1u) / GPU01::N_SELL_WIDTH) + 1u;
 	}
 
 	inline uint32_t QueryCellSlotCount(const uint32_t cellQueryReach)
@@ -228,9 +226,9 @@ namespace
 		const uint32_t N_chunks = SellChunkNumTotal(N_F);
 		if (chunk >= N_chunks) { return; }
 
-		const uint32_t begin = chunk * N_SELL_WIDTH;
-		const uint32_t end = (begin + N_SELL_WIDTH < N_F)
-						   ? (begin + N_SELL_WIDTH)
+		const uint32_t begin = chunk * GPU01::N_SELL_WIDTH;
+		const uint32_t end = (begin + GPU01::N_SELL_WIDTH < N_F)
+						   ? (begin + GPU01::N_SELL_WIDTH)
 						   : N_F;
 
 		uint16_t N_maxNbrs = 0;
@@ -505,7 +503,7 @@ void NS_BruteForce_GPU01::Construct(
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, 0.0f, 1u,
 		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
+		Sim::CellCoordFrame{}, 0u, 0u, be_.stream_);
 
 	GPU::StreamSync(be_.stream_);
 }
@@ -645,6 +643,7 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
 	cellQueryReach_ = 1;
+	cellFrame_ = {};
 	N_nonEmptyCellsF_ = 0;
 	N_nonEmptyCellsB_ = 0;
 	N_nonEmptyCellsR_ = 0;
@@ -667,6 +666,51 @@ void NS_CellLinkedList_Compact_GPU01::Init(const SimParams& params)
 	d_cellRefFByAny_.Release();
 	d_cellRefBByAny_.Release();
 	d_queryCellRefAnyByCellF_.Release();
+}
+
+void NS_CellLinkedList_Compact_GPU01::UpdateCellFrame()
+{
+	cellFrame_ = {};
+
+	if (!be_.simDomainBoundsValid_ || Base::ApproxEqu(cellSize_, 0.0f))
+	{
+		throw std::runtime_error(
+			"GPU compact CLL requires valid simulation-domain bounds and cell size.");
+	}
+
+	const int64_t cxMin = static_cast<int64_t>(
+		std::floor(be_.simDomainMin_.x * cellSizeInv_));
+	const int64_t cyMin = static_cast<int64_t>(
+		std::floor(be_.simDomainMin_.y * cellSizeInv_));
+	const int64_t czMin = static_cast<int64_t>(
+		std::floor(be_.simDomainMin_.z * cellSizeInv_));
+	const int64_t cxMax = static_cast<int64_t>(
+		std::floor(be_.simDomainMax_.x * cellSizeInv_));
+	const int64_t cyMax = static_cast<int64_t>(
+		std::floor(be_.simDomainMax_.y * cellSizeInv_));
+	const int64_t czMax = static_cast<int64_t>(
+		std::floor(be_.simDomainMax_.z * cellSizeInv_));
+
+	// include the query reach to make every stencil cell stays inside the frame
+	const int64_t frameMargin = static_cast<int64_t>(cellQueryReach_);
+	const int64_t frameOrigX = cxMin - frameMargin;
+	const int64_t frameOrigY = cyMin - frameMargin;
+	const int64_t frameOrigZ = czMin - frameMargin;
+	const int64_t frameMaxX = cxMax + frameMargin;
+	const int64_t frameMaxY = cyMax + frameMargin;
+	const int64_t frameMaxZ = czMax + frameMargin;
+
+	CellCoordFrame nextFrame{};
+	if (!TryBuildCellCoordFrame(
+		frameOrigX, frameOrigY, frameOrigZ,
+		frameMaxX, frameMaxY, frameMaxZ,
+		nextFrame))
+	{
+		throw std::runtime_error(
+			"GPU compact CLL simulation-domain cell frame exceeds the supported range.");
+	}
+
+	cellFrame_ = nextFrame;
 }
 
 void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
@@ -712,6 +756,7 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
 		? 1u : std::max<uint32_t>(1u,
 			static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
+	UpdateCellFrame();
 
 	EnsureStorageAllocation();
 	const NS_CompactSharedScratchLayout scratchLayout = BuildCompactSharedScratchLayout(N_F, N_B);
@@ -722,7 +767,8 @@ void NS_CellLinkedList_Compact_GPU01::Construct(const SimParams& params)
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
 		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
+		cellFrame_, 0u, 0u,
+		be_.stream_);
 
 	// if DataReOrder() already computed and permuted the per-particle cell IDs for this step,
 	// then they can be reused directly here and no re-computation is needed
@@ -999,6 +1045,7 @@ void NS_CellLinkedList_Compact_GPU01::ReOrderParticleData(
 	cellQueryReach_ = Base::ApproxEqu(cellSize_, 0.0f)
 		? 1u : std::max<uint32_t>(1u,
 		static_cast<uint32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
+	UpdateCellFrame();
 
 	EnsureStorageAllocation();
 	const NS_CompactSharedScratchLayout scratchLayout = BuildCompactSharedScratchLayout(N_F, N_B);
@@ -1009,7 +1056,8 @@ void NS_CellLinkedList_Compact_GPU01::ReOrderParticleData(
 	GPU01::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
 		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, be_.stream_);
+		cellFrame_, 0u, 0u,
+		be_.stream_);
 
 	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
 	if (N_F > 0)

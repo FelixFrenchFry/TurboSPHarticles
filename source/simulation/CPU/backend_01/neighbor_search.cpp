@@ -196,16 +196,6 @@ namespace
 		float maxZ = std::numeric_limits<float>::lowest();
 	};
 
-	struct CellCoordFrame
-	{
-		int cellOrigX = 0;
-		int cellOrigY = 0;
-		int cellOrigZ = 0;
-		uint32_t N_dimX = 0;
-		uint32_t N_dimY = 0;
-		uint32_t N_dimZ = 0;
-	};
-
 	// merges one AABB into another (default bounds are the identity, so an empty one is a no-op)
 	inline void MergeSceneAABB(SceneAABB& dst, const SceneAABB& src)
 	{
@@ -280,29 +270,6 @@ namespace
 		sceneAABB.maxX = std::clamp(sceneAABB.maxX, simDomainMin.x, simDomainMax.x);
 		sceneAABB.maxY = std::clamp(sceneAABB.maxY, simDomainMin.y, simDomainMax.y);
 		sceneAABB.maxZ = std::clamp(sceneAABB.maxZ, simDomainMin.z, simDomainMax.z);
-	}
-
-	inline CellCoordFrame ComputeCellCoordFrame_FromAABB(
-		const SceneAABB& sceneAABB,
-		float cellSizeInv)
-	{
-		CellCoordFrame frame{};
-
-		const int cxMin = FloorToInt(sceneAABB.minX * cellSizeInv);
-		const int cyMin = FloorToInt(sceneAABB.minY * cellSizeInv);
-		const int czMin = FloorToInt(sceneAABB.minZ * cellSizeInv);
-		const int cxMax = FloorToInt(sceneAABB.maxX * cellSizeInv);
-		const int cyMax = FloorToInt(sceneAABB.maxY * cellSizeInv);
-		const int czMax = FloorToInt(sceneAABB.maxZ * cellSizeInv);
-
-		frame.cellOrigX = cxMin;
-		frame.cellOrigY = cyMin;
-		frame.cellOrigZ = czMin;
-		frame.N_dimX = static_cast<uint32_t>(cxMax - cxMin + 1);
-		frame.N_dimY = static_cast<uint32_t>(cyMax - cyMin + 1);
-		frame.N_dimZ = static_cast<uint32_t>(czMax - czMin + 1);
-
-		return frame;
 	}
 
 	constexpr uint64_t N_CELL_TABLE_CHUNK = 4096;
@@ -1012,12 +979,7 @@ void NS_CellLinkedList_Compact_CPU01::Init(const SimParams& params)
 	cellSizeInv_ = 0.0f;
 	kernelRadiusSqu_ = params.kernelRadiusSqu;
 	cellQueryReach_ = 1;
-	cellOrigX_ = 0;
-	cellOrigY_ = 0;
-	cellOrigZ_ = 0;
-	N_dimX_ = 0;
-	N_dimY_ = 0;
-	N_dimZ_ = 0;
+	cellFrame_ = {};
 	cellFrameValid_ = false;
 	cellIdsMatchCurrentParticleOrder_ = false;
 
@@ -1059,12 +1021,7 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 	if (N_F == 0 && N_B == 0 && N_R == 0)
 	{
 		SPDLOG_WARN("Cannot construct neighbor search for an empty simulation.");
-		cellOrigX_ = 0;
-		cellOrigY_ = 0;
-		cellOrigZ_ = 0;
-		N_dimX_ = 0;
-		N_dimY_ = 0;
-		N_dimZ_ = 0;
+		cellFrame_ = {};
 		cellFrameValid_ = false;
 		cellIdsMatchCurrentParticleOrder_ = false;
 
@@ -1201,7 +1158,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 		);
 		SortParticleOrderByCellId(
 			cellIdR_, particleOrderR_, cellIdScratchR_, particleOrderScratchR_,
-			radixDigitCounts_ByChunk_, CellIdKeyBits(N_dimX_, N_dimY_, N_dimZ_));
+			radixDigitCounts_ByChunk_, CellIdKeyBits(
+				cellFrame_.N_dimX, cellFrame_.N_dimY, cellFrame_.N_dimZ));
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] ---------------------------------
@@ -1231,7 +1189,8 @@ void NS_CellLinkedList_Compact_CPU01::Construct(const SimParams& params)
 
 void NS_CellLinkedList_Compact_CPU01::BuildDenseCellTables()
 {
-	const uint64_t N_tableCells = static_cast<uint64_t>(N_dimX_) * N_dimY_ * N_dimZ_;
+	const uint64_t N_tableCells = static_cast<uint64_t>(cellFrame_.N_dimX)
+		* cellFrame_.N_dimY * cellFrame_.N_dimZ;
 	if (N_tableCells > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) [[unlikely]]
 	{
 		throw std::runtime_error("CPU01 dense compact CLL cell table too large.");
@@ -1333,12 +1292,15 @@ void NS_CellLinkedList_Compact_CPU01::GatherBoxQueryRanges(
 	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const
 {
 	// keeps the dense table lookups in bounds for boxes reaching past the clipped frame
-	const int cxLo = std::max(cxBegin, cellOrigX_);
-	const int cyLo = std::max(cyBegin, cellOrigY_);
-	const int czLo = std::max(czBegin, cellOrigZ_);
-	const int cxHi = std::min(cxEnd, cellOrigX_ + static_cast<int>(N_dimX_) - 1);
-	const int cyHi = std::min(cyEnd, cellOrigY_ + static_cast<int>(N_dimY_) - 1);
-	const int czHi = std::min(czEnd, cellOrigZ_ + static_cast<int>(N_dimZ_) - 1);
+	const int cxLo = std::max(cxBegin, static_cast<int>(cellFrame_.cellOrigX));
+	const int cyLo = std::max(cyBegin, static_cast<int>(cellFrame_.cellOrigY));
+	const int czLo = std::max(czBegin, static_cast<int>(cellFrame_.cellOrigZ));
+	const int cxHi = std::min(cxEnd,
+		static_cast<int>(cellFrame_.cellOrigX) + static_cast<int>(cellFrame_.N_dimX) - 1);
+	const int cyHi = std::min(cyEnd,
+		static_cast<int>(cellFrame_.cellOrigY) + static_cast<int>(cellFrame_.N_dimY) - 1);
+	const int czHi = std::min(czEnd,
+		static_cast<int>(cellFrame_.cellOrigZ) + static_cast<int>(cellFrame_.N_dimZ) - 1);
 
 	const auto appendCellRange = [](
 		const std::vector<uint32_t>& cellTable,
@@ -2016,7 +1978,8 @@ void NS_CellLinkedList_Compact_CPU01::ReOrderParticleData(
 	if (cellSizeChanged || cellQueryReachChanged) { cellFrameValid_ = false; }
 	UpdateCellFrame();
 
-	const uint32_t N_keyBits = CellIdKeyBits(N_dimX_, N_dimY_, N_dimZ_);
+	const uint32_t N_keyBits = CellIdKeyBits(
+		cellFrame_.N_dimX, cellFrame_.N_dimY, cellFrame_.N_dimZ);
 
 	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
 	cellIdF_.resize(N_F);
@@ -2199,12 +2162,7 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	const uint32_t N_R = be_.N_R_;
 	if (N_F == 0 && N_B == 0 && N_R == 0)
 	{
-		cellOrigX_ = 0;
-		cellOrigY_ = 0;
-		cellOrigZ_ = 0;
-		N_dimX_ = 0;
-		N_dimY_ = 0;
-		N_dimZ_ = 0;
+		cellFrame_ = {};
 		cellFrameValid_ = false;
 		return;
 	}
@@ -2213,12 +2171,15 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	if (!rebuildFrame)
 	{
 		const int margin = static_cast<int>(cellQueryReach_);
-		const int xMinInner = cellOrigX_ + margin;
-		const int yMinInner = cellOrigY_ + margin;
-		const int zMinInner = cellOrigZ_ + margin;
-		const int xMaxInner = cellOrigX_ + static_cast<int>(N_dimX_) - 1 - margin;
-		const int yMaxInner = cellOrigY_ + static_cast<int>(N_dimY_) - 1 - margin;
-		const int zMaxInner = cellOrigZ_ + static_cast<int>(N_dimZ_) - 1 - margin;
+		const int xMinInner = static_cast<int>(cellFrame_.cellOrigX) + margin;
+		const int yMinInner = static_cast<int>(cellFrame_.cellOrigY) + margin;
+		const int zMinInner = static_cast<int>(cellFrame_.cellOrigZ) + margin;
+		const int xMaxInner = static_cast<int>(cellFrame_.cellOrigX)
+			+ static_cast<int>(cellFrame_.N_dimX) - 1 - margin;
+		const int yMaxInner = static_cast<int>(cellFrame_.cellOrigY)
+			+ static_cast<int>(cellFrame_.N_dimY) - 1 - margin;
+		const int zMaxInner = static_cast<int>(cellFrame_.cellOrigZ)
+			+ static_cast<int>(cellFrame_.N_dimZ) - 1 - margin;
 
 		const auto particlesExceeded = [&](const std::vector<float>& xPos,
 			const std::vector<float>& yPos, const std::vector<float>& zPos,
@@ -2266,30 +2227,37 @@ void NS_CellLinkedList_Compact_CPU01::UpdateCellFrame()
 	// cell tables scale with its volume (they are dropped from the grid by the cell ID build)
 	ClipSceneAABB_ToSimDomain(sceneAABB, be_.simDomainMin_, be_.simDomainMax_);
 
-	const CellCoordFrame cellFrame = ComputeCellCoordFrame_FromAABB(sceneAABB, cellSizeInv_);
+	const int64_t margin = static_cast<int64_t>(cellQueryReach_)
+		+ N_CELL_FRAME_REBUILD_MARGIN;
+	const int64_t frameOrigX = static_cast<int64_t>(
+		FloorToInt(sceneAABB.minX * cellSizeInv_)) - margin;
+	const int64_t frameOrigY = static_cast<int64_t>(
+		FloorToInt(sceneAABB.minY * cellSizeInv_)) - margin;
+	const int64_t frameOrigZ = static_cast<int64_t>(
+		FloorToInt(sceneAABB.minZ * cellSizeInv_)) - margin;
+	const int64_t frameMaxX = static_cast<int64_t>(
+		FloorToInt(sceneAABB.maxX * cellSizeInv_)) + margin;
+	const int64_t frameMaxY = static_cast<int64_t>(
+		FloorToInt(sceneAABB.maxY * cellSizeInv_)) + margin;
+	const int64_t frameMaxZ = static_cast<int64_t>(
+		FloorToInt(sceneAABB.maxZ * cellSizeInv_)) + margin;
+	const int64_t N_dimX = frameMaxX - frameOrigX + 1;
+	const int64_t N_dimY = frameMaxY - frameOrigY + 1;
+	const int64_t N_dimZ = frameMaxZ - frameOrigZ + 1;
 
-	const int margin = static_cast<int>(cellQueryReach_ + N_CELL_FRAME_REBUILD_MARGIN);
-	const uint32_t N_dimX = cellFrame.N_dimX + static_cast<uint32_t>(2 * margin);
-	const uint32_t N_dimY = cellFrame.N_dimY + static_cast<uint32_t>(2 * margin);
-	const uint32_t N_dimZ = cellFrame.N_dimZ + static_cast<uint32_t>(2 * margin);
-
-	// the Morton cell IDs hold 21 bits per axis, so an oversized frame is dropped uncommitted
-	static constexpr uint32_t MaxAxisCells = (1u << 21);
-	if (N_dimX > MaxAxisCells || N_dimY > MaxAxisCells || N_dimZ > MaxAxisCells)
+	CellCoordFrame nextFrame{};
+	if (!TryBuildCellCoordFrame(
+		frameOrigX, frameOrigY, frameOrigZ,
+		frameMaxX, frameMaxY, frameMaxZ,
+		nextFrame))
 	{
-		SPDLOG_ERROR("Compact CLL cell frame exceeds the 21-bit axis limit [{}, {}, {}].",
+		SPDLOG_ERROR("Compact CLL cell frame exceeds the supported range [{}, {}, {}].",
 			N_dimX, N_dimY, N_dimZ);
 		assert(false);
 		return;
 	}
 
-	cellOrigX_ = cellFrame.cellOrigX - margin;
-	cellOrigY_ = cellFrame.cellOrigY - margin;
-	cellOrigZ_ = cellFrame.cellOrigZ - margin;
-	N_dimX_ = N_dimX;
-	N_dimY_ = N_dimY;
-	N_dimZ_ = N_dimZ;
-
+	cellFrame_ = nextFrame;
 	cellFrameValid_ = true;
 }
 
@@ -2308,13 +2276,13 @@ inline bool NS_CellLinkedList_Compact_CPU01::IsInsideSimDomain(
 inline bool NS_CellLinkedList_Compact_CPU01::IsInsideCellFrame(
 	int cx, int cy, int cz) const noexcept
 {
-	const int lx = cx - cellOrigX_;
-	const int ly = cy - cellOrigY_;
-	const int lz = cz - cellOrigZ_;
+	const int lx = cx - static_cast<int>(cellFrame_.cellOrigX);
+	const int ly = cy - static_cast<int>(cellFrame_.cellOrigY);
+	const int lz = cz - static_cast<int>(cellFrame_.cellOrigZ);
 
-	return lx >= 0 && lx < static_cast<int>(N_dimX_)
-		&& ly >= 0 && ly < static_cast<int>(N_dimY_)
-		&& lz >= 0 && lz < static_cast<int>(N_dimZ_);
+	return lx >= 0 && lx < static_cast<int>(cellFrame_.N_dimX)
+		&& ly >= 0 && ly < static_cast<int>(cellFrame_.N_dimY)
+		&& lz >= 0 && lz < static_cast<int>(cellFrame_.N_dimZ);
 }
 
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId(
@@ -2327,12 +2295,12 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
 	int cx, int cy, int cz) const noexcept
 {
 	// shift to local cell frame to avoid zig-zag preprocessing
-	const int lx = cx - cellOrigX_;
-	const int ly = cy - cellOrigY_;
-	const int lz = cz - cellOrigZ_;
-	assert(lx >= 0 && lx < static_cast<int>(N_dimX_));
-	assert(ly >= 0 && ly < static_cast<int>(N_dimY_));
-	assert(lz >= 0 && lz < static_cast<int>(N_dimZ_));
+	const int lx = cx - static_cast<int>(cellFrame_.cellOrigX);
+	const int ly = cy - static_cast<int>(cellFrame_.cellOrigY);
+	const int lz = cz - static_cast<int>(cellFrame_.cellOrigZ);
+	assert(lx >= 0 && lx < static_cast<int>(cellFrame_.N_dimX));
+	assert(ly >= 0 && ly < static_cast<int>(cellFrame_.N_dimY));
+	assert(lz >= 0 && lz < static_cast<int>(cellFrame_.N_dimZ));
 
 	const uint32_t ux = static_cast<uint32_t>(lx);
 	const uint32_t uy = static_cast<uint32_t>(ly);
@@ -2351,15 +2319,15 @@ inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToCellId_Morton(
 inline uint64_t NS_CellLinkedList_Compact_CPU01::MapToDenseCellIdx(
 	int cx, int cy, int cz) const noexcept
 {
-	const int lx = cx - cellOrigX_;
-	const int ly = cy - cellOrigY_;
-	const int lz = cz - cellOrigZ_;
-	assert(lx >= 0 && lx < static_cast<int>(N_dimX_));
-	assert(ly >= 0 && ly < static_cast<int>(N_dimY_));
-	assert(lz >= 0 && lz < static_cast<int>(N_dimZ_));
+	const int lx = cx - static_cast<int>(cellFrame_.cellOrigX);
+	const int ly = cy - static_cast<int>(cellFrame_.cellOrigY);
+	const int lz = cz - static_cast<int>(cellFrame_.cellOrigZ);
+	assert(lx >= 0 && lx < static_cast<int>(cellFrame_.N_dimX));
+	assert(ly >= 0 && ly < static_cast<int>(cellFrame_.N_dimY));
+	assert(lz >= 0 && lz < static_cast<int>(cellFrame_.N_dimZ));
 
-	return (static_cast<uint64_t>(lz) * N_dimY_ + static_cast<uint32_t>(ly))
-		* N_dimX_ + static_cast<uint32_t>(lx);
+	return (static_cast<uint64_t>(lz) * cellFrame_.N_dimY + static_cast<uint32_t>(ly))
+		* cellFrame_.N_dimX + static_cast<uint32_t>(lx);
 }
 
 // spread out lower 21 bits of v into lower 63 bits and fill with gaps zeros like 000x00x00x00x00x...
