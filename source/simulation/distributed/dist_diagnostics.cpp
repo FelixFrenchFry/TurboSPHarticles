@@ -222,9 +222,9 @@ namespace
 		return lines;
 	}
 
-	const char* MemSpaceLabel(const Base::BackendVersion backendVersion)
+	const char* MemSpaceLabel(const Base::BackendType backendType)
 	{
-		return backendVersion == Base::BackendVersion::GPU01 ? "VRAM" : "RAM";
+		return backendType == Base::BackendType::GPU ? "VRAM" : "RAM";
 	}
 
 	DistHardwareReport BuildLocalHardwareReport(
@@ -968,12 +968,12 @@ namespace
 	std::string BuildMemoryTable(
 		const std::vector<DistRankStepReport>& reports,
 		const Mem::ByteUnit unit,
-		const Base::BackendVersion backendVersion)
+		const Base::BackendType backendType)
 	{
 		std::string table{};
 		char memoryUnitLabel[32];
 		std::snprintf(memoryUnitLabel, sizeof(memoryUnitLabel), "%s [%s]",
-			MemSpaceLabel(backendVersion), Mem::UnitLabel(unit));
+			MemSpaceLabel(backendType), Mem::UnitLabel(unit));
 
 		char line[256];
 		std::snprintf(line, sizeof(line),
@@ -1014,9 +1014,9 @@ namespace
 	void PrintMemoryTable(
 		const std::vector<DistRankStepReport>& reports,
 		const Mem::ByteUnit unit,
-		const Base::BackendVersion backendVersion)
+		const Base::BackendType backendType)
 	{
-		const std::string table = BuildMemoryTable(reports, unit, backendVersion);
+		const std::string table = BuildMemoryTable(reports, unit, backendType);
 		std::printf("%s", table.c_str());
 	}
 
@@ -1211,7 +1211,7 @@ namespace Dist
 		PrintCliSectionHeader("distributed simulation setup");
 		PrintCliSeparator();
 
-		std::printf("%-30s = %s\n", "sim backend", setup.backendVersion);
+		std::printf("%-30s = %s\n", "sim backend", setup.backendType);
 		std::printf("%-30s = %s\n", "sim scenario", setup.scenarioType);
 		std::printf("%-30s = %s\n", "neighbor search method",
 			setup.neighborSearchMethod);
@@ -1369,7 +1369,7 @@ namespace Dist
 
 		if (!mpiContext.IsRoot()) { return; }
 
-		PrintMemoryTable(reports, params.byteUnit, params.backendVersion);
+		PrintMemoryTable(reports, params.byteUnit, params.backendType);
 		std::printf("\n");
 		std::fflush(stdout);
 	}

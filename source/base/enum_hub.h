@@ -16,21 +16,21 @@ namespace Base
 		Rigid               // 2 rigid boundary particles
 	};
 
-	enum class BackendVersion : uint8_t
+	enum class BackendType : uint8_t
 	{
-		CPU01,              // 0
-		GPU01               // 1
+		CPU,                // 0
+		GPU                 // 1
 	};
-	constexpr const char* ToCString(BackendVersion v) noexcept
+	constexpr const char* ToCString(BackendType v) noexcept
 	{
 		switch (v)
 		{
-		case BackendVersion::CPU01:
-			return "CPU01";
-		case BackendVersion::GPU01:
-			return "GPU01";
+		case BackendType::CPU:
+			return "CPU";
+		case BackendType::GPU:
+			return "GPU";
 		}
-		return "BackendVersion::<unknown>";
+		return "BackendType::<unknown>";
 	}
 
 	enum class ProgressReportMode : uint8_t
@@ -116,13 +116,13 @@ namespace Base
 		return "NeighborListStorage::<unknown>";
 	}
 	constexpr const char* ToEffectiveNeighborListStorageCString(
-		const BackendVersion backend,
+		const BackendType backend,
 		const NeighborListMethod v) noexcept
 	{
 		switch (v)
 		{
 		case NeighborListMethod::ChunkedSELLX_Explicit:
-			return (backend == BackendVersion::GPU01)
+			return (backend == BackendType::GPU)
 				? "ChunkedSELL32_Explicit"
 			#if defined(TSP_CPU_SIMD_WIDTH) && TSP_CPU_SIMD_WIDTH == 16
 				: "ChunkedSELL16_Explicit";
@@ -130,7 +130,7 @@ namespace Base
 				: "ChunkedSELL8_Explicit";
 			#endif
 		case NeighborListMethod::ChunkedSELLX_AdaptCompress:
-			return (backend == BackendVersion::GPU01)
+			return (backend == BackendType::GPU)
 				? "ChunkedSELL32_AdaptCompress"
 			#if defined(TSP_CPU_SIMD_WIDTH) && TSP_CPU_SIMD_WIDTH == 16
 				: "ChunkedSELL16_AdaptCompress";

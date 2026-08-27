@@ -1,5 +1,5 @@
 {
-  "backendVersion": "CPU01",
+  "backendType": "CPU",
   "scenarioType": "BigDroplet",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,

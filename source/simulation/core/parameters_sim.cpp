@@ -64,13 +64,15 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	// --- [ modes ] ---------------------------------------------------------------------------------
 
 	// helpers for reading enums
-	auto ParseBackendVersion = [](const nlohmann::json& v, Base::BackendVersion& out) -> bool
+	auto ParseBackendType = [](const nlohmann::json& v, Base::BackendType& out) -> bool
 		{
 			if (v.is_string())
 			{
 				const std::string s = v.get<std::string>();
-				if (s == "CPU01") { out = Base::BackendVersion::CPU01; return true; }
-				if (s == "GPU01") { out = Base::BackendVersion::GPU01; return true; }
+				if (s == "CPU" || s == "CPU01")
+					{ out = Base::BackendType::CPU; return true; }
+				if (s == "GPU" || s == "GPU01")
+					{ out = Base::BackendType::GPU; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -79,10 +81,10 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				switch (i)
 				{
 				case 0:
-					out = Base::BackendVersion::CPU01;
+					out = Base::BackendType::CPU;
 					return true;
 				case 1:
-					out = Base::BackendVersion::GPU01;
+					out = Base::BackendType::GPU;
 					return true;
 				default:
 					return false;
@@ -318,20 +320,28 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		};
 
-	// TODO: implement actual setters for backend version and scenario type?
+	// TODO: implement actual setters for backend type and scenario type?
 	{
 		BeginWrite();
 
-		if (auto it = j.find("backendVersion"); it != j.end())
+		auto backendIt = j.find("backendType");
+		const char* backendKey = "backendType";
+		if (backendIt == j.end())
 		{
-			Base::BackendVersion bv;
-			if (ParseBackendVersion(*it, bv))
+			backendIt = j.find("backendVersion");
+			backendKey = "backendVersion";
+		}
+
+		if (backendIt != j.end())
+		{
+			Base::BackendType bt;
+			if (ParseBackendType(*backendIt, bt))
 			{
-				params_.backendVersion = bv;
+				params_.backendType = bt;
 			}
 			else
 			{
-				SPDLOG_WARN("Invalid 'backendVersion' value in JSON.");
+				SPDLOG_WARN("Invalid '{}' value in JSON.", backendKey);
 				EndWrite();
 				return false;
 			}
@@ -1040,12 +1050,12 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 
 	// --- [ modes ] ---------------------------------------------------------------------------------
 
-	j["backendVersion"] = Base::ToCString(par.backendVersion);
+	j["backendType"] = Base::ToCString(par.backendType);
 	j["scenarioType"] = Base::ToCString(par.scenarioType);
 	j["neighborSearchMethod"] = Base::ToCString(par.neighborSearchMethod);
 	j["neighborListStorage"] = Base::ToCString(par.neighborListMethod);
 	j["neighborListStorageEffective"] = Base::ToEffectiveNeighborListStorageCString(
-		par.backendVersion, par.neighborListMethod);
+		par.backendType, par.neighborListMethod);
 	j["domainDecompMethod"] = Base::ToCString(par.domainDecompMethod);
 	j["distHaloMode"] = Base::ToCString(par.distHaloMode);
 	j["loadBalanceMetric"] = Base::ToCString(par.loadBalanceMetric);

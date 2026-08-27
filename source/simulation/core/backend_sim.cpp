@@ -6,35 +6,35 @@
 
 // internal
 #include "backend_sim.h"
-#include "source/simulation/CPU/backend_01/cpu_backend_01.h"
+#include "source/simulation/CPU/backend/cpu_backend.h"
 #ifdef TURBOSPHARTICLES_WITH_CUDA
-	#include "source/simulation/GPU/backend_01/gpu_backend_01.h"
+	#include "source/simulation/GPU/backend/gpu_backend.h"
 #endif
 
 
 
 namespace Sim
 {
-	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendVersion version,
+	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendType backendType,
 												 Sim::SimParamsMgr& simParamsMgr,
 												 Bench::BenchmarksTracker& benchmarksTracker,
 												 SimParams const& params)
 	{
-		switch (version)
+		switch (backendType)
 		{
-		case Base::BackendVersion::CPU01:
+		case Base::BackendType::CPU:
 			{
-				return std::make_unique<SimBackend_CPU01>(simParamsMgr, benchmarksTracker, params);
+				return std::make_unique<SimBackend_CPU>(simParamsMgr, benchmarksTracker, params);
 			}
 		#ifdef TURBOSPHARTICLES_WITH_CUDA
-		case Base::BackendVersion::GPU01:
+		case Base::BackendType::GPU:
 			{
-				return std::make_unique<SimBackend_GPU01>(simParamsMgr, benchmarksTracker, params);
+				return std::make_unique<SimBackend_GPU>(simParamsMgr, benchmarksTracker, params);
 			}
 		#endif
 		}
 
-		throw std::runtime_error("Unsupported sim backend version requested.");
+		throw std::runtime_error("Unsupported sim backend type requested.");
 	}
 
 } // namespace Sim

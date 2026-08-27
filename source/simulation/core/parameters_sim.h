@@ -25,8 +25,8 @@ namespace Sim
 	struct SimParams
 	{
 		// modes
-		Base::BackendVersion backendVersion =
-			Base::BackendVersion::CPU01;
+		Base::BackendType backendType =
+			Base::BackendType::CPU;
 		Base::ScenarioType scenarioType	=
 			Base::ScenarioType::BreakingDam;
 		Base::NeighborSearchMethod neighborSearchMethod =

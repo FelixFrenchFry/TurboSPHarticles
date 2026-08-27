@@ -151,9 +151,9 @@ namespace
 		return loggingOptions;
 	}
 
-	Mem::MemSpace PrimaryMemSpace(const Base::BackendVersion backendVersion)
+	Mem::MemSpace PrimaryMemSpace(const Base::BackendType backendType)
 	{
-		return backendVersion == Base::BackendVersion::GPU01
+		return backendType == Base::BackendType::GPU
 			? Mem::MemSpace::VRAM
 			: Mem::MemSpace::RAM;
 	}
@@ -400,13 +400,13 @@ bool DistSimulationMgr::Init(
 	SyncParameters(true);
 
 	SPDLOG_INFO_MPI("Init distributed simulation backend...", mpiContext_);
-	SelectSimBackend(simParams_.backendVersion);
+	SelectSimBackend(simParams_.backendType);
 	bool backendSupported = simBackend_ && simBackend_->SupportsDistributedSimulation();
 	if (simBackend_ && !backendSupported)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Sim backend {} does not support distributed simulation. "
-			"CPU01 is currently the only distributed backend.",
+			"CPU is currently the only distributed backend.",
 			mpiContext_.Rank(), mpiContext_.Size(), simBackend_->Name());
 	}
 	if (!mpiContext_.AllTrue(backendSupported)) { return false; }
@@ -483,7 +483,7 @@ void DistSimulationMgr::SelectSimScenario(
 	}
 }
 
-void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
+void DistSimulationMgr::SelectSimBackend(const Base::BackendType backendType)
 {
 	if (simBackend_)
 	{
@@ -506,23 +506,23 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	try
 	{
 		simBackend_ = Sim::MakeSimBackend(
-			version, simParamsMgr_, *benchmarksTracker_, simParams_);
+			backendType, simParamsMgr_, *benchmarksTracker_, simParams_);
 	}
 	catch (const std::exception& ex)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to create distributed sim backend ({}): {} "
-			"CPU01 is currently the only distributed backend.",
+			"CPU is currently the only distributed backend.",
 			mpiContext_.Rank(), mpiContext_.Size(),
-			static_cast<int>(version), ex.what());
+			static_cast<int>(backendType), ex.what());
 		return;
 	}
 	if (!simBackend_)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to create distributed sim backend ({}). "
-			"CPU01 is currently the only distributed backend.",
-			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
+			"CPU is currently the only distributed backend.",
+			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(backendType));
 		return;
 	}
 
@@ -531,8 +531,8 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Sim backend ({}) does not provide distributed "
-			"particle storage access. CPU01 is currently the only distributed backend.",
-			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
+			"particle storage access. CPU is currently the only distributed backend.",
+			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(backendType));
 		simBackend_.reset();
 		return;
 	}
@@ -574,7 +574,7 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendVersion version)
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid distributed benchmark operation list "
 			"for sim backend ({}).",
-			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(version));
+			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(backendType));
 		curBenchOps_.clear();
 	}
 }
@@ -713,11 +713,11 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 	report.loadBalanceMetric = Base::ToCString(simParams_.loadBalanceMetric);
 	report.loadBalanceTrigger = Base::ToCString(simParams_.loadBalanceTrigger);
 	report.loadBalanceWeightModel = Base::ToCString(simParams_.loadBalanceWeightModel);
-	report.backendVersion = Base::ToCString(simParams_.backendVersion);
+	report.backendType = Base::ToCString(simParams_.backendType);
 	report.scenarioType = Base::ToCString(simParams_.scenarioType);
 	report.neighborSearchMethod = Base::ToCString(simParams_.neighborSearchMethod);
 	report.neighborListStorage = Base::ToEffectiveNeighborListStorageCString(
-		simParams_.backendVersion,
+		simParams_.backendType,
 		simParams_.neighborListMethod);
 
 	report.N_globalF = static_cast<uint32_t>(N_expectedGlobalF_);
@@ -2095,7 +2095,7 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 
 	if (memoryTracker_)
 	{
-		const Mem::MemSpace memSpace = PrimaryMemSpace(params.backendVersion);
+		const Mem::MemSpace memSpace = PrimaryMemSpace(params.backendType);
 		const Mem::MemUsage latest = SumMemoryUsage(memoryTracker_->GetCurrentRecord(), memSpace);
 		const Mem::MemUsage max = SumMaxMemoryUsage(*memoryTracker_, memSpace);
 		const Mem::MemUsage backendMax = SumBackendMaxMemoryUsage(*memoryTracker_, memSpace);

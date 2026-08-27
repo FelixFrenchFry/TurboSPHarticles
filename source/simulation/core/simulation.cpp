@@ -12,9 +12,9 @@
 #include "source/eval/memory/memory.h"
 #include "source/eval/serial/serialization.h"
 #include "source/simulation/core/diagnostics.h"
-#include "source/simulation/CPU/backend_01/cpu_backend_01.h"
+#include "source/simulation/CPU/backend/cpu_backend.h"
 #ifdef TURBOSPHARTICLES_WITH_CUDA
-	#include "source/simulation/GPU/backend_01/gpu_backend_01.h"
+	#include "source/simulation/GPU/backend/gpu_backend.h"
 #endif
 #include "simulation.h"
 
@@ -52,7 +52,7 @@ void SimulationMgr::Init()
 
 	SPDLOG_INFO("Init simulation state...");
 	SelectSimScenario(simParams_.scenarioType, configProfile_);
-	SelectSimBackend(simParams_.backendVersion);
+	SelectSimBackend(simParams_.backendType);
 
 	SPDLOG_INFO("Init backend data structures...");
 	ReBuildInitialSimState();
@@ -115,7 +115,7 @@ void SimulationMgr::SelectSimScenario(
 }
 
 void SimulationMgr::SelectSimBackend(
-	Base::BackendVersion version)
+	Base::BackendType backendType)
 {
 	if (running_.load(std::memory_order_acquire))
 	{
@@ -131,11 +131,11 @@ void SimulationMgr::SelectSimBackend(
 	}
 
 	// create new backend and initialize it with the universal state
-	simBackend_ = MakeSimBackend(version, simParamsMgr_, benchmarksTracker_, simParams_);
+	simBackend_ = MakeSimBackend(backendType, simParamsMgr_, benchmarksTracker_, simParams_);
 	if (!simBackend_)
 	{
 		throw std::runtime_error("Failed to create simulation backend " +
-			std::to_string(static_cast<int>(version)) + ".");
+			std::to_string(static_cast<int>(backendType)) + ".");
 	}
 
 	{
@@ -155,7 +155,7 @@ void SimulationMgr::SelectSimBackend(
 	if (!Bench::ValidateOpList(curBenchOps_))
 	{
 		throw std::runtime_error("Invalid benchmark operation list for simulation backend " +
-			std::to_string(static_cast<int>(version)) + ".");
+			std::to_string(static_cast<int>(backendType)) + ".");
 	}
 }
 
@@ -209,7 +209,7 @@ void SimulationMgr::ReBuildInitialSimState()
 	}
 
 	lock.unlock();
-	SelectSimBackend(simParams_.backendVersion);
+	SelectSimBackend(simParams_.backendType);
 }
 
 void SimulationMgr::ApplySimDomainBoundsToBackend()
@@ -236,7 +236,7 @@ void SimulationMgr::Launch_Async()
 	}
 	if (!simBackend_)
 	{
-		SelectSimBackend(simParams_.backendVersion);
+		SelectSimBackend(simParams_.backendType);
 	}
 	if (!simBackend_)
 	{
@@ -284,7 +284,7 @@ void SimulationMgr::Launch_Blocking()
 	}
 	if (!simBackend_)
 	{
-		SelectSimBackend(simParams_.backendVersion);
+		SelectSimBackend(simParams_.backendType);
 	}
 	if (!simBackend_)
 	{
@@ -734,5 +734,5 @@ void SimulationMgr::DisplayMemoryUsageStats(
 	if (!force && simStep_ != 1) { return; }
 
 	DiagnosticsMgr::PrintMemorySummary_Standalone(
-		memoryTracker_, params.byteUnit, params.backendVersion);
+		memoryTracker_, params.byteUnit, params.backendType);
 }

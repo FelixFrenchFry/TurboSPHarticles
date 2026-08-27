@@ -279,14 +279,14 @@ namespace Sim
 
         // modes
 		printf("%-30s = %s\n", "sim backend",
-			Base::ToCString(params.backendVersion));
+			Base::ToCString(params.backendType));
         printf("%-30s = %s\n", "sim scenario",
             Base::ToCString(params.scenarioType));
         printf("%-30s = %s\n", "neighbor search method",
 			Base::ToCString(params.neighborSearchMethod));
         printf("%-30s = %s\n", "neighbor list storage",
             Base::ToEffectiveNeighborListStorageCString(
-				params.backendVersion,
+				params.backendType,
 				params.neighborListMethod));
 
         // particle counts
@@ -554,7 +554,7 @@ namespace Sim
 	void DiagnosticsMgr::PrintMemorySummary_Standalone(
         const Mem::MemoryTracker& memTracker,
         Mem::ByteUnit unit,
-        Base::BackendVersion backendVersion)
+        Base::BackendType backendType)
     {
         // pack snapshot
         Sync::MemSnapshot snap{};
@@ -682,12 +682,12 @@ namespace Sim
 					totalLabel, totalUsedValueLabel, "---", totalAllocValueLabel, "---");
 			};
 
-		switch (backendVersion)
+		switch (backendType)
 		{
-		case Base::BackendVersion::GPU01:
+		case Base::BackendType::GPU:
 			PrintSpaceTable(Mem::MemSpace::VRAM, "memory usage (VRAM)", "total (VRAM)");
 			break;
-		case Base::BackendVersion::CPU01:
+		case Base::BackendType::CPU:
 			[[fallthrough]];
 		default:
 			PrintSpaceTable(Mem::MemSpace::RAM, "memory usage (RAM)", "total (RAM)");

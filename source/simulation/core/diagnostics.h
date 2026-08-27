@@ -51,7 +51,7 @@ namespace Sim
 		static void PrintMemorySummary_Standalone(
 			const Mem::MemoryTracker& memTracker,
 			Mem::ByteUnit unit,
-			Base::BackendVersion backendVersion);
+			Base::BackendType backendType);
 	};
 
 } // namespace Sim

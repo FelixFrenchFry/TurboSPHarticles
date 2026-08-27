@@ -53,7 +53,7 @@ namespace Dist
 		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
 
 		// create backend when no backend is active
-		void SelectSimBackend(Base::BackendVersion version);
+		void SelectSimBackend(Base::BackendType backendType);
 
 		// create or switch domain decomp
 		// (destroys previous domain decomp, so it has to be built again afterwards)
@@ -123,7 +123,7 @@ namespace Dist
 		// [ rank-reduced ] materializes, gathers, and serializes the final full state
 		bool WriteFinalState(const Sim::SimParams& params, bool enabled);
 
-		// [ rank-reduced ] rebuilds the regular CPU01 fluid surface selection from authoritative rank data
+		// [ rank-reduced ] rebuilds the regular CPU fluid surface selection from authoritative rank data
 		bool BuildExportFluidParticleLocalIdxs(
 			const Sync::FluidConstView& particlesF,
 			std::vector<uint32_t>& localIdxs);

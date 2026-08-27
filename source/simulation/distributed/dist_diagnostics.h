@@ -40,7 +40,7 @@ namespace Dist
 		const char* loadBalanceMetric = "";
 		const char* loadBalanceTrigger = "";
 		const char* loadBalanceWeightModel = "";
-		const char* backendVersion = "";
+		const char* backendType = "";
 		const char* scenarioType = "";
 		const char* neighborSearchMethod = "";
 		const char* neighborListStorage = "";
