@@ -1189,7 +1189,7 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 bool SimParamsMgr::LoadSimParamsFromProfile(const std::string& profile, bool verbose)
 {
 	nlohmann::json j;
-	if (!Base::LoadJsonObjectFromFile(profile + "/params.json", j))
+	if (!Base::LoadJsonObjectFromFile(Base::ParamsPathForProfile(profile), j))
 	{
 		return false;
 	}

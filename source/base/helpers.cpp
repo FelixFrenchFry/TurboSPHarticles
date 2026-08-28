@@ -13,6 +13,16 @@
 
 namespace Base
 {
+	std::string ParamsPathForProfile(const std::string& profile)
+	{
+		return profile == "default" ? "params_def.json" : profile + "/params.json";
+	}
+
+	std::string ScenariosPathForProfile(const std::string& profile)
+	{
+		return profile == "default" ? "scenarios_def.json" : profile + "/scenarios.json";
+	}
+
 	bool LoadJsonObjectFromFile(
 		const std::string& fileName,
 		nlohmann::json& out)

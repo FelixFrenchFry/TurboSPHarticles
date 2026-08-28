@@ -374,7 +374,7 @@ namespace Scene
 	inline SampledMeshConfig LoadSampledMeshConfigFromProfile(
 		const std::string& profile, ScenarioMgr& scenarioMgr)
 	{
-		// try to load a SampledMesh scenario from scenarios.json file of a given profile
+		// try to load a SampledMesh scenario from the config file of a given profile
 		auto TryLoadFromScenarioFile = [&](const std::string& scenariosFile)
 			-> std::optional<SampledMeshConfig>
 			{
@@ -534,7 +534,7 @@ namespace Scene
 		auto LoadProfile = [&](const std::string& profileName)
 			-> std::optional<SampledMeshConfig>
 			{
-				const auto cfg = TryLoadFromScenarioFile(profileName + "/scenarios.json");
+				const auto cfg = TryLoadFromScenarioFile(Base::ScenariosPathForProfile(profileName));
 				if (!cfg) { return std::nullopt; }
 
 				SampledMeshConfig resolved = *cfg;
@@ -551,13 +551,17 @@ namespace Scene
 
 		// try chosen profile
 		if (auto cfg = LoadProfile(profile)) { return *cfg; }
-		SPDLOG_WARN("Could not load SampledMesh from '/{}/scenarios.json'.", profile);
+		SPDLOG_WARN(
+			"Could not load SampledMesh from '/{}'.",
+			Base::ScenariosPathForProfile(profile));
 
 		// fallback to default profile
 		if (profile != "default")
 		{
 			if (auto cfg = LoadProfile("default")) { return *cfg; }
-			SPDLOG_WARN("Could not load SampledMesh from '/default/scenarios.json'.");
+			SPDLOG_WARN(
+				"Could not load SampledMesh from '/{}'.",
+				Base::ScenariosPathForProfile("default"));
 		}
 
 		// final fallback to built-in defaults

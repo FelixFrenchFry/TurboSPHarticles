@@ -586,8 +586,8 @@ void SimulationMgr::JoinThreads()
 void SimulationMgr::SetConfigProfile(std::string profile)
 {
 	configProfile_ = std::move(profile);
-	paramsFile_ = configProfile_ + "/params.json";
-	scenariosFile_ = configProfile_ + "/scenarios.json";
+	paramsFile_ = Base::ParamsPathForProfile(configProfile_);
+	scenariosFile_ = Base::ScenariosPathForProfile(configProfile_);
 }
 
 void SimulationMgr::WriteExportSnapshot(const SimParams& params) const

@@ -103,8 +103,8 @@ namespace Sim
 
 		// configuration profile
 		std::string configProfile_ = "default";
-		std::string paramsFile_ = "default/params.json";
-		std::string scenariosFile_ = "default/scenarios.json";
+		std::string paramsFile_ = "params_def.json";
+		std::string scenariosFile_ = "scenarios_def.json";
 
 		// parameter manager and snapshot to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;

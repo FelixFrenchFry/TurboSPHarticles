@@ -251,7 +251,7 @@ namespace Scene
 
 		// try chosen profile
 		{
-			const std::string file = profile + "/scenarios.json";
+			const std::string file = Base::ScenariosPathForProfile(profile);
 			if (auto cfg = TryLoadFromScenarioFile(file)) { return *cfg; }
 
 			SPDLOG_WARN("Could not load RigidCube from '/{}'.", file);
@@ -260,7 +260,7 @@ namespace Scene
 		// fallback to default profile if profile was not 'default' already
 		if (profile != "default")
 		{
-			const std::string file = "default/scenarios.json";
+			const std::string file = Base::ScenariosPathForProfile("default");
 			if (auto cfg = TryLoadFromScenarioFile(file)) { return *cfg; }
 
 			SPDLOG_WARN("Could not load RigidCube from '/{}'.", file);

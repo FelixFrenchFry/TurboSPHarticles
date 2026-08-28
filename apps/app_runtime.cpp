@@ -134,8 +134,8 @@ App::ParseResult App::ParseMainOptions(
 	MainOptions options{};
 
 	application.add_option("-p,--profile", options.profile,
-			"Name of configuration profile /configs/<...> with 'A-Z', 'a-z' and '0-9', "
-			"matching the directory name (e.g. 'A2' or 'test') or 'default'");
+			"Name of configuration profile under /configs with 'A-Z', 'a-z' and '0-9', "
+			"matching a profile directory (e.g. 'A2' or 'test') or 'default'");
 	application.add_option("--sim", options.simOverrides,
 		"Master override simulation parameter via key=value "
 		"(repeatable, CLI wins over config file)");
@@ -189,7 +189,7 @@ App::ParseResult App::ParseMainOptions(
 		if (logErrors)
 		{
 			SPDLOG_ERROR("Invalid --profile arg '{}'. Use letters 'A-Z', 'a-z' and digits "
-				"'0-9' matching the directory name, or leave empty for 'default'.",
+				"'0-9' matching a profile directory, or leave empty for 'default'.",
 				options.profile);
 		}
 
@@ -221,19 +221,21 @@ bool App::LoadSimParams(
 		{
 			if (logStatus)
 			{
-				SPDLOG_WARN("Failed to load '/{}/params.json'. Falling back to '/default/params.json'.", profile);
+				SPDLOG_WARN(
+					"Failed to load '/{}/params.json'. Falling back to '/{}'.",
+					profile, Base::ParamsPathForProfile("default"));
 			}
 			profile = "default";
 
 			if (!simParamsMgr.LoadSimParamsFromProfile(profile))
 			{
-				SPDLOG_ERROR("Failed to load '/default/params.json' too.");
+				SPDLOG_ERROR("Failed to load '/{}' too.", Base::ParamsPathForProfile("default"));
 				return false;
 			}
 		}
 		else
 		{
-			SPDLOG_ERROR("Failed to load '/default/params.json'.");
+			SPDLOG_ERROR("Failed to load '/{}'.", Base::ParamsPathForProfile("default"));
 			return false;
 		}
 	}

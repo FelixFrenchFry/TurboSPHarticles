@@ -81,7 +81,7 @@ namespace Dist
 		// helpers marked [ rank-reduced ] run their own collective before returning, so they hand back
 		// the same result on every rank and callers branch on it directly instead of reducing it again
 
-		// [ rank-reduced ] root reads params.json, then every rank loads the broadcast copy
+		// [ rank-reduced ] root reads the selected params config, then every rank loads the broadcast copy
 		bool LoadParamsFromProfileBroadcast(std::string& profile, bool logStatus = true);
 
 		// [ rank-reduced ] applies the same command-line overrides on every rank
@@ -176,7 +176,7 @@ namespace Dist
 		// keeps particle identity metadata in sync with backend data ordering
 		bool ApplyLastBackendParticleReOrder();
 
-		// reads raw params.json text, parsing happens after broadcast
+		// reads raw params config text, parsing happens after broadcast
 		static bool TryReadProfileJson(const std::string& profile, std::string& jsonText);
 
 		MpiContext& mpiContext_;
@@ -188,8 +188,8 @@ namespace Dist
 
 		// configuration profile
 		std::string configProfile_ = "default";
-		std::string paramsFile_ = "default/params.json";
-		std::string scenariosFile_ = "default/scenarios.json";
+		std::string paramsFile_ = "params_def.json";
+		std::string scenariosFile_ = "scenarios_def.json";
 
 		// scenario management
 		Scene::ScenarioMgr scenarioMgr_;

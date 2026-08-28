@@ -57,7 +57,7 @@ namespace App
 
 	class AppStopWatcher
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		AppStopWatcher() = default;
 		~AppStopWatcher();
@@ -65,7 +65,7 @@ namespace App
 		bool Start(std::function<void()> stopCallback);
 		void Stop();
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		std::jthread watcherThread_{};
 		bool handlerInstalled_ = false;

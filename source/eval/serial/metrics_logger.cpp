@@ -16,6 +16,7 @@
 
 // internal
 #include "metrics_logger.h"
+#include "source/base/helpers.h"
 #include "source/simulation/core/build_config.h"
 
 
@@ -516,12 +517,18 @@ namespace Export
 
 		const std::filesystem::path requestedPath{ requestedRelPath };
 		const std::string fileName = requestedPath.filename().string();
-		const std::string parentName = requestedPath.parent_path().filename().string();
-
-		if (parentName != "default" && !fileName.empty())
+		std::string fallbackRelPath{};
+		if (fileName == "params.json")
 		{
-			const std::string fallbackRelPath = std::string("default/") + fileName;
+			fallbackRelPath = Base::ParamsPathForProfile("default");
+		}
+		else if (fileName == "scenarios.json")
+		{
+			fallbackRelPath = Base::ScenariosPathForProfile("default");
+		}
 
+		if (!fallbackRelPath.empty() && fallbackRelPath != requestedRelPath)
+		{
 			if (LoadJsonObjectFromFile_Silent(fallbackRelPath, out))
 			{
 				resolvedRelPath = fallbackRelPath;

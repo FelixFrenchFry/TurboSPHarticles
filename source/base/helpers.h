@@ -126,6 +126,10 @@ namespace Base
 
     // --- [ json ] -------------------------------------------------------------------------------
 
+    // relative config paths under TSP_CONFIG_DIR
+    std::string ParamsPathForProfile(const std::string& profile);
+    std::string ScenariosPathForProfile(const std::string& profile);
+
     bool LoadJsonObjectFromFile(
         const std::string& fileName,
         nlohmann::json& out);

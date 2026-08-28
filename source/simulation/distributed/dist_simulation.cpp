@@ -387,8 +387,8 @@ bool DistSimulationMgr::Init(
 	}
 
 	configProfile_ = profile;
-	paramsFile_ = configProfile_ + "/params.json";
-	scenariosFile_ = configProfile_ + "/scenarios.json";
+	paramsFile_ = Base::ParamsPathForProfile(configProfile_);
+	scenariosFile_ = Base::ScenariosPathForProfile(configProfile_);
 
 	// initial snapshot
 	SyncParameters(true);
@@ -979,15 +979,17 @@ bool DistSimulationMgr::LoadParamsFromProfileBroadcast(
 				if (logStatus)
 				{
 					SPDLOG_WARN_MPI(
-						"Failed to load '/{}/params.json'. Falling back to '/default/params.json'.",
-						mpiContext_, profile);
+						"Failed to load '/{}/params.json'. Falling back to '/{}'.",
+						mpiContext_, profile, Base::ParamsPathForProfile("default"));
 				}
 				profile = "default";
 			}
 
 			if (!TryReadProfileJson(profile, jsonText))
 			{
-				SPDLOG_ERROR_MPI("Failed to load '/{}/params.json'.", mpiContext_, profile);
+				SPDLOG_ERROR_MPI(
+					"Failed to load '/{}'.",
+					mpiContext_, Base::ParamsPathForProfile(profile));
 				loadOk = 0;
 			}
 		}
@@ -2875,7 +2877,7 @@ bool DistSimulationMgr::TryReadProfileJson(
 	std::string& jsonText)
 {
 	const std::filesystem::path paramsPath =
-		std::filesystem::path(TSP_CONFIG_DIR) / profile / "params.json";
+		std::filesystem::path(TSP_CONFIG_DIR) / Base::ParamsPathForProfile(profile);
 
 	std::ifstream file(paramsPath, std::ios::in | std::ios::binary);
 	if (!file) { return false; }
