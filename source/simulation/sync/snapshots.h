@@ -12,7 +12,7 @@
 // internal
 #include "source/base/enum_hub.h"
 #include "source/eval/bench/operations.h"
-#include "source/eval/memory/metrics_mem.h"
+#include "source/eval/memory/categories.h"
 #include "source/eval/stats/metrics.h"
 #include "source/simulation/scene/builder.h"
 

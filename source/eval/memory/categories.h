@@ -1,4 +1,4 @@
-// metrics_mem.h
+// categories.h
 
 #pragma once
 

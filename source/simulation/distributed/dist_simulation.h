@@ -14,6 +14,7 @@
 #include "source/eval/memory/memory.h"
 #include "source/eval/serial/metrics_logger.h"
 #include "source/eval/serial/serialization.h"
+#include "source/eval/trace/trace.h"
 #include "source/simulation/core/backend_sim.h"
 #include "source/simulation/core/parameters_sim.h"
 #include "source/simulation/scene/scenario_sim.h"
@@ -131,6 +132,9 @@ namespace Dist
 		// builds rank-local startup diagnostics gathered by the root rank
 		DistStartupRankReport BuildStartupRankReport() const;
 
+		// writes a trace marker without charging active benchmark timers for trace I/O
+		void MarkTrace(Trace::TraceStage stage);
+
 		// manages per-rank CSV metric logging
 		void BeginRunLogging(const Sim::SimParams& params);
 		void EndRunLogging();
@@ -232,6 +236,7 @@ namespace Dist
 		// serialization management
 		Export::SerializationMgr serializationMgr_{};
 		mutable Export::LoggingMgr loggingMgr_;
+		Trace::TraceRecorder traceRecorder_{};
 		mutable Sync::ExportSnapshot exportSnapScratch_{};
 
 		std::atomic<bool> running_{ false };

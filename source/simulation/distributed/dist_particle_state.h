@@ -10,7 +10,7 @@
 #include <vector>
 
 // internal
-#include "source/eval/memory/metrics_mem.h"
+#include "source/eval/memory/categories.h"
 #include "source/simulation/sync/state_sim.h"
 #include "domain_decomp.h"
 

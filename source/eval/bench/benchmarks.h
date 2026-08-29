@@ -20,7 +20,7 @@ namespace Bench
 {
 	class BenchmarksTracker
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		BenchmarksTracker(const Sim::SimParams& simParams);
 
@@ -33,6 +33,9 @@ namespace Bench
 		// timing start/stop for one operation
 		void StartBench(BenchOp op);
 		void StopBench(BenchOp op);
+		// exclude instrumentation time from currently active operation timers
+		void PauseActiveTimers();
+		void ResumeActiveTimers();
 
 		// accumulate one timing sample into the current step's bench data
 		void AddTimingSample(BenchOp op, uint64_t ns);
@@ -53,11 +56,15 @@ namespace Bench
 		const BenchRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<BenchRecordStep>& GetHistory() const { return recHistory_; }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// start timestamps
 		using Clock = std::chrono::steady_clock;
 		std::array<Clock::time_point, GetIdx(BenchOp::Count)> t0_single_{};
+		// tracks timers whose start timestamp must skip instrumentation time
+		std::array<uint8_t, GetIdx(BenchOp::Count)> activeTimers_{};
+		Clock::time_point pauseStart_{};
+		bool timersPaused_ = false;
 
 		// max and current number of steps for which timings are kept
 		uint32_t N_maxRecords_;

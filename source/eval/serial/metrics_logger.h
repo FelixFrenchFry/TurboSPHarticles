@@ -14,7 +14,7 @@
 
 // internal
 #include "source/eval/bench/operations.h"
-#include "source/eval/memory/metrics_mem.h"
+#include "source/eval/memory/categories.h"
 #include "source/simulation/core/parameters_sim.h"
 
 

@@ -85,6 +85,7 @@ void BenchmarksTracker::StartBench(const BenchOp op)
 	const uint8_t i = GetIdx(op);
 
 	t0_single_[i] = Clock::now();
+	activeTimers_[i] = 1;
 }
 
 void BenchmarksTracker::StopBench(const BenchOp op)
@@ -96,6 +97,28 @@ void BenchmarksTracker::StopBench(const BenchOp op)
 		<std::chrono::nanoseconds>(t1 - t0_single_[i]).count());
 
 	AddTimingSample(op, ns);
+	activeTimers_[i] = 0;
+}
+
+void BenchmarksTracker::PauseActiveTimers()
+{
+	if (timersPaused_) { return; }
+
+	pauseStart_ = Clock::now();
+	timersPaused_ = true;
+}
+
+void BenchmarksTracker::ResumeActiveTimers()
+{
+	if (!timersPaused_) { return; }
+
+	const auto pauseDuration = Clock::now() - pauseStart_;
+	for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
+	{
+		if (activeTimers_[i]) { t0_single_[i] += pauseDuration; }
+	}
+
+	timersPaused_ = false;
 }
 
 void BenchmarksTracker::AddTimingSample(const BenchOp op, const uint64_t ns)

@@ -819,6 +819,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 	// pack and serialize export snapshot of initial state
 	if (paramsInit.exportEnabled)
 	{
+		MarkTrace(Trace::TraceStage::Dist_ExportSnapshot);
 		if (!WriteExportSnapshot(paramsInit)) { runOk = false; }
 	}
 
@@ -832,6 +833,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 			break;
 		}
 
+		MarkTrace(Trace::TraceStage::Dist_LoopParameterSync);
 		SyncParameters(true);
 
 		// local copy for step-local consistency
@@ -866,6 +868,9 @@ bool DistSimulationMgr::RunSim_Blocking()
 		memoryTracker_->BeginStep();
 		statisticsTracker_->BeginStep();
 		particleRedistributionMgr_.ResetRedistStats();
+		traceRecorder_.BeginStep(
+			simStep_ + 1,
+			simTime_ + static_cast<double>(params.timeStep));
 
 		// starting point of total benchmark
 		benchmarksTracker_->StartBench(Bench::BenchOp::Total);
@@ -899,35 +904,50 @@ bool DistSimulationMgr::RunSim_Blocking()
 			params.exportEnabled)
 		{
 			exportedStep = true;
+			MarkTrace(Trace::TraceStage::Dist_ExportSnapshot);
 			if (!WriteExportSnapshot(params)) { runOk = false; }
 		}
 
-		if (runOk && !FillDistributedStatisticsRecord(params))
+		if (runOk)
 		{
-			runOk = false;
+			MarkTrace(Trace::TraceStage::Dist_Statistics);
+			if (!FillDistributedStatisticsRecord(params)) { runOk = false; }
 		}
 
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_LoadBalancing);
-		if (runOk && !UpdateLoadBalancing()) { runOk = false; }
+		if (runOk)
+		{
+			MarkTrace(Trace::TraceStage::Dist_LoadBalancing);
+			if (!UpdateLoadBalancing()) { runOk = false; }
+		}
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_LoadBalancing);
 
 		// evaluate the benchmarks and memory usage for this step
+		if (runOk) { MarkTrace(Trace::TraceStage::Dist_Metrics); }
 		FinalizeBenchMemMeasurements(params);
 		AppendLatestMemoryMetricsLog();
 		AppendLatestBenchmarkMetricsLog();
 
+		if (runOk) { MarkTrace(Trace::TraceStage::Dist_PostStepParameterSync); }
 		SyncParameters();
 
+		if (runOk) { MarkTrace(Trace::TraceStage::Dist_ProgressReport); }
 		DisplayMemoryUsageStats(params);
 
 		// the progress block redraw would overwrite the error a failed stage just reported
 		if (runOk) { DisplayDistributedProgress(params, exportedStep); }
+		if (runOk) { MarkTrace(Trace::TraceStage::StepComplete); }
 	}
 
 	auto paramsFinal = simParams_;
 	paramsFinal.maxSteps = paramsInit.maxSteps;
+	const bool wantsFinalState = runOk && paramsFinal.saveFinalState;
+	if (wantsFinalState)
+	{
+		MarkTrace(Trace::TraceStage::Dist_FinalStateSerialization);
+	}
 	const bool shouldSaveFinalState = mpiContext_.AllTrue(
-		runOk && paramsFinal.saveFinalState);
+		wantsFinalState);
 	const bool finalStateOk = WriteFinalState(
 		paramsFinal,
 		shouldSaveFinalState);
@@ -1926,13 +1946,42 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 
 void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
-	loggingMgr_.BeginRun(
-		configProfile_, paramsFile_, scenariosFile_, params,
+	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params,
 		simParamsMgr_.CliOverrides(), mpiContext_.IsRoot());
+	traceRecorder_.BeginRun(loggingMgr_.GetRunDir(), mpiContext_.Rank());
+}
+
+void DistSimulationMgr::MarkTrace(const Trace::TraceStage stage)
+{
+	if (!traceRecorder_.IsActive()) { return; }
+
+	if (benchmarksTracker_)
+	{
+		benchmarksTracker_->PauseActiveTimers();
+	}
+
+	try
+	{
+		traceRecorder_.Mark(stage);
+	}
+	catch (...)
+	{
+		if (benchmarksTracker_)
+		{
+			benchmarksTracker_->ResumeActiveTimers();
+		}
+		throw;
+	}
+
+	if (benchmarksTracker_)
+	{
+		benchmarksTracker_->ResumeActiveTimers();
+	}
 }
 
 void DistSimulationMgr::EndRunLogging()
 {
+	traceRecorder_.EndRun();
 	loggingMgr_.EndRun();
 }
 
@@ -2279,26 +2328,32 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 				mpiContext_.Rank(), mpiContext_.Size());
 			localOk = false;
 		}
+		MarkTrace(Trace::TraceStage::Dist_InputValidation);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
 		const bool inputOk = mpiContext_.AllTrue(localOk);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!inputOk) { return false; }
 
 		// ensure all ranks have the same parameters before redistribution
+		MarkTrace(Trace::TraceStage::Dist_ParameterSync);
 		SyncParameters();
 
+		MarkTrace(Trace::TraceStage::Dist_ParticleRedistribution);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticleRedistribution);
 		const bool redistributionOk = RedistributeRankLocalParticles(params);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticleRedistribution);
 		if (!redistributionOk) { return false; }
 
+		MarkTrace(Trace::TraceStage::Dist_GlobalCountValidation);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
 		const bool globalCountsOk = ValidateGlobalOwnedParticleCounts();
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!globalCountsOk) { return false; }
 
+		MarkTrace(Trace::TraceStage::Dist_RankParticlePreparation);
 		if (!PrepareRankLocalBackendStep()) { return false; }
 
+		MarkTrace(Trace::TraceStage::Dist_RankBackendStep);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_RankBackendStep);
 		try
 		{
@@ -2318,6 +2373,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!backendOk) { return false; }
 
+		MarkTrace(Trace::TraceStage::Dist_ParticlePermutation);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticlePermutation);
 		try
 		{
@@ -2346,6 +2402,7 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!finishOk) { return false; }
 
+		MarkTrace(Trace::TraceStage::Dist_ParticleMetadataValidation);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
 		if (!ValidateRankLocalParticleMetadata()) { localOk = false; }
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
@@ -2593,11 +2650,13 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 	try
 	{
+		MarkTrace(Trace::TraceStage::Dist_FluidSyncPlanRebuild);
 		if (!RebuildFluidSolverSyncPlan()) { localOk = false; }
 
 		bool configured = false;
 		if (localOk)
 		{
+			MarkTrace(Trace::TraceStage::Dist_BackendConfiguration);
 			configured = simBackend_->ConfigureDistributedStep(
 				particleStateF_.particleLocalIdx_Owned,
 				particleStateF_.particleLocalIdx_Outer,
@@ -2630,6 +2689,8 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 bool DistSimulationMgr::FinishRankLocalBackendStep(
 	const Sim::SimParams& params)
 {
+	MarkTrace(Trace::TraceStage::Dist_RigidBodySynchronization);
+
 	// derived from the replicated global topology, so every rank agrees on whether the
 	// rigid body collectives below run at all
 	const bool hasRigidBodies =
@@ -2668,6 +2729,7 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 
 	if (hasRigidBodies)
 	{
+		MarkTrace(Trace::TraceStage::Dist_RigidForceReduction);
 		SumRigidBodyForceTorqueAcrossRanks(
 			rigidBodyForceTorque_,
 			rigidBodySyncBuffers_,
@@ -2683,6 +2745,7 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 
 		try
 		{
+			MarkTrace(Trace::TraceStage::Dist_RigidForceIntegration);
 			if (mpiContext_.IsRoot() &&
 				!simBackend_->ApplyRigidBodyForceTorque(
 					rigidBodyForceTorque_,
@@ -2708,6 +2771,7 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 	{
 		try
 		{
+			MarkTrace(Trace::TraceStage::Dist_RigidStateBroadcast);
 			if (mpiContext_.IsRoot())
 			{
 				distParticleBackend_->CopyRigidBodyStateTo(

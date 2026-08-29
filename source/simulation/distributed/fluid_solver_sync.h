@@ -12,7 +12,7 @@
 
 // internal
 #include "source/eval/bench/benchmarks.h"
-#include "source/eval/memory/metrics_mem.h"
+#include "source/eval/memory/categories.h"
 #include "source/simulation/core/backend_sim.h"
 #include "source/simulation/sync/state_sim.h"
 #include "dist_particle_state.h"
