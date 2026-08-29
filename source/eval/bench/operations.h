@@ -221,6 +221,21 @@ namespace Bench
 	static_assert(Definitions.size() == static_cast<uint8_t>(BenchOp::Count),
 		"Bench::Definitions must list all BenchOp entries");
 
+	constexpr inline bool BenchOpDefinitionsMatchEnum()
+	{
+		for (uint8_t i = 0; i < static_cast<uint8_t>(BenchOp::Count); i++)
+		{
+			if (Definitions[i].op != static_cast<BenchOp>(i))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+	static_assert(BenchOpDefinitionsMatchEnum(),
+		"Bench::Definitions entries must match BenchOp ordering");
+
 	constexpr inline uint8_t GetIdx(BenchOp op) { return static_cast<uint8_t>(op); }
 
 	using BenchOpList = std::vector<BenchOp>;

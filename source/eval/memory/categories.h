@@ -105,6 +105,21 @@ namespace Mem
 	static_assert(SpaceDefinitions.size() == static_cast<uint8_t>(MemSpace::Count),
 		"Mem::SpaceDefinitions must list all MemSpace entries");
 
+	constexpr inline bool MemSpaceDefinitionsMatchEnum()
+	{
+		for (uint8_t i = 0; i < static_cast<uint8_t>(MemSpace::Count); i++)
+		{
+			if (SpaceDefinitions[i].space != static_cast<MemSpace>(i))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+	static_assert(MemSpaceDefinitionsMatchEnum(),
+		"Mem::SpaceDefinitions entries must match MemSpace ordering");
+
 	constexpr inline std::array<MemBucketDef, static_cast<uint16_t>(MemBucket::Count)> Definitions =
 	{
 		{
@@ -182,13 +197,6 @@ namespace Mem
 				"involving rigid particles"
 			},
 			{
-				.bucket = MemBucket::Misc,
-				.type = Base::ParticleType::Fluid,
-				.name = "misc",
-				.tip =
-				"TODO"
-			},
-			{
 				.bucket = MemBucket::Dist_GlobalState,
 				.type = Base::ParticleType::Fluid,
 				.name = "dist global state",
@@ -227,11 +235,33 @@ namespace Mem
 				.tip =
 				"Memory used/allocated by reusable distributed rebuild and export\n"
 				"scratches and other misc buffers"
+			},
+			{
+				.bucket = MemBucket::Misc,
+				.type = Base::ParticleType::Fluid,
+				.name = "misc",
+				.tip =
+				"TODO"
 			}
 		}
 	};
 	static_assert(Definitions.size() == static_cast<uint8_t>(MemBucket::Count),
 		"Mem::Definitions must list all MemBucket entries");
+
+	constexpr inline bool MemBucketDefinitionsMatchEnum()
+	{
+		for (uint8_t i = 0; i < static_cast<uint8_t>(MemBucket::Count); i++)
+		{
+			if (Definitions[i].bucket != static_cast<MemBucket>(i))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+	static_assert(MemBucketDefinitionsMatchEnum(),
+		"Mem::Definitions entries must match MemBucket ordering");
 
 	constexpr inline uint8_t GetIdx(MemSpace space) { return static_cast<uint8_t>(space); }
 	constexpr inline uint8_t GetIdx(MemBucket bucket) { return static_cast<uint8_t>(bucket); }
