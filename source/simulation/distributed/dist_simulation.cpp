@@ -1715,6 +1715,7 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
+	MarkTrace(Trace::TraceStage::Dist_ExportSnapshotGather);
 	const bool gatherOk = GatherExportSnapshotToRoot(
 		expSnap,
 		exportSnapGatherScratch_,
@@ -1742,6 +1743,7 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	bool writeOk = true;
 	if (mpiContext_.IsRoot())
 	{
+		MarkTrace(Trace::TraceStage::Dist_ExportSnapshotSerialization);
 		try
 		{
 			// write export snapshot to files
@@ -2614,6 +2616,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 			{
 				activeRankCounts[localIdx] = 1;
 			}
+			MarkTrace(Trace::TraceStage::Dist_RigidParticleAuthorityValidation);
 			mpiContext_.AllReduceSumUint32s(activeRankCounts);
 
 			const auto invalidAuthorityIt = std::find_if(
@@ -2707,6 +2710,7 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 
 	if (localOk && hasRigidBodies)
 	{
+		MarkTrace(Trace::TraceStage::Dist_RigidForceCollection);
 		try
 		{
 			if (!simBackend_->GetRigidBodyForceTorque(rigidBodyForceTorque_))

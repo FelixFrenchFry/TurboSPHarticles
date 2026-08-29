@@ -39,6 +39,10 @@ namespace Trace
 		Dist_ProgressReport,
 		StepComplete,
 		Dist_FinalStateSerialization,
+		Dist_RigidParticleAuthorityValidation,
+		Dist_RigidForceCollection,
+		Dist_ExportSnapshotGather,
+		Dist_ExportSnapshotSerialization,
 		Count
 	};
 
@@ -172,6 +176,26 @@ namespace Trace
 				.stage = TraceStage::Dist_FinalStateSerialization,
 				.name = "distributed final-state serialization",
 				.alias = "dist_final_state_serialization"
+			},
+			{
+				.stage = TraceStage::Dist_RigidParticleAuthorityValidation,
+				.name = "distributed rigid-particle authority validation",
+				.alias = "dist_rigid_particle_authority_validation"
+			},
+			{
+				.stage = TraceStage::Dist_RigidForceCollection,
+				.name = "distributed rigid force collection",
+				.alias = "dist_rigid_force_collection"
+			},
+			{
+				.stage = TraceStage::Dist_ExportSnapshotGather,
+				.name = "distributed export snapshot gather",
+				.alias = "dist_export_snapshot_gather"
+			},
+			{
+				.stage = TraceStage::Dist_ExportSnapshotSerialization,
+				.name = "distributed export snapshot serialization",
+				.alias = "dist_export_snapshot_serialization"
 			}
 		}
 	};
