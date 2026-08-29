@@ -81,6 +81,12 @@ build.ninja
 !.vscode/extensions.json
 !.vscode/settings.json
 
+# Python ------------------------------------------------------------------------------------------
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # Backup or temporary files -----------------------------------------------------------------------
 *~
 *.swp
