@@ -18,11 +18,18 @@ module load mpi/impi/2021.14-intel-2025.0
 unset CFLAGS CXXFLAGS CPPFLAGS FFLAGS FCFLAGS LDFLAGS
 export CC=gcc
 export CXX=g++
-export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+# process pinning
+export I_MPI_PIN=1
+export I_MPI_PIN_RESPECT_CPUSET=disable
+export I_MPI_PIN_CELL=core
+export I_MPI_PIN_DOMAIN="$SLURM_CPUS_PER_TASK"
+export I_MPI_PIN_ORDER=compact
+export I_MPI_DEBUG=4
 
 # build location
 cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
 
 # run
-mpiexec.hydra -bootstrap slurm -n 12 ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=16 -p A2
+mpiexec.hydra -bootstrap slurm -n "$SLURM_NTASKS" ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim="$SLURM_CPUS_PER_TASK" -p A2
 rc=$?; if [ $rc -ne 0 ]; then exit $rc; fi
