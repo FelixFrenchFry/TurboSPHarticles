@@ -1,0 +1,79 @@
+{
+  "scenarios": {
+    "SampledMeshCollection": {
+      "type": "SampledMeshCollection",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 20.0,
+        "vLen": 12.0,
+        "wLen": 50.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 20.0,
+        "vLen": 4.0,
+        "wLen": 50.0
+      },
+      "rigidBodies": [
+        {
+          "model": "CorvetteShip",
+          "modelTargetExtent": 10.0,
+          "rigidBody": {
+            "centerOfPosition": [ 10.0, 6.5, 6.25 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 20.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "CruiserShip",
+          "modelTargetExtent": 10.0,
+          "rigidBody": {
+            "centerOfPosition": [ 10.0, 6.5, 18.75 ],
+            "yawDeg": 0.0,
+            "pitchDeg": -20.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "DestroyerShip",
+          "modelTargetExtent": 10.0,
+          "rigidBody": {
+            "centerOfPosition": [ 10.0, 6.5, 31.25 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 60.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "FrigateShip",
+          "modelTargetExtent": 10.0,
+          "rigidBody": {
+            "centerOfPosition": [ 10.0, 6.5, 43.75 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        }
+      ]
+    }
+  }
+}
