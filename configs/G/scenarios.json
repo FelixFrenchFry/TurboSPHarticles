@@ -1,0 +1,131 @@
+{
+  "scenarios": {
+    "SampledMeshCollection": {
+      "type": "SampledMeshCollection",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 16.0,
+        "vLen": 9.6,
+        "wLen": 80.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 16.0,
+        "vLen": 3.2,
+        "wLen": 80.0
+      },
+      "rigidBodies": [
+        {
+          "model": "CorvetteShip",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 5.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 20.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "CruiserShip",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 15.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": -20.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "DestroyerShip",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 25.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 60.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "FrigateShip",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 35.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "PassengerShip",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 45.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": -60.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "TugBoat",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 55.0 ],
+            "yawDeg": 90.0,
+            "pitchDeg": -10.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "ShortSubmarine",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 65.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 90.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "HouseBoat",
+          "modelTargetExtent": 8.0,
+          "rigidBody": {
+            "centerOfPosition": [ 8.0, 5.2, 75.0 ],
+            "yawDeg": 45.0,
+            "pitchDeg": -10.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 650.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        }
+      ]
+    }
+  }
+}
