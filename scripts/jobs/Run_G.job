@@ -25,7 +25,7 @@ export I_MPI_PIN_RESPECT_CPUSET=disable
 export I_MPI_PIN_CELL=core
 export I_MPI_PIN_DOMAIN="$SLURM_CPUS_PER_TASK"
 export I_MPI_PIN_ORDER=compact
-export I_MPI_DEBUG=4
+export I_MPI_DEBUG=+4,time
 
 # build location
 cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
