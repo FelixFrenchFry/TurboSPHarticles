@@ -22,12 +22,18 @@ namespace
 	void AccumulateOwnedParticleCounts(
 		const DomainDecompParticlePositionView& particles,
 		const AABB& globalBounds,
+		const int splitAxis,
 		const uint32_t profileBinCount,
 		std::vector<uint32_t>& profile,
 		const char* particleType)
 	{
-		const float splitMin = globalBounds.min.x;
-		const float splitMax = globalBounds.max.x;
+		const std::span<const float> splitCoordinates = splitAxis == 0
+			? particles.x
+			: splitAxis == 1
+			? particles.y
+			: particles.z;
+		const float splitMin = globalBounds.min[splitAxis];
+		const float splitMax = globalBounds.max[splitAxis];
 		const float splitLength = splitMax - splitMin;
 		if (!std::isfinite(splitLength) || splitLength <= 0.0f)
 		{
@@ -37,14 +43,14 @@ namespace
 
 		for (const uint32_t localIdx : particles.ownedLocalIdx)
 		{
-			if (localIdx >= particles.x.size())
+			if (localIdx >= splitCoordinates.size())
 			{
 				throw std::runtime_error(
 					std::string("Cannot build a slab AABB repartition profile with an invalid ") +
 					particleType + " particle index.");
 			}
 
-			const float splitCoordinate = particles.x[localIdx];
+			const float splitCoordinate = splitCoordinates[localIdx];
 			if (!std::isfinite(splitCoordinate))
 			{
 				throw std::runtime_error(
@@ -163,12 +169,14 @@ void Decomp_AABB_Slabs::BuildRepartitionProfile(
 	AccumulateOwnedParticleCounts(
 		input.fluid,
 		globalBounds,
+		SPLIT_AXIS,
 		PROFILE_BIN_COUNT,
 		profile.ownedFluidByUnit,
 		"fluid");
 	AccumulateOwnedParticleCounts(
 		input.boundary,
 		globalBounds,
+		SPLIT_AXIS,
 		PROFILE_BIN_COUNT,
 		profile.ownedBoundaryByUnit,
 		"boundary");

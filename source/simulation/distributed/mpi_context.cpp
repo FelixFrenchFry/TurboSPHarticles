@@ -2,11 +2,19 @@
 
 // external
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstdint>
 #include <exception>
 #include <limits>
 #include <stdexcept>
+
+#ifdef _WIN32
+	#include <process.h>
+#else
+	#include <unistd.h>
+#endif
 
 // internal
 #include "mpi_context.h"
@@ -17,6 +25,17 @@ using namespace Dist;
 
 namespace
 {
+	constexpr uint64_t MPI_WAIT_CLOCK_CHECK_INTERVAL = 64;
+
+	int64_t CurrentProcessId()
+	{
+	#ifdef _WIN32
+		return static_cast<int64_t>(_getpid());
+	#else
+		return static_cast<int64_t>(getpid());
+	#endif
+	}
+
 	int CheckedMpiCount(const uint64_t N_values)
 	{
 		if (N_values > static_cast<uint64_t>(std::numeric_limits<int>::max()))
@@ -80,7 +99,6 @@ namespace
 	template <typename T, typename MpiOp>
 	void ForEachMpiVectorChunk(
 		std::vector<T>& values,
-		const char* opName,
 		MpiOp&& mpiOp)
 	{
 		constexpr uint64_t chunkCapacity = MPI_CONTEXT_BYTE_CHUNK_SIZE / sizeof(T);
@@ -91,11 +109,9 @@ namespace
 			const uint64_t N_chunkValues = std::min(
 				chunkCapacity,
 				static_cast<uint64_t>(values.size()) - valueOffset);
-			CheckMpiResultImpl(
-				mpiOp(
-					values.data() + valueOffset,
-					CheckedMpiCount(N_chunkValues)),
-				opName);
+			mpiOp(
+				values.data() + valueOffset,
+				CheckedMpiCount(N_chunkValues));
 			valueOffset += N_chunkValues;
 		}
 	}
@@ -105,8 +121,16 @@ namespace
 MpiContext::MpiContext(
 	int& argc,
 	char**& argv,
-	const int requestedThreadSupport)
+	const int requestedThreadSupport,
+	const MpiWaitConfig waitConfig)
+	: waitConfig_(waitConfig)
 {
+	if (waitConfig_.warningTimeout.count() <= 0 ||
+		waitConfig_.abortTimeout < waitConfig_.warningTimeout)
+	{
+		throw std::runtime_error("Invalid MPI wait timeout configuration.");
+	}
+
 	int alreadyInitialized = 0;
 	// MPI_Abort is not valid until MPI initialization has succeeded.
 	CheckMpiResultImpl(
@@ -135,16 +159,42 @@ MpiContext::MpiContext(
 
 	CheckMpiResult(MPI_Comm_rank(MPI_COMM_WORLD, &rank_), "MPI_Comm_rank");
 	CheckMpiResult(MPI_Comm_size(MPI_COMM_WORLD, &N_ranks_), "MPI_Comm_size");
+	CheckMpiResult(
+		MPI_Comm_get_errhandler(MPI_COMM_WORLD, &previousErrorHandler_),
+		"MPI_Comm_get_errhandler");
+	CheckMpiResult(
+		MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+		"MPI_Comm_set_errhandler");
+
+	std::array<char, MPI_MAX_PROCESSOR_NAME> processorName{};
+	int processorNameLength = 0;
+	CheckMpiResult(
+		MPI_Get_processor_name(processorName.data(), &processorNameLength),
+		"MPI_Get_processor_name");
+	if (processorNameLength > 0)
+	{
+		processorName_.assign(
+			processorName.data(),
+			static_cast<std::string::size_type>(processorNameLength));
+	}
+	processId_ = CurrentProcessId();
 }
 
 MpiContext::~MpiContext()
 {
-	// only finalize MPI if this context initialized it
-	if (!ownsMpiLifetime_) { return; }
-
 	int alreadyFinalized = 0;
 	if (MPI_Finalized(&alreadyFinalized) != MPI_SUCCESS) { return; }
-	if (!alreadyFinalized)
+	if (alreadyFinalized) { return; }
+
+	// restore the communicator before leaving or finalizing the MPI lifetime
+	if (previousErrorHandler_ != MPI_ERRHANDLER_NULL)
+	{
+		(void)MPI_Comm_set_errhandler(MPI_COMM_WORLD, previousErrorHandler_);
+		(void)MPI_Errhandler_free(&previousErrorHandler_);
+	}
+
+	// only finalize MPI if this context initialized it
+	if (ownsMpiLifetime_)
 	{
 		(void)MPI_Finalize();
 	}
@@ -156,24 +206,46 @@ MpiContext::~MpiContext()
 {
 	const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
 	const std::string message = "[rank " + std::to_string(rank_) + "/" +
-		std::to_string(N_ranks_) + "] " +
+		std::to_string(N_ranks_) + " host=" + processorName_ +
+		" pid=" + std::to_string(processId_) + "] " +
 		MpiErrorMessage(abortErrorCode, context);
 	AbortMpiJob(message, abortErrorCode);
 }
 
+[[noreturn]] void MpiContext::AbortJob(
+	const std::string& reason,
+	const int errorCode) const
+{
+	const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
+	AbortMpiJob(
+		"[rank " + std::to_string(rank_) + "/" + std::to_string(N_ranks_) +
+			" host=" + processorName_ + " pid=" + std::to_string(processId_) + "] " + reason,
+		abortErrorCode);
+}
+
 void MpiContext::Barrier() const
 {
-	CheckMpiResult(MPI_Barrier(MPI_COMM_WORLD), "MPI_Barrier");
+	MPI_Request request = MPI_REQUEST_NULL;
+	CheckMpiResult(MPI_Ibarrier(MPI_COMM_WORLD, &request), "MPI_Ibarrier");
+	Wait(&request, 1, "MPI barrier", nullptr);
 }
 
 void MpiContext::BroadcastInt(int& value, const int root) const
 {
-	CheckMpiResult(MPI_Bcast(&value, 1, MPI_INT, root, MPI_COMM_WORLD), "MPI_Bcast(int)");
+	MPI_Request request = MPI_REQUEST_NULL;
+	CheckMpiResult(
+		MPI_Ibcast(&value, 1, MPI_INT, root, MPI_COMM_WORLD, &request),
+		"MPI_Ibcast(int)");
+	Wait(&request, 1, "MPI int broadcast", nullptr);
 }
 
 void MpiContext::BroadcastUint64(uint64_t& value, const int root) const
 {
-	CheckMpiResult(MPI_Bcast(&value, 1, MPI_UINT64_T, root, MPI_COMM_WORLD), "MPI_Bcast(uint64)");
+	MPI_Request request = MPI_REQUEST_NULL;
+	CheckMpiResult(
+		MPI_Ibcast(&value, 1, MPI_UINT64_T, root, MPI_COMM_WORLD, &request),
+		"MPI_Ibcast(uint64)");
+	Wait(&request, 1, "MPI uint64 broadcast", nullptr);
 }
 
 void MpiContext::BroadcastFloats(
@@ -182,15 +254,19 @@ void MpiContext::BroadcastFloats(
 {
 	ForEachMpiVectorChunk(
 		values,
-		"MPI_Bcast(floats)",
-		[root](float* chunkData, const int N_chunkValues)
+		[this, root](float* chunkData, const int N_chunkValues)
 		{
-			return MPI_Bcast(
-				chunkData,
-				N_chunkValues,
-				MPI_FLOAT,
-				root,
-				MPI_COMM_WORLD);
+			MPI_Request request = MPI_REQUEST_NULL;
+			CheckMpiResult(
+				MPI_Ibcast(
+					chunkData,
+					N_chunkValues,
+					MPI_FLOAT,
+					root,
+					MPI_COMM_WORLD,
+					&request),
+				"MPI_Ibcast(floats)");
+			Wait(&request, 1, "MPI float broadcast", nullptr);
 		});
 }
 
@@ -212,120 +288,152 @@ void MpiContext::BroadcastString(std::string& value, const int root) const
 
 	if (N_chars > 0)
 	{
-		CheckMpiResult(MPI_Bcast(value.data(), N_chars, MPI_CHAR, root, MPI_COMM_WORLD),
-			"MPI_Bcast(string)");
+		MPI_Request request = MPI_REQUEST_NULL;
+		CheckMpiResult(
+			MPI_Ibcast(
+				value.data(), N_chars, MPI_CHAR, root, MPI_COMM_WORLD, &request),
+			"MPI_Ibcast(string)");
+		Wait(&request, 1, "MPI string broadcast", nullptr);
 	}
 }
 
-bool MpiContext::AllTrue(const bool localValue) const
+bool MpiContext::AllTrue(
+	const bool localValue,
+	const char* context) const
 {
 	const int local = localValue ? 1 : 0;
 	int global = 0;
-	CheckMpiResult(MPI_Allreduce(&local, &global, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD),
-		"MPI_Allreduce(bool)");
+	MPI_Request request = MPI_REQUEST_NULL;
+	CheckMpiResult(
+		MPI_Iallreduce(
+			&local, &global, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD, &request),
+		"MPI_Iallreduce(bool)");
+	Wait(&request, 1, context ? context : "MPI all-true reduction", nullptr);
 	return global != 0;
 }
 
 uint64_t MpiContext::AllReduceSumUint64(const uint64_t value) const
 {
 	uint64_t result = 0;
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			&value,
 			&result,
 			1,
 			MPI_UINT64_T,
 			MPI_SUM,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(uint64 sum)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(uint64 sum)");
+	Wait(&request, 1, "MPI uint64-sum reduction", nullptr);
 	return result;
 }
 
 void MpiContext::AllReduceSumUint64s(
 	std::array<uint64_t, 4>& values) const
 {
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			MPI_IN_PLACE,
 			values.data(),
 			static_cast<int>(values.size()),
 			MPI_UINT64_T,
 			MPI_SUM,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(uint64 sum)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(uint64 sum)");
+	Wait(&request, 1, "MPI uint64-array sum reduction", nullptr);
 }
 
 void MpiContext::AllReduceSumDoubles(
-	std::array<double, 3>& values) const
+	std::array<double, 3>& values,
+	const char* context) const
 {
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			MPI_IN_PLACE,
 			values.data(),
 			static_cast<int>(values.size()),
 			MPI_DOUBLE,
 			MPI_SUM,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(double sum)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(double sum)");
+	Wait(&request, 1, context ? context : "MPI double-sum reduction", nullptr);
 }
 
 uint32_t MpiContext::AllReduceMaxUint32(const uint32_t value) const
 {
 	uint32_t result = 0;
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			&value,
 			&result,
 			1,
 			MPI_UINT32_T,
 			MPI_MAX,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(uint32 max)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(uint32 max)");
+	Wait(&request, 1, "MPI uint32-max reduction", nullptr);
 	return result;
 }
 
 double MpiContext::AllReduceSumDouble(const double value) const
 {
 	double result = 0.0;
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			&value,
 			&result,
 			1,
 			MPI_DOUBLE,
 			MPI_SUM,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(double sum)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(double sum)");
+	Wait(&request, 1, "MPI double-sum reduction", nullptr);
 	return result;
 }
 
 float MpiContext::AllReduceMinFloat(const float value) const
 {
 	float result = 0.0f;
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			&value,
 			&result,
 			1,
 			MPI_FLOAT,
 			MPI_MIN,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(float min)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(float min)");
+	Wait(&request, 1, "MPI float-min reduction", nullptr);
 	return result;
 }
 
 float MpiContext::AllReduceMaxFloat(const float value) const
 {
 	float result = 0.0f;
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allreduce(
+		MPI_Iallreduce(
 			&value,
 			&result,
 			1,
 			MPI_FLOAT,
 			MPI_MAX,
-			MPI_COMM_WORLD),
-		"MPI_Allreduce(float max)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallreduce(float max)");
+	Wait(&request, 1, "MPI float-max reduction", nullptr);
 	return result;
 }
 
@@ -334,32 +442,39 @@ void MpiContext::AllGatherDouble(
 	std::vector<double>& values) const
 {
 	values.resize(static_cast<uint64_t>(N_ranks_));
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Allgather(
+		MPI_Iallgather(
 			&localValue,
 			1,
 			MPI_DOUBLE,
 			values.data(),
 			1,
 			MPI_DOUBLE,
-			MPI_COMM_WORLD),
-		"MPI_Allgather(double)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Iallgather(double)");
+	Wait(&request, 1, "MPI double all-gather", nullptr);
 }
 
 void MpiContext::AllReduceSumUint32s(std::vector<uint32_t>& values) const
 {
 	ForEachMpiVectorChunk(
 		values,
-		"MPI_Allreduce(uint32s)",
-		[](uint32_t* chunkData, const int N_chunkValues)
+		[this](uint32_t* chunkData, const int N_chunkValues)
 		{
-			return MPI_Allreduce(
-				MPI_IN_PLACE,
-				chunkData,
-				N_chunkValues,
-				MPI_UINT32_T,
-				MPI_SUM,
-				MPI_COMM_WORLD);
+			MPI_Request request = MPI_REQUEST_NULL;
+			CheckMpiResult(
+				MPI_Iallreduce(
+					MPI_IN_PLACE,
+					chunkData,
+					N_chunkValues,
+					MPI_UINT32_T,
+					MPI_SUM,
+					MPI_COMM_WORLD,
+					&request),
+				"MPI_Iallreduce(uint32s)");
+			Wait(&request, 1, "MPI uint32-vector sum reduction", nullptr);
 		});
 }
 
@@ -367,16 +482,20 @@ void MpiContext::AllReduceSumFloats(std::vector<float>& values) const
 {
 	ForEachMpiVectorChunk(
 		values,
-		"MPI_Allreduce(floats)",
-		[](float* chunkData, const int N_chunkValues)
+		[this](float* chunkData, const int N_chunkValues)
 		{
-			return MPI_Allreduce(
-				MPI_IN_PLACE,
-				chunkData,
-				N_chunkValues,
-				MPI_FLOAT,
-				MPI_SUM,
-				MPI_COMM_WORLD);
+			MPI_Request request = MPI_REQUEST_NULL;
+			CheckMpiResult(
+				MPI_Iallreduce(
+					MPI_IN_PLACE,
+					chunkData,
+					N_chunkValues,
+					MPI_FLOAT,
+					MPI_SUM,
+					MPI_COMM_WORLD,
+					&request),
+				"MPI_Iallreduce(floats)");
+			Wait(&request, 1, "MPI float-vector sum reduction", nullptr);
 		});
 }
 
@@ -397,16 +516,19 @@ void MpiContext::AllToAllInts(
 	}
 
 	recvValues.resize(N_expectedValues);
+	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
-		MPI_Alltoall(
+		MPI_Ialltoall(
 			sendValues.data(),
 			N_valuesPerRank,
 			MPI_INT,
 			recvValues.data(),
 			N_valuesPerRank,
 			MPI_INT,
-			MPI_COMM_WORLD),
-		"MPI_Alltoall(int)");
+			MPI_COMM_WORLD,
+			&request),
+		"MPI_Ialltoall(int)");
+	Wait(&request, 1, "MPI int all-to-all", nullptr);
 }
 
 void MpiContext::IRecvInt(
@@ -506,7 +628,8 @@ void MpiContext::IRecvBytesChunked(
 	const uint64_t N_recvBytes,
 	const int peerRank,
 	const int tag,
-	std::vector<MPI_Request>& requests) const
+	std::vector<MPI_Request>& requests,
+	std::vector<MpiRequestInfo>* requestInfos) const
 {
 	if (N_recvBytes == 0) { return; }
 	if (recvData == nullptr)
@@ -531,6 +654,15 @@ void MpiContext::IRecvBytesChunked(
 			peerRank,
 			tag,
 			requests.back());
+		if (requestInfos)
+		{
+			requestInfos->push_back({
+				.peerRank = peerRank,
+				.tag = tag,
+				.N_bytes = N_chunkBytes,
+				.direction = MpiRequestDirection::Receive
+			});
+		}
 
 		byteOffset += N_chunkBytes;
 	}
@@ -541,7 +673,8 @@ void MpiContext::ISendBytesChunked(
 	const uint64_t N_sendBytes,
 	const int peerRank,
 	const int tag,
-	std::vector<MPI_Request>& requests) const
+	std::vector<MPI_Request>& requests,
+	std::vector<MpiRequestInfo>* requestInfos) const
 {
 	if (N_sendBytes == 0) { return; }
 	if (sendData == nullptr)
@@ -566,6 +699,15 @@ void MpiContext::ISendBytesChunked(
 			peerRank,
 			tag,
 			requests.back());
+		if (requestInfos)
+		{
+			requestInfos->push_back({
+				.peerRank = peerRank,
+				.tag = tag,
+				.N_bytes = N_chunkBytes,
+				.direction = MpiRequestDirection::Send
+			});
+		}
 
 		byteOffset += N_chunkBytes;
 	}
@@ -573,37 +715,121 @@ void MpiContext::ISendBytesChunked(
 
 void MpiContext::WaitAll(
 	std::vector<MPI_Request>& requests,
-	const char* context) const
+	const char* context,
+	const std::vector<MpiRequestInfo>* requestInfos) const
 {
-	if (requests.empty()) { return; }
-	if (requests.size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
+	if (requestInfos && requestInfos->size() != requests.size())
+	{
+		throw std::runtime_error("MPI request diagnostics do not match the request count.");
+	}
+	Wait(
+		requests.data(), requests.size(), context,
+		requestInfos ? requestInfos->data() : nullptr);
+}
+
+void MpiContext::Wait(
+	MPI_Request* requests,
+	const uint64_t N_requests,
+	const char* context,
+	const MpiRequestInfo* requestInfos) const
+{
+	if (N_requests == 0) { return; }
+	if (N_requests > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 	{
 		throw std::runtime_error("MPI request count exceeds int range.");
 	}
 
 	const std::string opName = context && context[0] != '\0'
-		? "MPI_Waitall (" + std::string(context) + ")"
-		: "MPI_Waitall";
-	waitStatuses_.resize(requests.size());
-	const int result = MPI_Waitall(
-		static_cast<int>(requests.size()),
-		requests.data(),
-		waitStatuses_.data());
-	if (result == MPI_SUCCESS) { return; }
+		? std::string(context)
+		: "MPI request completion";
+	waitStatuses_.resize(N_requests);
+	const auto waitStart = std::chrono::steady_clock::now();
+	bool warningPrinted = false;
+	uint64_t N_polls = 0;
 
-	if (result == MPI_ERR_IN_STATUS)
+	while (true)
 	{
-		for (uint64_t requestIdx = 0; requestIdx != requests.size(); requestIdx++)
+		int complete = 0;
+		const int result = MPI_Testall(
+			static_cast<int>(N_requests),
+			requests,
+			&complete,
+			waitStatuses_.data());
+		if (result != MPI_SUCCESS)
 		{
-			if (waitStatuses_[requestIdx].MPI_ERROR == MPI_SUCCESS) { continue; }
+			if (result == MPI_ERR_IN_STATUS)
+			{
+				for (uint64_t requestIdx = 0; requestIdx != N_requests; requestIdx++)
+				{
+					const int requestError = waitStatuses_[requestIdx].MPI_ERROR;
+					if (requestError == MPI_SUCCESS || requestError == MPI_ERR_PENDING) { continue; }
 
-			const std::string requestOpName = opName + " request " +
-				std::to_string(requestIdx);
-			Abort(requestOpName.c_str(), waitStatuses_[requestIdx].MPI_ERROR);
+					const std::string requestOpName = opName + " request " +
+						std::to_string(requestIdx);
+					Abort(requestOpName.c_str(), requestError);
+				}
+			}
+			Abort(opName.c_str(), result);
+		}
+		if (complete) { return; }
+		N_polls += 1;
+		if (N_polls % MPI_WAIT_CLOCK_CHECK_INTERVAL != 0) { continue; }
+
+		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - waitStart);
+		if (!warningPrinted && elapsed >= waitConfig_.warningTimeout)
+		{
+			warningPrinted = true;
+			std::fprintf(
+				stderr,
+				"[rank %d/%d host=%s pid=%lld] MPI wait is still pending after %lld ms: %s.\n",
+				rank_, N_ranks_, processorName_.c_str(),
+				static_cast<long long>(processId_),
+				static_cast<long long>(elapsed.count()), opName.c_str());
+
+			for (uint64_t requestIdx = 0; requestIdx != N_requests; requestIdx++)
+			{
+				if (requests[requestIdx] == MPI_REQUEST_NULL) { continue; }
+				int requestComplete = 0;
+				MPI_Status status{};
+				CheckMpiResult(
+					MPI_Request_get_status(requests[requestIdx], &requestComplete, &status),
+					"MPI_Request_get_status");
+				if (requestComplete) { continue; }
+
+				if (requestInfos)
+				{
+					const MpiRequestInfo& info = requestInfos[requestIdx];
+					std::fprintf(
+						stderr,
+						"[rank %d/%d host=%s pid=%lld] Pending MPI request %llu: direction=%s peer=%d tag=%d bytes=%llu.\n",
+						rank_, N_ranks_, processorName_.c_str(),
+						static_cast<long long>(processId_),
+						static_cast<unsigned long long>(requestIdx),
+						info.direction == MpiRequestDirection::Receive ? "receive" : "send",
+						info.peerRank, info.tag,
+						static_cast<unsigned long long>(info.N_bytes));
+				}
+				else
+				{
+					std::fprintf(
+						stderr,
+						"[rank %d/%d host=%s pid=%lld] Pending MPI request %llu.\n",
+						rank_, N_ranks_, processorName_.c_str(),
+						static_cast<long long>(processId_),
+						static_cast<unsigned long long>(requestIdx));
+				}
+			}
+			std::fflush(stderr);
+		}
+
+		if (elapsed >= waitConfig_.abortTimeout)
+		{
+			AbortJob(
+				"MPI wait timed out after " + std::to_string(elapsed.count()) +
+				" ms: " + opName + ".");
 		}
 	}
-
-	Abort(opName.c_str(), result);
 }
 
 const char* MpiContext::ThreadSupportName(const int threadSupport)

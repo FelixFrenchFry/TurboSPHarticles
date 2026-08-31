@@ -69,6 +69,16 @@ namespace Sim
 		double abs = 0.0;
 	};
 
+	enum class FluidSolverSyncPhase : uint8_t
+	{
+		Density,
+		PredictedVelocity,
+		InitialPressure,
+		PressureAcceleration,
+		Pressure,
+		PressureErrorReduction,
+	};
+
 	// optional owner-to-halo synchronization used by distributed fluid solvers
 	class I_DistributedFluidSolverSync
 	{
@@ -84,23 +94,31 @@ namespace Sim
 		// split owner-to-halo exchange of fluid values over the selected halo extent
 		virtual void BeginSynchronizeFluidScalarField(
 			std::span<float> values,
-			Base::DistHaloMode haloExtent) = 0;
+			Base::DistHaloMode haloExtent,
+			FluidSolverSyncPhase phase,
+			uint32_t iteration) = 0;
 		virtual void BeginSynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
 			std::span<float> zValues,
-			Base::DistHaloMode haloExtent) = 0;
+			Base::DistHaloMode haloExtent,
+			FluidSolverSyncPhase phase,
+			uint32_t iteration) = 0;
 		virtual void EndSynchronizeFluidFields() = 0;
 
 		// blocking form of the split exchange
 		virtual void SynchronizeFluidScalarField(
 			std::span<float> values,
-			Base::DistHaloMode haloExtent) = 0;
+			Base::DistHaloMode haloExtent,
+			FluidSolverSyncPhase phase,
+			uint32_t iteration) = 0;
 		virtual void SynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
 			std::span<float> zValues,
-			Base::DistHaloMode haloExtent) = 0;
+			Base::DistHaloMode haloExtent,
+			FluidSolverSyncPhase phase,
+			uint32_t iteration) = 0;
 
 		// overwrites fluid halo flags with the values held by their owning ranks
 		virtual void SynchronizeFluidParticleFlagsToHalos(
@@ -108,7 +126,8 @@ namespace Sim
 			Base::DistHaloMode haloExtent) = 0;
 
 		virtual PressureSolveErrorSums GlobalizePressureSolveErrorSums(
-			const PressureSolveErrorSums& localSums) const = 0;
+			const PressureSolveErrorSums& localSums,
+			uint32_t iteration) const = 0;
 		virtual uint64_t GetGlobalFluidParticleCount() const = 0;
 	};
 

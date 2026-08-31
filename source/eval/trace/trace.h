@@ -6,8 +6,10 @@
 
 // external
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string_view>
 
 // internal
 #include "stages.h"
@@ -25,12 +27,27 @@ namespace Trace
 	{
 	public:
 
-		bool BeginRun(const std::filesystem::path& runDir, int mpiRank = 0);
+		bool BeginRun(
+			const std::filesystem::path& runDir,
+			int mpiRank = 0,
+			bool enableFluidSynchronization = false);
 		void EndRun();
 
 		bool IsActive() const { return active_; }
+		bool IsFluidSynchronizationActive() const
+		{
+			return active_ && fluidSynchronizationEnabled_;
+		}
 		void BeginStep(uint64_t simStep, double simTime);
 		void Mark(TraceStage stage);
+		void MarkFluidSynchronization(
+			std::string_view phase,
+			std::string_view event,
+			uint32_t iteration,
+			uint64_t epoch,
+			uint32_t N_peers,
+			uint64_t N_sendBytes,
+			uint64_t N_recvBytes);
 
 	private:
 
@@ -45,6 +62,7 @@ namespace Trace
 		double simTime_ = 0.0;
 		Clock::time_point stepStart_{};
 		bool active_ = false;
+		bool fluidSynchronizationEnabled_ = false;
 
 		void Disable();
 		void WriteMarker(TraceStage stage);

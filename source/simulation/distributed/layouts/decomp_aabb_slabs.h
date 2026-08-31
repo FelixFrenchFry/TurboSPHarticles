@@ -13,7 +13,7 @@
 
 namespace Dist
 {
-	// dynamically sized AABB slabs, split along the global X axis
+	// dynamically sized AABB slabs, split along the selected axis
 	class Decomp_AABB_Slabs final : public IDomainDecomp
 	{
 	public:
@@ -41,7 +41,7 @@ namespace Dist
 
 	private:
 
-		static constexpr int SPLIT_AXIS = 0;
+		static constexpr int SPLIT_AXIS = 2;
 		static constexpr uint32_t PROFILE_BIN_COUNT = 256;
 
 		AABBSlabLayout slabLayout_;

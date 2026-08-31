@@ -5,6 +5,7 @@
 // external
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -21,13 +22,33 @@
 
 
 
+namespace Trace
+{
+	class TraceRecorder;
+}
+
 namespace Dist
 {
-	// separate tags for plan counts, global-index validation, and solver payloads
+	// separate tags for plan validation and solver payloads
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_COUNT = 6200;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS = 6201;
-	inline constexpr int FLUID_SOLVER_SYNC_TAG_PAYLOAD = 6202;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_DENSITY = 6202;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD = 6203;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_FINGERPRINT = 6204;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_PREDICTED_VELOCITY = 6205;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_INITIAL_PRESSURE = 6206;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_PRESSURE_ACCELERATION = 6207;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_PRESSURE = 6208;
+
+	struct FluidSolverSyncPayloadProtocol
+	{
+		int tag = -1;
+		uint32_t N_fields = 0;
+	};
+
+	// phase-specific message identity and payload shape for solver field exchanges
+	std::optional<FluidSolverSyncPayloadProtocol> GetFluidSolverSyncPayloadProtocol(
+		Sim::FluidSolverSyncPhase phase) noexcept;
 
 	// particles packed per block, keeping one block of every field cache resident
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
@@ -46,7 +67,7 @@ namespace Dist
 	public:
 
 		// builds the peer exchange plan from the current owned and remote particles
-		// (collective peer-count validation is enabled in every build,
+		// (collective peer-count and fingerprint validation is enabled in every build,
 		// full peer-plan validation is enabled in debug/validation builds)
 		bool Rebuild(
 			const Sync::FluidConstView& particlesF,
@@ -57,6 +78,7 @@ namespace Dist
 			uint64_t N_expectedGlobalF,
 			MpiContext& mpiContext,
 			Bench::BenchmarksTracker& benchmarksTracker,
+			Trace::TraceRecorder& traceRecorder,
 			std::string* failMsg = nullptr);
 
 		// remaps the plan onto re-ordered backend storage, leaving global particle IDs unchanged
@@ -66,29 +88,38 @@ namespace Dist
 		// overwrites remote values with the ones held by their owning rank
 		void BeginSynchronizeFluidScalarField(
 			std::span<float> values,
-			Base::DistHaloMode haloExtent) override;
+			Base::DistHaloMode haloExtent,
+			Sim::FluidSolverSyncPhase phase,
+			uint32_t iteration) override;
 		void BeginSynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
 			std::span<float> zValues,
-			Base::DistHaloMode haloExtent) override;
+			Base::DistHaloMode haloExtent,
+			Sim::FluidSolverSyncPhase phase,
+			uint32_t iteration) override;
 		void EndSynchronizeFluidFields() override;
 
 		void SynchronizeFluidScalarField(
 			std::span<float> values,
-			Base::DistHaloMode haloExtent) override;
+			Base::DistHaloMode haloExtent,
+			Sim::FluidSolverSyncPhase phase,
+			uint32_t iteration) override;
 		void SynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
 			std::span<float> zValues,
-			Base::DistHaloMode haloExtent) override;
+			Base::DistHaloMode haloExtent,
+			Sim::FluidSolverSyncPhase phase,
+			uint32_t iteration) override;
 		void SynchronizeFluidParticleFlagsToHalos(
 			std::span<uint8_t> flags,
 			Base::DistHaloMode haloExtent) override;
 
 		// sums rank-local solver errors, normalization happens in the solver
 		Sim::PressureSolveErrorSums GlobalizePressureSolveErrorSums(
-			const Sim::PressureSolveErrorSums& localSums) const override;
+			const Sim::PressureSolveErrorSums& localSums,
+			uint32_t iteration) const override;
 		uint64_t GetGlobalFluidParticleCount() const override { return N_globalF_; }
 
 		Mem::MemUsage GetExchangeBufferMemoryUsage() const;
@@ -161,7 +192,17 @@ namespace Dist
 		void BeginSynchronizeFluidFields(
 			const std::array<std::span<float>, 3>& fields,
 			uint32_t N_fields,
-			Base::DistHaloMode haloExtent);
+			Base::DistHaloMode haloExtent,
+			Sim::FluidSolverSyncPhase phase,
+			uint32_t iteration);
+
+		void MarkSynchronizationTrace(
+			Sim::FluidSolverSyncPhase phase,
+			const char* event,
+			uint32_t iteration,
+			uint64_t epoch,
+			uint64_t N_sendBytes,
+			uint64_t N_recvBytes) const;
 
 		// rebuilds both single and double halo work schedules from the published peer plans
 		void BuildFieldSyncSchedules();
@@ -178,6 +219,7 @@ namespace Dist
 		// set when Rebuild() publishes a validated plan
 		MpiContext* mpiContext_ = nullptr;
 		Bench::BenchmarksTracker* benchmarksTracker_ = nullptr;
+		Trace::TraceRecorder* traceRecorder_ = nullptr;
 
 		// particle counts the current plan was built for
 		uint64_t N_globalF_ = 0;
@@ -191,9 +233,16 @@ namespace Dist
 		std::array<FieldSyncSchedule, N_HALO_EXTENTS> fieldSyncSchedules_;
 
 		std::vector<MPI_Request> requests_;
+		std::vector<MpiRequestInfo> requestInfos_;
 		std::array<std::span<float>, 3> pendingFields_{};
 		uint32_t N_pendingFields_ = 0;
 		Base::DistHaloMode pendingHaloExtent_ = Base::DistHaloMode::SingleHalo;
+		Sim::FluidSolverSyncPhase pendingPhase_ = Sim::FluidSolverSyncPhase::Density;
+		uint32_t pendingIteration_ = 0;
+		uint64_t pendingEpoch_ = 0;
+		uint64_t pendingSendBytes_ = 0;
+		uint64_t pendingRecvBytes_ = 0;
+		mutable uint64_t synchronizationEpoch_ = 0;
 		bool fluidFieldExchangePending_ = false;
 
 		// reusable rebuild storage

@@ -17,6 +17,7 @@
 // internal
 #include "source/base/helpers.h"
 #include "source/base/parallel_checks.h"
+#include "source/eval/trace/trace.h"
 #include "parallel_utils.h"
 #include "fluid_solver_sync.h"
 
@@ -24,8 +25,77 @@
 
 using namespace Dist;
 
+std::optional<FluidSolverSyncPayloadProtocol> Dist::GetFluidSolverSyncPayloadProtocol(
+	const Sim::FluidSolverSyncPhase phase) noexcept
+{
+	switch (phase)
+	{
+	case Sim::FluidSolverSyncPhase::Density:
+		return FluidSolverSyncPayloadProtocol{
+			.tag = FLUID_SOLVER_SYNC_TAG_DENSITY,
+			.N_fields = 1
+		};
+	case Sim::FluidSolverSyncPhase::PredictedVelocity:
+		return FluidSolverSyncPayloadProtocol{
+			.tag = FLUID_SOLVER_SYNC_TAG_PREDICTED_VELOCITY,
+			.N_fields = 3
+		};
+	case Sim::FluidSolverSyncPhase::InitialPressure:
+		return FluidSolverSyncPayloadProtocol{
+			.tag = FLUID_SOLVER_SYNC_TAG_INITIAL_PRESSURE,
+			.N_fields = 1
+		};
+	case Sim::FluidSolverSyncPhase::PressureAcceleration:
+		return FluidSolverSyncPayloadProtocol{
+			.tag = FLUID_SOLVER_SYNC_TAG_PRESSURE_ACCELERATION,
+			.N_fields = 3
+		};
+	case Sim::FluidSolverSyncPhase::Pressure:
+		return FluidSolverSyncPayloadProtocol{
+			.tag = FLUID_SOLVER_SYNC_TAG_PRESSURE,
+			.N_fields = 1
+		};
+	case Sim::FluidSolverSyncPhase::PressureErrorReduction:
+		return std::nullopt;
+	}
+
+	return std::nullopt;
+}
+
 namespace
 {
+	const char* FluidSolverSyncPhaseName(const Sim::FluidSolverSyncPhase phase)
+	{
+		switch (phase)
+		{
+		case Sim::FluidSolverSyncPhase::Density:
+			return "density";
+		case Sim::FluidSolverSyncPhase::PredictedVelocity:
+			return "predicted_velocity";
+		case Sim::FluidSolverSyncPhase::InitialPressure:
+			return "initial_pressure";
+		case Sim::FluidSolverSyncPhase::PressureAcceleration:
+			return "pressure_acceleration";
+		case Sim::FluidSolverSyncPhase::Pressure:
+			return "pressure";
+		case Sim::FluidSolverSyncPhase::PressureErrorReduction:
+			return "pressure_error_reduction";
+		}
+
+		return "unknown";
+	}
+
+	std::string FluidSolverSyncContext(
+		const Sim::FluidSolverSyncPhase phase,
+		const uint32_t iteration,
+		const uint64_t epoch)
+	{
+		return "fluid solver synchronization (phase=" +
+			std::string(FluidSolverSyncPhaseName(phase)) +
+			", iteration=" + std::to_string(iteration) +
+			", epoch=" + std::to_string(epoch) + ")";
+	}
+
 	// retain the first local validation failure for rank-wide reporting
 	bool SetFailure(std::string& localFailMsg, const std::string& failMsg)
 	{
@@ -102,6 +172,30 @@ namespace
 			}) != 0;
 	}
 
+	using FluidSolverPlanFingerprint = std::array<uint64_t, 2>;
+
+	// compact, deterministic fingerprint of an ordered global-particle-ID plan
+	FluidSolverPlanFingerprint BuildFluidSolverPlanFingerprint(
+		const std::span<const uint32_t> globalIdxs) noexcept
+	{
+		// two independent 64-bit streams over a canonical little-endian encoding
+		uint64_t first = 14695981039346656037ull;
+		uint64_t second = 7809847782465536322ull;
+		for (const uint32_t globalIdx : globalIdxs)
+		{
+			for (uint32_t byteIdx = 0; byteIdx != sizeof(globalIdx); byteIdx++)
+			{
+				const uint8_t byte = static_cast<uint8_t>(globalIdx >> (byteIdx * 8));
+				first = (first ^ byte) * 1099511628211ull;
+				second = (second ^ byte) * 14029467366897019727ull;
+			}
+		}
+
+		first = (first ^ globalIdxs.size()) * 1099511628211ull;
+		second = (second ^ globalIdxs.size()) * 14029467366897019727ull;
+		return { first, second };
+	}
+
 } // namespace anonymous
 
 void FluidSolverSyncMgr::AppendFieldSyncWorkItems(
@@ -161,12 +255,14 @@ bool FluidSolverSyncMgr::Rebuild(
 	const uint64_t N_expectedGlobalF,
 	MpiContext& mpiContext,
 	Bench::BenchmarksTracker& benchmarksTracker,
+	Trace::TraceRecorder& traceRecorder,
 	std::string* failMsg)
 {
 	std::string localFailMsg;
 	bool localOk = true;
 
 	// --- [ input validation ] ----------------------------------------------------------------------
+
 	if (fluidFieldExchangePending_)
 	{
 		localOk = SetFailure(localFailMsg,
@@ -640,8 +736,8 @@ bool FluidSolverSyncMgr::Rebuild(
 		return false;
 	}
 
-	// peer counts validated in every build,
-	// the more expensive global-ID exchange is for debug/validation builds
+	// peer counts and ordered-ID fingerprints are validated in every build,
+	// the full global-ID exchange remains available in debug/validation builds
 	const auto ValidatePeerPlan = [&](const Base::DistHaloMode haloExtent) -> bool
 	{
 		// --- [ peer count exchange ] ---------------------------------------------------------------
@@ -649,7 +745,9 @@ bool FluidSolverSyncMgr::Rebuild(
 		std::vector<int> sendCounts(newPeerPlans.size(), 0);
 		std::vector<int> recvCounts(newPeerPlans.size(), 0);
 		requests_.clear();
+		requestInfos_.clear();
 		requests_.reserve(newPeerPlans.size() * 2);
+		requestInfos_.reserve(newPeerPlans.size() * 2);
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			const ParticlePlan& particlePlan =
@@ -676,6 +774,12 @@ bool FluidSolverSyncMgr::Rebuild(
 			mpiContext.IRecvInt(
 				recvCounts[peerIdx], newPeerPlans[peerIdx].rank,
 				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
+			requestInfos_.push_back({
+				.peerRank = newPeerPlans[peerIdx].rank,
+				.tag = FLUID_SOLVER_SYNC_TAG_COUNT,
+				.N_bytes = sizeof(int),
+				.direction = MpiRequestDirection::Receive
+			});
 		}
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
@@ -683,8 +787,15 @@ bool FluidSolverSyncMgr::Rebuild(
 			mpiContext.ISendInt(
 				sendCounts[peerIdx], newPeerPlans[peerIdx].rank,
 				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
+			requestInfos_.push_back({
+				.peerRank = newPeerPlans[peerIdx].rank,
+				.tag = FLUID_SOLVER_SYNC_TAG_COUNT,
+				.N_bytes = sizeof(int),
+				.direction = MpiRequestDirection::Send
+			});
 		}
-		mpiContext.WaitAll(requests_, "fluid solver peer particle counts");
+		mpiContext.WaitAll(
+			requests_, "fluid solver peer particle counts", &requestInfos_);
 
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
@@ -709,11 +820,66 @@ bool FluidSolverSyncMgr::Rebuild(
 			return false;
 		}
 
+		// --- [ peer ordered-ID fingerprint exchange ] -----------------------------------------------
+
+		std::vector<FluidSolverPlanFingerprint> sendFingerprints(newPeerPlans.size());
+		std::vector<FluidSolverPlanFingerprint> recvFingerprints(newPeerPlans.size());
+		requests_.clear();
+		requestInfos_.clear();
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			const ParticlePlan& particlePlan =
+				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
+			sendFingerprints[peerIdx] =
+				BuildFluidSolverPlanFingerprint(particlePlan.sendGlobalIdxs);
+			mpiContext.IRecvBytesChunked(
+				recvFingerprints[peerIdx].data(),
+				sizeof(FluidSolverPlanFingerprint),
+				newPeerPlans[peerIdx].rank,
+				FLUID_SOLVER_SYNC_TAG_FINGERPRINT,
+				requests_,
+				&requestInfos_);
+		}
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			mpiContext.ISendBytesChunked(
+				sendFingerprints[peerIdx].data(),
+				sizeof(FluidSolverPlanFingerprint),
+				newPeerPlans[peerIdx].rank,
+				FLUID_SOLVER_SYNC_TAG_FINGERPRINT,
+				requests_,
+				&requestInfos_);
+		}
+		mpiContext.WaitAll(
+			requests_, "fluid solver peer plan fingerprints", &requestInfos_);
+
+		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+		{
+			const ParticlePlan& particlePlan =
+				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
+			if (recvFingerprints[peerIdx] !=
+				BuildFluidSolverPlanFingerprint(particlePlan.recvGlobalIdxs))
+			{
+				localOk = SetFailure(localFailMsg,
+					"Fluid solver synchronization peer plan fingerprint does not match "
+					"the local halo plan (peer rank " +
+					std::to_string(newPeerPlans[peerIdx].rank) + ", " +
+					(haloExtent == Base::DistHaloMode::SingleHalo ? "single" : "double") +
+					" halo).");
+			}
+		}
+		if (!FinishCollectiveValidation(
+			mpiContext, localOk, localFailMsg, failMsg))
+		{
+			return false;
+		}
+
 	#ifndef NDEBUG
 		// --- [ peer global-index exchange ] --------------------------------------------------------
 
 		std::vector<std::vector<uint32_t>> receivedGlobalIdxs(newPeerPlans.size());
 		requests_.clear();
+		requestInfos_.clear();
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			receivedGlobalIdxs[peerIdx].resize(static_cast<uint32_t>(recvCounts[peerIdx]));
@@ -722,7 +888,8 @@ bool FluidSolverSyncMgr::Rebuild(
 				static_cast<uint64_t>(receivedGlobalIdxs[peerIdx].size()) * sizeof(uint32_t),
 				newPeerPlans[peerIdx].rank,
 				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
-				requests_);
+				requests_,
+				&requestInfos_);
 		}
 		for (const PeerPlan& peerPlan : newPeerPlans)
 		{
@@ -732,9 +899,11 @@ bool FluidSolverSyncMgr::Rebuild(
 				static_cast<uint64_t>(particlePlan.sendGlobalIdxs.size()) * sizeof(uint32_t),
 				peerPlan.rank,
 				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
-				requests_);
+				requests_,
+				&requestInfos_);
 		}
-		mpiContext.WaitAll(requests_, "fluid solver peer global IDs");
+		mpiContext.WaitAll(
+			requests_, "fluid solver peer global IDs", &requestInfos_);
 
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
@@ -762,6 +931,7 @@ bool FluidSolverSyncMgr::Rebuild(
 	// publish the locally validated plan after peer-plan validation
 	mpiContext_ = &mpiContext;
 	benchmarksTracker_ = &benchmarksTracker;
+	traceRecorder_ = &traceRecorder;
 	N_localF_ = particlesF.N_;
 	N_globalF_ = N_expectedGlobalF;
 	distHaloMode_ = distHaloMode;
@@ -815,25 +985,33 @@ void FluidSolverSyncMgr::ApplyFluidParticleReOrder(
 
 void FluidSolverSyncMgr::BeginSynchronizeFluidScalarField(
 	const std::span<float> values,
-	const Base::DistHaloMode haloExtent)
+	const Base::DistHaloMode haloExtent,
+	const Sim::FluidSolverSyncPhase phase,
+	const uint32_t iteration)
 {
-	BeginSynchronizeFluidFields({ values, {}, {} }, 1, haloExtent);
+	BeginSynchronizeFluidFields(
+		{ values, {}, {} }, 1, haloExtent, phase, iteration);
 }
 
 void FluidSolverSyncMgr::BeginSynchronizeFluidVectorField(
 	const std::span<float> xValues,
 	const std::span<float> yValues,
 	const std::span<float> zValues,
-	const Base::DistHaloMode haloExtent)
+	const Base::DistHaloMode haloExtent,
+	const Sim::FluidSolverSyncPhase phase,
+	const uint32_t iteration)
 {
-	BeginSynchronizeFluidFields({ xValues, yValues, zValues }, 3, haloExtent);
+	BeginSynchronizeFluidFields(
+		{ xValues, yValues, zValues }, 3, haloExtent, phase, iteration);
 }
 
 void FluidSolverSyncMgr::SynchronizeFluidScalarField(
 	const std::span<float> values,
-	const Base::DistHaloMode haloExtent)
+	const Base::DistHaloMode haloExtent,
+	const Sim::FluidSolverSyncPhase phase,
+	const uint32_t iteration)
 {
-	BeginSynchronizeFluidScalarField(values, haloExtent);
+	BeginSynchronizeFluidScalarField(values, haloExtent, phase, iteration);
 	EndSynchronizeFluidFields();
 }
 
@@ -841,9 +1019,12 @@ void FluidSolverSyncMgr::SynchronizeFluidVectorField(
 	const std::span<float> xValues,
 	const std::span<float> yValues,
 	const std::span<float> zValues,
-	const Base::DistHaloMode haloExtent)
+	const Base::DistHaloMode haloExtent,
+	const Sim::FluidSolverSyncPhase phase,
+	const uint32_t iteration)
 {
-	BeginSynchronizeFluidVectorField(xValues, yValues, zValues, haloExtent);
+	BeginSynchronizeFluidVectorField(
+		xValues, yValues, zValues, haloExtent, phase, iteration);
 	EndSynchronizeFluidFields();
 }
 
@@ -876,7 +1057,9 @@ void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 
 	const uint8_t haloExtentIdx = Base::GetIdx(haloExtent);
 	requests_.clear();
+	requestInfos_.clear();
 	requests_.reserve(peerPlans_.size() * 2);
+	requestInfos_.reserve(peerPlans_.size() * 2);
 
 	// pack every owned flag before posting communication
 	for (PeerPlan& peerPlan : peerPlans_)
@@ -903,7 +1086,8 @@ void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 			particlePlan.recvLocalIdxs.size(),
 			peerPlan.rank,
 			FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD,
-			requests_);
+			requests_,
+			&requestInfos_);
 	}
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
@@ -913,9 +1097,11 @@ void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 			particlePlan.sendLocalIdxs.size(),
 			peerPlan.rank,
 			FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD,
-			requests_);
+			requests_,
+			&requestInfos_);
 	}
-	mpiContext_->WaitAll(requests_, "fluid solver particle flag payloads");
+	mpiContext_->WaitAll(
+		requests_, "fluid solver particle flag payloads", &requestInfos_);
 
 	// overwrite only halo slots with their owner-held flags
 	for (const PeerPlan& peerPlan : peerPlans_)
@@ -932,7 +1118,9 @@ void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	const std::array<std::span<float>, 3>& fields,
 	const uint32_t N_fields,
-	const Base::DistHaloMode haloExtent)
+	const Base::DistHaloMode haloExtent,
+	const Sim::FluidSolverSyncPhase phase,
+	const uint32_t iteration)
 {
 	if (!mpiContext_ || !benchmarksTracker_)
 	{
@@ -941,6 +1129,13 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	if (fluidFieldExchangePending_)
 	{
 		throw std::runtime_error("A fluid solver synchronization exchange is already pending.");
+	}
+	const std::optional<FluidSolverSyncPayloadProtocol> protocol =
+		GetFluidSolverSyncPayloadProtocol(phase);
+	if (!protocol || protocol->N_fields != N_fields)
+	{
+		throw std::runtime_error(
+			"Fluid solver synchronization phase does not match the payload field count.");
 	}
 
 	bool localOk = N_fields > 0 && N_fields <= fields.size() &&
@@ -960,6 +1155,9 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
 	requests_.clear();
+	requestInfos_.clear();
+	uint64_t N_sendBytes = 0;
+	uint64_t N_recvBytes = 0;
 	// grow every peer payload before the parallel pass reads its storage
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
@@ -968,11 +1166,16 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size();
 		const uint64_t N_recvValues =
 			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size();
+		N_sendBytes += N_sendValues * sizeof(float);
+		N_recvBytes += N_recvValues * sizeof(float);
 
 		// pack owned values in field-major order for each peer
 		Base::ResizeGrowScratchVector(peerPlan.sendBuffer, N_sendValues);
 		Base::ResizeGrowScratchVector(peerPlan.recvBuffer, N_recvValues);
 	}
+	const uint64_t epoch = ++synchronizationEpoch_;
+	MarkSynchronizationTrace(
+		phase, "begin", iteration, epoch, N_sendBytes, N_recvBytes);
 
 	// gather every field sequentially within each parallel work item
 	// (work items span every peer, so no peer waits for another one to finish packing)
@@ -1013,8 +1216,9 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 			peerPlan.recvBuffer.data(),
 			N_recvValues * sizeof(float),
 			peerPlan.rank,
-			FLUID_SOLVER_SYNC_TAG_PAYLOAD,
-			requests_);
+			protocol->tag,
+			requests_,
+			&requestInfos_);
 	}
 	for (const PeerPlan& peerPlan : peerPlans_)
 	{
@@ -1025,13 +1229,21 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 			peerPlan.sendBuffer.data(),
 			N_sendValues * sizeof(float),
 			peerPlan.rank,
-			FLUID_SOLVER_SYNC_TAG_PAYLOAD,
-			requests_);
+			protocol->tag,
+			requests_,
+			&requestInfos_);
 	}
 	pendingFields_ = fields;
 	N_pendingFields_ = N_fields;
 	pendingHaloExtent_ = haloExtent;
+	pendingPhase_ = phase;
+	pendingIteration_ = iteration;
+	pendingEpoch_ = epoch;
+	pendingSendBytes_ = N_sendBytes;
+	pendingRecvBytes_ = N_recvBytes;
 	fluidFieldExchangePending_ = true;
+	MarkSynchronizationTrace(
+		phase, "posted", iteration, epoch, N_sendBytes, N_recvBytes);
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
 }
 
@@ -1047,7 +1259,12 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 	}
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
-	mpiContext_->WaitAll(requests_, "fluid solver field payloads");
+	MarkSynchronizationTrace(
+		pendingPhase_, "wait", pendingIteration_, pendingEpoch_,
+		pendingSendBytes_, pendingRecvBytes_);
+	const std::string waitContext = FluidSolverSyncContext(
+		pendingPhase_, pendingIteration_, pendingEpoch_);
+	mpiContext_->WaitAll(requests_, waitContext.c_str(), &requestInfos_);
 	// unpack halo values
 	// (every halo slot is owned by exactly one peer, so work items write disjoint slots)
 	const FieldSyncSchedule& schedule = fieldSyncSchedules_[Base::GetIdx(pendingHaloExtent_)];
@@ -1077,14 +1294,22 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 			}
 		}
 	});
+	MarkSynchronizationTrace(
+		pendingPhase_, "complete", pendingIteration_, pendingEpoch_,
+		pendingSendBytes_, pendingRecvBytes_);
 	pendingFields_ = {};
 	N_pendingFields_ = 0;
+	pendingIteration_ = 0;
+	pendingEpoch_ = 0;
+	pendingSendBytes_ = 0;
+	pendingRecvBytes_ = 0;
 	fluidFieldExchangePending_ = false;
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
 }
 
 Sim::PressureSolveErrorSums FluidSolverSyncMgr::GlobalizePressureSolveErrorSums(
-	const Sim::PressureSolveErrorSums& localSums) const
+	const Sim::PressureSolveErrorSums& localSums,
+	const uint32_t iteration) const
 {
 	if (!mpiContext_)
 	{
@@ -1092,14 +1317,49 @@ Sim::PressureSolveErrorSums FluidSolverSyncMgr::GlobalizePressureSolveErrorSums(
 	}
 
 	// reduce raw, positive, and absolute errors
+	const uint64_t epoch = ++synchronizationEpoch_;
+	constexpr uint64_t N_bytes = sizeof(double) * 3;
+	MarkSynchronizationTrace(
+		Sim::FluidSolverSyncPhase::PressureErrorReduction,
+		"wait", iteration, epoch, N_bytes, N_bytes);
 	std::array<double, 3> sums{ localSums.raw, localSums.pos, localSums.abs };
-	mpiContext_->AllReduceSumDoubles(sums);
+	const std::string waitContext = FluidSolverSyncContext(
+		Sim::FluidSolverSyncPhase::PressureErrorReduction, iteration, epoch);
+	mpiContext_->AllReduceSumDoubles(sums, waitContext.c_str());
+	MarkSynchronizationTrace(
+		Sim::FluidSolverSyncPhase::PressureErrorReduction,
+		"complete", iteration, epoch, N_bytes, N_bytes);
 	return Sim::PressureSolveErrorSums
 	{
 		.raw = sums[0],
 		.pos = sums[1],
 		.abs = sums[2]
 	};
+}
+
+void FluidSolverSyncMgr::MarkSynchronizationTrace(
+	const Sim::FluidSolverSyncPhase phase,
+	const char* event,
+	const uint32_t iteration,
+	const uint64_t epoch,
+	const uint64_t N_sendBytes,
+	const uint64_t N_recvBytes) const
+{
+	if (!traceRecorder_ || !traceRecorder_->IsFluidSynchronizationActive() ||
+		!benchmarksTracker_)
+	{
+		return;
+	}
+
+	const uint32_t N_peers = phase == Sim::FluidSolverSyncPhase::PressureErrorReduction &&
+		mpiContext_
+		? static_cast<uint32_t>(std::max(mpiContext_->Size() - 1, 0))
+		: static_cast<uint32_t>(peerPlans_.size());
+	benchmarksTracker_->PauseActiveTimers();
+	traceRecorder_->MarkFluidSynchronization(
+		FluidSolverSyncPhaseName(phase), event, iteration, epoch,
+		N_peers, N_sendBytes, N_recvBytes);
+	benchmarksTracker_->ResumeActiveTimers();
 }
 
 Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const
@@ -1118,6 +1378,7 @@ Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const
 		}
 	}
 	Mem::Add(usage, Mem::MemUsageOf_Vector(requests_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(requestInfos_));
 
 	return usage;
 }
@@ -1128,23 +1389,16 @@ Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 	Mem::MemUsage usage = Mem::MemUsageOf_Vector(peerPlans_);
 
 	Mem::Add(usage, Mem::MemUsageOf_Vector(nextPeerPlans_));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.sendCounts_ByChunkBucket));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.sendWriteOffsets_ByChunkBucket));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.sendCounts_ByChunkBucket));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.sendWriteOffsets_ByChunkBucket));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.sendTotals));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.recvCounts_ByChunkBucket));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.recvWriteOffsets_ByChunkBucket));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.recvCounts_ByChunkBucket));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.recvWriteOffsets_ByChunkBucket));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.recvTotals));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.peerIdx_ByRank));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.sendSingleBounds_ByPeer));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.sendDoubleBounds_ByPeer));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(
-		planBuildWorkBuffers_.recvPeerIdx_ByHaloIdx));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.sendSingleBounds_ByPeer));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.sendDoubleBounds_ByPeer));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(planBuildWorkBuffers_.recvPeerIdx_ByHaloIdx));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(peerIdxSortScratch_));
 	for (const FieldSyncSchedule& schedule : fieldSyncSchedules_)
 	{

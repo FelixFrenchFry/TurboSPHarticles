@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -16,6 +17,7 @@
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <tbb/blocked_range.h>
@@ -41,6 +43,12 @@ using namespace Dist;
 
 namespace
 {
+	bool FluidSynchronizationTraceEnabled()
+	{
+		const char* const value = std::getenv("TSP_TRACE_FLUID_SYNC");
+		return value && std::string_view(value) == "1";
+	}
+
 	// checksum over the global indices owned by this rank, summed across all ranks it has
 	// to stay at the value the initial partition produced (wrap-around sums are intended)
 	uint64_t OwnedGlobalIdxChecksum(
@@ -1252,10 +1260,14 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to apply initial domain decomp profile: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-		localOk = false;
+		mpiContext_.AbortJob(
+			"Failed to apply initial domain decomp profile: " +
+			std::string(ex.what()));
+	}
+	catch (...)
+	{
+		mpiContext_.AbortJob(
+			"Failed to apply initial domain decomp profile: unknown error.");
 	}
 
 	return mpiContext_.AllTrue(localOk);
@@ -1659,6 +1671,7 @@ bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
 			N_expectedGlobalF_,
 			mpiContext_,
 			*benchmarksTracker_,
+			traceRecorder_,
 			&failMsg))
 		{
 			localOk = false;
@@ -1666,8 +1679,14 @@ bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
 	}
 	catch (const std::exception& ex)
 	{
-		failMsg = ex.what();
-		localOk = false;
+		mpiContext_.AbortJob(
+			"Failed to rebuild distributed fluid solver synchronization: " +
+			std::string(ex.what()));
+	}
+	catch (...)
+	{
+		mpiContext_.AbortJob(
+			"Failed to rebuild distributed fluid solver synchronization: unknown error.");
 	}
 
 	if (!localOk)
@@ -1950,7 +1969,9 @@ void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
 	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params,
 		simParamsMgr_.CliOverrides(), mpiContext_.IsRoot());
-	traceRecorder_.BeginRun(loggingMgr_.GetRunDir(), mpiContext_.Rank());
+	traceRecorder_.BeginRun(
+		loggingMgr_.GetRunDir(), mpiContext_.Rank(),
+		FluidSynchronizationTraceEnabled());
 }
 
 void DistSimulationMgr::MarkTrace(const Trace::TraceStage stage)
@@ -2363,15 +2384,20 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		}
 		catch (const std::exception& ex)
 		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed rank-local backend solver step: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-			localOk = false;
+			mpiContext_.AbortJob(
+				"Failed rank-local backend solver step: " + std::string(ex.what()));
+		}
+		catch (...)
+		{
+			mpiContext_.AbortJob(
+				"Failed rank-local backend solver step: unknown error.");
 		}
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_RankBackendStep);
+		MarkTrace(Trace::TraceStage::Dist_RankBackendStepComplete);
 
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
-		const bool backendOk = mpiContext_.AllTrue(localOk);
+		const bool backendOk = mpiContext_.AllTrue(
+			localOk, "distributed rank backend completion");
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!backendOk) { return false; }
 
@@ -2387,10 +2413,13 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		}
 		catch (const std::exception& ex)
 		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed to apply backend particle re-order: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-			localOk = false;
+			mpiContext_.AbortJob(
+				"Failed to apply backend particle re-order: " + std::string(ex.what()));
+		}
+		catch (...)
+		{
+			mpiContext_.AbortJob(
+				"Failed to apply backend particle re-order: unknown error.");
 		}
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
 
@@ -2411,9 +2440,12 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed distributed step: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-		localOk = false;
+		mpiContext_.AbortJob(
+			"Failed distributed step: " + std::string(ex.what()));
+	}
+	catch (...)
+	{
+		mpiContext_.AbortJob("Failed distributed step: unknown error.");
 	}
 
 	return mpiContext_.AllTrue(localOk);
@@ -2468,10 +2500,12 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to redistribute particles: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-		localOk = false;
+		mpiContext_.AbortJob(
+			"Failed to redistribute particles: " + std::string(ex.what()));
+	}
+	catch (...)
+	{
+		mpiContext_.AbortJob("Failed to redistribute particles: unknown error.");
 	}
 
 	return AllRanksTrue(localOk);
@@ -2638,10 +2672,14 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to classify rank-local distributed work: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-		localOk = false;
+		mpiContext_.AbortJob(
+			"Failed to classify rank-local distributed work: " +
+			std::string(ex.what()));
+	}
+	catch (...)
+	{
+		mpiContext_.AbortJob(
+			"Failed to classify rank-local distributed work: unknown error.");
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
@@ -2797,10 +2835,13 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 		}
 		catch (const std::exception& ex)
 		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed to synchronize rigid body state: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-			localOk = false;
+			mpiContext_.AbortJob(
+				"Failed to synchronize rigid body state: " + std::string(ex.what()));
+		}
+		catch (...)
+		{
+			mpiContext_.AbortJob(
+				"Failed to synchronize rigid body state: unknown error.");
 		}
 	}
 
