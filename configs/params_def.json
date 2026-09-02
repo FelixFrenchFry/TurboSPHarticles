@@ -1,6 +1,6 @@
 {
   "backendType": "CPU",
-  "scenarioType": "SampledMeshCollection",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 0,

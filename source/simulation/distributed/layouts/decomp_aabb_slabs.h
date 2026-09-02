@@ -41,7 +41,7 @@ namespace Dist
 
 	private:
 
-		static constexpr int SPLIT_AXIS = 2;
+		static constexpr int SPLIT_AXIS = 0;
 		static constexpr uint32_t PROFILE_BIN_COUNT = 256;
 
 		AABBSlabLayout slabLayout_;
