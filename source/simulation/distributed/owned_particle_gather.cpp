@@ -1,7 +1,9 @@
 // owned_particle_gather.cpp
 
 // external
+#include <algorithm>
 #include <limits>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -45,6 +47,13 @@ namespace
 		}
 
 		return N_packets * sizeof(T);
+	}
+
+	uint64_t ByteChunkRequestCount(const uint64_t N_bytes)
+	{
+		return N_bytes > 0
+			? 1 + (N_bytes - 1) / MPI_CONTEXT_BYTE_CHUNK_SIZE
+			: 0;
 	}
 
 	template <typename T>
@@ -350,22 +359,32 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	const MpiContext& mpiContext,
 	const uint32_t N_globalF, const uint32_t N_globalB)
 {
+	bool localOk = true;
 	int N_sendF = 0;
 	int N_sendB = 0;
-	N_sendF = CheckedPacketCount(sendBuffer.particlesF);
-	N_sendB = CheckedPacketCount(sendBuffer.particlesB);
-
-	bool localOk = true;
-
 	std::vector<MPI_Request> requests{};
-	requests.reserve(static_cast<uint64_t>(mpiContext.Size()) * 2);
 	std::vector<int> N_recvF{};
 	std::vector<int> N_recvB{};
-	if (mpiContext.IsRoot())
+	try
 	{
-		N_recvF.resize(static_cast<uint64_t>(mpiContext.Size()), 0);
-		N_recvB.resize(static_cast<uint64_t>(mpiContext.Size()), 0);
+		N_sendF = CheckedPacketCount(sendBuffer.particlesF);
+		N_sendB = CheckedPacketCount(sendBuffer.particlesB);
+		requests.reserve(static_cast<uint64_t>(mpiContext.Size()) * 2);
+
+		if (mpiContext.IsRoot())
+		{
+			N_recvF.resize(static_cast<uint64_t>(mpiContext.Size()), 0);
+			N_recvB.resize(static_cast<uint64_t>(mpiContext.Size()), 0);
+		}
 	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to prepare owned particle gather storage: {}",
+			mpiContext.Rank(), mpiContext.Size(), ex.what());
+		localOk = false;
+	}
+	if (!mpiContext.AllTrue(localOk)) { return false; }
 
 	// gather packet counts before gathering raw particle payloads
 	if (mpiContext.IsRoot())
@@ -429,25 +448,73 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 
 	std::vector<uint8_t> gatheredParticlesF{};
 	std::vector<uint8_t> gatheredParticlesB{};
-	if (mpiContext.IsRoot())
+	OwnedParticleGatherBuffer recvBuffer{};
+	uint64_t N_maxRecvF = 0;
+	uint64_t N_maxRecvB = 0;
+	try
 	{
-		InitializeGlobalOwnedState(
-			globalOwnedState,
-			localState,
-			N_globalF,
-			N_globalB,
-			gatheredParticlesF,
-			gatheredParticlesB);
+		if (mpiContext.IsRoot())
+		{
+			InitializeGlobalOwnedState(
+				globalOwnedState,
+				localState,
+				N_globalF,
+				N_globalB,
+				gatheredParticlesF,
+				gatheredParticlesB);
 
-		localOk = CopyOwnedParticleGatherBufferToGlobal(
-			globalOwnedState,
-			sendBuffer,
-			gatheredParticlesF,
-			gatheredParticlesB);
+			localOk = CopyOwnedParticleGatherBufferToGlobal(
+				globalOwnedState,
+				sendBuffer,
+				gatheredParticlesF,
+				gatheredParticlesB);
+
+			for (int rank = 0; rank < mpiContext.Size(); rank++)
+			{
+				if (rank == mpiContext.RootRank()) { continue; }
+
+				N_maxRecvF = std::max(
+					N_maxRecvF, static_cast<uint64_t>(N_recvF[rank]));
+				N_maxRecvB = std::max(
+					N_maxRecvB, static_cast<uint64_t>(N_recvB[rank]));
+			}
+			recvBuffer.particlesF.resize(N_maxRecvF);
+			recvBuffer.particlesB.resize(N_maxRecvB);
+			recvBuffer.Clear();
+
+			uint64_t N_maxPayloadRequests = 0;
+			for (int rank = 0; rank < mpiContext.Size(); rank++)
+			{
+				if (rank == mpiContext.RootRank()) { continue; }
+
+				const uint64_t N_payloadRequests =
+					ByteChunkRequestCount(
+						static_cast<uint64_t>(N_recvF[rank]) *
+							sizeof(OwnedFluidParticlePacket)) +
+					ByteChunkRequestCount(
+						static_cast<uint64_t>(N_recvB[rank]) *
+							sizeof(OwnedBoundaryParticlePacket));
+				N_maxPayloadRequests = std::max(
+					N_maxPayloadRequests, N_payloadRequests);
+			}
+			requests.reserve(N_maxPayloadRequests);
+		}
+		else
+		{
+			const uint64_t N_payloadRequests =
+				ByteChunkRequestCount(CheckedByteSize(sendBuffer.particlesF)) +
+				ByteChunkRequestCount(CheckedByteSize(sendBuffer.particlesB));
+			requests.reserve(N_payloadRequests);
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to prepare owned particle gather storage: {}",
+			mpiContext.Rank(), mpiContext.Size(), ex.what());
+		localOk = false;
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
-
-	OwnedParticleGatherBuffer recvBuffer{};
 
 	// gather ranks sequentially to limit root memory usage
 	if (mpiContext.IsRoot())
@@ -459,7 +526,6 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 			recvBuffer.particlesF.resize(static_cast<uint64_t>(N_recvF[rank]));
 			recvBuffer.particlesB.resize(static_cast<uint64_t>(N_recvB[rank]));
 			requests.clear();
-			requests.reserve(2);
 
 			// receive fluid payload from rank
 			mpiContext.IRecvBytesChunked(
@@ -488,7 +554,7 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	}
 	else
 	{
-		// send fluid paylod to root
+		// send fluid payload to root
 		mpiContext.ISendBytesChunked(
 			DataOrNull(sendBuffer.particlesF),
 			CheckedByteSize(sendBuffer.particlesF),
@@ -510,8 +576,18 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	// check that all particles are now present at the root
 	if (mpiContext.IsRoot())
 	{
-		localOk = AllParticlesGathered(gatheredParticlesF) && localOk;
-		localOk = AllParticlesGathered(gatheredParticlesB) && localOk;
+		try
+		{
+			localOk = AllParticlesGathered(gatheredParticlesF) && localOk;
+			localOk = AllParticlesGathered(gatheredParticlesB) && localOk;
+		}
+		catch (const std::exception& ex)
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to validate gathered owned particles: {}",
+				mpiContext.Rank(), mpiContext.Size(), ex.what());
+			localOk = false;
+		}
 	}
 
 	return mpiContext.AllTrue(localOk);

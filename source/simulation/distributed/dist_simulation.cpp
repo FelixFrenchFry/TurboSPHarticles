@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <numeric>
 #include <span>
@@ -642,8 +643,6 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 			SyncParameters();
 
 			if (!BuildGlobalSimState()) { localOk = false; }
-			if (localOk && !BuildRankLocalSimState()) { localOk = false; }
-			if (localOk && !ValidateRankLocalSimState(true)) { localOk = false; }
 		}
 	}
 	catch (const std::exception& ex)
@@ -672,6 +671,34 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 			mpiContext_.Rank(), mpiContext_.Size());
 		return false;
 	}
+
+	const uint64_t N_maxGlobalParticles =
+		static_cast<uint64_t>(std::numeric_limits<uint32_t>::max());
+	const bool globalParticleCountsFit =
+		N_expectedGlobalF_ <= N_maxGlobalParticles &&
+		N_expectedGlobalB_ <= N_maxGlobalParticles;
+	if (!globalParticleCountsFit)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Global particle count exceeds the supported 32-bit particle ID range "
+			"(F={}, B={}, max={}).",
+			mpiContext_.Rank(), mpiContext_.Size(),
+			N_expectedGlobalF_, N_expectedGlobalB_, N_maxGlobalParticles);
+	}
+	if (!mpiContext_.AllTrue(globalParticleCountsFit)) { return false; }
+
+	try
+	{
+		if (!BuildRankLocalSimState()) { localOk = false; }
+		if (localOk && !ValidateRankLocalSimState(true)) { localOk = false; }
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to build rank-local initial sim state: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		localOk = false;
+	}
+	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 	// use initial partition to validate if per-step ownership checksums match across ranks
 	expectedOwnedIdxChecksumF_ =
@@ -1726,7 +1753,20 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	DistSnapshotGatherStats stats{};
 
 	auto& exportFluidParticleLocalIdxs = exportFluidParticleLocalIdxsScratch_;
-	if (!BuildExportFluidParticleLocalIdxs(particlesF, exportFluidParticleLocalIdxs))
+	bool exportSelectionOk = true;
+	try
+	{
+		exportSelectionOk =
+			BuildExportFluidParticleLocalIdxs(particlesF, exportFluidParticleLocalIdxs);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to select particles for distributed export: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		exportSelectionOk = false;
+	}
+	if (!mpiContext_.AllTrue(exportSelectionOk))
 	{
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
@@ -1806,11 +1846,22 @@ bool DistSimulationMgr::WriteFinalState(
 	}
 
 	OwnedParticleGatherBuffer sendBuffer{};
-	const bool packOk = PackOwnedParticleGatherBuffer(
-		sendBuffer,
-		localSimState_,
-		particleStateF_,
-		particleStateB_);
+	bool packOk = true;
+	try
+	{
+		packOk = PackOwnedParticleGatherBuffer(
+			sendBuffer,
+			localSimState_,
+			particleStateF_,
+			particleStateB_);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to pack the distributed final simulation state: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		packOk = false;
+	}
 	const bool allPackOk = mpiContext_.AllTrue(packOk);
 
 	// backend and rank-local particle payloads are not needed after packing

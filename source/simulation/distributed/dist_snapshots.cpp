@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <tbb/parallel_sort.h>
 #include <utility>
@@ -59,6 +60,13 @@ namespace
 	uint64_t CheckedByteSize(const std::vector<T>& packets)
 	{
 		return CheckedByteSize<T>(packets.size());
+	}
+
+	uint64_t ByteChunkRequestCount(const uint64_t N_bytes)
+	{
+		return N_bytes > 0
+			? 1 + (N_bytes - 1) / MPI_CONTEXT_BYTE_CHUNK_SIZE
+			: 0;
 	}
 
 	template <typename T>
@@ -336,43 +344,56 @@ bool Dist::GatherExportSnapshotToRoot(
 {
 	if (stats) { *stats = {}; }
 
-	// locally packed packets occupy the front of the gather storage on every rank
-	bool localOk = PackOwnedExportSnapshotBuffer(
-		gatherBuffer,
-		particlesF,
-		particlesB,
-		particleStateF,
-		particleStateB,
-		exportFluidParticleLocalIdxs,
-		mpiContext.Rank());
-
+	bool localOk = true;
 	int N_sendF = 0;
 	int N_sendB = 0;
-	if (localOk)
-	{
-		N_sendF = CheckedPacketCount(gatherBuffer.particlesF);
-		N_sendB = CheckedPacketCount(gatherBuffer.particlesB);
-	}
-
-	if (!mpiContext.AllTrue(localOk)) { return false; }
-
 	std::vector<RankDistExportSnapshotGather> rankGathers{};
-	rankGathers.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
-
-	if (mpiContext.IsRoot())
-	{
-		for (int rank = 0; rank < mpiContext.Size(); rank++)
-		{
-			if (rank == mpiContext.RootRank()) { continue; }
-
-			RankDistExportSnapshotGather rankGather{};
-			rankGather.rank = rank;
-			rankGathers.push_back(std::move(rankGather));
-		}
-	}
-
 	std::vector<MPI_Request> requests{};
-	requests.reserve(rankGathers.size() * 2);
+	try
+	{
+		// locally packed packets occupy the front of the gather storage on every rank
+		localOk = PackOwnedExportSnapshotBuffer(
+			gatherBuffer,
+			particlesF,
+			particlesB,
+			particleStateF,
+			particleStateB,
+			exportFluidParticleLocalIdxs,
+			mpiContext.Rank());
+
+		if (localOk)
+		{
+			N_sendF = CheckedPacketCount(gatherBuffer.particlesF);
+			N_sendB = CheckedPacketCount(gatherBuffer.particlesB);
+		}
+
+		if (mpiContext.IsRoot())
+		{
+			rankGathers.reserve(
+				static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
+			for (int rank = 0; rank < mpiContext.Size(); rank++)
+			{
+				if (rank == mpiContext.RootRank()) { continue; }
+
+				RankDistExportSnapshotGather rankGather{};
+				rankGather.rank = rank;
+				rankGathers.push_back(std::move(rankGather));
+			}
+		}
+
+		const uint64_t N_countRequests = mpiContext.IsRoot()
+			? static_cast<uint64_t>(rankGathers.size()) * 2
+			: 2;
+		requests.reserve(N_countRequests);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to prepare distributed snapshot gather storage: {}",
+			mpiContext.Rank(), mpiContext.Size(), ex.what());
+		localOk = false;
+	}
+	if (!mpiContext.AllTrue(localOk)) { return false; }
 
 	// gather packet counts before gathering raw particle payloads
 	if (mpiContext.IsRoot())
@@ -411,35 +432,58 @@ bool Dist::GatherExportSnapshotToRoot(
 	mpiContext.WaitAll(requests, "distributed snapshot counts");
 	requests.clear();
 
-	if (mpiContext.IsRoot())
+	try
 	{
-		// reserve one packet slot range per rank behind the locally packed packets
-		uint64_t N_gatheredF = gatherBuffer.particlesF.size();
-		uint64_t N_gatheredB = gatherBuffer.particlesB.size();
-
-		for (RankDistExportSnapshotGather& rankGather : rankGathers)
+		uint64_t N_payloadRequests = 0;
+		if (mpiContext.IsRoot())
 		{
-			if (rankGather.N_recvF < 0 || rankGather.N_recvB < 0)
+			// reserve one packet slot range per rank behind the locally packed packets
+			uint64_t N_gatheredF = gatherBuffer.particlesF.size();
+			uint64_t N_gatheredB = gatherBuffer.particlesB.size();
+
+			for (RankDistExportSnapshotGather& rankGather : rankGathers)
 			{
-				localOk = false;
-				break;
+				if (rankGather.N_recvF < 0 || rankGather.N_recvB < 0)
+				{
+					localOk = false;
+					break;
+				}
+
+				rankGather.recvFluidBeginIdx = N_gatheredF;
+				rankGather.recvBoundaryBeginIdx = N_gatheredB;
+				N_gatheredF += static_cast<uint64_t>(rankGather.N_recvF);
+				N_gatheredB += static_cast<uint64_t>(rankGather.N_recvB);
+				N_payloadRequests += ByteChunkRequestCount(
+					CheckedByteSize<DistExportFluidParticlePacket>(
+						static_cast<uint64_t>(rankGather.N_recvF)));
+				N_payloadRequests += ByteChunkRequestCount(
+					CheckedByteSize<DistExportBoundaryParticlePacket>(
+						static_cast<uint64_t>(rankGather.N_recvB)));
 			}
 
-			rankGather.recvFluidBeginIdx = N_gatheredF;
-			rankGather.recvBoundaryBeginIdx = N_gatheredB;
-			N_gatheredF += static_cast<uint64_t>(rankGather.N_recvF);
-			N_gatheredB += static_cast<uint64_t>(rankGather.N_recvB);
+			if (localOk)
+			{
+				gatherBuffer.particlesF.resize(N_gatheredF);
+				gatherBuffer.particlesB.resize(N_gatheredB);
+			}
 		}
-
-		if (localOk)
+		else
 		{
-			gatherBuffer.particlesF.resize(N_gatheredF);
-			gatherBuffer.particlesB.resize(N_gatheredB);
+			N_payloadRequests += ByteChunkRequestCount(
+				CheckedByteSize(gatherBuffer.particlesF));
+			N_payloadRequests += ByteChunkRequestCount(
+				CheckedByteSize(gatherBuffer.particlesB));
 		}
+		requests.reserve(N_payloadRequests);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Failed to prepare distributed snapshot gather storage: {}",
+			mpiContext.Rank(), mpiContext.Size(), ex.what());
+		localOk = false;
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
-
-	requests.reserve(rankGathers.size() * 2);
 
 	// gather payloads after the root gather storage holds a slot range for every rank
 	if (mpiContext.IsRoot())
@@ -484,24 +528,34 @@ bool Dist::GatherExportSnapshotToRoot(
 
 	if (mpiContext.IsRoot())
 	{
-		localOk = RebuildExportSnapshotFromGatheredParticles(
-			exportSnap,
-			gatherBuffer,
-			simStep,
-			simTime);
-		if (localOk)
+		try
 		{
-			PackReplicatedRigidExportSnapshot(
-				exportSnap, particlesR, rigidBodies);
-		}
+			localOk = RebuildExportSnapshotFromGatheredParticles(
+				exportSnap,
+				gatherBuffer,
+				simStep,
+				simTime);
+			if (localOk)
+			{
+				PackReplicatedRigidExportSnapshot(
+					exportSnap, particlesR, rigidBodies);
+			}
 
-		if (localOk && stats)
+			if (localOk && stats)
+			{
+				stats->N_gatheredF =
+					static_cast<uint32_t>(gatherBuffer.particlesF.size());
+				stats->N_gatheredB =
+					static_cast<uint32_t>(gatherBuffer.particlesB.size());
+				stats->N_gatheredR = particlesR.N_;
+			}
+		}
+		catch (const std::exception& ex)
 		{
-			stats->N_gatheredF =
-				static_cast<uint32_t>(gatherBuffer.particlesF.size());
-			stats->N_gatheredB =
-				static_cast<uint32_t>(gatherBuffer.particlesB.size());
-			stats->N_gatheredR = particlesR.N_;
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to rebuild distributed export snapshot: {}",
+				mpiContext.Rank(), mpiContext.Size(), ex.what());
+			localOk = false;
 		}
 	}
 
