@@ -1,6 +1,6 @@
 {
-  "backendType": "GPU",
-  "scenarioType": "ConvergingDam",
+  "backendType": "CPU",
+  "scenarioType": "SampledMeshCollection",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 0,
@@ -9,7 +9,7 @@
   "loadBalanceTrigger": 0,
   "loadBalanceWeightModel": 0,
 
-  "maxSteps": 100,
+  "maxSteps": -1,
   "timeStep": 0.001,
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
