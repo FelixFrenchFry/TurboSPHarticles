@@ -43,6 +43,57 @@ namespace
 		return static_cast<SELLNeighborCount>(N_nbrs);
 	}
 
+	SELLNeighborCount CommitChunkNeighborCounts(
+		const uint32_t begin,
+		const uint32_t* counts,
+		std::vector<SELLNeighborCount>& nbrCounts,
+		const char* overflowMsg)
+	{
+		SELLNeighborCount N_maxNbrs = 0;
+
+		// query scratch includes zeroed inactive and tail lanes
+		for (uint32_t lane = 0; lane != CPU::N_SIMD_WIDTH; lane++)
+		{
+			const SELLNeighborCount N_nbrs = NarrowNeighborCount_Debug(
+				counts[lane], overflowMsg);
+			nbrCounts[begin + lane] = N_nbrs;
+			N_maxNbrs = std::max(N_maxNbrs, N_nbrs);
+		}
+
+		return N_maxNbrs;
+	}
+
+	void ClearFluidChunkCounts_Parallel(
+		std::vector<SELLNeighborCount>& nbrCountFF,
+		std::vector<SELLNeighborCount>& nbrCountFB,
+		std::vector<SELLNeighborCount>& nbrCountFR,
+		std::vector<SELLNeighborCount>& nbrChunkMaxCountFF,
+		std::vector<SELLNeighborCount>& nbrChunkMaxCountFB,
+		std::vector<SELLNeighborCount>& nbrChunkMaxCountFR)
+	{
+		const uint32_t N_chunks = static_cast<uint32_t>(nbrChunkMaxCountFF.size());
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+				{
+					const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+					for (uint32_t lane = 0; lane != CPU::N_SIMD_WIDTH; lane++)
+					{
+						nbrCountFF[begin + lane] = 0;
+						nbrCountFB[begin + lane] = 0;
+						nbrCountFR[begin + lane] = 0;
+					}
+					nbrChunkMaxCountFF[chunk] = 0;
+					nbrChunkMaxCountFB[chunk] = 0;
+					nbrChunkMaxCountFR[chunk] = 0;
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
 	template<typename ValueAtIdx>
 	uint64_t BuildExclusivePrefixSum_Parallel(
 		const uint32_t N_values,
@@ -51,10 +102,7 @@ namespace
 	{
 		offsets.resize(static_cast<uint64_t>(N_values) + 1ull);
 		offsets[0] = 0;
-		if (N_values == 0u)
-		{
-			return 0;
-		}
+		if (N_values == 0u) { return 0; }
 
 		return tbb::parallel_scan(
 			tbb::blocked_range<uint32_t>(0, N_values),
@@ -123,13 +171,12 @@ void NeighborLists_ChunkedSELL_Explicit_CPU::Resize(
 	const uint32_t N_padded = N_chunks * chunkWidth;
 
 	// count arrays are padded, tail chunk still has a full SIMD width
-	// (no assign() in cases where because Finalize_Count() overwrites the entries)
-	nbrCountFF_.assign(N_padded, 0);
-	nbrCountFB_.assign(N_padded, 0);
-	nbrCountFR_.assign(N_padded, 0);
-	nbrChunkMaxCountFF_.resize(N_chunks);
-	nbrChunkMaxCountFB_.resize(N_chunks);
-	nbrChunkMaxCountFR_.resize(N_chunks);
+	Base::ResizeScratchVector(nbrCountFF_, N_padded);
+	Base::ResizeScratchVector(nbrCountFB_, N_padded);
+	Base::ResizeScratchVector(nbrCountFR_, N_padded);
+	Base::ResizeScratchVector(nbrChunkMaxCountFF_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxCountFB_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxCountFR_, N_chunks);
 	nbrChunkOffsetsFF_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 	nbrChunkOffsetsFB_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 	nbrChunkOffsetsFR_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
@@ -161,10 +208,6 @@ void NeighborLists_ChunkedSELL_Explicit_CPU::Resize(
 
 void NeighborLists_ChunkedSELL_Explicit_CPU::Finalize_Count()
 {
-	BuildChunkMaxCount(nbrCountFF_, nbrChunkMaxCountFF_);
-	BuildChunkMaxCount(nbrCountFB_, nbrChunkMaxCountFB_);
-	BuildChunkMaxCount(nbrCountFR_, nbrChunkMaxCountFR_);
-
 	// chunk pitches are fixed after the count-query and shared by all lanes
 	FinalizeChunkOffsets(nbrChunkMaxCountFF_, nbrChunkOffsetsFF_, nbrListFF_);
 	FinalizeChunkOffsets(nbrChunkMaxCountFB_, nbrChunkOffsetsFB_, nbrListFB_);
@@ -220,6 +263,34 @@ void NeighborLists_ChunkedSELL_Explicit_CPU::SetNbrCountRR(
 	nbrCountRR_[i] = NarrowNeighborCount_Debug(
 		N_nbrs,
 		"RR neighbor count exceeds uint16 count storage.");
+}
+
+void NeighborLists_ChunkedSELL_Explicit_CPU::PrepareFluidCountWrite(
+	const bool allChunksWillBeWritten)
+{
+	if (allChunksWillBeWritten) { return; }
+
+	ClearFluidChunkCounts_Parallel(
+		nbrCountFF_, nbrCountFB_, nbrCountFR_,
+		nbrChunkMaxCountFF_, nbrChunkMaxCountFB_, nbrChunkMaxCountFR_);
+}
+
+void NeighborLists_ChunkedSELL_Explicit_CPU::CommitFluidChunkCounts(
+	const uint32_t chunk,
+	const ChunkedSELLNeighborCountResult& countsFF,
+	const ChunkedSELLNeighborCountResult& countsFB,
+	const ChunkedSELLNeighborCountResult& countsFR)
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	nbrChunkMaxCountFF_[chunk] = CommitChunkNeighborCounts(
+		begin, countsFF.counts, nbrCountFF_,
+		"Chunked SELL FF neighbor count exceeds uint16 count storage.");
+	nbrChunkMaxCountFB_[chunk] = CommitChunkNeighborCounts(
+		begin, countsFB.counts, nbrCountFB_,
+		"Chunked SELL FB neighbor count exceeds uint16 count storage.");
+	nbrChunkMaxCountFR_[chunk] = CommitChunkNeighborCounts(
+		begin, countsFR.counts, nbrCountFR_,
+		"Chunked SELL FR neighbor count exceeds uint16 count storage.");
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU::SetNbrListFF(
@@ -822,36 +893,6 @@ uint64_t NeighborLists_ChunkedSELL_Explicit_CPU::ParticleStorageIdx(
 		+ static_cast<uint64_t>(lane);
 }
 
-void NeighborLists_ChunkedSELL_Explicit_CPU::BuildChunkMaxCount(
-	const std::vector<SELLNeighborCount>& nbrCounts,
-	std::vector<SELLNeighborCount>& nbrChunkMaxCount) const
-{
-	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	nbrChunkMaxCount.resize(N_chunks);
-
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
-			{
-				const uint32_t begin = ChunkBegin(chunk);
-				const uint32_t end = ChunkEnd(chunk, N_F_);
-				SELLNeighborCount N_maxNbrs = 0;
-
-				// one pitch per chunk keeps all SIMD lanes aligned for traversal
-				for (uint32_t i = begin; i < end; i++)
-				{
-					N_maxNbrs = std::max(N_maxNbrs, nbrCounts[i]);
-				}
-
-				nbrChunkMaxCount[chunk] = N_maxNbrs;
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
 void NeighborLists_ChunkedSELL_Explicit_CPU::FinalizeChunkOffsets(
 	const std::vector<SELLNeighborCount>& nbrChunkMaxCount,
 	std::vector<uint64_t>& nbrChunkOffsets,
@@ -883,22 +924,20 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
 	const uint32_t N_padded = N_chunks * chunkWidth;
-	const uint32_t invalidRef = std::numeric_limits<uint32_t>::max();
 
 	// count arrays are padded, tail chunk still has a full SIMD width
-	// (no assign() in cases where because Finalize_Count() overwrites the entries)
-	nbrCountFF_.assign(N_padded, 0);
-	nbrCountFB_.assign(N_padded, 0);
-	nbrCountFR_.assign(N_padded, 0);
-	nbrChunkMaxCountFF_.resize(N_chunks);
-	nbrChunkMaxCountFB_.resize(N_chunks);
-	nbrChunkMaxCountFR_.resize(N_chunks);
-	nbrChunkMinRefFF_.assign(N_chunks, invalidRef);
-	nbrChunkMinRefFB_.assign(N_chunks, invalidRef);
-	nbrChunkMinRefFR_.assign(N_chunks, invalidRef);
-	nbrChunkMaxRefFF_.assign(N_chunks, 0);
-	nbrChunkMaxRefFB_.assign(N_chunks, 0);
-	nbrChunkMaxRefFR_.assign(N_chunks, 0);
+	Base::ResizeScratchVector(nbrCountFF_, N_padded);
+	Base::ResizeScratchVector(nbrCountFB_, N_padded);
+	Base::ResizeScratchVector(nbrCountFR_, N_padded);
+	Base::ResizeScratchVector(nbrChunkMaxCountFF_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxCountFB_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxCountFR_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMinRefFF_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMinRefFB_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMinRefFR_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxRefFF_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxRefFB_, N_chunks);
+	Base::ResizeScratchVector(nbrChunkMaxRefFR_, N_chunks);
 	nbrChunkBaseIdxFF_.resize(N_chunks);
 	nbrChunkBaseIdxFB_.resize(N_chunks);
 	nbrChunkBaseIdxFR_.resize(N_chunks);
@@ -931,10 +970,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Finalize_Count()
 {
-	BuildChunkMaxCount(nbrCountFF_, nbrChunkMaxCountFF_);
-	BuildChunkMaxCount(nbrCountFB_, nbrChunkMaxCountFB_);
-	BuildChunkMaxCount(nbrCountFR_, nbrChunkMaxCountFR_);
-
 	// chunk formats and pitches are fixed after the count-query
 	FinalizeChunkStorage(
 		nbrChunkMaxCountFF_, nbrChunkMinRefFF_, nbrChunkMaxRefFF_,
@@ -999,6 +1034,40 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrCountRR(
 	nbrCountRR_[i] = NarrowNeighborCount_Debug(
 		N_nbrs,
 		"RR neighbor count exceeds uint16 count storage.");
+}
+
+void NeighborLists_ChunkedSELL_AdaptCompress_CPU::PrepareFluidCountWrite(
+	const bool allChunksWillBeWritten)
+{
+	if (allChunksWillBeWritten) { return; }
+	ClearFluidChunkCounts_Parallel(
+		nbrCountFF_, nbrCountFB_, nbrCountFR_,
+		nbrChunkMaxCountFF_, nbrChunkMaxCountFB_, nbrChunkMaxCountFR_);
+}
+
+void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
+	const uint32_t chunk,
+	const ChunkedSELLNeighborCountResult& countsFF,
+	const ChunkedSELLNeighborCountResult& countsFB,
+	const ChunkedSELLNeighborCountResult& countsFR)
+{
+	const uint32_t begin = ChunkBegin(chunk);
+	nbrChunkMaxCountFF_[chunk] = CommitChunkNeighborCounts(
+		begin, countsFF.counts, nbrCountFF_,
+		"Compressed chunked SELL FF neighbor count exceeds uint16 count storage.");
+	nbrChunkMaxCountFB_[chunk] = CommitChunkNeighborCounts(
+		begin, countsFB.counts, nbrCountFB_,
+		"Compressed chunked SELL FB neighbor count exceeds uint16 count storage.");
+	nbrChunkMaxCountFR_[chunk] = CommitChunkNeighborCounts(
+		begin, countsFR.counts, nbrCountFR_,
+		"Compressed chunked SELL FR neighbor count exceeds uint16 count storage.");
+
+	nbrChunkMinRefFF_[chunk] = countsFF.minRef;
+	nbrChunkMinRefFB_[chunk] = countsFB.minRef;
+	nbrChunkMinRefFR_[chunk] = countsFR.minRef;
+	nbrChunkMaxRefFF_[chunk] = countsFF.maxRef;
+	nbrChunkMaxRefFB_[chunk] = countsFB.maxRef;
+	nbrChunkMaxRefFR_[chunk] = countsFR.maxRef;
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFF(
@@ -1533,27 +1602,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFRChunkWrite(
 	}
 }
 
-void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetChunkNeighborIdxRangeFF(
-	const uint32_t chunk, const uint32_t minRef, const uint32_t maxRef)
-{
-	nbrChunkMinRefFF_[chunk] = minRef;
-	nbrChunkMaxRefFF_[chunk] = maxRef;
-}
-
-void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetChunkNeighborIdxRangeFB(
-	const uint32_t chunk, const uint32_t minRef, const uint32_t maxRef)
-{
-	nbrChunkMinRefFB_[chunk] = minRef;
-	nbrChunkMaxRefFB_[chunk] = maxRef;
-}
-
-void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetChunkNeighborIdxRangeFR(
-	const uint32_t chunk, const uint32_t minRef, const uint32_t maxRef)
-{
-	nbrChunkMinRefFR_[chunk] = minRef;
-	nbrChunkMaxRefFR_[chunk] = maxRef;
-}
-
 uint32_t NeighborLists_ChunkedSELL_AdaptCompress_CPU::ChunkOfParticle(
 	const uint32_t i) noexcept
 {
@@ -1746,36 +1794,6 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 		nbrChunkMaxCountFR_[chunk],
 		format
 	};
-}
-
-void NeighborLists_ChunkedSELL_AdaptCompress_CPU::BuildChunkMaxCount(
-	const std::vector<SELLNeighborCount>& nbrCounts,
-	std::vector<SELLNeighborCount>& nbrChunkMaxCount) const
-{
-	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	nbrChunkMaxCount.resize(N_chunks);
-
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
-			{
-				const uint32_t begin = ChunkBegin(chunk);
-				const uint32_t end = ChunkEnd(chunk, N_F_);
-				SELLNeighborCount N_maxNbrs = 0;
-
-				// one pitch per chunk keeps all SIMD lanes aligned for traversal
-				for (uint32_t i = begin; i < end; i++)
-				{
-					N_maxNbrs = std::max(N_maxNbrs, nbrCounts[i]);
-				}
-
-				nbrChunkMaxCount[chunk] = N_maxNbrs;
-			}
-		},
-		tbb::auto_partitioner{}
-	);
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(

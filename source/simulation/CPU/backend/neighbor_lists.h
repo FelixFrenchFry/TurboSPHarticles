@@ -116,9 +116,16 @@ namespace Sim
 		}
 	};
 
+	struct ChunkedSELLNeighborCountResult
+	{
+		const uint32_t* counts;
+		uint32_t minRef;
+		uint32_t maxRef;
+	};
+
 	class I_NeighborListSELL : public I_NeighborList
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		virtual uint32_t ChunkNumTotal() const noexcept = 0;
 
@@ -133,26 +140,14 @@ namespace Sim
 		virtual void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) = 0;
 		virtual void FinishFRChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) = 0;
 
-		virtual bool NeedsChunkNeighborIdxRange() const noexcept { return false; }
+		virtual void PrepareFluidCountWrite(bool allChunksWillBeWritten) = 0;
+		virtual void CommitFluidChunkCounts(
+			uint32_t chunk,
+			const ChunkedSELLNeighborCountResult& countsFF,
+			const ChunkedSELLNeighborCountResult& countsFB,
+			const ChunkedSELLNeighborCountResult& countsFR) = 0;
 
-		virtual void SetChunkNeighborIdxRangeFF(uint32_t chunk, uint32_t minRef, uint32_t maxRef)
-		{
-			(void)chunk;
-			(void)minRef;
-			(void)maxRef;
-		}
-		virtual void SetChunkNeighborIdxRangeFB(uint32_t chunk, uint32_t minRef, uint32_t maxRef)
-		{
-			(void)chunk;
-			(void)minRef;
-			(void)maxRef;
-		}
-		virtual void SetChunkNeighborIdxRangeFR(uint32_t chunk, uint32_t minRef, uint32_t maxRef)
-		{
-			(void)chunk;
-			(void)minRef;
-			(void)maxRef;
-		}
+		virtual bool NeedsChunkNeighborIdxRange() const noexcept { return false; }
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -162,7 +157,7 @@ namespace Sim
 	class NeighborLists_ChunkedSELL_Explicit_CPU final
 		: public I_NeighborListSELL
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		void Resize(
 			uint32_t N_F, uint32_t N_B, uint32_t N_R,
@@ -212,11 +207,19 @@ namespace Sim
 		ChunkedSELLNeighborSpan_Write FFChunkWrite(uint32_t chunk) noexcept override;
 		ChunkedSELLNeighborSpan_Write FBChunkWrite(uint32_t chunk) noexcept override;
 		ChunkedSELLNeighborSpan_Write FRChunkWrite(uint32_t chunk) noexcept override;
+
 		void FinishFFChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 		void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 		void FinishFRChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 
-	private: // ------------------------------------------------------------------------------------
+		void PrepareFluidCountWrite(bool allChunksWillBeWritten) override;
+		void CommitFluidChunkCounts(
+			uint32_t chunk,
+			const ChunkedSELLNeighborCountResult& countsFF,
+			const ChunkedSELLNeighborCountResult& countsFB,
+			const ChunkedSELLNeighborCountResult& countsFR) override;
+
+	private:
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -271,11 +274,6 @@ namespace Sim
 		static uint64_t ParticleStorageIdx(
 			uint32_t i, uint32_t k,
 			const std::vector<uint64_t>& nbrChunkOffsets) noexcept;
-
-		void BuildChunkMaxCount(
-			const std::vector<SELLNeighborCount>& nbrCounts,
-			std::vector<SELLNeighborCount>& nbrChunkMaxCount) const;
-
 		void FinalizeChunkOffsets(
 			const std::vector<SELLNeighborCount>& nbrChunkMaxCount,
 			std::vector<uint64_t>& nbrChunkOffsets,
@@ -289,7 +287,7 @@ namespace Sim
 	class NeighborLists_ChunkedSELL_AdaptCompress_CPU final
 		: public I_NeighborListSELL
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		void Resize(
 			uint32_t N_F, uint32_t N_B, uint32_t N_R,
@@ -339,16 +337,21 @@ namespace Sim
 		ChunkedSELLNeighborSpan_Write FFChunkWrite(uint32_t chunk) noexcept override;
 		ChunkedSELLNeighborSpan_Write FBChunkWrite(uint32_t chunk) noexcept override;
 		ChunkedSELLNeighborSpan_Write FRChunkWrite(uint32_t chunk) noexcept override;
+
 		void FinishFFChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 		void FinishFBChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 		void FinishFRChunkWrite(uint32_t chunk, const uint32_t* writtenCounts) override;
 
-		bool NeedsChunkNeighborIdxRange() const noexcept override { return true; }
-		void SetChunkNeighborIdxRangeFF(uint32_t chunk, uint32_t minRef, uint32_t maxRef) override;
-		void SetChunkNeighborIdxRangeFB(uint32_t chunk, uint32_t minRef, uint32_t maxRef) override;
-		void SetChunkNeighborIdxRangeFR(uint32_t chunk, uint32_t minRef, uint32_t maxRef) override;
+		void PrepareFluidCountWrite(bool allChunksWillBeWritten) override;
+		void CommitFluidChunkCounts(
+			uint32_t chunk,
+			const ChunkedSELLNeighborCountResult& countsFF,
+			const ChunkedSELLNeighborCountResult& countsFB,
+			const ChunkedSELLNeighborCountResult& countsFR) override;
 
-	private: // ------------------------------------------------------------------------------------
+		bool NeedsChunkNeighborIdxRange() const noexcept override { return true; }
+
+	private:
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -426,10 +429,6 @@ namespace Sim
 		ChunkedSELLNeighborSpan_Write MakeWriteSpanFF(uint32_t chunk) noexcept;
 		ChunkedSELLNeighborSpan_Write MakeWriteSpanFB(uint32_t chunk) noexcept;
 		ChunkedSELLNeighborSpan_Write MakeWriteSpanFR(uint32_t chunk) noexcept;
-
-		void BuildChunkMaxCount(
-			const std::vector<SELLNeighborCount>& nbrCounts,
-			std::vector<SELLNeighborCount>& nbrChunkMaxCount) const;
 
 		void FinalizeChunkStorage(
 			const std::vector<SELLNeighborCount>& nbrChunkMaxCount,

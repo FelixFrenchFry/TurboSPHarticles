@@ -1965,6 +1965,21 @@ void SimBackend_CPU::BuildDistributedSolverChunkIdxs()
 			pressureAccChunkIdxs_);
 	}
 
+	#if defined(_DEBUG)
+	// exhaustively validate that the chunk indices are strictly ascending and in range,
+	// so the count query can treat a full-length list as covering every chunk
+	const uint32_t N_pressureAccChunks = static_cast<uint32_t>(pressureAccChunkIdxs_.size());
+	for (uint32_t i = 0; i != N_pressureAccChunks; i++)
+	{
+		if (pressureAccChunkIdxs_[i] >= N_chunks
+			|| (i > 0 && pressureAccChunkIdxs_[i] <= pressureAccChunkIdxs_[i - 1]))
+		{
+			throw std::runtime_error(
+				"Invalid pressure-acceleration CPU fluid chunk index.");
+		}
+	}
+	#endif
+
 	chunkFlagsScratch_.assign(N_ownedChunks, 0);
 	for (const uint32_t localIdx : outerFluidParticleLocalIdxs_)
 	{

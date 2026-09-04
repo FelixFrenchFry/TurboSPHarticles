@@ -600,10 +600,13 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 
 	// count FF, FB, and FR neighbors of each fluid particle
 	const bool useSelectedFluidCenters = be_.useDistributedStepWork_;
+	const uint32_t N_totalChunks = be_.neighborList_->ChunkNumTotal();
 	const uint32_t N_chunks = useSelectedFluidCenters
 		? static_cast<uint32_t>(be_.pressureAccChunkIdxs_.size())
-		: be_.neighborList_->ChunkNumTotal();
+		: N_totalChunks;
 	const bool trackChunkNeighborIdxRange = be_.neighborList_->NeedsChunkNeighborIdxRange();
+	// the distributed chunk indices are unique and ascending, a full list spans every chunk
+	be_.neighborList_->PrepareFluidCountWrite(N_chunks == N_totalChunks);
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -692,19 +695,11 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					}
 				}
 
-				for (uint32_t lane = 0; lane < end - begin; lane++)
-				{
-					const uint32_t i = begin + lane;
-					be_.neighborList_->SetNbrCountFF(i, cntFF[lane]);
-					be_.neighborList_->SetNbrCountFB(i, cntFB[lane]);
-					be_.neighborList_->SetNbrCountFR(i, cntFR[lane]);
-				}
-				if (trackChunkNeighborIdxRange)
-				{
-					be_.neighborList_->SetChunkNeighborIdxRangeFF(chunk, minRefFF, maxRefFF);
-					be_.neighborList_->SetChunkNeighborIdxRangeFB(chunk, minRefFB, maxRefFB);
-					be_.neighborList_->SetChunkNeighborIdxRangeFR(chunk, minRefFR, maxRefFR);
-				}
+				be_.neighborList_->CommitFluidChunkCounts(
+					chunk,
+					{ cntFF, minRefFF, maxRefFF },
+					{ cntFB, minRefFB, maxRefFB },
+					{ cntFR, minRefFR, maxRefFR });
 			}
 		},
 		tbb::auto_partitioner{}
@@ -1450,6 +1445,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 		const bool trackChunkNeighborIdxRange =
 			chunkedSELLNeighborList->NeedsChunkNeighborIdxRange();
+		// the distributed chunk indices are unique and ascending, a full list spans every chunk
+		chunkedSELLNeighborList->PrepareFluidCountWrite(N_chunks == N_totalChunks);
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -1570,23 +1567,11 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 					cntFB.store_aligned(cntLanesFB);
 					cntFR.store_aligned(cntLanesFR);
 
-					for (uint32_t lane = 0; lane < end - begin; lane++)
-					{
-						const uint32_t i = begin + lane;
-						be_.neighborList_->SetNbrCountFF(i, cntLanesFF[lane]);
-						be_.neighborList_->SetNbrCountFB(i, cntLanesFB[lane]);
-						be_.neighborList_->SetNbrCountFR(i, cntLanesFR[lane]);
-					}
-
-					if (trackChunkNeighborIdxRange)
-					{
-						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFF(
-							chunk, minRefFF, maxRefFF);
-						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFB(
-							chunk, minRefFB, maxRefFB);
-						chunkedSELLNeighborList->SetChunkNeighborIdxRangeFR(
-							chunk, minRefFR, maxRefFR);
-					}
+					chunkedSELLNeighborList->CommitFluidChunkCounts(
+						chunk,
+						{ cntLanesFF, minRefFF, maxRefFF },
+						{ cntLanesFB, minRefFB, maxRefFB },
+						{ cntLanesFR, minRefFR, maxRefFR });
 				}
 			},
 			tbb::auto_partitioner{}
