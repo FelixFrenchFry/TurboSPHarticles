@@ -1353,33 +1353,23 @@ void NS_CellLinkedList_Compact_CPU::GatherChunkQueryRanges(
 	int cellZ[CPU::N_SIMD_WIDTH]{};
 	uint32_t N_cells = 0;
 
+	// sorted cell IDs keep a cell's particles adjacent, so only an ID change starts a new cell
+	// (a chunk straddling the owned/halo boundary can repeat one, which the query tolerates)
+	uint64_t previousCellId = EMPTY_64;
+
 	// TODO: parallelize with TBB?
 	for (uint32_t i = begin; i < end; i++)
 	{
-		const int cx = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
-		const int cy = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
-		const int cz = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
+		const uint64_t cellId = cellIdF_[i];
 
 		// particles that left the domain query no cells, the frame cannot address them
-		if (!IsInsideCellFrame(cx, cy, cz)) [[unlikely]] { continue; }
+		if (cellId == EMPTY_64) [[unlikely]] { continue; }
+		if (cellId == previousCellId) { continue; }
+		previousCellId = cellId;
 
-		bool alreadyVisited = false;
-		for (uint32_t cell = 0; cell < N_cells; cell++)
-		{
-			if (cx == cellX[cell] &&
-				cy == cellY[cell] &&
-				cz == cellZ[cell])
-			{
-				alreadyVisited = true;
-				break;
-			}
-		}
-
-		if (alreadyVisited) { continue; }
-
-		cellX[N_cells] = cx;
-		cellY[N_cells] = cy;
-		cellZ[N_cells] = cz;
+		cellX[N_cells] = FloorToInt(be_.xPosF_[i] * cellSizeInv_);
+		cellY[N_cells] = FloorToInt(be_.yPosF_[i] * cellSizeInv_);
+		cellZ[N_cells] = FloorToInt(be_.zPosF_[i] * cellSizeInv_);
 		N_cells++;
 	}
 
