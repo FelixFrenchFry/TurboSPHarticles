@@ -94,6 +94,33 @@ namespace
 		);
 	}
 
+	void ClearFluidChunkFormats_Parallel(
+		std::vector<SELLChunkFormat>& nbrChunkFormatFF,
+		std::vector<SELLChunkFormat>& nbrChunkFormatFB,
+		std::vector<SELLChunkFormat>& nbrChunkFormatFR,
+		std::vector<uint32_t>& nbrChunkBaseIdxFF,
+		std::vector<uint32_t>& nbrChunkBaseIdxFB,
+		std::vector<uint32_t>& nbrChunkBaseIdxFR)
+	{
+		const uint32_t N_chunks = static_cast<uint32_t>(nbrChunkFormatFF.size());
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			[&](const tbb::blocked_range<uint32_t>& r)
+			{
+				for (uint32_t chunk = r.begin(); chunk != r.end(); chunk++)
+				{
+					nbrChunkFormatFF[chunk] = SELLChunkFormat::Abs32;
+					nbrChunkFormatFB[chunk] = SELLChunkFormat::Abs32;
+					nbrChunkFormatFR[chunk] = SELLChunkFormat::Abs32;
+					nbrChunkBaseIdxFF[chunk] = 0;
+					nbrChunkBaseIdxFB[chunk] = 0;
+					nbrChunkBaseIdxFR[chunk] = 0;
+				}
+			},
+			tbb::auto_partitioner{}
+		);
+	}
+
 	template<typename ValueAtIdx>
 	uint64_t BuildExclusivePrefixSum_Parallel(
 		const uint32_t N_values,
@@ -932,12 +959,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 	Base::ResizeScratchVector(nbrChunkMaxCountFF_, N_chunks);
 	Base::ResizeScratchVector(nbrChunkMaxCountFB_, N_chunks);
 	Base::ResizeScratchVector(nbrChunkMaxCountFR_, N_chunks);
-	Base::ResizeScratchVector(nbrChunkMinRefFF_, N_chunks);
-	Base::ResizeScratchVector(nbrChunkMinRefFB_, N_chunks);
-	Base::ResizeScratchVector(nbrChunkMinRefFR_, N_chunks);
-	Base::ResizeScratchVector(nbrChunkMaxRefFF_, N_chunks);
-	Base::ResizeScratchVector(nbrChunkMaxRefFB_, N_chunks);
-	Base::ResizeScratchVector(nbrChunkMaxRefFR_, N_chunks);
 	nbrChunkBaseIdxFF_.resize(N_chunks);
 	nbrChunkBaseIdxFB_.resize(N_chunks);
 	nbrChunkBaseIdxFR_.resize(N_chunks);
@@ -970,18 +991,15 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Finalize_Count()
 {
-	// chunk formats and pitches are fixed after the count-query
+	// chunk formats and pitches are fixed by the count-query
 	FinalizeChunkStorage(
-		nbrChunkMaxCountFF_, nbrChunkMinRefFF_, nbrChunkMaxRefFF_,
-		nbrChunkBaseIdxFF_, nbrChunkFormatFF_, nbrChunkOffsetsFF_,
+		nbrChunkMaxCountFF_, nbrChunkFormatFF_, nbrChunkOffsetsFF_,
 		nbrListDelta8FF_, nbrListDelta16FF_, nbrListAbs32FF_);
 	FinalizeChunkStorage(
-		nbrChunkMaxCountFB_, nbrChunkMinRefFB_, nbrChunkMaxRefFB_,
-		nbrChunkBaseIdxFB_, nbrChunkFormatFB_, nbrChunkOffsetsFB_,
+		nbrChunkMaxCountFB_, nbrChunkFormatFB_, nbrChunkOffsetsFB_,
 		nbrListDelta8FB_, nbrListDelta16FB_, nbrListAbs32FB_);
 	FinalizeChunkStorage(
-		nbrChunkMaxCountFR_, nbrChunkMinRefFR_, nbrChunkMaxRefFR_,
-		nbrChunkBaseIdxFR_, nbrChunkFormatFR_, nbrChunkOffsetsFR_,
+		nbrChunkMaxCountFR_, nbrChunkFormatFR_, nbrChunkOffsetsFR_,
 		nbrListDelta8FR_, nbrListDelta16FR_, nbrListAbs32FR_);
 	FinalizeCSRNeighborStorage(nbrCountRF_, nbrOffsetsRF_, nbrListRF_, extraAllocCapacityPct_);
 	FinalizeCSRNeighborStorage(nbrCountRB_, nbrOffsetsRB_, nbrListRB_, extraAllocCapacityPct_);
@@ -1043,6 +1061,10 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::PrepareFluidCountWrite(
 	ClearFluidChunkCounts_Parallel(
 		nbrCountFF_, nbrCountFB_, nbrCountFR_,
 		nbrChunkMaxCountFF_, nbrChunkMaxCountFB_, nbrChunkMaxCountFR_);
+	// the count-query only writes the formats of the chunks it visits
+	ClearFluidChunkFormats_Parallel(
+		nbrChunkFormatFF_, nbrChunkFormatFB_, nbrChunkFormatFR_,
+		nbrChunkBaseIdxFF_, nbrChunkBaseIdxFB_, nbrChunkBaseIdxFR_);
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
@@ -1062,12 +1084,19 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
 		begin, countsFR.counts, nbrCountFR_,
 		"Compressed chunked SELL FR neighbor count exceeds uint16 count storage.");
 
-	nbrChunkMinRefFF_[chunk] = countsFF.minRef;
-	nbrChunkMinRefFB_[chunk] = countsFB.minRef;
-	nbrChunkMinRefFR_[chunk] = countsFR.minRef;
-	nbrChunkMaxRefFF_[chunk] = countsFF.maxRef;
-	nbrChunkMaxRefFB_[chunk] = countsFB.maxRef;
-	nbrChunkMaxRefFR_[chunk] = countsFR.maxRef;
+	// the chunk pitch and neighbor index range are complete here
+	const SELLChunkFormat formatFF = ChooseChunkFormat(
+		nbrChunkMaxCountFF_[chunk], countsFF.minRef, countsFF.maxRef);
+	const SELLChunkFormat formatFB = ChooseChunkFormat(
+		nbrChunkMaxCountFB_[chunk], countsFB.minRef, countsFB.maxRef);
+	const SELLChunkFormat formatFR = ChooseChunkFormat(
+		nbrChunkMaxCountFR_[chunk], countsFR.minRef, countsFR.maxRef);
+	nbrChunkFormatFF_[chunk] = formatFF;
+	nbrChunkFormatFB_[chunk] = formatFB;
+	nbrChunkFormatFR_[chunk] = formatFR;
+	nbrChunkBaseIdxFF_[chunk] = (formatFF == SELLChunkFormat::Abs32) ? 0u : countsFF.minRef;
+	nbrChunkBaseIdxFB_[chunk] = (formatFB == SELLChunkFormat::Abs32) ? 0u : countsFB.minRef;
+	nbrChunkBaseIdxFR_[chunk] = (formatFR == SELLChunkFormat::Abs32) ? 0u : countsFR.minRef;
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFF(
@@ -1370,8 +1399,6 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage(
 	// FF
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkMaxCountFF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkMinRefFF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkMaxRefFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkFormatFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkOffsetsFF_));
@@ -1382,8 +1409,6 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage(
 	// FB
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkMaxCountFB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkMinRefFB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkMaxRefFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkFormatFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkOffsetsFB_));
@@ -1394,8 +1419,6 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage(
 	// FR
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkMaxCountFR_));
-	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkMinRefFR_));
-	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkMaxRefFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkFormatFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkOffsetsFR_));
@@ -1798,10 +1821,7 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(
 	const std::vector<SELLNeighborCount>& nbrChunkMaxCount,
-	const std::vector<uint32_t>& nbrChunkMinRef,
-	const std::vector<uint32_t>& nbrChunkMaxRef,
-	std::vector<uint32_t>& nbrChunkBaseIdx,
-	std::vector<SELLChunkFormat>& nbrChunkFormat,
+	const std::vector<SELLChunkFormat>& nbrChunkFormat,
 	std::vector<uint64_t>& nbrChunkOffsets,
 	std::vector<uint8_t>& nbrListDelta8,
 	std::vector<uint16_t>& nbrListDelta16,
@@ -1826,15 +1846,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(
 				{
 					const uint32_t pitch = nbrChunkMaxCount[chunk];
 					const uint64_t chunkStorage = ChunkStorageSize(pitch);
-					const SELLChunkFormat format = ChooseChunkFormat(
-						pitch, nbrChunkMinRef[chunk], nbrChunkMaxRef[chunk]);
-
-					if (isFinalScan)
-					{
-						nbrChunkFormat[chunk] = format;
-						nbrChunkBaseIdx[chunk] = (format == SELLChunkFormat::Abs32)
-							? 0u : nbrChunkMinRef[chunk];
-					}
+					const SELLChunkFormat format = nbrChunkFormat[chunk];
 
 					if (format == SELLChunkFormat::Delta8)
 					{

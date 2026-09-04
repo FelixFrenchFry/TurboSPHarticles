@@ -366,12 +366,6 @@ namespace Sim
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFF_; // per-chunk max neighbor count (pitch used for chunk length)
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFB_;
 		std::vector<SELLNeighborCount> nbrChunkMaxCountFR_;
-		std::vector<uint32_t> nbrChunkMinRefFF_; // per-chunk min neighbor index from the count-query
-		std::vector<uint32_t> nbrChunkMinRefFB_;
-		std::vector<uint32_t> nbrChunkMinRefFR_;
-		std::vector<uint32_t> nbrChunkMaxRefFF_; // per-chunk max neighbor index from the count-query
-		std::vector<uint32_t> nbrChunkMaxRefFB_;
-		std::vector<uint32_t> nbrChunkMaxRefFR_;
 		std::vector<uint32_t> nbrChunkBaseIdxFF_; // per-chunk base index used for delta storage
 		std::vector<uint32_t> nbrChunkBaseIdxFB_;
 		std::vector<uint32_t> nbrChunkBaseIdxFR_;
@@ -432,10 +426,7 @@ namespace Sim
 
 		void FinalizeChunkStorage(
 			const std::vector<SELLNeighborCount>& nbrChunkMaxCount,
-			const std::vector<uint32_t>& nbrChunkMinRef,
-			const std::vector<uint32_t>& nbrChunkMaxRef,
-			std::vector<uint32_t>& nbrChunkBaseIdx,
-			std::vector<SELLChunkFormat>& nbrChunkFormat,
+			const std::vector<SELLChunkFormat>& nbrChunkFormat,
 			std::vector<uint64_t>& nbrChunkOffsets,
 			std::vector<uint8_t>& nbrListDelta8,
 			std::vector<uint16_t>& nbrListDelta16,
