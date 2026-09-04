@@ -92,7 +92,8 @@ namespace
 	void FinalizeCSRNeighborStorage(
 		const std::vector<SELLNeighborCount>& nbrCount,
 		std::vector<uint64_t>& nbrOffsets,
-		std::vector<uint32_t>& nbrList)
+		std::vector<uint32_t>& nbrList,
+		const float extraAllocCapacityPct)
 	{
 		const uint64_t N_total = BuildExclusivePrefixSum_Parallel(
 			static_cast<uint32_t>(nbrCount.size()),
@@ -101,7 +102,7 @@ namespace
 				return static_cast<uint64_t>(nbrCount[i]);
 			},
 			nbrOffsets);
-		Base::ResizeScratchVector(nbrList, N_total, 0.0f);
+		Base::ResizeScratchVector(nbrList, N_total, extraAllocCapacityPct);
 	}
 
 } // namespace anonymous
@@ -167,9 +168,9 @@ void NeighborLists_ChunkedSELL_Explicit_CPU::Finalize_Count()
 	FinalizeChunkOffsets(nbrChunkMaxCountFF_, nbrChunkOffsetsFF_, nbrListFF_);
 	FinalizeChunkOffsets(nbrChunkMaxCountFB_, nbrChunkOffsetsFB_, nbrListFB_);
 	FinalizeChunkOffsets(nbrChunkMaxCountFR_, nbrChunkOffsetsFR_, nbrListFR_);
-	FinalizeCSRNeighborStorage(nbrCountRF_, nbrOffsetsRF_, nbrListRF_);
-	FinalizeCSRNeighborStorage(nbrCountRB_, nbrOffsetsRB_, nbrListRB_);
-	FinalizeCSRNeighborStorage(nbrCountRR_, nbrOffsetsRR_, nbrListRR_);
+	FinalizeCSRNeighborStorage(nbrCountRF_, nbrOffsetsRF_, nbrListRF_, extraAllocCapacityPct_);
+	FinalizeCSRNeighborStorage(nbrCountRB_, nbrOffsetsRB_, nbrListRB_, extraAllocCapacityPct_);
+	FinalizeCSRNeighborStorage(nbrCountRR_, nbrOffsetsRR_, nbrListRR_, extraAllocCapacityPct_);
 }
 
 void NeighborLists_ChunkedSELL_Explicit_CPU::SetNbrCountFF(
@@ -875,8 +876,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 	const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 	const SimParams& params)
 {
-	(void)params;
-
 	N_F_ = N_F;
 	N_B_ = N_B;
 	N_R_ = N_R;
@@ -917,6 +916,15 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 	nbrOffsetsRF_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 	nbrOffsetsRB_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
 	nbrOffsetsRR_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
+
+	// reserve packed rigid storage up front based on the expected neighbor count
+	// (the compressed fluid payloads are left to the growth headroom in Finalize_Count)
+	Base::ReserveScratchVector(nbrListRF_,
+		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FF), 0.0f);
+	Base::ReserveScratchVector(nbrListRB_,
+		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FB), 0.0f);
+	Base::ReserveScratchVector(nbrListRR_,
+		ExpectedPackedCSRCapacity(N_R_, params.expctdAvgNbrCountHardMax_FF), 0.0f);
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Finalize_Count()
@@ -938,9 +946,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Finalize_Count()
 		nbrChunkMaxCountFR_, nbrChunkMinRefFR_, nbrChunkMaxRefFR_,
 		nbrChunkBaseIdxFR_, nbrChunkFormatFR_, nbrChunkOffsetsFR_,
 		nbrListDelta8FR_, nbrListDelta16FR_, nbrListAbs32FR_);
-	FinalizeCSRNeighborStorage(nbrCountRF_, nbrOffsetsRF_, nbrListRF_);
-	FinalizeCSRNeighborStorage(nbrCountRB_, nbrOffsetsRB_, nbrListRB_);
-	FinalizeCSRNeighborStorage(nbrCountRR_, nbrOffsetsRR_, nbrListRR_);
+	FinalizeCSRNeighborStorage(nbrCountRF_, nbrOffsetsRF_, nbrListRF_, extraAllocCapacityPct_);
+	FinalizeCSRNeighborStorage(nbrCountRB_, nbrOffsetsRB_, nbrListRB_, extraAllocCapacityPct_);
+	FinalizeCSRNeighborStorage(nbrCountRR_, nbrOffsetsRR_, nbrListRR_, extraAllocCapacityPct_);
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrCountFF(
