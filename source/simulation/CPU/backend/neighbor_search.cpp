@@ -1827,6 +1827,12 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
 							{
 								const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
+								if (writtenFR[lane] >= chunkFR.pitch) [[unlikely]]
+								{
+									throw std::runtime_error(
+										"CPU ChunkedSELL FR direct fill exceeded chunk pitch.");
+								}
+
 								chunkFR.StoreNeighbor(lane, writtenFR[lane], l);
 								writtenFR[lane]++;
 							}
