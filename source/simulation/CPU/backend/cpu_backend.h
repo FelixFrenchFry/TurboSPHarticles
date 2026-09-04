@@ -185,8 +185,15 @@ namespace Sim
 		glm::vec3 simDomainMin_ = glm::vec3(0.0f);
 		glm::vec3 simDomainMax_ = glm::vec3(0.0f);
 
-		// persistent parallelization partitioner for TBB
-		mutable std::unique_ptr<tbb::affinity_partitioner> affinityPart_;
+		// persistent parallelization partitioners for TBB, one per chunk range
+		struct StepAffinityPartitioners
+		{
+			tbb::affinity_partitioner full; // every fluid chunk
+			tbb::affinity_partitioner pressureAcc; // pressureAccChunkIdxs_
+			tbb::affinity_partitioner outer; // outerFluidChunkIdxs_
+			tbb::affinity_partitioner inner; // innerFluidChunkIdxs_
+		};
+		mutable std::unique_ptr<StepAffinityPartitioners> affinityParts_;
 
 		// --- [ backend-specific data structures for operating the simulation ] ---
 

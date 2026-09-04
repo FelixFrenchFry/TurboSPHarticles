@@ -94,7 +94,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	neighborSearch_->DataReOrder_SolverStep(params);
 	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
-	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
 	// restricted pointers for all the SoA particle properties
@@ -258,7 +258,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			psiB, psiR,
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-			massF, params.pressGamma, N_F_, *affinityPart_,
+			massF, params.pressGamma, N_F_, affinityParts_->full,
 			xAccPressF, yAccPressF, zAccPressF);
 
 		// update system vector and pressure
@@ -272,7 +272,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			neighborList,
 			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			params.restDensity, massF, params.jacobiOmega,
-			N_F_, *affinityPart_, pressureF, nullptr, errorSums);
+			N_F_, affinityParts_->full, pressureF, nullptr, errorSums);
 
 		if (N_F_ > 0)
 		{
@@ -300,7 +300,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		psiB, psiR,
 		neighborList,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-		massF, params.pressGamma, N_F_, *affinityPart_,
+		massF, params.pressGamma, N_F_, affinityParts_->full,
 		xAccPressF, yAccPressF, zAccPressF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 
@@ -368,7 +368,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	neighborSearch_->DataReOrder_SolverStep(params);
 	// update owned indices and the synchronization plan for the reordered storage
 	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
-	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
 	// restricted pointers for all the SoA particle properties
@@ -564,7 +564,8 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		const auto computePressureAcceleration = [&](
 			const std::span<const uint32_t> chunkIdxs,
 			const uint32_t N_fluidCenters,
-			const uint8_t* particleFlags)
+			const uint8_t* particleFlags,
+			tbb::affinity_partitioner& affPart)
 		{
 			CPU::PressureAcceleration_ChunkedSELL(
 				xPosF, yPosF, zPosF,
@@ -574,7 +575,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				psiB, psiR,
 				neighborList,
 				sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-				massF, params.pressGamma, N_fluidCenters, *affinityPart_,
+				massF, params.pressGamma, N_fluidCenters, affPart,
 				xAccPressF, yAccPressF, zAccPressF,
 				chunkIdxs, true, particleFlags);
 		};
@@ -582,11 +583,13 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		if (computeFirstHaloLayerPressureAcc)
 		{
 			computePressureAcceleration(
-				pressureAccChunkIdxs_, N_F_, pressureAccFluidParticleFlags_.data());
+				pressureAccChunkIdxs_, N_F_, pressureAccFluidParticleFlags_.data(),
+				affinityParts_->pressureAcc);
 		}
 		else
 		{
-			computePressureAcceleration(outerFluidChunkIdxs_, N_ownedF_, nullptr);
+			computePressureAcceleration(
+				outerFluidChunkIdxs_, N_ownedF_, nullptr, affinityParts_->outer);
 			benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 			sync.BeginSynchronizeFluidVectorField(
 				std::span<float>(xAccPressF_.data(), N_F_),
@@ -595,13 +598,15 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				Base::DistHaloMode::SingleHalo,
 				Sim::FluidSolverSyncPhase::PressureAcceleration, N_solverIters_);
 			benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
-			computePressureAcceleration(innerFluidChunkIdxs_, N_ownedF_, nullptr);
+			computePressureAcceleration(
+				innerFluidChunkIdxs_, N_ownedF_, nullptr, affinityParts_->inner);
 			benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 			sync.EndSynchronizeFluidFields();
 			benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 		}
 
-		const auto updatePressure = [&](const std::span<const uint32_t> chunkIdxs)
+		const auto updatePressure = [&](const std::span<const uint32_t> chunkIdxs,
+			tbb::affinity_partitioner& affPart)
 		{
 			PressureSolveErrorSums errorSums{};
 			CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
@@ -614,19 +619,21 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				neighborList,
 				timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 				params.restDensity, massF, params.jacobiOmega,
-				N_ownedF_, *affinityPart_, pressureF,
+				N_ownedF_, affPart, pressureF,
 				nullptr, errorSums,
 				chunkIdxs, true);
 			return errorSums;
 		};
 
-		PressureSolveErrorSums localErrorSums = updatePressure(outerFluidChunkIdxs_);
+		PressureSolveErrorSums localErrorSums = updatePressure(
+			outerFluidChunkIdxs_, affinityParts_->outer);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 		sync.BeginSynchronizeFluidScalarField(
 			std::span<float>(pressureF_.data(), N_F_), params.distHaloMode,
 			Sim::FluidSolverSyncPhase::Pressure, N_solverIters_);
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
-		const PressureSolveErrorSums innerErrorSums = updatePressure(innerFluidChunkIdxs_);
+		const PressureSolveErrorSums innerErrorSums = updatePressure(
+			innerFluidChunkIdxs_, affinityParts_->inner);
 		localErrorSums.raw += innerErrorSums.raw;
 		localErrorSums.pos += innerErrorSums.pos;
 		localErrorSums.abs += innerErrorSums.abs;
@@ -668,7 +675,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		psiB, psiR,
 		neighborList,
 		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-		massF, params.pressGamma, N_ownedF_, *affinityPart_,
+		massF, params.pressGamma, N_ownedF_, affinityParts_->full,
 		xAccPressF, yAccPressF, zAccPressF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
 

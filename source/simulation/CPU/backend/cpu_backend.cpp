@@ -136,7 +136,7 @@ SimBackend_CPU::SimBackend_CPU(
 	const SimParams& params)
 	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_{ benchmarksTracker }
 {
-	affinityPart_ = std::make_unique<tbb::affinity_partitioner>();
+	affinityParts_ = std::make_unique<StepAffinityPartitioners>();
 
 	// select neighbor search method
 	if (params.neighborSearchMethod ==
@@ -176,7 +176,7 @@ SimBackend_CPU::SimBackend_CPU(
 void SimBackend_CPU::PullFromUniversalSimState(
 	Sync::UniversalSimState& src, const SimParams& params)
 {
-	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	distributedFluidSolverSync_ = nullptr;
 	useDistributedParticleLayout_ = false;
 	N_ownedF_ = 0;
@@ -1557,7 +1557,7 @@ void SimBackend_CPU::ExecuteNeighborSearch(const SimParams& params, const bool b
 	}
 	neighborSearch_->DataReOrder(params);
 	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
-	affinityPart_ = std::make_unique<tbb::affinity_partitioner>(); // reset mapping
+	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	if (bench)
 	{
 		benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
