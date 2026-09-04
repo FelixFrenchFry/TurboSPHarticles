@@ -147,7 +147,7 @@
             "pitchDeg": 20.0,
             "rollDeg": 0.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -160,7 +160,7 @@
             "pitchDeg": -20.0,
             "rollDeg": 0.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -173,7 +173,7 @@
             "pitchDeg": 0.0,
             "rollDeg": 60.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -186,7 +186,7 @@
             "pitchDeg": 0.0,
             "rollDeg": 0.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -199,7 +199,7 @@
             "pitchDeg": 0.0,
             "rollDeg": -60.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -212,7 +212,7 @@
             "pitchDeg": -10.0,
             "rollDeg": 0.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -225,7 +225,7 @@
             "pitchDeg": 0.0,
             "rollDeg": 90.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },
@@ -238,7 +238,7 @@
             "pitchDeg": -10.0,
             "rollDeg": 0.0
           },
-          "rigidDensity": 650.0,
+          "rigidDensity": 500.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         }

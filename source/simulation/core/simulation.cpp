@@ -330,12 +330,19 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	}
 
 	AppendInitialMemoryMetricsLog(paramsInit);
+	const char* stopReason = "unknown reason";
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
-	while (!stopToken.stop_requested() &&
-		   !stopRequested_.load(std::memory_order_acquire))
+	while (true)
 	{
+		if (stopToken.stop_requested() ||
+			stopRequested_.load(std::memory_order_acquire))
+		{
+			stopReason = "stop requested";
+			break;
+		}
+
 		SyncParameters(true);
 
 		// local copy for thread safety
@@ -345,9 +352,13 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
-		// explicit maximum number of steps reached
+		// explicit max number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
-			paramsInit.maxSteps > 0) { break; }
+			paramsInit.maxSteps > 0)
+		{
+			stopReason = "max number of steps reached";
+			break;
+		}
 
 		// small sleep to avoid busy spin when nothing to do yet
 		if (!doSimStep)
@@ -440,7 +451,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	EndRunLogging();
 
 	printf("\n");
-	SPDLOG_INFO("Simulation stopped running");
+	SPDLOG_INFO("Simulation stopped running ({})", stopReason);
 	DiagnosticsMgr::PrintFinalProgressPeakRam(
 		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
 		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
@@ -468,11 +479,18 @@ void SimulationMgr::RunSim_Blocking()
 	}
 
 	AppendInitialMemoryMetricsLog(paramsInit);
+	const char* stopReason = "unknown reason";
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
-	while (!stopRequested_.load(std::memory_order_acquire))
+	while (true)
 	{
+		if (stopRequested_.load(std::memory_order_acquire))
+		{
+			stopReason = "stop requested";
+			break;
+		}
+
 		SyncParameters(true);
 
 		// local copy for thread safety
@@ -482,9 +500,13 @@ void SimulationMgr::RunSim_Blocking()
 		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
-		// explicit maximum number of steps reached
+		// explicit max number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
-			paramsInit.maxSteps > 0) { break; }
+			paramsInit.maxSteps > 0)
+		{
+			stopReason = "max number of steps reached";
+			break;
+		}
 
 		// small sleep to avoid busy spin when nothing to do yet
 		if (!doSimStep)
@@ -555,7 +577,7 @@ void SimulationMgr::RunSim_Blocking()
 	EndRunLogging();
 
 	printf("\n");
-	SPDLOG_INFO("Simulation stopped running");
+	SPDLOG_INFO("Simulation stopped running ({})", stopReason);
 	DiagnosticsMgr::PrintFinalProgressPeakRam(
 		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
 		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);

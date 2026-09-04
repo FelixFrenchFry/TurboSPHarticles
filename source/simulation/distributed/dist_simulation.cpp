@@ -847,8 +847,6 @@ bool DistSimulationMgr::RunSim_Blocking()
 	BeginRunLogging(paramsInit);
 	DistDiagnosticsMgr::ResetProgress();
 	bool runOk = true;
-
-	// reported once the loop below is left, so every exit states why the run ended
 	const char* stopReason = "unknown reason";
 
 	// pack and serialize export snapshot of initial state
@@ -883,11 +881,11 @@ bool DistSimulationMgr::RunSim_Blocking()
 			!stopRequested_.load(std::memory_order_acquire));
 		if (!keepRunning) { stopReason = "stop requested"; break; }
 
-		// explicit maximum number of steps reached
+		// explicit max number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
 			paramsInit.maxSteps > 0)
 		{
-			stopReason = "maximum number of steps reached";
+			stopReason = "max number of steps reached";
 			break;
 		}
 
