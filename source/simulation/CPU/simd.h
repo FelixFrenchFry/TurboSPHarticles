@@ -13,7 +13,7 @@
 #elif defined(TSP_CPU_SIMD_ARCH_AVX256) || !defined(TSP_CPU_SIMD_WIDTH)
 #include "source/simulation/CPU/simd_avx256.h"
 #else
-#error "Unsupported CPU SIMD architecture. Expected AVX256 or AVX512."
+#error "Unsupported CPU SIMD architecture. Expected support for AVX256 or AVX512."
 #endif
 
 
@@ -64,28 +64,34 @@ namespace CPU
 		return xsimd::load_unaligned<SimdArch>(p);
 	}
 
-	// build particle indices for one SIMD chunk, padding the last partial chunk safely
-	inline UInt32xSIMD ParticleIdx32xSIMD(
-		const uint32_t begin,
-		const uint32_t end) noexcept
-	{
-		alignas(N_SIMD_ALIGNMENT) uint32_t idx[N_SIMD_WIDTH]{};
-		const uint32_t last = end - 1u;
-
-		for (uint32_t lane = 0; lane < N_SIMD_WIDTH; lane++)
-		{
-			idx[lane] = std::min(begin + lane, last);
-		}
-
-		return LoadUInt32xSIMD(idx);
-	}
-
 	// gather scattered float values by particle index
 	inline Float32xSIMD GatherFloat32xSIMD(
 		const float* p,
 		const UInt32xSIMD idx) noexcept
 	{
 		return Float32xSIMD::gather(p, idx);
+	}
+
+	// load a full SIMD chunk or only the valid lanes of the final partial chunk
+	inline Float32xSIMD LoadFloat32xSIMDPartial(
+		const float* p,
+		const uint32_t begin,
+		const uint32_t end) noexcept
+	{
+		if (end - begin == N_SIMD_WIDTH)
+		{
+			return LoadFloat32xSIMD(p + begin);
+		}
+
+		alignas(N_SIMD_ALIGNMENT) float tmp[N_SIMD_WIDTH]{};
+		const uint32_t last = end - 1u;
+
+		for (uint32_t lane = 0; lane < N_SIMD_WIDTH; lane++)
+		{
+			tmp[lane] = p[std::min(begin + lane, last)];
+		}
+
+		return LoadFloat32xSIMD(tmp);
 	}
 
 	// fused multiply-add for hot inner-loop arithmetic
@@ -144,6 +150,7 @@ namespace CPU
 		if (!particleFlags) { return ValidLaneMask32xSIMD(begin, end); }
 
 		alignas(N_SIMD_ALIGNMENT) uint32_t flags[N_SIMD_WIDTH]{};
+
 		for (uint32_t lane = 0; lane < end - begin; lane++)
 		{
 			flags[lane] = particleFlags[begin + lane];
@@ -223,6 +230,7 @@ namespace CPU
 
 		alignas(N_SIMD_ALIGNMENT) float tmp[N_SIMD_WIDTH]{};
 		v.store_aligned(tmp);
+
 		for (uint32_t i = begin; i < end; i++)
 		{
 			dst[i] = tmp[i - begin];

@@ -1480,10 +1480,9 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 						useSelectedFluidCenters
 							? be_.pressureAccFluidParticleFlags_.data() : nullptr,
 						begin, end);
-					const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
-					const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-					const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-					const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+					const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+					const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+					const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
 					CPU::UInt32xSIMD cntFF = CPU::SetUInt32xSIMD(0u);
 					CPU::UInt32xSIMD cntFB = CPU::SetUInt32xSIMD(0u);
 					CPU::UInt32xSIMD cntFR = CPU::SetUInt32xSIMD(0u);
@@ -1729,10 +1728,9 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 							}
 						}
 					}
-					const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
-					const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-					const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-					const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+					const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+					const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+					const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
 					uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFR[CPU::N_SIMD_WIDTH]{};

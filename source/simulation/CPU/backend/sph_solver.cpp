@@ -795,11 +795,9 @@ void CPU::Density_ChunkedSELL(
 				if (begin >= end) { continue; }
 
 				// one SELL chunk, covering up to CPU::N_SIMD_WIDTH consecutive fluid particles
-				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
-
-				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
+				const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+				const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+				const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
 
 				CPU::Float32xSIMD tmp_densityF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_densityB = CPU::ZeroFloat32xSIMD();
@@ -949,14 +947,12 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 				if (begin >= end) { continue; }
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
-				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
-
-				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
-				const CPU::Float32xSIMD vxi = CPU::GatherFloat32xSIMD(xVelF, idxI);
-				const CPU::Float32xSIMD vyi = CPU::GatherFloat32xSIMD(yVelF, idxI);
-				const CPU::Float32xSIMD vzi = CPU::GatherFloat32xSIMD(zVelF, idxI);
+				const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+				const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+				const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
+				const CPU::Float32xSIMD vxi = CPU::LoadFloat32xSIMDPartial(xVelF, begin, end);
+				const CPU::Float32xSIMD vyi = CPU::LoadFloat32xSIMDPartial(yVelF, begin, end);
+				const CPU::Float32xSIMD vzi = CPU::LoadFloat32xSIMDPartial(zVelF, begin, end);
 
 				CPU::Float32xSIMD tmp_xAccViscF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_yAccViscF = CPU::ZeroFloat32xSIMD();
@@ -1240,15 +1236,14 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = std::min(nbrFF.end, N_F);
 				if (begin >= end) { continue; }
-				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
-				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
-				const CPU::Float32xSIMD vpxi = CPU::GatherFloat32xSIMD(xVelPredF, idxI);
-				const CPU::Float32xSIMD vpyi = CPU::GatherFloat32xSIMD(yVelPredF, idxI);
-				const CPU::Float32xSIMD vpzi = CPU::GatherFloat32xSIMD(zVelPredF, idxI);
+				const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+				const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+				const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
+				const CPU::Float32xSIMD vpxi = CPU::LoadFloat32xSIMDPartial(xVelPredF, begin, end);
+				const CPU::Float32xSIMD vpyi = CPU::LoadFloat32xSIMDPartial(yVelPredF, begin, end);
+				const CPU::Float32xSIMD vpzi = CPU::LoadFloat32xSIMDPartial(zVelPredF, begin, end);
 
 				CPU::Float32xSIMD tmp_SourceTermF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_SourceTermB = CPU::ZeroFloat32xSIMD();
@@ -1380,7 +1375,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				tmp_SourceTermF *= massFV;
 
 				const CPU::Float32xSIMD fin_sourceTermF =
-					restDensityV - CPU::GatherFloat32xSIMD(densityF, idxI)
+					restDensityV - CPU::LoadFloat32xSIMDPartial(densityF, begin, end)
 					- timeStepV * (tmp_SourceTermF + tmp_SourceTermB + tmp_SourceTermR);
 
 				const CPU::Float32xSIMD xCTerm = xCTermF * cTermFacF + (xCTermB + xCTermR) * cTermFacB;
@@ -1467,13 +1462,12 @@ void CPU::PressureAcceleration_ChunkedSELL(
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = std::min(nbrFF.end, N_F);
 				if (begin >= end) { continue; }
-				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
-				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
-				const CPU::Float32xSIMD presi = CPU::GatherFloat32xSIMD(pressureF, idxI);
+				const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+				const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+				const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
+				const CPU::Float32xSIMD presi = CPU::LoadFloat32xSIMDPartial(pressureF, begin, end);
 				const CPU::Float32xSIMD accCoeffF_outer = massFV * presi * densiInvSquV;
 
 				CPU::Float32xSIMD tmp_xAccPressF = CPU::ZeroFloat32xSIMD();
@@ -1725,15 +1719,14 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 				const uint32_t begin = nbrFF.begin;
 				const uint32_t end = std::min(nbrFF.end, N_F);
 				if (begin >= end) { continue; }
-				const CPU::UInt32xSIMD idxI = CPU::ParticleIdx32xSIMD(begin, end);
 
 				// one SELL chunk covers up to CPU::N_SIMD_WIDTH consecutive i-particles
-				const CPU::Float32xSIMD xi = CPU::GatherFloat32xSIMD(xPosF, idxI);
-				const CPU::Float32xSIMD yi = CPU::GatherFloat32xSIMD(yPosF, idxI);
-				const CPU::Float32xSIMD zi = CPU::GatherFloat32xSIMD(zPosF, idxI);
-				const CPU::Float32xSIMD axi = CPU::GatherFloat32xSIMD(xAccPressF, idxI);
-				const CPU::Float32xSIMD ayi = CPU::GatherFloat32xSIMD(yAccPressF, idxI);
-				const CPU::Float32xSIMD azi = CPU::GatherFloat32xSIMD(zAccPressF, idxI);
+				const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
+				const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
+				const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
+				const CPU::Float32xSIMD axi = CPU::LoadFloat32xSIMDPartial(xAccPressF, begin, end);
+				const CPU::Float32xSIMD ayi = CPU::LoadFloat32xSIMDPartial(yAccPressF, begin, end);
+				const CPU::Float32xSIMD azi = CPU::LoadFloat32xSIMDPartial(zAccPressF, begin, end);
 
 				CPU::Float32xSIMD tmp_SysVecElemF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_SysVecElemB = CPU::ZeroFloat32xSIMD();
@@ -1837,13 +1830,13 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 				}
 
 				const CPU::Float32xSIMD sysVecElemF = timeStepSquV * (tmp_SysVecElemF + tmp_SysVecElemB);
-				const CPU::Float32xSIMD sourceTerm = CPU::GatherFloat32xSIMD(sourceTermF, idxI);
-				const CPU::Float32xSIMD diagElem = CPU::GatherFloat32xSIMD(diagElemF, idxI);
+				const CPU::Float32xSIMD sourceTerm = CPU::LoadFloat32xSIMDPartial(sourceTermF, begin, end);
+				const CPU::Float32xSIMD diagElem = CPU::LoadFloat32xSIMDPartial(diagElemF, begin, end);
 				const CPU::Float32xSIMD solverResidual = sourceTerm - sysVecElemF;
 				const CPU::Float32xSIMD predDensityError = sysVecElemF - sourceTerm;
 
 				const CPU::Mask32xSIMD validDiag = CPU::AbsBitwiseFloat32xSIMD(diagElem) > eps;
-				const CPU::Float32xSIMD pressure = CPU::GatherFloat32xSIMD(pressureF, idxI);
+				const CPU::Float32xSIMD pressure = CPU::LoadFloat32xSIMDPartial(pressureF, begin, end);
 				const CPU::Float32xSIMD pressureNext = xsimd::max(zero,
 					CPU::AndMaskedFloat32xSIMD(
 						CPU::FmaFloat32xSIMD(jacobiOmegaV, solverResidual / diagElem, pressure),
