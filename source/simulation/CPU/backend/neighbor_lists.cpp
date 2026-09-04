@@ -136,12 +136,13 @@ void NeighborLists_ChunkedSELL_Explicit_CPU::Resize(
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
-	nbrCountRF_.assign(N_R_, 0);
-	nbrCountRB_.assign(N_R_, 0);
-	nbrCountRR_.assign(N_R_, 0);
-	nbrOffsetsRF_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
-	nbrOffsetsRB_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
-	nbrOffsetsRR_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
+	// (the query writes every rigid count and the prefix scan every offset)
+	Base::ResizeScratchVector(nbrCountRF_, N_R_);
+	Base::ResizeScratchVector(nbrCountRB_, N_R_);
+	Base::ResizeScratchVector(nbrCountRR_, N_R_);
+	Base::ResizeScratchVector(nbrOffsetsRF_, static_cast<uint64_t>(N_R_) + 1ull);
+	Base::ResizeScratchVector(nbrOffsetsRB_, static_cast<uint64_t>(N_R_) + 1ull);
+	Base::ResizeScratchVector(nbrOffsetsRR_, static_cast<uint64_t>(N_R_) + 1ull);
 
 	// reserve packed storage up front based on the expected neighbor count
 	Base::ReserveScratchVector(nbrListFF_,
@@ -371,7 +372,7 @@ NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU::FF(
 	if (N_nbrs == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFF_.local();
-	out.resize(N_nbrs);
+	out.resize(N_nbrs, boost::container::default_init);
 
 	// reconstruct fluid neighbor list of one particle from SELL storage
 	for (uint32_t k = 0; k < N_nbrs; k++)
@@ -389,7 +390,7 @@ NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU::FB(
 	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFB_.local();
-	out.resize(N_nbrs);
+	out.resize(N_nbrs, boost::container::default_init);
 
 	// reconstruct boundary neighbor list of one particle from SELL storage
 	for (uint32_t k = 0; k < N_nbrs; k++)
@@ -407,7 +408,7 @@ NeighborSpan NeighborLists_ChunkedSELL_Explicit_CPU::FR(
 	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFR_.local();
-	out.resize(N_nbrs);
+	out.resize(N_nbrs, boost::container::default_init);
 
 	// reconstruct rigid neighbor list of one particle from SELL storage
 	for (uint32_t k = 0; k < N_nbrs; k++)
@@ -910,12 +911,13 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
-	nbrCountRF_.assign(N_R_, 0);
-	nbrCountRB_.assign(N_R_, 0);
-	nbrCountRR_.assign(N_R_, 0);
-	nbrOffsetsRF_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
-	nbrOffsetsRB_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
-	nbrOffsetsRR_.assign(static_cast<uint64_t>(N_R_) + 1ull, 0);
+	// (the query writes every rigid count and the prefix scan every offset)
+	Base::ResizeScratchVector(nbrCountRF_, N_R_);
+	Base::ResizeScratchVector(nbrCountRB_, N_R_);
+	Base::ResizeScratchVector(nbrCountRR_, N_R_);
+	Base::ResizeScratchVector(nbrOffsetsRF_, static_cast<uint64_t>(N_R_) + 1ull);
+	Base::ResizeScratchVector(nbrOffsetsRB_, static_cast<uint64_t>(N_R_) + 1ull);
+	Base::ResizeScratchVector(nbrOffsetsRR_, static_cast<uint64_t>(N_R_) + 1ull);
 
 	// reserve packed rigid storage up front based on the expected neighbor count
 	// (the compressed fluid payloads are left to the growth headroom in Finalize_Count)
@@ -1164,7 +1166,7 @@ NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU::FF(
 	if (N_nbrs == 0) [[unlikely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFF_.local();
-	out.resize(N_nbrs);
+	out.resize(N_nbrs, boost::container::default_init);
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
@@ -1186,7 +1188,7 @@ NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU::FB(
 	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFB_.local();
-	out.resize(N_nbrs);
+	out.resize(N_nbrs, boost::container::default_init);
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
@@ -1208,7 +1210,7 @@ NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU::FR(
 	if (N_nbrs == 0) [[likely]] { return NeighborSpan{ nullptr, 0 }; }
 
 	auto& out = nbrScratchFR_.local();
-	out.resize(N_nbrs);
+	out.resize(N_nbrs, boost::container::default_init);
 
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
