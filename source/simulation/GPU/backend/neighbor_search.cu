@@ -1,11 +1,13 @@
 // neighbor_search.cu
 
 // external
+#include <bit>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <cub/device/device_radix_sort.cuh>
 #include <thrust/copy.h>
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
@@ -14,7 +16,6 @@
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
 #include <thrust/set_operations.h>
-#include <thrust/sort.h>
 #include <thrust/transform_scan.h>
 #include <thrust/transform_reduce.h>
 
@@ -103,8 +104,74 @@ namespace
 		size_t cellIdF = 0;
 		size_t cellIdB = 0;
 		size_t sortedParticleIdxB = 0;
+		size_t sortAltKeys = 0;
+		size_t sortCubTemp = 0;
+		size_t cubTempBytes = 0;
 		size_t N_totalBytes = 0;
 	};
+
+	// end bit for radix sorting Morton cell IDs, highest axis bit sits at 3 * bitsPerAxis - 1
+	inline int ActiveMortonBits(const CellCoordFrame& frame) noexcept
+	{
+		const uint32_t maxDim = std::max({ frame.N_dimX, frame.N_dimY, frame.N_dimZ });
+		const uint32_t bitsPerAxis = (maxDim <= 1u) ? 1u : std::bit_width(maxDim - 1u);
+
+		return static_cast<int>(3u * bitsPerAxis);
+	}
+
+	// temp storage for radix sorting N pairs with CUB, queried over the full key width
+	inline size_t QueryCubSortTempStorageBytes(const uint32_t N)
+	{
+		cub::DoubleBuffer<uint64_t> keys;
+		cub::DoubleBuffer<uint32_t> values;
+		size_t tempBytes = 0;
+
+		GPU::Check(cub::DeviceRadixSort::SortPairs(
+			nullptr, tempBytes, keys, values, static_cast<int>(N), 0, 64));
+
+		return tempBytes;
+	}
+
+	// device scratch for one radix sort of cell ID / particle index pairs
+	struct NS_SortScratch
+	{
+		uint64_t* d_altKeys = nullptr;
+		uint32_t* d_altValues = nullptr;
+		void* d_cubTemp = nullptr;
+		size_t cubTempBytes = 0;
+		int activeBits = 0;
+	};
+
+	inline void SortPairsByCellId(
+		uint64_t* const d_cellId,
+		uint32_t* const d_particleIdx,
+		const NS_SortScratch& scratch,
+		const uint32_t N,
+		cudaStream_t stream)
+	{
+		if (N <= 1u) { return; }
+
+		cub::DoubleBuffer<uint64_t> keys(d_cellId, scratch.d_altKeys);
+		cub::DoubleBuffer<uint32_t> values(d_particleIdx, scratch.d_altValues);
+		size_t tempBytes = scratch.cubTempBytes;
+
+		GPU::Check(cub::DeviceRadixSort::SortPairs(
+			scratch.d_cubTemp, tempBytes, keys, values,
+			static_cast<int>(N), 0, scratch.activeBits, stream));
+
+		// an odd pass count leaves both results in the alternate buffers
+		if (keys.Current() != d_cellId)
+		{
+			GPU::Check(cudaMemcpyAsync(
+				d_cellId, keys.Current(),
+				static_cast<size_t>(N) * sizeof(uint64_t),
+				cudaMemcpyDeviceToDevice, stream));
+			GPU::Check(cudaMemcpyAsync(
+				d_particleIdx, values.Current(),
+				static_cast<size_t>(N) * sizeof(uint32_t),
+				cudaMemcpyDeviceToDevice, stream));
+		}
+	}
 
 	struct NS_CompactSharedScratchLayout
 	{
@@ -130,25 +197,29 @@ namespace
 	}
 
 	inline NS_CompactBuildScratchLayout BuildCompactBuildScratchLayout(
-		const uint32_t N_F, const uint32_t N_B)
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R)
 	{
 		NS_CompactBuildScratchLayout layout{};
 		size_t cursor = 0;
+		const uint32_t N_sortMax = std::max({ N_F, N_B, N_R });
 
 		layout.cellIdF = ReserveScratchElems<uint64_t>(cursor, N_F);
 		layout.cellIdB = ReserveScratchElems<uint64_t>(cursor, N_B);
 		layout.sortedParticleIdxB = ReserveScratchElems<uint32_t>(cursor, N_B);
+		layout.sortAltKeys = ReserveScratchElems<uint64_t>(cursor, N_sortMax);
+		layout.cubTempBytes = QueryCubSortTempStorageBytes(N_sortMax);
+		layout.sortCubTemp = ReserveScratchElems<uint8_t>(cursor, layout.cubTempBytes);
 		layout.N_totalBytes = cursor;
 
 		return layout;
 	}
 
 	inline NS_CompactSharedScratchLayout BuildCompactSharedScratchLayout(
-		const uint32_t N_F, const uint32_t N_B)
+		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R)
 	{
 		NS_CompactSharedScratchLayout layout{};
 		layout.finalize = BuildFinalizeScratchLayout(N_F);
-		layout.build = BuildCompactBuildScratchLayout(N_F, N_B);
+		layout.build = BuildCompactBuildScratchLayout(N_F, N_B, N_R);
 		layout.N_phaseScratchBytes =
 			std::max(layout.finalize.N_totalBytes, layout.build.N_totalBytes);
 
@@ -654,10 +725,17 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 	UpdateCellFrame();
 
 	EnsureStorageAllocation();
-	const NS_CompactSharedScratchLayout scratchLayout = BuildCompactSharedScratchLayout(N_F, N_B);
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(N_F, N_B, N_R);
 	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
 	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
 	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
+	const NS_SortScratch sortScratch{
+		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
+		be_.d_reorderIdScratch_.Data(),
+		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
+		scratchLayout.build.cubTempBytes,
+		ActiveMortonBits(cellFrame_) };
 
 	GPU::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
@@ -693,22 +771,14 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 
 		if (N_F > 0) // fluid
 		{
-			thrust::device_ptr<uint64_t> keysF(d_cellIdF);
-			thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
-
-			// using radix sort from thrust
-			thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
-				keysF, keysF + N_F,valsF);
+			SortPairsByCellId(
+				d_cellIdF, d_sortedParticleIdxF_.Data(), sortScratch, N_F, be_.stream_);
 		}
 
 		if (N_B > 0) // boundary
 		{
-			thrust::device_ptr<uint64_t> keysB(d_cellIdB);
-			thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB);
-
-			// using radix sort from thrust
-			thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
-				keysB, keysB + N_B, valsB);
+			SortPairsByCellId(
+				d_cellIdB, d_sortedParticleIdxB, sortScratch, N_B, be_.stream_);
 		}
 	}
 
@@ -718,11 +788,13 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 		GPU::Launch_FillCellIdAndInitParticleIdx(
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
 			N_R, be_.stream_, d_cellIdR_.Data(), d_sortedParticleIdxR_.Data());
-		thrust::sort_by_key(
-			thrust::cuda::par.on(be_.stream_),
-			thrust::device_pointer_cast(d_cellIdR_.Data()),
-			thrust::device_pointer_cast(d_cellIdR_.Data() + N_R),
-			thrust::device_pointer_cast(d_sortedParticleIdxR_.Data()));
+
+		// the rigid marker scratch is unused until the compact cell list below overwrites it
+		NS_SortScratch rigidSortScratch = sortScratch;
+		rigidSortScratch.d_altValues = d_cellMarkerR_.Data();
+
+		SortPairsByCellId(
+			d_cellIdR_.Data(), d_sortedParticleIdxR_.Data(), rigidSortScratch, N_R, be_.stream_);
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] --------------------------------
@@ -921,10 +993,17 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	UpdateCellFrame();
 
 	EnsureStorageAllocation();
-	const NS_CompactSharedScratchLayout scratchLayout = BuildCompactSharedScratchLayout(N_F, N_B);
+	const NS_CompactSharedScratchLayout scratchLayout =
+		BuildCompactSharedScratchLayout(N_F, N_B, be_.N_R_);
 	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
 	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
 	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
+	const NS_SortScratch sortScratch{
+		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
+		be_.d_reorderIdScratch_.Data(),
+		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
+		scratchLayout.build.cubTempBytes,
+		ActiveMortonBits(cellFrame_) };
 
 	GPU::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
@@ -939,12 +1018,8 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 			N_F, be_.stream_, d_cellIdF, d_sortedParticleIdxF_.Data());
 
-		thrust::device_ptr<uint64_t> keysF(d_cellIdF);
-		thrust::device_ptr<uint32_t> valsF(d_sortedParticleIdxF_.Data());
-
-		// using radix sort from thrust
-		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
-			keysF, keysF + N_F, valsF);
+		SortPairsByCellId(
+			d_cellIdF, d_sortedParticleIdxF_.Data(), sortScratch, N_F, be_.stream_);
 	}
 
 	// build the exact compact-CLL cell IDs and particle permutation for boundary particles
@@ -954,12 +1029,8 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 			N_B, be_.stream_, d_cellIdB, d_sortedParticleIdxB);
 
-		thrust::device_ptr<uint64_t> keysB(d_cellIdB);
-		thrust::device_ptr<uint32_t> valsB(d_sortedParticleIdxB);
-
-		// using radix sort from thrust
-		thrust::sort_by_key(thrust::cuda::par.on(be_.stream_),
-			keysB, keysB + N_B, valsB);
+		SortPairsByCellId(
+			d_cellIdB, d_sortedParticleIdxB, sortScratch, N_B, be_.stream_);
 	}
 
 	// density array as temp scratch storage (only needed after the particle arrays are re-ordered),
@@ -1063,14 +1134,12 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU::GetMemUsage(
 	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellIdR_));
 	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellMarkerR_));
 
-	// shared merged lookup metadata is accounted in the fluid-side bucket to avoid double-counting
+	// shared merged lookup metadata is accounted in the fluid bucket to avoid double-counting
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefFByAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefBByAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryCellRefAnyByCellF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
-
-	// shared scan scratch is accounted in the fluid-side bucket to avoid double-counting
 
 	return { usageF, usageB, usageR };
 }
@@ -1120,7 +1189,7 @@ void NS_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 	}
 
 	be_.EnsureNsSharedScratchCapacity(
-		BuildCompactSharedScratchLayout(N_F, N_B).N_totalBytes);
+		BuildCompactSharedScratchLayout(N_F, N_B, N_R).N_totalBytes);
 }
 
 void NS_CellLinkedList_Compact_GPU::BuildCompactCellList(
@@ -1222,7 +1291,7 @@ void NS_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()
 	}
 
 	const NS_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_, be_.N_R_);
 	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
 	uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
@@ -1268,7 +1337,7 @@ void NS_CellLinkedList_Compact_GPU::BuildQueryCellRefCache()
 	}
 
 	const NS_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
+		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_, be_.N_R_);
 	const uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
 	const uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
