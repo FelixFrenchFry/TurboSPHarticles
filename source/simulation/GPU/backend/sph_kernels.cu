@@ -355,7 +355,6 @@ namespace GPU
 		if (i >= c_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -557,7 +556,6 @@ namespace GPU
 		if (i >= c_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -771,7 +769,6 @@ namespace GPU
 		if (i >= c_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -937,7 +934,6 @@ namespace GPU
 		if (i >= c_N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];

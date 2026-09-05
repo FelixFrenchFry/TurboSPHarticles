@@ -91,18 +91,54 @@ namespace GPU
 		return static_cast<uint32_t>((t > high) ? high : t);
 	}
 
-	__device__ __forceinline__
-	void CommitChunkNeighborIndexRange(
-		const uint32_t chunk,
-		const uint32_t localMin,
-		const uint32_t localMax,
-		uint32_t* __restrict__ chunkMinRef,
-		uint32_t* __restrict__ chunkMaxRef)
-	{
-		if (localMin == 0xffffffffu) { return; }
+	static_assert(N_SELL_WIDTH == 32u,
+		"Chunked SELL32 chunk meta reduction assumes one chunk per warp.");
 
-		atomicMin(chunkMinRef + chunk, localMin);
-		atomicMax(chunkMaxRef + chunk, localMax);
+	// every lane of the warp has to reach this, the shuffles span the full chunk
+	__device__ __forceinline__
+	void CommitChunkCompressionMeta(
+		const uint32_t chunk,
+		const bool isChunkOwner,
+		uint32_t pitch,
+		uint32_t minRef,
+		uint32_t maxRef,
+		uint16_t* __restrict__ chunkMaxCount,
+		uint32_t* __restrict__ chunkBaseIdx,
+		uint8_t* __restrict__ chunkFormat)
+	{
+		for (uint32_t offset = N_SELL_WIDTH / 2u; offset != 0u; offset >>= 1u)
+		{
+			const uint32_t otherPitch = __shfl_down_sync(0xffffffffu, pitch, offset);
+			const uint32_t otherMinRef = __shfl_down_sync(0xffffffffu, minRef, offset);
+			const uint32_t otherMaxRef = __shfl_down_sync(0xffffffffu, maxRef, offset);
+			pitch = (otherPitch > pitch) ? otherPitch : pitch;
+			minRef = (otherMinRef < minRef) ? otherMinRef : minRef;
+			maxRef = (otherMaxRef > maxRef) ? otherMaxRef : maxRef;
+		}
+
+		if (!isChunkOwner) { return; }
+
+		chunkMaxCount[chunk] = static_cast<uint16_t>(pitch);
+
+		if (pitch == 0u)
+		{
+			chunkBaseIdx[chunk] = 0u;
+			chunkFormat[chunk] = static_cast<uint8_t>(NbrChunkFormat::Abs32);
+			return;
+		}
+
+		const uint32_t span = (maxRef >= minRef) ? (maxRef - minRef) : 0xffffffffu;
+		const bool canUseDelta16 =
+			(maxRef >= minRef) && (span <= 0xffffu);
+		const bool canUseDelta8 =
+			(maxRef >= minRef) && (span <= 0xffu);
+
+		chunkBaseIdx[chunk] = minRef;
+		chunkFormat[chunk] = canUseDelta8
+			? static_cast<uint8_t>(NbrChunkFormat::Delta8)
+			: (canUseDelta16
+				? static_cast<uint8_t>(NbrChunkFormat::Delta16)
+				: static_cast<uint8_t>(NbrChunkFormat::Abs32));
 	}
 
 	__device__ __forceinline__
@@ -189,21 +225,21 @@ namespace GPU
 		uint16_t* __restrict__ nbrCountFF,
 		uint16_t* __restrict__ nbrCountFB,
 		uint16_t* __restrict__ nbrCountFR,
-		uint32_t* __restrict__ nbrChunkMinRefFF,
-		uint32_t* __restrict__ nbrChunkMaxRefFF,
-		uint32_t* __restrict__ nbrChunkMinRefFB,
-		uint32_t* __restrict__ nbrChunkMaxRefFB,
-		uint32_t* __restrict__ nbrChunkMinRefFR,
-		uint32_t* __restrict__ nbrChunkMaxRefFR)
+		uint16_t* __restrict__ nbrChunkMaxCountFF,
+		uint16_t* __restrict__ nbrChunkMaxCountFB,
+		uint16_t* __restrict__ nbrChunkMaxCountFR,
+		uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		uint32_t* __restrict__ nbrChunkBaseIdxFR,
+		uint8_t* __restrict__ nbrChunkFormatFF,
+		uint8_t* __restrict__ nbrChunkFormatFB,
+		uint8_t* __restrict__ nbrChunkFormatFR)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= c_ns_N_F) { return; }
-
-		// particle i data
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
 		const uint32_t chunk = i / N_SELL_WIDTH;
+		// one chunk per warp, only lane 0 writes the metadata after the reduction
+		// (lanes 1-31 only feed the reduction that produces it, but do not write)
+		const bool isChunkOwner = (i < c_ns_N_F) && ((threadIdx.x % N_SELL_WIDTH) == 0u);
 
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
@@ -215,74 +251,85 @@ namespace GPU
 		uint32_t minRefFR = 0xffffffffu;
 		uint32_t maxRefFR = 0u;
 
-		// check fluid candidates (all particles)
-		for (uint32_t j = 0; j < c_ns_N_F; j++)
+		if (i < c_ns_N_F)
 		{
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
+			// particle i data
+			const float xi = xPosF[i];
+			const float yi = yPosF[i];
+			const float zi = zPosF[i];
 
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
+			// check fluid candidates (all particles)
+			for (uint32_t j = 0; j < c_ns_N_F; j++)
 			{
-				cntFF++;
-				minRefFF = (j < minRefFF) ? j : minRefFF;
-				maxRefFF = (j > maxRefFF) ? j : maxRefFF;
+				// position difference
+				const float dx = xi - xPosF[j];
+				const float dy = yi - yPosF[j];
+				const float dz = zi - zPosF[j];
+
+				// squared distance between particles i and j
+				const float distSqu = dx * dx + dy * dy + dz * dz;
+
+				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
+				{
+					cntFF++;
+					minRefFF = (j < minRefFF) ? j : minRefFF;
+					maxRefFF = (j > maxRefFF) ? j : maxRefFF;
+				}
 			}
+
+			// check boundary candidates (all particles)
+			for (uint32_t j = 0; j < c_ns_N_B; j++)
+			{
+				// position difference
+				const float dx = xi - xPosB[j];
+				const float dy = yi - yPosB[j];
+				const float dz = zi - zPosB[j];
+
+				// squared distance between particles i and j
+				const float distSqu = dx * dx + dy * dy + dz * dz;
+
+				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
+				{
+					cntFB++;
+					minRefFB = (j < minRefFB) ? j : minRefFB;
+					maxRefFB = (j > maxRefFB) ? j : maxRefFB;
+				}
+			}
+
+			// check rigid candidates (all particles)
+			for (uint32_t j = 0; j < c_ns_N_R; j++)
+			{
+				// position difference
+				const float dx = xi - xPosR[j];
+				const float dy = yi - yPosR[j];
+				const float dz = zi - zPosR[j];
+
+				// squared distance between particles i and j
+				const float distSqu = dx * dx + dy * dy + dz * dz;
+
+				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
+				{
+					cntFR++;
+					minRefFR = (j < minRefFR) ? j : minRefFR;
+					maxRefFR = (j > maxRefFR) ? j : maxRefFR;
+				}
+			}
+
+			// update neighbor counts
+			nbrCountFF[i] = static_cast<uint16_t>(cntFF);
+			nbrCountFB[i] = static_cast<uint16_t>(cntFB);
+			nbrCountFR[i] = static_cast<uint16_t>(cntFR);
 		}
 
-		// check boundary candidates (all particles)
-		for (uint32_t j = 0; j < c_ns_N_B; j++)
-		{
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
-			{
-				cntFB++;
-				minRefFB = (j < minRefFB) ? j : minRefFB;
-				maxRefFB = (j > maxRefFB) ? j : maxRefFB;
-			}
-		}
-
-		// check rigid candidates (all particles)
-		for (uint32_t j = 0; j < c_ns_N_R; j++)
-		{
-			// position difference
-			const float dx = xi - xPosR[j];
-			const float dy = yi - yPosR[j];
-			const float dz = zi - zPosR[j];
-
-			// squared distance between particles i and j
-			const float distSqu = dx * dx + dy * dy + dz * dz;
-
-			if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
-			{
-				cntFR++;
-				minRefFR = (j < minRefFR) ? j : minRefFR;
-				maxRefFR = (j > maxRefFR) ? j : maxRefFR;
-			}
-		}
-
-		CommitChunkNeighborIndexRange(
-			chunk, minRefFF, maxRefFF, nbrChunkMinRefFF, nbrChunkMaxRefFF);
-		CommitChunkNeighborIndexRange(
-			chunk, minRefFB, maxRefFB, nbrChunkMinRefFB, nbrChunkMaxRefFB);
-		CommitChunkNeighborIndexRange(
-			chunk, minRefFR, maxRefFR, nbrChunkMinRefFR, nbrChunkMaxRefFR);
-
-		// update neighbor counts
-		nbrCountFF[i] = static_cast<uint16_t>(cntFF);
-		nbrCountFB[i] = static_cast<uint16_t>(cntFB);
-		nbrCountFR[i] = static_cast<uint16_t>(cntFR);
+		CommitChunkCompressionMeta(
+			chunk, isChunkOwner, cntFF, minRefFF, maxRefFF,
+			nbrChunkMaxCountFF, nbrChunkBaseIdxFF, nbrChunkFormatFF);
+		CommitChunkCompressionMeta(
+			chunk, isChunkOwner, cntFB, minRefFB, maxRefFB,
+			nbrChunkMaxCountFB, nbrChunkBaseIdxFB, nbrChunkFormatFB);
+		CommitChunkCompressionMeta(
+			chunk, isChunkOwner, cntFR, minRefFR, maxRefFR,
+			nbrChunkMaxCountFR, nbrChunkBaseIdxFR, nbrChunkFormatFR);
 	}
 
 	__global__
@@ -922,7 +969,6 @@ namespace GPU
 		if (i >= N) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float x = xPos[i];
 		const float y = yPos[i];
 		const float z = zPos[i];
@@ -963,25 +1009,21 @@ namespace GPU
 		uint16_t* __restrict__ nbrCountFF,
 		uint16_t* __restrict__ nbrCountFB,
 		uint16_t* __restrict__ nbrCountFR,
-		uint32_t* __restrict__ nbrChunkMinRefFF,
-		uint32_t* __restrict__ nbrChunkMaxRefFF,
-		uint32_t* __restrict__ nbrChunkMinRefFB,
-		uint32_t* __restrict__ nbrChunkMaxRefFB,
-		uint32_t* __restrict__ nbrChunkMinRefFR,
-		uint32_t* __restrict__ nbrChunkMaxRefFR)
+		uint16_t* __restrict__ nbrChunkMaxCountFF,
+		uint16_t* __restrict__ nbrChunkMaxCountFB,
+		uint16_t* __restrict__ nbrChunkMaxCountFR,
+		uint32_t* __restrict__ nbrChunkBaseIdxFF,
+		uint32_t* __restrict__ nbrChunkBaseIdxFB,
+		uint32_t* __restrict__ nbrChunkBaseIdxFR,
+		uint8_t* __restrict__ nbrChunkFormatFF,
+		uint8_t* __restrict__ nbrChunkFormatFB,
+		uint8_t* __restrict__ nbrChunkFormatFR)
 	{
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
-
-		// particle i data
-		// (global memory reads)
-		const float x = xPosF[i];
-		const float y = yPosF[i];
-		const float z = zPosF[i];
 		const uint32_t chunk = i / N_SELL_WIDTH;
-		const uint32_t cF_src = compactCellIdxByParticleF[i];
-		const uint64_t querySlotBase =
-			static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(N_queryCellSlots);
+		// one chunk per warp, only lane 0 writes the metadata after the reduction
+		// (lanes 1-31 only feed the reduction that produces it, but do not write)
+		const bool isChunkOwner = (i < N_F) && ((threadIdx.x % N_SELL_WIDTH) == 0u);
 
 		uint32_t cntFF = 0;
 		uint32_t cntFB = 0;
@@ -993,136 +1035,149 @@ namespace GPU
 		uint32_t minRefFR = 0xffffffffu;
 		uint32_t maxRefFR = 0u;
 
-		// check all particles j in the cached neighboring grid cells
-		for (uint32_t s = 0; s < N_queryCellSlots; s++)
+		if (i < N_F)
 		{
-			const uint32_t cAny_nbr = queryCellRefAnyByCellF[querySlotBase + s];
-			if (cAny_nbr == 0xffffffffu) { continue; }
+			// particle i data
+			const float x = xPosF[i];
+			const float y = yPosF[i];
+			const float z = zPosF[i];
+			const uint32_t cF_src = compactCellIdxByParticleF[i];
+			const uint64_t querySlotBase =
+				static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(N_queryCellSlots);
 
-			// fluid neighbor cell
-			const uint32_t cF_nbr = cellRefFByAny[cAny_nbr];
-			if (cF_nbr != 0xffffffffu)
+			// check all particles j in the cached neighboring grid cells
+			for (uint32_t s = 0; s < N_queryCellSlots; s++)
 			{
-				// range of all fluid particles in the neighbor cell
-				const uint32_t sF_nbr = cellStartIdxF[cF_nbr]; // start
-				const uint32_t eF_nbr = cellStartIdxF[cF_nbr + 1]; // end
-				if (sF_nbr >= eF_nbr) { continue; }
+				const uint32_t cAny_nbr = queryCellRefAnyByCellF[querySlotBase + s];
+				if (cAny_nbr == 0xffffffffu) { continue; }
 
-				for (uint32_t k = sF_nbr; k < eF_nbr; k++)
+				// fluid neighbor cell
+				const uint32_t cF_nbr = cellRefFByAny[cAny_nbr];
+				if (cF_nbr != 0xffffffffu)
 				{
-					// index of fluid neighbor candidate
-					const uint32_t j = k;
+					// range of all fluid particles in the neighbor cell
+					const uint32_t sF_nbr = cellStartIdxF[cF_nbr]; // start
+					const uint32_t eF_nbr = cellStartIdxF[cF_nbr + 1]; // end
+					if (sF_nbr >= eF_nbr) { continue; }
 
-					// position difference
-					const float dx = x - xPosF[j];
-					const float dy = y - yPosF[j];
-					const float dz = z - zPosF[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx
-										+ dy * dy
-										+ dz * dz;
-
-					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
+					for (uint32_t k = sF_nbr; k < eF_nbr; k++)
 					{
-						cntFF++;
-						minRefFF = (j < minRefFF) ? j : minRefFF;
-						maxRefFF = (j > maxRefFF) ? j : maxRefFF;
-					}
-				}
-			}
+						// index of fluid neighbor candidate
+						const uint32_t j = k;
 
-			// boundary neighbor cell
-			const uint32_t cB_nbr = cellRefBByAny[cAny_nbr];
-			if (cB_nbr != 0xffffffffu)
-			{
-				// range of all boundary particles in the neighbor cell
-				const uint32_t sB_nbr = cellStartIdxB[cB_nbr]; // start
-				const uint32_t eB_nbr = cellStartIdxB[cB_nbr + 1]; // end
-				if (sB_nbr >= eB_nbr) { continue; }
+						// position difference
+						const float dx = x - xPosF[j];
+						const float dy = y - yPosF[j];
+						const float dz = z - zPosF[j];
 
-				for (uint32_t k = sB_nbr; k < eB_nbr; k++)
-				{
-					// index of boundary neighbor candidate
-					const uint32_t j = k;
+						// squared distance between particles i and j
+						const float distSqu = dx * dx
+											+ dy * dy
+											+ dz * dz;
 
-					// position difference
-					const float dx = x - xPosB[j];
-					const float dy = y - yPosB[j];
-					const float dz = z - zPosB[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx
-										+ dy * dy
-										+ dz * dz;
-
-					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
-					{
-						cntFB++;
-						minRefFB = (j < minRefFB) ? j : minRefFB;
-						maxRefFB = (j > maxRefFB) ? j : maxRefFB;
-					}
-				}
-			}
-		}
-
-		// check all rigid particles in the neighboring grid cells
-		if (c_ns_N_R > 0u)
-		{
-			const int cx = FloorToInt(x * c_ns_cellSizeInv);
-			const int cy = FloorToInt(y * c_ns_cellSizeInv);
-			const int cz = FloorToInt(z * c_ns_cellSizeInv);
-			const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
-
-			for (int cellOffsetZ = -cellQueryReach;
-				cellOffsetZ <= cellQueryReach; cellOffsetZ++)
-			{
-				for (int cellOffsetY = -cellQueryReach;
-					cellOffsetY <= cellQueryReach; cellOffsetY++)
-				{
-					for (int cellOffsetX = -cellQueryReach;
-						cellOffsetX <= cellQueryReach; cellOffsetX++)
-					{
-						const uint64_t cellId = MapToCellId(
-							cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
-						const int cellR = BinarySearchUniqueCellId(
-							uniqueCellIdR, N_nonEmptyCellsR, cellId);
-						if (cellR < 0) { continue; }
-
-						const uint32_t begin = cellStartIdxR[cellR];
-						const uint32_t end = cellStartIdxR[cellR + 1];
-						for (uint32_t k = begin; k < end; k++)
+						if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 						{
-							const uint32_t j = sortedParticleIdxR[k];
-							const float dx = x - xPosR[j];
-							const float dy = y - yPosR[j];
-							const float dz = z - zPosR[j];
-							const float distSqu = dx * dx + dy * dy + dz * dz;
+							cntFF++;
+							minRefFF = (j < minRefFF) ? j : minRefFF;
+							maxRefFF = (j > maxRefFF) ? j : maxRefFF;
+						}
+					}
+				}
 
-							if (distSqu <= c_ns_kernelRadiusSqu)
+				// boundary neighbor cell
+				const uint32_t cB_nbr = cellRefBByAny[cAny_nbr];
+				if (cB_nbr != 0xffffffffu)
+				{
+					// range of all boundary particles in the neighbor cell
+					const uint32_t sB_nbr = cellStartIdxB[cB_nbr]; // start
+					const uint32_t eB_nbr = cellStartIdxB[cB_nbr + 1]; // end
+					if (sB_nbr >= eB_nbr) { continue; }
+
+					for (uint32_t k = sB_nbr; k < eB_nbr; k++)
+					{
+						// index of boundary neighbor candidate
+						const uint32_t j = k;
+
+						// position difference
+						const float dx = x - xPosB[j];
+						const float dy = y - yPosB[j];
+						const float dz = z - zPosB[j];
+
+						// squared distance between particles i and j
+						const float distSqu = dx * dx
+											+ dy * dy
+											+ dz * dz;
+
+						if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
+						{
+							cntFB++;
+							minRefFB = (j < minRefFB) ? j : minRefFB;
+							maxRefFB = (j > maxRefFB) ? j : maxRefFB;
+						}
+					}
+				}
+			}
+
+			// check all rigid particles in the neighboring grid cells
+			if (c_ns_N_R > 0u)
+			{
+				const int cx = FloorToInt(x * c_ns_cellSizeInv);
+				const int cy = FloorToInt(y * c_ns_cellSizeInv);
+				const int cz = FloorToInt(z * c_ns_cellSizeInv);
+				const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
+
+				for (int cellOffsetZ = -cellQueryReach;
+					cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+				{
+					for (int cellOffsetY = -cellQueryReach;
+						cellOffsetY <= cellQueryReach; cellOffsetY++)
+					{
+						for (int cellOffsetX = -cellQueryReach;
+							cellOffsetX <= cellQueryReach; cellOffsetX++)
+						{
+							const uint64_t cellId = MapToCellId(
+								cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
+							const int cellR = BinarySearchUniqueCellId(
+								uniqueCellIdR, N_nonEmptyCellsR, cellId);
+							if (cellR < 0) { continue; }
+
+							const uint32_t begin = cellStartIdxR[cellR];
+							const uint32_t end = cellStartIdxR[cellR + 1];
+							for (uint32_t k = begin; k < end; k++)
 							{
-								cntFR++;
-								minRefFR = (j < minRefFR) ? j : minRefFR;
-								maxRefFR = (j > maxRefFR) ? j : maxRefFR;
+								const uint32_t j = sortedParticleIdxR[k];
+								const float dx = x - xPosR[j];
+								const float dy = y - yPosR[j];
+								const float dz = z - zPosR[j];
+								const float distSqu = dx * dx + dy * dy + dz * dz;
+
+								if (distSqu <= c_ns_kernelRadiusSqu)
+								{
+									cntFR++;
+									minRefFR = (j < minRefFR) ? j : minRefFR;
+									maxRefFR = (j > maxRefFR) ? j : maxRefFR;
+								}
 							}
 						}
 					}
 				}
 			}
+
+			// update neighbor counts
+			nbrCountFF[i] = static_cast<uint16_t>(cntFF);
+			nbrCountFB[i] = static_cast<uint16_t>(cntFB);
+			nbrCountFR[i] = static_cast<uint16_t>(cntFR);
 		}
 
-		// update neighbor counts
-		// (global memory write)
-		CommitChunkNeighborIndexRange(
-			chunk, minRefFF, maxRefFF, nbrChunkMinRefFF, nbrChunkMaxRefFF);
-		CommitChunkNeighborIndexRange(
-			chunk, minRefFB, maxRefFB, nbrChunkMinRefFB, nbrChunkMaxRefFB);
-		CommitChunkNeighborIndexRange(
-			chunk, minRefFR, maxRefFR, nbrChunkMinRefFR, nbrChunkMaxRefFR);
-
-		nbrCountFF[i] = static_cast<uint16_t>(cntFF);
-		nbrCountFB[i] = static_cast<uint16_t>(cntFB);
-		nbrCountFR[i] = static_cast<uint16_t>(cntFR);
+		CommitChunkCompressionMeta(
+			chunk, isChunkOwner, cntFF, minRefFF, maxRefFF,
+			nbrChunkMaxCountFF, nbrChunkBaseIdxFF, nbrChunkFormatFF);
+		CommitChunkCompressionMeta(
+			chunk, isChunkOwner, cntFB, minRefFB, maxRefFB,
+			nbrChunkMaxCountFB, nbrChunkBaseIdxFB, nbrChunkFormatFB);
+		CommitChunkCompressionMeta(
+			chunk, isChunkOwner, cntFR, minRefFR, maxRefFR,
+			nbrChunkMaxCountFR, nbrChunkBaseIdxFR, nbrChunkFormatFR);
 	}
 
 	__global__
@@ -1176,7 +1231,6 @@ namespace GPU
 		if (i >= N_F) { return; }
 
 		// particle i data
-		// (global memory reads)
 		const float x = xPosF[i];
 		const float y = yPosF[i];
 		const float z = zPosF[i];
@@ -1236,7 +1290,6 @@ namespace GPU
 					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
 						// add fluid neighbor to the list
-						// (global memory write)
 						StoreNeighbor_CompressedSell32(
 							baseFF, pitchFF, lane, wrFF, j,
 							baseIdxFF, formatFF,
@@ -1273,7 +1326,6 @@ namespace GPU
 					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
 						// add boundary neighbor to the list
-						// (global memory write)
 						StoreNeighbor_CompressedSell32(
 							baseFB, pitchFB, lane, wrFB, j,
 							baseIdxFB, formatFB,
@@ -1467,7 +1519,7 @@ namespace GPU
 	}
 
 	__global__
-	void K_Compact_Query_Count_RF_RB_RR(
+	void K_CellLinkedList_Compact_Query_Count_RF_RB_RR(
 		const float* __restrict__ xPosF,
 		const float* __restrict__ yPosF,
 		const float* __restrict__ zPosF,
@@ -1507,14 +1559,11 @@ namespace GPU
 		uint32_t cntRB = 0;
 		uint32_t cntRR = 0;
 
-		for (int cellOffsetZ = -cellQueryReach;
-			cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+		for (int cellOffsetZ = -cellQueryReach; cellOffsetZ <= cellQueryReach; cellOffsetZ++)
 		{
-			for (int cellOffsetY = -cellQueryReach;
-				cellOffsetY <= cellQueryReach; cellOffsetY++)
+			for (int cellOffsetY = -cellQueryReach; cellOffsetY <= cellQueryReach; cellOffsetY++)
 			{
-				for (int cellOffsetX = -cellQueryReach;
-					cellOffsetX <= cellQueryReach; cellOffsetX++)
+				for (int cellOffsetX = -cellQueryReach; cellOffsetX <= cellQueryReach; cellOffsetX++)
 				{
 					const uint64_t cellId = MapToCellId(
 						cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
@@ -1586,7 +1635,7 @@ namespace GPU
 	}
 
 	__global__
-	void K_Compact_Query_Fill_RF_RB_RR(
+	void K_CellLinkedList_Compact_Query_Fill_RF_RB_RR(
 		const float* __restrict__ xPosF,
 		const float* __restrict__ yPosF,
 		const float* __restrict__ zPosF,
@@ -1629,14 +1678,11 @@ namespace GPU
 		uint64_t wrRB = nbrOffsetsRB[i];
 		uint64_t wrRR = nbrOffsetsRR[i];
 
-		for (int cellOffsetZ = -cellQueryReach;
-			cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+		for (int cellOffsetZ = -cellQueryReach; cellOffsetZ <= cellQueryReach; cellOffsetZ++)
 		{
-			for (int cellOffsetY = -cellQueryReach;
-				cellOffsetY <= cellQueryReach; cellOffsetY++)
+			for (int cellOffsetY = -cellQueryReach; cellOffsetY <= cellQueryReach; cellOffsetY++)
 			{
-				for (int cellOffsetX = -cellQueryReach;
-					cellOffsetX <= cellQueryReach; cellOffsetX++)
+				for (int cellOffsetX = -cellQueryReach; cellOffsetX <= cellQueryReach; cellOffsetX++)
 				{
 					const uint64_t cellId = MapToCellId(
 						cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
@@ -1722,12 +1768,15 @@ namespace GPU
 		uint16_t* nbrCountFF,
 		uint16_t* nbrCountFB,
 		uint16_t* nbrCountFR,
-		uint32_t* nbrChunkMinRefFF,
-		uint32_t* nbrChunkMaxRefFF,
-		uint32_t* nbrChunkMinRefFB,
-		uint32_t* nbrChunkMaxRefFB,
-		uint32_t* nbrChunkMinRefFR,
-		uint32_t* nbrChunkMaxRefFR)
+		uint16_t* nbrChunkMaxCountFF,
+		uint16_t* nbrChunkMaxCountFB,
+		uint16_t* nbrChunkMaxCountFR,
+		uint32_t* nbrChunkBaseIdxFF,
+		uint32_t* nbrChunkBaseIdxFB,
+		uint32_t* nbrChunkBaseIdxFR,
+		uint8_t* nbrChunkFormatFF,
+		uint8_t* nbrChunkFormatFB,
+		uint8_t* nbrChunkFormatFR)
 	{
 		(void)N_B;
 		(void)N_R;
@@ -1739,9 +1788,9 @@ namespace GPU
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
 			xPosR, yPosR, zPosR,
 			nbrCountFF, nbrCountFB, nbrCountFR,
-			nbrChunkMinRefFF, nbrChunkMaxRefFF,
-			nbrChunkMinRefFB, nbrChunkMaxRefFB,
-			nbrChunkMinRefFR, nbrChunkMaxRefFR);
+			nbrChunkMaxCountFF, nbrChunkMaxCountFB, nbrChunkMaxCountFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR);
 
 		GPU::CheckLastKernel("K_BruteForce_Query_Count()");
 	}
@@ -2019,12 +2068,15 @@ namespace GPU
 		uint16_t* nbrCountFF,
 		uint16_t* nbrCountFB,
 		uint16_t* nbrCountFR,
-		uint32_t* nbrChunkMinRefFF,
-		uint32_t* nbrChunkMaxRefFF,
-		uint32_t* nbrChunkMinRefFB,
-		uint32_t* nbrChunkMaxRefFB,
-		uint32_t* nbrChunkMinRefFR,
-		uint32_t* nbrChunkMaxRefFR)
+		uint16_t* nbrChunkMaxCountFF,
+		uint16_t* nbrChunkMaxCountFB,
+		uint16_t* nbrChunkMaxCountFR,
+		uint32_t* nbrChunkBaseIdxFF,
+		uint32_t* nbrChunkBaseIdxFB,
+		uint32_t* nbrChunkBaseIdxFR,
+		uint8_t* nbrChunkFormatFF,
+		uint8_t* nbrChunkFormatFB,
+		uint8_t* nbrChunkFormatFR)
 	{
 		(void)N_B;
 		(void)N_R;
@@ -2033,8 +2085,7 @@ namespace GPU
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_CellLinkedList_Compact_Query_Count<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
-			xPosR, yPosR, zPosR,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
 			cellRefFByAny, cellRefBByAny,
 			cellStartIdxF, cellStartIdxB,
 			compactCellIdxByParticleF,
@@ -2043,9 +2094,9 @@ namespace GPU
 			N_nonEmptyCellsR,
 			N_F,
 			nbrCountFF, nbrCountFB, nbrCountFR,
-			nbrChunkMinRefFF, nbrChunkMaxRefFF,
-			nbrChunkMinRefFB, nbrChunkMaxRefFB,
-			nbrChunkMinRefFR, nbrChunkMaxRefFR);
+			nbrChunkMaxCountFF, nbrChunkMaxCountFB, nbrChunkMaxCountFR,
+			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR);
 
 		GPU::CheckLastKernel("K_CellLinkedList_Compact_Query_Count()");
 	}
@@ -2096,8 +2147,7 @@ namespace GPU
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_CellLinkedList_Compact_Query_Fill<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB,
-			xPosR, yPosR, zPosR,
+			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
 			cellRefFByAny, cellRefBByAny,
 			cellStartIdxF, cellStartIdxB,
 			compactCellIdxByParticleF,
@@ -2186,7 +2236,8 @@ namespace GPU
 		const uint64_t* uniqueCellIdB, const uint32_t* cellStartIdxB,
 		const uint64_t* uniqueCellIdR, const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_nonEmptyCellsF, const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
 		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
@@ -2202,16 +2253,14 @@ namespace GPU
 		if (N_R > 0)
 		{
 			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
-			K_Compact_Query_Count_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-				xPosF, yPosF, zPosF,
-				xPosB, yPosB, zPosB,
-				xPosR, yPosR, zPosR, bodyIdR,
+			K_CellLinkedList_Compact_Query_Count_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
+				xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR, bodyIdR,
 				uniqueCellIdF, cellStartIdxF,
 				uniqueCellIdB, cellStartIdxB,
 				uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
 				N_nonEmptyCellsF, N_nonEmptyCellsB, N_nonEmptyCellsR,
 				nbrCountRF, nbrCountRB, nbrCountRR);
-			GPU::CheckLastKernel("K_Compact_Query_Count_RF_RB_RR()");
+			GPU::CheckLastKernel("K_CellLinkedList_Compact_Query_Count_RF_RB_RR()");
 		}
 	}
 
@@ -2224,7 +2273,8 @@ namespace GPU
 		const uint64_t* uniqueCellIdB, const uint32_t* cellStartIdxB,
 		const uint64_t* uniqueCellIdR, const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_nonEmptyCellsF, const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
 		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
@@ -2243,17 +2293,16 @@ namespace GPU
 		if (N_R > 0)
 		{
 			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
-			K_Compact_Query_Fill_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-				xPosF, yPosF, zPosF,
-				xPosB, yPosB, zPosB,
-				xPosR, yPosR, zPosR, bodyIdR,
+			K_CellLinkedList_Compact_Query_Fill_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
+				xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
+				bodyIdR,
 				uniqueCellIdF, cellStartIdxF,
 				uniqueCellIdB, cellStartIdxB,
 				uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
 				N_nonEmptyCellsF, N_nonEmptyCellsB, N_nonEmptyCellsR,
 				nbrOffsetsRF, nbrOffsetsRB, nbrOffsetsRR,
 				nbrListRF, nbrListRB, nbrListRR);
-			GPU::CheckLastKernel("K_Compact_Query_Fill_RF_RB_RR()");
+			GPU::CheckLastKernel("K_CellLinkedList_Compact_Query_Fill_RF_RB_RR()");
 		}
 	}
 

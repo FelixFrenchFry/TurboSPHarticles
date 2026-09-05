@@ -94,12 +94,6 @@ namespace
 
 	struct NS_FinalizeScratchLayout
 	{
-		size_t chunkMinRefFF = 0;
-		size_t chunkMinRefFB = 0;
-		size_t chunkMinRefFR = 0;
-		size_t chunkMaxRefFF = 0;
-		size_t chunkMaxRefFB = 0;
-		size_t chunkMaxRefFR = 0;
 		size_t chunkOffsetsScratch = 0;
 		size_t N_totalBytes = 0;
 	};
@@ -128,12 +122,6 @@ namespace
 		size_t cursor = 0;
 		const uint32_t N_chunks = SellChunkNumTotal(N_F);
 
-		layout.chunkMinRefFF = ReserveScratchElems<uint32_t>(cursor, N_chunks);
-		layout.chunkMinRefFB = ReserveScratchElems<uint32_t>(cursor, N_chunks);
-		layout.chunkMinRefFR = ReserveScratchElems<uint32_t>(cursor, N_chunks);
-		layout.chunkMaxRefFF = ReserveScratchElems<uint32_t>(cursor, N_chunks);
-		layout.chunkMaxRefFB = ReserveScratchElems<uint32_t>(cursor, N_chunks);
-		layout.chunkMaxRefFR = ReserveScratchElems<uint32_t>(cursor, N_chunks);
 		layout.chunkOffsetsScratch = ReserveScratchElems<uint64_t>(
 			cursor, static_cast<size_t>(N_chunks) + 1ull);
 		layout.N_totalBytes = cursor;
@@ -217,65 +205,6 @@ namespace
 	}
 	#endif
 
-	__global__ void K_BuildSellChunkMaxCount(
-		const uint16_t* __restrict__ nbrCount,
-		const uint32_t N_F,
-		uint16_t* __restrict__ chunkMaxCount)
-	{
-		const uint32_t chunk = blockIdx.x * blockDim.x + threadIdx.x;
-		const uint32_t N_chunks = SellChunkNumTotal(N_F);
-		if (chunk >= N_chunks) { return; }
-
-		const uint32_t begin = chunk * GPU::N_SELL_WIDTH;
-		const uint32_t end = (begin + GPU::N_SELL_WIDTH < N_F)
-						   ? (begin + GPU::N_SELL_WIDTH)
-						   : N_F;
-
-		uint16_t N_maxNbrs = 0;
-		for (uint32_t i = begin; i < end; i++)
-		{
-			if (nbrCount[i] > N_maxNbrs) { N_maxNbrs = nbrCount[i]; }
-		}
-
-		chunkMaxCount[chunk] = N_maxNbrs;
-	}
-
-	__global__ void K_BuildSellChunkCompressionMeta(
-		const uint16_t* __restrict__ chunkMaxCount,
-		const uint32_t* __restrict__ chunkMinRef,
-		const uint32_t* __restrict__ chunkMaxRef,
-		const uint32_t N_chunks,
-		// destinations
-		uint32_t* __restrict__ chunkBaseIdx,
-		uint8_t* __restrict__ chunkFormat)
-	{
-		const uint32_t chunk = blockIdx.x * blockDim.x + threadIdx.x;
-		if (chunk >= N_chunks) { return; }
-
-		const uint16_t pitch = chunkMaxCount[chunk];
-		if (pitch == 0u)
-		{
-			chunkBaseIdx[chunk] = 0u;
-			chunkFormat[chunk] = static_cast<uint8_t>(GPU::NbrChunkFormat::Abs32);
-			return;
-		}
-
-		const uint32_t minRef = chunkMinRef[chunk];
-		const uint32_t maxRef = chunkMaxRef[chunk];
-		const uint32_t span = (maxRef >= minRef) ? (maxRef - minRef) : 0xffffffffu;
-		const bool canUseDelta16 =
-			(maxRef >= minRef) && (span <= 0xffffu);
-		const bool canUseDelta8 =
-			(maxRef >= minRef) && (span <= 0xffu);
-
-		chunkBaseIdx[chunk] = minRef;
-		chunkFormat[chunk] = canUseDelta8
-			? static_cast<uint8_t>(GPU::NbrChunkFormat::Delta8)
-			: (canUseDelta16
-				? static_cast<uint8_t>(GPU::NbrChunkFormat::Delta16)
-				: static_cast<uint8_t>(GPU::NbrChunkFormat::Abs32));
-	}
-
 	__global__ void K_SelectChunkOffsetsByFormat(
 		const uint64_t* __restrict__ offsetsByFormat,
 		const uint8_t* __restrict__ chunkFormat,
@@ -340,12 +269,6 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 	const uint32_t N_chunks = SellChunkNumTotal(N_F_);
 	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(N_F_);
 	EnsureNsSharedScratchCapacity(scratchLayout.N_totalBytes);
-	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFF);
-	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFB);
-	uint32_t* const d_nbrChunkMinRefFR = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMinRefFR);
-	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFF);
-	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFB);
-	uint32_t* const d_nbrChunkMaxRefFR = ScratchPtr<uint32_t>(d_nsSharedScratch_, scratchLayout.chunkMaxRefFR);
 	uint64_t* const d_nbrChunkOffsetsScratch = ScratchPtr<uint64_t>(d_nsSharedScratch_, scratchLayout.chunkOffsetsScratch);
 
 	const uint64_t zero = 0;
@@ -369,9 +292,6 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 			const char* label,
 			const auto& d_nbrCount,
 			auto& d_nbrChunkMaxCount,
-			const uint32_t* d_nbrChunkMinRef,
-			const uint32_t* d_nbrChunkMaxRef,
-			auto& d_nbrChunkBaseIdx,
 			auto& d_nbrChunkFormat,
 			auto& d_nbrChunkOffsets,
 			auto& d_nbrListDelta8,
@@ -383,15 +303,6 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 			uint64_t& N_delta16,
 			uint64_t& N_abs32)
 		{
-			K_BuildSellChunkMaxCount<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream_>>>(
-				d_nbrCount.Data(), N_F_, d_nbrChunkMaxCount.Data());
-			GPU::CheckLastKernel(label);
-
-			K_BuildSellChunkCompressionMeta<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream_>>>(
-				d_nbrChunkMaxCount.Data(), d_nbrChunkMinRef, d_nbrChunkMaxRef, N_chunks,
-				d_nbrChunkBaseIdx.Data(), d_nbrChunkFormat.Data());
-			GPU::CheckLastKernel(label);
-
 			uint64_t totals[3]{};
 			for (uint8_t format = 0; format < 3; format++)
 			{
@@ -409,6 +320,7 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 				K_SelectChunkOffsetsByFormat<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream_>>>(
 					d_nbrChunkOffsetsScratch, d_nbrChunkFormat.Data(), format,
 					N_chunks, d_nbrChunkOffsets.Data());
+				GPU::CheckLastKernel(label);
 				GPU::Copy_DeviceToHost(&totals[format],
 					d_nbrChunkOffsetsScratch + N_chunks, 1, stream_);
 			}
@@ -437,18 +349,15 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 		};
 
 		finalizeSell("Finalize SELL32 FF", d_nbrCountFF_, d_nbrChunkMaxCountFF_,
-			d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
-			d_nbrChunkBaseIdxFF_, d_nbrChunkFormatFF_, d_nbrChunkOffsetsFF_,
+			d_nbrChunkFormatFF_, d_nbrChunkOffsetsFF_,
 			d_nbrListDelta8FF_, d_nbrListDelta16FF_, d_nbrListAbs32FF_,
 			N_totalFF_, N_packedFF_, N_delta8FF_, N_delta16FF_, N_abs32FF_);
 		finalizeSell("Finalize SELL32 FB", d_nbrCountFB_, d_nbrChunkMaxCountFB_,
-			d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB,
-			d_nbrChunkBaseIdxFB_, d_nbrChunkFormatFB_, d_nbrChunkOffsetsFB_,
+			d_nbrChunkFormatFB_, d_nbrChunkOffsetsFB_,
 			d_nbrListDelta8FB_, d_nbrListDelta16FB_, d_nbrListAbs32FB_,
 			N_totalFB_, N_packedFB_, N_delta8FB_, N_delta16FB_, N_abs32FB_);
 		finalizeSell("Finalize SELL32 FR", d_nbrCountFR_, d_nbrChunkMaxCountFR_,
-			d_nbrChunkMinRefFR, d_nbrChunkMaxRefFR,
-			d_nbrChunkBaseIdxFR_, d_nbrChunkFormatFR_, d_nbrChunkOffsetsFR_,
+			d_nbrChunkFormatFR_, d_nbrChunkOffsetsFR_,
 			d_nbrListDelta8FR_, d_nbrListDelta16FR_, d_nbrListAbs32FR_,
 			N_totalFR_, N_packedFR_, N_delta8FR_, N_delta16FR_, N_abs32FR_);
 	}
@@ -512,34 +421,12 @@ void NS_BruteForce_GPU::Query_Count(
 	const SimParams& params)
 {
 
-	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(be_.N_F_);
-	be_.EnsureNsSharedScratchCapacity(scratchLayout.N_totalBytes);
-	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFF);
-	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFB);
-	uint32_t* const d_nbrChunkMinRefFR = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.chunkMinRefFR);
-	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFF);
-	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFB);
-	uint32_t* const d_nbrChunkMaxRefFR = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.chunkMaxRefFR);
-
-	const uint32_t N_chunks = SellChunkNumTotal(be_.N_F_);
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFR_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountRF_.Data(), be_.N_R_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountRB_.Data(), be_.N_R_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountRR_.Data(), be_.N_R_, be_.stream_);
-	GPU::MemsetBytes(d_nbrChunkMinRefFF, 0xff, N_chunks, be_.stream_);
-	GPU::MemsetBytes(d_nbrChunkMinRefFB, 0xff, N_chunks, be_.stream_);
-	GPU::MemsetBytes(d_nbrChunkMinRefFR, 0xff, N_chunks, be_.stream_);
-	GPU::MemsetZero(d_nbrChunkMaxRefFF, N_chunks, be_.stream_);
-	GPU::MemsetZero(d_nbrChunkMaxRefFB, N_chunks, be_.stream_);
-	GPU::MemsetZero(d_nbrChunkMaxRefFR, N_chunks, be_.stream_);
 
 	if (be_.N_F_ > 0)
 	{
@@ -549,9 +436,15 @@ void NS_BruteForce_GPU::Query_Count(
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
 			be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
 			be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(), be_.d_nbrCountFR_.Data(),
-			d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
-			d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB,
-			d_nbrChunkMinRefFR, d_nbrChunkMaxRefFR);
+			be_.d_nbrChunkMaxCountFF_.Data(),
+			be_.d_nbrChunkMaxCountFB_.Data(),
+			be_.d_nbrChunkMaxCountFR_.Data(),
+			be_.d_nbrChunkBaseIdxFF_.Data(),
+			be_.d_nbrChunkBaseIdxFB_.Data(),
+			be_.d_nbrChunkBaseIdxFR_.Data(),
+			be_.d_nbrChunkFormatFF_.Data(),
+			be_.d_nbrChunkFormatFB_.Data(),
+			be_.d_nbrChunkFormatFR_.Data());
 	}
 
 	GPU::Launch_BruteForce_Query_Count_RF_RB_RR(
@@ -580,19 +473,26 @@ void NS_BruteForce_GPU::Query_Fill(
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
 			be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
-			be_.d_nbrChunkMaxCountFF_.Data(), be_.d_nbrChunkMaxCountFB_.Data(),
+			be_.d_nbrChunkMaxCountFF_.Data(),
+			be_.d_nbrChunkMaxCountFB_.Data(),
 			be_.d_nbrChunkMaxCountFR_.Data(),
-			be_.d_nbrChunkOffsetsFF_.Data(), be_.d_nbrChunkOffsetsFB_.Data(),
+			be_.d_nbrChunkOffsetsFF_.Data(),
+			be_.d_nbrChunkOffsetsFB_.Data(),
 			be_.d_nbrChunkOffsetsFR_.Data(),
-			be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
+			be_.d_nbrChunkBaseIdxFF_.Data(),
+			be_.d_nbrChunkBaseIdxFB_.Data(),
 			be_.d_nbrChunkBaseIdxFR_.Data(),
-			be_.d_nbrChunkFormatFF_.Data(), be_.d_nbrChunkFormatFB_.Data(),
+			be_.d_nbrChunkFormatFF_.Data(),
+			be_.d_nbrChunkFormatFB_.Data(),
 			be_.d_nbrChunkFormatFR_.Data(),
-			be_.d_nbrListDelta8FF_.Data(), be_.d_nbrListDelta8FB_.Data(),
+			be_.d_nbrListDelta8FF_.Data(),
+			be_.d_nbrListDelta8FB_.Data(),
 			be_.d_nbrListDelta8FR_.Data(),
-			be_.d_nbrListDelta16FF_.Data(), be_.d_nbrListDelta16FB_.Data(),
+			be_.d_nbrListDelta16FF_.Data(),
+			be_.d_nbrListDelta16FB_.Data(),
 			be_.d_nbrListDelta16FR_.Data(),
-			be_.d_nbrListAbs32FF_.Data(), be_.d_nbrListAbs32FB_.Data(),
+			be_.d_nbrListAbs32FF_.Data(),
+			be_.d_nbrListAbs32FB_.Data(),
 			be_.d_nbrListAbs32FR_.Data(),
 			be_.d_nbrOverflowFlag_.Data());
 	}
@@ -881,35 +781,13 @@ void NS_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
 			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
 	}
 
-	const NS_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_);
-	uint32_t* const d_nbrChunkMinRefFF = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFF);
-	uint32_t* const d_nbrChunkMinRefFB = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFB);
-	uint32_t* const d_nbrChunkMinRefFR = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMinRefFR);
-	uint32_t* const d_nbrChunkMaxRefFF = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFF);
-	uint32_t* const d_nbrChunkMaxRefFB = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFB);
-	uint32_t* const d_nbrChunkMaxRefFR = ScratchPtr<uint32_t>(
-		be_.d_nsSharedScratch_, scratchLayout.finalize.chunkMaxRefFR);
-
 	// reset per-particle counts before count-query
-	const uint32_t N_chunks = SellChunkNumTotal(be_.N_F_);
 	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountFR_.Data(), be_.N_F_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountRF_.Data(), be_.N_R_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountRB_.Data(), be_.N_R_, be_.stream_);
 	GPU::MemsetZero(be_.d_nbrCountRR_.Data(), be_.N_R_, be_.stream_);
-	GPU::MemsetBytes(d_nbrChunkMinRefFF, 0xff, N_chunks, be_.stream_);
-	GPU::MemsetBytes(d_nbrChunkMinRefFB, 0xff, N_chunks, be_.stream_);
-	GPU::MemsetBytes(d_nbrChunkMinRefFR, 0xff, N_chunks, be_.stream_);
-	GPU::MemsetZero(d_nbrChunkMaxRefFF, N_chunks, be_.stream_);
-	GPU::MemsetZero(d_nbrChunkMaxRefFB, N_chunks, be_.stream_);
-	GPU::MemsetZero(d_nbrChunkMaxRefFR, N_chunks, be_.stream_);
 
 	if (be_.N_F_ > 0)
 	{
@@ -925,9 +803,15 @@ void NS_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
 			N_nonEmptyCellsR_,
 			N_queryCellSlots_, be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
 			be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(), be_.d_nbrCountFR_.Data(),
-			d_nbrChunkMinRefFF, d_nbrChunkMaxRefFF,
-			d_nbrChunkMinRefFB, d_nbrChunkMaxRefFB,
-			d_nbrChunkMinRefFR, d_nbrChunkMaxRefFR);
+			be_.d_nbrChunkMaxCountFF_.Data(),
+			be_.d_nbrChunkMaxCountFB_.Data(),
+			be_.d_nbrChunkMaxCountFR_.Data(),
+			be_.d_nbrChunkBaseIdxFF_.Data(),
+			be_.d_nbrChunkBaseIdxFB_.Data(),
+			be_.d_nbrChunkBaseIdxFR_.Data(),
+			be_.d_nbrChunkFormatFF_.Data(),
+			be_.d_nbrChunkFormatFB_.Data(),
+			be_.d_nbrChunkFormatFR_.Data());
 	}
 
 	GPU::Launch_CellLinkedList_Compact_Query_Count_RF_RB_RR(

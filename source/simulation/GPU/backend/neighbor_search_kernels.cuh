@@ -31,12 +31,15 @@ namespace GPU
 		uint16_t* nbrCountFF,
 		uint16_t* nbrCountFB,
 		uint16_t* nbrCountFR,
-		uint32_t* nbrChunkMinRefFF,
-		uint32_t* nbrChunkMaxRefFF,
-		uint32_t* nbrChunkMinRefFB,
-		uint32_t* nbrChunkMaxRefFB,
-		uint32_t* nbrChunkMinRefFR,
-		uint32_t* nbrChunkMaxRefFR);
+		uint16_t* nbrChunkMaxCountFF,
+		uint16_t* nbrChunkMaxCountFB,
+		uint16_t* nbrChunkMaxCountFR,
+		uint32_t* nbrChunkBaseIdxFF,
+		uint32_t* nbrChunkBaseIdxFB,
+		uint32_t* nbrChunkBaseIdxFR,
+		uint8_t* nbrChunkFormatFF,
+		uint8_t* nbrChunkFormatFB,
+		uint8_t* nbrChunkFormatFR);
 
 	void Launch_BruteForce_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -172,14 +175,18 @@ namespace GPU
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
-		uint16_t* nbrCountFF, uint16_t* nbrCountFB,
+		uint16_t* nbrCountFF,
+		uint16_t* nbrCountFB,
 		uint16_t* nbrCountFR,
-		uint32_t* nbrChunkMinRefFF,
-		uint32_t* nbrChunkMaxRefFF,
-		uint32_t* nbrChunkMinRefFB,
-		uint32_t* nbrChunkMaxRefFB,
-		uint32_t* nbrChunkMinRefFR,
-		uint32_t* nbrChunkMaxRefFR);
+		uint16_t* nbrChunkMaxCountFF,
+		uint16_t* nbrChunkMaxCountFB,
+		uint16_t* nbrChunkMaxCountFR,
+		uint32_t* nbrChunkBaseIdxFF,
+		uint32_t* nbrChunkBaseIdxFB,
+		uint32_t* nbrChunkBaseIdxFR,
+		uint8_t* nbrChunkFormatFF,
+		uint8_t* nbrChunkFormatFB,
+		uint8_t* nbrChunkFormatFR);
 
 	void Launch_CellLinkedList_Compact_Query_Fill(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -256,7 +263,8 @@ namespace GPU
 		const uint64_t* uniqueCellIdB, const uint32_t* cellStartIdxB,
 		const uint64_t* uniqueCellIdR, const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_nonEmptyCellsF, const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
 		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
@@ -274,7 +282,8 @@ namespace GPU
 		const uint64_t* uniqueCellIdB, const uint32_t* cellStartIdxB,
 		const uint64_t* uniqueCellIdR, const uint32_t* cellStartIdxR,
 		const uint32_t* sortedParticleIdxR,
-		const uint32_t N_nonEmptyCellsF, const uint32_t N_nonEmptyCellsB,
+		const uint32_t N_nonEmptyCellsF,
+		const uint32_t N_nonEmptyCellsB,
 		const uint32_t N_nonEmptyCellsR,
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
