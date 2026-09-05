@@ -106,6 +106,9 @@ namespace GPU
 		uint32_t* __restrict__ chunkBaseIdx,
 		uint8_t* __restrict__ chunkFormat)
 	{
+		// match per-particle counts before reducing the chunk pitch
+		pitch = static_cast<uint16_t>(pitch);
+
 		for (uint32_t offset = N_SELL_WIDTH / 2u; offset != 0u; offset >>= 1u)
 		{
 			const uint32_t otherPitch = __shfl_down_sync(0xffffffffu, pitch, offset);
@@ -261,12 +264,9 @@ namespace GPU
 			// check fluid candidates (all particles)
 			for (uint32_t j = 0; j < c_ns_N_F; j++)
 			{
-				// position difference
 				const float dx = xi - xPosF[j];
 				const float dy = yi - yPosF[j];
 				const float dz = zi - zPosF[j];
-
-				// squared distance between particles i and j
 				const float distSqu = dx * dx + dy * dy + dz * dz;
 
 				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
@@ -280,12 +280,9 @@ namespace GPU
 			// check boundary candidates (all particles)
 			for (uint32_t j = 0; j < c_ns_N_B; j++)
 			{
-				// position difference
 				const float dx = xi - xPosB[j];
 				const float dy = yi - yPosB[j];
 				const float dz = zi - zPosB[j];
-
-				// squared distance between particles i and j
 				const float distSqu = dx * dx + dy * dy + dz * dz;
 
 				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
@@ -299,12 +296,9 @@ namespace GPU
 			// check rigid candidates (all particles)
 			for (uint32_t j = 0; j < c_ns_N_R; j++)
 			{
-				// position difference
 				const float dx = xi - xPosR[j];
 				const float dy = yi - yPosR[j];
 				const float dz = zi - zPosR[j];
-
-				// squared distance between particles i and j
 				const float distSqu = dx * dx + dy * dy + dz * dz;
 
 				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
@@ -397,12 +391,9 @@ namespace GPU
 		// check fluid candidates (all particles)
 		for (uint32_t j = 0; j < c_ns_N_F; j++)
 		{
-			// position difference
 			const float dx = xi - xPosF[j];
 			const float dy = yi - yPosF[j];
 			const float dz = zi - zPosF[j];
-
-			// squared distance between particles i and j
 			const float distSqu = dx * dx + dy * dy + dz * dz;
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
@@ -419,12 +410,9 @@ namespace GPU
 		// check boundary candidates (all particles)
 		for (uint32_t j = 0; j < c_ns_N_B; j++)
 		{
-			// position difference (gmr)
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
-
-			// squared distance between particles i and j
 			const float distSqu = dx * dx + dy * dy + dz * dz;
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
@@ -441,12 +429,9 @@ namespace GPU
 		// check rigid candidates (all particles)
 		for (uint32_t j = 0; j < c_ns_N_R; j++)
 		{
-			// position difference
 			const float dx = xi - xPosR[j];
 			const float dy = yi - yPosR[j];
 			const float dz = zi - zPosR[j];
-
-			// squared distance between particles i and j
 			const float distSqu = dx * dx + dy * dy + dz * dz;
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
@@ -473,7 +458,7 @@ namespace GPU
 		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 		if (i >= N_F) { return; }
 
-		// particle i data (gmr)
+		// particle i data
 		const float xi = xPosF[i];
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
@@ -1048,32 +1033,25 @@ namespace GPU
 			// check all particles j in the cached neighboring grid cells
 			for (uint32_t s = 0; s < N_queryCellSlots; s++)
 			{
-				const uint32_t cAny_nbr = queryCellRefAnyByCellF[querySlotBase + s];
-				if (cAny_nbr == 0xffffffffu) { continue; }
+				const uint32_t cellAny = queryCellRefAnyByCellF[querySlotBase + s];
+				if (cellAny == 0xffffffffu) { continue; }
 
 				// fluid neighbor cell
-				const uint32_t cF_nbr = cellRefFByAny[cAny_nbr];
-				if (cF_nbr != 0xffffffffu)
+				const uint32_t cellF = cellRefFByAny[cellAny];
+				if (cellF != 0xffffffffu)
 				{
 					// range of all fluid particles in the neighbor cell
-					const uint32_t sF_nbr = cellStartIdxF[cF_nbr]; // start
-					const uint32_t eF_nbr = cellStartIdxF[cF_nbr + 1]; // end
-					if (sF_nbr >= eF_nbr) { continue; }
+					const uint32_t beginF = cellStartIdxF[cellF];
+					const uint32_t endF = cellStartIdxF[cellF + 1];
+					if (beginF >= endF) { continue; }
 
-					for (uint32_t k = sF_nbr; k < eF_nbr; k++)
+					for (uint32_t k = beginF; k < endF; k++)
 					{
-						// index of fluid neighbor candidate
 						const uint32_t j = k;
-
-						// position difference
 						const float dx = x - xPosF[j];
 						const float dy = y - yPosF[j];
 						const float dz = z - zPosF[j];
-
-						// squared distance between particles i and j
-						const float distSqu = dx * dx
-											+ dy * dy
-											+ dz * dz;
+						const float distSqu = dx * dx + dy * dy + dz * dz;
 
 						if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 						{
@@ -1085,28 +1063,21 @@ namespace GPU
 				}
 
 				// boundary neighbor cell
-				const uint32_t cB_nbr = cellRefBByAny[cAny_nbr];
-				if (cB_nbr != 0xffffffffu)
+				const uint32_t cellB = cellRefBByAny[cellAny];
+				if (cellB != 0xffffffffu)
 				{
 					// range of all boundary particles in the neighbor cell
-					const uint32_t sB_nbr = cellStartIdxB[cB_nbr]; // start
-					const uint32_t eB_nbr = cellStartIdxB[cB_nbr + 1]; // end
-					if (sB_nbr >= eB_nbr) { continue; }
+					const uint32_t beginB = cellStartIdxB[cellB];
+					const uint32_t endB = cellStartIdxB[cellB + 1];
+					if (beginB >= endB) { continue; }
 
-					for (uint32_t k = sB_nbr; k < eB_nbr; k++)
+					for (uint32_t k = beginB; k < endB; k++)
 					{
-						// index of boundary neighbor candidate
 						const uint32_t j = k;
-
-						// position difference
 						const float dx = x - xPosB[j];
 						const float dy = y - yPosB[j];
 						const float dz = z - zPosB[j];
-
-						// squared distance between particles i and j
-						const float distSqu = dx * dx
-											+ dy * dy
-											+ dz * dz;
+						const float distSqu = dx * dx + dy * dy + dz * dz;
 
 						if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 						{
@@ -1126,21 +1097,19 @@ namespace GPU
 				const int cz = FloorToInt(z * c_ns_cellSizeInv);
 				const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
 
-				for (int cellOffsetZ = -cellQueryReach;
-					cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+				for (int oz = cz - cellQueryReach; oz <= cz + cellQueryReach; oz++)
 				{
-					for (int cellOffsetY = -cellQueryReach;
-						cellOffsetY <= cellQueryReach; cellOffsetY++)
+					for (int oy = cy - cellQueryReach; oy <= cy + cellQueryReach; oy++)
 					{
-						for (int cellOffsetX = -cellQueryReach;
-							cellOffsetX <= cellQueryReach; cellOffsetX++)
+						for (int ox = cx - cellQueryReach; ox <= cx + cellQueryReach; ox++)
 						{
-							const uint64_t cellId = MapToCellId(
-								cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
+							const uint64_t cellId = MapToCellId(ox, oy, oz);
+							// rigid neighbor cell
 							const int cellR = BinarySearchUniqueCellId(
 								uniqueCellIdR, N_nonEmptyCellsR, cellId);
 							if (cellR < 0) { continue; }
 
+							// range of all rigid particles in the neighbor cell
 							const uint32_t begin = cellStartIdxR[cellR];
 							const uint32_t end = cellStartIdxR[cellR + 1];
 							for (uint32_t k = begin; k < end; k++)
@@ -1151,7 +1120,7 @@ namespace GPU
 								const float dz = z - zPosR[j];
 								const float distSqu = dx * dx + dy * dy + dz * dz;
 
-								if (distSqu <= c_ns_kernelRadiusSqu)
+								if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 								{
 									cntFR++;
 									minRefFR = (j < minRefFR) ? j : minRefFR;
@@ -1257,35 +1226,28 @@ namespace GPU
 		uint32_t wrFB = 0;
 		uint32_t wrFR = 0;
 
-		// check all particles j in the cached neighboring grid cells
+		// store all particles j in the cached neighboring grid cells
 		for (uint32_t s = 0; s < N_queryCellSlots; s++)
 		{
-			const uint32_t cAny_nbr = queryCellRefAnyByCellF[querySlotBase + s];
-			if (cAny_nbr == 0xffffffffu) { continue; }
+			const uint32_t cellAny = queryCellRefAnyByCellF[querySlotBase + s];
+			if (cellAny == 0xffffffffu) { continue; }
 
 			// fluid neighbor cell
-			const uint32_t cF_nbr = cellRefFByAny[cAny_nbr];
-			if (cF_nbr != 0xffffffffu)
+			const uint32_t cellF = cellRefFByAny[cellAny];
+			if (cellF != 0xffffffffu)
 			{
 				// range of all fluid particles in the neighbor cell
-				const uint32_t sF_nbr = cellStartIdxF[cF_nbr]; // start
-				const uint32_t eF_nbr = cellStartIdxF[cF_nbr + 1]; // end
-				if (sF_nbr >= eF_nbr) { continue; }
+				const uint32_t beginF = cellStartIdxF[cellF];
+				const uint32_t endF = cellStartIdxF[cellF + 1];
+				if (beginF >= endF) { continue; }
 
-				for (uint32_t k = sF_nbr; k < eF_nbr; k++)
+				for (uint32_t k = beginF; k < endF; k++)
 				{
-					// index of fluid neighbor candidate
 					const uint32_t j = k;
-
-					// position difference
 					const float dx = x - xPosF[j];
 					const float dy = y - yPosF[j];
 					const float dz = z - zPosF[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx
-										+ dy * dy
-										+ dz * dz;
+					const float distSqu = dx * dx + dy * dy + dz * dz;
 
 					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
@@ -1300,28 +1262,21 @@ namespace GPU
 			}
 
 			// boundary neighbor cell
-			const uint32_t cB_nbr = cellRefBByAny[cAny_nbr];
-			if (cB_nbr != 0xffffffffu)
+			const uint32_t cellB = cellRefBByAny[cellAny];
+			if (cellB != 0xffffffffu)
 			{
 				// range of all boundary particles in the neighbor cell
-				const uint32_t sB_nbr = cellStartIdxB[cB_nbr]; // start
-				const uint32_t eB_nbr = cellStartIdxB[cB_nbr + 1]; // end
-				if (sB_nbr >= eB_nbr) { continue; }
+				const uint32_t beginB = cellStartIdxB[cellB];
+				const uint32_t endB = cellStartIdxB[cellB + 1];
+				if (beginB >= endB) { continue; }
 
-				for (uint32_t k = sB_nbr; k < eB_nbr; k++)
+				for (uint32_t k = beginB; k < endB; k++)
 				{
-					// index of boundary neighbor candidate
 					const uint32_t j = k;
-
-					// position difference
 					const float dx = x - xPosB[j];
 					const float dy = y - yPosB[j];
 					const float dz = z - zPosB[j];
-
-					// squared distance between particles i and j
-					const float distSqu = dx * dx
-										+ dy * dy
-										+ dz * dz;
+					const float distSqu = dx * dx + dy * dy + dz * dz;
 
 					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
@@ -1344,21 +1299,19 @@ namespace GPU
 			const int cz = FloorToInt(z * c_ns_cellSizeInv);
 			const int cellQueryReach = static_cast<int>(c_ns_cellQueryReach);
 
-			for (int cellOffsetZ = -cellQueryReach;
-				cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+			for (int oz = cz - cellQueryReach; oz <= cz + cellQueryReach; oz++)
 			{
-				for (int cellOffsetY = -cellQueryReach;
-					cellOffsetY <= cellQueryReach; cellOffsetY++)
+				for (int oy = cy - cellQueryReach; oy <= cy + cellQueryReach; oy++)
 				{
-					for (int cellOffsetX = -cellQueryReach;
-						cellOffsetX <= cellQueryReach; cellOffsetX++)
+					for (int ox = cx - cellQueryReach; ox <= cx + cellQueryReach; ox++)
 					{
-						const uint64_t cellId = MapToCellId(
-							cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
+						const uint64_t cellId = MapToCellId(ox, oy, oz);
+						// rigid neighbor cell
 						const int cellR = BinarySearchUniqueCellId(
 							uniqueCellIdR, N_nonEmptyCellsR, cellId);
 						if (cellR < 0) { continue; }
 
+						// range of all rigid particles in the neighbor cell
 						const uint32_t begin = cellStartIdxR[cellR];
 						const uint32_t end = cellStartIdxR[cellR + 1];
 						for (uint32_t k = begin; k < end; k++)
@@ -1369,8 +1322,9 @@ namespace GPU
 							const float dz = z - zPosR[j];
 							const float distSqu = dx * dx + dy * dy + dz * dz;
 
-							if (distSqu <= c_ns_kernelRadiusSqu)
+							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
+								// add rigid neighbor to the list
 								StoreNeighbor_CompressedSell32(
 									baseFR, pitchFR, lane, wrFR, j,
 									baseIdxFR, formatFR,
@@ -1559,14 +1513,13 @@ namespace GPU
 		uint32_t cntRB = 0;
 		uint32_t cntRR = 0;
 
-		for (int cellOffsetZ = -cellQueryReach; cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+		for (int oz = cz - cellQueryReach; oz <= cz + cellQueryReach; oz++)
 		{
-			for (int cellOffsetY = -cellQueryReach; cellOffsetY <= cellQueryReach; cellOffsetY++)
+			for (int oy = cy - cellQueryReach; oy <= cy + cellQueryReach; oy++)
 			{
-				for (int cellOffsetX = -cellQueryReach; cellOffsetX <= cellQueryReach; cellOffsetX++)
+				for (int ox = cx - cellQueryReach; ox <= cx + cellQueryReach; ox++)
 				{
-					const uint64_t cellId = MapToCellId(
-						cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
+					const uint64_t cellId = MapToCellId(ox, oy, oz);
 
 					// count fluid neighbors in this cell
 					const int cellF = BinarySearchUniqueCellId(
@@ -1678,14 +1631,13 @@ namespace GPU
 		uint64_t wrRB = nbrOffsetsRB[i];
 		uint64_t wrRR = nbrOffsetsRR[i];
 
-		for (int cellOffsetZ = -cellQueryReach; cellOffsetZ <= cellQueryReach; cellOffsetZ++)
+		for (int oz = cz - cellQueryReach; oz <= cz + cellQueryReach; oz++)
 		{
-			for (int cellOffsetY = -cellQueryReach; cellOffsetY <= cellQueryReach; cellOffsetY++)
+			for (int oy = cy - cellQueryReach; oy <= cy + cellQueryReach; oy++)
 			{
-				for (int cellOffsetX = -cellQueryReach; cellOffsetX <= cellQueryReach; cellOffsetX++)
+				for (int ox = cx - cellQueryReach; ox <= cx + cellQueryReach; ox++)
 				{
-					const uint64_t cellId = MapToCellId(
-						cx + cellOffsetX, cy + cellOffsetY, cz + cellOffsetZ);
+					const uint64_t cellId = MapToCellId(ox, oy, oz);
 
 					// store fluid neighbors in this cell
 					const int cellF = BinarySearchUniqueCellId(
@@ -1853,8 +1805,6 @@ namespace GPU
 		// destinations
 		uint32_t* cellIdF)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1871,8 +1821,6 @@ namespace GPU
 		// destinations
 		uint32_t* cellIdB)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_B + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1889,8 +1837,6 @@ namespace GPU
 		// destinations
 		uint32_t* cellStartIdx, uint32_t* cellEndIdx)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1906,8 +1852,6 @@ namespace GPU
 		// destinations
 		uint32_t* cellStartIdx, uint32_t* cellEndIdx)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_cells + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1924,8 +1868,6 @@ namespace GPU
 		// destinations
 		uint32_t* cellStartMarker)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1945,8 +1887,6 @@ namespace GPU
 		uint64_t* uniqueCellId,
 		uint32_t* cellStartIdx)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -2038,8 +1978,6 @@ namespace GPU
 		// destinations
 		uint64_t* cellId, uint32_t* sortedParticleIdx)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -2183,9 +2121,10 @@ namespace GPU
 		(void)N_B;
 
 		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+
 		if (N_R > 0)
 		{
-			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 			K_BruteForce_Query_Count_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF,
 				xPosB, yPosB, zPosB,
@@ -2214,9 +2153,10 @@ namespace GPU
 		(void)N_B;
 
 		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+
 		if (N_R > 0)
 		{
-			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 			K_BruteForce_Query_Fill_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF,
 				xPosB, yPosB, zPosB,
@@ -2250,9 +2190,10 @@ namespace GPU
 		(void)N_B;
 
 		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+
 		if (N_R > 0)
 		{
-			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 			K_CellLinkedList_Compact_Query_Count_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR, bodyIdR,
 				uniqueCellIdF, cellStartIdxF,
@@ -2290,9 +2231,10 @@ namespace GPU
 		(void)N_B;
 
 		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+
 		if (N_R > 0)
 		{
-			const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 			K_CellLinkedList_Compact_Query_Fill_RF_RB_RR<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 				xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
 				bodyIdR,

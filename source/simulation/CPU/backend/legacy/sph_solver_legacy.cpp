@@ -545,7 +545,6 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit(
 				}
 
 				// clamp pressure to non-negative values
-				// (and perform final global memory writes)
 				pressureF[i] = fmaxf(tmp_pressureF, 0.0f);
 				sourceTermF[i] = fin_sourceTermF;
 				diagElemF[i] = fin_diagElemF;
