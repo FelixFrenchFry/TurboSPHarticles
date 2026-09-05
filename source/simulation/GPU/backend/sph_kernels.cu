@@ -118,7 +118,7 @@ namespace GPU
 	}
 
 	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor_Delta8(
+	uint32_t SELL32ReadNeighbor_Delta8(
 		const uint64_t chunkBase,
 		const uint32_t chunkBaseIdx,
 		const uint32_t lane,
@@ -130,7 +130,7 @@ namespace GPU
 	}
 
 	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor_Delta16(
+	uint32_t SELL32ReadNeighbor_Delta16(
 		const uint64_t chunkBase,
 		const uint32_t chunkBaseIdx,
 		const uint32_t lane,
@@ -142,7 +142,7 @@ namespace GPU
 	}
 
 	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor_Abs32(
+	uint32_t SELL32ReadNeighbor_Abs32(
 		const uint64_t chunkBase,
 		const uint32_t lane,
 		const uint32_t k,
@@ -151,31 +151,46 @@ namespace GPU
 		return nbrListAbs32[chunkBase + static_cast<uint64_t>(k) * N_SELL_WIDTH + lane];
 	}
 
+	template <typename F>
 	__device__ __forceinline__
-	uint32_t Sell32ReadNeighbor(
+	void ComputeForEachNeighbor_SELL32(
 		const uint64_t chunkBase,
 		const uint32_t chunkBaseIdx,
 		const uint8_t chunkFormat,
 		const uint32_t lane,
-		const uint32_t k,
+		const uint32_t count,
 		const uint8_t* __restrict__ nbrListDelta8,
 		const uint16_t* __restrict__ nbrListDelta16,
-		const uint32_t* __restrict__ nbrListAbs32)
+		const uint32_t* __restrict__ nbrListAbs32,
+		F&& func)
 	{
 		if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta8))
 		{
-			return Sell32ReadNeighbor_Delta8(
-				chunkBase, chunkBaseIdx, lane, k, nbrListDelta8);
+			for (uint32_t k = 0; k < count; k++)
+			{
+				const uint32_t j = SELL32ReadNeighbor_Delta8(
+					chunkBase, chunkBaseIdx, lane, k, nbrListDelta8);
+				func(j);
+			}
 		}
-
-		if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16))
+		else if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16))
 		{
-			return Sell32ReadNeighbor_Delta16(
-				chunkBase, chunkBaseIdx, lane, k, nbrListDelta16);
+			for (uint32_t k = 0; k < count; k++)
+			{
+				const uint32_t j = SELL32ReadNeighbor_Delta16(
+					chunkBase, chunkBaseIdx, lane, k, nbrListDelta16);
+				func(j);
+			}
 		}
-
-		return Sell32ReadNeighbor_Abs32(
-			chunkBase, lane, k, nbrListAbs32);
+		else
+		{
+			for (uint32_t k = 0; k < count; k++)
+			{
+				const uint32_t j = SELL32ReadNeighbor_Abs32(
+					chunkBase, lane, k, nbrListAbs32);
+				func(j);
+			}
+		}
 	}
 
 	// ------------------------------------------------------------------------------------------------
@@ -246,65 +261,55 @@ namespace GPU
 		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
-		for (uint32_t k = 0; k < countFF; k++)
-		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFF, baseIdxFF, formatFF, lane, k,
-				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
+		ComputeForEachNeighbor_SELL32(
+			baseFF, baseIdxFF, formatFF, lane, countFF,
+			nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosF[j];
+				const float dy = yi - yPosF[j];
+				const float dz = zi - zPosF[j];
 
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
+				float kw = 0.0f;
+				KernelWeight_CubicSpline(dx, dy, dz, kw);
 
-			// kernel weight
-			float kw = 0.0f;
-			KernelWeight_CubicSpline(dx, dy, dz, kw);
-
-			// density contribution from fluid neighbor j
-			tmp_density = fmaf(c_massF,kw, tmp_density);
-		}
+				// density contribution from fluid neighbor j
+				tmp_density = fmaf(c_massF, kw, tmp_density);
+			});
 
 		// FB
-		for (uint32_t k = 0; k < countFB; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+		ComputeForEachNeighbor_SELL32(
+			baseFB, baseIdxFB, formatFB, lane, countFB,
+			nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosB[j];
+				const float dy = yi - yPosB[j];
+				const float dz = zi - zPosB[j];
 
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
+				float kw = 0.0f;
+				KernelWeight_CubicSpline(dx, dy, dz, kw);
 
-			// kernel weight
-			float kw = 0.0f;
-			KernelWeight_CubicSpline(dx, dy, dz, kw);
-
-			// density contribution from boundary neighbor j
-			tmp_density = fmaf(psiB[j], kw, tmp_density);
-		}
+				// density contribution from boundary neighbor j
+				tmp_density = fmaf(psiB[j], kw, tmp_density);
+			});
 
 		// FR
-		for (uint32_t k = 0; k < countFR; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFR, baseIdxFR, formatFR, lane, k,
-				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+		ComputeForEachNeighbor_SELL32(
+			baseFR, baseIdxFR, formatFR, lane, countFR,
+			nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosR[j];
+				const float dy = yi - yPosR[j];
+				const float dz = zi - zPosR[j];
 
-			// position difference
-			const float dx = xi - xPosR[j];
-			const float dy = yi - yPosR[j];
-			const float dz = zi - zPosR[j];
+				float kw = 0.0f;
+				KernelWeight_CubicSpline(dx, dy, dz, kw);
 
-			// kernel weight
-			float kw = 0.0f;
-			KernelWeight_CubicSpline(dx, dy, dz, kw);
-
-			// density contribution from rigid neighbor j
-			tmp_density = fmaf(psiR[j], kw, tmp_density);
-		}
+				// density contribution from rigid neighbor j
+				tmp_density = fmaf(psiR[j], kw, tmp_density);
+			});
 
 		densityF[i] = tmp_density;
 	}
@@ -387,39 +392,34 @@ namespace GPU
 		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
-		for (uint32_t k = 0; k < countFF; k++)
-		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFF, baseIdxFF, formatFF, lane, k,
-				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
+		ComputeForEachNeighbor_SELL32(
+			baseFF, baseIdxFF, formatFF, lane, countFF,
+			nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosF[j];
+				const float dy = yi - yPosF[j];
+				const float dz = zi - zPosF[j];
 
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
+				const float dvx = vxi - xVelF[j];
+				const float dvy = vyi - yVelF[j];
+				const float dvz = vzi - zVelF[j];
 
-			// velocity difference
-			const float dvx = vxi - xVelF[j];
-			const float dvy = vyi - yVelF[j];
-			const float dvz = vzi - zVelF[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-7f))
+										 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
+										 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
+										 + 0.01f * c_sizeF * c_sizeF);
 
-			// viscosity acc contribution from fluid neighbor j
-			const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-7f))
-									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
-									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
-									 + 0.01f * c_sizeF * c_sizeF);
-
-			tmp_xAccViscF = fmaf(accViscCoeff, xkg, tmp_xAccViscF);
-			tmp_yAccViscF = fmaf(accViscCoeff, ykg, tmp_yAccViscF);
-			tmp_zAccViscF = fmaf(accViscCoeff, zkg, tmp_zAccViscF);
-		}
+				// viscosity acceleration contribution from fluid neighbor j
+				tmp_xAccViscF = fmaf(accViscCoeff, xkg, tmp_xAccViscF);
+				tmp_yAccViscF = fmaf(accViscCoeff, ykg, tmp_yAccViscF);
+				tmp_zAccViscF = fmaf(accViscCoeff, zkg, tmp_zAccViscF);
+			});
 
 		// temp accumulation variables
 		float tmp_xAccViscB = 0.0f;
@@ -427,68 +427,62 @@ namespace GPU
 		float tmp_zAccViscB = 0.0f;
 
 		// FB
-		for (uint32_t k = 0; k < countFB; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+		ComputeForEachNeighbor_SELL32(
+			baseFB, baseIdxFB, formatFB, lane, countFB,
+			nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosB[j];
+				const float dy = yi - yPosB[j];
+				const float dz = zi - zPosB[j];
+				const float dvx = vxi;
+				const float dvy = vyi;
+				const float dvz = vzi;
 
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-			const float dvx = vxi;
-			const float dvy = vyi;
-			const float dvz = vzi;
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float accViscCoeff = volB[j]
+										 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
+										 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
+										 + 0.01f * c_sizeF * c_sizeF);
 
-			// viscosity acc contribution from boundary neighbor j
-			const float accViscCoeff = volB[j]
-									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
-									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
-									 + 0.01f * c_sizeF * c_sizeF);
-
-			tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
-			tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
-			tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
-		}
+				// viscosity acceleration contribution from boundary neighbor j
+				tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
+				tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
+				tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
+			});
 
 		// FR
-		for (uint32_t k = 0; k < countFR; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFR, baseIdxFR, formatFR, lane, k,
-				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+		ComputeForEachNeighbor_SELL32(
+			baseFR, baseIdxFR, formatFR, lane, countFR,
+			nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosR[j];
+				const float dy = yi - yPosR[j];
+				const float dz = zi - zPosR[j];
+				const float dvx = vxi - xVelR[j];
+				const float dvy = vyi - yVelR[j];
+				const float dvz = vzi - zVelR[j];
 
-			// position difference
-			const float dx = xi - xPosR[j];
-			const float dy = yi - yPosR[j];
-			const float dz = zi - zPosR[j];
-			const float dvx = vxi - xVelR[j];
-			const float dvy = vyi - yVelR[j];
-			const float dvz = vzi - zVelR[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float accViscCoeff = volR[j]
+										 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
+										 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
+										 + 0.01f * c_sizeF * c_sizeF);
 
-			// viscosity acc contribution from rigid neighbor j
-			const float accViscCoeff = volR[j]
-									 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
-									 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
-									 + 0.01f * c_sizeF * c_sizeF);
-
-			tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
-			tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
-			tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
-		}
+				// viscosity acceleration contribution from rigid neighbor j
+				tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
+				tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
+				tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
+			});
 
 		// finalize accelerations
 		// (3D -> factor 2 * (dim + 2))
@@ -589,37 +583,31 @@ namespace GPU
 		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
-		for (uint32_t k = 0; k < countFF; k++)
-		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFF, baseIdxFF, formatFF, lane, k,
-				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
+		ComputeForEachNeighbor_SELL32(
+			baseFF, baseIdxFF, formatFF, lane, countFF,
+			nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosF[j];
+				const float dy = yi - yPosF[j];
+				const float dz = zi - zPosF[j];
 
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
+				const float dvpx = vpxi - xVelPredF[j];
+				const float dvpy = vpyi - yVelPredF[j];
+				const float dvpz = vpzi - zVelPredF[j];
 
-			// predicted velocity difference
-			const float dvpx = vpxi - xVelPredF[j];
-			const float dvpy = vpyi - yVelPredF[j];
-			const float dvpz = vpzi - zVelPredF[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				tmp_sourceTermF += fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
 
-			// source term contribution from fluid neighbor
-			tmp_sourceTermF += fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
-
-			xCTermF += xkg;
-			yCTermF += ykg;
-			zCTermF += zkg;
-			gradSquSumF += fmaf(xkg, xkg, fmaf(ykg, ykg, zkg * zkg));
-		}
+				xCTermF += xkg;
+				yCTermF += ykg;
+				zCTermF += zkg;
+				gradSquSumF += fmaf(xkg, xkg, fmaf(ykg, ykg, zkg * zkg));
+			});
 		tmp_sourceTermF *= c_massF;
 
 		// temp accumulation variables for boundary
@@ -629,64 +617,56 @@ namespace GPU
 		float zCTermB = 0.0f;
 
 		// FB
-		for (uint32_t k = 0; k < countFB; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+		ComputeForEachNeighbor_SELL32(
+			baseFB, baseIdxFB, formatFB, lane, countFB,
+			nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosB[j];
+				const float dy = yi - yPosB[j];
+				const float dz = zi - zPosB[j];
+				const float dvpx = vpxi;
+				const float dvpy = vpyi;
+				const float dvpz = vpzi;
 
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
-			const float dvpx = vpxi;
-			const float dvpy = vpyi;
-			const float dvpz = vpzi;
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float psiBj = psiB[j];
+				tmp_sourceTermB += psiBj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
 
-			// source term contribution from boundary neighbor
-			const float psiBj = psiB[j];
-			tmp_sourceTermB += psiBj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
-
-			xCTermB += psiBj * xkg;
-			yCTermB += psiBj * ykg;
-			zCTermB += psiBj * zkg;
-		}
+				xCTermB += psiBj * xkg;
+				yCTermB += psiBj * ykg;
+				zCTermB += psiBj * zkg;
+			});
 
 		// FR
-		for (uint32_t k = 0; k < countFR; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFR, baseIdxFR, formatFR, lane, k,
-				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+		ComputeForEachNeighbor_SELL32(
+			baseFR, baseIdxFR, formatFR, lane, countFR,
+			nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosR[j];
+				const float dy = yi - yPosR[j];
+				const float dz = zi - zPosR[j];
+				const float dvpx = vpxi - xVelR[j];
+				const float dvpy = vpyi - yVelR[j];
+				const float dvpz = vpzi - zVelR[j];
 
-			// position difference
-			const float dx = xi - xPosR[j];
-			const float dy = yi - yPosR[j];
-			const float dz = zi - zPosR[j];
-			const float dvpx = vpxi - xVelR[j];
-			const float dvpy = vpyi - yVelR[j];
-			const float dvpz = vpzi - zVelR[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float psiRj = psiR[j];
+				tmp_sourceTermB += psiRj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
 
-			// source term contribution from rigid neighbor
-			const float psiRj = psiR[j];
-			tmp_sourceTermB += psiRj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
-
-			xCTermB += psiRj * xkg;
-			yCTermB += psiRj * ykg;
-			zCTermB += psiRj * zkg;
-		}
+				xCTermB += psiRj * xkg;
+				yCTermB += psiRj * ykg;
+				zCTermB += psiRj * zkg;
+			});
 
 		// finalize source term
 		const float fin_sourceTermF = c_restDensity - densityF[i] - c_timeStep
@@ -800,86 +780,76 @@ namespace GPU
 		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
-		for (uint32_t k = 0; k < countFF; k++)
-		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFF, baseIdxFF, formatFF, lane, k,
-				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
+		ComputeForEachNeighbor_SELL32(
+			baseFF, baseIdxFF, formatFF, lane, countFF,
+			nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosF[j];
+				const float dy = yi - yPosF[j];
+				const float dz = zi - zPosF[j];
 
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float accCoeffF = accCoeffF_outer + c_massF
+									  * pressureF[j] * densiInvSqu;
 
-			const float accCoeffF = accCoeffF_outer + c_massF
-								  * pressureF[j] * densiInvSqu;
-
-			// pressure acc contribution from fluid neighbor j
-			tmp_xAccPressF = fmaf(accCoeffF, xkg, tmp_xAccPressF);
-			tmp_yAccPressF = fmaf(accCoeffF, ykg, tmp_yAccPressF);
-			tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
-		}
+				// pressure acceleration contribution from fluid neighbor j
+				tmp_xAccPressF = fmaf(accCoeffF, xkg, tmp_xAccPressF);
+				tmp_yAccPressF = fmaf(accCoeffF, ykg, tmp_yAccPressF);
+				tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
+			});
 
 		// FB
-		for (uint32_t k = 0; k < countFB; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+		ComputeForEachNeighbor_SELL32(
+			baseFB, baseIdxFB, formatFB, lane, countFB,
+			nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosB[j];
+				const float dy = yi - yPosB[j];
+				const float dz = zi - zPosB[j];
 
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float accCoeffB = c_pressGamma * 2.0f
+									  * psiB[j] * presi * densiInvSqu;
 
-			const float accCoeffB = c_pressGamma * 2.0f
-								  * psiB[j] * presi * densiInvSqu;
-
-			// pressure acc contribution from boundary neighbor j
-			tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
-			tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
-			tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
-		}
+				// pressure acceleration contribution from boundary neighbor j
+				tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
+				tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
+				tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
+			});
 
 		// FR
-		for (uint32_t k = 0; k < countFR; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFR, baseIdxFR, formatFR, lane, k,
-				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+		ComputeForEachNeighbor_SELL32(
+			baseFR, baseIdxFR, formatFR, lane, countFR,
+			nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosR[j];
+				const float dy = yi - yPosR[j];
+				const float dz = zi - zPosR[j];
 
-			// position difference
-			const float dx = xi - xPosR[j];
-			const float dy = yi - yPosR[j];
-			const float dz = zi - zPosR[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float accCoeffB = c_pressGamma * 2.0f
+									  * psiR[j] * presi * densiInvSqu;
 
-			const float accCoeffB = c_pressGamma * 2.0f
-								  * psiR[j] * presi * densiInvSqu;
-
-			// pressure acc contribution from rigid neighbor j
-			tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
-			tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
-			tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
-		}
+				// pressure acceleration contribution from rigid neighbor j
+				tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
+				tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
+				tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
+			});
 
 		// finalize pressure acceleration
 		tmp_xAccPressF *= -1.0f;
@@ -945,9 +915,7 @@ namespace GPU
 		const float azi = zAccPressF[i];
 
 		// temp accumulation variables
-		float tmp_xSysVecElem = 0.0f;
-		float tmp_ySysVecElem = 0.0f;
-		float tmp_zSysVecElem = 0.0f;
+		float tmp_sysVecElem = 0.0f;
 		const uint32_t chunk = i / N_SELL_WIDTH;
 		const uint32_t lane = i % N_SELL_WIDTH;
 		const uint64_t baseFF = nbrChunkOffsetsFF[chunk];
@@ -964,81 +932,70 @@ namespace GPU
 		const uint32_t countFR = static_cast<uint32_t>(nbrCountFR[i]);
 
 		// FF
-		for (uint32_t k = 0; k < countFF; k++)
-		{
-			// global index of neighbor particle
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFF, baseIdxFF, formatFF, lane, k,
-				nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF);
+		ComputeForEachNeighbor_SELL32(
+			baseFF, baseIdxFF, formatFF, lane, countFF,
+			nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosF[j];
+				const float dy = yi - yPosF[j];
+				const float dz = zi - zPosF[j];
 
-			// position difference
-			const float dx = xi - xPosF[j];
-			const float dy = yi - yPosF[j];
-			const float dz = zi - zPosF[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
-
-			// system vector element contribution from fluid neighbor j
-			tmp_xSysVecElem = fmaf(c_massF * (axi - xAccPressF[j]), xkg, tmp_xSysVecElem);
-			tmp_ySysVecElem = fmaf(c_massF * (ayi - yAccPressF[j]), ykg, tmp_ySysVecElem);
-			tmp_zSysVecElem = fmaf(c_massF * (azi - zAccPressF[j]), zkg, tmp_zSysVecElem);
-		}
+				// system vector element contribution from fluid neighbor j
+				const float dotAccF = fmaf(axi - xAccPressF[j], xkg,
+									  fmaf(ayi - yAccPressF[j], ykg,
+										  (azi - zAccPressF[j]) * zkg));
+				tmp_sysVecElem = fmaf(c_massF, dotAccF, tmp_sysVecElem);
+			});
 
 		// FB
-		for (uint32_t k = 0; k < countFB; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFB, baseIdxFB, formatFB, lane, k,
-				nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB);
+		ComputeForEachNeighbor_SELL32(
+			baseFB, baseIdxFB, formatFB, lane, countFB,
+			nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosB[j];
+				const float dy = yi - yPosB[j];
+				const float dz = zi - zPosB[j];
 
-			// position difference
-			const float dx = xi - xPosB[j];
-			const float dy = yi - yPosB[j];
-			const float dz = zi - zPosB[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float psiBj = psiB[j];
 
-			const float psiBj = psiB[j];
-
-			// system vector element contribution from boundary neighbor j
-			tmp_xSysVecElem = fmaf(psiBj * axi, xkg, tmp_xSysVecElem);
-			tmp_ySysVecElem = fmaf(psiBj * ayi, ykg, tmp_ySysVecElem);
-			tmp_zSysVecElem = fmaf(psiBj * azi, zkg, tmp_zSysVecElem);
-		}
+				// system vector element contribution from boundary neighbor j
+				const float dotAccB = fmaf(axi, xkg, fmaf(ayi, ykg, azi * zkg));
+				tmp_sysVecElem = fmaf(psiBj, dotAccB, tmp_sysVecElem);
+			});
 
 		// FR
-		for (uint32_t k = 0; k < countFR; k++)
-		{
-			const uint32_t j = Sell32ReadNeighbor(
-				baseFR, baseIdxFR, formatFR, lane, k,
-				nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR);
+		ComputeForEachNeighbor_SELL32(
+			baseFR, baseIdxFR, formatFR, lane, countFR,
+			nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR,
+			[&](const uint32_t j)
+			{
+				const float dx = xi - xPosR[j];
+				const float dy = yi - yPosR[j];
+				const float dz = zi - zPosR[j];
 
-			// position difference
-			const float dx = xi - xPosR[j];
-			const float dy = yi - yPosR[j];
-			const float dz = zi - zPosR[j];
+				float xkg = 0.0f;
+				float ykg = 0.0f;
+				float zkg = 0.0f;
+				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
 
-			// kernel gradient
-			float xkg = 0.0f;
-			float ykg = 0.0f;
-			float zkg = 0.0f;
-			KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float psiRj = psiR[j];
 
-			const float psiRj = psiR[j];
-
-			// system vector element contribution from rigid neighbor j
-			tmp_xSysVecElem = fmaf(psiRj * axi, xkg, tmp_xSysVecElem);
-			tmp_ySysVecElem = fmaf(psiRj * ayi, ykg, tmp_ySysVecElem);
-			tmp_zSysVecElem = fmaf(psiRj * azi, zkg, tmp_zSysVecElem);
-		}
+				// system vector element contribution from rigid neighbor j
+				const float dotAccR = fmaf(axi, xkg, fmaf(ayi, ykg, azi * zkg));
+				tmp_sysVecElem = fmaf(psiRj, dotAccR, tmp_sysVecElem);
+			});
 
 		float tmp_pressureF = 0.0f;
 
@@ -1046,8 +1003,7 @@ namespace GPU
 		if (!(fabsf(diagElemF[i]) <= 1e-7f))
 		{
 			tmp_pressureF = pressureF[i] + c_jacobiOmega
-						  * ((sourceTermF[i] - (c_timeStep * c_timeStep
-						  * (tmp_xSysVecElem + tmp_ySysVecElem + tmp_zSysVecElem)))
+						  * ((sourceTermF[i] - (c_timeStep * c_timeStep * tmp_sysVecElem))
 						  / diagElemF[i]);
 		}
 
@@ -1138,7 +1094,6 @@ namespace GPU
 			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
 			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR, densityF);
-
 		GPU::CheckLastKernel("K_Density()");
 	}
 
@@ -1176,8 +1131,6 @@ namespace GPU
 		// destinations
 		float* xVelPredF, float* yVelPredF, float* zVelPredF)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1192,7 +1145,6 @@ namespace GPU
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
 			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			xVelPredF, yVelPredF, zVelPredF);
-
 		GPU::CheckLastKernel("K_NonPressureAcceleration()");
 	}
 
@@ -1232,8 +1184,6 @@ namespace GPU
 		float* diagElemF,
 		float* pressureF)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1248,7 +1198,6 @@ namespace GPU
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
 			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			sourceTermF, diagElemF, pressureF);
-
 		GPU::CheckLastKernel("K_SourceTermAndDiagonalElementAndPressureJacobiInit()");
 	}
 
@@ -1286,8 +1235,6 @@ namespace GPU
 		float* yAccPressF,
 		float* zAccPressF)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1301,7 +1248,6 @@ namespace GPU
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
 			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			xAccPressF, yAccPressF, zAccPressF);
-
 		GPU::CheckLastKernel("K_PressureAcceleration()");
 	}
 
@@ -1339,8 +1285,6 @@ namespace GPU
 		// destinations
 		float* pressureF)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
@@ -1354,7 +1298,6 @@ namespace GPU
 			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
 			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR, pressureF);
-
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
 	}
 
@@ -1367,15 +1310,12 @@ namespace GPU
 		float* xPosF, float* yPosF, float* zPosF,
 		float* xVelF, float* yVelF, float* zVelF)
 	{
-		// TODO: initialize constants if needed
-
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_Integration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xVelPredF, yVelPredF, zVelPredF, xAccPressF, yAccPressF, zAccPressF,
 			xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
-
 		GPU::CheckLastKernel("K_Integration()");
 	}
 
