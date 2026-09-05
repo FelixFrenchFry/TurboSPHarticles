@@ -1,2 +1,7 @@
 # excludes generated embedded font data from Git language statistics
 source/visualization/fonts/iosevka_compressed.h linguist-generated
+
+# normalizes every text file to LF in the index and in the working tree
+* text=auto eol=lf
+
+*.ttf binary
