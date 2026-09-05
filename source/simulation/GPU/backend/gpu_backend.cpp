@@ -1483,8 +1483,6 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				N_F_, N_B_, N_R_, stream_,
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
-			GPU::StreamSync(stream_);
-
 			// [ loop 2: relaxed jacobi solver ] --------------------------------------------------------
 			GPU::Launch_PressureRelaxedJacobiSolver(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
@@ -1503,10 +1501,9 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				N_F_, N_B_, N_R_, stream_,
 				d_pressureF_.Data());
 
-			GPU::StreamSync(stream_);
-
 			N_solverIters_++;
 		} while (!TerminationConditionSatisfied(params));
+		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 		// --- [ finalize pressure acceleration for integration ] ---------------------------------------
