@@ -18,6 +18,7 @@ namespace GPU
 	__constant__ uint32_t c_N_B;
 	__constant__ float c_timeStep;
 	__constant__ float c_sizeF;
+	__constant__ float c_sizeInvF;
 	__constant__ float c_sizeB;
 	__constant__ float c_restDensity;
 	__constant__ float c_restDensitySquInv;
@@ -34,9 +35,9 @@ namespace GPU
 
 	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
 	{
-		const float sizeInv = 1.0 / params.particleSizeF;
+		const float sizeInvF = 1.0 / params.particleSizeF;
 		const float cubicSplineAlpha = static_cast<float>(
-			(1.0 / (4.0 * static_cast<double>(PI))) * sizeInv * sizeInv * sizeInv);
+			(1.0 / (4.0 * static_cast<double>(PI))) * sizeInvF * sizeInvF * sizeInvF);
 		const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
 		const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
 
@@ -45,6 +46,7 @@ namespace GPU
 		GPU::Check(cudaMemcpyToSymbol(c_N_B, &N_B, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_timeStep, &params.timeStep, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_sizeF, &params.particleSizeF, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_sizeInvF, &sizeInvF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_sizeB, &params.particleSizeB, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_restDensity, &params.restDensity, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInv, &restDensitySquInv, sizeof(float)));
@@ -73,7 +75,7 @@ namespace GPU
 	{
 		float distSqu = dx * dx + dy * dy + dz * dz;
 		float dist = sqrtf(distSqu);
-		float distNorm = c_sizeF > 0.0f ? dist / c_sizeF : 0.0f;
+		float distNorm = dist * c_sizeInvF;
 
 		float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
 		float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
@@ -88,18 +90,20 @@ namespace GPU
 		float& gx, float& gy, float& gz)
 	{
 		float distSqu = dx * dx + dy * dy + dz * dz;
-		float dist = sqrtf(distSqu);
-		float distNorm = c_sizeF > 0.0f ? dist / c_sizeF : 0.0f;
 
-		float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-		float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
-
-		// kernel gradient
-		if (dist > 1e-7f && distNorm > 0.0f)
+		// kernel gradient, singularity guard (1e-14 is 1e-7 squared)
+		if (distSqu > 1e-14f)
 		{
+			// 1 / (distNorm * c_sizeF * c_sizeF) collapses to distInv * c_sizeInvF
+			float distInv = rsqrtf(distSqu);
+			float distNorm = distSqu * distInv * c_sizeInvF;
+
+			float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
+			float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
+
 			float commonFac = c_cubicSplineAlpha
 							* (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-							/ (distNorm * c_sizeF * c_sizeF);
+							* distInv * c_sizeInvF;
 
 			gx = commonFac * dx;
 			gy = commonFac * dy;

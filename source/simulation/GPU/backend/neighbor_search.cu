@@ -421,12 +421,7 @@ void NS_BruteForce_GPU::Query_Count(
 	const SimParams& params)
 {
 
-	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountFR_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountRF_.Data(), be_.N_R_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountRB_.Data(), be_.N_R_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountRR_.Data(), be_.N_R_, be_.stream_);
+	// (no count reset needed, query overwrites every per-particle count)
 
 	if (be_.N_F_ > 0)
 	{
@@ -781,13 +776,7 @@ void NS_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
 			"GPU compact CLL query requires particle arrays to match the compact cell ordering");
 	}
 
-	// reset per-particle counts before count-query
-	GPU::MemsetZero(be_.d_nbrCountFF_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountFB_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountFR_.Data(), be_.N_F_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountRF_.Data(), be_.N_R_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountRB_.Data(), be_.N_R_, be_.stream_);
-	GPU::MemsetZero(be_.d_nbrCountRR_.Data(), be_.N_R_, be_.stream_);
+	// (no count reset needed, query overwrites every per-particle count)
 
 	if (be_.N_F_ > 0)
 	{
