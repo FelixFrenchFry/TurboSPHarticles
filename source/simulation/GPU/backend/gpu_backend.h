@@ -62,6 +62,8 @@ namespace Sim
 			{
 				cudaError_t err = cudaMalloc(reinterpret_cast<void**>(&ptr_), n * sizeof(T));
 				if (err != cudaSuccess) throw std::runtime_error("cudaMalloc failed.");
+
+				Mem::TrackDeviceAlloc(n * sizeof(T));
 			}
 
 			size_ = n;
@@ -73,7 +75,12 @@ namespace Sim
 
 		void Release()
 		{
-			if (ptr_) { cudaFree(ptr_); ptr_ = nullptr; }
+			if (ptr_)
+			{
+				cudaFree(ptr_);
+				ptr_ = nullptr;
+				Mem::TrackDeviceFree(size_ * sizeof(T));
+			}
 
 			size_ = 0;
 		}

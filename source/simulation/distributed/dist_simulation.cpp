@@ -2071,6 +2071,7 @@ void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& para
 	FillDistributedMemoryRecord(record);
 	memoryTracker_->SampleProcessMemory();
 	record.process = memoryTracker_->GetCurrentRecord().process;
+	record.device = memoryTracker_->GetCurrentRecord().device;
 	loggingMgr_.AppendMemoryRecord(record);
 }
 

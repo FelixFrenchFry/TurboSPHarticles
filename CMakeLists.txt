@@ -320,6 +320,15 @@ target_link_libraries(TSP_H PUBLIC
 
 if(ENABLE_CUDA)
     target_compile_definitions(TSP_H PUBLIC TURBOSPHARTICLES_WITH_CUDA=1)
+    # per-process VRAM comes from DXGI on Windows, and from NVML elsewhere
+    if(WIN32)
+        target_link_libraries(TSP_H PUBLIC dxgi)
+    elseif(TARGET CUDA::nvml)
+        target_link_libraries(TSP_H PUBLIC CUDA::nvml)
+        target_compile_definitions(TSP_H PUBLIC TSP_HAS_NVML=1)
+    else()
+        message(WARNING "CUDA::nvml not found, usage will be reported device-wide, not per-process.")
+    endif()
 endif()
 
 if(ENABLE_CUDA AND SRC_SIM_GPU)

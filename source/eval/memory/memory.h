@@ -19,7 +19,7 @@ namespace Mem
 {
 	class MemoryTracker
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		MemoryTracker(const Sim::SimParams& simParams);
 
@@ -49,11 +49,14 @@ namespace Mem
 		const MemRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<MemRecordStep>& GetHistory() const { return recHistory_; }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// max and current number of steps for which memory usage is kept
 		uint32_t N_maxRecords_;
 		uint32_t N_records_;
+
+		// device memory is only sampled for the GPU backend
+		Base::BackendType backendType_;
 
 		MemRecordStep recLatest_;
 
@@ -65,6 +68,13 @@ namespace Mem
 
 		// all-time process peak
 		ProcessMemUsage processMax_allTime_{};
+
+		// all-time device peaks, the device reports none of its own
+		uint64_t N_peakDeviceResidentBytes_allTime_ = 0;
+		uint64_t N_peakDeviceAllocBytes_allTime_ = 0;
+
+		// samples OS-reported and backend-tracked device memory
+		bool SampleDeviceMemory();
 
 		// helpers
 		void ClearAllTime();

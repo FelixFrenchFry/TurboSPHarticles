@@ -40,6 +40,17 @@ namespace Mem
 		uint64_t N_peakResidentBytes = 0;
 	};
 
+	struct DeviceMemUsage
+	{
+		// current and high-water device memory attributed to this process by the OS, separate from tracked buckets
+		uint64_t N_residentBytes = 0;
+		uint64_t N_peakResidentBytes = 0;
+
+		// current and high-water sum of the raw device allocations made by the backend
+		uint64_t N_allocBytes = 0;
+		uint64_t N_peakAllocBytes = 0;
+	};
+
 	struct ParticleClassMemUsage
 	{
 		MemUsage fluid{};
@@ -280,6 +291,7 @@ namespace Mem
 
 		// process and tracked memory data
 		ProcessMemUsage process{};
+		DeviceMemUsage device{};
 		MemSpaceRecord mem{};
 	};
 
@@ -312,8 +324,16 @@ namespace Mem
 		record.simStep = 0ull;
 		record.simTime = 0.0;
 		record.process = {};
+		record.device = {};
 		Clear(record.mem);
 	}
+
+	// running totals of the raw device allocations made through the device buffers
+	// (the getter fills only the alloc fields)
+	void TrackDeviceAlloc(uint64_t N_bytes) noexcept;
+	void TrackDeviceFree(uint64_t N_bytes) noexcept;
+	DeviceMemUsage GetTrackedDeviceAllocations() noexcept;
+	void ResetTrackedDeviceAllocationPeak() noexcept;
 
 	// helpers for computing memory usage of common data structures
 	template<class T, size_t N>

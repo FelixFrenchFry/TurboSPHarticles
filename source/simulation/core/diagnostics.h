@@ -36,7 +36,9 @@ namespace Sim
 		static void ResetProgress();
 
 		static void PrintFinalProgressPeakRam(uint64_t N_residentBytes,
-											  uint64_t N_peakResidentBytes);
+											  uint64_t N_peakResidentBytes,
+											  uint64_t N_deviceResidentBytes = 0,
+											  uint64_t N_peakDeviceResidentBytes = 0);
 
 		static void PrintLatestPerformanceSummaryAndProgress(
 			const Bench::BenchmarksTracker& benchmarksTracker,
@@ -46,7 +48,9 @@ namespace Sim
 			uint64_t step,
 			int64_t maxSteps = -1,
 			uint64_t N_residentBytes = 0,
-			uint64_t N_peakResidentBytes = 0);
+			uint64_t N_peakResidentBytes = 0,
+			uint64_t N_deviceResidentBytes = 0,
+			uint64_t N_peakDeviceResidentBytes = 0);
 
 		static void PrintMemorySummary_Standalone(
 			const Mem::MemoryTracker& memTracker,

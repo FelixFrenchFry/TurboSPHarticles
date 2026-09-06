@@ -58,12 +58,12 @@ namespace
 		const uint64_t N_peakResidentBytes,
 		const int peakRank)
 	{
-		char buffer[80];
+		char buffer[96];
 		std::snprintf(buffer, sizeof(buffer),
-			" | RSS %.2f GB (rank %d) | HWM %.2f GB (rank %d)",
+			" | RSS/HWM %.2f/%.2f GB (RSS rank %d, HWM rank %d)",
 			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_residentBytes),
-			residentRank,
 			Mem::ConvertFromBytes(Mem::ByteUnit::GB, N_peakResidentBytes),
+			residentRank,
 			peakRank);
 		return buffer;
 	}
@@ -112,14 +112,14 @@ namespace
 		if (hasTotal)
 		{
 			std::snprintf(progressLine, sizeof(progressLine),
-				"%02d:%02d:%02d time | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s%s",
+				"%02d:%02d:%02d | %" PRIu64 "/%" PRId64 " steps (%.1f %%) | %.3f steps/s%s",
 				elH, elM, elS,
 				step, maxSteps, percent, stepsPerSec, ramUsageLabel.c_str());
 		}
 		else
 		{
 			std::snprintf(progressLine, sizeof(progressLine),
-				"%02d:%02d:%02d time | %" PRIu64 " steps | %.3f steps/s%s",
+				"%02d:%02d:%02d | %" PRIu64 " steps | %.3f steps/s%s",
 				elH, elM, elS, step, stepsPerSec, ramUsageLabel.c_str());
 		}
 

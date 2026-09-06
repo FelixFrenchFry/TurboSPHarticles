@@ -220,7 +220,11 @@ namespace Export
 		}
 
 		memoryMetricsCsv_ << ','
-						  << record.process.N_peakResidentBytes
+						  << record.process.N_peakResidentBytes << ','
+						  << record.device.N_residentBytes << ','
+						  << record.device.N_peakResidentBytes << ','
+						  << record.device.N_allocBytes << ','
+						  << record.device.N_peakAllocBytes
 						  << '\n';
 		memoryMetricsCsv_.flush();
 
@@ -475,7 +479,11 @@ namespace Export
 							  << spaceKey << "_total_allocBytes";
 		}
 
-		memoryMetricsCsv_ << ",process_peakResidentBytes\n";
+		memoryMetricsCsv_ << ",process_peakResidentBytes"
+						  << ",device_residentBytes"
+						  << ",device_peakResidentBytes"
+						  << ",device_allocBytes"
+						  << ",device_peakAllocBytes\n";
 	}
 
 	void LoggingMgr::WriteBenchmarkMetricsHeader()

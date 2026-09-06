@@ -148,6 +148,7 @@ namespace Sync
 		double simTime;
 		Mem::ProcessMemUsage latestProcess{};
 		Mem::ProcessMemUsage maxProcess{};
+		Mem::DeviceMemUsage latestDevice{};
 
 		// per-space / per-bucket memory usage
 		Mem::MemSpaceRecord latest{};

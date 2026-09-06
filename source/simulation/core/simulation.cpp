@@ -454,7 +454,9 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	SPDLOG_INFO("Simulation stopped running ({})", stopReason);
 	DiagnosticsMgr::PrintFinalProgressPeakRam(
 		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
-		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
+		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes,
+		memoryTracker_.GetCurrentRecord().device.N_residentBytes,
+		memoryTracker_.GetCurrentRecord().device.N_peakResidentBytes);
 }
 
 void SimulationMgr::RunSim_Blocking()
@@ -580,7 +582,9 @@ void SimulationMgr::RunSim_Blocking()
 	SPDLOG_INFO("Simulation stopped running ({})", stopReason);
 	DiagnosticsMgr::PrintFinalProgressPeakRam(
 		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
-		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
+		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes,
+		memoryTracker_.GetCurrentRecord().device.N_residentBytes,
+		memoryTracker_.GetCurrentRecord().device.N_peakResidentBytes);
 }
 
 // requests the controller thread to stop cleanly
@@ -697,6 +701,7 @@ void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
 	simBackend_->FillMemoryRecord(record, params);
 	memoryTracker_.SampleProcessMemory();
 	record.process = memoryTracker_.GetCurrentRecord().process;
+	record.device = memoryTracker_.GetCurrentRecord().device;
 	loggingMgr_.AppendMemoryRecord(record);
 }
 
@@ -747,7 +752,9 @@ void SimulationMgr::DisplayPerformanceStats(
 		benchmarksTracker_, curBenchOps_, params.timeUnit,
 		params.progressReportMode, simStep_, params.maxSteps,
 		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
-		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes);
+		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes,
+		memoryTracker_.GetCurrentRecord().device.N_residentBytes,
+		memoryTracker_.GetCurrentRecord().device.N_peakResidentBytes);
 }
 
 void SimulationMgr::DisplayMemoryUsageStats(
