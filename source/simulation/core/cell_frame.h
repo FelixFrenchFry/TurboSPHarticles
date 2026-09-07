@@ -21,6 +21,11 @@ namespace Sim
 		uint32_t N_dimZ = 0;
 	};
 
+	// markers for an absent cell ID, index or reference
+	// (used by both the CPU and GPU backend)
+	inline constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
+	inline constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
+
 	// the Morton encoder spreads 21 bits per axis into the 64-bit cell ID
 	inline constexpr uint32_t CellCoordFrameMaxAxisCells = (1u << 21);
 

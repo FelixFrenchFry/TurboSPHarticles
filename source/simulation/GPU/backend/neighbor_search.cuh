@@ -3,7 +3,6 @@
 
 // external
 #include <cstdint>
-#include <limits>
 
 // internal
 #include "common.cuh"
@@ -109,9 +108,6 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
 		DeviceBuffer<uint32_t> d_queryCellRefAnyByCellF_; // cached references for source fluid-cell query slot -> merged-cell index
 		DeviceBuffer<GPU::CellRangeByAny> d_cellRangeByAny_; // merged-cell to fluid/boundary particle ranges
-
-		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
-		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
 
 		// helpers
 		void EnsureStorageAllocation();

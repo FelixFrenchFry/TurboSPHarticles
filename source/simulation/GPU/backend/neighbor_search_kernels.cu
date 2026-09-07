@@ -599,7 +599,7 @@ namespace GPU
 			ly < 0 || static_cast<uint32_t>(ly) >= c_ns_N_dimY ||
 			lz < 0 || static_cast<uint32_t>(lz) >= c_ns_N_dimZ)
 		{
-			return EMPTY_CELL_ID;
+			return Sim::EMPTY_64;
 		}
 
 		return MapToCellId_Morton(
@@ -856,7 +856,7 @@ namespace GPU
 					const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
 
 					// stencil cells outside the frame hold no particles
-					if (cid_nbr == EMPTY_CELL_ID) { continue; }
+					if (cid_nbr == Sim::EMPTY_64) { continue; }
 
 					litMaxCellId = (cid_nbr < litMaxCellId) ? cid_nbr : litMaxCellId;
 					bigMinCellId = (cid_nbr > bigMinCellId) ? cid_nbr : bigMinCellId;
@@ -905,7 +905,7 @@ namespace GPU
 		{
 			for (uint32_t s = 0; s < N_queryCellSlots; s++)
 			{
-				queryCellRefAnyByCellF[slotBase + s] = 0xffffffffu;
+				queryCellRefAnyByCellF[slotBase + s] = Sim::EMPTY_32;
 			}
 			return;
 		}
@@ -933,7 +933,7 @@ namespace GPU
 				for (int rx = -cellQueryReach; rx <= cellQueryReach; rx++)
 				{
 					const int cx_nbr = cx + rx;
-					uint32_t cAny_nbr = 0xffffffffu;
+					uint32_t cAny_nbr = Sim::EMPTY_32;
 
 					// cells outside the frame are never in the search range
 					if (loAny < hiAny)
@@ -955,7 +955,7 @@ namespace GPU
 
 		for (; s < N_queryCellSlots; s++)
 		{
-			queryCellRefAnyByCellF[slotBase + s] = 0xffffffffu;
+			queryCellRefAnyByCellF[slotBase + s] = Sim::EMPTY_32;
 		}
 	}
 
@@ -1050,7 +1050,7 @@ namespace GPU
 			for (uint32_t s = 0; s < N_queryCellSlots; s++)
 			{
 				const uint32_t cellAny = queryCellRefAnyByCellF[querySlotBase + s];
-				if (cellAny == 0xffffffffu) { continue; }
+				if (cellAny == Sim::EMPTY_32) { continue; }
 
 				// particle ranges of the neighbor cell, an absent species has an empty range
 				const CellRangeByAny cellRange = cellRangeByAny[cellAny];
@@ -1105,7 +1105,7 @@ namespace GPU
 							const uint64_t cellId = MapToCellId(ox, oy, oz);
 
 							// stencil cells outside the frame hold no particles
-							if (cellId == EMPTY_CELL_ID) { continue; }
+							if (cellId == Sim::EMPTY_64) { continue; }
 
 							// rigid neighbor cell
 							const int cellR = BinarySearchUniqueCellId(
@@ -1230,7 +1230,7 @@ namespace GPU
 		for (uint32_t s = 0; s < N_queryCellSlots; s++)
 		{
 			const uint32_t cellAny = queryCellRefAnyByCellF[querySlotBase + s];
-			if (cellAny == 0xffffffffu) { continue; }
+			if (cellAny == Sim::EMPTY_32) { continue; }
 
 			// particle ranges of the neighbor cell, an absent species has an empty range
 			const CellRangeByAny cellRange = cellRangeByAny[cellAny];
@@ -1291,7 +1291,7 @@ namespace GPU
 						const uint64_t cellId = MapToCellId(ox, oy, oz);
 
 						// stencil cells outside the frame hold no particles
-						if (cellId == EMPTY_CELL_ID) { continue; }
+						if (cellId == Sim::EMPTY_64) { continue; }
 
 						// rigid neighbor cell
 						const int cellR = BinarySearchUniqueCellId(
@@ -1509,7 +1509,7 @@ namespace GPU
 					const uint64_t cellId = MapToCellId(ox, oy, oz);
 
 					// stencil cells outside the frame hold no particles
-					if (cellId == EMPTY_CELL_ID) { continue; }
+					if (cellId == Sim::EMPTY_64) { continue; }
 
 					// count fluid neighbors in this cell
 					const int cellF = BinarySearchUniqueCellId(
@@ -1630,7 +1630,7 @@ namespace GPU
 					const uint64_t cellId = MapToCellId(ox, oy, oz);
 
 					// stencil cells outside the frame hold no particles
-					if (cellId == EMPTY_CELL_ID) { continue; }
+					if (cellId == Sim::EMPTY_64) { continue; }
 
 					// store fluid neighbors in this cell
 					const int cellF = BinarySearchUniqueCellId(

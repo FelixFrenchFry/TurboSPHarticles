@@ -7,7 +7,6 @@
 #include <bit>
 #include <boost/container/small_vector.hpp>
 #include <cstdint>
-#include <limits>
 #include <span>
 #include <tbb/enumerable_thread_specific.h>
 #include <vector>
@@ -97,8 +96,6 @@ namespace Sim
 		float cellSizeInv_ = 0.0f;
 		float kernelRadiusSqu_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
-		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
-		static constexpr uint32_t EMPTY_COMPACT_CELL = std::numeric_limits<uint32_t>::max();
 		static constexpr uint32_t N_CELL_FRAME_REBUILD_MARGIN = 8; // hysteresis buffer
 		static constexpr uint64_t N_CELL_SEARCH_LINEAR_TAIL = 32; // max elemnt count for linear search
 		static constexpr uint32_t N_QUERY_CELL_INLINE = 96;

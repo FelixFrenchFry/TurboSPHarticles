@@ -1218,7 +1218,7 @@ NS_CellLinkedList_Compact_CPU::ResolveCellQueryRanges(
 		const std::vector<uint32_t>& cellStartIdx) noexcept
 	{
 		const uint32_t compactCellIdx = FindCompactCellIdx(uniqueCellIds, cellId);
-		if (compactCellIdx == EMPTY_COMPACT_CELL) { return ActiveCellRange{}; }
+		if (compactCellIdx == EMPTY_32) { return ActiveCellRange{}; }
 
 		return ActiveCellRange{
 			cellStartIdx[compactCellIdx], cellStartIdx[compactCellIdx + 1]};
@@ -2307,7 +2307,7 @@ uint32_t NS_CellLinkedList_Compact_CPU::FindCompactCellIdx(
 	}
 
 	// linear scan of the tail instead of further narrowing
-	uint32_t compactCellIdx = EMPTY_COMPACT_CELL;
+	uint32_t compactCellIdx = EMPTY_32;
 	for (uint64_t i = lo; i < hi; i++)
 	{
 		if (uniqueCellIds[i] == cellId)
