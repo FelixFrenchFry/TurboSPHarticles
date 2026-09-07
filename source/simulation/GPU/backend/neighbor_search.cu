@@ -629,8 +629,7 @@ void NS_CellLinkedList_Compact_GPU::Init(const SimParams& params)
 	d_cellIdR_.Release();
 	d_cellMarkerR_.Release();
 	d_uniqueCellIdAny_.Release();
-	d_cellRefFByAny_.Release();
-	d_cellRefBByAny_.Release();
+	d_cellRangeByAny_.Release();
 	d_queryCellRefAnyByCellF_.Release();
 }
 
@@ -708,8 +707,7 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 		d_cellIdR_.Release();
 		d_cellMarkerR_.Release();
 		d_uniqueCellIdAny_.Release();
-		d_cellRefFByAny_.Release();
-		d_cellRefBByAny_.Release();
+		d_cellRangeByAny_.Release();
 		d_queryCellRefAnyByCellF_.Release();
 
 		return;
@@ -829,7 +827,7 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 		N_nonEmptyCellsR_ = 0;
 	}
 
-	BuildMergedCompactCellLookup();
+	BuildMergedCompactCellRanges();
 	BuildQueryLookupBounds();
 	BuildQueryCellRefCache();
 
@@ -856,8 +854,7 @@ void NS_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-			d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
-			d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+			d_cellRangeByAny_.Data(),
 			d_sortedParticleIdxF_.Data(),
 			d_queryCellRefAnyByCellF_.Data(),
 			d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
@@ -909,8 +906,7 @@ void NS_CellLinkedList_Compact_GPU::Query_Fill(const SimParams& params)
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-			d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data(),
-			d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
+			d_cellRangeByAny_.Data(),
 			d_sortedParticleIdxF_.Data(),
 			d_queryCellRefAnyByCellF_.Data(),
 			d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
@@ -1136,8 +1132,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU::GetMemUsage(
 
 	// shared merged lookup metadata is accounted in the fluid bucket to avoid double-counting
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefFByAny_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRefBByAny_));
+	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRangeByAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryCellRefAnyByCellF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
 
@@ -1184,8 +1179,6 @@ void NS_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 		// keep capacity once allocated and only grow when needed
 		// (to avoid repeated device alloc/free between steps)
 		if (d_uniqueCellIdAny_.Size() < N_ANY_MAX) { d_uniqueCellIdAny_.Resize(N_ANY_MAX); }
-		if (d_cellRefFByAny_.Size() < N_ANY_MAX) { d_cellRefFByAny_.Resize(N_ANY_MAX); }
-		if (d_cellRefBByAny_.Size() < N_ANY_MAX) { d_cellRefBByAny_.Resize(N_ANY_MAX); }
 	}
 
 	be_.EnsureNsSharedScratchCapacity(
@@ -1236,7 +1229,7 @@ void NS_CellLinkedList_Compact_GPU::BuildCompactCellList(
 		d_uniqueCellId.Data(), d_cellStartIdx.Data());
 }
 
-void NS_CellLinkedList_Compact_GPU::BuildMergedCompactCellLookup()
+void NS_CellLinkedList_Compact_GPU::BuildMergedCompactCellRanges()
 {
 	N_nonEmptyCellsAny_ = 0;
 
@@ -1276,11 +1269,22 @@ void NS_CellLinkedList_Compact_GPU::BuildMergedCompactCellLookup()
 
 	if (N_nonEmptyCellsAny_ == 0) { return; }
 
-	GPU::Launch_FillMergedCompactCellRefs(
+	// keep capacity once allocated and only grow when needed
+	// (to avoid repeated device alloc/free between steps)
+	if (d_cellRangeByAny_.Size() < N_nonEmptyCellsAny_)
+	{
+		const uint64_t capTarget = static_cast<uint64_t>(N_nonEmptyCellsAny_)
+			+ Base::ExtraPercent(N_nonEmptyCellsAny_, be_.extraAllocCapacityPct_);
+
+		d_cellRangeByAny_.Resize(static_cast<size_t>(capTarget));
+	}
+
+	GPU::Launch_FillMergedCompactCellRanges(
 		d_uniqueCellIdAny_.Data(), N_nonEmptyCellsAny_,
 		d_uniqueCellIdF_.Data(), d_uniqueCellIdB_.Data(),
+		d_cellStartIdxF_.Data(), d_cellStartIdxB_.Data(),
 		N_nonEmptyCellsF_, N_nonEmptyCellsB_, be_.stream_,
-		d_cellRefFByAny_.Data(), d_cellRefBByAny_.Data());
+		d_cellRangeByAny_.Data());
 }
 
 void NS_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()

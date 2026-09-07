@@ -7,6 +7,7 @@
 #include <cstdint>
 
 // internal
+#include "common.cuh"
 #include "source/simulation/core/cell_frame.h"
 
 
@@ -115,17 +116,18 @@ namespace GPU
 		uint64_t* uniqueCellId,
 		uint32_t* cellStartIdx);
 
-	void Launch_FillMergedCompactCellRefs(
+	void Launch_FillMergedCompactCellRanges(
 		const uint64_t* uniqueCellIdAny,
 		const uint32_t N_nonEmptyCellsAny,
 		const uint64_t* uniqueCellIdF,
 		const uint64_t* uniqueCellIdB,
+		const uint32_t* cellStartIdxF,
+		const uint32_t* cellStartIdxB,
 		const uint32_t N_nonEmptyCellsF,
 		const uint32_t N_nonEmptyCellsB,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* cellRefFByAny,
-		uint32_t* cellRefBByAny);
+		CellRangeByAny* cellRangeByAny);
 
 	void Launch_FillQueryLookupBoundsF(
 		const float* xPosF, const float* yPosF, const float* zPosF,
@@ -163,8 +165,7 @@ namespace GPU
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xPosR, const float* yPosR, const float* zPosR,
-		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
-		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
+		const CellRangeByAny* cellRangeByAny,
 		const uint32_t* compactCellIdxByParticleF,
 		const uint32_t* queryCellRefAnyByCellF,
 		const uint64_t* uniqueCellIdR,
@@ -192,8 +193,7 @@ namespace GPU
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xPosR, const float* yPosR, const float* zPosR,
-		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
-		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
+		const CellRangeByAny* cellRangeByAny,
 		const uint32_t* compactCellIdxByParticleF,
 		const uint32_t* queryCellRefAnyByCellF,
 		const uint64_t* uniqueCellIdR,

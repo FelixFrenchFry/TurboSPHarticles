@@ -23,7 +23,7 @@ namespace Sim
 	class NS_BruteForce_GPU
 		: public I_NeighborSearch
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		explicit NS_BruteForce_GPU(SimBackend_GPU& backend)
 			: be_{ backend } {}
@@ -54,7 +54,7 @@ namespace Sim
 	class NS_CellLinkedList_Compact_GPU
 		: public I_NeighborSearch
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		explicit NS_CellLinkedList_Compact_GPU(SimBackend_GPU& backend)
 			: be_{ backend } {}
@@ -75,7 +75,7 @@ namespace Sim
 
 		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		SimBackend_GPU& be_;
 
@@ -107,9 +107,8 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_cellMarkerR_;
 
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
-		DeviceBuffer<uint32_t> d_cellRefFByAny_; // merged-cell to compact fluid-cell index
-		DeviceBuffer<uint32_t> d_cellRefBByAny_; // merged-cell to compact boundary-cell index
 		DeviceBuffer<uint32_t> d_queryCellRefAnyByCellF_; // cached references for source fluid-cell query slot -> merged-cell index
+		DeviceBuffer<GPU::CellRangeByAny> d_cellRangeByAny_; // merged-cell to fluid/boundary particle ranges
 
 		static constexpr uint32_t EMPTY_32 = std::numeric_limits<uint32_t>::max();
 		static constexpr uint64_t EMPTY_64 = std::numeric_limits<uint64_t>::max();
@@ -125,7 +124,7 @@ namespace Sim
 			const uint64_t* d_cellIdSorted,
 			uint32_t N, uint32_t& N_nonEmptyCells);
 
-		void BuildMergedCompactCellLookup();
+		void BuildMergedCompactCellRanges();
 		void BuildQueryLookupBounds();
 		void BuildQueryCellRefCache();
 	};

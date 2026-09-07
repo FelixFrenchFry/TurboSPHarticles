@@ -26,7 +26,17 @@ namespace GPU
 	static constexpr uint32_t NbrListError_InvalidChunkFormat = 1u << 1u;
 	static constexpr uint32_t NbrListError_DeltaRangeOverflow = 1u << 2u;
 
-	// host+device struct for AABB accumulation
+	// particle index ranges of one merged non-empty cell
+	// (a particle class absent from the cell is encoded as begin == end)
+	struct alignas(16) CellRangeByAny
+	{
+		uint32_t beginF, endF;
+		uint32_t beginB, endB;
+	};
+	static_assert(sizeof(CellRangeByAny) == 16u,
+		"Merged cell ranges must stay one vectorized load wide.");
+
+	// host + device struct for AABB accumulation
 	struct MinMax3HD
 	{
 		float xMin, yMin, zMin;

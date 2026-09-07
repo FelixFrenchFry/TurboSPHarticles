@@ -767,16 +767,17 @@ namespace GPU
 	}
 
 	__global__
-	void K_FillMergedCompactCellRefs(
+	void K_FillMergedCompactCellRanges(
 		const uint64_t* __restrict__ uniqueCellIdAny,
 		const uint32_t N_nonEmptyCellsAny,
 		const uint64_t* __restrict__ uniqueCellIdF,
 		const uint64_t* __restrict__ uniqueCellIdB,
+		const uint32_t* __restrict__ cellStartIdxF,
+		const uint32_t* __restrict__ cellStartIdxB,
 		const uint32_t N_nonEmptyCellsF,
 		const uint32_t N_nonEmptyCellsB,
 		// destinations
-		uint32_t* __restrict__ cellRefFByAny,
-		uint32_t* __restrict__ cellRefBByAny)
+		CellRangeByAny* __restrict__ cellRangeByAny)
 	{
 		const uint32_t cAny = blockIdx.x * blockDim.x + threadIdx.x;
 		if (cAny >= N_nonEmptyCellsAny) { return; }
@@ -785,8 +786,19 @@ namespace GPU
 		const int cF = BinarySearchUniqueCellId(uniqueCellIdF, N_nonEmptyCellsF, cid);
 		const int cB = BinarySearchUniqueCellId(uniqueCellIdB, N_nonEmptyCellsB, cid);
 
-		cellRefFByAny[cAny] = (cF >= 0) ? static_cast<uint32_t>(cF) : 0xffffffffu;
-		cellRefBByAny[cAny] = (cB >= 0) ? static_cast<uint32_t>(cB) : 0xffffffffu;
+		CellRangeByAny cellRange{ 0u, 0u, 0u, 0u };
+		if (cF >= 0)
+		{
+			cellRange.beginF = cellStartIdxF[cF];
+			cellRange.endF = cellStartIdxF[cF + 1];
+		}
+		if (cB >= 0)
+		{
+			cellRange.beginB = cellStartIdxB[cB];
+			cellRange.endB = cellStartIdxB[cB + 1];
+		}
+
+		cellRangeByAny[cAny] = cellRange;
 	}
 
 	__global__
@@ -978,10 +990,7 @@ namespace GPU
 		const float* __restrict__ xPosR,
 		const float* __restrict__ yPosR,
 		const float* __restrict__ zPosR,
-		const uint32_t* __restrict__ cellRefFByAny,
-		const uint32_t* __restrict__ cellRefBByAny,
-		const uint32_t* __restrict__ cellStartIdxF,
-		const uint32_t* __restrict__ cellStartIdxB,
+		const CellRangeByAny* __restrict__ cellRangeByAny,
 		const uint32_t* __restrict__ compactCellIdxByParticleF,
 		const uint32_t* __restrict__ queryCellRefAnyByCellF,
 		const uint32_t N_queryCellSlots,
@@ -1036,55 +1045,38 @@ namespace GPU
 				const uint32_t cellAny = queryCellRefAnyByCellF[querySlotBase + s];
 				if (cellAny == 0xffffffffu) { continue; }
 
-				// fluid neighbor cell
-				const uint32_t cellF = cellRefFByAny[cellAny];
-				if (cellF != 0xffffffffu)
+				// particle ranges of the neighbor cell, an absent species has an empty range
+				const CellRangeByAny cellRange = cellRangeByAny[cellAny];
+
+				// fluid neighbors
+				for (uint32_t j = cellRange.beginF; j < cellRange.endF; j++)
 				{
-					// range of all fluid particles in the neighbor cell
-					const uint32_t beginF = cellStartIdxF[cellF];
-					const uint32_t endF = cellStartIdxF[cellF + 1];
-					if (beginF >= endF) { continue; }
+					const float dx = x - xPosF[j];
+					const float dy = y - yPosF[j];
+					const float dz = z - zPosF[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
 
-					for (uint32_t k = beginF; k < endF; k++)
+					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
-						const uint32_t j = k;
-						const float dx = x - xPosF[j];
-						const float dy = y - yPosF[j];
-						const float dz = z - zPosF[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
-
-						if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
-						{
-							cntFF++;
-							minRefFF = (j < minRefFF) ? j : minRefFF;
-							maxRefFF = (j > maxRefFF) ? j : maxRefFF;
-						}
+						cntFF++;
+						minRefFF = (j < minRefFF) ? j : minRefFF;
+						maxRefFF = (j > maxRefFF) ? j : maxRefFF;
 					}
 				}
 
-				// boundary neighbor cell
-				const uint32_t cellB = cellRefBByAny[cellAny];
-				if (cellB != 0xffffffffu)
+				// boundary neighbors
+				for (uint32_t j = cellRange.beginB; j < cellRange.endB; j++)
 				{
-					// range of all boundary particles in the neighbor cell
-					const uint32_t beginB = cellStartIdxB[cellB];
-					const uint32_t endB = cellStartIdxB[cellB + 1];
-					if (beginB >= endB) { continue; }
+					const float dx = x - xPosB[j];
+					const float dy = y - yPosB[j];
+					const float dz = z - zPosB[j];
+					const float distSqu = dx * dx + dy * dy + dz * dz;
 
-					for (uint32_t k = beginB; k < endB; k++)
+					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
-						const uint32_t j = k;
-						const float dx = x - xPosB[j];
-						const float dy = y - yPosB[j];
-						const float dz = z - zPosB[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
-
-						if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
-						{
-							cntFB++;
-							minRefFB = (j < minRefFB) ? j : minRefFB;
-							maxRefFB = (j > maxRefFB) ? j : maxRefFB;
-						}
+						cntFB++;
+						minRefFB = (j < minRefFB) ? j : minRefFB;
+						maxRefFB = (j > maxRefFB) ? j : maxRefFB;
 					}
 				}
 			}
@@ -1160,10 +1152,7 @@ namespace GPU
 		const float* __restrict__ xPosR,
 		const float* __restrict__ yPosR,
 		const float* __restrict__ zPosR,
-		const uint32_t* __restrict__ cellRefFByAny,
-		const uint32_t* __restrict__ cellRefBByAny,
-		const uint32_t* __restrict__ cellStartIdxF,
-		const uint32_t* __restrict__ cellStartIdxB,
+		const CellRangeByAny* __restrict__ cellRangeByAny,
 		const uint32_t* __restrict__ compactCellIdxByParticleF,
 		const uint32_t* __restrict__ queryCellRefAnyByCellF,
 		const uint32_t N_queryCellSlots,
@@ -1232,61 +1221,44 @@ namespace GPU
 			const uint32_t cellAny = queryCellRefAnyByCellF[querySlotBase + s];
 			if (cellAny == 0xffffffffu) { continue; }
 
-			// fluid neighbor cell
-			const uint32_t cellF = cellRefFByAny[cellAny];
-			if (cellF != 0xffffffffu)
+			// particle ranges of the neighbor cell, an absent species has an empty range
+			const CellRangeByAny cellRange = cellRangeByAny[cellAny];
+
+			// fluid neighbors
+			for (uint32_t j = cellRange.beginF; j < cellRange.endF; j++)
 			{
-				// range of all fluid particles in the neighbor cell
-				const uint32_t beginF = cellStartIdxF[cellF];
-				const uint32_t endF = cellStartIdxF[cellF + 1];
-				if (beginF >= endF) { continue; }
+				const float dx = x - xPosF[j];
+				const float dy = y - yPosF[j];
+				const float dz = z - zPosF[j];
+				const float distSqu = dx * dx + dy * dy + dz * dz;
 
-				for (uint32_t k = beginF; k < endF; k++)
+				if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 				{
-					const uint32_t j = k;
-					const float dx = x - xPosF[j];
-					const float dy = y - yPosF[j];
-					const float dz = z - zPosF[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
-					{
-						// add fluid neighbor to the list
-						StoreNeighbor_CompressedSell32(
-							baseFF, pitchFF, lane, wrFF, j,
-							baseIdxFF, formatFF,
-							nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
-							overflowFlag);
-					}
+					// add fluid neighbor to the list
+					StoreNeighbor_CompressedSell32(
+						baseFF, pitchFF, lane, wrFF, j,
+						baseIdxFF, formatFF,
+						nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+						overflowFlag);
 				}
 			}
 
-			// boundary neighbor cell
-			const uint32_t cellB = cellRefBByAny[cellAny];
-			if (cellB != 0xffffffffu)
+			// boundary neighbors
+			for (uint32_t j = cellRange.beginB; j < cellRange.endB; j++)
 			{
-				// range of all boundary particles in the neighbor cell
-				const uint32_t beginB = cellStartIdxB[cellB];
-				const uint32_t endB = cellStartIdxB[cellB + 1];
-				if (beginB >= endB) { continue; }
+				const float dx = x - xPosB[j];
+				const float dy = y - yPosB[j];
+				const float dz = z - zPosB[j];
+				const float distSqu = dx * dx + dy * dy + dz * dz;
 
-				for (uint32_t k = beginB; k < endB; k++)
+				if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 				{
-					const uint32_t j = k;
-					const float dx = x - xPosB[j];
-					const float dy = y - yPosB[j];
-					const float dz = z - zPosB[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
-
-					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
-					{
-						// add boundary neighbor to the list
-						StoreNeighbor_CompressedSell32(
-							baseFB, pitchFB, lane, wrFB, j,
-							baseIdxFB, formatFB,
-							nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
-							overflowFlag);
-					}
+					// add boundary neighbor to the list
+					StoreNeighbor_CompressedSell32(
+						baseFB, pitchFB, lane, wrFB, j,
+						baseIdxFB, formatFB,
+						nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+						overflowFlag);
 				}
 			}
 		}
@@ -1896,28 +1868,30 @@ namespace GPU
 		GPU::CheckLastKernel("K_FillUniqueCellIdAndCellStartIdx()");
 	}
 
-	void Launch_FillMergedCompactCellRefs(
+	void Launch_FillMergedCompactCellRanges(
 		const uint64_t* uniqueCellIdAny,
 		const uint32_t N_nonEmptyCellsAny,
 		const uint64_t* uniqueCellIdF,
 		const uint64_t* uniqueCellIdB,
+		const uint32_t* cellStartIdxF,
+		const uint32_t* cellStartIdxB,
 		const uint32_t N_nonEmptyCellsF,
 		const uint32_t N_nonEmptyCellsB,
 		cudaStream_t stream,
 		// destinations
-		uint32_t* cellRefFByAny,
-		uint32_t* cellRefBByAny)
+		CellRangeByAny* cellRangeByAny)
 	{
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsAny + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
-		K_FillMergedCompactCellRefs<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
+		K_FillMergedCompactCellRanges<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			uniqueCellIdAny, N_nonEmptyCellsAny,
 			uniqueCellIdF, uniqueCellIdB,
+			cellStartIdxF, cellStartIdxB,
 			N_nonEmptyCellsF, N_nonEmptyCellsB,
-			cellRefFByAny, cellRefBByAny);
+			cellRangeByAny);
 
-		GPU::CheckLastKernel("K_FillMergedCompactCellRefs()");
+		GPU::CheckLastKernel("K_FillMergedCompactCellRanges()");
 	}
 
 	void Launch_FillQueryLookupBoundsF(
@@ -1991,8 +1965,7 @@ namespace GPU
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xPosR, const float* yPosR, const float* zPosR,
-		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
-		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
+		const CellRangeByAny* cellRangeByAny,
 		const uint32_t* compactCellIdxByParticleF,
 		const uint32_t* queryCellRefAnyByCellF,
 		const uint64_t* uniqueCellIdR,
@@ -2024,8 +1997,7 @@ namespace GPU
 
 		K_CellLinkedList_Compact_Query_Count<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
-			cellRefFByAny, cellRefBByAny,
-			cellStartIdxF, cellStartIdxB,
+			cellRangeByAny,
 			compactCellIdxByParticleF,
 			queryCellRefAnyByCellF, N_queryCellSlots,
 			uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
@@ -2043,8 +2015,7 @@ namespace GPU
 		const float* xPosF, const float* yPosF, const float* zPosF,
 		const float* xPosB, const float* yPosB, const float* zPosB,
 		const float* xPosR, const float* yPosR, const float* zPosR,
-		const uint32_t* cellRefFByAny, const uint32_t* cellRefBByAny,
-		const uint32_t* cellStartIdxF, const uint32_t* cellStartIdxB,
+		const CellRangeByAny* cellRangeByAny,
 		const uint32_t* compactCellIdxByParticleF,
 		const uint32_t* queryCellRefAnyByCellF,
 		const uint64_t* uniqueCellIdR,
@@ -2086,8 +2057,7 @@ namespace GPU
 
 		K_CellLinkedList_Compact_Query_Fill<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
-			cellRefFByAny, cellRefBByAny,
-			cellStartIdxF, cellStartIdxB,
+			cellRangeByAny,
 			compactCellIdxByParticleF,
 			queryCellRefAnyByCellF, N_queryCellSlots,
 			uniqueCellIdR, cellStartIdxR, sortedParticleIdxR,
