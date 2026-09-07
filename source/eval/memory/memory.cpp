@@ -74,12 +74,6 @@ namespace
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 #if defined(_WIN32)
 	// the DXGI adapter backing the active CUDA device, matched by its LUID
-	struct DxgiAdapter
-	{
-		IDXGIAdapter3* ptr = nullptr;
-		~DxgiAdapter() { if (ptr) { ptr->Release(); } }
-	};
-
 	IDXGIAdapter3* ResolveCudaDxgiAdapter() noexcept
 	{
 		int device = 0;
@@ -121,17 +115,23 @@ namespace
 		if (nvmlInit() != NVML_SUCCESS) { return nullptr; }
 
 		int device = 0;
-		if (cudaGetDevice(&device) != cudaSuccess) { return nullptr; }
+		if (cudaGetDevice(&device) != cudaSuccess)
+		{
+			nvmlShutdown();
+			return nullptr;
+		}
 
 		char pciBusId[NVML_DEVICE_PCI_BUS_ID_BUFFER_SIZE] = {};
 		if (cudaDeviceGetPCIBusId(pciBusId, sizeof(pciBusId), device) != cudaSuccess)
 		{
+			nvmlShutdown();
 			return nullptr;
 		}
 
 		nvmlDevice_t nvmlDevice{};
 		if (nvmlDeviceGetHandleByPciBusId(pciBusId, &nvmlDevice) != NVML_SUCCESS)
 		{
+			nvmlShutdown();
 			return nullptr;
 		}
 
@@ -143,12 +143,12 @@ namespace
 	uint64_t QueryProcessDeviceMemoryUsage() noexcept
 	{
 #if defined(_WIN32)
-		// the LUID match only has to be resolved once
-		static DxgiAdapter adapter{ ResolveCudaDxgiAdapter() };
-		if (!adapter.ptr) { return 0ull; }
+		// the LUID match only has to be resolved once, and the adapter is never released
+		static IDXGIAdapter3* const adapter = ResolveCudaDxgiAdapter();
+		if (!adapter) { return 0ull; }
 
 		DXGI_QUERY_VIDEO_MEMORY_INFO info{};
-		if (FAILED(adapter.ptr->QueryVideoMemoryInfo(
+		if (FAILED(adapter->QueryVideoMemoryInfo(
 			0u, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info)))
 		{
 			return 0ull;
@@ -161,6 +161,7 @@ namespace
 		if (!nvmlDevice) { return 0ull; }
 
 		// query the process list twice, since the first call only reports the required capacity
+		// (a device without compute processes reports success instead, and has nothing to attribute)
 		unsigned int N_procs = 0;
 		if (nvmlDeviceGetComputeRunningProcesses(nvmlDevice, &N_procs, nullptr)
 			!= NVML_ERROR_INSUFFICIENT_SIZE)
