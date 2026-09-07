@@ -177,6 +177,7 @@ void SimulationMgr::ReBuildInitialSimState()
 	// reset metadata
 	simStep_ = 0;
 	simTime_ = 0.0;
+	serializationMgr_.ResetStaticBoundary();
 
 	// reset scenario and all its data
 	universalSimState_ = {};

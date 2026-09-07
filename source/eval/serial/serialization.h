@@ -1,6 +1,4 @@
 // serialization.h
-//
-// TODO: comment
 
 #pragma once
 
@@ -30,7 +28,7 @@ namespace Export
 
 	class SerializationMgr
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		explicit SerializationMgr(SaveOptions opt = {})
 			: saveOptions_(std::move(opt)) {}
@@ -49,9 +47,20 @@ namespace Export
 		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 		void SaveExportSnapshotXdmfViews(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
-	private: // ------------------------------------------------------------------------------------
+		// the next export writes the static boundary file again
+		void ResetStaticBoundary() { staticBoundaryWritten_ = false; }
+
+	private:
 
 		SaveOptions saveOptions_;
+
+		// the static boundary file is written once
+		mutable bool staticBoundaryWritten_ = false;
+
+		// helpers
+		void SaveStaticBoundaryBin(
+			const Sync::ExportSnapshot& snap,
+			const std::filesystem::path& dirPath) const;
 	};
 
 } // namespace Export
