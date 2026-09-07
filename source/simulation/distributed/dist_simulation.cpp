@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
-#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -18,7 +17,6 @@
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdexcept>
-#include <string_view>
 #include <thread>
 #include <utility>
 #include <tbb/blocked_range.h>
@@ -44,12 +42,6 @@ using namespace Dist;
 
 namespace
 {
-	bool FluidSynchronizationTraceEnabled()
-	{
-		const char* const value = std::getenv("TSP_TRACE_FLUID_SYNC");
-		return value && std::string_view(value) == "1";
-	}
-
 	// checksum over the global indices owned by this rank, summed across all ranks it has
 	// to stay at the value the initial partition produced (wrap-around sums are intended)
 	uint64_t OwnedGlobalIdxChecksum(
@@ -1697,7 +1689,6 @@ bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
 			N_expectedGlobalF_,
 			mpiContext_,
 			*benchmarksTracker_,
-			traceRecorder_,
 			&failMsg))
 		{
 			localOk = false;
@@ -2019,9 +2010,7 @@ void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
 	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params,
 		simParamsMgr_.CliOverrides(), mpiContext_.IsRoot());
-	traceRecorder_.BeginRun(
-		loggingMgr_.GetRunDir(), mpiContext_.Rank(),
-		FluidSynchronizationTraceEnabled());
+	traceRecorder_.BeginRun(loggingMgr_.GetRunDir(), mpiContext_.Rank());
 }
 
 void DistSimulationMgr::MarkTrace(const Trace::TraceStage stage)

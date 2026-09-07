@@ -17,7 +17,6 @@
 // internal
 #include "source/base/helpers.h"
 #include "source/base/parallel_checks.h"
-#include "source/eval/trace/trace.h"
 #include "parallel_utils.h"
 #include "fluid_solver_sync.h"
 
@@ -255,7 +254,6 @@ bool FluidSolverSyncMgr::Rebuild(
 	const uint64_t N_expectedGlobalF,
 	MpiContext& mpiContext,
 	Bench::BenchmarksTracker& benchmarksTracker,
-	Trace::TraceRecorder& traceRecorder,
 	std::string* failMsg)
 {
 	std::string localFailMsg;
@@ -931,7 +929,6 @@ bool FluidSolverSyncMgr::Rebuild(
 	// publish the locally validated plan after peer-plan validation
 	mpiContext_ = &mpiContext;
 	benchmarksTracker_ = &benchmarksTracker;
-	traceRecorder_ = &traceRecorder;
 	N_localF_ = particlesF.N_;
 	N_globalF_ = N_expectedGlobalF;
 	distHaloMode_ = distHaloMode;
@@ -1156,8 +1153,6 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
 	requests_.clear();
 	requestInfos_.clear();
-	uint64_t N_sendBytes = 0;
-	uint64_t N_recvBytes = 0;
 	// grow every peer payload before the parallel pass reads its storage
 	for (PeerPlan& peerPlan : peerPlans_)
 	{
@@ -1166,16 +1161,11 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 			static_cast<uint64_t>(N_fields) * particlePlan.sendLocalIdxs.size();
 		const uint64_t N_recvValues =
 			static_cast<uint64_t>(N_fields) * particlePlan.recvLocalIdxs.size();
-		N_sendBytes += N_sendValues * sizeof(float);
-		N_recvBytes += N_recvValues * sizeof(float);
-
 		// pack owned values in field-major order for each peer
 		Base::ResizeGrowScratchVector(peerPlan.sendBuffer, N_sendValues);
 		Base::ResizeGrowScratchVector(peerPlan.recvBuffer, N_recvValues);
 	}
 	const uint64_t epoch = ++synchronizationEpoch_;
-	MarkSynchronizationTrace(
-		phase, "begin", iteration, epoch, N_sendBytes, N_recvBytes);
 
 	// gather every field sequentially within each parallel work item
 	// (work items span every peer, so no peer waits for another one to finish packing)
@@ -1239,11 +1229,7 @@ void FluidSolverSyncMgr::BeginSynchronizeFluidFields(
 	pendingPhase_ = phase;
 	pendingIteration_ = iteration;
 	pendingEpoch_ = epoch;
-	pendingSendBytes_ = N_sendBytes;
-	pendingRecvBytes_ = N_recvBytes;
 	fluidFieldExchangePending_ = true;
-	MarkSynchronizationTrace(
-		phase, "posted", iteration, epoch, N_sendBytes, N_recvBytes);
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
 }
 
@@ -1259,9 +1245,6 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 	}
 
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
-	MarkSynchronizationTrace(
-		pendingPhase_, "wait", pendingIteration_, pendingEpoch_,
-		pendingSendBytes_, pendingRecvBytes_);
 	const std::string waitContext = FluidSolverSyncContext(
 		pendingPhase_, pendingIteration_, pendingEpoch_);
 	mpiContext_->WaitAll(requests_, waitContext.c_str(), &requestInfos_);
@@ -1294,15 +1277,10 @@ void FluidSolverSyncMgr::EndSynchronizeFluidFields()
 			}
 		}
 	});
-	MarkSynchronizationTrace(
-		pendingPhase_, "complete", pendingIteration_, pendingEpoch_,
-		pendingSendBytes_, pendingRecvBytes_);
 	pendingFields_ = {};
 	N_pendingFields_ = 0;
 	pendingIteration_ = 0;
 	pendingEpoch_ = 0;
-	pendingSendBytes_ = 0;
-	pendingRecvBytes_ = 0;
 	fluidFieldExchangePending_ = false;
 	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
 }
@@ -1318,48 +1296,16 @@ Sim::PressureSolveErrorSums FluidSolverSyncMgr::GlobalizePressureSolveErrorSums(
 
 	// reduce raw, positive, and absolute errors
 	const uint64_t epoch = ++synchronizationEpoch_;
-	constexpr uint64_t N_bytes = sizeof(double) * 3;
-	MarkSynchronizationTrace(
-		Sim::FluidSolverSyncPhase::PressureErrorReduction,
-		"wait", iteration, epoch, N_bytes, N_bytes);
 	std::array<double, 3> sums{ localSums.raw, localSums.pos, localSums.abs };
 	const std::string waitContext = FluidSolverSyncContext(
 		Sim::FluidSolverSyncPhase::PressureErrorReduction, iteration, epoch);
 	mpiContext_->AllReduceSumDoubles(sums, waitContext.c_str());
-	MarkSynchronizationTrace(
-		Sim::FluidSolverSyncPhase::PressureErrorReduction,
-		"complete", iteration, epoch, N_bytes, N_bytes);
 	return Sim::PressureSolveErrorSums
 	{
 		.raw = sums[0],
 		.pos = sums[1],
 		.abs = sums[2]
 	};
-}
-
-void FluidSolverSyncMgr::MarkSynchronizationTrace(
-	const Sim::FluidSolverSyncPhase phase,
-	const char* event,
-	const uint32_t iteration,
-	const uint64_t epoch,
-	const uint64_t N_sendBytes,
-	const uint64_t N_recvBytes) const
-{
-	if (!traceRecorder_ || !traceRecorder_->IsFluidSynchronizationActive() ||
-		!benchmarksTracker_)
-	{
-		return;
-	}
-
-	const uint32_t N_peers = phase == Sim::FluidSolverSyncPhase::PressureErrorReduction &&
-		mpiContext_
-		? static_cast<uint32_t>(std::max(mpiContext_->Size() - 1, 0))
-		: static_cast<uint32_t>(peerPlans_.size());
-	benchmarksTracker_->PauseActiveTimers();
-	traceRecorder_->MarkFluidSynchronization(
-		FluidSolverSyncPhaseName(phase), event, iteration, epoch,
-		N_peers, N_sendBytes, N_recvBytes);
-	benchmarksTracker_->ResumeActiveTimers();
 }
 
 Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const

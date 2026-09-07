@@ -22,11 +22,6 @@
 
 
 
-namespace Trace
-{
-	class TraceRecorder;
-}
-
 namespace Dist
 {
 	// separate tags for plan validation and solver payloads
@@ -78,7 +73,6 @@ namespace Dist
 			uint64_t N_expectedGlobalF,
 			MpiContext& mpiContext,
 			Bench::BenchmarksTracker& benchmarksTracker,
-			Trace::TraceRecorder& traceRecorder,
 			std::string* failMsg = nullptr);
 
 		// remaps the plan onto re-ordered backend storage, leaving global particle IDs unchanged
@@ -196,14 +190,6 @@ namespace Dist
 			Sim::FluidSolverSyncPhase phase,
 			uint32_t iteration);
 
-		void MarkSynchronizationTrace(
-			Sim::FluidSolverSyncPhase phase,
-			const char* event,
-			uint32_t iteration,
-			uint64_t epoch,
-			uint64_t N_sendBytes,
-			uint64_t N_recvBytes) const;
-
 		// rebuilds both single and double halo work schedules from the published peer plans
 		void BuildFieldSyncSchedules();
 
@@ -219,7 +205,6 @@ namespace Dist
 		// set when Rebuild() publishes a validated plan
 		MpiContext* mpiContext_ = nullptr;
 		Bench::BenchmarksTracker* benchmarksTracker_ = nullptr;
-		Trace::TraceRecorder* traceRecorder_ = nullptr;
 
 		// particle counts the current plan was built for
 		uint64_t N_globalF_ = 0;
@@ -240,8 +225,6 @@ namespace Dist
 		Sim::FluidSolverSyncPhase pendingPhase_ = Sim::FluidSolverSyncPhase::Density;
 		uint32_t pendingIteration_ = 0;
 		uint64_t pendingEpoch_ = 0;
-		uint64_t pendingSendBytes_ = 0;
-		uint64_t pendingRecvBytes_ = 0;
 		mutable uint64_t synchronizationEpoch_ = 0;
 		bool fluidFieldExchangePending_ = false;
 

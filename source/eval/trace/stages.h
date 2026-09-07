@@ -43,7 +43,6 @@ namespace Trace
 		Dist_RigidForceCollection,
 		Dist_ExportSnapshotGather,
 		Dist_ExportSnapshotSerialization,
-		Dist_FluidSynchronization,
 		Dist_RankBackendStepComplete,
 		Count
 	};
@@ -198,11 +197,6 @@ namespace Trace
 				.stage = TraceStage::Dist_ExportSnapshotSerialization,
 				.name = "distributed export snapshot serialization",
 				.alias = "dist_export_snapshot_serialization"
-			},
-			{
-				.stage = TraceStage::Dist_FluidSynchronization,
-				.name = "distributed fluid synchronization",
-				.alias = "dist_fluid_synchronization"
 			},
 			{
 				.stage = TraceStage::Dist_RankBackendStepComplete,

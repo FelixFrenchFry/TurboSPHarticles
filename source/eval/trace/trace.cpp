@@ -19,8 +19,7 @@ namespace Trace
 {
 	bool TraceRecorder::BeginRun(
 		const std::filesystem::path& runDir,
-		const int mpiRank,
-		const bool enableFluidSynchronization)
+		const int mpiRank)
 	{
 		EndRun();
 		mpiRank_ = mpiRank;
@@ -47,7 +46,6 @@ namespace Trace
 			simStep_ = 0;
 			simTime_ = 0.0;
 			stepStart_ = Clock::now();
-			fluidSynchronizationEnabled_ = enableFluidSynchronization;
 			active_ = true;
 		}
 		catch (const std::exception& ex)
@@ -108,54 +106,6 @@ namespace Trace
 		WriteMarker(stage);
 	}
 
-	void TraceRecorder::MarkFluidSynchronization(
-		const std::string_view phase,
-		const std::string_view event,
-		const uint32_t iteration,
-		const uint64_t epoch,
-		const uint32_t N_peers,
-		const uint64_t N_sendBytes,
-		const uint64_t N_recvBytes)
-	{
-		if (!IsFluidSynchronizationActive() || !logger_) { return; }
-
-		const uint64_t sequence = ++sequence_;
-		const auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
-			Clock::now() - stepStart_).count();
-
-		try
-		{
-			logger_->info(
-				"seq={} rank={} step={} simTime={:.17g} elapsedUs={} stage={} "
-				"phase={} event={} iteration={} epoch={} peers={} sendBytes={} recvBytes={}",
-				sequence,
-				mpiRank_,
-				simStep_,
-				simTime_,
-				elapsedUs,
-				Definitions[GetIdx(TraceStage::Dist_FluidSynchronization)].alias,
-				phase,
-				event,
-				iteration,
-				epoch,
-				N_peers,
-				N_sendBytes,
-				N_recvBytes);
-		}
-		catch (const std::exception& ex)
-		{
-			SPDLOG_ERROR("[rank {}] Failed to write trace file '{}': {}.",
-				mpiRank_, tracePath_.string(), ex.what());
-			Disable();
-		}
-		catch (...)
-		{
-			SPDLOG_ERROR("[rank {}] Failed to write trace file '{}': unknown error.",
-				mpiRank_, tracePath_.string());
-			Disable();
-		}
-	}
-
 	void TraceRecorder::Disable()
 	{
 		logger_.reset();
@@ -166,7 +116,6 @@ namespace Trace
 		simTime_ = 0.0;
 		stepStart_ = {};
 		active_ = false;
-		fluidSynchronizationEnabled_ = false;
 	}
 
 	void TraceRecorder::WriteMarker(const TraceStage stage)
