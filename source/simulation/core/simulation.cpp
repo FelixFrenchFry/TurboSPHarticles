@@ -623,8 +623,8 @@ void SimulationMgr::WriteExportSnapshot(const SimParams& params) const
 	auto& expSnap = exportSnapScratch_;
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
 
-	// in the non-distributed path, root rank owns every fluid particle
-	expSnap.rankF.assign(expSnap.N_F, 0);
+	// the non-distributed path owns every fluid particle, so the ranks are not exported
+	expSnap.rankF.clear();
 
 	// write export snapshot to files
 	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);

@@ -82,6 +82,7 @@ namespace Export
 		uint32_t NF;
 		uint32_t NB;
 		uint32_t NR;
+		uint32_t NrankF;      // NF in distributed runs, 0 when the ranks are not written
 	};
 	#pragma pack(pop)
 
@@ -195,6 +196,7 @@ namespace Export
 		uint32_t NF = 0;
 		uint32_t NB = 0;
 		uint32_t NR = 0;
+		uint32_t NrankF = 0;
 	};
 
 	struct ExportSnapshotOffsets
@@ -233,8 +235,10 @@ namespace Export
 		const ExportSnapshotBinInfo& info)
 	{
 		constexpr uint64_t N_elementBytes = 4; // float32 / uint32
+		constexpr uint64_t N_rankBytes = 2; // uint16
 
 		// offsets must match SaveExportSnapshot write order
+		// (an absent rank array has no entries, so the rigid arrays move up on their own)
 		ExportSnapshotOffsets off{};
 		off.xF = sizeof(BinHeaderSnap);
 		off.yF = off.xF + static_cast<uint64_t>(info.NF) * N_elementBytes;
@@ -243,7 +247,7 @@ namespace Export
 		off.idF = off.vF + static_cast<uint64_t>(info.NF) * N_elementBytes;
 		off.rankF = off.idF + static_cast<uint64_t>(info.NF) * N_elementBytes;
 
-		off.xPosR = off.rankF + static_cast<uint64_t>(info.NF) * N_elementBytes;
+		off.xPosR = off.rankF + static_cast<uint64_t>(info.NrankF) * N_rankBytes;
 		off.yPosR = off.xPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
 		off.zPosR = off.yPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
 		off.volR = off.zPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
@@ -313,6 +317,7 @@ namespace Export
 		info.NF = hdr.NF;
 		info.NB = hdr.NB;
 		info.NR = hdr.NR;
+		info.NrankF = hdr.NrankF;
 
 		// there is only one layout, so a file belongs to it matches the size implied by the array set
 		// (this rejects files left over from older layouts and truncated writes)
@@ -417,12 +422,14 @@ namespace Export
 		std::ofstream& ofs,
 		uint32_t N_values,
 		const char* numberType,
+		uint32_t precisionBytes,
 		uint64_t offset,
 		const std::string& fileName,
 		const char* indent)
 	{
 		ofs << indent << "<DataItem Dimensions=\"" << N_values
-			<< "\" NumberType=\"" << numberType << "\" Precision=\"4\" "
+			<< "\" NumberType=\"" << numberType
+			<< "\" Precision=\"" << precisionBytes << "\" "
 			<< "Format=\"Binary\" Endian=\"Little\" Seek=\""
 			<< offset << "\">\n";
 		ofs << indent << "  " << fileName << "\n";
@@ -443,9 +450,9 @@ namespace Export
 			<< "Function=\"JOIN($0, $1, $2)\" "
 			<< "Dimensions=\"" << N_points << " 3\" "
 			<< "NumberType=\"Float\" Precision=\"4\">\n";
-		WriteBinaryDataItem(ofs, N_points, "Float", offX, fileName, "            ");
-		WriteBinaryDataItem(ofs, N_points, "Float", offY, fileName, "            ");
-		WriteBinaryDataItem(ofs, N_points, "Float", offZ, fileName, "            ");
+		WriteBinaryDataItem(ofs, N_points, "Float", 4, offX, fileName, "            ");
+		WriteBinaryDataItem(ofs, N_points, "Float", 4, offY, fileName, "            ");
+		WriteBinaryDataItem(ofs, N_points, "Float", 4, offZ, fileName, "            ");
 		ofs << "          </DataItem>\n";
 		ofs << "        </Geometry>\n";
 	}
@@ -455,12 +462,13 @@ namespace Export
 		const char* name,
 		uint32_t N_values,
 		const char* numberType,
+		uint32_t precisionBytes,
 		uint64_t offset,
 		const std::string& fileName)
 	{
 		ofs << "        <Attribute Name=\"" << name << "\" "
 			<< "AttributeType=\"Scalar\" Center=\"Node\">\n";
-		WriteBinaryDataItem(ofs, N_values, numberType, offset, fileName, "          ");
+		WriteBinaryDataItem(ofs, N_values, numberType, precisionBytes, offset, fileName, "          ");
 		ofs << "        </Attribute>\n";
 	}
 
@@ -477,9 +485,14 @@ namespace Export
 		ofs << "        <Topology TopologyType=\"Polyvertex\" "
 			<< "Dimensions=\"" << info.NF << "\"/>\n";
 		WriteXyzGeometry(ofs, "posF", info.NF, off.xF, off.yF, off.zF, info.fileName);
-		WriteScalarAttribute(ofs, "velMagF", info.NF, "Float", off.vF, info.fileName);
-		WriteScalarAttribute(ofs, "idF", info.NF, "UInt", off.idF, info.fileName);
-		WriteScalarAttribute(ofs, "rankF", info.NF, "UInt", off.rankF, info.fileName);
+		WriteScalarAttribute(ofs, "velMagF", info.NF, "Float", 4, off.vF, info.fileName);
+		WriteScalarAttribute(ofs, "idF", info.NF, "UInt", 4, off.idF, info.fileName);
+
+		// non-distributed runs own every particle, so the ranks carry no information there
+		if (info.NrankF > 0)
+		{
+			WriteScalarAttribute(ofs, "rankF", info.NF, "UInt", 2, off.rankF, info.fileName);
+		}
 		ofs << "      </Grid>\n";
 	}
 
@@ -497,9 +510,9 @@ namespace Export
 		WriteXyzGeometry(ofs, "posB", NB,
 			off.xPosB, off.yPosB, off.zPosB, fileName);
 		WriteScalarAttribute(ofs, "volB", NB,
-			"Float", off.volB, fileName);
+			"Float", 4, off.volB, fileName);
 		WriteScalarAttribute(ofs, "idB", NB,
-			"UInt", off.idB, fileName);
+			"UInt", 4, off.idB, fileName);
 		ofs << "      </Grid>\n";
 	}
 
@@ -518,11 +531,11 @@ namespace Export
 		WriteXyzGeometry(ofs, "posR", info.NR,
 			off.xPosR, off.yPosR, off.zPosR, info.fileName);
 		WriteScalarAttribute(ofs, "volR", info.NR,
-			"Float", off.volR, info.fileName);
+			"Float", 4, off.volR, info.fileName);
 		WriteScalarAttribute(ofs, "idR", info.NR,
-			"UInt", off.idR, info.fileName);
+			"UInt", 4, off.idR, info.fileName);
 		WriteScalarAttribute(ofs, "bodyIdR", info.NR,
-			"UInt", off.bodyIdR, info.fileName);
+			"UInt", 4, off.bodyIdR, info.fileName);
 		ofs << "      </Grid>\n";
 	}
 
@@ -1070,6 +1083,7 @@ namespace Export
 			hdr.NF = 0;
 			hdr.NB = snap.N_B;
 			hdr.NR = 0;
+			hdr.NrankF = 0;
 
 			WritePod(ofs, hdr);
 
@@ -1117,7 +1131,7 @@ namespace Export
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
-		assert(snap.rankF.size() == NF_size);
+		assert(snap.rankF.empty() || snap.rankF.size() == NF_size);
 		assert(snap.idB.size() == NB_size);
 		assert(snap.xPosB.size() == NB_size);
 		assert(snap.yPosB.size() == NB_size);
@@ -1148,7 +1162,7 @@ namespace Export
 			}
 
 			// arrays are written in the same order as referenced by the XDMF file:
-			// xPosF, yPosF, zPosF, velMagF, idF, rankF
+			// xPosF, yPosF, zPosF, velMagF, idF, rankF (only in distributed runs)
 			// xPosR, yPosR, zPosR, volR, idR, bodyIdR
 			// (boundary arrays live in the shared static boundary file)
 
@@ -1162,6 +1176,7 @@ namespace Export
 			hdr.NF = NF_size;
 			hdr.NB = NB_size;
 			hdr.NR = NR_size;
+			hdr.NrankF = static_cast<uint32_t>(snap.rankF.size());
 
 			WritePod(ofs, hdr);
 
@@ -1224,7 +1239,7 @@ namespace Export
 		assert(snap.yPosF.size() == NF_size);
 		assert(snap.zPosF.size() == NF_size);
 		assert(snap.velMagF.size() == NF_size);
-		assert(snap.rankF.size() == NF_size);
+		assert(snap.rankF.empty() || snap.rankF.size() == NF_size);
 		assert(snap.idB.size() == NB_size);
 		assert(snap.xPosB.size() == NB_size);
 		assert(snap.yPosB.size() == NB_size);

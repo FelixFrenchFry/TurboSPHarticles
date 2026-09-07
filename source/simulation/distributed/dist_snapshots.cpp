@@ -264,7 +264,7 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		exportSnap.yPosF[i] = packet.yPos;
 		exportSnap.zPosF[i] = packet.zPos;
 		exportSnap.velMagF[i] = packet.velMag;
-		exportSnap.rankF[i] = packet.rank;
+		exportSnap.rankF[i] = static_cast<uint16_t>(packet.rank);
 
 		prevGlobalIdx = packet.globalIdx;
 	}
