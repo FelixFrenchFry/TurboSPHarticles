@@ -26,6 +26,9 @@ namespace GPU
 	static constexpr uint32_t NbrListError_InvalidChunkFormat = 1u << 1u;
 	static constexpr uint32_t NbrListError_DeltaRangeOverflow = 1u << 2u;
 
+	// cell ID of the particles that left the cell frame
+	static constexpr uint64_t EMPTY_CELL_ID = 0xffffffffffffffffull;
+
 	// particle index ranges of one merged non-empty cell
 	// (a particle class absent from the cell is encoded as begin == end)
 	struct alignas(16) CellRangeByAny

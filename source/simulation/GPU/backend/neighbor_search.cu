@@ -110,13 +110,14 @@ namespace
 		size_t N_totalBytes = 0;
 	};
 
-	// end bit for radix sorting Morton cell IDs, highest axis bit sits at 3 * bitsPerAxis - 1
-	inline int ActiveMortonBits(const CellCoordFrame& frame) noexcept
+	// end bit for radix sorting Morton cell IDs, highest axis bit sits at 3 * bitsPerAxis - 1,
+	// plus one bit that keeps the empty cell ID above every valid one
+	inline int CellIdKeyBits(const CellCoordFrame& frame) noexcept
 	{
 		const uint32_t maxDim = std::max({ frame.N_dimX, frame.N_dimY, frame.N_dimZ });
 		const uint32_t bitsPerAxis = (maxDim <= 1u) ? 1u : std::bit_width(maxDim - 1u);
 
-		return static_cast<int>(3u * bitsPerAxis);
+		return static_cast<int>(3u * bitsPerAxis + 1u); // three interleaved axes plus the empty key bit
 	}
 
 	// temp storage for radix sorting N pairs with CUB, queried over the full key width
@@ -733,7 +734,7 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 		be_.d_reorderIdScratch_.Data(),
 		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
 		scratchLayout.build.cubTempBytes,
-		ActiveMortonBits(cellFrame_) };
+		CellIdKeyBits(cellFrame_) };
 
 	GPU::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
@@ -999,7 +1000,7 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 		be_.d_reorderIdScratch_.Data(),
 		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
 		scratchLayout.build.cubTempBytes,
-		ActiveMortonBits(cellFrame_) };
+		CellIdKeyBits(cellFrame_) };
 
 	GPU::NS_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
