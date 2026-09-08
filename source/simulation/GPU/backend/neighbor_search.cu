@@ -1,6 +1,7 @@
 // neighbor_search.cu
 
 // external
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <iostream>
@@ -1150,36 +1151,14 @@ void NS_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 	{
 		// keep capacity once allocated and only grow when needed
 		// (to avoid repeated device alloc/free between steps)
-		// TODO: use heuristic instead of allocating worst-case size?
-		if (d_uniqueCellIdF_.Size() < N_F) { d_uniqueCellIdF_.Resize(N_F); }
-		if (d_cellStartIdxF_.Size() < N_F + 1) { d_cellStartIdxF_.Resize(N_F + 1); }
 		if (d_sortedParticleIdxF_.Size() < N_F + 1) { d_sortedParticleIdxF_.Resize(N_F + 1); }
-	}
-
-	if (N_B > 0)
-	{
-		// keep capacity once allocated and only grow when needed
-		// (to avoid repeated device alloc/free between steps)
-		// TODO: use heuristic instead of allocating worst-case size?
-		if (d_uniqueCellIdB_.Size() < N_B) { d_uniqueCellIdB_.Resize(N_B); }
-		if (d_cellStartIdxB_.Size() < N_B + 1) { d_cellStartIdxB_.Resize(N_B + 1); }
 	}
 
 	if (N_R > 0)
 	{
-		if (d_uniqueCellIdR_.Size() < N_R) { d_uniqueCellIdR_.Resize(N_R); }
-		if (d_cellStartIdxR_.Size() < N_R + 1) { d_cellStartIdxR_.Resize(N_R + 1); }
 		if (d_sortedParticleIdxR_.Size() < N_R) { d_sortedParticleIdxR_.Resize(N_R); }
 		if (d_cellIdR_.Size() < N_R) { d_cellIdR_.Resize(N_R); }
 		if (d_cellMarkerR_.Size() < N_R) { d_cellMarkerR_.Resize(N_R); }
-	}
-
-	const uint32_t N_ANY_MAX = N_F + N_B;
-	if (N_ANY_MAX > 0)
-	{
-		// keep capacity once allocated and only grow when needed
-		// (to avoid repeated device alloc/free between steps)
-		if (d_uniqueCellIdAny_.Size() < N_ANY_MAX) { d_uniqueCellIdAny_.Resize(N_ANY_MAX); }
 	}
 
 	be_.EnsureNsSharedScratchCapacity(
@@ -1222,6 +1201,16 @@ void NS_CellLinkedList_Compact_GPU::BuildCompactCellList(
 	GPU::StreamSync(be_.stream_);
 	N_nonEmptyCells = lastScan;
 
+	// grow cell metadata by occupied cells, with one extra start index for the sentinel
+	const uint64_t N_cells = N_nonEmptyCells;
+	if (d_uniqueCellId.Size() < N_cells || d_cellStartIdx.Size() < N_cells + 1)
+	{
+		const uint64_t capTarget = std::min<uint64_t>(N,
+			N_cells + Base::ExtraPercent(N_cells, be_.extraAllocCapacityPct_));
+		if (d_uniqueCellId.Size() < N_cells) { d_uniqueCellId.Resize(static_cast<size_t>(capTarget)); }
+		if (d_cellStartIdx.Size() < N_cells + 1) { d_cellStartIdx.Resize(static_cast<size_t>(capTarget + 1)); }
+	}
+
 	// fill in cell-related data
 	// (write only first N_NonEmptyCells entries and one sentinel entry)
 	GPU::Launch_FillUniqueCellIdAndCellStartIdx(
@@ -1235,6 +1224,17 @@ void NS_CellLinkedList_Compact_GPU::BuildMergedCompactCellRanges()
 	N_nonEmptyCellsAny_ = 0;
 
 	if (N_nonEmptyCellsF_ == 0 && N_nonEmptyCellsB_ == 0) { return; }
+
+	// the union has at most the sum of the two occupied-cell counts
+	const uint64_t N_cellsMax = static_cast<uint64_t>(N_nonEmptyCellsF_)
+							  + static_cast<uint64_t>(N_nonEmptyCellsB_);
+	if (d_uniqueCellIdAny_.Size() < N_cellsMax)
+	{
+		const uint64_t N_particlesMax = static_cast<uint64_t>(be_.N_F_) + be_.N_B_;
+		const uint64_t capTarget = std::min(N_particlesMax,
+			N_cellsMax + Base::ExtraPercent(N_cellsMax, be_.extraAllocCapacityPct_));
+		d_uniqueCellIdAny_.Resize(static_cast<size_t>(capTarget));
+	}
 
 	const auto beginAny = thrust::device_pointer_cast(d_uniqueCellIdAny_.Data());
 	auto endAny = beginAny;
