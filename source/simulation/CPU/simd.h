@@ -21,6 +21,7 @@
 namespace CPU
 {
 	constexpr float ZERO_EQU_LIM_F = 1e-7f;
+	constexpr float KERNEL_GRADIENT_MIN_DIST_SQU_F = 1e-14f;
 
 	static_assert(Float32xSIMD::size == N_SIMD_WIDTH);
 	static_assert(Int32xSIMD::size == N_SIMD_WIDTH);
@@ -324,26 +325,29 @@ namespace CPU
 		const Float32xSIMD one = xsimd::broadcast<float, SimdArch>(1.0f);
 		const Float32xSIMD two = xsimd::broadcast<float, SimdArch>(2.0f);
 		const Float32xSIMD three = xsimd::broadcast<float, SimdArch>(3.0f);
+		const Float32xSIMD nine = xsimd::broadcast<float, SimdArch>(9.0f);
 		const Float32xSIMD twelve = xsimd::broadcast<float, SimdArch>(12.0f);
-		const Float32xSIMD eps = xsimd::broadcast<float, SimdArch>(ZERO_EQU_LIM_F);
+		const Float32xSIMD eps = xsimd::broadcast<float, SimdArch>(KERNEL_GRADIENT_MIN_DIST_SQU_F);
 		const Float32xSIMD sizeInv = xsimd::broadcast<float, SimdArch>(particleSizeInv);
 		const Float32xSIMD radiusSqu = xsimd::broadcast<float, SimdArch>(kernelRadiusSqu);
 		const Float32xSIMD alpha = xsimd::broadcast<float, SimdArch>(cubicSplineAlpha);
 
 		const Float32xSIMD distSqu = xsimd::fma(dx, dx, xsimd::fma(dy, dy, dz * dz));
 		const Mask32xSIMD inside = distSqu < radiusSqu;
-		const Mask32xSIMD nonZero = distSqu >= eps;
+		const Mask32xSIMD nonZero = distSqu > eps;
 		const Mask32xSIMD valid = inside && nonZero;
+		// keep the outer expression finite for zero-distance lanes before selecting
 		const Float32xSIMD dist = xsimd::sqrt(xsimd::max(distSqu, eps));
 		const Float32xSIMD distNorm = dist * sizeInv;
 
-		const Float32xSIMD t1 = xsimd::max(one - distNorm, zero);
+		// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
+		const Float32xSIMD innerFac = alpha * sizeInv * sizeInv
+			* xsimd::fma(nine, distNorm, zero - twelve);
 		const Float32xSIMD t2 = xsimd::max(two - distNorm, zero);
-		const Float32xSIMD t1_2 = t1 * t1;
-		const Float32xSIMD t2_2 = t2 * t2;
-		const Float32xSIMD commonFac = alpha
-			* ((zero - three) * t2_2 + twelve * t1_2)
+		const Float32xSIMD outerFac = alpha
+			* ((zero - three) * t2 * t2)
 			* (sizeInv / dist);
+		const Float32xSIMD commonFac = SelectFloat32xSIMD(distNorm < one, innerFac, outerFac);
 
 		xkg = ZeroMaskedFloat32xSIMD(commonFac * dx, valid);
 		ykg = ZeroMaskedFloat32xSIMD(commonFac * dy, valid);

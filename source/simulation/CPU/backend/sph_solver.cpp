@@ -43,7 +43,7 @@ namespace
 		float& xkg, float& ykg, float& zkg)
 	{
 		const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-		if (distSqu >= kernelRadiusSqu || distSqu < CPU::ZERO_EQU_LIM_F)
+		if (distSqu >= kernelRadiusSqu || !(distSqu > CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F))
 		{
 			xkg = 0.0f;
 			ykg = 0.0f;
@@ -53,11 +53,20 @@ namespace
 
 		const float dist = std::sqrt(distSqu);
 		const float distNorm = dist * particleSizeInv;
-		const float t1 = std::max(1.0f - distNorm, 0.0f);
-		const float t2 = std::max(2.0f - distNorm, 0.0f);
-		const float commonFac = cubicSplineAlpha
-			* (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-			* (particleSizeInv / dist);
+		float commonFac = 0.0f;
+		if (distNorm < 1.0f)
+		{
+			// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
+			commonFac = cubicSplineAlpha * particleSizeInv * particleSizeInv
+				* std::fmaf(9.0f, distNorm, -12.0f);
+		}
+		else
+		{
+			const float t2 = std::max(2.0f - distNorm, 0.0f);
+			commonFac = cubicSplineAlpha
+				* (-3.0f * t2 * t2)
+				* (particleSizeInv / dist);
+		}
 
 		xkg = commonFac * dx;
 		ykg = commonFac * dy;
