@@ -10,10 +10,6 @@
 
 namespace GPU
 {
-	// refresh before rigid force launches when the SPH parameters change
-	void ReloadRigidConstants(
-		float sizeInvF, float kernelRadiusSqu, float cubicSplineAlpha);
-
 	void Launch_UpdateRigidParticles(
 		const uint32_t* bodyIdR,
 		const float* xRelPosR, const float* yRelPosR, const float* zRelPosR,
@@ -47,7 +43,10 @@ namespace GPU
 		const uint16_t* nbrCountRF,
 		const uint64_t* nbrOffsetsRF,
 		const uint32_t* nbrListRF,
+		float particleSizeInvF,
 		float particleSizeSquF,
+		float kernelRadiusSqu,
+		float cubicSplineAlpha,
 		float massF,
 		float viscosityB,
 		uint32_t N_R,
@@ -63,6 +62,9 @@ namespace GPU
 		const uint16_t* nbrCountRF,
 		const uint64_t* nbrOffsetsRF,
 		const uint32_t* nbrListRF,
+		float particleSizeInvF,
+		float kernelRadiusSqu,
+		float cubicSplineAlpha,
 		float restDensity,
 		float massF,
 		float pressGamma,

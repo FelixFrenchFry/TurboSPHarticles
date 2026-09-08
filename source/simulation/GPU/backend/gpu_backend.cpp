@@ -1330,11 +1330,6 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 	for (uint64_t step = 0; step < N_steps; step++)
 	{
 		GPU::ReloadConstants(params, N_F_, N_B_, stream_);
-		if (N_R_ > 0)
-		{
-			GPU::ReloadRigidConstants(
-				params.particleSizeInvF, params.kernelRadiusSqu, cubicSplineAlpha);
-		}
 
 		if (N_RB_ > 0)
 		{
@@ -1430,7 +1425,8 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				d_xVelR_.Data(), d_yVelR_.Data(), d_zVelR_.Data(),
 				d_volR_.Data(),
 				d_nbrCountRF_.Data(), d_nbrOffsetsRF_.Data(), d_nbrListRF_.Data(),
-				particleSizeSquF,
+				params.particleSizeInvF, particleSizeSquF,
+				params.kernelRadiusSqu, cubicSplineAlpha,
 				params.massF, params.viscosityB, N_R_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data());
 			GPU::StreamSync(stream_);
@@ -1541,6 +1537,7 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				d_pressureF_.Data(),
 				d_psiR_.Data(),
 				d_nbrCountRF_.Data(), d_nbrOffsetsRF_.Data(), d_nbrListRF_.Data(),
+				params.particleSizeInvF, params.kernelRadiusSqu, cubicSplineAlpha,
 				params.restDensity, params.massF, params.pressGamma, N_R_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data());
 
