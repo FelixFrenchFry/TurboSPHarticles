@@ -144,7 +144,7 @@ namespace Sim
 		Stats::StatisticsTracker& statisticsTracker_;
 
 		// serialization management
-		Export::SerializationMgr serializationMgr_;
+		Export::SerializationMgr& serializationMgr_;
 		mutable Export::LoggingMgr loggingMgr_;
 		mutable Sync::ExportSnapshot exportSnapScratch_;
 

@@ -631,7 +631,7 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 		{
 			simStep_ = 0;
 			simTime_ = 0.0;
-			serializationMgr_.ResetStaticBoundary();
+			serializationMgr_.ResetExportDirState();
 
 			SyncParameters();
 

@@ -9,11 +9,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #ifdef _WIN32
@@ -184,20 +186,6 @@ namespace Export
 		oss << std::setfill('0') << std::setw(width) << step;
 		return oss.str();
 	}
-
-	// header-only metadata for rebuilding XDMF time series
-	struct ExportSnapshotBinInfo
-	{
-		std::string fileName;
-
-		uint64_t step = 0;
-		double time = 0.0;
-
-		uint32_t NF = 0;
-		uint32_t NB = 0;
-		uint32_t NR = 0;
-		uint32_t NrankF = 0;
-	};
 
 	struct ExportSnapshotOffsets
 	{
@@ -373,7 +361,8 @@ namespace Export
 	}
 
 	static std::vector<ExportSnapshotBinInfo> CollectExportSnapshotBinInfos(
-		const std::filesystem::path& dirPath)
+		const std::filesystem::path& dirPath,
+		std::unordered_map<std::string, ExportSnapshotBinInfo>& infoCache)
 	{
 		// all valid export bins in this directory become one time series
 		std::vector<ExportSnapshotBinInfo> infos;
@@ -390,9 +379,17 @@ namespace Export
 			const std::string fileName = entry.path().filename().string();
 			if (!IsExportSnapshotBinFileName(fileName)) { continue; }
 
+			// the header of an already parsed file never changes, only new files are read
+			if (const auto it = infoCache.find(fileName); it != infoCache.end())
+			{
+				infos.push_back(it->second);
+				continue;
+			}
+
 			ExportSnapshotBinInfo info{};
 			if (TryReadExportSnapshotBinInfo(entry.path(), info))
 			{
+				infoCache.emplace(fileName, info);
 				infos.push_back(std::move(info));
 			}
 			else
@@ -1045,15 +1042,21 @@ namespace Export
 		const Sync::ExportSnapshot& snap,
 		const std::filesystem::path& dirPath) const
 	{
-		if (staticBoundaryWritten_) { return; }
+		std::scoped_lock lock(exportDirStateMutex_);
 
 		const std::filesystem::path dstPath = dirPath / kStaticBoundaryBinFileName;
+
+		// a boundary-less scenario writes no file, so its absence is the finished state
+		std::error_code existsEc;
+		const bool dirHoldsThisBoundary =
+			std::filesystem::exists(dstPath, existsEc) == (snap.N_B > 0);
+		if (staticBoundaryDir_ == dirPath && dirHoldsThisBoundary) { return; }
 
 		std::error_code removeEc;
 		if (snap.N_B == 0)
 		{
 			std::filesystem::remove(dstPath, removeEc);
-			staticBoundaryWritten_ = true;
+			staticBoundaryDir_ = dirPath;
 			return;
 		}
 
@@ -1102,7 +1105,7 @@ namespace Export
 			AtomicReplace(tmpPath, dstPath);
 		}
 
-		staticBoundaryWritten_ = true;
+		staticBoundaryDir_ = dirPath;
 	}
 
 	void SerializationMgr::SaveExportSnapshot(
@@ -1145,6 +1148,12 @@ namespace Export
 		assert(snap.volR.size() == NR_size);
 
 		SaveStaticBoundaryBin(snap, saveOptions_.baseDir / dir);
+
+		// since a re-run overwrites the snapshots of the previous one
+		{
+			std::scoped_lock lock(exportDirStateMutex_);
+			exportSnapshotInfos_.erase(binFileName);
+		}
 
 		// file path handling
 		const std::filesystem::path dstPath = saveOptions_.baseDir / dir / binFileName;
@@ -1252,8 +1261,19 @@ namespace Export
 		assert(snap.zPosR.size() == NR_size);
 		assert(snap.volR.size() == NR_size);
 
-		const std::vector<ExportSnapshotBinInfo> infos =
-			CollectExportSnapshotBinInfos(dirPath);
+		std::vector<ExportSnapshotBinInfo> infos;
+		{
+			std::scoped_lock lock(exportDirStateMutex_);
+
+			// snapshots of another directory say nothing about this one
+			if (exportSnapshotInfosDir_ != dirPath)
+			{
+				exportSnapshotInfos_.clear();
+				exportSnapshotInfosDir_ = dirPath;
+			}
+
+			infos = CollectExportSnapshotBinInfos(dirPath, exportSnapshotInfos_);
+		}
 		if (infos.empty())
 		{
 			throw std::runtime_error("No export snapshot binary files found in '" +

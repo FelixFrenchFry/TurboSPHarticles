@@ -5,7 +5,9 @@
 // external
 #include <cstdint>
 #include <filesystem>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 // internal
 #include "source/simulation/sync/snapshots.h"
@@ -24,6 +26,20 @@ namespace Export
 		// write to temp file and rename on success
 		std::string tempSuffix = ".tmp";
 		bool atomicWrite = true;
+	};
+
+	// header-only metadata for rebuilding XDMF time series
+	struct ExportSnapshotBinInfo
+	{
+		std::string fileName;
+
+		uint64_t step = 0;
+		double time = 0.0;
+
+		uint32_t NF = 0;
+		uint32_t NB = 0;
+		uint32_t NR = 0;
+		uint32_t NrankF = 0;
 	};
 
 	class SerializationMgr
@@ -47,15 +63,27 @@ namespace Export
 		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 		void SaveExportSnapshotXdmfViews(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
-		// the next export writes the static boundary file again
-		void ResetStaticBoundary() { staticBoundaryWritten_ = false; }
+		// the next export rebuilds everything memorized about the export directory
+		void ResetExportDirState()
+		{
+			std::scoped_lock lock(exportDirStateMutex_);
+			staticBoundaryDir_.clear();
+			exportSnapshotInfos_.clear();
+		}
 
 	private:
 
 		SaveOptions saveOptions_;
 
-		// the static boundary file is written once
-		mutable bool staticBoundaryWritten_ = false;
+		// the export runs on the simulation thread, while a reset comes from the GUI thread
+		mutable std::mutex exportDirStateMutex_;
+
+		// the export directory the static boundary file was last written to
+		mutable std::filesystem::path staticBoundaryDir_;
+
+		// parsed .bin headers of the export directory, keyed by file name
+		mutable std::filesystem::path exportSnapshotInfosDir_;
+		mutable std::unordered_map<std::string, ExportSnapshotBinInfo> exportSnapshotInfos_;
 
 		// helpers
 		void SaveStaticBoundaryBin(
