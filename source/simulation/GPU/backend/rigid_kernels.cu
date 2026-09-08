@@ -143,7 +143,7 @@ namespace GPU
 		float& gx, float& gy, float& gz)
 	{
 		const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
-		if (distSqu >= kernelRadiusSqu || distSqu < 1e-7f)
+		if (distSqu >= kernelRadiusSqu || !(distSqu > 1e-14f))
 		{
 			gx = 0.0f;
 			gy = 0.0f;
@@ -153,11 +153,21 @@ namespace GPU
 
 		const float dist = sqrtf(distSqu);
 		const float distNorm = dist * particleSizeInvF;
-		const float t1 = fmaxf(1.0f - distNorm, 0.0f);
-		const float t2 = fmaxf(2.0f - distNorm, 0.0f);
-		const float commonFac = cubicSplineAlpha
-			* (-3.0f * t2 * t2 + 12.0f * t1 * t1)
-			* (particleSizeInvF / dist);
+		float commonFac = 0.0f;
+		if (distNorm < 1.0f)
+		{
+			// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
+			commonFac = cubicSplineAlpha * particleSizeInvF * particleSizeInvF
+				* fmaf(9.0f, distNorm, -12.0f);
+		}
+		else
+		{
+			// only the (2 - q) piece contributes for q >= 1
+			const float t2 = fmaxf(2.0f - distNorm, 0.0f);
+			commonFac = cubicSplineAlpha
+				* (-3.0f * t2 * t2)
+				* (particleSizeInvF / dist);
+		}
 
 		gx = commonFac * dx;
 		gy = commonFac * dy;

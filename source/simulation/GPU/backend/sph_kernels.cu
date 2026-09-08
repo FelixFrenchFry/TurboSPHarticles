@@ -98,12 +98,22 @@ namespace GPU
 			float distInv = rsqrtf(distSqu);
 			float distNorm = distSqu * distInv * c_sizeInvF;
 
-			float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-			float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
+			float commonFac = 0.0f;
+			if (distNorm < 1.0f)
+			{
+				// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
+				commonFac = c_cubicSplineAlpha * c_sizeInvF * c_sizeInvF
+							* fmaf(9.0f, distNorm, -12.0f);
+			}
+			else
+			{
+				// only the (2 - q) piece contributes for q >= 1
+				float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
 
-			float commonFac = c_cubicSplineAlpha
-							* (-3.0f * t2 * t2 + 12.0f * t1 * t1)
+				commonFac = c_cubicSplineAlpha
+							* (-3.0f * t2 * t2)
 							* distInv * c_sizeInvF;
+			}
 
 			gx = commonFac * dx;
 			gy = commonFac * dy;
