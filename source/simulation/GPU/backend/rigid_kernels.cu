@@ -13,6 +13,18 @@
 
 namespace GPU
 {
+	static __constant__ float c_sizeInvF;
+	static __constant__ float c_kernelRadiusSqu;
+	static __constant__ float c_cubicSplineAlpha;
+
+	void ReloadRigidConstants(
+		const float sizeInvF, const float kernelRadiusSqu, const float cubicSplineAlpha)
+	{
+		GPU::Check(cudaMemcpyToSymbol(c_sizeInvF, &sizeInvF, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_cubicSplineAlpha, &cubicSplineAlpha, sizeof(float)));
+	}
+
 	static constexpr float RigidOrthonormalEps = 1e-12f;
 
 	__device__ __forceinline__
@@ -137,13 +149,10 @@ namespace GPU
 	__device__ __forceinline__
 	void KernelGradient_CubicSpline(
 		const float dx, const float dy, const float dz,
-		const float particleSizeInvF,
-		const float kernelRadiusSqu,
-		const float cubicSplineAlpha,
 		float& gx, float& gy, float& gz)
 	{
 		const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
-		if (distSqu >= kernelRadiusSqu || !(distSqu > 1e-14f))
+		if (distSqu >= c_kernelRadiusSqu || !(distSqu > 1e-14f))
 		{
 			gx = 0.0f;
 			gy = 0.0f;
@@ -152,21 +161,21 @@ namespace GPU
 		}
 
 		const float dist = sqrtf(distSqu);
-		const float distNorm = dist * particleSizeInvF;
+		const float distNorm = dist * c_sizeInvF;
 		float commonFac = 0.0f;
 		if (distNorm < 1.0f)
 		{
 			// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
-			commonFac = cubicSplineAlpha * particleSizeInvF * particleSizeInvF
+			commonFac = c_cubicSplineAlpha * c_sizeInvF * c_sizeInvF
 				* fmaf(9.0f, distNorm, -12.0f);
 		}
 		else
 		{
 			// only the (2 - q) piece contributes for q >= 1
 			const float t2 = fmaxf(2.0f - distNorm, 0.0f);
-			commonFac = cubicSplineAlpha
+			commonFac = c_cubicSplineAlpha
 				* (-3.0f * t2 * t2)
-				* (particleSizeInvF / dist);
+				* (c_sizeInvF / dist);
 		}
 
 		gx = commonFac * dx;
@@ -256,10 +265,7 @@ namespace GPU
 		const uint16_t* __restrict__ nbrCountRF,
 		const uint64_t* __restrict__ nbrOffsetsRF,
 		const uint32_t* __restrict__ nbrListRF,
-		const float particleSizeInvF,
 		const float particleSizeSquF,
-		const float kernelRadiusSqu,
-		const float cubicSplineAlpha,
 		const float massF,
 		const float viscosityB,
 		const uint32_t N_R,
@@ -288,8 +294,7 @@ namespace GPU
 
 			float xkg = 0.0f, ykg = 0.0f, zkg = 0.0f;
 			KernelGradient_CubicSpline(
-				dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
-				cubicSplineAlpha, xkg, ykg, zkg);
+				dx, dy, dz, xkg, ykg, zkg);
 
 			const float dot = fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz));
 			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
@@ -314,9 +319,6 @@ namespace GPU
 		const uint16_t* __restrict__ nbrCountRF,
 		const uint64_t* __restrict__ nbrOffsetsRF,
 		const uint32_t* __restrict__ nbrListRF,
-		const float particleSizeInvF,
-		const float kernelRadiusSqu,
-		const float cubicSplineAlpha,
 		const float restDensity,
 		const float massF,
 		const float pressGamma,
@@ -343,8 +345,7 @@ namespace GPU
 
 			float xkg = 0.0f, ykg = 0.0f, zkg = 0.0f;
 			KernelGradient_CubicSpline(
-				dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
-				cubicSplineAlpha, xkg, ykg, zkg);
+				dx, dy, dz, xkg, ykg, zkg);
 
 			const float forceCoeff = massF * pressGamma * 2.0f
 				* psiR[i] * pressureF[j] * densityInvSqu;
@@ -613,10 +614,7 @@ namespace GPU
 		const uint16_t* nbrCountRF,
 		const uint64_t* nbrOffsetsRF,
 		const uint32_t* nbrListRF,
-		const float particleSizeInvF,
 		const float particleSizeSquF,
-		const float kernelRadiusSqu,
-		const float cubicSplineAlpha,
 		const float massF,
 		const float viscosityB,
 		const uint32_t N_R,
@@ -631,7 +629,7 @@ namespace GPU
 			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR,
 			xVelF, yVelF, zVelF, xVelR, yVelR, zVelR, volR,
 			nbrCountRF, nbrOffsetsRF, nbrListRF,
-			particleSizeInvF, particleSizeSquF, kernelRadiusSqu, cubicSplineAlpha,
+			particleSizeSquF,
 			massF, viscosityB, N_R, xForceR, yForceR, zForceR);
 		GPU::CheckLastKernel("K_AccumulateRigidParticleNonPressureForces()");
 	}
@@ -644,9 +642,6 @@ namespace GPU
 		const uint16_t* nbrCountRF,
 		const uint64_t* nbrOffsetsRF,
 		const uint32_t* nbrListRF,
-		const float particleSizeInvF,
-		const float kernelRadiusSqu,
-		const float cubicSplineAlpha,
 		const float restDensity,
 		const float massF,
 		const float pressGamma,
@@ -661,7 +656,6 @@ namespace GPU
 		K_AccumulateRigidParticlePressureForces<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR, pressureF, psiR,
 			nbrCountRF, nbrOffsetsRF, nbrListRF,
-			particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha,
 			restDensity, massF, pressGamma, N_R, xForceR, yForceR, zForceR);
 		GPU::CheckLastKernel("K_AccumulateRigidParticlePressureForces()");
 	}
