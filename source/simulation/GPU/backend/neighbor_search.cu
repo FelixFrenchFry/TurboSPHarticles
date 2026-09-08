@@ -225,10 +225,12 @@ namespace
 		layout.N_phaseScratchBytes =
 			std::max(layout.finalize.N_totalBytes, layout.build.N_totalBytes);
 
-		size_t cursor = layout.N_phaseScratchBytes;
+		// query bounds are produced and consumed after all sorts, on the same stream
+		// (two uint32_t[N_F] arrays fit in the uint64_t[N_sortMax] alternate keys)
+		size_t cursor = layout.build.sortAltKeys;
 		layout.queryLoAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
 		layout.queryHiAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
-		layout.N_totalBytes = cursor;
+		layout.N_totalBytes = std::max(layout.N_phaseScratchBytes, cursor);
 
 		return layout;
 	}
