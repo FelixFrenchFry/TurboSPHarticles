@@ -1,6 +1,4 @@
 // common.cuh
-//
-// TODO
 
 #pragma once
 

@@ -144,7 +144,7 @@ namespace
 	{
 		Export::LoggingOptions loggingOptions{};
 		// each rank writes its own CSV files to avoid shared log-file writes
-		loggingOptions.baseDir /= FormatRankLogDirName(mpiContext.Rank());
+		loggingOptions.rankSubDir = FormatRankLogDirName(mpiContext.Rank());
 		// the export directory is written by the root rank only
 		loggingOptions.writeRunMetaToExportDir = mpiContext.IsRoot();
 		loggingOptions.mpiRank = mpiContext.Rank();
@@ -2008,8 +2008,19 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 
 void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
+	// the root rank reserves the run directory shared by all ranks
+	uint64_t runIdx = mpiContext_.IsRoot() ? loggingMgr_.ReserveNextRunIdx() : 0;
+	mpiContext_.BroadcastUint64(runIdx, mpiContext_.RootRank());
+	if (runIdx == 0)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to reserve a run log directory.",
+			mpiContext_.Rank(), mpiContext_.Size());
+		EndRunLogging();
+		return;
+	}
+
 	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params,
-		simParamsMgr_.CliOverrides(), mpiContext_.IsRoot());
+		simParamsMgr_.CliOverrides(), mpiContext_.IsRoot(), runIdx);
 	traceRecorder_.BeginRun(loggingMgr_.GetRunDir(), mpiContext_.Rank());
 }
 

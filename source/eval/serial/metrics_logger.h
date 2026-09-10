@@ -1,10 +1,8 @@
 // metrics_logger.h
-//
-// TODO: comment
-
 #pragma once
 
 // external
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -38,6 +36,9 @@ namespace Export
 		// disabled on non-root ranks, which write no export snapshots
 		bool writeRunMetaToExportDir = true;
 
+		// rank directory below the run directory, empty for non-distributed runs
+		std::filesystem::path rankSubDir{};
+
 		// a zero rank count marks a non-distributed run
 		int mpiRank = 0;
 		int N_mpiRanks = 0;
@@ -45,17 +46,23 @@ namespace Export
 
 	class LoggingMgr
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		explicit LoggingMgr(LoggingOptions opt = {})
 			: loggingOptions_{ std::move(opt) } {}
 
+		// claims the next free run directory below the logs base directory
+		// (returns zero on failure, valid run indices start at one)
+		uint64_t ReserveNextRunIdx() const;
+
+		// a zero run index reserves one, distributed runs pass a broadcast index
 		bool BeginRun(const std::string& configProfile,
 					  const std::string& paramsFile,
 					  const std::string& scenariosFile,
 					  const Sim::SimParams& simParams,
 					  const nlohmann::json& cliOverrides,
-					  bool logStatus = true);
+					  bool logStatus = true,
+					  uint64_t runIdx = 0);
 
 		void EndRun();
 
@@ -67,7 +74,7 @@ namespace Export
 
 		const std::filesystem::path& GetRunDir() const { return runDir_; }
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		LoggingOptions loggingOptions_;
 
@@ -78,7 +85,7 @@ namespace Export
 
 		bool active_ = false;
 
-		bool CreateNextRunDirectory();
+		bool CreateRunDirectory(uint64_t runIdx);
 		bool OpenBenchmarkMetricsCsv();
 		bool OpenMemoryMetricsCsv();
 		bool WriteRunMeta(const std::string& configProfile,

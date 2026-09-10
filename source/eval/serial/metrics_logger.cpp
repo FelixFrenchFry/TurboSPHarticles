@@ -55,7 +55,7 @@ namespace
 
 		const fs::path base = baseDir.lexically_normal();
 		const fs::path logsName = base.filename();
-		const fs::path runName = runDir.filename();
+		const fs::path runName = runDir.lexically_normal().lexically_relative(base);
 
 		if (!logsName.empty() && !runName.empty())
 		{
@@ -75,11 +75,19 @@ namespace Export
 		const std::string& scenariosFile,
 		const Sim::SimParams& simParams,
 		const nlohmann::json& cliOverrides,
-		const bool logStatus)
+		const bool logStatus,
+		uint64_t runIdx)
 	{
 		EndRun();
 
-		if (!CreateNextRunDirectory())
+		// non-distributed runs reserve their own run directory
+		if (runIdx == 0)
+		{
+			runIdx = ReserveNextRunIdx();
+			if (runIdx == 0) { return false; }
+		}
+
+		if (!CreateRunDirectory(runIdx))
 		{
 			return false;
 		}
@@ -236,7 +244,7 @@ namespace Export
 		}
 	}
 
-	bool LoggingMgr::CreateNextRunDirectory()
+	uint64_t LoggingMgr::ReserveNextRunIdx() const
 	{
 		namespace fs = std::filesystem;
 
@@ -246,7 +254,7 @@ namespace Export
 		{
 			SPDLOG_ERROR("Failed to create logs base directory '{}': {}.",
 				loggingOptions_.baseDir.string(), ec.message());
-			return false;
+			return 0;
 		}
 
 		uint64_t nextIdx = 1;
@@ -256,7 +264,7 @@ namespace Export
 			{
 				SPDLOG_ERROR("Failed to iterate logs directory '{}': {}.",
 					loggingOptions_.baseDir.string(), ec.message());
-				return false;
+				return 0;
 			}
 			if (!entry.is_directory()) { continue; }
 
@@ -289,17 +297,39 @@ namespace Export
 
 			if (fs::create_directory(candidate, ec))
 			{
-				runDir_ = candidate;
-				return true;
+				return idx;
 			}
 
 			if (ec)
 			{
 				SPDLOG_ERROR("Failed to create run directory '{}': {}.",
 					candidate.string(), ec.message());
-				return false;
+				return 0;
 			}
 		}
+	}
+
+	bool LoggingMgr::CreateRunDirectory(const uint64_t runIdx)
+	{
+		namespace fs = std::filesystem;
+
+		runDir_ = loggingOptions_.baseDir / std::to_string(runIdx);
+		if (!loggingOptions_.rankSubDir.empty())
+		{
+			runDir_ /= loggingOptions_.rankSubDir;
+		}
+
+		std::error_code ec;
+		fs::create_directories(runDir_, ec);
+		if (ec)
+		{
+			SPDLOG_ERROR("Failed to create run directory '{}': {}.",
+				runDir_.string(), ec.message());
+			runDir_.clear();
+			return false;
+		}
+
+		return true;
 	}
 
 	bool LoggingMgr::OpenMemoryMetricsCsv()
