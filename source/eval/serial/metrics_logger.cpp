@@ -258,36 +258,40 @@ namespace Export
 		}
 
 		uint64_t nextIdx = 1;
-		for (const auto& entry : fs::directory_iterator(loggingOptions_.baseDir, ec))
+		// unreadable directory entries fail the reservation
+		try
 		{
-			if (ec)
+			for (const auto& entry : fs::directory_iterator(loggingOptions_.baseDir))
 			{
-				SPDLOG_ERROR("Failed to iterate logs directory '{}': {}.",
-					loggingOptions_.baseDir.string(), ec.message());
-				return 0;
-			}
-			if (!entry.is_directory()) { continue; }
+				if (!entry.is_directory()) { continue; }
 
-			const std::string name = entry.path().filename().string();
-			if (name.empty()) { continue; }
-			if (!std::all_of(name.begin(), name.end(),
-				[](const char ch)
+				const std::string name = entry.path().filename().string();
+				if (name.empty()) { continue; }
+				if (!std::all_of(name.begin(), name.end(),
+					[](const char ch)
+					{
+						return std::isdigit(static_cast<unsigned char>(ch)) != 0;
+					}))
 				{
-					return std::isdigit(static_cast<unsigned char>(ch)) != 0;
-				}))
-			{
-				continue;
-			}
+					continue;
+				}
 
-			try
-			{
-				const uint64_t idx = std::stoull(name);
-				nextIdx = std::max(nextIdx, idx + 1);
+				try
+				{
+					const uint64_t idx = std::stoull(name);
+					nextIdx = std::max(nextIdx, idx + 1);
+				}
+				catch (const std::exception&)
+				{
+					// ignore malformed directory names
+				}
 			}
-			catch (const std::exception&)
-			{
-				// ignore malformed directory names
-			}
+		}
+		catch (const std::exception& ex)
+		{
+			SPDLOG_ERROR("Failed to iterate logs directory '{}': {}.",
+				loggingOptions_.baseDir.string(), ex.what());
+			return 0;
 		}
 
 		for (uint64_t idx = nextIdx; ; idx++)
