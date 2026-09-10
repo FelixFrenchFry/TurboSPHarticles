@@ -284,15 +284,13 @@ namespace CPU
 		const Float32xSIMD one = xsimd::broadcast<float, SimdArch>(1.0f);
 		const Float32xSIMD two = xsimd::broadcast<float, SimdArch>(2.0f);
 		const Float32xSIMD four = xsimd::broadcast<float, SimdArch>(4.0f);
-		const Float32xSIMD eps = xsimd::broadcast<float, SimdArch>(ZERO_EQU_LIM_F);
 		const Float32xSIMD sizeInv = xsimd::broadcast<float, SimdArch>(particleSizeInv);
 		const Float32xSIMD radiusSqu = xsimd::broadcast<float, SimdArch>(kernelRadiusSqu);
 		const Float32xSIMD alpha = xsimd::broadcast<float, SimdArch>(cubicSplineAlpha);
 
 		const Float32xSIMD distSqu = xsimd::fma(dx, dx, xsimd::fma(dy, dy, dz * dz));
 		const Mask32xSIMD inside = distSqu < radiusSqu;
-		const Mask32xSIMD zeroDist = distSqu < eps;
-		const Float32xSIMD dist = xsimd::sqrt(xsimd::max(distSqu, eps));
+		const Float32xSIMD dist = xsimd::sqrt(distSqu);
 		const Float32xSIMD distNorm = dist * sizeInv;
 
 		const Float32xSIMD t1 = xsimd::max(one - distNorm, zero);
@@ -302,10 +300,8 @@ namespace CPU
 		const Float32xSIMD t1_3 = t1_2 * t1;
 		const Float32xSIMD t2_3 = t2_2 * t2;
 		const Float32xSIMD kw = alpha * (t2_3 - four * t1_3);
-		const Float32xSIMD kwZeroDist = four * alpha;
-		const Float32xSIMD kwFinal = SelectFloat32xSIMD(zeroDist, kwZeroDist, kw);
 
-		return ZeroMaskedFloat32xSIMD(kwFinal, inside);
+		return ZeroMaskedFloat32xSIMD(kw, inside);
 	}
 
 	// compute cubic-spline kernel gradients for SIMD particle-pair offsets

@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
-#include <numbers>
 #include <span>
 #include <stdexcept>
 #include <spdlog/spdlog.h>
@@ -15,6 +14,7 @@
 
 // internal
 #include "source/base/helpers.h"
+#include "source/simulation/core/solver_constants.h"
 #include "neighbor_lists.h"
 #include "neighbor_search.h"
 #include "cpu_backend.h"
@@ -30,7 +30,6 @@
 
 
 
-constexpr float PI = std::numbers::pi_v<float>;
 using namespace Sim;
 
 namespace
@@ -87,15 +86,13 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	// --- [ temporary pre-computed constants ] ------------------------------------------------------
 
 	// misc hoisted constants
+	const SolverConstants solverConstants = BuildSolverConstants(params.particleSizeF, params.restDensity);
 	const float timeStep = params.timeStep;
-	const float sizeInvF = params.particleSizeInvF;
-	const float sizeSquF = params.particleSizeF * params.particleSizeF;
+	const float sizeInvF = solverConstants.sizeInvF;
+	const float sizeSquF = solverConstants.sizeSquF;
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	// TODO: use particle size OR kernel supp radius / ratio ?
-	const float cubicSplineAlpha = static_cast<float>(
-		(1.0 / (4.0 * static_cast<double>(PI))) * static_cast<double>(sizeInvF) *
-		static_cast<double>(sizeInvF) * static_cast<double>(sizeInvF));
-	const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
+	const float cubicSplineAlpha = solverConstants.cubicSplineAlpha;
+	const float restDensitySquInv = solverConstants.restDensitySquInv;
 	const float massF = params.massF;
 
 	// --- [ particle data re-ordering ] -------------------------------------------------------------
@@ -360,15 +357,13 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	// --- [ temporary pre-computed constants ] ------------------------------------------------------
 
 	// misc hoisted constants
+	const SolverConstants solverConstants = BuildSolverConstants(params.particleSizeF, params.restDensity);
 	const float timeStep = params.timeStep;
-	const float sizeInvF = params.particleSizeInvF;
-	const float sizeSquF = params.particleSizeF * params.particleSizeF;
+	const float sizeInvF = solverConstants.sizeInvF;
+	const float sizeSquF = solverConstants.sizeSquF;
 	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	// TODO: use particle size OR kernel supp radius / ratio ?
-	const float cubicSplineAlpha = static_cast<float>(
-		(1.0 / (4.0 * static_cast<double>(PI))) * static_cast<double>(sizeInvF) *
-		static_cast<double>(sizeInvF) * static_cast<double>(sizeInvF));
-	const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
+	const float cubicSplineAlpha = solverConstants.cubicSplineAlpha;
+	const float restDensitySquInv = solverConstants.restDensitySquInv;
 	const float massF = params.massF;
 
 	// --- [ particle data re-ordering ] -------------------------------------------------------------

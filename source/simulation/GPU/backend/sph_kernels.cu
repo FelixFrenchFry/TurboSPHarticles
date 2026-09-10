@@ -2,13 +2,12 @@
 
 // external
 #include <cuda_runtime.h>
-#include <numbers>
 
 // internal
+#include "source/simulation/core/solver_constants.h"
 #include "source/simulation/GPU/gpu_utils.h"
 #include "sph_kernels.cuh"
 
-constexpr float  PI = std::numbers::pi_v<float>;
 
 
 
@@ -35,11 +34,10 @@ namespace GPU
 
 	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
 	{
-		const float sizeInvF = 1.0 / params.particleSizeF;
-		const float cubicSplineAlpha = static_cast<float>(
-			(1.0 / (4.0 * static_cast<double>(PI))) * sizeInvF * sizeInvF * sizeInvF);
-		const float kernelRadiusSqu = params.kernelRadius * params.kernelRadius;
-		const float restDensitySquInv = 1.0f / (params.restDensity * params.restDensity);
+		const Sim::SolverConstants solverConstants = Sim::BuildSolverConstants(params.particleSizeF, params.restDensity);
+		const float sizeInvF = solverConstants.sizeInvF;
+		const float cubicSplineAlpha = solverConstants.cubicSplineAlpha;
+		const float restDensitySquInv = solverConstants.restDensitySquInv;
 
 		// store values in constant memory on the GPU
 		GPU::Check(cudaMemcpyToSymbol(c_N_F, &N_F, sizeof(uint32_t)));
@@ -58,10 +56,8 @@ namespace GPU
 		GPU::Check(cudaMemcpyToSymbol(c_xGravity, &params.gravity.x, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_yGravity, &params.gravity.y, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_zGravity, &params.gravity.z, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &kernelRadiusSqu, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &params.kernelRadiusSqu, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_cubicSplineAlpha, &cubicSplineAlpha, sizeof(float)));
-
-		//GPU::StreamSync(stream);
 	}
 
 	// ------------------------------------------------------------------------------------------------

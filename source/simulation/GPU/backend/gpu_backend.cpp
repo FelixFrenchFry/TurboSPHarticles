@@ -5,12 +5,12 @@
 #include <atomic>
 #include <glm/vec3.hpp>
 #include <cmath>
-#include <numbers>
 #include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
 
 // internal
 #include "source/base/helpers.h"
+#include "source/simulation/core/solver_constants.h"
 #include "source/simulation/GPU/gpu_utils.h"
 #include "source/simulation/sync/mailboxes_cuda.h"
 #include "gpu_backend.h"
@@ -1320,12 +1320,7 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 		return;
 	}
 
-	const float particleSizeSquF = params.particleSizeF * params.particleSizeF;
-	const float cubicSplineAlpha = static_cast<float>(
-		(1.0 / (4.0 * static_cast<double>(std::numbers::pi_v<float>))) *
-		static_cast<double>(params.particleSizeInvF) *
-		static_cast<double>(params.particleSizeInvF) *
-		static_cast<double>(params.particleSizeInvF));
+	const SolverConstants solverConstants = BuildSolverConstants(params.particleSizeF, params.restDensity);
 
 	for (uint64_t step = 0; step < N_steps; step++)
 	{
@@ -1425,8 +1420,8 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				d_xVelR_.Data(), d_yVelR_.Data(), d_zVelR_.Data(),
 				d_volR_.Data(),
 				d_nbrCountRF_.Data(), d_nbrOffsetsRF_.Data(), d_nbrListRF_.Data(),
-				params.particleSizeInvF, particleSizeSquF,
-				params.kernelRadiusSqu, cubicSplineAlpha,
+				solverConstants.sizeInvF, solverConstants.sizeSquF,
+				params.kernelRadiusSqu, solverConstants.cubicSplineAlpha,
 				params.massF, params.viscosityB, N_R_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data());
 			GPU::StreamSync(stream_);
@@ -1537,7 +1532,7 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				d_pressureF_.Data(),
 				d_psiR_.Data(),
 				d_nbrCountRF_.Data(), d_nbrOffsetsRF_.Data(), d_nbrListRF_.Data(),
-				params.particleSizeInvF, params.kernelRadiusSqu, cubicSplineAlpha,
+				solverConstants.sizeInvF, params.kernelRadiusSqu, solverConstants.cubicSplineAlpha,
 				params.restDensity, params.massF, params.pressGamma, N_R_, stream_,
 				d_xForceR_.Data(), d_yForceR_.Data(), d_zForceR_.Data());
 

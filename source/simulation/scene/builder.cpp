@@ -21,6 +21,7 @@
 
 // internal
 #include "source/base/helpers.h"
+#include "source/simulation/core/solver_constants.h"
 #include "builder.h"
 
 
@@ -45,23 +46,17 @@ namespace
 	// scalar kernel weight for boundary coefficient sums
 	float KernelWeight_CubicSpline(
 		const float dx, const float dy, const float dz,
-		const Sim::SimParams& params)
+		const float particleSizeInvF, const float kernelRadiusSqu,
+		const float cubicSplineAlpha)
 	{
-		constexpr float PI = std::numbers::pi_v<float>;
 		constexpr float ZERO_EQU_LIM_F = 1e-7f;
 
 		const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
-		if (distSqu >= params.kernelRadiusSqu) [[unlikely]]
+		if (distSqu >= kernelRadiusSqu) [[unlikely]]
 		{
 			return 0.0f;
 		}
-
-		const float cubicSplineAlpha =
-			(1.0f / (4.0f * PI))
-			* params.particleSizeInvF
-			* params.particleSizeInvF
-			* params.particleSizeInvF;
 
 		if (distSqu < ZERO_EQU_LIM_F) [[unlikely]]
 		{
@@ -69,7 +64,7 @@ namespace
 		}
 
 		const float dist = std::sqrt(distSqu);
-		const float distNorm = dist * params.particleSizeInvF;
+		const float distNorm = dist * particleSizeInvF;
 
 		const float t1 = std::max(1.0f - distNorm, 0.0f);
 		const float t2 = std::max(2.0f - distNorm, 0.0f);
@@ -228,6 +223,7 @@ void ScenarioMgr::ComputeParticleCoefficients(
 		static_cast<int32_t>(std::ceil(std::max(0.0f, querySpanCells - 1e-6f))));
 	const float cellSizeInv = 1.0f / cellSize;
 	const uint32_t N_compute = end - begin;
+	const Sim::SolverConstants solverConstants = Sim::BuildSolverConstants(params.particleSizeF, params.restDensity);
 
 	std::vector<CellCoord> cellCoords(N_compute);
 	std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets;
@@ -278,7 +274,8 @@ void ScenarioMgr::ComputeParticleCoefficients(
 									xPos[i] - xPos[j],
 									yPos[i] - yPos[j],
 									zPos[i] - zPos[j],
-									params);
+									solverConstants.sizeInvF, params.kernelRadiusSqu,
+									solverConstants.cubicSplineAlpha);
 							}
 						}
 					}
