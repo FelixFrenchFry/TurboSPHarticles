@@ -368,34 +368,40 @@ namespace Export
 		std::vector<ExportSnapshotBinInfo> infos;
 		uint32_t N_skipped = 0;
 
-		std::error_code ec;
-		for (const auto& entry : std::filesystem::directory_iterator(dirPath, ec))
+		try
 		{
-			if (ec) { break; }
-
-			std::error_code fileEc;
-			if (!entry.is_regular_file(fileEc) || fileEc) { continue; }
-
-			const std::string fileName = entry.path().filename().string();
-			if (!IsExportSnapshotBinFileName(fileName)) { continue; }
-
-			// the header of an already parsed file never changes, only new files are read
-			if (const auto it = infoCache.find(fileName); it != infoCache.end())
+			for (const auto& entry : std::filesystem::directory_iterator(dirPath))
 			{
-				infos.push_back(it->second);
-				continue;
-			}
+				std::error_code fileEc;
+				if (!entry.is_regular_file(fileEc) || fileEc) { continue; }
 
-			ExportSnapshotBinInfo info{};
-			if (TryReadExportSnapshotBinInfo(entry.path(), info))
-			{
-				infoCache.emplace(fileName, info);
-				infos.push_back(std::move(info));
+				const std::string fileName = entry.path().filename().string();
+				if (!IsExportSnapshotBinFileName(fileName)) { continue; }
+
+				// the header of an already parsed file never changes, only new files are read
+				if (const auto it = infoCache.find(fileName); it != infoCache.end())
+				{
+					infos.push_back(it->second);
+					continue;
+				}
+
+				ExportSnapshotBinInfo info{};
+				if (TryReadExportSnapshotBinInfo(entry.path(), info))
+				{
+					infoCache.emplace(fileName, info);
+					infos.push_back(std::move(info));
+				}
+				else
+				{
+					N_skipped++;
+				}
 			}
-			else
-			{
-				N_skipped++;
-			}
+		}
+		catch (const std::filesystem::filesystem_error& ex)
+		{
+			spdlog::warn("Failed to iterate export snapshots in '{}': {}.",
+				dirPath.string(), ex.what());
+			throw;
 		}
 
 		if (N_skipped > 0)
