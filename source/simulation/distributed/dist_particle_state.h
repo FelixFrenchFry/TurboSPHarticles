@@ -1,5 +1,4 @@
 // dist_particle_state.h
-
 #pragma once
 
 // external

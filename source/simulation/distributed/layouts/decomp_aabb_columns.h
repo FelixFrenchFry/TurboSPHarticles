@@ -1,5 +1,4 @@
 // decomp_aabb_columns.h
-
 #pragma once
 
 // external

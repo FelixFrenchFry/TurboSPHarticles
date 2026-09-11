@@ -1,7 +1,4 @@
 // structs_vis.h
-//
-// TODO: comment
-
 #pragma once
 
 // external

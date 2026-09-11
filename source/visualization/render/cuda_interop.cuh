@@ -1,5 +1,4 @@
 // cuda_interop.cuh
-
 #pragma once
 
 // external

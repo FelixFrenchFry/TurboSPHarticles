@@ -1,5 +1,4 @@
 // neighbor_search.h
-
 #pragma once
 
 // external

@@ -1,5 +1,4 @@
 // mpi_context.h
-
 #pragma once
 
 // external

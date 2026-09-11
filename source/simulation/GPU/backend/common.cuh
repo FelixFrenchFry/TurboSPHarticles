@@ -1,5 +1,4 @@
 // common.cuh
-
 #pragma once
 
 // external

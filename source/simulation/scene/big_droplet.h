@@ -1,5 +1,4 @@
 // big_droplet.h
-
 #pragma once
 
 // external
@@ -39,7 +38,7 @@ namespace Scene
 
 	class BigDropletScene : public ISimScenario
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		BigDropletScene(ScenarioMgr& scenarioMgr, BigDropletConfig cfg)
 			: scenarioMgr_(scenarioMgr), cfg_(cfg) {}
@@ -127,7 +126,7 @@ namespace Scene
 			return { cfg_.container };
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		ScenarioMgr& scenarioMgr_;
 		BigDropletConfig cfg_;

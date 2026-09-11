@@ -1,5 +1,4 @@
 // domain_decomp.h
-
 #pragma once
 
 // external

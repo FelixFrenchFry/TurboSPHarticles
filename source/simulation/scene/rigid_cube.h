@@ -1,5 +1,4 @@
 // rigid_cube.h
-
 #pragma once
 
 // external
@@ -39,7 +38,7 @@ namespace Scene
 
 	class RigidCubeScene final : public ISimScenario
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		RigidCubeScene(ScenarioMgr& scenarioMgr, RigidCubeConfig cfg)
 			: scenarioMgr_(scenarioMgr), cfg_(cfg) {}
@@ -64,7 +63,7 @@ namespace Scene
 			return { cfg_.container };
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		void ApplyInitialRigidBodyState(
 			Sync::RigidBodies& rigidBodies,

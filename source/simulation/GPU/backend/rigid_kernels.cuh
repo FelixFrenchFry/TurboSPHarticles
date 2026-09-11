@@ -1,5 +1,4 @@
 // rigid_kernels.cuh
-
 #pragma once
 
 // external

@@ -1,5 +1,4 @@
 // parallel_checks.h
-
 #pragma once
 
 // external

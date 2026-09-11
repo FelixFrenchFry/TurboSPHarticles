@@ -1,5 +1,4 @@
 // particle_redistribution.h
-
 #pragma once
 
 // external

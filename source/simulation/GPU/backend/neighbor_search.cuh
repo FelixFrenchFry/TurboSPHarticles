@@ -41,7 +41,7 @@ namespace Sim
 
 		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		SimBackend_GPU& be_;
 	};

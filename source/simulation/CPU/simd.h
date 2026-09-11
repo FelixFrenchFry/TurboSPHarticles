@@ -1,5 +1,4 @@
 // simd.h
-
 #pragma once
 
 // external

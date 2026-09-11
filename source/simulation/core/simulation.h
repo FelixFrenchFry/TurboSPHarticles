@@ -1,5 +1,4 @@
 // simulation.h
-
 #pragma once
 
 // external
@@ -27,7 +26,7 @@ namespace Sim
 {
 	class SimulationMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 					  Scene::ScenarioMgr& scenarioMgr,
@@ -93,7 +92,7 @@ namespace Sim
 		uint64_t simStep_ = 0;
 		double simTime_ = 0.0;
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		friend class DiagnosticsMgr;
 

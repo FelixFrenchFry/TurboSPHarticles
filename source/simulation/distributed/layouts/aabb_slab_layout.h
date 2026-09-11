@@ -1,5 +1,4 @@
 // aabb_slab_layout.h
-
 #pragma once
 
 // external

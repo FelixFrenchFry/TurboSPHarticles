@@ -1,7 +1,4 @@
 // metrics.h
-//
-// TODO: comment
-
 #pragma once
 
 // external

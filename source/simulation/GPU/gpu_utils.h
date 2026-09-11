@@ -1,7 +1,4 @@
 // gpu_utils.h
-//
-// TODO: comment
-
 #pragma once
 
 // external

@@ -1,5 +1,4 @@
 // serialization.h
-
 #pragma once
 
 // external

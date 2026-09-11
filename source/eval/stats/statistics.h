@@ -1,5 +1,4 @@
 // statistics.h
-
 #pragma once
 
 // external
@@ -54,7 +53,7 @@ namespace Stats
 
 	class StatisticsTracker
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		StatisticsTracker(const Sim::SimParams& simParams);
 
@@ -83,7 +82,7 @@ namespace Stats
 		const StatRecordStep& GetCurrentRecord() const { return recLatest_; }
 		const std::deque<StatRecordStep>& GetHistory() const { return recHistory_; }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// max and current number of steps for which stat data is kept
 		uint32_t N_maxRecords_;

@@ -1,5 +1,4 @@
 // snapshot_kernels.cuh
-
 #pragma once
 
 // external

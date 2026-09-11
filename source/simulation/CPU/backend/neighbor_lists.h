@@ -1,5 +1,4 @@
 // neighbor_lists.h
-
 #pragma once
 
 // external

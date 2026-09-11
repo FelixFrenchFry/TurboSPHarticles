@@ -1,5 +1,4 @@
 // owned_particle_gather.h
-
 #pragma once
 
 // external

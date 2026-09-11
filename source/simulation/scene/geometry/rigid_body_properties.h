@@ -1,5 +1,4 @@
 // rigid_body_properties.h
-
 #pragma once
 
 // external

@@ -1,7 +1,4 @@
 // benchmarks.h
-//
-// TODO: comment
-
 #pragma once
 
 // external

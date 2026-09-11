@@ -1,7 +1,6 @@
 // color_maps.h
 //
 // 256-entry sRGB color map lookup tables
-
 #pragma once
 
 // external

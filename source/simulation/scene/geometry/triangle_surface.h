@@ -1,5 +1,4 @@
 // triangle_surface.h
-
 #pragma once
 
 // external

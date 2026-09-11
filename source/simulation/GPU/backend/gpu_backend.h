@@ -1,7 +1,4 @@
 // gpu_backend.h
-//
-// TODO: comment
-
 #pragma once
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 
@@ -37,7 +34,7 @@ namespace Sim
 	template <class T>
 	class DeviceBuffer
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		DeviceBuffer() = default;
 		~DeviceBuffer() { Release(); }
@@ -87,7 +84,7 @@ namespace Sim
 
 		void Swap(DeviceBuffer& other) noexcept { Swap_(other); }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		void Swap_(DeviceBuffer& o) noexcept
 		{
@@ -101,7 +98,7 @@ namespace Sim
 
 	class SimBackend_GPU final : public I_SimBackend
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		SimBackend_GPU(Sim::SimParamsMgr& simParamsMgr,
 						 Bench::BenchmarksTracker& benchmarksTracker,
@@ -162,7 +159,7 @@ namespace Sim
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
 		uint32_t GetNumRigidParticles() const override { return N_R_; }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// managers
 		Sim::SimParamsMgr& simParamsMgr_;

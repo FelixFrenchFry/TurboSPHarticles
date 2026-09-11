@@ -1,5 +1,4 @@
 // dist_diagnostics.h
-
 #pragma once
 
 // external

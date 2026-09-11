@@ -1,5 +1,4 @@
 // solver_constants.h
-
 #pragma once
 
 // external

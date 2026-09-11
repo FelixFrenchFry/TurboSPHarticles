@@ -1,5 +1,4 @@
 // backend_sim.h
-
 #pragma once
 
 // external
@@ -176,7 +175,7 @@ namespace Sim
 
 	class I_SimBackend
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		virtual ~I_SimBackend() = default;
 
@@ -322,7 +321,7 @@ namespace Sim
 
 	class I_NeighborSearch
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		virtual ~I_NeighborSearch() = default;
 
@@ -365,7 +364,7 @@ namespace Sim
 
 	class I_NeighborList
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		virtual ~I_NeighborList() = default;
 

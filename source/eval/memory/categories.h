@@ -1,5 +1,4 @@
 // categories.h
-
 #pragma once
 
 // external

@@ -1,5 +1,4 @@
 // cpu_backend.h
-
 #pragma once
 
 // external
@@ -20,7 +19,7 @@ namespace Sim
 {
 	class SimBackend_CPU final  : public I_SimBackend, public I_DistributedParticleBackend
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		SimBackend_CPU(Sim::SimParamsMgr& simParamsMgr,
 						 Bench::BenchmarksTracker& benchmarksTracker,
@@ -134,7 +133,7 @@ namespace Sim
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
 		uint32_t GetNumRigidParticles() const override { return N_R_; }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// extra capacity for particle fields that grow during distributed redistribution
 		static constexpr float particleFieldExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune

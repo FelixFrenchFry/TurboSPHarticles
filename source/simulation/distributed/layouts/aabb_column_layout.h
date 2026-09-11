@@ -1,5 +1,4 @@
 // aabb_column_layout.h
-
 #pragma once
 
 // external

@@ -1,5 +1,4 @@
 // neighbor_search_kernels.cuh
-
 #pragma once
 
 // external

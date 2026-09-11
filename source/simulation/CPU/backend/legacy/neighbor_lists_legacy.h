@@ -1,5 +1,4 @@
 // neighbor_lists_legacy.h
-
 #pragma once
 
 // internal
@@ -24,7 +23,7 @@ namespace Sim
 	class NeighborLists_IndividualVectors_Explicit_CPU final
 		: public I_NeighborList
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -48,7 +47,7 @@ namespace Sim
 		bool RunFillQuery() const override { return true; }
 		bool RunSecondFillQuery() const { return false; }
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -66,7 +65,7 @@ namespace Sim
 	class NeighborLists_SingleCSRVector_Explicit_CPU final
 		: public I_NeighborList
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -90,7 +89,7 @@ namespace Sim
 		bool RunFillQuery() const override { return true; }
 		bool RunSecondFillQuery() const { return false; }
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		// metadata
 		uint32_t N_F_ = 0;
@@ -131,7 +130,7 @@ namespace Sim
 	class NeighborLists_SingleCSRVector_AdaptCompress_CPU final
 		: public I_NeighborList
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -163,7 +162,7 @@ namespace Sim
 		bool RunFillQuery() const override { return true; }
 		bool RunSecondFillQuery() const { return true; }
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		enum class FillPhase : uint8_t
 		{
@@ -248,7 +247,7 @@ namespace Sim
 	class NeighborLists_SingleCSRVector_VByteCompress_CPU final
 		: public I_NeighborList
 	{
-	public: // -------------------------------------------------------------------------------------
+	public:
 
 		void Resize(uint32_t N_F, uint32_t N_B, const SimParams& params) override;
 
@@ -280,7 +279,7 @@ namespace Sim
 		bool RunFillQuery() const override { return true; }
 		bool RunSecondFillQuery() const { return true; }
 
-	private: // ------------------------------------------------------------------------------------
+	private:
 
 		enum class FillPhase : uint8_t
 		{

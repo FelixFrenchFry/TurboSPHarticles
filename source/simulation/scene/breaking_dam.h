@@ -1,5 +1,4 @@
 // breaking_dam.h
-
 #pragma once
 
 // external
@@ -31,7 +30,7 @@ namespace Scene
 
 	class BreakingDamScene final : public ISimScenario
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		BreakingDamScene(ScenarioMgr& scenarioMgr, BreakingDamConfig cfg)
 			: scenarioMgr_(scenarioMgr), cfg_(cfg) {}
@@ -50,7 +49,7 @@ namespace Scene
 			return { cfg_.container };
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		ScenarioMgr& scenarioMgr_;
 		BreakingDamConfig cfg_;

@@ -1,5 +1,4 @@
 // diagnostics.h
-
 #pragma once
 
 // external

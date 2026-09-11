@@ -1,7 +1,4 @@
 // scenario_sim.h
-//
-// TODO: comment
-
 #pragma once
 
 // external
@@ -19,7 +16,7 @@ namespace Scene
 {
 	class ISimScenario
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		virtual ~ISimScenario() = default;
 

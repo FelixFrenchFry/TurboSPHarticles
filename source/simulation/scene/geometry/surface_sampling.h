@@ -1,5 +1,4 @@
 // surface_sampling.h
-
 #pragma once
 
 // external
@@ -45,7 +44,7 @@ namespace Scene
 	// (minimum/maximum spacing and coverage repair)
 	class SurfaceSampler
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		SurfaceSampler(
 			const TriangleSurfaceMesh& mesh,
@@ -57,7 +56,7 @@ namespace Scene
 
 		SurfaceSamplingResult Sample();
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// bounds temporary candidate and coverage probe buffers
 		static constexpr uint32_t N_samplingBatch = 1000000u;

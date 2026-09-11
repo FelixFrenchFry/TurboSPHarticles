@@ -1,5 +1,4 @@
 // snapshots.h
-
 #pragma once
 
 // external

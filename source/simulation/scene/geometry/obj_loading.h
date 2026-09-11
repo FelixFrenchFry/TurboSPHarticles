@@ -1,5 +1,4 @@
 // obj_loading.h
-
 #pragma once
 
 // external

@@ -1,7 +1,4 @@
 // visualization.h
-//
-// TODO: comment
-
 #pragma once
 
 // external
@@ -28,7 +25,7 @@ namespace Vis
 {
 	class VisualizationMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		VisualizationMgr(Sim::SimulationMgr& simulationMgr,
 						 Bench::BenchmarksTracker& benchmarksTracker,
@@ -60,7 +57,7 @@ namespace Vis
 		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox)
 			{ statSnapMailbox_ = statSnapMailbox; }
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		Sim::SimulationMgr& simulationMgr_;
 		Bench::BenchmarksTracker& benchmarksTracker_;

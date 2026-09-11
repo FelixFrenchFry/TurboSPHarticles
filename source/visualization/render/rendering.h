@@ -1,7 +1,4 @@
 // rendering.h
-//
-// TODO: comment
-
 #pragma once
 
 // external
@@ -49,7 +46,7 @@ namespace Render
 	// (instancing, shaders, buffers, draw calls, etc...)
 	class RenderingMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		RenderingMgr(Sim::SimParamsMgr& simParamsMgr,
 					 Vis::VisParamsMgr& visParamsMgr);
@@ -97,7 +94,7 @@ namespace Render
 		// draw the particles in the current frame (as imposter spheres)
 		void Render(const Vis::RenderConfig& render, const Vis::CameraState& cam);
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// parameter managers for making changes to parameters
 		Sim::SimParamsMgr& simParamsMgr_;

@@ -1,5 +1,4 @@
 // parameters_sim.h
-
 #pragma once
 
 // external
@@ -168,7 +167,7 @@ namespace Sim
 
 	class SimParamsMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		SimParamsMgr() = default;
 
@@ -221,7 +220,7 @@ namespace Sim
 		uint32_t HeuristicSurfaceNbrCountThreshold(
 			float surfaceNbrCountRatio, uint32_t expctdAvgNbrCountHardMax_FF) const;
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		alignas(64) SimParams params_{}; // current active copy of visualization parameters
 		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing

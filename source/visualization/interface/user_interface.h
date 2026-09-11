@@ -1,7 +1,4 @@
 // user_interface.h
-//
-// TODO: comment
-
 #pragma once
 
 // external
@@ -76,7 +73,7 @@ namespace Inter
 	// own and manage the ImGui lifecycle
 	class UserInterfaceMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		UserInterfaceMgr(Sim::SimParamsMgr& simParamsMgr,
 						 Vis::VisParamsMgr& visParamsMgr);
@@ -114,7 +111,7 @@ namespace Inter
 		// helpers
 		void SetDockingEnabled(bool enabled);
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// parameter managers for making changes to parameters
 		Sim::SimParamsMgr& simParamsMgr_;

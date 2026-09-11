@@ -1,5 +1,4 @@
 // domain_geometry.h
-
 #pragma once
 
 // external

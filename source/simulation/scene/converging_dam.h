@@ -1,5 +1,4 @@
 // converging_dam.h
-
 #pragma once
 
 // external
@@ -33,7 +32,7 @@ namespace Scene
 
 	class ConvergingDamScene final : public ISimScenario
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		ConvergingDamScene(ScenarioMgr& scenarioMgr, ConvergingDamConfig cfg)
 			: scenarioMgr_(scenarioMgr), cfg_(cfg) {}
@@ -80,7 +79,7 @@ namespace Scene
 			return { cfg_.container };
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		ScenarioMgr& scenarioMgr_;
 		ConvergingDamConfig cfg_;

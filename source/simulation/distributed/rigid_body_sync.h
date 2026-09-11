@@ -1,5 +1,4 @@
 // rigid_body_sync.h
-
 #pragma once
 
 // external

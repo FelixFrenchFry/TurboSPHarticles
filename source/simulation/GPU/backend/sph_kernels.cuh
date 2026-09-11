@@ -1,5 +1,4 @@
 // sph_kernels.cuh
-
 #pragma once
 
 // external

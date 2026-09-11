@@ -1,5 +1,4 @@
 // app_runtime.h
-
 #pragma once
 
 // external

@@ -1,5 +1,4 @@
 // simd_avx512.h
-
 #pragma once
 
 // external

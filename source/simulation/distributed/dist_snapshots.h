@@ -1,5 +1,4 @@
 // dist_snapshots.h
-
 #pragma once
 
 // external

@@ -1,7 +1,4 @@
 // trace.h
-//
-// TODO: comment
-
 #pragma once
 
 // external

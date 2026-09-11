@@ -1,5 +1,4 @@
 // sampled_mesh_collection.h
-
 #pragma once
 
 // external
@@ -70,7 +69,7 @@ namespace Scene
 
 	class SampledMeshCollectionScene final : public ISimScenario
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		SampledMeshCollectionScene(ScenarioMgr& scenarioMgr, SampledMeshCollectionConfig cfg)
 			: scenarioMgr_(scenarioMgr), cfg_(std::move(cfg)) {}
@@ -192,7 +191,7 @@ namespace Scene
 			return { cfg_.container };
 		}
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		static void ApplyInitialRigidBodyState(
 			Sync::RigidBodies& rigidBodies,

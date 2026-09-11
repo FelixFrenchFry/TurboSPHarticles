@@ -1,5 +1,4 @@
 // fluid_solver_sync.h
-
 #pragma once
 
 // external

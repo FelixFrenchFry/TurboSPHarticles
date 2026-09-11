@@ -1,5 +1,4 @@
 // mailboxes_cuda.h
-
 #pragma once
 
 #ifdef TURBOSPHARTICLES_WITH_CUDA
@@ -47,7 +46,7 @@ namespace Sync
 	// reusable CUDA frames shared by the simulation and visualization threads
 	class VisualFrameMailboxCUDA
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		VisualFrameMailboxCUDA();
 		~VisualFrameMailboxCUDA();
@@ -72,7 +71,7 @@ namespace Sync
 		bool TryFetchLatest(VisualFrameReadCUDA& dst);
 		bool ReleaseRead(const VisualFrameReadCUDA& src, cudaStream_t stream);
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		struct Impl;
 		std::unique_ptr<Impl> impl_;

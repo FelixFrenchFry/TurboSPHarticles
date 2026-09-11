@@ -1,7 +1,4 @@
 // user_input.h
-//
-// TODO: comment
-
 #pragma once
 
 // external
@@ -17,7 +14,7 @@ namespace Input
 {
 	class UserInputMgr
 	{
-	public: // ---------------------------------------------------------------------------------------
+	public:
 
 		UserInputMgr(Sim::SimParamsMgr& simParamsMgr,
 					 Vis::VisParamsMgr& visParamsMgr);
@@ -39,7 +36,7 @@ namespace Input
 		bool OnCursorPos(double xPos, double yPos);
 		bool OnScroll(double xOff, double yOff);
 
-	private: // --------------------------------------------------------------------------------------
+	private:
 
 		// parameter managers for making changes to parameters
 		Sim::SimParamsMgr& simParamsMgr_;

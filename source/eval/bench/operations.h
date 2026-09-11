@@ -1,7 +1,4 @@
 // operations.h
-//
-// TODO: comment
-
 #pragma once
 
 // external

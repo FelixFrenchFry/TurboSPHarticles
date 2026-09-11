@@ -1,7 +1,4 @@
 // shader.h
-//
-// TODO: comment
-
 #pragma once
 
 

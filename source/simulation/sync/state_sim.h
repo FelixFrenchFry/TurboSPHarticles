@@ -1,5 +1,4 @@
 // state_sim.h
-
 #pragma once
 
 // external

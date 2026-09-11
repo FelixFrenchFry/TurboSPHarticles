@@ -1,5 +1,4 @@
 // dist_simulation.h
-
 #pragma once
 
 // external

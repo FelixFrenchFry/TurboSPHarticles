@@ -1,5 +1,4 @@
 // sph_solver.h
-
 #pragma once
 
 // external
