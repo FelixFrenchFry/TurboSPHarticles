@@ -409,12 +409,12 @@ namespace Stats
 		double simTime = 0.0;
 
 		// stat data
-		std::array<float, GetIdx(StatMetric::Count)> stats{};
+		std::array<double, GetIdx(StatMetric::Count)> stats{};
 	};
 
-	inline float Get(const StatRecordStep& record, StatMetric metric)
+	inline double Get(const StatRecordStep& record, StatMetric metric)
 		{ return record.stats[GetIdx(metric)]; }
-	inline void Set(StatRecordStep& record, StatMetric metric, float x)
+	inline void Set(StatRecordStep& record, StatMetric metric, double x)
 		{ record.stats[GetIdx(metric)] = x; }
 
 } // namespace Stats

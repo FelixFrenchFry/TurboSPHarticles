@@ -35,9 +35,8 @@ namespace
 	}
 
 	template <typename T>
-	uint64_t CheckedByteSize(const std::vector<T>& packets)
+	uint64_t CheckedByteSize(const uint64_t N_packets)
 	{
-		const uint64_t N_packets = packets.size();
 		const uint64_t N_max = std::numeric_limits<uint64_t>::max() / sizeof(T);
 
 		if (N_packets > N_max)
@@ -47,6 +46,34 @@ namespace
 		}
 
 		return N_packets * sizeof(T);
+	}
+
+	template <typename T>
+	uint64_t CheckedByteSize(const std::vector<T>& packets)
+	{
+		return CheckedByteSize<T>(packets.size());
+	}
+
+	uint64_t CheckedOwnedParticleRootStorageBytes(
+		const uint64_t N_globalF,
+		const uint64_t N_globalB)
+	{
+		constexpr uint64_t FluidParticleBytes =
+			sizeof(uint64_t) + 16ull * sizeof(float);
+		constexpr uint64_t BoundaryParticleBytes =
+			sizeof(uint64_t) + 5ull * sizeof(float);
+
+		uint64_t N_bytes = Sim::CheckedParticleMultiply(
+			N_globalF, FluidParticleBytes, "final-state fluid root storage");
+		N_bytes = Sim::CheckedParticleAdd(
+			N_bytes,
+			Sim::CheckedParticleMultiply(
+				N_globalB, BoundaryParticleBytes, "final-state boundary root storage"),
+			"final-state root storage");
+		N_bytes = Sim::CheckedParticleAdd(
+			N_bytes, N_globalF, "final-state fluid gathered markers");
+		return Sim::CheckedParticleAdd(
+			N_bytes, N_globalB, "final-state boundary gathered markers");
 	}
 
 	uint64_t ByteChunkRequestCount(const uint64_t N_bytes)
@@ -68,11 +95,11 @@ namespace
 		return packets.empty() ? nullptr : packets.data();
 	}
 
-	bool IsGlobalIdxInRange(
-		const uint32_t globalIdx,
-		const uint32_t N_particles)
+	bool IsParticleIdInRange(
+		const uint64_t particleId,
+		const uint64_t N_particles)
 	{
-		return globalIdx < N_particles;
+		return particleId < N_particles;
 	}
 
 	OwnedFluidParticlePacket PackFluidParticle(
@@ -81,7 +108,6 @@ namespace
 	{
 		OwnedFluidParticlePacket packet{};
 
-		packet.globalIdx = particlesF.id[localIdx];
 		packet.id = particlesF.id[localIdx];
 		packet.xPos = particlesF.xPos[localIdx];
 		packet.yPos = particlesF.yPos[localIdx];
@@ -109,7 +135,6 @@ namespace
 	{
 		OwnedBoundaryParticlePacket packet{};
 
-		packet.globalIdx = particlesB.id[localIdx];
 		packet.id = particlesB.id[localIdx];
 		packet.xPos = particlesB.xPos[localIdx];
 		packet.yPos = particlesB.yPos[localIdx];
@@ -124,52 +149,53 @@ namespace
 		const OwnedFluidParticlePacket& packet,
 		Sync::FluidParticles& dst)
 	{
-		const uint32_t globalIdx = packet.globalIdx;
+		const uint32_t dstIdx = static_cast<uint32_t>(packet.id);
 
-		dst.id[globalIdx] = packet.id;
-		dst.xPos[globalIdx] = packet.xPos;
-		dst.yPos[globalIdx] = packet.yPos;
-		dst.zPos[globalIdx] = packet.zPos;
-		dst.xVel[globalIdx] = packet.xVel;
-		dst.yVel[globalIdx] = packet.yVel;
-		dst.zVel[globalIdx] = packet.zVel;
-		dst.xVelPred[globalIdx] = packet.xVelPred;
-		dst.yVelPred[globalIdx] = packet.yVelPred;
-		dst.zVelPred[globalIdx] = packet.zVelPred;
-		dst.xAccPress[globalIdx] = packet.xAccPress;
-		dst.yAccPress[globalIdx] = packet.yAccPress;
-		dst.zAccPress[globalIdx] = packet.zAccPress;
-		dst.sourceTerm[globalIdx] = packet.sourceTerm;
-		dst.diagElem[globalIdx] = packet.diagElem;
-		dst.pressure[globalIdx] = packet.pressure;
-		dst.density[globalIdx] = packet.density;
+		dst.id[dstIdx] = packet.id;
+		dst.xPos[dstIdx] = packet.xPos;
+		dst.yPos[dstIdx] = packet.yPos;
+		dst.zPos[dstIdx] = packet.zPos;
+		dst.xVel[dstIdx] = packet.xVel;
+		dst.yVel[dstIdx] = packet.yVel;
+		dst.zVel[dstIdx] = packet.zVel;
+		dst.xVelPred[dstIdx] = packet.xVelPred;
+		dst.yVelPred[dstIdx] = packet.yVelPred;
+		dst.zVelPred[dstIdx] = packet.zVelPred;
+		dst.xAccPress[dstIdx] = packet.xAccPress;
+		dst.yAccPress[dstIdx] = packet.yAccPress;
+		dst.zAccPress[dstIdx] = packet.zAccPress;
+		dst.sourceTerm[dstIdx] = packet.sourceTerm;
+		dst.diagElem[dstIdx] = packet.diagElem;
+		dst.pressure[dstIdx] = packet.pressure;
+		dst.density[dstIdx] = packet.density;
 	}
 
 	void CopyBoundaryPacketToGlobal(
 		const OwnedBoundaryParticlePacket& packet,
 		Sync::BoundaryParticles& dst)
 	{
-		const uint32_t globalIdx = packet.globalIdx;
+		const uint32_t dstIdx = static_cast<uint32_t>(packet.id);
 
-		dst.id[globalIdx] = packet.id;
-		dst.xPos[globalIdx] = packet.xPos;
-		dst.yPos[globalIdx] = packet.yPos;
-		dst.zPos[globalIdx] = packet.zPos;
-		dst.volB[globalIdx] = packet.volB;
-		dst.psiB[globalIdx] = packet.psiB;
+		dst.id[dstIdx] = packet.id;
+		dst.xPos[dstIdx] = packet.xPos;
+		dst.yPos[dstIdx] = packet.yPos;
+		dst.zPos[dstIdx] = packet.zPos;
+		dst.volB[dstIdx] = packet.volB;
+		dst.psiB[dstIdx] = packet.psiB;
 	}
 
 	bool MarkGatheredParticle(
 		std::vector<uint8_t>& gatheredParticles,
-		const uint32_t globalIdx)
+		const uint64_t particleId)
 	{
-		if (!IsGlobalIdxInRange(globalIdx, static_cast<uint32_t>(gatheredParticles.size())))
+		if (!IsParticleIdInRange(particleId, gatheredParticles.size()))
 		{
 			return false;
 		}
 
-		if (gatheredParticles[globalIdx] != 0) { return false; }
-		gatheredParticles[globalIdx] = 1;
+		const size_t particleIdx = static_cast<size_t>(particleId);
+		if (gatheredParticles[particleIdx] != 0) { return false; }
+		gatheredParticles[particleIdx] = 1;
 		return true;
 	}
 
@@ -178,9 +204,9 @@ namespace
 		return Check::CountViolations(
 			0,
 			static_cast<uint32_t>(gatheredParticles.size()),
-			[&](const uint32_t globalIdx)
+			[&](const uint32_t particleIdx)
 			{
-				return gatheredParticles[globalIdx] == 0;
+				return gatheredParticles[particleIdx] == 0;
 			}) == 0;
 	}
 
@@ -214,7 +240,7 @@ namespace
 		// TODO: parallelize with TBB?
 		for (const OwnedFluidParticlePacket& packet : gatherBuffer.particlesF)
 		{
-			if (!MarkGatheredParticle(gatheredParticlesF, packet.globalIdx))
+			if (!MarkGatheredParticle(gatheredParticlesF, packet.id))
 			{
 				localOk = false;
 				continue;
@@ -225,7 +251,7 @@ namespace
 		// TODO: parallelize with TBB?
 		for (const OwnedBoundaryParticlePacket& packet : gatherBuffer.particlesB)
 		{
-			if (!MarkGatheredParticle(gatheredParticlesB, packet.globalIdx))
+			if (!MarkGatheredParticle(gatheredParticlesB, packet.id))
 			{
 				localOk = false;
 				continue;
@@ -242,6 +268,26 @@ void OwnedParticleGatherBuffer::Clear()
 {
 	particlesF.clear();
 	particlesB.clear();
+}
+
+bool Dist::ValidateOwnedParticleGatherRootCapacity(
+	const uint64_t N_globalF,
+	const uint64_t N_globalB,
+	std::string* const failMsg)
+{
+	if (failMsg) { failMsg->clear(); }
+	try
+	{
+		Sim::CheckedLocalParticleCount(N_globalF, "final-state fluid root output");
+		Sim::CheckedLocalParticleCount(N_globalB, "final-state boundary root output");
+		CheckedOwnedParticleRootStorageBytes(N_globalF, N_globalB);
+		return true;
+	}
+	catch (const std::exception& ex)
+	{
+		if (failMsg) { *failMsg = ex.what(); }
+		return false;
+	}
 }
 
 bool Dist::PackOwnedParticleGatherBuffer(
@@ -357,16 +403,33 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	const OwnedParticleGatherBuffer& sendBuffer,
 	const Sync::UniversalSimState& localState,
 	const MpiContext& mpiContext,
-	const uint32_t N_globalF, const uint32_t N_globalB)
+	const uint64_t N_globalF, const uint64_t N_globalB)
 {
 	bool localOk = true;
+	uint32_t N_materializedF = 0;
+	uint32_t N_materializedB = 0;
 	int N_sendF = 0;
 	int N_sendB = 0;
 	std::vector<MPI_Request> requests{};
 	std::vector<int> N_recvF{};
 	std::vector<int> N_recvB{};
+	std::string capacityFailure{};
+	localOk = ValidateOwnedParticleGatherRootCapacity(
+		N_globalF, N_globalB, &capacityFailure);
+	if (!localOk)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Cannot materialize requested distributed final state: {}",
+			mpiContext.Rank(), mpiContext.Size(), capacityFailure);
+	}
+	if (!mpiContext.AllTrue(localOk)) { return false; }
+
 	try
 	{
+		N_materializedF = Sim::CheckedLocalParticleCount(
+			N_globalF, "gathered fluid state");
+		N_materializedB = Sim::CheckedLocalParticleCount(
+			N_globalB, "gathered boundary state");
 		N_sendF = CheckedPacketCount(sendBuffer.particlesF);
 		N_sendB = CheckedPacketCount(sendBuffer.particlesB);
 		requests.reserve(static_cast<uint64_t>(mpiContext.Size()) * 2);
@@ -387,6 +450,11 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	if (!mpiContext.AllTrue(localOk)) { return false; }
 
 	// gather packet counts before gathering raw particle payloads
+	uint64_t N_maxRecvF = 0;
+	uint64_t N_maxRecvB = 0;
+	uint64_t N_maxPayloadRequests = 0;
+	uint64_t N_gatheredF = sendBuffer.particlesF.size();
+	uint64_t N_gatheredB = sendBuffer.particlesB.size();
 	if (mpiContext.IsRoot())
 	{
 		for (int rank = 0; rank < mpiContext.Size(); rank++)
@@ -442,6 +510,63 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 				localOk = false;
 				break;
 			}
+
+			try
+			{
+				const uint32_t N_rankF = static_cast<uint32_t>(N_recvF[rank]);
+				const uint32_t N_rankB = static_cast<uint32_t>(N_recvB[rank]);
+				N_gatheredF = Sim::CheckedParticleAdd(
+					N_gatheredF, N_rankF, "final-state gathered fluid count");
+				N_gatheredB = Sim::CheckedParticleAdd(
+					N_gatheredB, N_rankB, "final-state gathered boundary count");
+				N_maxRecvF = std::max<uint64_t>(N_maxRecvF, N_rankF);
+				N_maxRecvB = std::max<uint64_t>(N_maxRecvB, N_rankB);
+				const uint64_t N_payloadRequests = Sim::CheckedParticleAdd(
+					ByteChunkRequestCount(CheckedByteSize<OwnedFluidParticlePacket>(N_rankF)),
+					ByteChunkRequestCount(CheckedByteSize<OwnedBoundaryParticlePacket>(N_rankB)),
+					"final-state payload request count");
+				N_maxPayloadRequests = std::max(N_maxPayloadRequests, N_payloadRequests);
+			}
+			catch (const std::exception& ex)
+			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Invalid distributed final-state gather counts: {}",
+					mpiContext.Rank(), mpiContext.Size(), ex.what());
+				localOk = false;
+				break;
+			}
+		}
+
+		if (localOk && (N_gatheredF != N_globalF || N_gatheredB != N_globalB))
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Distributed final-state gather announced F={}, B={} packets, "
+				"but the dense root state requires F={}, B={}.",
+				mpiContext.Rank(), mpiContext.Size(),
+				N_gatheredF, N_gatheredB, N_globalF, N_globalB);
+			localOk = false;
+		}
+
+		if (localOk)
+		{
+			try
+			{
+				const uint64_t N_recvBytes = Sim::CheckedParticleAdd(
+					CheckedByteSize<OwnedFluidParticlePacket>(N_maxRecvF),
+					CheckedByteSize<OwnedBoundaryParticlePacket>(N_maxRecvB),
+					"final-state root receive storage");
+				Sim::CheckedParticleAdd(
+					CheckedOwnedParticleRootStorageBytes(N_globalF, N_globalB),
+					N_recvBytes,
+					"final-state combined root storage");
+			}
+			catch (const std::exception& ex)
+			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Invalid distributed final-state root storage size: {}",
+					mpiContext.Rank(), mpiContext.Size(), ex.what());
+				localOk = false;
+			}
 		}
 	}
 	if (!mpiContext.AllTrue(localOk)) { return false; }
@@ -449,8 +574,6 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	std::vector<uint8_t> gatheredParticlesF{};
 	std::vector<uint8_t> gatheredParticlesB{};
 	OwnedParticleGatherBuffer recvBuffer{};
-	uint64_t N_maxRecvF = 0;
-	uint64_t N_maxRecvB = 0;
 	try
 	{
 		if (mpiContext.IsRoot())
@@ -458,8 +581,8 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 			InitializeGlobalOwnedState(
 				globalOwnedState,
 				localState,
-				N_globalF,
-				N_globalB,
+				N_materializedF,
+				N_materializedB,
 				gatheredParticlesF,
 				gatheredParticlesB);
 
@@ -469,34 +592,9 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 				gatheredParticlesF,
 				gatheredParticlesB);
 
-			for (int rank = 0; rank < mpiContext.Size(); rank++)
-			{
-				if (rank == mpiContext.RootRank()) { continue; }
-
-				N_maxRecvF = std::max(
-					N_maxRecvF, static_cast<uint64_t>(N_recvF[rank]));
-				N_maxRecvB = std::max(
-					N_maxRecvB, static_cast<uint64_t>(N_recvB[rank]));
-			}
 			recvBuffer.particlesF.resize(N_maxRecvF);
 			recvBuffer.particlesB.resize(N_maxRecvB);
 			recvBuffer.Clear();
-
-			uint64_t N_maxPayloadRequests = 0;
-			for (int rank = 0; rank < mpiContext.Size(); rank++)
-			{
-				if (rank == mpiContext.RootRank()) { continue; }
-
-				const uint64_t N_payloadRequests =
-					ByteChunkRequestCount(
-						static_cast<uint64_t>(N_recvF[rank]) *
-							sizeof(OwnedFluidParticlePacket)) +
-					ByteChunkRequestCount(
-						static_cast<uint64_t>(N_recvB[rank]) *
-							sizeof(OwnedBoundaryParticlePacket));
-				N_maxPayloadRequests = std::max(
-					N_maxPayloadRequests, N_payloadRequests);
-			}
 			requests.reserve(N_maxPayloadRequests);
 		}
 		else
@@ -510,7 +608,8 @@ bool Dist::GatherOwnedParticleBufferToRoot(
 	catch (const std::exception& ex)
 	{
 		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to prepare owned particle gather storage: {}",
+			"[rank {}/{}] Failed to allocate owned particle gather storage "
+			"below the root-output capacity limit: {}",
 			mpiContext.Rank(), mpiContext.Size(), ex.what());
 		localOk = false;
 	}

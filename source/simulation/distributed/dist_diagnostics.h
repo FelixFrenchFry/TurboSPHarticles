@@ -9,6 +9,7 @@
 
 // internal
 #include "source/eval/bench/operations.h"
+#include "source/simulation/core/particle_types.h"
 
 
 
@@ -44,9 +45,9 @@ namespace Dist
 		const char* neighborSearchMethod = "";
 		const char* neighborListStorage = "";
 
-		uint32_t N_globalF = 0;
-		uint32_t N_globalB = 0;
-		uint32_t N_globalR = 0;
+		uint64_t N_globalF = 0;
+		uint64_t N_globalB = 0;
+		uint64_t N_globalR = 0;
 		uint32_t N_globalRB = 0;
 	};
 
@@ -85,10 +86,10 @@ namespace Dist
 		uint32_t N_sentMigratedB = 0;
 		uint32_t N_recvMigratedB = 0;
 
-		uint32_t N_sentHaloF = 0;
-		uint32_t N_recvHaloF = 0;
-		uint32_t N_sentHaloB = 0;
-		uint32_t N_recvHaloB = 0;
+		uint64_t N_sentHaloF = 0;
+		uint64_t N_recvHaloF = 0;
+		uint64_t N_sentHaloB = 0;
+		uint64_t N_recvHaloB = 0;
 
 		uint64_t totalStepLatestNs = 0;
 		uint64_t totalStepAvgNs = 0;

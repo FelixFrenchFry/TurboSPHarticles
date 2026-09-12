@@ -618,7 +618,7 @@ namespace GPU
 
 		while (low <= high)
 		{
-			int mid = (low + high) >> 1;
+			int mid = low + ((high - low) >> 1);
 			uint64_t midVal = uniqueCellId[mid];
 
 			if (midVal < cid) { low = mid + 1; }
@@ -678,7 +678,7 @@ namespace GPU
 	}
 
 	__device__
-	int BinarySearchUniqueCellId(
+	uint32_t BinarySearchUniqueCellId(
 		const uint64_t* uniqueCellId,
 		uint32_t lo, uint32_t hi, uint64_t cid)
 	{
@@ -697,11 +697,11 @@ namespace GPU
 			}
 			else
 			{
-				return static_cast<int>(mid);
+				return mid;
 			}
 		}
 
-		return -1;
+		return Sim::EMPTY_32;
 	}
 
 	__global__
@@ -939,9 +939,9 @@ namespace GPU
 					if (loAny < hiAny)
 					{
 						const uint64_t cid_nbr = MapToCellId(cx_nbr, cy_nbr, cz_nbr);
-						const int cAny = BinarySearchUniqueCellId(
+						const uint32_t cAny = BinarySearchUniqueCellId(
 							uniqueCellIdAny, loAny, hiAny, cid_nbr);
-						if (cAny >= 0) { cAny_nbr = static_cast<uint32_t>(cAny); }
+						if (cAny != Sim::EMPTY_32) { cAny_nbr = cAny; }
 					}
 
 					if (s < N_queryCellSlots)
@@ -1903,7 +1903,10 @@ namespace GPU
 		CellRangeByAny* cellRangeByAny)
 	{
 		const uint32_t N_BLOCK_SIZE = 256;
-		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsAny + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+		const uint32_t N_GRID_SIZE = N_nonEmptyCellsAny == 0
+			? 0
+			: 1u + (N_nonEmptyCellsAny - 1u) / N_BLOCK_SIZE;
+		if (N_GRID_SIZE == 0) { return; }
 
 		K_FillMergedCompactCellRanges<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			uniqueCellIdAny, N_nonEmptyCellsAny,

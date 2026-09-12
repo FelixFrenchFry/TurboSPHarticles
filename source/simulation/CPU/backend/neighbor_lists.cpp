@@ -195,7 +195,8 @@ void NeighborLists_ChunkedSELL_Explicit_CPU::Resize(
 	N_R_ = N_R;
 
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	const uint32_t N_padded = N_chunks * chunkWidth;
+	const uint32_t N_padded = Sim::CheckedPaddedLocalCount(
+		N_F_, chunkWidth, "Explicit SELL particle count");
 
 	// count arrays are padded, tail chunk still has a full SIMD width
 	Base::ResizeScratchVector(nbrCountFF_, N_padded);
@@ -950,7 +951,8 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 	N_R_ = N_R;
 
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
-	const uint32_t N_padded = N_chunks * chunkWidth;
+	const uint32_t N_padded = Sim::CheckedPaddedLocalCount(
+		N_F_, chunkWidth, "Compressed SELL particle count");
 
 	// count arrays are padded, tail chunk still has a full SIMD width
 	Base::ResizeScratchVector(nbrCountFF_, N_padded);

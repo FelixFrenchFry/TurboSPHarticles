@@ -3,6 +3,7 @@
 
 // external
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // internal
@@ -25,8 +26,7 @@ namespace Dist
 	// TODO: use SoA instead of AoS approach?
 	struct OwnedFluidParticlePacket
 	{
-		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
-		uint32_t id = 0;
+		uint64_t id = Sim::INVALID_PARTICLE_ID;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -45,13 +45,13 @@ namespace Dist
 		float pressure = 0.0f;
 		float density = 0.0f;
 	};
+	static_assert(sizeof(OwnedFluidParticlePacket) == 72);
 
 	// boundary particle payload used to gather authoritative owned particles
 	// TODO: use SoA instead of AoS approach?
 	struct OwnedBoundaryParticlePacket
 	{
-		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
-		uint32_t id = 0;
+		uint64_t id = Sim::INVALID_PARTICLE_ID;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -68,6 +68,12 @@ namespace Dist
 		void Clear();
 	};
 
+	// allocation-free check for the dense root state required by a final-state save
+	bool ValidateOwnedParticleGatherRootCapacity(
+		uint64_t N_globalF,
+		uint64_t N_globalB,
+		std::string* failMsg = nullptr);
+
 	bool PackOwnedParticleGatherBuffer(
 		OwnedParticleGatherBuffer& gatherBuffer,
 		const Sync::UniversalSimState& localState,
@@ -79,6 +85,6 @@ namespace Dist
 		const OwnedParticleGatherBuffer& sendBuffer,
 		const Sync::UniversalSimState& localState,
 		const MpiContext& mpiContext,
-		uint32_t N_globalF, uint32_t N_globalB);
+		uint64_t N_globalF, uint64_t N_globalB);
 
 } // namespace Dist

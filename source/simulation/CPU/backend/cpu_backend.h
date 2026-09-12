@@ -197,7 +197,7 @@ namespace Sim
 		// --- [ backend-specific data structures for operating the simulation ] ---
 
 		// fluid particles
-		std::vector<uint32_t> idF_;
+		std::vector<uint64_t> idF_;
 		std::vector<float> xPosF_, yPosF_, zPosF_;
 		std::vector<float> xVelF_, yVelF_, zVelF_;
 		std::vector<float> xVelPredF_, yVelPredF_, zVelPredF_; // TODO: unify with velF?
@@ -208,13 +208,13 @@ namespace Sim
 		std::vector<float> densityF_;
 
 		// boundary particles
-		std::vector<uint32_t> idB_;
+		std::vector<uint64_t> idB_;
 		std::vector<float> xPosB_, yPosB_, zPosB_;
 		std::vector<float> volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		std::vector<float> psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
 		// rigid particles
-		std::vector<uint32_t> idR_;
+		std::vector<uint64_t> idR_;
 		std::vector<uint32_t> bodyIdR_;
 		std::vector<float> xPosR_, yPosR_, zPosR_;
 		std::vector<float> xRelPosR_, yRelPosR_, zRelPosR_;
@@ -288,8 +288,8 @@ namespace Sim
 		mutable std::vector<float> workBufferB_;
 		mutable std::vector<float> workBufferB2_;
 		mutable std::vector<float> workBufferB3_;
-		mutable std::vector<uint32_t> workBufferIdF_;
-		mutable std::vector<uint32_t> workBufferIdB_;
+		mutable std::vector<uint64_t> workBufferIdF_;
+		mutable std::vector<uint64_t> workBufferIdB_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;
 		mutable std::vector<uint8_t> expNearSurfaceFlagsScratch_;
 		mutable Stats::StatisticsPartial statisticsPartialScratch_;

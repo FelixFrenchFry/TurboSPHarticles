@@ -204,8 +204,8 @@ namespace Dist
 		Sync::UniversalSimState localSimState_{};
 		uint64_t N_expectedGlobalF_ = 0; // expected global fluid particle count
 		uint64_t N_expectedGlobalB_ = 0; // expected global boundary particle count
-		uint64_t expectedOwnedIdxChecksumF_ = 0; // checksum over the global fluid index range
-		uint64_t expectedOwnedIdxChecksumB_ = 0; // checksum over the global boundary index range
+		uint64_t expectedOwnedIdChecksumF_ = 0; // checksum over the global fluid particle ID range
+		uint64_t expectedOwnedIdChecksumB_ = 0; // checksum over the global boundary particle ID range
 		DistParticleState particleStateF_{};
 		DistParticleState particleStateB_{};
 		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};

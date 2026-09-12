@@ -4,6 +4,7 @@
 // external
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -17,8 +18,7 @@
 
 namespace Dist
 {
-	// sentinel representing no global particle, valid indices are in [0, N_global)
-	inline constexpr uint32_t NO_GLOBAL_PARTICLE_IDX = std::numeric_limits<uint32_t>::max();
+	class MpiContext;
 
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CHUNK_SIZE = 16384;
@@ -83,10 +83,24 @@ namespace Dist
 		bool HasMetadataAtLocalIdx(uint32_t localIdx) const;
 		bool IsValidLocalParticleLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
 		bool IsValidLocalParticleState(
-			std::span<const uint32_t> particleIds,
-			uint32_t N_global,
+			std::span<const uint64_t> particleIds,
+			uint64_t N_global,
 			std::string* failMsg = nullptr) const;
 	};
+
+	struct OwnedParticleConflict
+	{
+		uint64_t id = Sim::INVALID_PARTICLE_ID;
+		uint32_t ownerCount = 0;
+	};
+
+	bool FindFirstOwnedParticleConflict(
+		std::span<const uint64_t> particleIds,
+		std::span<const uint32_t> ownedParticleLocalIdxs,
+		uint64_t N_global,
+		const MpiContext& mpiContext,
+		std::optional<OwnedParticleConflict>& conflict,
+		std::string* failMsg = nullptr);
 
 	// TODO: move these functions into the DistParticleState class?
 

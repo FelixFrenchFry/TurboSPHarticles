@@ -127,6 +127,9 @@ void SimBackend_GPU::PullFromUniversalSimState(
 	auto& B = src.particlesB;
 	auto& R = src.particlesR;
 	auto& RB = src.rigidBodies;
+	(void)CheckedLocalParticleCount(F.N_, "GPU fluid state");
+	(void)CheckedLocalParticleCount(B.N_, "GPU boundary state");
+	(void)CheckedLocalParticleCount(R.N_, "GPU rigid state");
 	N_F_ = F.N_;
 	N_B_ = B.N_;
 	N_R_ = R.N_;
@@ -1049,6 +1052,7 @@ void SimBackend_GPU::FillMemoryRecord(
 		MemUsage usage{};
 
 		Add(usage, MemUsageOf_DeviceBuffer(d_reorderIdScratch_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_sortParticleIdxScratch_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_idRB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_rigidParticleBeginRB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_rigidParticleCountRB_));
@@ -1112,12 +1116,12 @@ void SimBackend_GPU::FillStatisticsRecord(
 	const uint32_t NB = N_B_;
 	const uint32_t NR = N_R_;
 
-	Set(record, StatMetric::NumF, static_cast<float>(NF));
-	Set(record, StatMetric::NumB, static_cast<float>(NB));
-	Set(record, StatMetric::NumR, static_cast<float>(NR));
+	Set(record, StatMetric::NumF, static_cast<double>(NF));
+	Set(record, StatMetric::NumB, static_cast<double>(NB));
+	Set(record, StatMetric::NumR, static_cast<double>(NR));
 
-	const float invNF = NF ? 1.0f / static_cast<float>(NF) : 0.0f;
-	const float invNR = NR ? 1.0f / static_cast<float>(NR) : 0.0f;
+	const double invNF = NF ? 1.0 / static_cast<double>(NF) : 0.0;
+	const double invNR = NR ? 1.0 / static_cast<double>(NR) : 0.0;
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Statistics_Computation);
 
@@ -1156,14 +1160,14 @@ void SimBackend_GPU::FillStatisticsRecord(
 		GPU::StreamSync(stream_);
 
 		const auto setNeighborStats = [&](const GPU::NeighborCountStats& stats,
-			const uint64_t total, const float N_sourcesInv,
+			const uint64_t total, const double N_sourcesInv,
 			const StatMetric avg, const StatMetric min, const StatMetric max,
 			const StatMetric p99)
 		{
-			Set(record, avg, static_cast<float>(total) * N_sourcesInv);
-			Set(record, min, static_cast<float>(stats.min));
-			Set(record, max, static_cast<float>(stats.max));
-			Set(record, p99, static_cast<float>(stats.p99));
+			Set(record, avg, static_cast<double>(total) * N_sourcesInv);
+			Set(record, min, static_cast<double>(stats.min));
+			Set(record, max, static_cast<double>(stats.max));
+			Set(record, p99, static_cast<double>(stats.p99));
 		};
 
 		setNeighborStats(h_nbrCountStats_[0], N_totalFF_, invNF,
@@ -1214,7 +1218,7 @@ void SimBackend_GPU::FillStatisticsRecord(
 
 	// --- [ pressure stats ] ------------------------------------------------------------------------
 
-	Set(record, StatMetric::NumSolverIters, static_cast<float>(N_solverIters_));
+	Set(record, StatMetric::NumSolverIters, static_cast<double>(N_solverIters_));
 
 	// --- [ velocity stats ] ------------------------------------------------------------------------
 

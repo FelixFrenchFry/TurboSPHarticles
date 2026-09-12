@@ -4,6 +4,7 @@
 // external
 #include <cstdint>
 #include <mpi.h>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -59,6 +60,12 @@ namespace Dist
 	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_OWNED_BOUNDARY = 5510;
 	inline constexpr int PARTICLE_REDISTRIBUTION_TAG_HALO_BOUNDARY = 5610;
 
+	uint64_t AggregateParticleTrafficCounts(
+		std::span<const int> packedCounts,
+		int lane,
+		int laneCount,
+		const char* countName);
+
 	class MpiContext;
 
 	struct ParticleRedistributionRoutes
@@ -99,17 +106,17 @@ namespace Dist
 
 	struct ParticleRedistributionStats
 	{
-		// fluid ownership migration and halo traffic
+		// ownership migration
 		uint32_t N_sentOwnedF = 0;
 		uint32_t N_recvOwnedF = 0;
-		uint32_t N_sentHaloF = 0;
-		uint32_t N_recvHaloF = 0;
-
-		// boundary ownership migration and halo traffic
 		uint32_t N_sentOwnedB = 0;
 		uint32_t N_recvOwnedB = 0;
-		uint32_t N_sentHaloB = 0;
-		uint32_t N_recvHaloB = 0;
+
+		// halo exchange
+		uint64_t N_sentHaloF = 0;
+		uint64_t N_recvHaloF = 0;
+		uint64_t N_sentHaloB = 0;
+		uint64_t N_recvHaloB = 0;
 	};
 
 	class ParticleRedistributionMgr final
@@ -127,7 +134,7 @@ namespace Dist
 			const IDomainDecomp& domainDecomp,
 			bool redistributeParticlesB,
 			int rank, int N_ranks,
-			uint32_t N_globalF, uint32_t N_globalB,
+			uint64_t N_globalF, uint64_t N_globalB,
 			std::string* failMsg = nullptr);
 
 		// orchestrator that compacts kept particles in place and appends the next migrated / halo particles
@@ -139,8 +146,8 @@ namespace Dist
 			const MpiContext& mpiContext,
 			const Sim::SimParams& simParams,
 			bool redistributeParticlesB,
-			uint32_t N_globalF,
-			uint32_t N_globalB,
+			uint64_t N_globalF,
+			uint64_t N_globalB,
 			std::string* failMsg = nullptr);
 
 		// latest routes and traffic statistics
@@ -194,7 +201,7 @@ namespace Dist
 			uint32_t Size() const { return N_particles_; }
 			bool IsEmpty() const { return Size() == 0; }
 			int CheckedCount() const;
-			uint32_t GlobalIdxAt(uint32_t bufferIdx) const; // particle IDs are the global indices
+			uint64_t ParticleIdAt(uint32_t bufferIdx) const; // returns the particle ID at the buffer index
 			Mem::MemUsage GetMemoryUsage() const;
 
 		private:
@@ -204,7 +211,7 @@ namespace Dist
 
 			// packed payload storage, holding the particle IDs and one contiguous block
 			// per float field, indexed by [fieldIdx * N_particles_ + bufferIdx]
-			std::vector<uint32_t> ids_;
+			std::vector<uint64_t> particleIds_;
 			std::vector<float> fieldValues_;
 		};
 
@@ -241,7 +248,7 @@ namespace Dist
 			uint32_t Size() const { return N_particles_; }
 			bool IsEmpty() const { return Size() == 0; }
 			int CheckedCount() const;
-			uint32_t GlobalIdxAt(uint32_t bufferIdx) const; // particle IDs are the global indices
+			uint64_t ParticleIdAt(uint32_t bufferIdx) const; // returns the particle ID at the buffer index
 			Mem::MemUsage GetMemoryUsage() const;
 
 		private:
@@ -251,32 +258,34 @@ namespace Dist
 
 			// packed payload storage, holding the particle IDs and one contiguous block
 			// per float field, indexed by [fieldIdx * N_particles_ + bufferIdx]
-			std::vector<uint32_t> ids_;
+			std::vector<uint64_t> particleIds_;
 			std::vector<float> fieldValues_;
 		};
 
 		// send and receive storage for exchange with one neighbor rank
 		struct RankBuffers
 		{
-			// fluid migration and halo payloads
+			// ownership migration payloads
 			FluidExchangeBuffer sendOwnedParticlesF;
 			FluidExchangeBuffer recvOwnedParticlesF;
-			FluidExchangeBuffer sendHaloParticlesF;
-			FluidExchangeBuffer recvHaloParticlesF;
-
-			// boundary migration and halo payloads
 			BoundaryExchangeBuffer sendOwnedParticlesB;
 			BoundaryExchangeBuffer recvOwnedParticlesB;
+
+			// halo exchange payloads
+			FluidExchangeBuffer sendHaloParticlesF;
+			FluidExchangeBuffer recvHaloParticlesF;
 			BoundaryExchangeBuffer sendHaloParticlesB;
 			BoundaryExchangeBuffer recvHaloParticlesB;
 
-			// packed count lanes
+			// ownership migration counts
 			int N_sendOwnedF = 0;
 			int N_recvOwnedF = 0;
-			int N_sendHaloF = 0;
-			int N_recvHaloF = 0;
 			int N_sendOwnedB = 0;
 			int N_recvOwnedB = 0;
+
+			// halo counts
+			int N_sendHaloF = 0;
+			int N_recvHaloF = 0;
 			int N_sendHaloB = 0;
 			int N_recvHaloB = 0;
 		};
@@ -315,22 +324,17 @@ namespace Dist
 			uint32_t N_local);
 		static bool AddHaloParticleMetadata(
 			DistParticleState& particleState,
-			uint32_t N_global,
-			uint32_t globalIdx,
-			uint32_t particleId,
+			uint64_t N_global,
+			uint64_t expectedParticleId,
+			uint64_t particleId,
 			uint32_t localIdx,
 			uint32_t haloIdx);
-		static bool CheckedUint32(
-			uint64_t value,
-			uint32_t& result,
-			const char* valueName,
-			std::string* failMsg);
 		static bool ValidateParticleViews(
 			const Sync::FluidConstView& particlesF,
 			const Sync::BoundaryConstView& particlesB,
 			const DistParticleState& particleStateF,
 			const DistParticleState& particleStateB,
-			uint32_t N_globalF, uint32_t N_globalB,
+			uint64_t N_globalF, uint64_t N_globalB,
 			std::string* failMsg);
 
 		// routing and communication phases
@@ -375,14 +379,14 @@ namespace Dist
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,
-			uint32_t N_global,
+			uint64_t N_global,
 			std::string* failMsg);
 		bool PrepareBoundaryParticleMutation(
 			const Sync::BoundaryConstView& oldParticles,
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,
-			uint32_t N_global,
+			uint64_t N_global,
 			std::string* failMsg);
 
 		// peer communication routes and storage
@@ -396,7 +400,7 @@ namespace Dist
 		// dense compaction mappings and append-only particle storage
 		std::vector<uint32_t> retainedFluidOldLocalIdx_FromNewLocalIdx_;
 		std::vector<uint32_t> retainedBoundaryOldLocalIdx_FromNewLocalIdx_;
-		std::vector<uint32_t> migratedGlobalIdxScratch_;
+		std::vector<uint64_t> migratedParticleIdScratch_;
 		Sync::FluidParticles appendedParticlesF_;
 		Sync::BoundaryParticles appendedParticlesB_;
 

@@ -588,7 +588,7 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 			{
 				const uint16_t i = Stats::GetIdx(metric);
 				const auto& def = Stats::Definitions[i];
-				const float val = ReadStatData(statSnap, metric);
+				const double val = ReadStatData(statSnap, metric);
 
 				ImGui::TableNextRow();
 
@@ -1332,7 +1332,7 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 	unsavedParamChanges_ = false;
 }
 
-inline float UserInterfaceMgr::ReadStatData(
+inline double UserInterfaceMgr::ReadStatData(
 	const Sync::StatSnapshot* snap, Stats::StatMetric metric) const
 {
 	if (!snap)
@@ -1399,7 +1399,7 @@ void UserInterfaceMgr::TableTextRightAligned(const char* fmt, ...)
 inline void UserInterfaceMgr::FormatStatValue(
 	const Stats::StatMetricDef& def,
 	char* out,
-	float x,
+	double x,
 	uint64_t cap)
 {
 	// ints

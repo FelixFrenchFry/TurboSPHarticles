@@ -44,8 +44,8 @@ namespace Dist
 	// local strategy-defined spatial weights split by owned particle type
 	struct DomainDecompRepartitionProfile
 	{
-		std::vector<uint32_t> ownedFluidByUnit;
-		std::vector<uint32_t> ownedBoundaryByUnit;
+		std::vector<uint64_t> ownedFluidByUnit;
+		std::vector<uint64_t> ownedBoundaryByUnit;
 	};
 
 	// rank loads and global spatial weights supplied by the load balancing coordinator
@@ -54,8 +54,8 @@ namespace Dist
 		Base::LoadBalanceWeightModel weightModel =
 			Base::LoadBalanceWeightModel::OwnedParticleCount;
 		std::span<const double> loadByRank;
-		std::span<const uint32_t> ownedFluidByUnit;
-		std::span<const uint32_t> ownedBoundaryByUnit;
+		std::span<const uint64_t> ownedFluidByUnit;
+		std::span<const uint64_t> ownedBoundaryByUnit;
 	};
 
 	// interface for domain decomp strategies

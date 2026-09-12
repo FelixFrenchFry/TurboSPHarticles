@@ -128,8 +128,8 @@ namespace Dist
 			std::vector<uint32_t> recvLocalIdxs;
 
 			// global particle IDs matching the local index lists
-			std::vector<uint32_t> sendGlobalIdxs;
-			std::vector<uint32_t> recvGlobalIdxs;
+			std::vector<uint64_t> sendParticleIds;
+			std::vector<uint64_t> recvParticleIds;
 		};
 
 		// single/double halo plans and reusable payload storage for one neighboring rank
@@ -230,7 +230,7 @@ namespace Dist
 		// reusable rebuild storage
 		std::vector<PeerPlan> nextPeerPlans_;
 		PlanBuildWorkBuffers planBuildWorkBuffers_;
-		std::vector<std::pair<uint32_t, uint32_t>> peerIdxSortScratch_;
+		std::vector<std::pair<uint64_t, uint32_t>> peerIdxSortScratch_;
 	};
 
 } // namespace Dist

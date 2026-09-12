@@ -13,6 +13,7 @@
 
 // internal
 #include "source/simulation/core/parameters_sim.h"
+#include "source/simulation/core/particle_types.h"
 #include "source/simulation/scene/geometry/surface_sampling.h"
 #include "source/simulation/sync/state_sim.h"
 
@@ -23,6 +24,15 @@ using ParticleKeepPredicate = std::function<bool(float u, float v, float w)>;
 
 namespace Scene
 {
+	uint64_t GlobalLatticeParticleId(
+		uint64_t base,
+		uint32_t N_u,
+		uint32_t N_v,
+		uint32_t iu,
+		uint32_t jv,
+		uint32_t kw,
+		const char* context);
+
 	struct OBB
 	{
 		glm::vec3 origin; // near-left-bottom (xMin, yMin, zMin)
@@ -54,11 +64,12 @@ namespace Scene
 		// distributed ranks build their own regions while particle IDs stay the global scenario indices
 		void BeginBuildRegion(const glm::vec3& min, const glm::vec3& max);
 		void EndBuildRegion();
+		void FinalizeGeneratedParticleIds(Sync::UniversalSimState& state);
 
 		// unfiltered particle counts of the build region session, identical on every rank
 		// because the generated particle set does not depend on the region
-		uint32_t GetBuiltGlobalFluidParticleCount() const { return N_builtGlobalF_; }
-		uint32_t GetBuiltGlobalBoundaryParticleCount() const { return N_builtGlobalB_; }
+		uint64_t GetBuiltGlobalFluidParticleCount() const { return N_builtGlobalF_; }
+		uint64_t GetBuiltGlobalBoundaryParticleCount() const { return N_builtGlobalB_; }
 
 		// builds a box-shaped boundary container around a given OBB
 		// (boundary particle layers grow outwards by default)
@@ -159,15 +170,15 @@ namespace Scene
 
 		static inline uint32_t TilesCount(float length, float spacing);
 
-		static inline uint32_t ParticleCountHollowBox(
+		static inline uint64_t ParticleCountHollowBox(
 			uint32_t N_u, uint32_t N_v, uint32_t N_w, uint32_t layers);
 
 		// build region state, reset by every BeginBuildRegion() call
 		glm::vec3 buildRegionMin_{ 0.0f };
 		glm::vec3 buildRegionMax_{ 0.0f };
 		bool hasBuildRegion_ = false;
-		uint32_t N_builtGlobalF_ = 0; // total fluid particles generated, before the region filter
-		uint32_t N_builtGlobalB_ = 0; // total boundary particles generated, before the region filter
+		uint64_t N_builtGlobalF_ = 0; // total fluid particles generated, before the region filter
+		uint64_t N_builtGlobalB_ = 0; // total boundary particles generated, before the region filter
 	};
 
 } // namespace Scene

@@ -13,16 +13,16 @@ using namespace Stats;
 
 namespace
 {
-	float ComputeAverage(const double sum, const uint64_t N)
+	double ComputeAverage(const double sum, const uint64_t N)
 	{
-		if (N == 0) { return 0.0f; }
+		if (N == 0) { return 0.0; }
 
-		return static_cast<float>(sum / static_cast<double>(N));
+		return sum / static_cast<double>(N);
 	}
 
-	float ComputeP99(const DistributionPartial& partial)
+	double ComputeP99(const DistributionPartial& partial)
 	{
-		if (partial.N == 0) { return 0.0f; }
+		if (partial.N == 0) { return 0.0; }
 
 		const uint64_t i99 = (99ull * (partial.N - 1)) / 100ull;
 		uint64_t N_cumulative = 0;
@@ -31,11 +31,11 @@ namespace
 			N_cumulative += partial.histogram[value];
 			if (N_cumulative > i99)
 			{
-				return static_cast<float>(value);
+				return static_cast<double>(value);
 			}
 		}
 
-		return 0.0f;
+		return 0.0;
 	}
 
 } // namespace anonymous
@@ -75,14 +75,14 @@ StatisticsTracker::StatisticsTracker(const Sim::SimParams& simParams)
 	, N_records_(0u)
 {
 	recLatest_ = {};
-	std::ranges::fill(recLatest_.stats, 0.0f);
+	std::ranges::fill(recLatest_.stats, 0.0);
 	ClearAllTime();
 }
 
 void StatisticsTracker::BeginStep()
 {
 	recLatest_ = {};
-	std::ranges::fill(recLatest_.stats, 0.0f);
+	std::ranges::fill(recLatest_.stats, 0.0);
 }
 
 void StatisticsTracker::EndStep(uint64_t simStep, double simTime)
@@ -147,9 +147,9 @@ void StatisticsTracker::FinalizeStatisticsRecord(
 {
 	record = {};
 
-	Set(record, StatMetric::NumF, static_cast<float>(partial.N_F));
-	Set(record, StatMetric::NumB, static_cast<float>(partial.N_B));
-	Set(record, StatMetric::NumR, static_cast<float>(partial.N_R));
+	Set(record, StatMetric::NumF, static_cast<double>(partial.N_F));
+	Set(record, StatMetric::NumB, static_cast<double>(partial.N_B));
+	Set(record, StatMetric::NumR, static_cast<double>(partial.N_R));
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
@@ -214,7 +214,7 @@ void StatisticsTracker::FinalizeStatisticsRecord(
 			ComputeAverage(partial.densRelErrorAbsSum, partial.N_F));
 	}
 
-	Set(record, StatMetric::NumSolverIters, static_cast<float>(partial.N_solverIters));
+	Set(record, StatMetric::NumSolverIters, static_cast<double>(partial.N_solverIters));
 
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Velocity)])
 	{
@@ -227,37 +227,37 @@ void StatisticsTracker::FinalizeStatisticsRecord(
 	}
 }
 
-float StatisticsTracker::GetStat_Latest(StatMetric metric) const
+double StatisticsTracker::GetStat_Latest(StatMetric metric) const
 {
-	if (N_records_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0; }
 
 	return recLatest_.stats[GetIdx(metric)];
 }
 
-float StatisticsTracker::GetStat_Avg(StatMetric metric) const
+double StatisticsTracker::GetStat_Avg(StatMetric metric) const
 {
-	if (N_records_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0; }
 
-	return statsSum_allTime_[GetIdx(metric)] / static_cast<float>(N_records_);
+	return statsSum_allTime_[GetIdx(metric)] / static_cast<double>(N_records_);
 }
 
-float StatisticsTracker::GetStat_Min(StatMetric metric) const
+double StatisticsTracker::GetStat_Min(StatMetric metric) const
 {
-	if (N_records_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0; }
 
 	return statsMin_allTime_[GetIdx(metric)];
 }
 
-float StatisticsTracker::GetStat_Max(StatMetric metric) const
+double StatisticsTracker::GetStat_Max(StatMetric metric) const
 {
-	if (N_records_ == 0) { return 0.0f; }
+	if (N_records_ == 0) { return 0.0; }
 
 	return statsMax_allTime_[GetIdx(metric)];
 }
 
 void StatisticsTracker::ClearAllTime()
 {
-	std::ranges::fill(statsSum_allTime_, 0.0f);
-	std::ranges::fill(statsMin_allTime_, std::numeric_limits<float>::max());
-	std::ranges::fill(statsMax_allTime_, 0.0f);
+	std::ranges::fill(statsSum_allTime_, 0.0);
+	std::ranges::fill(statsMin_allTime_, std::numeric_limits<double>::max());
+	std::ranges::fill(statsMax_allTime_, 0.0);
 }

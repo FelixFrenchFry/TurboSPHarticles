@@ -81,7 +81,7 @@ namespace
 
 	// sums the profile bins of one region into the per-bin weights of the balanced axis
 	void AccumulateAxisWeights(
-		const std::span<const uint32_t> weightByBin,
+		const std::span<const uint64_t> weightByBin,
 		const uint32_t binCountPerAxis,
 		const ProfileBinRegion& region,
 		const bool balanceAxisX,
@@ -105,7 +105,7 @@ namespace
 		const DomainDecompParticlePositionView& particles,
 		const AABB& globalBounds,
 		const uint32_t binCountPerAxis,
-		std::vector<uint32_t>& profile,
+		std::vector<uint64_t>& profile,
 		const char* particleType)
 	{
 		// only the split axes are binned, because the Y axis is never split
@@ -141,8 +141,8 @@ namespace
 			const uint32_t binZ = ProfileBinAtPosition(
 				zCoordinate, globalBounds.min.z, extents.z, binCountPerAxis);
 
-			uint32_t& binCount = profile[ProfileBinIdx(binX, binZ, binCountPerAxis)];
-			if (binCount == std::numeric_limits<uint32_t>::max())
+			uint64_t& binCount = profile[ProfileBinIdx(binX, binZ, binCountPerAxis)];
+			if (binCount == std::numeric_limits<uint64_t>::max())
 			{
 				throw std::runtime_error(
 					"Cannot build a column AABB repartition profile with an overflowing bin.");
@@ -333,11 +333,11 @@ void Decomp_AABB_Columns::Repartition(const DomainDecompRepartitionInput& input)
 	const float minSectionExtent = columnLayout_.HaloRadius();
 
 	// TODO: restore a boundary-particle weight when boundary work is modeled?
-	const std::span<const uint32_t> weightByBin = input.ownedFluidByUnit;
+	const std::span<const uint64_t> weightByBin = input.ownedFluidByUnit;
 
 	// an empty profile carries no balancing information, so the current layout is kept
 	uint64_t totalWeight = 0;
-	for (const uint32_t binWeight : weightByBin) { totalWeight += binWeight; }
+	for (const uint64_t binWeight : weightByBin) { totalWeight += binWeight; }
 	if (totalWeight == 0) { return; }
 
 	const ProfileBinRegion globalRegion

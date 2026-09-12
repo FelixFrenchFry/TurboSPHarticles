@@ -35,10 +35,10 @@ namespace Export
 		uint64_t step = 0;
 		double time = 0.0;
 
-		uint32_t NF = 0;
-		uint32_t NB = 0;
-		uint32_t NR = 0;
-		uint32_t NrankF = 0;
+		uint64_t N_F = 0;
+		uint64_t N_B = 0;
+		uint64_t N_R = 0;
+		uint64_t N_rankF = 0;
 	};
 
 	class SerializationMgr

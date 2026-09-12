@@ -798,9 +798,9 @@ namespace
 		const std::vector<DistRankStepReport>& reports)
 	{
 		PrintLine(N_lines,
-			"%-2s | %17s | %17s | %16s | %16s",
-			"r", "migr F send/recv", "halo F send/recv",
-			"migr B send/recv", "halo B send/recv");
+			"%-2s | %17s | %16s | %17s | %16s",
+			"r", "migr F send/recv", "migr B send/recv",
+			"halo F send/recv", "halo B send/recv");
 		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankStepReport& report : reports)
@@ -809,14 +809,15 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %7u / %-7u | %7u / %-7u | %6u / %-7u | %6u / %-7u",
+				"%-2s | %7" PRIu32 " / %-7" PRIu32 " | %6" PRIu32 " / %-7" PRIu32
+				" | %7" PRIu64 " / %-7" PRIu64 " | %6" PRIu64 " / %-7" PRIu64,
 				rankLabel,
 				report.N_sentMigratedF,
 				report.N_recvMigratedF,
-				report.N_sentHaloF,
-				report.N_recvHaloF,
 				report.N_sentMigratedB,
 				report.N_recvMigratedB,
+				report.N_sentHaloF,
+				report.N_recvHaloF,
 				report.N_sentHaloB,
 				report.N_recvHaloB);
 		}
@@ -1226,7 +1227,8 @@ namespace Dist
 			setup.loadBalanceWeightModel);
 		std::printf("%-30s = %s\n", "mpi thread support",
 			MpiContext::ThreadSupportName(setup.mpiThreadSupport));
-		std::printf("%-30s = [ %u / %u / %u ]\n", "global particles [F / B / R]",
+		std::printf("%-30s = [ %" PRIu64 " / %" PRIu64 " / %" PRIu64 " ]\n",
+			"global particles [F / B / R]",
 			setup.N_globalF,
 			setup.N_globalB,
 			setup.N_globalR);

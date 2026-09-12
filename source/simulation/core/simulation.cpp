@@ -188,6 +188,7 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);
+	scenarioMgr_.FinalizeGeneratedParticleIds(universalSimState_);
 	universalSimState_.particlesF.ensureParticleIdsPresent();
 	universalSimState_.particlesB.ensureParticleIdsPresent();
 	universalSimState_.particlesR.ensureParticleIdsPresent();

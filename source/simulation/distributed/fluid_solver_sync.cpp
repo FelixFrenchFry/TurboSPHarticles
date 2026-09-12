@@ -123,8 +123,8 @@ namespace
 	// sort local indices into the global ID order shared by both peer plans
 	void SortPeerParticleIdxs(
 		std::vector<uint32_t>& localIdxs,
-		std::vector<uint32_t>& globalIdxs,
-		std::vector<std::pair<uint32_t, uint32_t>>& idxPairs)
+		std::vector<uint64_t>& particleIds,
+		std::vector<std::pair<uint64_t, uint32_t>>& idxPairs)
 	{
 		if (localIdxs.empty())
 		{
@@ -141,7 +141,7 @@ namespace
 		{
 			for (uint32_t i = range.begin(); i != range.end(); i++)
 			{
-				idxPairs[i] = { globalIdxs[i], localIdxs[i] };
+				idxPairs[i] = { particleIds[i], localIdxs[i] };
 			}
 		});
 
@@ -153,21 +153,21 @@ namespace
 		{
 			for (uint32_t i = range.begin(); i != range.end(); i++)
 			{
-				globalIdxs[i] = idxPairs[i].first;
+				particleIds[i] = idxPairs[i].first;
 				localIdxs[i] = idxPairs[i].second;
 			}
 		});
 	}
 
 	// duplicate global IDs indicate an invalid one-to-one exchange plan
-	bool HasDuplicateGlobalIdxs(const std::vector<uint32_t>& globalIdxs)
+	bool HasDuplicateParticleIds(const std::vector<uint64_t>& particleIds)
 	{
 		return Check::CountAdjacentViolations(
 			0,
-			static_cast<uint32_t>(globalIdxs.size()),
+			static_cast<uint32_t>(particleIds.size()),
 			[&](const uint32_t previousIdx, const uint32_t currentIdx)
 			{
-				return globalIdxs[previousIdx] == globalIdxs[currentIdx];
+				return particleIds[previousIdx] == particleIds[currentIdx];
 			}) != 0;
 	}
 
@@ -175,23 +175,23 @@ namespace
 
 	// compact, deterministic fingerprint of an ordered global-particle-ID plan
 	FluidSolverPlanFingerprint BuildFluidSolverPlanFingerprint(
-		const std::span<const uint32_t> globalIdxs) noexcept
+		const std::span<const uint64_t> particleIds) noexcept
 	{
 		// two independent 64-bit streams over a canonical little-endian encoding
 		uint64_t first = 14695981039346656037ull;
 		uint64_t second = 7809847782465536322ull;
-		for (const uint32_t globalIdx : globalIdxs)
+		for (const uint64_t particleId : particleIds)
 		{
-			for (uint32_t byteIdx = 0; byteIdx != sizeof(globalIdx); byteIdx++)
+			for (uint32_t byteIdx = 0; byteIdx != sizeof(particleId); byteIdx++)
 			{
-				const uint8_t byte = static_cast<uint8_t>(globalIdx >> (byteIdx * 8));
+				const uint8_t byte = static_cast<uint8_t>(particleId >> (byteIdx * 8));
 				first = (first ^ byte) * 1099511628211ull;
 				second = (second ^ byte) * 14029467366897019727ull;
 			}
 		}
 
-		first = (first ^ globalIdxs.size()) * 1099511628211ull;
-		second = (second ^ globalIdxs.size()) * 14029467366897019727ull;
+		first = (first ^ particleIds.size()) * 1099511628211ull;
+		second = (second ^ particleIds.size()) * 14029467366897019727ull;
 		return { first, second };
 	}
 
@@ -241,8 +241,8 @@ void FluidSolverSyncMgr::ClearParticlePlan(ParticlePlan& particlePlan)
 {
 	particlePlan.sendLocalIdxs.clear();
 	particlePlan.recvLocalIdxs.clear();
-	particlePlan.sendGlobalIdxs.clear();
-	particlePlan.recvGlobalIdxs.clear();
+	particlePlan.sendParticleIds.clear();
+	particlePlan.recvParticleIds.clear();
 }
 
 bool FluidSolverSyncMgr::Rebuild(
@@ -267,14 +267,6 @@ bool FluidSolverSyncMgr::Rebuild(
 			"Cannot rebuild a fluid solver synchronization plan while an exchange is pending.");
 	}
 
-	// validate the global count, particle view, and rank-local metadata
-	if (localOk && N_expectedGlobalF > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
-	{
-		localOk = SetFailure(localFailMsg,
-			"Global fluid particle count exceeds the supported index range.");
-	}
-	const uint32_t N_globalF = static_cast<uint32_t>(N_expectedGlobalF);
-
 	// validate every backend field before publishing the exchange plan
 	const std::array<std::span<const float>, 16> fluidFields{
 		particlesF.xPos, particlesF.yPos, particlesF.zPos,
@@ -296,7 +288,7 @@ bool FluidSolverSyncMgr::Rebuild(
 	}
 
 	if (localOk && !particleStateF.IsValidLocalParticleState(
-		particlesF.id, N_globalF, &localFailMsg))
+		particlesF.id, N_expectedGlobalF, &localFailMsg))
 	{
 		localOk = false;
 	}
@@ -477,7 +469,7 @@ bool FluidSolverSyncMgr::Rebuild(
 					newPeerPlans[peerIdx].particlePlans[haloExtentIdx];
 				particlePlan.sendLocalIdxs.resize(
 					planBuildWorkBuffers.sendTotals[bucketIdx]);
-				particlePlan.sendGlobalIdxs.resize(
+				particlePlan.sendParticleIds.resize(
 					planBuildWorkBuffers.sendTotals[bucketIdx]);
 			}
 		}
@@ -505,7 +497,7 @@ bool FluidSolverSyncMgr::Rebuild(
 				{
 					const uint32_t localIdx =
 						particleStateF.particleLocalIdx_Outer[outerIdx];
-					const uint32_t globalIdx = particlesF.id[localIdx];
+					const uint64_t particleId = particlesF.id[localIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
 						particlesF.yPos[localIdx],
@@ -523,7 +515,7 @@ bool FluidSolverSyncMgr::Rebuild(
 							ParticlePlan& particlePlan =
 								newPeerPlans[peerIdx].particlePlans[singleHaloIdx];
 							particlePlan.sendLocalIdxs[writeIdx] = localIdx;
-							particlePlan.sendGlobalIdxs[writeIdx] = globalIdx;
+							particlePlan.sendParticleIds[writeIdx] = particleId;
 						}
 						if (useDoubleHalo &&
 							planBuildWorkBuffers.sendDoubleBounds_ByPeer[
@@ -534,7 +526,7 @@ bool FluidSolverSyncMgr::Rebuild(
 							ParticlePlan& particlePlan =
 								newPeerPlans[peerIdx].particlePlans[doubleHaloIdx];
 							particlePlan.sendLocalIdxs[writeIdx] = localIdx;
-							particlePlan.sendGlobalIdxs[writeIdx] = globalIdx;
+							particlePlan.sendParticleIds[writeIdx] = particleId;
 						}
 					}
 				}
@@ -628,7 +620,7 @@ bool FluidSolverSyncMgr::Rebuild(
 					newPeerPlans[peerIdx].particlePlans[haloExtentIdx];
 				particlePlan.recvLocalIdxs.resize(
 					planBuildWorkBuffers.recvTotals[bucketIdx]);
-				particlePlan.recvGlobalIdxs.resize(
+				particlePlan.recvParticleIds.resize(
 					planBuildWorkBuffers.recvTotals[bucketIdx]);
 			}
 		}
@@ -660,7 +652,7 @@ bool FluidSolverSyncMgr::Rebuild(
 
 					const uint32_t localIdx =
 						particleStateF.particleLocalIdx_Halo[haloIdx];
-					const uint32_t globalIdx = particlesF.id[localIdx];
+					const uint64_t particleId = particlesF.id[localIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
 						particlesF.yPos[localIdx],
@@ -676,7 +668,7 @@ bool FluidSolverSyncMgr::Rebuild(
 						ParticlePlan& particlePlan =
 							newPeerPlans[peerIdx].particlePlans[singleHaloIdx];
 						particlePlan.recvLocalIdxs[writeIdx] = localIdx;
-						particlePlan.recvGlobalIdxs[writeIdx] = globalIdx;
+						particlePlan.recvParticleIds[writeIdx] = particleId;
 					}
 					else if (!useDoubleHalo)
 					{
@@ -690,7 +682,7 @@ bool FluidSolverSyncMgr::Rebuild(
 						ParticlePlan& particlePlan =
 							newPeerPlans[peerIdx].particlePlans[doubleHaloIdx];
 						particlePlan.recvLocalIdxs[writeIdx] = localIdx;
-						particlePlan.recvGlobalIdxs[writeIdx] = globalIdx;
+						particlePlan.recvParticleIds[writeIdx] = particleId;
 					}
 				}
 			}
@@ -714,16 +706,16 @@ bool FluidSolverSyncMgr::Rebuild(
 		for (ParticlePlan& particlePlan : peerPlan.particlePlans)
 		{
 			SortPeerParticleIdxs(
-				particlePlan.sendLocalIdxs, particlePlan.sendGlobalIdxs,
+				particlePlan.sendLocalIdxs, particlePlan.sendParticleIds,
 				peerIdxSortScratch_);
 			SortPeerParticleIdxs(
-				particlePlan.recvLocalIdxs, particlePlan.recvGlobalIdxs,
+				particlePlan.recvLocalIdxs, particlePlan.recvParticleIds,
 				peerIdxSortScratch_);
-			if (HasDuplicateGlobalIdxs(particlePlan.sendGlobalIdxs) ||
-				HasDuplicateGlobalIdxs(particlePlan.recvGlobalIdxs))
+			if (HasDuplicateParticleIds(particlePlan.sendParticleIds) ||
+				HasDuplicateParticleIds(particlePlan.recvParticleIds))
 			{
 				localOk = SetFailure(localFailMsg,
-					"Fluid solver synchronization plan contains duplicate global indices.");
+					"Fluid solver synchronization plan contains duplicate particle IDs.");
 			}
 		}
 	}
@@ -750,7 +742,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		{
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			const uint64_t N_send = particlePlan.sendGlobalIdxs.size();
+			const uint64_t N_send = particlePlan.sendParticleIds.size();
 			if (N_send > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 			{
 				localOk = SetFailure(localFailMsg,
@@ -799,7 +791,7 @@ bool FluidSolverSyncMgr::Rebuild(
 		{
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			const uint64_t N_expectedRecv = particlePlan.recvGlobalIdxs.size();
+			const uint64_t N_expectedRecv = particlePlan.recvParticleIds.size();
 			if (recvCounts[peerIdx] < 0 ||
 				static_cast<uint64_t>(recvCounts[peerIdx]) !=
 				N_expectedRecv)
@@ -829,7 +821,7 @@ bool FluidSolverSyncMgr::Rebuild(
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
 			sendFingerprints[peerIdx] =
-				BuildFluidSolverPlanFingerprint(particlePlan.sendGlobalIdxs);
+				BuildFluidSolverPlanFingerprint(particlePlan.sendParticleIds);
 			mpiContext.IRecvBytesChunked(
 				recvFingerprints[peerIdx].data(),
 				sizeof(FluidSolverPlanFingerprint),
@@ -856,7 +848,7 @@ bool FluidSolverSyncMgr::Rebuild(
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
 			if (recvFingerprints[peerIdx] !=
-				BuildFluidSolverPlanFingerprint(particlePlan.recvGlobalIdxs))
+				BuildFluidSolverPlanFingerprint(particlePlan.recvParticleIds))
 			{
 				localOk = SetFailure(localFailMsg,
 					"Fluid solver synchronization peer plan fingerprint does not match "
@@ -875,15 +867,16 @@ bool FluidSolverSyncMgr::Rebuild(
 	#ifndef NDEBUG
 		// --- [ peer global-index exchange ] --------------------------------------------------------
 
-		std::vector<std::vector<uint32_t>> receivedGlobalIdxs(newPeerPlans.size());
+		std::vector<std::vector<uint64_t>> receivedParticleIds(newPeerPlans.size());
 		requests_.clear();
 		requestInfos_.clear();
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
-			receivedGlobalIdxs[peerIdx].resize(static_cast<uint32_t>(recvCounts[peerIdx]));
+			receivedParticleIds[peerIdx].resize(static_cast<uint32_t>(recvCounts[peerIdx]));
 			mpiContext.IRecvBytesChunked(
-				receivedGlobalIdxs[peerIdx].data(),
-				static_cast<uint64_t>(receivedGlobalIdxs[peerIdx].size()) * sizeof(uint32_t),
+				receivedParticleIds[peerIdx].data(),
+				Sim::CheckedParticleMultiply(receivedParticleIds[peerIdx].size(),
+					sizeof(uint64_t), "fluid solver received global ID payload"),
 				newPeerPlans[peerIdx].rank,
 				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
 				requests_,
@@ -893,8 +886,9 @@ bool FluidSolverSyncMgr::Rebuild(
 		{
 			const ParticlePlan& particlePlan = peerPlan.particlePlans[Base::GetIdx(haloExtent)];
 			mpiContext.ISendBytesChunked(
-				particlePlan.sendGlobalIdxs.data(),
-				static_cast<uint64_t>(particlePlan.sendGlobalIdxs.size()) * sizeof(uint32_t),
+				particlePlan.sendParticleIds.data(),
+				Sim::CheckedParticleMultiply(particlePlan.sendParticleIds.size(),
+					sizeof(uint64_t), "fluid solver sent global ID payload"),
 				peerPlan.rank,
 				FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS,
 				requests_,
@@ -907,10 +901,10 @@ bool FluidSolverSyncMgr::Rebuild(
 		{
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			if (receivedGlobalIdxs[peerIdx] != particlePlan.recvGlobalIdxs)
+			if (receivedParticleIds[peerIdx] != particlePlan.recvParticleIds)
 			{
 				localOk = SetFailure(localFailMsg,
-					"Fluid solver synchronization peer global indices do not match the local halo plan.");
+					"Fluid solver synchronization peer particle IDs do not match the local halo plan.");
 			}
 		}
 		return FinishCollectiveValidation(
@@ -1331,7 +1325,7 @@ Mem::MemUsage FluidSolverSyncMgr::GetExchangeBufferMemoryUsage() const
 
 Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 {
-	// published and recycled peer plans with their local/global index lists
+	// published and recycled peer plans with their local index lists and particle ID lists
 	Mem::MemUsage usage = Mem::MemUsageOf_Vector(peerPlans_);
 
 	Mem::Add(usage, Mem::MemUsageOf_Vector(nextPeerPlans_));
@@ -1360,8 +1354,8 @@ Mem::MemUsage FluidSolverSyncMgr::GetPlanMemoryUsage() const
 			{
 				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.sendLocalIdxs));
 				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.recvLocalIdxs));
-				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.sendGlobalIdxs));
-				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.recvGlobalIdxs));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.sendParticleIds));
+				Mem::Add(usage, Mem::MemUsageOf_Vector(particlePlan.recvParticleIds));
 			}
 		}
 	}

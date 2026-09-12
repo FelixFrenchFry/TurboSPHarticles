@@ -71,7 +71,7 @@ namespace Sync
 
 		// data for fluid particle export
 		uint32_t N_F;
-		std::vector<uint32_t> idF;
+		std::vector<uint64_t> idF;
 		std::vector<float> xPosF;
 		std::vector<float> yPosF;
 		std::vector<float> zPosF;
@@ -80,7 +80,7 @@ namespace Sync
 
 		// data for boundary particle export
 		uint32_t N_B;
-		std::vector<uint32_t> idB;
+		std::vector<uint64_t> idB;
 		std::vector<float> xPosB;
 		std::vector<float> yPosB;
 		std::vector<float> zPosB;
@@ -88,7 +88,7 @@ namespace Sync
 
 		// data for rigid particle export
 		uint32_t N_R;
-		std::vector<uint32_t> idR;
+		std::vector<uint64_t> idR;
 		std::vector<uint32_t> bodyIdR;
 		std::vector<float> xPosR;
 		std::vector<float> yPosR;
@@ -161,10 +161,10 @@ namespace Sync
 		double simTime;
 
 		// per-metric stat data
-		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> latest{};
-		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> avg{};
-		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> min{};
-		std::array<float, Stats::GetIdx(Stats::StatMetric::Count)> max{};
+		std::array<double, Stats::GetIdx(Stats::StatMetric::Count)> latest{};
+		std::array<double, Stats::GetIdx(Stats::StatMetric::Count)> avg{};
+		std::array<double, Stats::GetIdx(Stats::StatMetric::Count)> min{};
+		std::array<double, Stats::GetIdx(Stats::StatMetric::Count)> max{};
 	};
 
 } // namespace Sync

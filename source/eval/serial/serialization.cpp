@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <mutex>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -61,32 +62,33 @@ namespace Export
 	#pragma pack(push, 1)
 	struct BinHeaderSim
 	{
-		char magic[8];        // file magic
-		uint32_t endianTag;   // kEndianLE
-		uint32_t headerBytes; // sizeof(file header)
+		char magic[8];
+		uint32_t endianTag;
+		uint32_t headerBytes;
 		uint64_t step;
 		double time;
-
-		uint32_t NF;
-		uint32_t NB;
-		uint32_t NR;
-		uint32_t NRB;
+		uint64_t N_F;
+		uint64_t N_B;
+		uint64_t N_R;
+		uint64_t N_RB;
 	};
 
 	struct BinHeaderSnap
 	{
-		char magic[8];        // file magic
-		uint32_t endianTag;   // kEndianLE
-		uint32_t headerBytes; // sizeof(file header)
+		char magic[8];
+		uint32_t endianTag;
+		uint32_t headerBytes;
 		uint64_t step;
 		double time;
-
-		uint32_t NF;
-		uint32_t NB;
-		uint32_t NR;
-		uint32_t NrankF;      // NF in distributed runs, 0 when the ranks are not written
+		uint64_t N_F;
+		uint64_t N_B;
+		uint64_t N_R;
+		uint64_t N_rankF;
 	};
 	#pragma pack(pop)
+
+	static_assert(sizeof(BinHeaderSim) == 64);
+	static_assert(sizeof(BinHeaderSnap) == 64);
 
 	static void EnsureStreamOk(const std::ios& s, const char* what, const std::string& path)
 	{
@@ -138,6 +140,36 @@ namespace Export
 		if (!v.empty())
 		{
 			ReadExact(ifs, v.data(), v.size() * sizeof(T));
+		}
+	}
+
+	static uint64_t CheckedByteProduct(
+		const uint64_t count, const uint64_t width, const char* context)
+	{
+		if (width != 0 && count > std::numeric_limits<uint64_t>::max() / width)
+		{
+			throw std::runtime_error(std::string(context) + " byte size overflow.");
+		}
+		return count * width;
+	}
+
+	static uint64_t CheckedByteSum(
+		const uint64_t a, const uint64_t b, const char* context)
+	{
+		if (b > std::numeric_limits<uint64_t>::max() - a)
+		{
+			throw std::runtime_error(std::string(context) + " byte size overflow.");
+		}
+		return a + b;
+	}
+
+	static void ValidateParticleIds(
+		const std::span<const uint64_t> ids,
+		const char* const context)
+	{
+		if (std::find(ids.begin(), ids.end(), Sim::INVALID_PARTICLE_ID) != ids.end())
+		{
+			throw std::runtime_error(std::string(context) + " contains the invalid particle ID sentinel.");
 		}
 	}
 
@@ -203,7 +235,7 @@ namespace Export
 		uint64_t idR = 0;
 		uint64_t bodyIdR = 0;
 
-		// total size implied by the arrays above, used to recognize files of the current layout
+		// total size implied by the arrays above, used to validate the stored layout
 		uint64_t totalBytes = 0;
 	};
 
@@ -222,44 +254,57 @@ namespace Export
 	static ExportSnapshotOffsets ComputeExportSnapshotOffsets(
 		const ExportSnapshotBinInfo& info)
 	{
-		constexpr uint64_t N_elementBytes = 4; // float32 / uint32
-		constexpr uint64_t N_rankBytes = 2; // uint16
+		uint64_t offset = sizeof(BinHeaderSnap);
+		const auto AppendField = [&](const uint64_t count, const uint64_t elementBytes)
+		{
+			const uint64_t start = offset;
+			offset = CheckedByteSum(offset,
+				CheckedByteProduct(count, elementBytes, "snapshot field"),
+				"snapshot offsets");
+			return start;
+		};
 
 		// offsets must match SaveExportSnapshot write order
 		// (an absent rank array has no entries, so the rigid arrays move up on their own)
 		ExportSnapshotOffsets off{};
-		off.xF = sizeof(BinHeaderSnap);
-		off.yF = off.xF + static_cast<uint64_t>(info.NF) * N_elementBytes;
-		off.zF = off.yF + static_cast<uint64_t>(info.NF) * N_elementBytes;
-		off.vF = off.zF + static_cast<uint64_t>(info.NF) * N_elementBytes;
-		off.idF = off.vF + static_cast<uint64_t>(info.NF) * N_elementBytes;
-		off.rankF = off.idF + static_cast<uint64_t>(info.NF) * N_elementBytes;
-
-		off.xPosR = off.rankF + static_cast<uint64_t>(info.NrankF) * N_rankBytes;
-		off.yPosR = off.xPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
-		off.zPosR = off.yPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
-		off.volR = off.zPosR + static_cast<uint64_t>(info.NR) * N_elementBytes;
-		off.idR = off.volR + static_cast<uint64_t>(info.NR) * N_elementBytes;
-		off.bodyIdR = off.idR + static_cast<uint64_t>(info.NR) * N_elementBytes;
-
-		off.totalBytes = off.bodyIdR + static_cast<uint64_t>(info.NR) * N_elementBytes;
+		off.xF = AppendField(info.N_F, sizeof(float));
+		off.yF = AppendField(info.N_F, sizeof(float));
+		off.zF = AppendField(info.N_F, sizeof(float));
+		off.vF = AppendField(info.N_F, sizeof(float));
+		off.idF = AppendField(info.N_F, sizeof(uint64_t));
+		off.rankF = AppendField(info.N_rankF, sizeof(uint16_t));
+		off.xPosR = AppendField(info.N_R, sizeof(float));
+		off.yPosR = AppendField(info.N_R, sizeof(float));
+		off.zPosR = AppendField(info.N_R, sizeof(float));
+		off.volR = AppendField(info.N_R, sizeof(float));
+		off.idR = AppendField(info.N_R, sizeof(uint64_t));
+		off.bodyIdR = AppendField(info.N_R, sizeof(uint32_t));
+		off.totalBytes = offset;
 
 		return off;
 	}
 
-	static StaticBoundaryOffsets ComputeStaticBoundaryOffsets(uint32_t NB)
+	static StaticBoundaryOffsets ComputeStaticBoundaryOffsets(
+		const ExportSnapshotBinInfo& info)
 	{
-		constexpr uint64_t N_elementBytes = 4; // float32 / uint32
+		uint64_t offset = sizeof(BinHeaderSnap);
+		const auto AppendField = [&](const uint64_t count, const uint64_t elementBytes)
+		{
+			const uint64_t start = offset;
+			offset = CheckedByteSum(offset,
+				CheckedByteProduct(count, elementBytes, "static boundary field"),
+				"static boundary offsets");
+			return start;
+		};
 
 		// offsets must match SaveStaticBoundaryBin write order
 		StaticBoundaryOffsets off{};
-		off.xPosB = sizeof(BinHeaderSnap);
-		off.yPosB = off.xPosB + static_cast<uint64_t>(NB) * N_elementBytes;
-		off.zPosB = off.yPosB + static_cast<uint64_t>(NB) * N_elementBytes;
-		off.volB = off.zPosB + static_cast<uint64_t>(NB) * N_elementBytes;
-		off.idB = off.volB + static_cast<uint64_t>(NB) * N_elementBytes;
-
-		off.totalBytes = off.idB + static_cast<uint64_t>(NB) * N_elementBytes;
+		off.xPosB = AppendField(info.N_B, sizeof(float));
+		off.yPosB = AppendField(info.N_B, sizeof(float));
+		off.zPosB = AppendField(info.N_B, sizeof(float));
+		off.volB = AppendField(info.N_B, sizeof(float));
+		off.idB = AppendField(info.N_B, sizeof(uint64_t));
+		off.totalBytes = offset;
 
 		return off;
 	}
@@ -284,17 +329,10 @@ namespace Export
 
 		BinHeaderSnap hdr{};
 		ReadPod(ifs, hdr);
-		if (!ifs) { return false; }
-
-		if (std::memcmp(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic)) != 0)
-		{
-			return false;
-		}
-		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
-		{
-			return false;
-		}
-		if (hdr.headerBytes != sizeof(BinHeaderSnap))
+		if (!ifs || std::memcmp(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic)) != 0 ||
+			!IsLittleEndian() ||
+			hdr.endianTag != kEndianLE ||
+			hdr.headerBytes != sizeof(BinHeaderSnap))
 		{
 			return false;
 		}
@@ -302,61 +340,60 @@ namespace Export
 		info.fileName = path.filename().string();
 		info.step = hdr.step;
 		info.time = hdr.time;
-		info.NF = hdr.NF;
-		info.NB = hdr.NB;
-		info.NR = hdr.NR;
-		info.NrankF = hdr.NrankF;
+		info.N_F = hdr.N_F;
+		info.N_B = hdr.N_B;
+		info.N_R = hdr.N_R;
+		info.N_rankF = hdr.N_rankF;
+		if (info.N_rankF != 0 && info.N_rankF != info.N_F) { return false; }
 
-		// there is only one layout, so a file belongs to it matches the size implied by the array set
-		// (this rejects files left over from older layouts and truncated writes)
+		// validate the complete payload before using its offsets
 		std::error_code ec;
 		const uint64_t N_fileBytes = std::filesystem::file_size(path, ec);
-		if (ec || N_fileBytes != ComputeExportSnapshotOffsets(info).totalBytes)
+		if (ec) { return false; }
+		try
 		{
-			return false;
+			if (N_fileBytes != ComputeExportSnapshotOffsets(info).totalBytes) { return false; }
 		}
+		catch (const std::runtime_error&) { return false; }
 
 		return true;
 	}
 
 	static bool TryReadStaticBoundaryBinInfo(
 		const std::filesystem::path& path,
-		uint32_t& NB)
+		ExportSnapshotBinInfo& info)
 	{
 		std::ifstream ifs(path, std::ios::binary | std::ios::in);
 		if (!ifs) { return false; }
-
 		BinHeaderSnap hdr{};
 		ReadPod(ifs, hdr);
-		if (!ifs) { return false; }
-
-		if (std::memcmp(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic)) != 0)
-		{
-			return false;
-		}
-		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
-		{
-			return false;
-		}
-		if (hdr.headerBytes != sizeof(BinHeaderSnap))
+		if (!ifs || std::memcmp(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic)) != 0 ||
+			!IsLittleEndian() ||
+			hdr.endianTag != kEndianLE ||
+			hdr.headerBytes != sizeof(BinHeaderSnap))
 		{
 			return false;
 		}
 
+		info.fileName = path.filename().string();
+		info.step = hdr.step;
+		info.time = hdr.time;
+		info.N_F = hdr.N_F;
+		info.N_B = hdr.N_B;
+		info.N_R = hdr.N_R;
+		info.N_rankF = hdr.N_rankF;
 		// the boundary file carries no fluid or rigid arrays
-		if (hdr.NF != 0 || hdr.NR != 0)
-		{
-			return false;
-		}
+		if (info.N_F != 0 || info.N_R != 0 || info.N_rankF != 0) { return false; }
 
 		std::error_code ec;
 		const uint64_t N_fileBytes = std::filesystem::file_size(path, ec);
-		if (ec || N_fileBytes != ComputeStaticBoundaryOffsets(hdr.NB).totalBytes)
+		if (ec) { return false; }
+		try
 		{
-			return false;
+			if (N_fileBytes != ComputeStaticBoundaryOffsets(info).totalBytes) { return false; }
 		}
+		catch (const std::runtime_error&) { return false; }
 
-		NB = hdr.NB;
 		return true;
 	}
 
@@ -406,8 +443,8 @@ namespace Export
 
 		if (N_skipped > 0)
 		{
-			// most likely snapshots from an older layout or truncated writes
-			spdlog::warn("Skipped {} export snapshot(s) in '{}' that do not match the current layout.",
+			// most likely snapshots from an unsupported layout or truncated writes
+			spdlog::warn("Skipped {} export snapshot(s) in '{}' that do not match a supported layout.",
 				N_skipped, dirPath.string());
 		}
 
@@ -423,7 +460,7 @@ namespace Export
 
 	static void WriteBinaryDataItem(
 		std::ofstream& ofs,
-		uint32_t N_values,
+		uint64_t N_values,
 		const char* numberType,
 		uint32_t precisionBytes,
 		uint64_t offset,
@@ -442,7 +479,7 @@ namespace Export
 	static void WriteXyzGeometry(
 		std::ofstream& ofs,
 		const char* name,
-		uint32_t N_points,
+		uint64_t N_points,
 		uint64_t offX,
 		uint64_t offY,
 		uint64_t offZ,
@@ -463,7 +500,7 @@ namespace Export
 	static void WriteScalarAttribute(
 		std::ofstream& ofs,
 		const char* name,
-		uint32_t N_values,
+		uint64_t N_values,
 		const char* numberType,
 		uint32_t precisionBytes,
 		uint64_t offset,
@@ -486,15 +523,16 @@ namespace Export
 			<< std::setprecision(16) << info.time
 			<< "\" />\n";
 		ofs << "        <Topology TopologyType=\"Polyvertex\" "
-			<< "Dimensions=\"" << info.NF << "\"/>\n";
-		WriteXyzGeometry(ofs, "posF", info.NF, off.xF, off.yF, off.zF, info.fileName);
-		WriteScalarAttribute(ofs, "velMagF", info.NF, "Float", 4, off.vF, info.fileName);
-		WriteScalarAttribute(ofs, "idF", info.NF, "UInt", 4, off.idF, info.fileName);
+			<< "Dimensions=\"" << info.N_F << "\"/>\n";
+		WriteXyzGeometry(ofs, "posF", info.N_F, off.xF, off.yF, off.zF, info.fileName);
+		WriteScalarAttribute(ofs, "velMagF", info.N_F, "Float", 4, off.vF, info.fileName);
+		WriteScalarAttribute(ofs, "idF", info.N_F, "UInt", sizeof(uint64_t),
+			off.idF, info.fileName);
 
 		// non-distributed runs own every particle, so the ranks carry no information there
-		if (info.NrankF > 0)
+		if (info.N_rankF > 0)
 		{
-			WriteScalarAttribute(ofs, "rankF", info.NF, "UInt", 2, off.rankF, info.fileName);
+			WriteScalarAttribute(ofs, "rankF", info.N_F, "UInt", 2, off.rankF, info.fileName);
 		}
 		ofs << "      </Grid>\n";
 	}
@@ -502,20 +540,20 @@ namespace Export
 	// no <Time> element, so the reader reports no time steps and stays visible for the whole animation
 	static void WriteStaticBoundaryGrid(
 		std::ofstream& ofs,
-		uint32_t NB,
+		const ExportSnapshotBinInfo& info,
 		const std::string& fileName)
 	{
-		const StaticBoundaryOffsets off = ComputeStaticBoundaryOffsets(NB);
+		const StaticBoundaryOffsets off = ComputeStaticBoundaryOffsets(info);
 
 		ofs << "      <Grid Name=\"StaticBoundary\" GridType=\"Uniform\">\n";
 		ofs << "        <Topology TopologyType=\"Polyvertex\" "
-			<< "Dimensions=\"" << NB << "\"/>\n";
-		WriteXyzGeometry(ofs, "posB", NB,
+			<< "Dimensions=\"" << info.N_B << "\"/>\n";
+		WriteXyzGeometry(ofs, "posB", info.N_B,
 			off.xPosB, off.yPosB, off.zPosB, fileName);
-		WriteScalarAttribute(ofs, "volB", NB,
+		WriteScalarAttribute(ofs, "volB", info.N_B,
 			"Float", 4, off.volB, fileName);
-		WriteScalarAttribute(ofs, "idB", NB,
-			"UInt", 4, off.idB, fileName);
+		WriteScalarAttribute(ofs, "idB", info.N_B,
+			"UInt", sizeof(uint64_t), off.idB, fileName);
 		ofs << "      </Grid>\n";
 	}
 
@@ -530,14 +568,14 @@ namespace Export
 			<< std::setprecision(16) << info.time
 			<< "\" />\n";
 		ofs << "        <Topology TopologyType=\"Polyvertex\" "
-			<< "Dimensions=\"" << info.NR << "\"/>\n";
-		WriteXyzGeometry(ofs, "posR", info.NR,
+			<< "Dimensions=\"" << info.N_R << "\"/>\n";
+		WriteXyzGeometry(ofs, "posR", info.N_R,
 			off.xPosR, off.yPosR, off.zPosR, info.fileName);
-		WriteScalarAttribute(ofs, "volR", info.NR,
+		WriteScalarAttribute(ofs, "volR", info.N_R,
 			"Float", 4, off.volR, info.fileName);
-		WriteScalarAttribute(ofs, "idR", info.NR,
-			"UInt", 4, off.idR, info.fileName);
-		WriteScalarAttribute(ofs, "bodyIdR", info.NR,
+		WriteScalarAttribute(ofs, "idR", info.N_R,
+			"UInt", sizeof(uint64_t), off.idR, info.fileName);
+		WriteScalarAttribute(ofs, "bodyIdR", info.N_R,
 			"UInt", 4, off.bodyIdR, info.fileName);
 		ofs << "      </Grid>\n";
 	}
@@ -635,13 +673,13 @@ namespace Export
 
 	static void WriteXdmfStaticBoundaryFile(
 		const std::filesystem::path& path,
-		uint32_t NB,
+		const ExportSnapshotBinInfo& info,
 		const std::string& fileName,
 		const SaveOptions& saveOptions)
 	{
 		WriteXdmfFile(path, saveOptions, [&](std::ofstream& ofs)
 		{
-			WriteStaticBoundaryGrid(ofs, NB, fileName);
+			WriteStaticBoundaryGrid(ofs, info, fileName);
 		});
 	}
 
@@ -650,7 +688,7 @@ namespace Export
 		return std::any_of(infos.begin(), infos.end(),
 			[](const ExportSnapshotBinInfo& info)
 			{
-				return info.NR > 0;
+				return info.N_R > 0;
 			});
 	}
 
@@ -740,6 +778,9 @@ namespace Export
 		CheckRigidConsistent(state.particlesR);
 		CheckRigidBodiesConsistent(state.rigidBodies);
 		state.ValidateRigidAttachments();
+		ValidateParticleIds(state.particlesF.id, "Fluid state");
+		ValidateParticleIds(state.particlesB.id, "Boundary state");
+		ValidateParticleIds(state.particlesR.id, "Rigid state");
 
 		// open scope for writer
 		{
@@ -759,10 +800,10 @@ namespace Export
 			hdr.step = state.step;
 			hdr.time = state.time;
 
-			hdr.NF = state.particlesF.N_;
-			hdr.NB = state.particlesB.N_;
-			hdr.NR = state.particlesR.N_;
-			hdr.NRB = state.rigidBodies.N_;
+			hdr.N_F = state.particlesF.N_;
+			hdr.N_B = state.particlesB.N_;
+			hdr.N_R = state.particlesR.N_;
+			hdr.N_RB = state.rigidBodies.N_;
 
 			WritePod(ofs, hdr);
 
@@ -894,7 +935,6 @@ namespace Export
 				"Failed to open file for read '" + srcPath.string() + "'.");
 		}
 
-		// header
 		BinHeaderSim hdr{};
 		ReadPod(ifs, hdr);
 		if (!ifs)
@@ -902,13 +942,11 @@ namespace Export
 			throw std::runtime_error("Failed to read simulation state header from '" +
 				srcPath.string() + "'.");
 		}
-
 		if (std::memcmp(hdr.magic, kSimStateMagic, sizeof(hdr.magic)) != 0)
 		{
-			throw std::runtime_error(
-				"Invalid simulation state file magic in '" + srcPath.string() + "'.");
+			throw std::runtime_error("Invalid simulation state file magic in '" +
+				srcPath.string() + "'.");
 		}
-
 		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
 		{
 			throw std::runtime_error("Endianness mismatch in '" + srcPath.string() +
@@ -920,15 +958,43 @@ namespace Export
 				srcPath.string() + "'.");
 		}
 
-		// metadata
+		const uint64_t N_F = hdr.N_F, N_B = hdr.N_B, N_R = hdr.N_R, N_RB = hdr.N_RB;
+		const uint32_t N_localF = Sim::CheckedLocalParticleCount(N_F, "serialized fluid state");
+		const uint32_t N_localB = Sim::CheckedLocalParticleCount(N_B, "serialized boundary state");
+		const uint32_t N_localR = Sim::CheckedLocalParticleCount(N_R, "serialized rigid state");
+		if (N_RB > std::numeric_limits<uint32_t>::max())
+		{
+			throw std::length_error("Serialized rigid body count exceeds uint32_t range.");
+		}
+		const uint32_t N_localRB = static_cast<uint32_t>(N_RB);
+
+		uint64_t expectedBytes = sizeof(BinHeaderSim);
+		expectedBytes = CheckedByteSum(expectedBytes,
+			CheckedByteProduct(N_F, sizeof(uint64_t) + 16ull * sizeof(float), "fluid payload"),
+			"simulation state");
+		expectedBytes = CheckedByteSum(expectedBytes,
+			CheckedByteProduct(N_B, sizeof(uint64_t) + 5ull * sizeof(float), "boundary payload"),
+			"simulation state");
+		expectedBytes = CheckedByteSum(expectedBytes,
+			CheckedByteProduct(N_R, sizeof(uint64_t) + sizeof(uint32_t) + 5ull * sizeof(float),
+				"rigid particle payload"), "simulation state");
+		expectedBytes = CheckedByteSum(expectedBytes,
+			CheckedByteProduct(N_RB, 3ull * sizeof(uint32_t) + 32ull * sizeof(float),
+				"rigid body payload"), "simulation state");
+		std::error_code sizeEc;
+		const uint64_t fileBytes = std::filesystem::file_size(srcPath, sizeEc);
+		if (sizeEc || fileBytes != expectedBytes)
+		{
+			throw std::runtime_error("Simulation state file length does not match its header in '" +
+				srcPath.string() + "'.");
+		}
+
 		state.step = hdr.step;
 		state.time = hdr.time;
-
-		// resize storage
-		state.ResizeFluid(hdr.NF);
-		state.ResizeBoundary(hdr.NB);
-		state.ResizeRigid(hdr.NR);
-		state.ResizeRigidBodies(hdr.NRB);
+		state.ResizeFluid(N_localF);
+		state.ResizeBoundary(N_localB);
+		state.ResizeRigid(N_localR);
+		state.ResizeRigidBodies(N_localRB);
 
 		// fluid particle data (read order must match SaveUniversalSimState)
 		{
@@ -957,7 +1023,7 @@ namespace Export
 			ReadVec(ifs, F.density);
 
 			// sanity check
-			F.N_ = hdr.NF;
+			F.N_ = N_localF;
 		}
 
 		// boundary particle data (fixed order)
@@ -1038,6 +1104,9 @@ namespace Export
 		}
 
 		EnsureStreamOk(ifs, "reading", srcPath.string());
+		ValidateParticleIds(state.particlesF.id, "Fluid state");
+		ValidateParticleIds(state.particlesB.id, "Boundary state");
+		ValidateParticleIds(state.particlesR.id, "Rigid state");
 		state.ValidateRigidAttachments();
 	}
 
@@ -1082,17 +1151,17 @@ namespace Export
 			// arrays are written in the same order as referenced by the XDMF file:
 			// xPosB, yPosB, zPosB, volB, idB
 
-			// NF and NR stay zero, this file holds boundary particles only
+			// N_F and N_R stay zero, this file holds boundary particles only
 			BinHeaderSnap hdr{};
 			std::memcpy(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic));
 			hdr.endianTag = kEndianLE;
 			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
 			hdr.step = snap.simStep;
 			hdr.time = snap.simTime;
-			hdr.NF = 0;
-			hdr.NB = snap.N_B;
-			hdr.NR = 0;
-			hdr.NrankF = 0;
+			hdr.N_F = 0;
+			hdr.N_B = snap.N_B;
+			hdr.N_R = 0;
+			hdr.N_rankF = 0;
 
 			WritePod(ofs, hdr);
 
@@ -1132,26 +1201,29 @@ namespace Export
 		}
 
 		// make sure data for every particle is present
-		const uint32_t NF_size = snap.N_F;
-		const uint32_t NB_size = snap.N_B;
-		const uint32_t NR_size = snap.N_R;
-		assert(snap.idF.size() == NF_size);
-		assert(snap.xPosF.size() == NF_size);
-		assert(snap.yPosF.size() == NF_size);
-		assert(snap.zPosF.size() == NF_size);
-		assert(snap.velMagF.size() == NF_size);
-		assert(snap.rankF.empty() || snap.rankF.size() == NF_size);
-		assert(snap.idB.size() == NB_size);
-		assert(snap.xPosB.size() == NB_size);
-		assert(snap.yPosB.size() == NB_size);
-		assert(snap.zPosB.size() == NB_size);
-		assert(snap.volB.size() == NB_size);
-		assert(snap.idR.size() == NR_size);
-		assert(snap.bodyIdR.size() == NR_size);
-		assert(snap.xPosR.size() == NR_size);
-		assert(snap.yPosR.size() == NR_size);
-		assert(snap.zPosR.size() == NR_size);
-		assert(snap.volR.size() == NR_size);
+		const uint32_t N_F_size = snap.N_F;
+		const uint32_t N_B_size = snap.N_B;
+		const uint32_t N_R_size = snap.N_R;
+		assert(snap.idF.size() == N_F_size);
+		assert(snap.xPosF.size() == N_F_size);
+		assert(snap.yPosF.size() == N_F_size);
+		assert(snap.zPosF.size() == N_F_size);
+		assert(snap.velMagF.size() == N_F_size);
+		assert(snap.rankF.empty() || snap.rankF.size() == N_F_size);
+		assert(snap.idB.size() == N_B_size);
+		assert(snap.xPosB.size() == N_B_size);
+		assert(snap.yPosB.size() == N_B_size);
+		assert(snap.zPosB.size() == N_B_size);
+		assert(snap.volB.size() == N_B_size);
+		assert(snap.idR.size() == N_R_size);
+		assert(snap.bodyIdR.size() == N_R_size);
+		assert(snap.xPosR.size() == N_R_size);
+		assert(snap.yPosR.size() == N_R_size);
+		assert(snap.zPosR.size() == N_R_size);
+		assert(snap.volR.size() == N_R_size);
+		ValidateParticleIds(snap.idF, "Fluid snapshot");
+		ValidateParticleIds(snap.idB, "Boundary snapshot");
+		ValidateParticleIds(snap.idR, "Rigid snapshot");
 
 		SaveStaticBoundaryBin(snap, saveOptions_.baseDir / dir);
 
@@ -1181,17 +1253,17 @@ namespace Export
 			// xPosR, yPosR, zPosR, volR, idR, bodyIdR
 			// (boundary arrays live in the shared static boundary file)
 
-			// NB is informational here, the boundary arrays are not part of this file
+			// N_B is informational here, the boundary arrays are not part of this file
 			BinHeaderSnap hdr{};
 			std::memcpy(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic));
 			hdr.endianTag = kEndianLE;
 			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
 			hdr.step = snap.simStep;
 			hdr.time = snap.simTime;
-			hdr.NF = NF_size;
-			hdr.NB = NB_size;
-			hdr.NR = NR_size;
-			hdr.NrankF = static_cast<uint32_t>(snap.rankF.size());
+			hdr.N_F = N_F_size;
+			hdr.N_B = N_B_size;
+			hdr.N_R = N_R_size;
+			hdr.N_rankF = static_cast<uint32_t>(snap.rankF.size());
 
 			WritePod(ofs, hdr);
 
@@ -1246,26 +1318,26 @@ namespace Export
 			dirPath / rigidParticleXdmfFileName;
 
 		// make sure data for every particle is present
-		[[maybe_unused]] const uint32_t NF_size = snap.N_F;
-		[[maybe_unused]] const uint32_t NB_size = snap.N_B;
-		[[maybe_unused]] const uint32_t NR_size = snap.N_R;
-		assert(snap.idF.size() == NF_size);
-		assert(snap.xPosF.size() == NF_size);
-		assert(snap.yPosF.size() == NF_size);
-		assert(snap.zPosF.size() == NF_size);
-		assert(snap.velMagF.size() == NF_size);
-		assert(snap.rankF.empty() || snap.rankF.size() == NF_size);
-		assert(snap.idB.size() == NB_size);
-		assert(snap.xPosB.size() == NB_size);
-		assert(snap.yPosB.size() == NB_size);
-		assert(snap.zPosB.size() == NB_size);
-		assert(snap.volB.size() == NB_size);
-		assert(snap.idR.size() == NR_size);
-		assert(snap.bodyIdR.size() == NR_size);
-		assert(snap.xPosR.size() == NR_size);
-		assert(snap.yPosR.size() == NR_size);
-		assert(snap.zPosR.size() == NR_size);
-		assert(snap.volR.size() == NR_size);
+		[[maybe_unused]] const uint32_t N_F_size = snap.N_F;
+		[[maybe_unused]] const uint32_t N_B_size = snap.N_B;
+		[[maybe_unused]] const uint32_t N_R_size = snap.N_R;
+		assert(snap.idF.size() == N_F_size);
+		assert(snap.xPosF.size() == N_F_size);
+		assert(snap.yPosF.size() == N_F_size);
+		assert(snap.zPosF.size() == N_F_size);
+		assert(snap.velMagF.size() == N_F_size);
+		assert(snap.rankF.empty() || snap.rankF.size() == N_F_size);
+		assert(snap.idB.size() == N_B_size);
+		assert(snap.xPosB.size() == N_B_size);
+		assert(snap.yPosB.size() == N_B_size);
+		assert(snap.zPosB.size() == N_B_size);
+		assert(snap.volB.size() == N_B_size);
+		assert(snap.idR.size() == N_R_size);
+		assert(snap.bodyIdR.size() == N_R_size);
+		assert(snap.xPosR.size() == N_R_size);
+		assert(snap.yPosR.size() == N_R_size);
+		assert(snap.zPosR.size() == N_R_size);
+		assert(snap.volR.size() == N_R_size);
 
 		std::vector<ExportSnapshotBinInfo> infos;
 		{
@@ -1291,10 +1363,11 @@ namespace Export
 
 		// the boundary file itself decides whether the view exists
 		std::error_code removeEc;
-		uint32_t NB_boundary = 0;
-		if (TryReadStaticBoundaryBinInfo(dirPath / kStaticBoundaryBinFileName, NB_boundary))
+		ExportSnapshotBinInfo boundaryInfo{};
+		if (TryReadStaticBoundaryBinInfo(
+			dirPath / kStaticBoundaryBinFileName, boundaryInfo))
 		{
-			WriteXdmfStaticBoundaryFile(staticBoundaryXdmfPath, NB_boundary,
+			WriteXdmfStaticBoundaryFile(staticBoundaryXdmfPath, boundaryInfo,
 				kStaticBoundaryBinFileName, saveOptions_);
 		}
 		else

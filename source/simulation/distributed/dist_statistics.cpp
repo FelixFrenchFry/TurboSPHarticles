@@ -36,12 +36,12 @@ namespace
 		}
 
 		distribution.histogram.resize(static_cast<uint64_t>(maxGlobal) + 1, 0);
-		mpiContext.AllReduceSumUint32s(distribution.histogram);
+		mpiContext.AllReduceSumUint64s(distribution.histogram);
 
 		const auto minIt = std::find_if(
 			distribution.histogram.begin(),
 			distribution.histogram.end(),
-			[](const uint32_t N_nbrs) { return N_nbrs > 0; });
+			[](const uint64_t N_nbrs) { return N_nbrs > 0; });
 
 		distribution.min = static_cast<float>(std::distance(distribution.histogram.begin(), minIt));
 		distribution.max = static_cast<float>(maxGlobal);

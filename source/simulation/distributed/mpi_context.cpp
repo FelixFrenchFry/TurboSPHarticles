@@ -347,6 +347,27 @@ void MpiContext::AllReduceSumUint64s(
 	Wait(&request, 1, "MPI uint64-array sum reduction", nullptr);
 }
 
+void MpiContext::AllReduceSumUint64s(std::vector<uint64_t>& values) const
+{
+	ForEachMpiVectorChunk(
+		values,
+		[this](uint64_t* chunkData, const int N_chunkValues)
+		{
+			MPI_Request request = MPI_REQUEST_NULL;
+			CheckMpiResult(
+				MPI_Iallreduce(
+					MPI_IN_PLACE,
+					chunkData,
+					N_chunkValues,
+					MPI_UINT64_T,
+					MPI_SUM,
+					MPI_COMM_WORLD,
+					&request),
+				"MPI_Iallreduce(uint64s)");
+			Wait(&request, 1, "MPI uint64-vector sum reduction", nullptr);
+		});
+}
+
 void MpiContext::AllReduceSumDoubles(
 	std::array<double, 3>& values,
 	const char* context) const

@@ -271,8 +271,8 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 
 	try
 	{
-		mpiContext.AllReduceSumUint32s(profile.ownedFluidByUnit);
-		mpiContext.AllReduceSumUint32s(profile.ownedBoundaryByUnit);
+		mpiContext.AllReduceSumUint64s(profile.ownedFluidByUnit);
+		mpiContext.AllReduceSumUint64s(profile.ownedBoundaryByUnit);
 
 		domainDecomp.Repartition(
 		{

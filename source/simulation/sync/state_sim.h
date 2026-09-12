@@ -9,6 +9,9 @@
 #include <stdexcept>
 #include <vector>
 
+// internal
+#include "source/simulation/core/particle_types.h"
+
 
 
 namespace Sync
@@ -23,7 +26,7 @@ namespace Sync
 		uint32_t N_ = 0;
 
 		// fields
-		std::span<const uint32_t> id;
+		std::span<const uint64_t> id;
 		std::span<const float> xPos, yPos, zPos;
 		std::span<const float> xVel, yVel, zVel;
 		std::span<const float> xVelPred, yVelPred, zVelPred;
@@ -42,7 +45,7 @@ namespace Sync
 		uint32_t N_ = 0;
 
 		// fields
-		std::span<const uint32_t> id;
+		std::span<const uint64_t> id;
 		std::span<const float> xPos, yPos, zPos;
 		std::span<const float> volB;
 		std::span<const float> psiB;
@@ -56,7 +59,7 @@ namespace Sync
 		uint32_t N_ = 0;
 
 		// fields
-		std::span<const uint32_t> id;
+		std::span<const uint64_t> id;
 		std::span<const uint32_t> bodyId;
 		std::span<const float> xRelPos, yRelPos, zRelPos;
 		std::span<const float> volR;
@@ -69,7 +72,7 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::vector<uint32_t> id;
+		std::vector<uint64_t> id;
 
 		// positions
 		std::vector<float> xPos;
@@ -100,6 +103,7 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
+			(void)Sim::CheckedLocalParticleCount(N, "Fluid reserve");
 			id.reserve(N);
 
 			xPos.reserve(N);
@@ -127,6 +131,7 @@ namespace Sync
 		// resizes all vectors consistently
 		void resizeAll(uint32_t N)
 		{
+			(void)Sim::CheckedLocalParticleCount(N, "Fluid resize");
 			N_ = N;
 
 			id.resize(N_);
@@ -204,7 +209,7 @@ namespace Sync
 			{
 				.N_ = N_,
 
-				.id = std::span<const uint32_t>(id),
+				.id = std::span<const uint64_t>(id),
 
 				.xPos = std::span<const float>(xPos),
 				.yPos = std::span<const float>(yPos),
@@ -238,7 +243,7 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::vector<uint32_t> id;
+		std::vector<uint64_t> id;
 
 		// positions
 		std::vector<float> xPos;
@@ -252,6 +257,7 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
+			(void)Sim::CheckedLocalParticleCount(N, "Boundary reserve");
 			id.reserve(N);
 
 			xPos.reserve(N);
@@ -265,6 +271,7 @@ namespace Sync
 		// resizes all vectors consistently
 		void resizeAll(uint32_t N)
 		{
+			(void)Sim::CheckedLocalParticleCount(N, "Boundary resize");
 			N_ = N;
 
 			id.resize(N_);
@@ -330,7 +337,7 @@ namespace Sync
 			{
 				.N_ = N_,
 
-				.id = std::span<const uint32_t>(id),
+				.id = std::span<const uint64_t>(id),
 				.xPos = std::span<const float>(xPos),
 				.yPos = std::span<const float>(yPos),
 				.zPos = std::span<const float>(zPos),
@@ -346,7 +353,7 @@ namespace Sync
 	{
 		// metadata
 		uint32_t N_ = 0;
-		std::vector<uint32_t> id;
+		std::vector<uint64_t> id;
 		std::vector<uint32_t> bodyId;
 
 		// positions relative to the rigid body center of mass
@@ -361,6 +368,7 @@ namespace Sync
 		// reserves capacity for all vectors consistently
 		void reserveAll(uint32_t N)
 		{
+			(void)Sim::CheckedLocalParticleCount(N, "Rigid reserve");
 			id.reserve(N);
 			bodyId.reserve(N);
 
@@ -375,6 +383,7 @@ namespace Sync
 		// resizes all vectors consistently
 		void resizeAll(uint32_t N)
 		{
+			(void)Sim::CheckedLocalParticleCount(N, "Rigid resize");
 			N_ = N;
 
 			id.resize(N_);
@@ -442,7 +451,7 @@ namespace Sync
 			{
 				.N_ = N_,
 
-				.id = std::span<const uint32_t>(id),
+				.id = std::span<const uint64_t>(id),
 				.bodyId = std::span<const uint32_t>(bodyId),
 				.xRelPos = std::span<const float>(xRelPos),
 				.yRelPos = std::span<const float>(yRelPos),
@@ -587,13 +596,31 @@ namespace Sync
 		RigidBodies rigidBodies;
 
 		// convenience methods for reserve/resizing
-		void ReserveFluid(uint32_t N) { particlesF.reserveAll(N); }
-		void ReserveBoundary(uint32_t N) { particlesB.reserveAll(N); }
-		void ReserveRigid(uint32_t N) { particlesR.reserveAll(N); }
+		void ReserveFluid(uint64_t N)
+		{
+			particlesF.reserveAll(Sim::CheckedLocalParticleCount(N, "Fluid reserve"));
+		}
+		void ReserveBoundary(uint64_t N)
+		{
+			particlesB.reserveAll(Sim::CheckedLocalParticleCount(N, "Boundary reserve"));
+		}
+		void ReserveRigid(uint64_t N)
+		{
+			particlesR.reserveAll(Sim::CheckedLocalParticleCount(N, "Rigid reserve"));
+		}
 		void ReserveRigidBodies(uint32_t N) { rigidBodies.reserveAll(N); }
-		void ResizeFluid(uint32_t N) { particlesF.resizeAll(N); }
-		void ResizeBoundary(uint32_t N) { particlesB.resizeAll(N); }
-		void ResizeRigid(uint32_t N) { particlesR.resizeAll(N); }
+		void ResizeFluid(uint64_t N)
+		{
+			particlesF.resizeAll(Sim::CheckedLocalParticleCount(N, "Fluid resize"));
+		}
+		void ResizeBoundary(uint64_t N)
+		{
+			particlesB.resizeAll(Sim::CheckedLocalParticleCount(N, "Boundary resize"));
+		}
+		void ResizeRigid(uint64_t N)
+		{
+			particlesR.resizeAll(Sim::CheckedLocalParticleCount(N, "Rigid resize"));
+		}
 		void ResizeRigidBodies(uint32_t N) { rigidBodies.resizeAll(N); }
 		void ShrinkToFitAll()
 		{
@@ -603,22 +630,25 @@ namespace Sync
 			rigidBodies.shrinkToFitAll();
 		}
 
-		void ReserveFluidAdditional(uint32_t add)
+		void ReserveFluidAdditional(uint64_t add)
 		{
-			const auto current = static_cast<uint32_t>(particlesF.xPos.size());
-			particlesF.reserveAll(current + add);
+			const uint64_t total = Sim::CheckedParticleAdd(
+				particlesF.xPos.size(), add, "Fluid reserve");
+			particlesF.reserveAll(Sim::CheckedLocalParticleCount(total, "Fluid reserve"));
 		}
 
-		void ReserveBoundaryAdditional(uint32_t add)
+		void ReserveBoundaryAdditional(uint64_t add)
 		{
-			const auto current = static_cast<uint32_t>(particlesB.xPos.size());
-			particlesB.reserveAll(current + add);
+			const uint64_t total = Sim::CheckedParticleAdd(
+				particlesB.xPos.size(), add, "Boundary reserve");
+			particlesB.reserveAll(Sim::CheckedLocalParticleCount(total, "Boundary reserve"));
 		}
 
-		void ReserveRigidAdditional(uint32_t add)
+		void ReserveRigidAdditional(uint64_t add)
 		{
-			const auto current = static_cast<uint32_t>(particlesR.xRelPos.size());
-			particlesR.reserveAll(current + add);
+			const uint64_t total = Sim::CheckedParticleAdd(
+				particlesR.xRelPos.size(), add, "Rigid reserve");
+			particlesR.reserveAll(Sim::CheckedLocalParticleCount(total, "Rigid reserve"));
 		}
 
 		// validates rigid particle ownership before backend hot loops perform updates

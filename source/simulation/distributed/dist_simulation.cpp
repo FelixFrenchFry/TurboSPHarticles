@@ -10,9 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <limits>
 #include <nlohmann/json.hpp>
 #include <numeric>
+#include <optional>
 #include <span>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -42,11 +42,11 @@ using namespace Dist;
 
 namespace
 {
-	// checksum over the global indices owned by this rank, summed across all ranks it has
+	// checksum over the particle IDs owned by this rank, summed across all ranks it has
 	// to stay at the value the initial partition produced (wrap-around sums are intended)
-	uint64_t OwnedGlobalIdxChecksum(
+	uint64_t OwnedParticleIdChecksum(
 		const DistParticleState& particleState,
-		const std::span<const uint32_t> particleIds)
+		const std::span<const uint64_t> particleIds)
 	{
 		uint64_t checksum = 0;
 
@@ -665,20 +665,20 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 		return false;
 	}
 
-	const uint64_t N_maxGlobalParticles =
-		static_cast<uint64_t>(std::numeric_limits<uint32_t>::max());
-	const bool globalParticleCountsFit =
-		N_expectedGlobalF_ <= N_maxGlobalParticles &&
-		N_expectedGlobalB_ <= N_maxGlobalParticles;
-	if (!globalParticleCountsFit)
+	if (simParams_.saveFinalState)
 	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Global particle count exceeds the supported 32-bit particle ID range "
-			"(F={}, B={}, max={}).",
-			mpiContext_.Rank(), mpiContext_.Size(),
-			N_expectedGlobalF_, N_expectedGlobalB_, N_maxGlobalParticles);
+		std::string outputCapacityFailure{};
+		const bool finalStateOutputSupported =
+			ValidateOwnedParticleGatherRootCapacity(
+				N_expectedGlobalF_, N_expectedGlobalB_, &outputCapacityFailure);
+		if (!finalStateOutputSupported)
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Requested distributed final-state output is unsupported: {}",
+				mpiContext_.Rank(), mpiContext_.Size(), outputCapacityFailure);
+		}
+		if (!mpiContext_.AllTrue(finalStateOutputSupported)) { return false; }
 	}
-	if (!mpiContext_.AllTrue(globalParticleCountsFit)) { return false; }
 
 	try
 	{
@@ -694,12 +694,12 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 	// use initial partition to validate if per-step ownership checksums match across ranks
-	expectedOwnedIdxChecksumF_ =
+	expectedOwnedIdChecksumF_ =
 		mpiContext_.AllReduceSumUint64(
-			OwnedGlobalIdxChecksum(particleStateF_, localSimState_.particlesF.id));
-	expectedOwnedIdxChecksumB_ =
+			OwnedParticleIdChecksum(particleStateF_, localSimState_.particlesF.id));
+	expectedOwnedIdChecksumB_ =
 		mpiContext_.AllReduceSumUint64(
-			OwnedGlobalIdxChecksum(particleStateB_, localSimState_.particlesB.id));
+			OwnedParticleIdChecksum(particleStateB_, localSimState_.particlesB.id));
 
 	try
 	{
@@ -748,8 +748,8 @@ DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 		simParams_.backendType,
 		simParams_.neighborListMethod);
 
-	report.N_globalF = static_cast<uint32_t>(N_expectedGlobalF_);
-	report.N_globalB = static_cast<uint32_t>(N_expectedGlobalB_);
+	report.N_globalF = N_expectedGlobalF_;
+	report.N_globalB = N_expectedGlobalB_;
 	report.N_globalR = globalSimState_.particlesR.N_;
 	report.N_globalRB = globalSimState_.rigidBodies.N_;
 
@@ -1206,6 +1206,7 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 			const Sim::SimParams probeParams =
 				MakeInitialDomainDecompProbeParams(simParams_);
 			simScenario_->Build(probeState, probeParams);
+			scenarioMgr_.FinalizeGeneratedParticleIds(probeState);
 
 			probeFluidLocalIdxs.resize(probeState.particlesF.xPos.size());
 			std::iota(probeFluidLocalIdxs.begin(), probeFluidLocalIdxs.end(), 0u);
@@ -1255,8 +1256,8 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 
 	try
 	{
-		mpiContext_.AllReduceSumUint32s(profile.ownedFluidByUnit);
-		mpiContext_.AllReduceSumUint32s(profile.ownedBoundaryByUnit);
+		mpiContext_.AllReduceSumUint64s(profile.ownedFluidByUnit);
+		mpiContext_.AllReduceSumUint64s(profile.ownedBoundaryByUnit);
 
 		// repartition validates rank loads, despite the initial profile supplying
 		// the spatial weights used to place the domain walls
@@ -1344,6 +1345,7 @@ bool DistSimulationMgr::BuildGlobalSimState()
 
 	scenarioMgr_.BeginBuildRegion(buildRegion.min, buildRegion.max);
 	simScenario_->Build(globalSimState_, simParams_);
+	scenarioMgr_.FinalizeGeneratedParticleIds(globalSimState_);
 	scenarioMgr_.EndBuildRegion();
 
 	// the generated particle set does not depend on the build region, so these counts are
@@ -1409,7 +1411,7 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 	std::string failMsg{};
 	if (!particleStateF_.IsValidLocalParticleState(
 		localSimState_.particlesF.id,
-		static_cast<uint32_t>(N_expectedGlobalF_),
+		N_expectedGlobalF_,
 		&failMsg))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local fluid particle state: {}",
@@ -1419,7 +1421,7 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 
 	if (!particleStateB_.IsValidLocalParticleState(
 		localSimState_.particlesB.id,
-		static_cast<uint32_t>(N_expectedGlobalB_),
+		N_expectedGlobalB_,
 		&failMsg))
 	{
 		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local boundary particle state: {}",
@@ -1455,8 +1457,8 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 
 bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 {
-	std::span<const uint32_t> particleIdsF = localSimState_.particlesF.id;
-	std::span<const uint32_t> particleIdsB = localSimState_.particlesB.id;
+	std::span<const uint64_t> particleIdsF = localSimState_.particlesF.id;
+	std::span<const uint64_t> particleIdsB = localSimState_.particlesB.id;
 
 	if (distParticleBackend_)
 	{
@@ -1474,13 +1476,13 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 		}
 	}
 
-	// rank-local owned particle counts and global index checksums, summed across all ranks
+	// rank-local owned particle counts and particle ID checksums, summed across all ranks
 	std::array<uint64_t, 4> N_globalOwned
 	{
 		particleStateF_.N_owned,
 		particleStateB_.N_owned,
-		OwnedGlobalIdxChecksum(particleStateF_, particleIdsF),
-		OwnedGlobalIdxChecksum(particleStateB_, particleIdsB)
+		OwnedParticleIdChecksum(particleStateF_, particleIdsF),
+		OwnedParticleIdChecksum(particleStateB_, particleIdsB)
 	};
 	mpiContext_.AllReduceSumUint64s(N_globalOwned);
 
@@ -1488,8 +1490,8 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 		N_globalOwned[0] == N_expectedGlobalF_ &&
 		N_globalOwned[1] == N_expectedGlobalB_;
 	const bool checksumsValid =
-		N_globalOwned[2] == expectedOwnedIdxChecksumF_ &&
-		N_globalOwned[3] == expectedOwnedIdxChecksumB_;
+		N_globalOwned[2] == expectedOwnedIdChecksumF_ &&
+		N_globalOwned[3] == expectedOwnedIdChecksumB_;
 
 	if (!countsValid)
 	{
@@ -1505,58 +1507,65 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 	else if (!checksumsValid)
 	{
 		SPDLOG_ERROR(
-			"[rank {}/{}] Global owned particle indices are not owned by exactly one rank "
+			"[rank {}/{}] Global owned particle IDs are not owned by exactly one rank "
 			"(fluid checksum={}/{}, boundary checksum={}/{}).",
 			mpiContext_.Rank(), mpiContext_.Size(),
 			N_globalOwned[2],
-			expectedOwnedIdxChecksumF_,
+			expectedOwnedIdChecksumF_,
 			N_globalOwned[3],
-			expectedOwnedIdxChecksumB_);
+			expectedOwnedIdChecksumB_);
 	}
 
 	#if defined(_DEBUG)
-	// [ rank-reduced ] names the first global index not owned by exactly one rank, detected by the checksums
-	const auto ReportOwnedIdxConflicts = [&](
-		const DistParticleState& particleState,
-		const std::span<const uint32_t> particleIds,
-		const uint64_t N_global,
-		const char* particleTypeName) -> bool
+	// expensive owner diagnosis runs only after every rank has observed the same
+	// reduced count/checksum failure, scanning a bounded global-ID window at a time
+	if (!countsValid || !checksumsValid)
 	{
-		std::vector<uint32_t> ownerRankCounts(N_global, 0u);
-
-		for (const uint32_t localIdx : particleState.particleLocalIdx_Owned)
+		const auto ReportOwnedIdConflict = [&](
+			const DistParticleState& particleState,
+			const std::span<const uint64_t> particleIds,
+			const uint64_t N_global,
+			const char* const particleTypeName) -> bool
 		{
-			if (localIdx >= particleIds.size()) { continue; }
+			std::optional<OwnedParticleConflict> conflict{};
+			std::string diagnosticFailure{};
+			if (!FindFirstOwnedParticleConflict(
+				particleIds,
+				particleState.particleLocalIdx_Owned,
+				N_global,
+				mpiContext_,
+				conflict,
+				&diagnosticFailure))
+			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Failed to diagnose global {} ownership: {}",
+					mpiContext_.Rank(), mpiContext_.Size(),
+					particleTypeName, diagnosticFailure);
+				return false;
+			}
+			if (conflict)
+			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Global {} particle {} has {} owner claims "
+					"(expected exactly one).",
+					mpiContext_.Rank(), mpiContext_.Size(),
+					particleTypeName, conflict->id, conflict->ownerCount);
+				return false;
+			}
+			return true;
+		};
 
-			const uint32_t globalIdx = particleIds[localIdx];
-			if (globalIdx < ownerRankCounts.size()) { ownerRankCounts[globalIdx] = 1; }
-		}
-		mpiContext_.AllReduceSumUint32s(ownerRankCounts);
-
-		const auto invalidOwnerIt = std::find_if(
-			ownerRankCounts.begin(),
-			ownerRankCounts.end(),
-			[](const uint32_t N_ranks) { return N_ranks != 1; });
-		if (invalidOwnerIt != ownerRankCounts.end())
+		if (!ReportOwnedIdConflict(
+			particleStateF_, particleIdsF, N_expectedGlobalF_, "fluid"))
 		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Global {} particle {} has {} owner ranks (expected exactly one).",
-				mpiContext_.Rank(), mpiContext_.Size(),
-				particleTypeName,
-				static_cast<uint32_t>(std::distance(ownerRankCounts.begin(), invalidOwnerIt)),
-				*invalidOwnerIt);
 			return false;
 		}
-
-		return true;
-	};
-
-	// both run unconditionally, because each one is a collective
-	const bool fluidIdxsValid =
-		ReportOwnedIdxConflicts(particleStateF_, particleIdsF, N_expectedGlobalF_, "fluid");
-	const bool boundaryIdxsValid =
-		ReportOwnedIdxConflicts(particleStateB_, particleIdsB, N_expectedGlobalB_, "boundary");
-	if (!fluidIdxsValid || !boundaryIdxsValid) { return false; }
+		if (!ReportOwnedIdConflict(
+			particleStateB_, particleIdsB, N_expectedGlobalB_, "boundary"))
+		{
+			return false;
+		}
+	}
 	#endif
 
 	return countsValid && checksumsValid;
@@ -1826,6 +1835,24 @@ bool DistSimulationMgr::WriteFinalState(
 		return true;
 	}
 
+	std::string outputCapacityFailure{};
+	const bool finalStateOutputSupported = ValidateOwnedParticleGatherRootCapacity(
+		N_expectedGlobalF_, N_expectedGlobalB_, &outputCapacityFailure);
+	if (!finalStateOutputSupported)
+	{
+		SPDLOG_ERROR(
+			"[rank {}/{}] Requested distributed final-state output is unsupported: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), outputCapacityFailure);
+	}
+	if (!mpiContext_.AllTrue(finalStateOutputSupported))
+	{
+		localSimState_.particlesF = {};
+		localSimState_.particlesB = {};
+		simBackend_.reset();
+		distParticleBackend_ = nullptr;
+		return false;
+	}
+
 	if (!MaterializeRankLocalState(true))
 	{
 		localSimState_.particlesF = {};
@@ -1873,8 +1900,8 @@ bool DistSimulationMgr::WriteFinalState(
 		sendBuffer,
 		localSimState_,
 		mpiContext_,
-		static_cast<uint32_t>(N_expectedGlobalF_),
-		static_cast<uint32_t>(N_expectedGlobalB_));
+		N_expectedGlobalF_,
+		N_expectedGlobalB_);
 	if (!gatherOk)
 	{
 		SPDLOG_ERROR(
@@ -1954,13 +1981,13 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 				break;
 			}
 
-			const uint32_t globalIdx = particlesF.id[localIdx];
-			if (globalIdx >= N_expectedGlobalF_)
+			const uint64_t particleId = particlesF.id[localIdx];
+			if (particleId >= N_expectedGlobalF_)
 			{
 				SPDLOG_ERROR(
-					"[rank {}/{}] Invalid owned fluid particle global index "
-					"during distributed surface export (localIdx={}, globalIdx={}).",
-					mpiContext_.Rank(), mpiContext_.Size(), localIdx, globalIdx);
+					"[rank {}/{}] Invalid owned fluid particle ID "
+					"during distributed surface export (localIdx={}, particleId={}).",
+					mpiContext_.Rank(), mpiContext_.Size(), localIdx, particleId);
 				localOk = false;
 				break;
 			}
@@ -1978,8 +2005,8 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 				break;
 			}
 
-			const uint32_t globalIdx = particlesF.id[localIdx];
-			if (globalIdx >= N_expectedGlobalF_)
+			const uint64_t particleId = particlesF.id[localIdx];
+			if (particleId >= N_expectedGlobalF_)
 			{
 				localOk = false;
 				break;
@@ -2535,8 +2562,8 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 			mpiContext_,
 			params,
 			redistributeParticlesB,
-			static_cast<uint32_t>(N_expectedGlobalF_),
-			static_cast<uint32_t>(N_expectedGlobalB_),
+			N_expectedGlobalF_,
+			N_expectedGlobalB_,
 			&failMsg))
 		{
 			SPDLOG_ERROR(
@@ -2906,13 +2933,13 @@ bool DistSimulationMgr::ValidateRankLocalBackendParticleState() const
 	const bool fluidStateValid =
 		particleStateF_.IsValidLocalParticleState(
 			localSimState_.particlesF.id,
-			static_cast<uint32_t>(N_expectedGlobalF_),
+			N_expectedGlobalF_,
 			&fluidFailMsg);
 	std::string boundaryFailMsg{};
 	const bool boundaryStateValid =
 		particleStateB_.IsValidLocalParticleState(
 			localSimState_.particlesB.id,
-			static_cast<uint32_t>(N_expectedGlobalB_),
+			N_expectedGlobalB_,
 			&boundaryFailMsg);
 	const bool rigidStateStable =
 		RigidStateMatchesGlobalState(localSimState_, globalSimState_);
@@ -2945,14 +2972,14 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata() const
 	const bool fluidMetadataValid =
 		particleStateF_.IsValidLocalParticleState(
 			particlesF.id,
-			static_cast<uint32_t>(N_expectedGlobalF_),
+			N_expectedGlobalF_,
 			&fluidFailMsg);
 
 	std::string boundaryFailMsg{};
 	const bool boundaryMetadataValid =
 		particleStateB_.IsValidLocalParticleState(
 			particlesB.id,
-			static_cast<uint32_t>(N_expectedGlobalB_),
+			N_expectedGlobalB_,
 			&boundaryFailMsg);
 
 	if (!fluidMetadataValid || !boundaryMetadataValid)

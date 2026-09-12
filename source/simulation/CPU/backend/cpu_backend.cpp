@@ -119,10 +119,11 @@ namespace
 		if (values.capacity() >= N_particles) { return; }
 
 		const uint64_t capacityTarget = std::min(
-			N_particles + Base::ExtraPercent(
+			Sim::CheckedParticleAdd(
 				N_particles,
-				extraAllocCapacityPct),
-			static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()));
+				Base::ExtraPercent(N_particles, extraAllocCapacityPct),
+				"CPU particle reserve"),
+			static_cast<uint64_t>(Sim::MaxLocalParticleCount));
 		values.reserve(capacityTarget);
 	}
 
@@ -202,6 +203,9 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	auto& B = src.particlesB;
 	auto& R = src.particlesR;
 	auto& RB = src.rigidBodies;
+	(void)CheckedLocalParticleCount(F.N_, "CPU fluid state");
+	(void)CheckedLocalParticleCount(B.N_, "CPU boundary state");
+	(void)CheckedLocalParticleCount(R.N_, "CPU rigid state");
 	N_F_ = F.N_;
 	N_B_ = B.N_;
 	N_R_ = R.N_;
@@ -553,22 +557,23 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		return false;
 	}
 
-	// check that the final particle counts do not exceed the max
+	// check that the final particle counts do not exceed the local storage limit
 	const uint32_t N_retainedF = static_cast<uint32_t>(retainedFluidOldLocalIdx_FromNewLocalIdx.size());
 	const uint32_t N_retainedB = redistributeParticlesB
 		? static_cast<uint32_t>(retainedBoundaryOldLocalIdx_FromNewLocalIdx.size())
 		: N_B_;
-	if (appendedParticlesF.N_ > std::numeric_limits<uint32_t>::max() - N_retainedF ||
-		(redistributeParticlesB &&
-		 appendedParticlesB.N_ > std::numeric_limits<uint32_t>::max() - N_retainedB))
+	const uint64_t N_finalF_U64 = static_cast<uint64_t>(N_retainedF) + appendedParticlesF.N_;
+	const uint64_t N_finalB_U64 = redistributeParticlesB
+		? static_cast<uint64_t>(N_retainedB) + appendedParticlesB.N_
+		: N_B_;
+	if (N_finalF_U64 > Sim::MaxLocalParticleCount ||
+		N_finalB_U64 > Sim::MaxLocalParticleCount)
 	{
 		return false;
 	}
 
-	const uint32_t N_finalF = N_retainedF + appendedParticlesF.N_;
-	const uint32_t N_finalB = redistributeParticlesB
-		? N_retainedB + appendedParticlesB.N_
-		: N_B_;
+	const uint32_t N_finalF = static_cast<uint32_t>(N_finalF_U64);
+	const uint32_t N_finalB = static_cast<uint32_t>(N_finalB_U64);
 
 	// reserve all required field capacity before compacting particles in place,
 	// so subsequent resize calls can then use this capacity without reallocating

@@ -222,10 +222,11 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 								   const Sim::SimParams& simParams,
 								   const Vis::VisParams& visParams)
 {
+	const uint32_t N_total = Sim::CheckedCombinedLocalParticleCount(
+		view.N_F, view.N_R, "Visual particle count");
 	N_fluidImpostorInstances_ = view.N_F;
 	N_rigidImpostorInstances_ = view.N_R;
 
-	const uint32_t N_total = N_fluidImpostorInstances_ + N_rigidImpostorInstances_;
 	if (N_total == 0) { return; }
 
 	EnsureInstanceCapacity(N_total);
@@ -272,10 +273,21 @@ bool RenderingMgr::UpdateParticlesCUDA(
 	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
 {
+	uint32_t N_total = 0;
+	try
+	{
+		N_total = Sim::CheckedCombinedLocalParticleCount(
+			frame.N_F, frame.N_R, "CUDA visual particle count");
+	}
+	catch (const std::exception& ex)
+	{
+		N_fluidImpostorInstances_ = 0;
+		N_rigidImpostorInstances_ = 0;
+		if (visualFrameMailboxCUDA_) { visualFrameMailboxCUDA_->Disable(ex.what()); }
+		return false;
+	}
 	N_fluidImpostorInstances_ = frame.N_F;
 	N_rigidImpostorInstances_ = frame.N_R;
-
-	const uint32_t N_total = N_fluidImpostorInstances_ + N_rigidImpostorInstances_;
 
 	if (!interopReadyCUDA_ || !visualFrameMailboxCUDA_)
 	{

@@ -5,7 +5,9 @@
 #include <cmath>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
+#include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -148,6 +150,11 @@ namespace Base
 		if (pct <= 0.0f || ApproxEqu(pct, 0.0f)) { return 0u; }
 
         const float extra = static_cast<float>(n) * pct / 100.0f;
+        if (!std::isfinite(extra) ||
+            extra >= static_cast<float>(std::numeric_limits<uint64_t>::max()))
+        {
+            return std::numeric_limits<uint64_t>::max();
+        }
         const uint64_t roundedDown = static_cast<uint64_t>(extra);
 
         return roundedDown + (static_cast<float>(roundedDown) < extra ? 1u : 0u);
@@ -162,8 +169,16 @@ namespace Base
     {
         if (values.capacity() < N_elements)
         {
-            const uint64_t capacityTarget =
-                N_elements + ExtraPercent(N_elements, extraAllocCapacityPct);
+            const uint64_t extra = ExtraPercent(N_elements, extraAllocCapacityPct);
+            if (extra > std::numeric_limits<uint64_t>::max() - N_elements)
+            {
+                throw std::length_error("Scratch vector reserve size overflow.");
+            }
+            const uint64_t capacityTarget = N_elements + extra;
+            if (capacityTarget > values.max_size())
+            {
+                throw std::length_error("Scratch vector reserve exceeds max_size().");
+            }
             values.clear();
             values.reserve(capacityTarget);
         }

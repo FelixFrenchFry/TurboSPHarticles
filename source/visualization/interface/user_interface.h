@@ -230,10 +230,10 @@ namespace Inter
 		void RebuildFonts(float dpiScale);
 		void ApplyParamChanges();
 		void ResetParamChanges(const Sim::SimParams& simParams);
-		inline float ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric) const;
+		inline double ReadStatData(const Sync::StatSnapshot* snap, Stats::StatMetric metric) const;
 		inline uint64_t ReadOpTiming(const Sync::BenchSnapshot* snap, Bench::BenchOp op) const;
 		static void TableTextRightAligned(const char* fmt, ...);
-		static inline void FormatStatValue(const Stats::StatMetricDef& def, char* out, float x, uint64_t cap);
+		static inline void FormatStatValue(const Stats::StatMetricDef& def, char* out, double x, uint64_t cap);
 
 		// dockspace
 		static void BeginDockspace();

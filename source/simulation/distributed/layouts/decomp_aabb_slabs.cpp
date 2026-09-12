@@ -24,7 +24,7 @@ namespace
 		const AABB& globalBounds,
 		const int splitAxis,
 		const uint32_t profileBinCount,
-		std::vector<uint32_t>& profile,
+		std::vector<uint64_t>& profile,
 		const char* particleType)
 	{
 		const std::span<const float> splitCoordinates = splitAxis == 0
@@ -66,8 +66,8 @@ namespace
 			const uint32_t bin = std::min(
 				static_cast<uint32_t>(normalizedCoordinate * profileBinCount),
 				profileBinCount - 1);
-			uint32_t& binCount = profile[bin];
-			if (binCount == std::numeric_limits<uint32_t>::max())
+			uint64_t& binCount = profile[bin];
+			if (binCount == std::numeric_limits<uint64_t>::max())
 			{
 				throw std::runtime_error(
 					"Cannot build a slab AABB repartition profile with an overflowing bin.");
@@ -219,11 +219,11 @@ void Decomp_AABB_Slabs::Repartition(const DomainDecompRepartitionInput& input)
 	const AABB globalBounds = slabLayout_.GlobalExtentAABB();
 
 	// TODO: restore a boundary-particle weight when boundary work is modeled?
-	const std::span<const uint32_t> weightByBin = input.ownedFluidByUnit;
+	const std::span<const uint64_t> weightByBin = input.ownedFluidByUnit;
 
 	// an empty profile carries no balancing information, so the current layout is kept
 	uint64_t totalWeight = 0;
-	for (const uint32_t binWeight : weightByBin) { totalWeight += binWeight; }
+	for (const uint64_t binWeight : weightByBin) { totalWeight += binWeight; }
 	if (totalWeight == 0) { return; }
 
 	// place the global walls from the profile, which is already binned along the split axis

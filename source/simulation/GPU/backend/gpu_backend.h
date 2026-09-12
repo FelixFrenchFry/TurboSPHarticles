@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 #include <stdexcept>
 
@@ -49,18 +50,23 @@ namespace Sim
 			return *this;
 		}
 
-		void Resize(size_t n)
+		void Resize(uint64_t n)
 		{
 			if (n == size_) { return; }
+			if (n > std::numeric_limits<size_t>::max() / sizeof(T))
+			{
+				throw std::length_error("CUDA device buffer byte size overflow.");
+			}
+			const uint64_t N_bytes = n * sizeof(T);
 
 			Release();
 
 			if (n)
 			{
-				cudaError_t err = cudaMalloc(reinterpret_cast<void**>(&ptr_), n * sizeof(T));
+				cudaError_t err = cudaMalloc(reinterpret_cast<void**>(&ptr_), static_cast<size_t>(N_bytes));
 				if (err != cudaSuccess) throw std::runtime_error("cudaMalloc failed.");
 
-				Mem::TrackDeviceAlloc(n * sizeof(T));
+				Mem::TrackDeviceAlloc(N_bytes);
 			}
 
 			size_ = n;
@@ -68,7 +74,7 @@ namespace Sim
 
 		T* Data() { return ptr_; }
 		const T* Data() const { return ptr_; }
-		size_t Size() const { return size_; }
+		uint64_t Size() const { return size_; }
 
 		void Release()
 		{
@@ -93,7 +99,7 @@ namespace Sim
 		}
 
 		T* ptr_ = nullptr;
-		size_t size_ = 0;
+		uint64_t size_ = 0;
 	};
 
 	class SimBackend_GPU final : public I_SimBackend
@@ -188,7 +194,7 @@ namespace Sim
 		// --- [ backend-specific data structures for operating the simulation ] ---
 
 		// fluid particles
-		DeviceBuffer<uint32_t> d_idF_;
+		DeviceBuffer<uint64_t> d_idF_;
 		DeviceBuffer<float> d_xPosF_, d_yPosF_, d_zPosF_;
 		DeviceBuffer<float> d_xVelF_, d_yVelF_, d_zVelF_;
 		DeviceBuffer<float> d_xVelPredF_, d_yVelPredF_, d_zVelPredF_;
@@ -199,13 +205,13 @@ namespace Sim
 		DeviceBuffer<float> d_densityF_;
 
 		// boundary particles
-		DeviceBuffer<uint32_t> d_idB_;
+		DeviceBuffer<uint64_t> d_idB_;
 		DeviceBuffer<float> d_xPosB_, d_yPosB_, d_zPosB_;
 		DeviceBuffer<float> d_volB_; // non-uniform volumes for non-uniform boundary particle spacing
 		DeviceBuffer<float> d_psiB_; // non-uniform pseudo-masses for non-uniform boundary particle spacing
 
 		// rigid particles
-		DeviceBuffer<uint32_t> d_idR_;
+		DeviceBuffer<uint64_t> d_idR_;
 		DeviceBuffer<uint32_t> d_bodyIdR_;
 		DeviceBuffer<float> d_xPosR_, d_yPosR_, d_zPosR_;
 		DeviceBuffer<float> d_xRelPosR_, d_yRelPosR_, d_zRelPosR_;
@@ -297,7 +303,8 @@ namespace Sim
 		uint64_t N_abs32FR_ = 0;
 		const float extraAllocCapacityPct_ = 2.0f; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
-		DeviceBuffer<uint32_t> d_reorderIdScratch_;
+		DeviceBuffer<uint64_t> d_reorderIdScratch_;
+		DeviceBuffer<uint32_t> d_sortParticleIdxScratch_;
 
 		// reusable device scratch for particle statistics
 		mutable DeviceBuffer<uint32_t> d_nbrCountHist_;
@@ -331,7 +338,7 @@ namespace Sim
 		mutable std::vector<float> h_expXVelF_;
 		mutable std::vector<float> h_expYVelF_;
 		mutable std::vector<float> h_expZVelF_;
-		mutable std::vector<uint32_t> h_expIdF_;
+		mutable std::vector<uint64_t> h_expIdF_;
 		mutable std::vector<uint8_t> h_expSurfaceFlagsScratch_;
 
 		// operation benchmarking order
@@ -346,6 +353,9 @@ namespace Sim
 		// (does not preserve data)
 		void EnsureCapacity(uint32_t N_newF, uint32_t N_newB, bool force = false)
 		{
+			(void)CheckedLocalParticleCount(N_newF, "GPU fluid capacity");
+			(void)CheckedLocalParticleCount(N_newB, "GPU boundary capacity");
+
 			const uint32_t N_newChunks = (N_newF == 0u)
 				? 0u : ((N_newF - 1u) / GPU::N_SELL_WIDTH) + 1u;
 			const uint32_t N_newReorderScratch = std::max(N_newF, N_newB);
@@ -362,10 +372,11 @@ namespace Sim
 				d_nbrChunkMaxCountFF_.Size() != N_newChunks || d_nbrChunkMaxCountFB_.Size() != N_newChunks || d_nbrChunkMaxCountFR_.Size() != N_newChunks ||
 				d_nbrChunkBaseIdxFF_.Size() != N_newChunks || d_nbrChunkBaseIdxFB_.Size() != N_newChunks || d_nbrChunkBaseIdxFR_.Size() != N_newChunks ||
 				d_nbrChunkFormatFF_.Size() != N_newChunks || d_nbrChunkFormatFB_.Size() != N_newChunks || d_nbrChunkFormatFR_.Size() != N_newChunks ||
-				d_nbrChunkOffsetsFF_.Size() != static_cast<size_t>(N_newChunks) + 1 ||
-				d_nbrChunkOffsetsFB_.Size() != static_cast<size_t>(N_newChunks) + 1 ||
-				d_nbrChunkOffsetsFR_.Size() != static_cast<size_t>(N_newChunks) + 1 ||
-				d_reorderIdScratch_.Size() != N_newReorderScratch;
+				d_nbrChunkOffsetsFF_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
+				d_nbrChunkOffsetsFB_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
+				d_nbrChunkOffsetsFR_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
+				d_reorderIdScratch_.Size() != N_newReorderScratch ||
+				d_sortParticleIdxScratch_.Size() != N_newReorderScratch;
 			const bool needBoundary = force || N_newB != N_B_ ||
 				d_idB_.Size() != N_newB ||
 				d_xPosB_.Size() != N_newB || d_yPosB_.Size() != N_newB || d_zPosB_.Size() != N_newB ||
@@ -386,20 +397,23 @@ namespace Sim
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
 			d_volB_.Resize(N_B_); d_psiB_.Resize(N_B_);
 			d_reorderIdScratch_.Resize(N_newReorderScratch);
+			d_sortParticleIdxScratch_.Resize(N_newReorderScratch);
 
 			d_nbrCountFF_.Resize(N_F_); d_nbrCountFB_.Resize(N_F_); d_nbrCountFR_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_newChunks); d_nbrChunkMaxCountFB_.Resize(N_newChunks); d_nbrChunkMaxCountFR_.Resize(N_newChunks);
 			d_nbrChunkBaseIdxFF_.Resize(N_newChunks); d_nbrChunkBaseIdxFB_.Resize(N_newChunks); d_nbrChunkBaseIdxFR_.Resize(N_newChunks);
 			d_nbrChunkFormatFF_.Resize(N_newChunks); d_nbrChunkFormatFB_.Resize(N_newChunks); d_nbrChunkFormatFR_.Resize(N_newChunks);
-			d_nbrChunkOffsetsFF_.Resize(static_cast<size_t>(N_newChunks) + 1);
-			d_nbrChunkOffsetsFB_.Resize(static_cast<size_t>(N_newChunks) + 1);
-			d_nbrChunkOffsetsFR_.Resize(static_cast<size_t>(N_newChunks) + 1);
+			d_nbrChunkOffsetsFF_.Resize(static_cast<uint64_t>(N_newChunks) + 1);
+			d_nbrChunkOffsetsFB_.Resize(static_cast<uint64_t>(N_newChunks) + 1);
+			d_nbrChunkOffsetsFR_.Resize(static_cast<uint64_t>(N_newChunks) + 1);
 			d_nbrOverflowFlag_.Resize(1);
 		}
 
 		void EnsureRigidCapacity(
 			uint32_t N_newRB, uint32_t N_newR, bool force = false)
 		{
+			(void)CheckedLocalParticleCount(N_newR, "GPU rigid capacity");
+
 			const bool needRigidBodies = force || N_newRB != N_RB_ ||
 				d_idRB_.Size() != N_newRB ||
 				d_rigidParticleBeginRB_.Size() != N_newRB || d_rigidParticleCountRB_.Size() != N_newRB ||
@@ -425,9 +439,9 @@ namespace Sim
 				d_volR_.Size() != N_newR || d_psiR_.Size() != N_newR ||
 				d_nbrCountRF_.Size() != N_newR || d_nbrCountRB_.Size() != N_newR ||
 				d_nbrCountRR_.Size() != N_newR ||
-				d_nbrOffsetsRF_.Size() != static_cast<size_t>(N_newR) + 1 ||
-				d_nbrOffsetsRB_.Size() != static_cast<size_t>(N_newR) + 1 ||
-				d_nbrOffsetsRR_.Size() != static_cast<size_t>(N_newR) + 1;
+				d_nbrOffsetsRF_.Size() != static_cast<uint64_t>(N_newR) + 1 ||
+				d_nbrOffsetsRB_.Size() != static_cast<uint64_t>(N_newR) + 1 ||
+				d_nbrOffsetsRR_.Size() != static_cast<uint64_t>(N_newR) + 1;
 			if (!(needRigidBodies || needParticlesR)) { return; }
 
 			N_RB_ = N_newRB;
@@ -439,9 +453,9 @@ namespace Sim
 			d_xForceR_.Resize(N_R_); d_yForceR_.Resize(N_R_); d_zForceR_.Resize(N_R_);
 			d_volR_.Resize(N_R_); d_psiR_.Resize(N_R_);
 			d_nbrCountRF_.Resize(N_R_); d_nbrCountRB_.Resize(N_R_); d_nbrCountRR_.Resize(N_R_);
-			d_nbrOffsetsRF_.Resize(static_cast<size_t>(N_R_) + 1);
-			d_nbrOffsetsRB_.Resize(static_cast<size_t>(N_R_) + 1);
-			d_nbrOffsetsRR_.Resize(static_cast<size_t>(N_R_) + 1);
+			d_nbrOffsetsRF_.Resize(static_cast<uint64_t>(N_R_) + 1);
+			d_nbrOffsetsRB_.Resize(static_cast<uint64_t>(N_R_) + 1);
+			d_nbrOffsetsRR_.Resize(static_cast<uint64_t>(N_R_) + 1);
 
 			d_idRB_.Resize(N_RB_);
 			d_rigidParticleBeginRB_.Resize(N_RB_); d_rigidParticleCountRB_.Resize(N_RB_);
@@ -464,14 +478,17 @@ namespace Sim
 		// and ensures list-storage capacity for the fill-query.
 		void FinalizeNeighborLists_Count();
 
-		void EnsureNsSharedScratchCapacity(const size_t N_requiredBytes)
+		void EnsureNsSharedScratchCapacity(const uint64_t N_requiredBytes)
 		{
 			if (N_requiredBytes <= d_nsSharedScratch_.Size()) { return; }
 
-			const size_t capacity = N_requiredBytes +
-				static_cast<size_t>(Base::ExtraPercent(
+			const uint64_t capacity = Sim::CheckedCapacityWithSlack(
+				N_requiredBytes,
+				Base::ExtraPercent(
 					N_requiredBytes,
-					extraAllocCapacityPct_));
+					extraAllocCapacityPct_),
+				std::numeric_limits<uint64_t>::max(),
+				"GPU neighbor-search scratch reserve");
 			d_nsSharedScratch_.Resize(capacity);
 		}
 	};

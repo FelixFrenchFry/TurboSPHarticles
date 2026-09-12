@@ -23,7 +23,7 @@ namespace Stats
 		double sum = 0.0;
 		float min = 0.0f;
 		float max = 0.0f;
-		std::vector<uint32_t> histogram;
+		std::vector<uint64_t> histogram;
 
 		void Clear();
 	};
@@ -72,10 +72,10 @@ namespace Stats
 			const Sim::SimParams& simParams);
 
 		// per-metric queries
-		float GetStat_Latest(StatMetric metric) const;
-		float GetStat_Avg(StatMetric metric) const;
-		float GetStat_Min(StatMetric metric) const;
-		float GetStat_Max(StatMetric metric) const;
+		double GetStat_Latest(StatMetric metric) const;
+		double GetStat_Avg(StatMetric metric) const;
+		double GetStat_Min(StatMetric metric) const;
+		double GetStat_Max(StatMetric metric) const;
 
 		// helpers
 		StatRecordStep& GetCurrentRecord() { return recLatest_; }
@@ -94,9 +94,9 @@ namespace Stats
 		std::deque<StatRecordStep> recHistory_;
 
 		// all-time per-metric aggregates
-		std::array<float, GetIdx(StatMetric::Count)> statsSum_allTime_{};
-		std::array<float, GetIdx(StatMetric::Count)> statsMin_allTime_{};
-		std::array<float, GetIdx(StatMetric::Count)> statsMax_allTime_{};
+		std::array<double, GetIdx(StatMetric::Count)> statsSum_allTime_{};
+		std::array<double, GetIdx(StatMetric::Count)> statsMin_allTime_{};
+		std::array<double, GetIdx(StatMetric::Count)> statsMax_allTime_{};
 
 		// helpers
 		void ClearAllTime();

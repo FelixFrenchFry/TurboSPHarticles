@@ -3,6 +3,7 @@
 
 // external
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // internal
@@ -25,8 +26,7 @@ namespace Dist
 	// fluid particle payload used to gather distributed export snapshots
 	struct DistExportFluidParticlePacket
 	{
-		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
-		uint32_t id = 0;
+		uint64_t id = Sim::INVALID_PARTICLE_ID;
 		uint32_t rank = 0;
 
 		float xPos = 0.0f;
@@ -38,8 +38,7 @@ namespace Dist
 	// boundary particle payload used to gather distributed export snapshots
 	struct DistExportBoundaryParticlePacket
 	{
-		uint32_t globalIdx = NO_GLOBAL_PARTICLE_IDX;
-		uint32_t id = 0;
+		uint64_t id = Sim::INVALID_PARTICLE_ID;
 
 		float xPos = 0.0f;
 		float yPos = 0.0f;
@@ -61,6 +60,14 @@ namespace Dist
 		uint32_t N_gatheredB = 0; // gathered boundary particles count
 		uint32_t N_gatheredR = 0; // gathered rigid particle count
 	};
+
+	// allocation-free count and byte-size check for a root export snapshot
+	bool ValidateDistExportSnapshotRootCapacity(
+		uint64_t N_gatheredF,
+		uint64_t N_gatheredB,
+		uint64_t N_replicatedR,
+		uint64_t* rootStorageBytes = nullptr,
+		std::string* failMsg = nullptr);
 
 	bool PackOwnedExportSnapshotBuffer(
 		DistExportSnapshotBuffer& gatherBuffer,

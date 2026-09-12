@@ -6,12 +6,14 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <exception>
 #include <mutex>
 #include <utility>
 #include <spdlog/spdlog.h>
 
 // internal
 #include "mailboxes_cuda.h"
+#include "source/simulation/core/particle_types.h"
 
 
 
@@ -140,6 +142,17 @@ namespace Sync
 	{
 		std::scoped_lock lock(impl_->mutex_);
 		if (!IsEnabled()) { return false; }
+		size_t N_required = 0;
+		try
+		{
+			N_required = Sim::CheckedCombinedLocalParticleCount(
+				N_F, N_R, "CUDA visual mailbox particle count");
+		}
+		catch (const std::exception& ex)
+		{
+			Disable(ex.what());
+			return false;
+		}
 
 		// select CUDA device used by the interop mailbox
 		int currentDevice = -1;
@@ -156,7 +169,6 @@ namespace Sync
 
 		// reclaim completed slots and acquire a free slot for packing
 		impl_->ReclaimRetiredSlots(*this);
-		const size_t N_required = static_cast<size_t>(N_F) + N_R;
 		for (uint32_t i = 0; i < impl_->slots_.size(); i++)
 		{
 			auto& slot = impl_->slots_[i];

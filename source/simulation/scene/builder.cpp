@@ -12,6 +12,7 @@
 #include <numbers>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <tbb/blocked_range.h>
@@ -115,7 +116,35 @@ namespace
 			std::abs(glm::dot(glm::cross(xAxis, yAxis), zAxis) - 1.0f) <= tolerance;
 	}
 
+	uint64_t ParticleCountBox(
+		const uint32_t N_u,
+		const uint32_t N_v,
+		const uint32_t N_w,
+		const char* const context)
+	{
+		return Sim::CheckedParticleMultiply(
+			Sim::CheckedParticleMultiply(N_u, N_v, context),
+			N_w,
+			context);
+	}
+
 } // namespace anonymous
+
+uint64_t Scene::GlobalLatticeParticleId(
+	const uint64_t base,
+	const uint32_t N_u,
+	const uint32_t N_v,
+	const uint32_t iu,
+	const uint32_t jv,
+	const uint32_t kw,
+	const char* const context)
+{
+	const uint64_t row = Sim::CheckedParticleAdd(
+		Sim::CheckedParticleMultiply(N_v, kw, context), jv, context);
+	const uint64_t localIdx = Sim::CheckedParticleAdd(
+		Sim::CheckedParticleMultiply(row, N_u, context), iu, context);
+	return Sim::CheckedParticleId(base, localIdx, context);
+}
 
 void ScenarioMgr::ComputeBoundaryCoefficients(
 	Sync::BoundaryParticles& particlesB,
@@ -313,6 +342,25 @@ void ScenarioMgr::EndBuildRegion()
 	hasBuildRegion_ = false;
 }
 
+void ScenarioMgr::FinalizeGeneratedParticleIds(Sync::UniversalSimState& state)
+{
+	if (!hasBuildRegion_)
+	{
+		N_builtGlobalF_ = state.particlesF.N_;
+		N_builtGlobalB_ = state.particlesB.N_;
+	}
+
+	auto& particlesR = state.particlesR;
+	if (particlesR.N_ == 0) { return; }
+
+	(void)Sim::CheckedParticleId(N_builtGlobalB_, particlesR.N_ - 1, "Rigid particle IDs");
+	for (uint32_t localIdx = 0; localIdx != particlesR.N_; localIdx++)
+	{
+		particlesR.id[localIdx] = Sim::CheckedParticleId(
+			N_builtGlobalB_, localIdx, "Rigid particle ID");
+	}
+}
+
 bool ScenarioMgr::IsInsideBuildRegion(const glm::vec3& pos) const
 {
 	if (!hasBuildRegion_) { return true; }
@@ -380,13 +428,12 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	const uint32_t N_v = TilesCount(vLen_i, size);
 	const uint32_t N_w = TilesCount(wLen_i, size);
 	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
-
 	auto& F = dst.particlesF;
 
 	// dense generation index of the first particle, so IDs stay the global scenario indices
-	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
-	const uint32_t N_add = N_u * N_v * N_w;
-	N_builtGlobalF_ += N_add;
+	const uint64_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
+	const uint64_t N_add = ParticleCountBox(N_u, N_v, N_w, "Fluid lattice");
+	N_builtGlobalF_ = Sim::CheckedParticleAdd(N_base, N_add, "Fluid lattice");
 
 	// offsets from box planes
 	const float uOff = radius + StartOffset(uLen_i, size, static_cast<int>(N_u));
@@ -397,7 +444,7 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 
 	// world position of one generated particle, so the region passes below stay consistent
 	const auto ParticlePosition = [&](const uint32_t iu, const uint32_t jv,
-									  const uint32_t kw, const uint32_t idx) -> glm::vec3
+									  const uint32_t kw, const uint64_t idx) -> glm::vec3
 	{
 		// position components
 		float u = uOff + static_cast<float>(iu) * size;
@@ -427,7 +474,7 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	};
 
 	// writes one particle into its storage slot, tagged with its global scenario index
-	const auto WriteParticle = [&](const uint32_t outIdx, const uint32_t idx, const glm::vec3& pos)
+	const auto WriteParticle = [&](const uint32_t outIdx, const uint64_t idx, const glm::vec3& pos)
 	{
 		F.id[outIdx] = idx;
 
@@ -459,17 +506,21 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	// keep only the generated particles inside the build region
 	if (hasBuildRegion_)
 	{
-		// first pass to determine how many particles to keep
-		uint32_t N_keep = 0;
+		// first pass, determine how many particles to keep
+		uint64_t N_keep = 0;
 		for (uint32_t kw = 0; kw < N_w; kw++) // depth
 		{
 			for (uint32_t jv = 0; jv < N_v; jv++) // height
 			{
 				for (uint32_t iu = 0; iu < N_u; iu++) // width
 				{
-					const uint32_t idx = N_base + (N_v * kw + jv) * N_u + iu;
+					const uint64_t idx = GlobalLatticeParticleId(
+						N_base, N_u, N_v, iu, jv, kw, "Fluid lattice ID");
 
-					if (IsInsideBuildRegion(ParticlePosition(iu, jv, kw, idx))) { N_keep++; }
+					if (IsInsideBuildRegion(ParticlePosition(iu, jv, kw, idx)))
+					{
+						N_keep = Sim::CheckedParticleAdd(N_keep, 1, "Local fluid count");
+					}
 				}
 			}
 		}
@@ -477,9 +528,9 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 
 		// resize fluid particle data structures according to the kept particle count
 		const uint32_t N_localBase = F.N_;
-		dst.ResizeFluid(N_localBase + N_keep);
+		dst.ResizeFluid(Sim::CheckedParticleAdd(N_localBase, N_keep, "Local fluid append"));
 
-		// second pass to actually add particles
+		// second pass, actually add particles
 		uint32_t outIdx = N_localBase;
 		for (uint32_t kw = 0; kw < N_w; kw++) // depth
 		{
@@ -487,7 +538,8 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 			{
 				for (uint32_t iu = 0; iu < N_u; iu++) // width
 				{
-					const uint32_t idx = N_base + (N_v * kw + jv) * N_u + iu;
+					const uint64_t idx = GlobalLatticeParticleId(
+						N_base, N_u, N_v, iu, jv, kw, "Fluid lattice ID");
 					const glm::vec3 pos = ParticlePosition(iu, jv, kw, idx);
 
 					// skip erroneous particles
@@ -503,13 +555,18 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 	}
 
 	// resize fluid particle data structures according to the new total particle count
-	dst.ResizeFluid(N_base + N_add);
+	const uint32_t N_localBase = F.N_;
+	dst.ResizeFluid(Sim::CheckedParticleAdd(N_localBase, N_add, "Local fluid append"));
 
 	// add particles
+	// TODO: remove the condition?
 	if (N_w > 0 && N_v > 0 && N_u > 0)
 	{
 		tbb::parallel_for(
-			tbb::blocked_range3d<int>(0, N_w, 0, N_v, 0, N_u),
+			tbb::blocked_range3d<int>(
+				0, static_cast<int>(N_w),
+				0, static_cast<int>(N_v),
+				0, static_cast<int>(N_u)),
 			[&](const tbb::blocked_range3d<int>& r)
 			{
 				for (int kw = r.pages().begin(); kw != r.pages().end(); kw++) // depth
@@ -519,10 +576,16 @@ void ScenarioMgr::BuildFluidBlock_OBB(const OBB& box,
 						for (int iu = r.cols().begin(); iu != r.cols().end(); iu++) // width
 						{
 							// get global index of currently handled particle
-							const uint32_t local = (N_v * kw + jv) * N_u + iu;
-							const uint32_t idx = N_base + local;
+							const uint64_t idx = GlobalLatticeParticleId(
+								N_base, N_u, N_v,
+								static_cast<uint32_t>(iu),
+								static_cast<uint32_t>(jv),
+								static_cast<uint32_t>(kw),
+								"Fluid lattice ID");
+							const uint32_t localIdx = Sim::CheckedLocalParticleCount(
+								idx - N_base, "Fluid lattice local slot");
 
-							WriteParticle(idx, idx, ParticlePosition(
+							WriteParticle(N_localBase + localIdx, idx, ParticlePosition(
 								static_cast<uint32_t>(iu),
 								static_cast<uint32_t>(jv),
 								static_cast<uint32_t>(kw),
@@ -556,6 +619,8 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 	const uint32_t N_w = TilesCount(wLen_i, size);
 	if (N_u <= 0 || N_v <= 0 || N_w <= 0) { return; }
 
+	const uint64_t N_candidates = ParticleCountBox(N_u, N_v, N_w, "Filtered fluid lattice");
+
 	// offsets from box planes
 	const float uOff = radius + StartOffset(uLen_i, size, static_cast<int>(N_u));
 	const float vOff = radius + StartOffset(vLen_i, size, static_cast<int>(N_v));
@@ -564,12 +629,13 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 	auto& F = dst.particlesF;
 
 	// dense generation index of the first particle, so IDs stay the global scenario indices
-	const uint32_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
+	const uint64_t N_base = hasBuildRegion_ ? N_builtGlobalF_ : F.N_;
+	(void)N_candidates;
 	const float jitAmp = params.jitterFracF * params.particleSizeF;
 
 	// world position of one generated particle, so the region passes below stay consistent
 	const auto ParticlePosition = [&](const uint32_t iu, const uint32_t jv,
-		const uint32_t kw, const uint32_t idx) -> glm::vec3
+		const uint32_t kw, const uint64_t idx) -> glm::vec3
 	{
 		float u = uOff + static_cast<float>(iu) * size;
 		float v = vOff + static_cast<float>(jv) * size;
@@ -595,9 +661,9 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 			+ box.wHat * w;
 	};
 
-	// first pass determines both the global filtered count and the local region count
-	uint32_t N_keepGlobal = 0;
-	uint32_t N_keepLocal = 0;
+	// first pass, determine both the global filtered count and the local region count
+	uint64_t N_keepGlobal = 0;
+	uint64_t N_keepLocal = 0;
 	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
 		for (uint32_t jv = 0; jv < N_v; jv++) // height
@@ -617,12 +683,15 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				// apply filter
 				if (keep && !keep(u, v, w)) { continue; }
 
-				const uint32_t globalIdx = N_base + N_keepGlobal;
-				N_keepGlobal++;
+				const uint64_t globalIdx = Sim::CheckedParticleId(
+					N_base, N_keepGlobal, "Filtered fluid ID");
+				N_keepGlobal = Sim::CheckedParticleAdd(
+					N_keepGlobal, 1, "Filtered global fluid count");
 				if (!hasBuildRegion_ || IsInsideBuildRegion(
 					ParticlePosition(iu, jv, kw, globalIdx)))
 				{
-					N_keepLocal++;
+					N_keepLocal = Sim::CheckedParticleAdd(
+						N_keepLocal, 1, "Filtered local fluid count");
 				}
 			}
 		}
@@ -630,16 +699,16 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 	if (N_keepGlobal == 0) { return; }
 
 	// advance the global count on every rank, even if this rank has no particles in the region
-	N_builtGlobalF_ += N_keepGlobal;
+	N_builtGlobalF_ = Sim::CheckedParticleAdd(N_base, N_keepGlobal, "Global fluid count");
 	if (N_keepLocal == 0) { return; }
 
 	// resize fluid particle data structures
 	const uint32_t N_localBase = F.N_;
-	dst.ResizeFluid(N_localBase + N_keepLocal);
+	dst.ResizeFluid(Sim::CheckedParticleAdd(N_localBase, N_keepLocal, "Local fluid append"));
 	uint32_t outIdx = N_localBase;
-	uint32_t idx = N_base;
+	uint64_t acceptedGlobalCount = 0;
 
-	// second pass to actually add particles
+	// second pass, actually add particles
 	for (uint32_t kw = 0; kw < N_w; kw++) // depth
 	{
 		for (uint32_t jv = 0; jv < N_v; jv++) // height
@@ -658,14 +727,16 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				// apply filter
 				if (keep && !keep(u, v, w)) { continue; }
 
-				const glm::vec3 pos = ParticlePosition(iu, jv, kw, idx);
+				const uint64_t particleId = Sim::CheckedParticleId(
+					N_base, acceptedGlobalCount, "Filtered fluid ID");
+				const glm::vec3 pos = ParticlePosition(iu, jv, kw, particleId);
 				if (hasBuildRegion_ && !IsInsideBuildRegion(pos))
 				{
-					idx++;
+					acceptedGlobalCount++;
 					continue;
 				}
 
-				F.id[outIdx] = idx;
+				F.id[outIdx] = particleId;
 
 				// use pos for new particle
 				F.xPos[outIdx] = pos.x;
@@ -692,16 +763,23 @@ void ScenarioMgr::BuildFluidBlock_OBB_Filtered(const OBB& box,
 				F.density[outIdx] = params.restDensity;
 
 				outIdx++;
-				idx++;
+				acceptedGlobalCount++;
 			}
 		}
 	}
+	assert(acceptedGlobalCount == N_keepGlobal);
 }
 
 void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 											    Sync::UniversalSimState& dst,
 											    const Sim::SimParams& params)
 {
+	if (hasBuildRegion_)
+	{
+		throw std::runtime_error(
+			"Hollow boundary blocks do not support regional generation.");
+	}
+
 	const float size = params.particleSizeB;
 	const float radius = params.particleSizeB * 0.5f;
 	const uint32_t layers = params.boundaryLayers;
@@ -724,15 +802,17 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	const uint32_t N_w = TilesCount(wLen_i, size);
 
 	// compute number of particles we keep to make the box hollow
-	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
+	const uint64_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
 	if (N_keep <= 0) { return; }
 
 	auto& B = dst.particlesB;
 
 	// resize boundary particle data structures
 	const uint32_t N_base = B.N_;
-	const uint32_t N_add = N_keep;
-	dst.ResizeBoundary(N_base + N_add);
+	const uint32_t N_add = Sim::CheckedLocalParticleCount(N_keep, "Hollow boundary block");
+	const uint32_t N_final = Sim::CheckedLocalParticleCount(
+		Sim::CheckedParticleAdd(N_base, N_add, "Boundary append"), "Boundary append");
+	dst.ResizeBoundary(N_final);
 
 	// jittering params
 	const float jitAmp = params.jitterFracB * params.particleSizeB;
@@ -780,7 +860,7 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 									+ box.vHat * v
 									+ box.wHat * w;
 
-				B.id[idx] = idx;
+				B.id[idx] = Sim::CheckedParticleId(N_base, idx - N_base, "Hollow boundary ID");
 
 				// use pos for new particle
 				B.xPos[idx] = pos.x;
@@ -791,8 +871,8 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 			}
 		}
 	}
-
 	assert(idx == (N_base + N_add));
+
 	ComputeBoundaryCoefficients(dst.particlesB, params, 0, dst.particlesB.N_);
 }
 
@@ -823,19 +903,25 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	const uint32_t N_u = TilesCount(uLen_i, size);
 	const uint32_t N_v = TilesCount(vLen_i, size);
 	const uint32_t N_w = TilesCount(wLen_i, size);
-	const uint32_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
+	const uint64_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
 	if (N_keep <= 0) { return Sync::InvalidRigidBodyId; }
 
-	auto& B = dst.particlesB;
 	auto& R = dst.particlesR;
 	auto& RB = dst.rigidBodies;
 
+	if (RB.N_ == std::numeric_limits<uint32_t>::max())
+	{
+		throw std::length_error("Rigid body count exceeds uint32_t range.");
+	}
+
 	const uint32_t bodyIdx = RB.N_;
 	const uint32_t N_base = R.N_;
-	const uint32_t N_add = N_keep;
+	const uint32_t N_add = Sim::CheckedLocalParticleCount(N_keep, "Hollow rigid body");
+	const uint32_t N_final = Sim::CheckedLocalParticleCount(
+		Sim::CheckedParticleAdd(N_base, N_add, "Rigid append"), "Rigid append");
 
 	dst.ResizeRigidBodies(bodyIdx + 1);
-	dst.ResizeRigid(N_base + N_add);
+	dst.ResizeRigid(N_final);
 
 	const glm::vec3 center = box.origin
 						   + box.uHat * (0.5f * box.uLen)
@@ -913,7 +999,6 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 									+ box.wHat * w;
 				const glm::vec3 rel = pos - center;
 
-				R.id[rigidParticleIdx] = B.N_ + rigidParticleIdx;
 				R.bodyId[rigidParticleIdx] = bodyIdx;
 				R.xRelPos[rigidParticleIdx] = Dot(rel, box.uHat);
 				R.yRelPos[rigidParticleIdx] = Dot(rel, box.vHat);
@@ -923,8 +1008,8 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 			}
 		}
 	}
-
 	assert(rigidParticleIdx == (N_base + N_add));
+
 	ComputeRigidCoefficients(R, params, N_base, N_base + N_add);
 
 	return bodyIdx;
@@ -941,9 +1026,9 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 {
 	// validate supplied samples and rigid body properties
 	if (bodyLocalSamples.empty()) { return Sync::InvalidRigidBodyId; }
-	if (bodyLocalSamples.size() > std::numeric_limits<uint32_t>::max())
+	if (bodyLocalSamples.size() > Sim::MaxLocalParticleCount)
 	{
-		throw std::runtime_error("Rigid surface sample count exceeds uint32 limits.");
+		throw std::length_error("Rigid surface sample count exceeds the local particle limit.");
 	}
 	if (!IsFinite(centerOfMass) || !IsFinite(orientation) || !IsRotationMatrix(orientation) ||
 		!IsFinite(bodyInertiaInv) ||
@@ -961,22 +1046,24 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	}
 
 	// validate state growth before resizing any arrays
-	auto& B = dst.particlesB;
 	auto& R = dst.particlesR;
 	auto& RB = dst.rigidBodies;
-	const uint32_t N_add = static_cast<uint32_t>(bodyLocalSamples.size());
+	const uint32_t N_add = Sim::CheckedLocalParticleCount(
+		bodyLocalSamples.size(), "Rigid surface sample count");
 	if (RB.N_ == std::numeric_limits<uint32_t>::max() ||
-		N_add > std::numeric_limits<uint32_t>::max() - R.N_)
+		R.N_ > Sim::MaxLocalParticleCount ||
+		N_add > Sim::MaxLocalParticleCount - R.N_)
 	{
-		throw std::runtime_error("Rigid surface state exceeds uint32 limits.");
+		throw std::length_error("Rigid surface state exceeds the local particle limit.");
 	}
 
 	const uint32_t bodyIdx = RB.N_;
 	const uint32_t N_base = R.N_;
+	const uint32_t N_final = N_base + N_add;
 
 	// append the rigid body and its rigid particle range
 	dst.ResizeRigidBodies(bodyIdx + 1);
-	dst.ResizeRigid(N_base + N_add);
+	dst.ResizeRigid(N_final);
 
 	RB.id[bodyIdx] = bodyIdx;
 	RB.rigidParticleBegin[bodyIdx] = N_base;
@@ -1016,7 +1103,6 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 		const uint32_t rigidParticleIdx = N_base + localIdx;
 		const glm::vec3 localPos = bodyLocalSamples[localIdx].pos;
 
-		R.id[rigidParticleIdx] = B.N_ + rigidParticleIdx;
 		R.bodyId[rigidParticleIdx] = bodyIdx;
 		R.xRelPos[rigidParticleIdx] = localPos.x;
 		R.yRelPos[rigidParticleIdx] = localPos.y;
@@ -1149,17 +1235,26 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	const uint32_t N_u = TilesCount(face.uLen, size); // num particles in u direction
 	const uint32_t N_v = TilesCount(face.vLen, size); // num particles in v direction
 	if (N_u <= 0 || N_v <= 0) { return; }
+	const uint64_t N_face = Sim::CheckedParticleMultiply(
+		Sim::CheckedParticleMultiply(N_u, N_v, "Boundary face"),
+		params.boundaryLayers, "Boundary face");
 
 	const float defaultVolB = DefaultBoundaryVolB(params);
 	const float defaultPsiB = DefaultBoundaryPsiB(params);
+
+	auto& B = dst.particlesB;
+	const uint64_t N_base = hasBuildRegion_
+		? N_builtGlobalB_
+		: B.xPos.size();
+	const uint64_t N_end = Sim::CheckedParticleAdd(
+		N_base, N_face, "Boundary face");
 
 	// pre-reserve memory for new particles
 	// (a build region keeps only a slice of the face, so its storage grows on demand instead)
 	if (!hasBuildRegion_)
 	{
-		dst.ReserveBoundaryAdditional(N_u * N_v * params.boundaryLayers);
+		dst.ReserveBoundaryAdditional(N_face);
 	}
-	auto& B = dst.particlesB;
 
 	for (uint32_t layer = 0; layer < params.boundaryLayers; layer++)
 	{
@@ -1181,14 +1276,20 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 				// TODO: add jittering?
 
 				// dense generation index of the first particle, so IDs stay the global scenario indices
-				const uint32_t idx = hasBuildRegion_
-					? N_builtGlobalB_
-					: static_cast<uint32_t>(B.xPos.size());
-				N_builtGlobalB_++;
+				const uint64_t faceRow = Sim::CheckedParticleAdd(
+					Sim::CheckedParticleMultiply(layer, N_u, "Boundary face ID"),
+					i, "Boundary face ID");
+				const uint64_t faceIdx = Sim::CheckedParticleAdd(
+					Sim::CheckedParticleMultiply(faceRow, N_v, "Boundary face ID"),
+					j, "Boundary face ID");
+				const uint64_t particleId = Sim::CheckedParticleId(
+					N_base, faceIdx, "Boundary face ID");
 
 				if (!IsInsideBuildRegion(pos)) { continue; }
+				(void)Sim::CheckedLocalParticleCount(
+					Sim::CheckedParticleAdd(B.xPos.size(), 1, "Boundary append"), "Boundary append");
 
-				B.id.push_back(idx);
+				B.id.push_back(particleId);
 
 				// use pos for new particle
 				B.xPos.push_back(pos.x);
@@ -1200,9 +1301,11 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 			}
 		}
 	}
+	N_builtGlobalB_ = N_end;
 
 	// update boundary particle count
-	dst.particlesB.N_ = static_cast<uint32_t>(dst.particlesB.xPos.size());
+	dst.particlesB.N_ = Sim::CheckedLocalParticleCount(
+		dst.particlesB.xPos.size(), "Boundary particle count");
 }
 
 // deterministic hash-based jitter, safe for parallel use
@@ -1235,20 +1338,29 @@ inline uint32_t ScenarioMgr::TilesCount(float length, float spacing)
 {
 	if (spacing <= 0.0f) { return 0; }
 
-	return std::max(1, static_cast<int>(std::floor(length / spacing)) + 1);
+	const float intervals = std::floor(length / spacing);
+	const double count = static_cast<double>(intervals) + 1.0;
+	if (!std::isfinite(intervals) ||
+		count < static_cast<double>(std::numeric_limits<int>::min()) ||
+		count > static_cast<double>(std::numeric_limits<int>::max()))
+	{
+		throw std::length_error("Particle lattice axis exceeds the signed iteration range.");
+	}
+
+	return static_cast<uint32_t>(std::max(1, static_cast<int>(count)));
 }
 
-inline uint32_t ScenarioMgr::ParticleCountHollowBox(
+inline uint64_t ScenarioMgr::ParticleCountHollowBox(
 	uint32_t N_u, uint32_t N_v, uint32_t N_w, uint32_t layers)
 {
 	// total particle count of "outer" box
-	const uint32_t N_total = N_u * N_v * N_w;
-	const int l = static_cast<int>(layers);
+	const uint64_t N_total = ParticleCountBox(N_u, N_v, N_w, "Hollow box outer lattice");
+	const uint64_t layerWidth = static_cast<uint64_t>(layers) * 2;
 	// compute particle count in each direction for "inner" box
-	const uint32_t N_u_i = std::max(static_cast<int>(N_u) - 2 * l, 0);
-	const uint32_t N_v_i = std::max(static_cast<int>(N_v) - 2 * l, 0);
-	const uint32_t N_w_i = std::max(static_cast<int>(N_w) - 2 * l, 0);
-	const uint32_t N_inner = N_u_i * N_v_i * N_w_i;
+	const uint32_t N_u_i = layerWidth < N_u ? N_u - static_cast<uint32_t>(layerWidth) : 0;
+	const uint32_t N_v_i = layerWidth < N_v ? N_v - static_cast<uint32_t>(layerWidth) : 0;
+	const uint32_t N_w_i = layerWidth < N_w ? N_w - static_cast<uint32_t>(layerWidth) : 0;
+	const uint64_t N_inner = ParticleCountBox(N_u_i, N_v_i, N_w_i, "Hollow box inner lattice");
 
 	return N_total - N_inner;
 }
