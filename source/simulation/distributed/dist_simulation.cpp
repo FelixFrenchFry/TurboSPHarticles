@@ -832,8 +832,9 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 	// local copy for consistent maximum-step handling during this run
 	const auto paramsInit = simParams_;
+	const uint64_t startStep = simStep_;
 	BeginRunLogging(paramsInit);
-	DistDiagnosticsMgr::ResetProgress();
+	DistDiagnosticsMgr::ResetProgress(startStep);
 	bool runOk = true;
 	const char* stopReason = "unknown reason";
 
@@ -954,7 +955,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 		SyncParameters();
 
 		if (runOk) { MarkTrace(Trace::TraceStage::Dist_ProgressReport); }
-		DisplayMemoryUsageStats(params);
+		DisplayMemoryUsageStats(params, simStep_ == startStep + 1);
 
 		// the progress block redraw would overwrite the error a failed stage just reported
 		if (runOk) { DisplayDistributedProgress(params, exportedStep); }

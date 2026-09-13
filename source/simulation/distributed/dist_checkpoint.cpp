@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -77,6 +78,18 @@ namespace
 		state.particleLocalIdx_Owned.resize(N_owned);
 		std::iota(state.particleLocalIdx_Owned.begin(), state.particleLocalIdx_Owned.end(), 0u);
 		state.particleLocalIdx_Outer = state.particleLocalIdx_Owned;
+	}
+
+	RebalanceTriggerState CheckpointTriggerStateFromJson(const nlohmann::json& value)
+	{
+		const uint64_t badStepCount = Export::CheckpointUint64(value.at("badStepCount"));
+		const uint64_t cooldownRemaining = Export::CheckpointUint64(value.at("cooldownRemaining"));
+		if (badStepCount > std::numeric_limits<uint32_t>::max() ||
+			cooldownRemaining > std::numeric_limits<uint32_t>::max())
+		{
+			throw std::runtime_error("Checkpoint load balance counters exceed the 32-bit limit.");
+		}
+		return { static_cast<uint32_t>(badStepCount), static_cast<uint32_t>(cooldownRemaining) };
 	}
 
 } // namespace anonymous
@@ -159,9 +172,24 @@ bool DistSimulationMgr::SaveCheckpoint(
 			manifest["fluidIdChecksum"] = expectedOwnedIdChecksumF_;
 			manifest["boundaryIdChecksum"] = expectedOwnedIdChecksumB_;
 			manifest["globalBounds"] = CheckpointBoundsToJson(domainDecomp_->GlobalExtentAABB());
+
+			// save root's trigger history alongside the current subdomain boundaries
+			const auto triggerState = loadBalanceMgr_.GetTriggerState();
+			manifest["loadBalanceState"]["badStepCount"] = triggerState.badStepCount;
+			manifest["loadBalanceState"]["cooldownRemaining"] = triggerState.cooldownRemaining;
+
 			for (int rank = 0; rank < mpiContext_.Size(); rank++)
 			{
 				const size_t offset = static_cast<size_t>(rank) * N_rankInfoFields;
+				const auto path = std::filesystem::path(directory) / CheckpointRankFileName(rank);
+				std::error_code error{};
+				const auto fileSize = std::filesystem::file_size(path, error);
+				if (error || fileSize != rankInfo[offset + 4])
+				{
+					throw std::runtime_error("Checkpoint rank file '" + path.string() +
+						"' is missing, inaccessible, or has a different size on root. "
+						"Distributed checkpoints require a shared output directory.");
+				}
 				if (rankInfo[offset + 2] != localSimState_.particlesR.N_ ||
 					rankInfo[offset + 3] != localSimState_.rigidBodies.N_)
 				{
@@ -229,6 +257,20 @@ bool DistSimulationMgr::LoadCheckpoint(
 		{
 			throw std::runtime_error("Checkpoint restart requires the original MPI rank count.");
 		}
+
+		// restore trigger history after policy configuration and before the first resumed step
+		RebalanceTriggerState triggerState{};
+		if (const auto it = manifest.find("loadBalanceState"); it != manifest.end())
+		{
+			triggerState = CheckpointTriggerStateFromJson(*it);
+		}
+		else if (loadBalanceMgr_.Enabled() &&
+			simParams_.loadBalanceTrigger == Base::LoadBalanceTrigger::SustainedImbalance)
+		{
+			throw std::runtime_error("Checkpoint is missing load-balancing trigger state.");
+		}
+		loadBalanceMgr_.RestoreTriggerState(triggerState);
+
 		simStep_ = info.step;
 		simTime_ = info.time;
 		N_expectedGlobalF_ = Export::CheckpointUint64(manifest.at("globalFluidCount"));

@@ -1231,7 +1231,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 		const size_t iEq = rawOverride.find('=');
 		if (iEq == std::string::npos)
 		{
-			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': Expected key=value.",
+			SPDLOG_ERROR("Invalid '--sim' override '{}': Expected key=value.",
 				rawOverride);
 			return false;
 		}
@@ -1241,7 +1241,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 
 		if (path.empty())
 		{
-			SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': Missing key.", rawOverride);
+			SPDLOG_ERROR("Invalid '--sim' override '{}': Missing key.", rawOverride);
 			return false;
 		}
 
@@ -1269,7 +1269,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 			const std::string key = path.substr(begin, end - begin);
 			if (key.empty())
 			{
-				SPDLOG_ERROR("Invalid '-sim/--sim' override '{}': Malformed key path.",
+				SPDLOG_ERROR("Invalid '--sim' override '{}': Malformed key path.",
 					rawOverride);
 				return false;
 			}
@@ -1284,7 +1284,7 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 			if (!next.is_object() && !next.is_null())
 			{
 				SPDLOG_ERROR(
-					"Invalid '-sim/--sim' override '{}': Key path collides with a non-object.",
+					"Invalid '--sim' override '{}': Key path collides with a non-object.",
 					rawOverride);
 				return false;
 			}

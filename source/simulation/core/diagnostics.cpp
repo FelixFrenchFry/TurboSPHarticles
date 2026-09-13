@@ -38,6 +38,7 @@ namespace
 	struct ProgressState
 	{
 		bool initialized = false;
+		uint64_t startStep = 0;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
 		int N_lastLines = 0;
@@ -130,11 +131,13 @@ namespace Sim
 		return false;
 	}
 
-	void DiagnosticsMgr::ResetProgress()
+	void DiagnosticsMgr::ResetProgress(const uint64_t step)
 	{
 		ProgressState& state = GetProgressState();
 		state = ProgressState{};
 		state.initialized = true;
+		state.startStep = step;
+		state.lastStep = step;
 		state.startSteady = steady_clock::now();
 	}
 
@@ -332,11 +335,13 @@ namespace Sim
         const uint64_t maxStepsU = hasTotal ? static_cast<uint64_t>(maxSteps) : 0;
         const auto now = steady_clock::now();
 
-        // re-initialize at start or when step == 0
-        if (!state.initialized || step == 0)
+        // restart progress timing when the simulation step is reset
+        if (!state.initialized || step == 0 || step < state.lastStep)
         {
             state = ProgressState{};
             state.initialized = true;
+            state.startStep = step;
+            state.lastStep = step;
             state.startSteady = now;
         }
 
@@ -347,7 +352,7 @@ namespace Sim
         double elapsedS = std::chrono::duration<double>(now - state.startSteady).count();
         elapsedS = std::max(elapsedS, 1e-14);
 
-        const double stepsPerSec = static_cast<double>(step) / elapsedS;
+        const double stepsPerSec = static_cast<double>(step - state.startStep) / elapsedS;
 
         // remaining time based on total simulation speed (only if total steps known)
         double remainingS = 0.0;

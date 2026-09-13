@@ -32,6 +32,7 @@ namespace
 	{
 		bool initialized = false;
 		bool overwriteProgress = true;
+		uint64_t startStep = 0;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
 		int N_lastLines = 0;
@@ -79,6 +80,7 @@ namespace
 
 	std::string FormatProgressLine(
 		const std::vector<DistRankStepReport>& reports,
+		const uint64_t startStep,
 		const double elapsedS,
 		const uint64_t N_residentBytes,
 		const int residentRank,
@@ -94,7 +96,7 @@ namespace
 
 		const double elapsed = std::max(elapsedS, 1e-14);
 
-		const double stepsPerSec = static_cast<double>(step) / elapsed;
+		const double stepsPerSec = static_cast<double>(step - startStep) / elapsed;
 		double percent = 0.0;
 		if (hasTotal)
 		{
@@ -1093,15 +1095,16 @@ namespace
 		state.overwriteProgress = Sim::DiagnosticsMgr::ShouldOverwriteProgress(
 			params.progressReportMode);
 		const auto now = steady_clock::now();
-		if (!state.initialized)
+		const uint64_t step = reports.front().step;
+		if (!state.initialized || step < state.lastStep)
 		{
 			state.initialized = true;
 			state.startSteady = now;
 			state.N_lastLines = 0;
-			state.lastStep = 0;
+			state.startStep = step;
+			state.lastStep = step;
 		}
 
-		const uint64_t step = reports.front().step;
 		if (step <= state.lastStep) { return; }
 		state.lastStep = step;
 
@@ -1143,7 +1146,7 @@ namespace
 		const int processPeakResidentMaxRank = RankWithMax(
 			reports, &DistRankStepReport::N_processPeakResidentBytes);
 		const std::string progressLine = FormatProgressLine(
-			reports, elapsedS,
+			reports, state.startStep, elapsedS,
 			processResidentMax, processResidentMaxRank,
 			processPeakResidentMax, processPeakResidentMaxRank);
 		PrintLine(N_lines, "%s", progressLine.c_str());
@@ -1303,11 +1306,13 @@ namespace Dist
 		std::fflush(stdout);
 	}
 
-	void DistDiagnosticsMgr::ResetProgress()
+	void DistDiagnosticsMgr::ResetProgress(const uint64_t step)
 	{
 		ProgressState& state = GetProgressState();
 		state = ProgressState{};
 		state.initialized = true;
+		state.startStep = step;
+		state.lastStep = step;
 		state.startSteady = steady_clock::now();
 	}
 
@@ -1334,7 +1339,7 @@ namespace Dist
 		const double elapsedS = std::chrono::duration<double>(
 			steady_clock::now() - state.startSteady).count();
 		const std::string progressLine = FormatProgressLine(
-			reports, elapsedS,
+			reports, state.startStep, elapsedS,
 			processResidentMax, processResidentMaxRank,
 			processPeakResidentMax, processPeakResidentMaxRank);
 		SPDLOG_INFO_MPI("Final progress report:", mpiContext);

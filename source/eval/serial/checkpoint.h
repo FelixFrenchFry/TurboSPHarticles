@@ -47,7 +47,7 @@ namespace Export
 		double time,
 		const Sim::SimParams& params);
 
-	// reads the manifest JSON and converts the original distributed format
+	// reads the manifest JSON and checks its format version
 	nlohmann::json ParseCheckpointManifest(const std::string& text);
 
 	// checks restart settings and returns the saved simulation step and time

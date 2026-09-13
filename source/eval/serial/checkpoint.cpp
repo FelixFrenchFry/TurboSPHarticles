@@ -24,11 +24,17 @@ namespace Export
 	{
 		if (!params.is_object()) { throw std::runtime_error("Invalid checkpoint parameters."); }
 
-		// exclude output, diagnostics and run limits from the parameter comparison
+		// exclude output, diagnostics, run limits and scene generation settings
 		for (const char* key : { "maxSteps", "maxThreadsSim", "exportEnabled", "exportDir",
 			"exportInterval", "saveFinalState", "maxBenchRecs", "timeUnit", "maxMemRecs",
 			"byteUnit", "maxStatRecs", "statGroupsEnabled", "progressReportMode",
-			"surfaceNbrCountRatio", "surfaceNbrCountThreshold" })
+			"surfaceNbrCountRatio", "surfaceNbrCountThreshold",
+			"jitterFracF", "jitterSeedF", "jitterFracB", "jitterSeedB",
+			"surfaceSamplingMinDistanceRatio", "surfaceSamplingMaxDistanceRatio",
+			"surfaceSamplingCoverageProbeSpacingRatio", "surfaceSamplingMinDistance",
+			"surfaceSamplingMaxDistance", "surfaceSamplingCoverageProbeSpacing",
+			"surfaceSamplingCandidateMultiplier", "surfaceSamplingMaxTrialsPerCell",
+			"surfaceSamplingSeed" })
 		{
 			params.erase(key);
 		}
@@ -130,13 +136,6 @@ namespace Export
 	nlohmann::json ParseCheckpointManifest(const std::string& text)
 	{
 		auto manifest = nlohmann::json::parse(text);
-		if (manifest.at("format") == "TSPDistributedCheckpoint" && manifest.at("version") == 1)
-		{
-			manifest["format"] = "TSPCheckpoint";
-			manifest["mode"] = "distributed";
-			manifest["files"] = manifest.at("ranks");
-			manifest.erase("ranks");
-		}
 		if (manifest.at("format") != "TSPCheckpoint" || manifest.at("version") != 1 ||
 			manifest.at("stateFormat") != "TSPSIM-64")
 		{
@@ -162,7 +161,16 @@ namespace Export
 		const auto currentParams = GetCheckpointComparisonParams(Sim::ToJson(params));
 		if (savedParams != currentParams)
 		{
-			throw std::runtime_error("Checkpoint physics, solver, or decomposition parameters differ from this run.");
+			std::string message = "Checkpoint physics, solver, or decomposition parameters differ from this run.";
+			for (const auto& change : nlohmann::json::diff(savedParams, currentParams))
+			{
+				const auto key = change.at("path").get<std::string>();
+				const nlohmann::json::json_pointer path(key);
+				message += "\n" + key + ": saved=" +
+					(savedParams.contains(path) ? savedParams.at(path).dump() : "<missing>") +
+					", current=" + (currentParams.contains(path) ? currentParams.at(path).dump() : "<missing>");
+			}
+			throw std::runtime_error(message);
 		}
 
 		CheckpointInfo info{};

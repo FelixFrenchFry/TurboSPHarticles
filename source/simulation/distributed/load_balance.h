@@ -76,6 +76,13 @@ namespace Dist
 		double Evaluate(const RankLoadSample& sample) override;
 	};
 
+	// trigger history needed to continue load balancing after checkpoint restart
+	struct RebalanceTriggerState
+	{
+		uint32_t badStepCount = 0;
+		uint32_t cooldownRemaining = 0;
+	};
+
 	class IRebalanceTrigger
 	{
 	public:
@@ -84,6 +91,8 @@ namespace Dist
 
 		virtual const char* Name() const = 0;
 		virtual bool ShouldRebalance(const LoadBalanceSnapshot& snapshot) = 0;
+		virtual RebalanceTriggerState GetState() const = 0;
+		virtual void RestoreState(const RebalanceTriggerState& state) = 0;
 	};
 
 	// decides to rebalance the load based on fixed step intervals
@@ -95,6 +104,8 @@ namespace Dist
 
 		const char* Name() const override;
 		bool ShouldRebalance(const LoadBalanceSnapshot& snapshot) override;
+		RebalanceTriggerState GetState() const override;
+		void RestoreState(const RebalanceTriggerState& state) override;
 
 	private:
 
@@ -113,6 +124,8 @@ namespace Dist
 
 		const char* Name() const override;
 		bool ShouldRebalance(const LoadBalanceSnapshot& snapshot) override;
+		RebalanceTriggerState GetState() const override;
+		void RestoreState(const RebalanceTriggerState& state) override;
 
 	private:
 
@@ -151,6 +164,10 @@ namespace Dist
 			std::string* failMsg = nullptr);
 
 		bool Enabled() const { return loadMetric_ != nullptr; }
+
+		// root owns trigger history and all ranks validate the saved state on restart
+		RebalanceTriggerState GetTriggerState() const;
+		void RestoreTriggerState(const RebalanceTriggerState& state);
 
 		Mem::MemUsage GetScratchMemoryUsage() const;
 

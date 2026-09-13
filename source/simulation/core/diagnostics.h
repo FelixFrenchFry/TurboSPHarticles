@@ -32,7 +32,7 @@ namespace Sim
 
 		static bool ShouldOverwriteProgress(Base::ProgressReportMode mode);
 
-		static void ResetProgress();
+		static void ResetProgress(uint64_t step);
 
 		static void PrintFinalProgressPeakRam(uint64_t N_residentBytes,
 											  uint64_t N_peakResidentBytes,

@@ -140,7 +140,7 @@ App::ParseResult App::ParseMainOptions(
 		"Override a simulation parameter using key=value (e.g. maxSteps=20000), "
 		"repeat --sim for multiple overrides, overruling the config file");
 	application.add_option("--restart", options.restartCheckpoint,
-		"Path to a checkpoint manifest.json containing the simulation state to restart from,"
+		"Path to a checkpoint manifest.json containing the simulation state to restart from, "
 		"requiring the simulation settings from --profile and --sim to be compatible");
 
 	try
@@ -222,7 +222,7 @@ bool App::LoadSimParams(
 	{
 		if (!simParamsMgr.LoadSimParamsFromCliOverrides(simOverrides, logStatus))
 		{
-			SPDLOG_ERROR("Failed to apply one or more '-sim/--sim' overrides.");
+			SPDLOG_ERROR("Failed to apply one or more '--sim' overrides.");
 			return false;
 		}
 
