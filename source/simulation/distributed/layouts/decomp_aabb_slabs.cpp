@@ -106,6 +106,33 @@ void Decomp_AABB_Slabs::Build(const DomainDecompInput& input)
 			input.globalBounds, input.N_ranks, SPLIT_AXIS));
 }
 
+void Decomp_AABB_Slabs::Restore(
+	const DomainDecompInput& input,
+	const std::span<const AABB> ownedBounds)
+{
+	if (input.N_ranks <= 0 || ownedBounds.size() != static_cast<size_t>(input.N_ranks))
+	{
+		throw std::runtime_error("Invalid checkpoint slab count.");
+	}
+
+	Build(input);
+	std::vector<float> splitPositions{ ownedBounds.front().min[SPLIT_AXIS] };
+	for (const AABB& bounds : ownedBounds)
+	{
+		splitPositions.push_back(bounds.max[SPLIT_AXIS]);
+	}
+
+	slabLayout_.Rebuild(splitPositions);
+	for (int rank = 0; rank < input.N_ranks; rank++)
+	{
+		const AABB restored = OwnedExtentAABB(rank);
+		if (restored.min != ownedBounds[rank].min || restored.max != ownedBounds[rank].max)
+		{
+			throw std::runtime_error("Checkpoint bounds do not form a valid slab decomposition.");
+		}
+	}
+}
+
 const AABB& Decomp_AABB_Slabs::GlobalExtentAABB() const
 {
 	return slabLayout_.GlobalExtentAABB();

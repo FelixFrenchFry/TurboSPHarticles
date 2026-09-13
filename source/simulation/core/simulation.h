@@ -6,8 +6,11 @@
 #include <chrono>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <stop_token>
+#include <string>
 #include <thread>
+#include <vector>
 
 // internal
 #include "source/eval/bench/benchmarks.h"
@@ -36,7 +39,7 @@ namespace Sim
 					  Export::SerializationMgr& serializationMgr);
 
 		// initialize sub-systems
-		void Init();
+		void Init(const std::string& restartCheckpoint = {});
 
 		// destroy sub-systems and free up resources
 		void Shutdown();
@@ -49,9 +52,9 @@ namespace Sim
 		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
 
 		// create or re-create backend when no backend is active
-		void SelectSimBackend(Base::BackendType backendType);
+		void CreateAndInitializeSimBackend(Base::BackendType backendType);
 
-		void ReBuildInitialSimState();
+		void ResetAndRebuildSimState();
 
 		// launch the simulation in async (for running live visualization)
 		// or blocking mode (for running headless)
@@ -96,8 +99,13 @@ namespace Sim
 
 		friend class DiagnosticsMgr;
 
-		// reports the domain of the selected scenario to the backend, so its spatial acceleration
-		// structures stay bounded by it (no-op while no scenario, backend, or domain is known)
+		// captures the final backend state and publishes a completed checkpoint
+		void SaveCheckpoint(const SimParams& params);
+
+		// loads state and scene metadata before backend initialization
+		void LoadCheckpoint(const std::string& manifestPath);
+
+		// sets the spatial domain bounds of the backend, or clears them if none are available
 		void ApplySimDomainBoundsToBackend();
 
 		// configuration profile
@@ -117,6 +125,13 @@ namespace Sim
 		// scenario management
 		Scene::ScenarioMgr& scenarioMgr_;
 		std::unique_ptr<Scene::ISimScenario> simScenario_{ nullptr };
+		std::vector<Scene::OBB> boundaryBoxes_{};
+		struct DomainBounds
+		{
+			glm::vec3 min{};
+			glm::vec3 max{};
+		};
+		std::optional<DomainBounds> domainBounds_{};
 
 		// mailbox pointers
 		Sync::VisualSnapMailbox* visualSnapMailbox_{ nullptr };

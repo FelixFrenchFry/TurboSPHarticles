@@ -247,7 +247,7 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 	if (simulationMgr.simStep_ == 0) { ImGui::BeginDisabled(); cached = true; }
 	if (ImGui::Button(" RESET ", { 185, 40 }))
 	{
-		simulationMgr.ReBuildInitialSimState();
+		simulationMgr.ResetAndRebuildSimState();
 		simParamsMgr_.Set_SimRunning(false);
 
 		// TODO: reset statistics and benchmarks

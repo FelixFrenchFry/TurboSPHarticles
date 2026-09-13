@@ -79,7 +79,7 @@ int main(int argc, char** argv)
 		Sync::StatSnapMailbox statMailbox{};
 		simulationMgr.SetStatMailbox(&statMailbox);
 
-		simulationMgr.Init();
+		simulationMgr.Init(parse.options.restartCheckpoint);
 		simParamsMgr.Set_SimRunning(true);
 
 		// --- [ main loop ] -----------------------------------------------------------------------

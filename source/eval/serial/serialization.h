@@ -48,6 +48,8 @@ namespace Export
 		explicit SerializationMgr(SaveOptions opt = {})
 			: saveOptions_(std::move(opt)) {}
 
+		const std::filesystem::path& BaseDir() const { return saveOptions_.baseDir; }
+
 		// lossless serialization of the full simulation state into a file
 		// (relative paths are resolved below SaveOptions::baseDir)
 		void SaveUniversalSimState(const Sync::UniversalSimState& state,

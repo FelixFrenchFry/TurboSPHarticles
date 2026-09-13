@@ -33,7 +33,6 @@
 #include "dist_helpers.h"
 #include "dist_snapshots.h"
 #include "dist_statistics.h"
-#include "owned_particle_gather.h"
 #include "rigid_body_sync.h"
 
 
@@ -376,7 +375,8 @@ DistSimulationMgr::DistSimulationMgr(MpiContext& mpiContext,
 bool DistSimulationMgr::Init(
 	std::string& profile,
 	const std::vector<std::string>& simOverrides,
-	const bool logParamStatus)
+	const bool logParamStatus,
+	const std::string& restartCheckpoint)
 {
 	boundaryRedistributionRequired_ = true;
 	if (!LoadParamsFromProfileBroadcast(profile, logParamStatus))
@@ -397,8 +397,9 @@ bool DistSimulationMgr::Init(
 	}
 	SyncParameters(true);
 
-	SPDLOG_INFO_MPI("Init distributed simulation backend...", mpiContext_);
-	SelectSimBackend(simParams_.backendType);
+	// create the backend before building or restoring its domain bounds
+	SPDLOG_INFO_MPI("Create distributed simulation backend...", mpiContext_);
+	CreateSimBackend(simParams_.backendType);
 	bool backendSupported = simBackend_ && simBackend_->SupportsDistributedSimulation();
 	if (simBackend_ && !backendSupported)
 	{
@@ -409,25 +410,37 @@ bool DistSimulationMgr::Init(
 	}
 	if (!mpiContext_.AllTrue(backendSupported)) { return false; }
 
-	SPDLOG_INFO_MPI("Init distributed simulation state...", mpiContext_);
-	SelectSimScenario(simParams_.scenarioType, configProfile_);
-	// TODO: select sim backend function?
-	if (!mpiContext_.AllTrue(simScenario_ != nullptr)) { return false; }
-
 	SPDLOG_INFO_MPI("Init distributed domain decomp...", mpiContext_);
 	// every rank parses the same broadcast parameters, so all ranks pick the same strategy
 	SelectDomainDecomp(simParams_.domainDecompMethod);
-	if (!BuildDomainDecomp()) { return false; }
+	if (!mpiContext_.AllTrue(domainDecomp_ != nullptr)) { return false; }
 	if (!ConfigureLoadBalancing()) { return false; }
 
-	SPDLOG_INFO_MPI("Init initial domain decomp profile...", mpiContext_);
-	if (!BuildInitialDomainDecomp()) { return false; }
+	SPDLOG_INFO_MPI("Init simulation state...", mpiContext_);
+	if (restartCheckpoint.empty())
+	{
+		SelectSimScenario(simParams_.scenarioType, configProfile_);
+		if (!mpiContext_.AllTrue(simScenario_ != nullptr)) { return false; }
 
-	SPDLOG_INFO_MPI("Init rank-local particle states...", mpiContext_);
-	if (!ReBuildInitialSimState()) { return false; }
+		if (!BuildDomainDecomp()) { return false; }
+		SPDLOG_INFO_MPI("Init initial domain decomp profile...", mpiContext_);
+		if (!BuildInitialDomainDecomp()) { return false; }
 
-	SPDLOG_INFO_MPI("Init rank-local backend data structures...", mpiContext_);
-	if (!InitRankLocalBackend()) { return false; }
+		SPDLOG_INFO_MPI("Init rank-local particle states...", mpiContext_);
+		if (!ResetAndRebuildSimState()) { return false; }
+	}
+	else // restart from a simulation state checkpoint
+	{
+		if (!LoadCheckpoint(restartCheckpoint)) { return false; }
+	}
+	SPDLOG_INFO_MPI("Init backend data structures...", mpiContext_);
+	if (!InitializeSimBackendFromState()) { return false; }
+	if (!restartCheckpoint.empty())
+	{
+		// redistribute restored particles and rebuild halos in backend storage
+		if (!RedistributeRankLocalParticles(simParams_)) { return false; }
+		if (!ValidateGlobalOwnedParticleCounts()) { return false; }
+	}
 	if (!RunRankLocalBackendStartupCheck()) { return false; }
 
 	// build the fluid solver synchronization plan required by the initial export
@@ -481,7 +494,7 @@ void DistSimulationMgr::SelectSimScenario(
 	}
 }
 
-void DistSimulationMgr::SelectSimBackend(const Base::BackendType backendType)
+void DistSimulationMgr::CreateSimBackend(const Base::BackendType backendType)
 {
 	if (simBackend_)
 	{
@@ -497,7 +510,7 @@ void DistSimulationMgr::SelectSimBackend(const Base::BackendType backendType)
 	benchmarksTracker_.reset();
 	curBenchOps_.clear();
 
-	// create new metric trackers and backend over rank-local data
+	// create metric trackers and backend, particle state is loaded separately
 	benchmarksTracker_ = std::make_unique<Bench::BenchmarksTracker>(simParams_);
 	memoryTracker_ = std::make_unique<Mem::MemoryTracker>(simParams_);
 	statisticsTracker_ = std::make_unique<Stats::StatisticsTracker>(simParams_);
@@ -605,7 +618,7 @@ void DistSimulationMgr::SelectDomainDecomp(const Base::DomainDecompMethod method
 	}
 }
 
-bool DistSimulationMgr::ReBuildInitialSimState()
+bool DistSimulationMgr::ResetAndRebuildSimState()
 {
 	bool localOk = true;
 
@@ -660,21 +673,6 @@ bool DistSimulationMgr::ReBuildInitialSimState()
 			"[rank {}/{}] Global particle counts differ across ranks.",
 			mpiContext_.Rank(), mpiContext_.Size());
 		return false;
-	}
-
-	if (simParams_.saveFinalState)
-	{
-		std::string outputCapacityFailure{};
-		const bool finalStateOutputSupported =
-			ValidateOwnedParticleGatherRootCapacity(
-				N_expectedGlobalF_, N_expectedGlobalB_, &outputCapacityFailure);
-		if (!finalStateOutputSupported)
-		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Requested distributed final-state output is unsupported: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), outputCapacityFailure);
-		}
-		if (!mpiContext_.AllTrue(finalStateOutputSupported)) { return false; }
 	}
 
 	try
@@ -839,8 +837,9 @@ bool DistSimulationMgr::RunSim_Blocking()
 	bool runOk = true;
 	const char* stopReason = "unknown reason";
 
-	// pack and serialize export snapshot of initial state
-	if (paramsInit.exportEnabled)
+	// restarted runs export after their next scheduled solver step,
+	// startup routing rebuilds halos but does not reconstruct their pressure/density fields
+	if (paramsInit.exportEnabled && simStep_ == 0)
 	{
 		MarkTrace(Trace::TraceStage::Dist_ExportSnapshot);
 		if (!WriteExportSnapshot(paramsInit)) { runOk = false; }
@@ -1568,7 +1567,7 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts() const
 	return countsValid && checksumsValid;
 }
 
-bool DistSimulationMgr::InitRankLocalBackend()
+bool DistSimulationMgr::InitializeSimBackendFromState()
 {
 	bool localOk = true;
 
@@ -1823,115 +1822,14 @@ bool DistSimulationMgr::WriteFinalState(
 	const Sim::SimParams& params,
 	const bool enabled)
 {
-	if (!enabled)
-	{
-		localSimState_.particlesF = {};
-		localSimState_.particlesB = {};
-		simBackend_.reset();
-		distParticleBackend_ = nullptr;
-		return true;
-	}
+	bool writeOk = !enabled || MaterializeRankLocalState(true);
 
-	std::string outputCapacityFailure{};
-	const bool finalStateOutputSupported = ValidateOwnedParticleGatherRootCapacity(
-		N_expectedGlobalF_, N_expectedGlobalB_, &outputCapacityFailure);
-	if (!finalStateOutputSupported)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Requested distributed final-state output is unsupported: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), outputCapacityFailure);
-	}
-	if (!mpiContext_.AllTrue(finalStateOutputSupported))
-	{
-		localSimState_.particlesF = {};
-		localSimState_.particlesB = {};
-		simBackend_.reset();
-		distParticleBackend_ = nullptr;
-		return false;
-	}
-
-	if (!MaterializeRankLocalState(true))
-	{
-		localSimState_.particlesF = {};
-		localSimState_.particlesB = {};
-		simBackend_.reset();
-		distParticleBackend_ = nullptr;
-		return false;
-	}
-
-	OwnedParticleGatherBuffer sendBuffer{};
-	bool packOk = true;
-	try
-	{
-		packOk = PackOwnedParticleGatherBuffer(
-			sendBuffer,
-			localSimState_,
-			particleStateF_,
-			particleStateB_);
-	}
-	catch (const std::exception& ex)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to pack the distributed final simulation state: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-		packOk = false;
-	}
-	const bool allPackOk = mpiContext_.AllTrue(packOk);
-
-	// backend and rank-local particle payloads are not needed after packing
-	localSimState_.particlesF = {};
-	localSimState_.particlesB = {};
+	// final-state output is the last backend consumer, even on failure
 	simBackend_.reset();
 	distParticleBackend_ = nullptr;
-
-	if (!allPackOk)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to pack the distributed final simulation state.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		return false;
-	}
-
-	const bool gatherOk = GatherOwnedParticleBufferToRoot(
-		globalSimState_,
-		sendBuffer,
-		localSimState_,
-		mpiContext_,
-		N_expectedGlobalF_,
-		N_expectedGlobalB_);
-	if (!gatherOk)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to gather the distributed final simulation state.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		globalSimState_.particlesF = {};
-		globalSimState_.particlesB = {};
-		return false;
-	}
-
-	bool writeOk = true;
-	if (mpiContext_.IsRoot())
-	{
-		try
-		{
-			serializationMgr_.SaveUniversalSimState(
-				globalSimState_,
-				(std::filesystem::path(params.exportDir) /
-					"simulation_state_final.bin").string());
-		}
-		catch (const std::exception& ex)
-		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed to write distributed final simulation state: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
-			writeOk = false;
-		}
-	}
-
-	const bool allWriteOk = mpiContext_.AllTrue(writeOk);
-	globalSimState_.particlesF = {};
-	globalSimState_.particlesB = {};
-	return allWriteOk;
+	if (enabled && writeOk) { writeOk = SaveCheckpoint(params); }
+	localSimState_ = {};
+	return writeOk;
 }
 
 bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(

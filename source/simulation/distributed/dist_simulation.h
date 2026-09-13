@@ -40,7 +40,8 @@ namespace Dist
 		DistSimulationMgr(MpiContext& mpiContext, Sim::SimParamsMgr& simParamsMgr);
 
 		// initialize sub-systems
-		bool Init(std::string& profile, const std::vector<std::string>& simOverrides, bool logParamStatus = true);
+		bool Init(std::string& profile, const std::vector<std::string>& simOverrides,
+			bool logParamStatus = true, const std::string& restartCheckpoint = {});
 
 		// destroy sub-systems and free up resources
 		void Shutdown();
@@ -52,14 +53,14 @@ namespace Dist
 		// (destroys previous scenario and all its data)
 		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
 
-		// create backend when no backend is active
-		void SelectSimBackend(Base::BackendType backendType);
+		// create backend and metric trackers when no backend is active
+		void CreateSimBackend(Base::BackendType backendType);
 
 		// create or switch domain decomp
 		// (destroys previous domain decomp, so it has to be built again afterwards)
 		void SelectDomainDecomp(Base::DomainDecompMethod method);
 
-		bool ReBuildInitialSimState();
+		bool ResetAndRebuildSimState();
 
 		// prints root-gathered distributed setup diagnostics
 		void RunStartupCheck() const;
@@ -109,7 +110,7 @@ namespace Dist
 		bool ValidateGlobalOwnedParticleCounts() const;
 
 		// [ rank-reduced ] transfers rank-local state into the selected backend
-		bool InitRankLocalBackend();
+		bool InitializeSimBackendFromState();
 
 		// [ rank-reduced ] runs a backend startup smoke test on rank-local data
 		bool RunRankLocalBackendStartupCheck();
@@ -120,8 +121,14 @@ namespace Dist
 		// [ rank-reduced ] gathers and serializes an export snapshot on the root rank
 		bool WriteExportSnapshot(const Sim::SimParams& params);
 
-		// [ rank-reduced ] materializes, gathers, and serializes the final full state
+		// [ rank-reduced ] retires the backend and optionally saves a distributed checkpoint
 		bool WriteFinalState(const Sim::SimParams& params, bool enabled);
+
+		// [ rank-reduced ] writes owned rank states, then publishes the completion manifest
+		bool SaveCheckpoint(const Sim::SimParams& params);
+
+		// [ rank-reduced ] restores owned rank states and the saved domain decomposition
+		bool LoadCheckpoint(const std::string& manifestPath);
 
 		// [ rank-reduced ] rebuilds the regular CPU fluid surface selection from authoritative rank data
 		bool BuildExportFluidParticleLocalIdxs(
@@ -161,7 +168,7 @@ namespace Dist
 		// [ rank-reduced ] routes owned particles and replaces backend [ owned ][ halo ] storage
 		bool RedistributeRankLocalParticles(const Sim::SimParams& params);
 
-		// [ rank-reduced ] copies backend state into localSimState_ for full final-state gathering
+		// [ rank-reduced ] copies backend state into localSimState_ for checkpoint output
 		bool MaterializeRankLocalState(bool backendWillBeRetired = false);
 
 		// [ rank-reduced ] prepares rank-authoritative particle work and backend state for the next step

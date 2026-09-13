@@ -134,44 +134,18 @@ App::ParseResult App::ParseMainOptions(
 	MainOptions options{};
 
 	application.add_option("-p,--profile", options.profile,
-			"Name of configuration profile under /configs with 'A-Z', 'a-z' and '0-9', "
-			"matching a profile directory (e.g. 'A2' or 'test') or 'default'");
+		"Name of configuration profile under /configs with 'A-Z', 'a-z' and '0-9', "
+		"matching an existing profile directory (e.g. 'A123' or 'test') or 'default'");
 	application.add_option("--sim", options.simOverrides,
-		"Master override simulation parameter via key=value "
-		"(repeatable, CLI wins over config file)");
-
-	// allow single-dash alias "-sim" by normalizing to "--sim" before CLI11 parsing
-	std::vector<std::string> cliArgs{};
-	cliArgs.reserve((argc > 0) ? static_cast<size_t>(argc) : 0);
-	if (argc > 0)
-	{
-		cliArgs.push_back(argv[0]);
-	}
-	for (int i = 1; i < argc; i++)
-	{
-		std::string arg = argv[i];
-		if (arg == "-sim")
-		{
-			arg = "--sim";
-		}
-		else if (arg.rfind("-sim=", 0) == 0)
-		{
-			arg.replace(0, 4, "--sim");
-		}
-
-		cliArgs.push_back(arg);
-	}
-
-	std::vector<char*> cliArgv{};
-	cliArgv.reserve(cliArgs.size());
-	for (auto& arg : cliArgs)
-	{
-		cliArgv.push_back(arg.data());
-	}
+		"Override a simulation parameter using key=value (e.g. maxSteps=20000), "
+		"repeat --sim for multiple overrides, overruling the config file");
+	application.add_option("--restart", options.restartCheckpoint,
+		"Path to a checkpoint manifest.json containing the simulation state to restart from,"
+		"requiring the simulation settings from --profile and --sim to be compatible");
 
 	try
 	{
-		application.parse(static_cast<int>(cliArgv.size()), cliArgv.data());
+		application.parse(argc, argv);
 	}
 	catch (const CLI::ParseError& e)
 	{

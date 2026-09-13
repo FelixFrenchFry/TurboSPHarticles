@@ -69,7 +69,7 @@ int main(int argc, char** argv)
 			mpiContext,
 			simParamsMgr};
 
-		if (!distSimulationMgr.Init(profile, simOverrides, false))
+		if (!distSimulationMgr.Init(profile, simOverrides, false, parse.options.restartCheckpoint))
 		{
 			return EXIT_FAILURE;
 		}

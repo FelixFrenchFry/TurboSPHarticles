@@ -93,7 +93,7 @@ int main(int argc, char** argv)
 		simulationMgr.SetStatMailbox(&statMailbox);
 		visualizationMgr.SetStatMailbox(&statMailbox);
 
-		simulationMgr.Init();
+		simulationMgr.Init(parse.options.restartCheckpoint);
 
 		auto tempVisParams = visParamsMgr.SnapshotParams().first;
 		visualizationMgr.Init(tempVisParams.window);

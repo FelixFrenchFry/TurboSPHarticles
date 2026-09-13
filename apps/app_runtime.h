@@ -19,6 +19,7 @@ namespace App
 	{
 		std::string profile = "default";
 		std::vector<std::string> simOverrides{};
+		std::string restartCheckpoint{};
 	};
 
 	struct ParseResult

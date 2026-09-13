@@ -20,6 +20,7 @@ namespace Dist
 		const char* Name() const override { return "Decomp_AABB_Slabs"; }
 
 		void Build(const DomainDecompInput& input) override;
+		void Restore(const DomainDecompInput& input, std::span<const AABB> ownedBounds) override;
 		const AABB& GlobalExtentAABB() const override;
 
 		int OwnerRank(const glm::vec3& position) const override;

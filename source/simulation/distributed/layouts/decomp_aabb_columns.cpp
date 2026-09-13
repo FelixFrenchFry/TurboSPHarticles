@@ -219,6 +219,43 @@ void Decomp_AABB_Columns::Build(const DomainDecompInput& input)
 			columnCounts.N_sectionsZ, columnCounts.N_sectionsX));
 }
 
+void Decomp_AABB_Columns::Restore(
+	const DomainDecompInput& input,
+	const std::span<const AABB> ownedBounds)
+{
+	if (input.N_ranks <= 0 || ownedBounds.size() != static_cast<size_t>(input.N_ranks))
+	{
+		throw std::runtime_error("Invalid checkpoint column count.");
+	}
+
+	Build(input);
+	const AABBColumnCounts counts = columnLayout_.ColumnCounts();
+	std::vector<float> xSplitPositions{ ownedBounds.front().min.x };
+	std::vector<float> zSplitPositions{};
+	for (int sectionX = 0; sectionX < counts.N_sectionsX; sectionX++)
+	{
+		const int firstRank = AABBColumnLayout::ColumnRank(counts, sectionX, 0);
+		xSplitPositions.push_back(ownedBounds[firstRank].max.x);
+		zSplitPositions.push_back(ownedBounds[firstRank].min.z);
+
+		for (int sectionZ = 0; sectionZ < counts.N_sectionsZ; sectionZ++)
+		{
+			const int rank = AABBColumnLayout::ColumnRank(counts, sectionX, sectionZ);
+			zSplitPositions.push_back(ownedBounds[rank].max.z);
+		}
+	}
+
+	columnLayout_.Rebuild(xSplitPositions, zSplitPositions);
+	for (int rank = 0; rank < input.N_ranks; rank++)
+	{
+		const AABB restored = OwnedExtentAABB(rank);
+		if (restored.min != ownedBounds[rank].min || restored.max != ownedBounds[rank].max)
+		{
+			throw std::runtime_error("Checkpoint bounds do not form a valid column decomposition.");
+		}
+	}
+}
+
 const AABB& Decomp_AABB_Columns::GlobalExtentAABB() const
 {
 	return columnLayout_.GlobalExtentAABB();

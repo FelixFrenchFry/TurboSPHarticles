@@ -13,6 +13,11 @@
 
 namespace Dist
 {
+	void IDomainDecomp::Restore(const DomainDecompInput&, std::span<const AABB>)
+	{
+		throw std::runtime_error("Selected domain decomp does not support checkpoint restart.");
+	}
+
 	std::unique_ptr<IDomainDecomp> MakeDomainDecomp(const Base::DomainDecompMethod method)
 	{
 		switch (method)

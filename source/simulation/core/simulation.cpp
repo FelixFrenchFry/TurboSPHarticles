@@ -2,7 +2,6 @@
 
 // external
 #include <chrono>
-#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <spdlog/spdlog.h>
@@ -38,7 +37,7 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 	// nothing to do
 }
 
-void SimulationMgr::Init()
+void SimulationMgr::Init(const std::string& restartCheckpoint)
 {
 	const auto initializationStart = std::chrono::steady_clock::now();
 
@@ -48,14 +47,21 @@ void SimulationMgr::Init()
 	// default sim state (empty)
 	universalSimState_ = Sync::UniversalSimState{};
 
-	// TODO: load initial sim state from a file?
-
 	SPDLOG_INFO("Init simulation state...");
-	SelectSimScenario(simParams_.scenarioType, configProfile_);
-	SelectSimBackend(simParams_.backendType);
-
+	if (restartCheckpoint.empty())
+	{
+		SelectSimScenario(simParams_.scenarioType, configProfile_);
+		ResetAndRebuildSimState();
+	}
+	else // restart from a simulation state checkpoint
+	{
+		LoadCheckpoint(restartCheckpoint);
+		simParamsMgr_.Set_SimRunning(false);
+		simParamsMgr_.Set_SimRunNextStep(false);
+		SyncParameters();
+	}
 	SPDLOG_INFO("Init backend data structures...");
-	ReBuildInitialSimState();
+	CreateAndInitializeSimBackend(simParams_.backendType);
 
 	// updated snapshot
 	initialized_.store(true, std::memory_order_release);
@@ -114,7 +120,7 @@ void SimulationMgr::SelectSimScenario(
 	}
 }
 
-void SimulationMgr::SelectSimBackend(
+void SimulationMgr::CreateAndInitializeSimBackend(
 	Base::BackendType backendType)
 {
 	if (running_.load(std::memory_order_acquire))
@@ -159,14 +165,8 @@ void SimulationMgr::SelectSimBackend(
 	}
 }
 
-void SimulationMgr::ReBuildInitialSimState()
+void SimulationMgr::ResetAndRebuildSimState()
 {
-	if (!simScenario_)
-	{
-		throw std::runtime_error(
-			"Failed to re-build initial simulation state without a selected scenario.");
-	}
-
 	// stop simulation
 	simParamsMgr_.Set_SimRunning(false);
 	simParamsMgr_.Set_SimRunNextStep(false);
@@ -186,8 +186,22 @@ void SimulationMgr::ReBuildInitialSimState()
 
 	SyncParameters();
 
+	// checkpoint startup does not generate a scene, but a reset uses the current profile
+	if (!simScenario_)
+	{
+		simScenario_ = Scene::MakeSimScenario(scenarioMgr_, simParams_.scenarioType, configProfile_);
+		if (!simScenario_) { throw std::runtime_error("Failed to create simulation scenario for reset."); }
+	}
+
 	// re-build initial scenario state by transferring into universal state
 	simScenario_->Build(universalSimState_, simParams_);
+	boundaryBoxes_ = simScenario_->GetBoundaryBoxes();
+	DomainBounds bounds{};
+	domainBounds_.reset();
+	if (Scene::ComputeSimDomainBounds(boundaryBoxes_, simParams_, bounds.min, bounds.max))
+	{
+		domainBounds_ = bounds;
+	}
 	scenarioMgr_.FinalizeGeneratedParticleIds(universalSimState_);
 	universalSimState_.particlesF.ensureParticleIdsPresent();
 	universalSimState_.particlesB.ensureParticleIdsPresent();
@@ -209,24 +223,20 @@ void SimulationMgr::ReBuildInitialSimState()
 		simBackend_->PullFromUniversalSimState(universalSimState_, simParams_);
 		return;
 	}
-
-	lock.unlock();
-	SelectSimBackend(simParams_.backendType);
 }
 
 void SimulationMgr::ApplySimDomainBoundsToBackend()
 {
-	if (!simScenario_ || !simBackend_) { return; }
-
-	glm::vec3 domainMin{};
-	glm::vec3 domainMax{};
-	if (!Scene::ComputeSimDomainBounds(
-		simScenario_->GetBoundaryBoxes(), simParams_, domainMin, domainMax))
+	if (!simBackend_) { return; }
+	if (domainBounds_)
 	{
-		return;
+		simBackend_->SetSimDomainBounds(domainBounds_->min, domainBounds_->max);
 	}
-
-	simBackend_->SetSimDomainBounds(domainMin, domainMax);
+	else
+	{
+		// invalid extents clear any bounds retained from a previous scene
+		simBackend_->SetSimDomainBounds(glm::vec3(0.0f), glm::vec3(0.0f));
+	}
 }
 
 void SimulationMgr::Launch_Async()
@@ -238,7 +248,7 @@ void SimulationMgr::Launch_Async()
 	}
 	if (!simBackend_)
 	{
-		SelectSimBackend(simParams_.backendType);
+		CreateAndInitializeSimBackend(simParams_.backendType);
 	}
 	if (!simBackend_)
 	{
@@ -286,7 +296,7 @@ void SimulationMgr::Launch_Blocking()
 	}
 	if (!simBackend_)
 	{
-		SelectSimBackend(simParams_.backendType);
+		CreateAndInitializeSimBackend(simParams_.backendType);
 	}
 	if (!simBackend_)
 	{
@@ -325,8 +335,8 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// vis throttle starting point
 	lastVisWall_ = std::chrono::steady_clock::now();
 
-	// pack and serialize export snapshot of initial state
-	if (paramsInit.exportEnabled)
+	// pack and serialize the initial export snapshot
+	if (paramsInit.exportEnabled && simStep_ == 0)
 	{
 		WriteExportSnapshot(paramsInit);
 	}
@@ -476,8 +486,8 @@ void SimulationMgr::RunSim_Blocking()
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
 
-	// pack and serialize export snapshot of initial state
-	if (paramsInit.exportEnabled)
+	// pack and serialize the initial export snapshot
+	if (paramsInit.exportEnabled && simStep_ == 0)
 	{
 		WriteExportSnapshot(paramsInit);
 	}
@@ -640,17 +650,7 @@ void SimulationMgr::FinalizeRunState(const SimParams& params)
 		return;
 	}
 
-	{
-		// transfer last sim state into the universal state to save it
-		std::scoped_lock lock(stateMutex_);
-		simBackend_->PushToUniversalSimState(universalSimState_, true);
-		simBackend_.reset();
-	}
-
-	serializationMgr_.SaveUniversalSimState(
-		universalSimState_,
-		(std::filesystem::path(params.exportDir) /
-			"simulation_state_final.bin").string());
+	SaveCheckpoint(params);
 }
 
 void SimulationMgr::PublishVisualSnapshot()
@@ -659,7 +659,10 @@ void SimulationMgr::PublishVisualSnapshot()
 	// (if CUDA path is taken, the particle data buffers are not filled)
 	auto visSnap = std::make_shared<Sync::VisualSnapshot>();
 	visSnap->simStep = simStep_;
-	visSnap->boxesB = simScenario_->GetBoundaryBoxes();
+	{
+		std::scoped_lock lock(stateMutex_);
+		visSnap->boxesB = boundaryBoxes_;
+	}
 	visSnap->scalarModeF = visualScalarMode_.load(std::memory_order_acquire);
 
 	// optionally pack particle data into CUDA-device buffers for OpenGL without going through the host

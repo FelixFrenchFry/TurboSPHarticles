@@ -904,7 +904,8 @@ namespace Export
 				WriteVec(ofs, RB.iBodyInv22);
 			}
 
-			EnsureStreamOk(ofs, "writing", tmpPath.string());
+			ofs.close();
+			EnsureStreamOk(ofs, "closing simulation state", tmpPath.string());
 		}
 
 		if (saveOptions_.atomicWrite)
