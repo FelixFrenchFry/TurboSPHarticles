@@ -223,18 +223,15 @@ namespace
 	{
 		Mem::MemUsage usage{};
 
-		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.velMagF));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.rankF));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.volB));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.idR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.bodyIdR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosR));

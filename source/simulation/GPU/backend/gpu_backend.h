@@ -338,7 +338,6 @@ namespace Sim
 		mutable std::vector<float> h_expXVelF_;
 		mutable std::vector<float> h_expYVelF_;
 		mutable std::vector<float> h_expZVelF_;
-		mutable std::vector<uint64_t> h_expIdF_;
 		mutable std::vector<uint8_t> h_expSurfaceFlagsScratch_;
 
 		// operation benchmarking order

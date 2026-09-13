@@ -146,11 +146,11 @@ bool Dist::ValidateDistExportSnapshotRootCapacity(
 		Sim::CheckedLocalParticleCount(N_replicatedR, "rigid export root output");
 
 		constexpr uint64_t FluidSnapshotParticleBytes =
-			sizeof(uint64_t) + 4ull * sizeof(float) + sizeof(uint16_t);
+			4ull * sizeof(float) + sizeof(uint16_t);
 		constexpr uint64_t BoundarySnapshotParticleBytes =
-			sizeof(uint64_t) + 4ull * sizeof(float);
+			4ull * sizeof(float);
 		constexpr uint64_t RigidSnapshotParticleBytes =
-			sizeof(uint64_t) + sizeof(uint32_t) + 4ull * sizeof(float);
+			sizeof(uint32_t) + 4ull * sizeof(float);
 
 		uint64_t N_bytes = CheckedByteSize<DistExportFluidParticlePacket>(N_gatheredF);
 		N_bytes = Sim::CheckedParticleAdd(
@@ -283,18 +283,15 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 	exportSnap.N_B = static_cast<uint32_t>(sortedParticlesB.size());
 	exportSnap.N_R = 0;
 
-	exportSnap.idF.resize(exportSnap.N_F);
 	exportSnap.xPosF.resize(exportSnap.N_F);
 	exportSnap.yPosF.resize(exportSnap.N_F);
 	exportSnap.zPosF.resize(exportSnap.N_F);
 	exportSnap.velMagF.resize(exportSnap.N_F);
 	exportSnap.rankF.resize(exportSnap.N_F);
-	exportSnap.idB.resize(exportSnap.N_B);
 	exportSnap.xPosB.resize(exportSnap.N_B);
 	exportSnap.yPosB.resize(exportSnap.N_B);
 	exportSnap.zPosB.resize(exportSnap.N_B);
 	exportSnap.volB.resize(exportSnap.N_B);
-	exportSnap.idR.clear();
 	exportSnap.bodyIdR.clear();
 	exportSnap.xPosR.clear();
 	exportSnap.yPosR.clear();
@@ -308,7 +305,6 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.id == Sim::INVALID_PARTICLE_ID) { return false; }
 		if (packet.id == prevParticleId) { return false; }
 
-		exportSnap.idF[i] = packet.id;
 		exportSnap.xPosF[i] = packet.xPos;
 		exportSnap.yPosF[i] = packet.yPos;
 		exportSnap.zPosF[i] = packet.zPos;
@@ -325,7 +321,6 @@ bool Dist::RebuildExportSnapshotFromGatheredParticles(
 		if (packet.id == Sim::INVALID_PARTICLE_ID) { return false; }
 		if (packet.id == prevParticleId) { return false; }
 
-		exportSnap.idB[i] = packet.id;
 		exportSnap.xPosB[i] = packet.xPos;
 		exportSnap.yPosB[i] = packet.yPos;
 		exportSnap.zPosB[i] = packet.zPos;
@@ -347,7 +342,6 @@ void Dist::PackReplicatedRigidExportSnapshot(
 	const uint32_t N_R = Sim::CheckedLocalParticleCount(R.N_, "rigid export root output");
 
 	exportSnap.N_R = N_R;
-	exportSnap.idR.assign(R.id.begin(), R.id.end());
 	exportSnap.bodyIdR.assign(R.bodyId.begin(), R.bodyId.end());
 	exportSnap.xPosR.resize(N_R);
 	exportSnap.yPosR.resize(N_R);
@@ -571,18 +565,15 @@ bool Dist::GatherExportSnapshotToRoot(
 	{
 		if (mpiContext.IsRoot())
 		{
-			exportSnap.idF.reserve(N_materializedF);
 			exportSnap.xPosF.reserve(N_materializedF);
 			exportSnap.yPosF.reserve(N_materializedF);
 			exportSnap.zPosF.reserve(N_materializedF);
 			exportSnap.velMagF.reserve(N_materializedF);
 			exportSnap.rankF.reserve(N_materializedF);
-			exportSnap.idB.reserve(N_materializedB);
 			exportSnap.xPosB.reserve(N_materializedB);
 			exportSnap.yPosB.reserve(N_materializedB);
 			exportSnap.zPosB.reserve(N_materializedB);
 			exportSnap.volB.reserve(N_materializedB);
-			exportSnap.idR.reserve(N_materializedR);
 			exportSnap.bodyIdR.reserve(N_materializedR);
 			exportSnap.xPosR.reserve(N_materializedR);
 			exportSnap.yPosR.reserve(N_materializedR);

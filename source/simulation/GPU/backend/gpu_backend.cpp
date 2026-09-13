@@ -372,14 +372,12 @@ void SimBackend_GPU::PackExportSnapshot(
 
 	// copy boundary particles
 	snap.N_B = N_B_;
-	snap.idB.resize(snap.N_B);
 	snap.xPosB.resize(snap.N_B);
 	snap.yPosB.resize(snap.N_B);
 	snap.zPosB.resize(snap.N_B);
 	snap.volB.resize(snap.N_B);
 	if (N_B_ > 0)
 	{
-		GPU::Copy_DeviceToHost(snap.idB.data(), d_idB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
 		GPU::Copy_DeviceToHost(snap.zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
@@ -388,7 +386,6 @@ void SimBackend_GPU::PackExportSnapshot(
 
 	// copy rigid particles
 	snap.N_R = N_R_;
-	snap.idR.resize(snap.N_R);
 	snap.bodyIdR.resize(snap.N_R);
 	snap.xPosR.resize(snap.N_R);
 	snap.yPosR.resize(snap.N_R);
@@ -396,7 +393,6 @@ void SimBackend_GPU::PackExportSnapshot(
 	snap.volR.resize(snap.N_R);
 	if (N_R_ > 0)
 	{
-		GPU::Copy_DeviceToHost(snap.idR.data(), d_idR_.Data(), N_R_, stream_);
 		GPU::Copy_DeviceToHost(snap.bodyIdR.data(), d_bodyIdR_.Data(), N_R_, stream_);
 		GPU::Copy_DeviceToHost(snap.xPosR.data(), d_xPosR_.Data(), N_R_, stream_);
 		GPU::Copy_DeviceToHost(snap.yPosR.data(), d_yPosR_.Data(), N_R_, stream_);
@@ -408,7 +404,6 @@ void SimBackend_GPU::PackExportSnapshot(
 	if (N_F_ == 0)
 	{
 		snap.N_F = 0;
-		snap.idF.clear();
 		snap.xPosF.clear();
 		snap.yPosF.clear();
 		snap.zPosF.clear();
@@ -446,9 +441,7 @@ void SimBackend_GPU::PackExportSnapshot(
 	auto& h_xVelF = h_expXVelF_;
 	auto& h_yVelF = h_expYVelF_;
 	auto& h_zVelF = h_expZVelF_;
-	auto& h_idF = h_expIdF_;
 
-	h_idF.resize(N_F_);
 	h_xPosF.resize(N_F_);
 	h_yPosF.resize(N_F_);
 	h_zPosF.resize(N_F_);
@@ -473,7 +466,6 @@ void SimBackend_GPU::PackExportSnapshot(
 	GPU::Copy_DeviceToHost(h_nbrListAbs32FF.data(), d_nbrListAbs32FF_.Data(),
 						   N_abs32FF_, stream_);
 
-	GPU::Copy_DeviceToHost(h_idF.data(), d_idF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
 	GPU::Copy_DeviceToHost(h_zPosF.data(), d_zPosF_.Data(), N_F_, stream_);
@@ -534,7 +526,6 @@ void SimBackend_GPU::PackExportSnapshot(
 	if (N_surface == 0) // no particles to export
 	{
 		snap.N_F = 0;
-		snap.idF.clear();
 		snap.xPosF.clear();
 		snap.yPosF.clear();
 		snap.zPosF.clear();
@@ -546,7 +537,6 @@ void SimBackend_GPU::PackExportSnapshot(
 	// prepare snapshot buffers
 	snap.N_F = N_surface;
 
-	snap.idF.resize(N_surface);
 	snap.xPosF.resize(N_surface);
 	snap.yPosF.resize(N_surface);
 	snap.zPosF.resize(N_surface);
@@ -561,7 +551,6 @@ void SimBackend_GPU::PackExportSnapshot(
 		snap.xPosF[dst] = h_xPosF[i];
 		snap.yPosF[dst] = h_yPosF[i];
 		snap.zPosF[dst] = h_zPosF[i];
-		snap.idF[dst] = h_idF[i];
 
 		const float vx = h_xVelF[i];
 		const float vy = h_yVelF[i];
@@ -841,7 +830,6 @@ void SimBackend_GPU::FillMemoryRecord(
 		MemUsage usageR{};
 
 		// fluid
-		Add(usageF, MemUsageOf_Vector(h_expIdF_));
 		Add(usageF, MemUsageOf_Vector(h_expXPosF_));
 		Add(usageF, MemUsageOf_Vector(h_expYPosF_));
 		Add(usageF, MemUsageOf_Vector(h_expZPosF_));
