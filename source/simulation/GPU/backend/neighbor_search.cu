@@ -19,12 +19,12 @@
 #include <thrust/set_operations.h>
 #include <thrust/transform_scan.h>
 #include <thrust/transform_reduce.h>
+#include <thrust/tuple.h>
 
 // internal
 #include "common.cuh"
 #include "neighbor_search.cuh"
 #include "neighbor_search_kernels.cuh"
-#include "sph_kernels.cuh"
 #include "source/base/helpers.h"
 #include "source/simulation/GPU/gpu_utils.h"
 

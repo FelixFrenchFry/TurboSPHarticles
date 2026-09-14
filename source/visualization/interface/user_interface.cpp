@@ -1154,15 +1154,6 @@ void UserInterfaceMgr::BuildParamElement_Gravity(const Sim::SimParams& simParams
 
 // --- [ helpers ] --------------------------------------------------------------------------------
 
-void UserInterfaceMgr::SetDockingEnabled(bool enabled)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	if (enabled) io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	else         io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable;
-
-	dockingEnabled_ = enabled;
-}
-
 void UserInterfaceMgr::CreateContexts(const char* iniFilename)
 {
 	// ImGui context

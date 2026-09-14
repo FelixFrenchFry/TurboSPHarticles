@@ -169,13 +169,6 @@ uint64_t BenchmarksTracker::GetBench_Max(const BenchOp op) const
 	return benchMax_allTime_[GetIdx(op)];
 }
 
-uint64_t BenchmarksTracker::GetBench_NumOcc(const BenchOp op) const
-{
-	if (N_records_ == 0) { return 0; }
-
-	return numOcc_allTime_[GetIdx(op)];
-}
-
 void BenchmarksTracker::ClearRecordHistory()
 {
 	recHistory_.clear();

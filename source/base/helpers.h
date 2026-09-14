@@ -207,13 +207,6 @@ namespace Base
         ResizeScratchVector(values, N_elements, extraAllocCapacityPct);
     }
 
-    // release all vector storage
-    template <class T>
-    static void ReleaseVectorMemory(std::vector<T>& v)
-    {
-        std::vector<T>().swap(v);
-    }
-
 } // namespace Base
 
 namespace Bench

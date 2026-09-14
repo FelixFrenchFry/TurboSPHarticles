@@ -5,11 +5,9 @@
 #include <array>
 #include <cstdint>
 #include <mpi.h>
-#include <vector>
 
 // internal
 #include "source/eval/bench/operations.h"
-#include "source/simulation/core/particle_types.h"
 
 
 

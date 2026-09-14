@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <random>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 

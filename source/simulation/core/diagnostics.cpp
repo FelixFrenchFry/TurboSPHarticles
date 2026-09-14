@@ -4,9 +4,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <chrono>
-#include <cstdarg>
 #include <cstdio>
-#include <cstdlib>
 #include <spdlog/spdlog.h>
 #include <string>
 #ifdef _WIN32

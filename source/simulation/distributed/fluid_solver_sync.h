@@ -98,13 +98,6 @@ namespace Dist
 			Base::DistHaloMode haloExtent,
 			Sim::FluidSolverSyncPhase phase,
 			uint32_t iteration) override;
-		void SynchronizeFluidVectorField(
-			std::span<float> xValues,
-			std::span<float> yValues,
-			std::span<float> zValues,
-			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase,
-			uint32_t iteration) override;
 		void SynchronizeFluidParticleFlagsToHalos(
 			std::span<uint8_t> flags,
 			Base::DistHaloMode haloExtent) override;

@@ -2,7 +2,6 @@
 
 // external
 #include <chrono>
-#include <iostream>
 #include <mutex>
 #include <spdlog/spdlog.h>
 #include <stdexcept>

@@ -1006,19 +1006,6 @@ void FluidSolverSyncMgr::SynchronizeFluidScalarField(
 	EndSynchronizeFluidFields();
 }
 
-void FluidSolverSyncMgr::SynchronizeFluidVectorField(
-	const std::span<float> xValues,
-	const std::span<float> yValues,
-	const std::span<float> zValues,
-	const Base::DistHaloMode haloExtent,
-	const Sim::FluidSolverSyncPhase phase,
-	const uint32_t iteration)
-{
-	BeginSynchronizeFluidVectorField(
-		xValues, yValues, zValues, haloExtent, phase, iteration);
-	EndSynchronizeFluidFields();
-}
-
 void FluidSolverSyncMgr::SynchronizeFluidParticleFlagsToHalos(
 	const std::span<uint8_t> flags,
 	const Base::DistHaloMode haloExtent)

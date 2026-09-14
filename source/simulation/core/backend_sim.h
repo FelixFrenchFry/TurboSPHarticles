@@ -111,13 +111,6 @@ namespace Sim
 			Base::DistHaloMode haloExtent,
 			FluidSolverSyncPhase phase,
 			uint32_t iteration) = 0;
-		virtual void SynchronizeFluidVectorField(
-			std::span<float> xValues,
-			std::span<float> yValues,
-			std::span<float> zValues,
-			Base::DistHaloMode haloExtent,
-			FluidSolverSyncPhase phase,
-			uint32_t iteration) = 0;
 
 		// overwrites fluid halo flags with the values held by their owning ranks
 		virtual void SynchronizeFluidParticleFlagsToHalos(

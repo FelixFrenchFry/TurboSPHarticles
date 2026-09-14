@@ -72,22 +72,9 @@ namespace GPU
 	// ------------------------------------------------------------------------------------------------
 
 	__device__ __forceinline__
-	uint32_t MapToCellId_Basic(uint32_t cx, uint32_t cy, uint32_t cz)
-	{
-		return cx + c_ns_N_dimX * (cy + c_ns_N_dimY * cz);
-	}
-
-	__device__ __forceinline__
 	int FloorToInt(float v)
 	{
 		return static_cast<int>(floorf(v));
-	}
-
-	__device__ __forceinline__
-	uint32_t ClampInt(int v, int low, int high)
-	{
-		const int t = (v < low) ? low : v;
-		return static_cast<uint32_t>((t > high) ? high : t);
 	}
 
 	static_assert(N_SELL_WIDTH == 32u,
@@ -443,114 +430,6 @@ namespace GPU
 					overflowFlag);
 			}
 		}
-	}
-
-	__global__
-	void K_FillCellIdAndIdxF(
-		const float* __restrict__ xPosF,
-		const float* __restrict__ yPosF,
-		const float* __restrict__ zPosF,
-		const uint32_t N_F,
-		// destinations
-		uint32_t* __restrict__ cellIdF)
-	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_F) { return; }
-
-		// particle i data
-		const float xi = xPosF[i];
-		const float yi = yPosF[i];
-		const float zi = zPosF[i];
-
-		// cell coordinates of particle i
-		const int cxi = FloorToInt((xi - c_ns_xBoxOrig) * c_ns_cellSizeInv);
-		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
-		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
-
-		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_dimX - 1);
-		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_dimY - 1);
-		const uint32_t cz = ClampInt(czi, 0, c_ns_N_dimZ - 1);
-
-		cellIdF[i] = MapToCellId_Basic(static_cast<uint32_t>(cx),
-									   static_cast<uint32_t>(cy),
-									   static_cast<uint32_t>(cz));
-	}
-
-	__global__ void
-	K_FillCellIdAndIdxB(
-		const float* __restrict__ xPosB,
-		const float* __restrict__ yPosB,
-		const float* __restrict__ zPosB,
-		const uint32_t N_B,
-		// destinations
-		uint32_t* __restrict__ cellIdB)
-	{
-		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_B) { return; }
-
-		// particle i data
-		const float xi = xPosB[i];
-		const float yi = yPosB[i];
-		const float zi = zPosB[i];
-
-		// compute cell coordinates
-		const int cxi = FloorToInt((xi - c_ns_xBoxOrig) * c_ns_cellSizeInv);
-		const int cyi = FloorToInt((yi - c_ns_yBoxOrig) * c_ns_cellSizeInv);
-		const int czi = FloorToInt((zi - c_ns_zBoxOrig) * c_ns_cellSizeInv);
-
-		const uint32_t cx = ClampInt(cxi, 0, c_ns_N_dimX - 1);
-		const uint32_t cy = ClampInt(cyi, 0, c_ns_N_dimY - 1);
-		const uint32_t cz = ClampInt(czi, 0, c_ns_N_dimZ - 1);
-
-		cellIdB[i] = MapToCellId_Basic(static_cast<uint32_t>(cx),
-									   static_cast<uint32_t>(cy),
-									   static_cast<uint32_t>(cz));
-	}
-
-	__global__
-	void K_BuildRangesFromSortedKeys(
-		const uint32_t* __restrict__ cellId,
-		const uint32_t N,
-		// destinations
-		uint32_t* __restrict__ cellStartIdx,
-		uint32_t* __restrict__ cellEndIdx)
-	{
-		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N) { return; }
-
-		uint32_t key = cellId[i];
-
-		// first element or boundary start
-		if (i == 0 || key != cellId[i - 1])
-		{
-			cellStartIdx[key] = i;
-
-			if (i > 0) // end of previous run
-			{
-				uint32_t prev = cellId[i - 1];
-				cellEndIdx[prev] = i;
-			}
-		}
-
-		// last element -> close current run
-		if (i == N - 1)
-		{
-			cellEndIdx[key] = N;
-		}
-	}
-
-	__global__
-	void K_ClearRanges(
-		const uint32_t N_cells,
-		// destinations
-		uint32_t* __restrict__ cellStartIdx,
-		uint32_t* __restrict__ cellEndIdx)
-	{
-		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= N_cells) { return; }
-
-		cellStartIdx[i] = c_ns_EMPTY;
-		cellEndIdx[i] = c_ns_EMPTY;
 	}
 
 } // namespace GPU
@@ -1789,69 +1668,6 @@ namespace GPU
 			overflowFlag);
 
 		GPU::CheckLastKernel("K_BruteForce_Query_Fill()");
-	}
-
-	void Launch_FillCellIdAndIdxF(
-		const float* xPosF, const float* yPosF, const float* zPosF,
-		const uint32_t N_F,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* cellIdF)
-	{
-		const uint32_t N_BLOCK_SIZE = 256;
-		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
-
-		K_FillCellIdAndIdxF<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			xPosF, yPosF, zPosF, N_F, cellIdF);
-
-		GPU::CheckLastKernel("K_FillCellIdAndIdxF()");
-	}
-
-	void Launch_FillCellIdAndIdxB(
-		const float* xPosB, const float* yPosB, const float* zPosB,
-		const uint32_t N_B,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* cellIdB)
-	{
-		const uint32_t N_BLOCK_SIZE = 256;
-		const uint32_t N_GRID_SIZE = (N_B + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
-
-		K_FillCellIdAndIdxB<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			xPosB, yPosB, zPosB, N_B, cellIdB);
-
-		GPU::CheckLastKernel("K_FillCellIdAndIdxB()");
-	}
-
-	void Launch_BuildRangesFromSortedKeys(
-		const uint32_t* cellId,
-		const uint32_t N,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* cellStartIdx, uint32_t* cellEndIdx)
-	{
-		const uint32_t N_BLOCK_SIZE = 256;
-		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
-
-		K_BuildRangesFromSortedKeys<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			cellId, N, cellStartIdx, cellEndIdx);
-
-		GPU::CheckLastKernel("K_BuildRangesFromSortedKeys()");
-	}
-
-	void Launch_ClearRanges(
-		const uint32_t N_cells,
-		cudaStream_t stream,
-		// destinations
-		uint32_t* cellStartIdx, uint32_t* cellEndIdx)
-	{
-		const uint32_t N_BLOCK_SIZE = 256;
-		const uint32_t N_GRID_SIZE = (N_cells + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
-
-		K_ClearRanges<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			N_cells, cellStartIdx, cellEndIdx);
-
-		GPU::CheckLastKernel("K_ClearRanges()");
 	}
 
 	void Launch_MarkCellStarts(

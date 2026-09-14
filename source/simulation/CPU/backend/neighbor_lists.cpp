@@ -3,7 +3,6 @@
 // external
 #include <algorithm>
 #include <cstdint>
-#include <cassert>
 #include <limits>
 #include <stdexcept>
 #include <tbb/parallel_for.h>

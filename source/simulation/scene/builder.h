@@ -8,12 +8,10 @@
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
-#include <string_view>
 #include <vector>
 
 // internal
 #include "source/simulation/core/parameters_sim.h"
-#include "source/simulation/core/particle_types.h"
 #include "source/simulation/scene/geometry/surface_sampling.h"
 #include "source/simulation/sync/state_sim.h"
 

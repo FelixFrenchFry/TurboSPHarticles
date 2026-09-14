@@ -6,7 +6,6 @@
 #include <chrono>
 #include <CLI/CLI.hpp>
 #include <csignal>
-#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <spdlog/spdlog.h>

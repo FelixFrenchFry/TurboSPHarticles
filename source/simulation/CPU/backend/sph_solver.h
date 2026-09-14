@@ -6,7 +6,6 @@
 #include <span>
 
 // internal
-#include "source/simulation/sync/state_sim.h"
 #include "neighbor_lists.h"
 
 #if defined(_MSC_VER)

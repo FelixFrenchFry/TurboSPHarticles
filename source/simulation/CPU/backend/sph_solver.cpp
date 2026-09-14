@@ -6,14 +6,10 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <stdexcept>
-#include <spdlog/spdlog.h>
 #include <tbb/parallel_reduce.h>
-#include <tbb/parallel_sort.h>
 #include <tbb/partitioner.h>
 
 // internal
-#include "source/base/helpers.h"
 #include "source/simulation/core/solver_constants.h"
 #include "neighbor_lists.h"
 #include "neighbor_search.h"

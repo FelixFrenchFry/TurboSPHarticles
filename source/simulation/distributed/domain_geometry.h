@@ -16,7 +16,6 @@ namespace Dist
 
 		[[nodiscard]] bool IsValid() const;
 		[[nodiscard]] glm::vec3 Extents() const;
-		[[nodiscard]] glm::vec3 Center() const;
 		[[nodiscard]] AABB Expanded(float radius) const;
 
 		// called per particle and halo destination by the particle routing

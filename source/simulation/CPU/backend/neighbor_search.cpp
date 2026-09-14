@@ -16,10 +16,6 @@
 #include <tbb/partitioner.h>
 #include <vector>
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#endif
-
 // internal
 #include "cpu_backend.h"
 #include "neighbor_lists.h"

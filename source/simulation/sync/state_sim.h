@@ -596,19 +596,6 @@ namespace Sync
 		RigidBodies rigidBodies;
 
 		// convenience methods for reserve/resizing
-		void ReserveFluid(uint64_t N)
-		{
-			particlesF.reserveAll(Sim::CheckedLocalParticleCount(N, "Fluid reserve"));
-		}
-		void ReserveBoundary(uint64_t N)
-		{
-			particlesB.reserveAll(Sim::CheckedLocalParticleCount(N, "Boundary reserve"));
-		}
-		void ReserveRigid(uint64_t N)
-		{
-			particlesR.reserveAll(Sim::CheckedLocalParticleCount(N, "Rigid reserve"));
-		}
-		void ReserveRigidBodies(uint32_t N) { rigidBodies.reserveAll(N); }
 		void ResizeFluid(uint64_t N)
 		{
 			particlesF.resizeAll(Sim::CheckedLocalParticleCount(N, "Fluid resize"));
@@ -630,25 +617,11 @@ namespace Sync
 			rigidBodies.shrinkToFitAll();
 		}
 
-		void ReserveFluidAdditional(uint64_t add)
-		{
-			const uint64_t total = Sim::CheckedParticleAdd(
-				particlesF.xPos.size(), add, "Fluid reserve");
-			particlesF.reserveAll(Sim::CheckedLocalParticleCount(total, "Fluid reserve"));
-		}
-
 		void ReserveBoundaryAdditional(uint64_t add)
 		{
 			const uint64_t total = Sim::CheckedParticleAdd(
 				particlesB.xPos.size(), add, "Boundary reserve");
 			particlesB.reserveAll(Sim::CheckedLocalParticleCount(total, "Boundary reserve"));
-		}
-
-		void ReserveRigidAdditional(uint64_t add)
-		{
-			const uint64_t total = Sim::CheckedParticleAdd(
-				particlesR.xRelPos.size(), add, "Rigid reserve");
-			particlesR.reserveAll(Sim::CheckedLocalParticleCount(total, "Rigid reserve"));
 		}
 
 		// validates rigid particle ownership before backend hot loops perform updates

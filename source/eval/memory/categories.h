@@ -4,8 +4,6 @@
 // external
 #include <algorithm>
 #include <array>
-#include <boost/container/small_vector.hpp>
-#include <cmath>
 #include <cstdint>
 #include <string_view>
 #include <utility>
@@ -335,45 +333,11 @@ namespace Mem
 	void ResetTrackedDeviceAllocationPeak() noexcept;
 
 	// helpers for computing memory usage of common data structures
-	template<class T, size_t N>
-	inline MemUsage MemUsageOf_Array([[maybe_unused]] const std::array<T, N>& src)
-	{
-		const uint64_t N_usedBytes = static_cast<uint64_t>(N) * sizeof(T);
-		const uint64_t N_allocBytes = static_cast<uint64_t>(N) * sizeof(T);
-
-		return MemUsage{ N_usedBytes, N_allocBytes };
-	}
-
 	template<class T, class Alloc>
 	inline MemUsage MemUsageOf_Vector(const std::vector<T, Alloc>& src)
 	{
 		const uint64_t N_usedBytes = static_cast<uint64_t>(src.size()) * sizeof(T);
 		const uint64_t N_allocBytes = static_cast<uint64_t>(src.capacity()) * sizeof(T);
-
-		return MemUsage{ N_usedBytes, N_allocBytes };
-	}
-
-	template<class T, std::size_t N, class Alloc>
-	inline MemUsage MemUsageOf_SmallVector(const boost::container::small_vector<T, N, Alloc>& src)
-	{
-		const uint64_t N_usedBytes = static_cast<uint64_t>(src.size()) * sizeof(T);
-		const uint64_t N_allocBytes = static_cast<uint64_t>(src.capacity()) * sizeof(T);
-
-		return MemUsage{ N_usedBytes, N_allocBytes };
-	}
-
-	template<class T, std::size_t N, class Alloc>
-	inline MemUsage MemUsageOf_SmallVector_HeapOnly(const boost::container::small_vector<T, N, Alloc>& src)
-	{
-		if (src.capacity() <= N) // no spill -> no heap allocation
-		{
-			return MemUsage{ 0ull, 0ull };
-		}
-
-		const uint64_t N_usedBytes = static_cast<uint64_t>(src.size()) * sizeof(T);
-		const uint64_t N_allocBytes = static_cast<uint64_t>(src.capacity()) * sizeof(T);
-		// only count spill heap allocation to prevent double-counting
-		// inline small_vector storage nested in another data struct
 
 		return MemUsage{ N_usedBytes, N_allocBytes };
 	}
@@ -392,22 +356,6 @@ namespace Mem
 		}
 
 		return mem;
-	}
-
-	template<class T, std::size_t N, class Alloc>
-	inline MemUsage MemUsageOf_VectorOfSmallVector(
-		const std::vector<boost::container::small_vector<T, N, Alloc>>& src)
-	{
-		// outer heap block containing inner small_vector objects
-		MemUsage total = MemUsageOf_Vector(src);
-
-		// add only spill heap blocks of inner small_vectors
-		for (auto const& sv : src)
-		{
-			Add(total, MemUsageOf_SmallVector_HeapOnly(sv));
-		}
-
-		return total;
 	}
 
 } // namespace Mem

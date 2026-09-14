@@ -14,7 +14,6 @@
 #endif
 
 // internal
-#include "source/simulation/sync/state_sim.h"
 #include "rendering.h"
 #include "shader.h"
 #ifdef TURBOSPHARTICLES_WITH_CUDA

@@ -45,7 +45,6 @@ namespace Bench
 		uint64_t GetBench_Avg_WhenUsed(BenchOp op) const;
 		uint64_t GetBench_Min(BenchOp op) const;
 		uint64_t GetBench_Max(BenchOp op) const;
-		uint64_t GetBench_NumOcc(BenchOp op) const;
 
 		// helpers
 		void ClearRecordHistory();

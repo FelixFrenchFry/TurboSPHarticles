@@ -7,7 +7,6 @@
 // internal
 #include "common.cuh"
 #include "gpu_backend.h"
-#include "neighbor_search_kernels.cuh"
 #include "source/simulation/core/backend_sim.h"
 #include "source/simulation/core/cell_frame.h"
 

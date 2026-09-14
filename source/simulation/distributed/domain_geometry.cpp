@@ -22,11 +22,6 @@ glm::vec3 AABB::Extents() const
 	return max - min;
 }
 
-glm::vec3 AABB::Center() const
-{
-	return 0.5f * (min + max);
-}
-
 AABB AABB::Expanded(const float radius) const
 {
 	const float r = std::max(0.0f, radius);

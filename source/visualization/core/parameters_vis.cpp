@@ -1,7 +1,6 @@
 // parameters_vis.cpp
 
 // external
-#include <spdlog/spdlog.h>
 #include <thread>
 
 // internal

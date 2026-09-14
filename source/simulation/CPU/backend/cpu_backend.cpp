@@ -7,7 +7,6 @@
 #include <glm/exponential.hpp>
 #include <glm/vec3.hpp>
 #include <limits>
-#include <numbers>
 #include <span>
 #include <stdexcept>
 #include <spdlog/spdlog.h>

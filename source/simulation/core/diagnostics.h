@@ -2,7 +2,6 @@
 #pragma once
 
 // external
-#include <chrono>
 #include <cstdint>
 
 // internal

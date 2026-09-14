@@ -104,12 +104,8 @@ namespace Inter
 		bool OnMouseButton(int button, int action, int mods);
 		bool OnCursorPos(double xPos, double yPos);
 		bool OnScroll(double xOff, double yOff);
-		bool OnChar(unsigned int codepoint);
 
 		void OnDPIScaleChanged(float dpiScale);
-
-		// helpers
-		void SetDockingEnabled(bool enabled);
 
 	private:
 
