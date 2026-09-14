@@ -40,41 +40,23 @@ void BenchmarksTracker::EndStep(const uint64_t simStep, const double simTime)
 		recHistory_.pop_front();
 	}
 
-	if (N_records_ == 0) // first entry
+	for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
 	{
-		benchSum_allTime_ = recLatest_.time;
-		benchMax_allTime_ = recLatest_.time;
+		// update all-time sum
+		benchSum_allTime_[i] += recLatest_.time[i];
 
-		for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
+		// update all-time min (only if the operation occured)
+		if (curStepOcc_[i] && recLatest_.time[i] < benchMin_allTime_[i])
 		{
-			// initialize min only for operations that actually occurred
-			benchMin_allTime_[i] = curStepOcc_[i] ? recLatest_.time[i]
-								 : std::numeric_limits<uint64_t>::max();
-
-			// convert from 8 to 64 bits, because simple array copy is not allowed
-			numOcc_allTime_[i] = static_cast<uint64_t>(curStepOcc_[i]);
+			benchMin_allTime_[i] = recLatest_.time[i];
 		}
-	}
-	else
-	{
-		for (uint8_t i = 0; i < GetIdx(BenchOp::Count); i++)
-		{
-			// update all-time sum
-			benchSum_allTime_[i] += recLatest_.time[i];
 
-			// update all-time min (only if the operation occured)
-			if (curStepOcc_[i] && recLatest_.time[i] < benchMin_allTime_[i])
-			{
-				benchMin_allTime_[i] = recLatest_.time[i];
-			}
+		// update all-time max
+		benchMax_allTime_[i] = std::max(recLatest_.time[i],
+										benchMax_allTime_[i]);
 
-			// update all-time max
-			benchMax_allTime_[i] = std::max(recLatest_.time[i],
-											benchMax_allTime_[i]);
-
-			// update occurrence count
-			numOcc_allTime_[i] += curStepOcc_[i] ? 1 : 0;
-		}
+		// update occurrence count
+		numOcc_allTime_[i] += curStepOcc_[i] ? 1 : 0;
 	}
 
 	N_records_ += 1;

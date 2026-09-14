@@ -1641,12 +1641,11 @@ bool ParticleRedistributionMgr::RouteOwnedParticles(
 	return true;
 }
 
-bool ParticleRedistributionMgr::PackSendBuffers(
+void ParticleRedistributionMgr::PackSendBuffers(
 	const Sync::FluidConstView& particlesF,
 	const Sync::BoundaryConstView& particlesB,
 	const bool redistributeParticlesB,
-	const int rank, const int N_ranks,
-	std::string* failMsg)
+	const int rank, const int N_ranks)
 {
 	// build one compact send buffer per destination rank
 	for (int dstRank = 0; dstRank != N_ranks; dstRank++)
@@ -1714,8 +1713,6 @@ bool ParticleRedistributionMgr::PackSendBuffers(
 	redistStats_.N_sentHaloB = AggregateParticleTrafficCounts(
 		sendCounts_, PARTICLE_REDISTRIBUTION_LANE_HALO_BOUNDARY,
 		PARTICLE_REDISTRIBUTION_LANE_COUNT, "Sent halo boundary particle count");
-	(void)failMsg;
-	return true;
 }
 
 bool ParticleRedistributionMgr::PrepareReceiveBuffers(
@@ -2494,10 +2491,10 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 		// pack outgoing migration and halo payloads
 		if (localOk)
 		{
-			localOk = PackSendBuffers(
+			PackSendBuffers(
 				particlesF, particlesB,
 				redistributeParticlesB,
-				rank, N_ranks, failMsg);
+				rank, N_ranks);
 		}
 	}
 	catch (const std::exception& ex)

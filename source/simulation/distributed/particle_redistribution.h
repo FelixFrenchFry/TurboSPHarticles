@@ -362,12 +362,11 @@ namespace Dist
 			bool redistributeParticlesB,
 			int rank, int N_ranks,
 			std::string* failMsg);
-		bool PackSendBuffers(
+		void PackSendBuffers(
 			const Sync::FluidConstView& particlesF,
 			const Sync::BoundaryConstView& particlesB,
 			bool redistributeParticlesB,
-			int rank, int N_ranks,
-			std::string* failMsg);
+			int rank, int N_ranks);
 		bool PrepareReceiveBuffers(
 			int rank, int N_ranks,
 			std::string* failMsg);
