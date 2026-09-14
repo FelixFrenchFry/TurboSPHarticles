@@ -342,7 +342,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		WriteExportSnapshot(paramsInit);
 	}
 
-	AppendInitialMemoryMetricsLog(paramsInit);
+	AppendInitialMemoryMetricsLog();
 	const char* stopReason = "unknown reason";
 	bool checkpointDue = false;
 
@@ -505,7 +505,7 @@ void SimulationMgr::RunSim_Blocking()
 		WriteExportSnapshot(paramsInit);
 	}
 
-	AppendInitialMemoryMetricsLog(paramsInit);
+	AppendInitialMemoryMetricsLog();
 	const char* stopReason = "unknown reason";
 	bool checkpointDue = false;
 
@@ -719,7 +719,7 @@ void SimulationMgr::HandleBenchMemStatSnapshots() const
 	statSnapMailbox_->StoreSnapshot(std::move(statSnap));
 }
 
-void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
+void SimulationMgr::AppendInitialMemoryMetricsLog() const
 {
 	if (!loggingMgr_.IsActive()) { return; }
 
@@ -727,7 +727,7 @@ void SimulationMgr::AppendInitialMemoryMetricsLog(const SimParams& params) const
 	record.simStep = simStep_;
 	record.simTime = simTime_;
 
-	simBackend_->FillMemoryRecord(record, params);
+	simBackend_->FillMemoryRecord(record);
 	memoryTracker_.SampleProcessMemory();
 	record.process = memoryTracker_.GetCurrentRecord().process;
 	record.device = memoryTracker_.GetCurrentRecord().device;
@@ -755,7 +755,7 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 	statisticsTracker_.EndStep(simStep_, simTime_);
 
 	// record memory usage, archive data and update aggregates
-	simBackend_->FillMemoryRecord(memoryTracker_.GetCurrentRecord(), simParams_);
+	simBackend_->FillMemoryRecord(memoryTracker_.GetCurrentRecord());
 	memoryTracker_.EndStep(simStep_, simTime_);
 
 	// ending point of total benchmark, archive data and update aggregates

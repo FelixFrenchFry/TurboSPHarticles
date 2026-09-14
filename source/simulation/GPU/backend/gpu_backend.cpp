@@ -814,9 +814,7 @@ void SimBackend_GPU::FillScalarData(
 	throw std::runtime_error("Unsupported scalar data mode in GPU.");
 }
 
-void SimBackend_GPU::FillMemoryRecord(
-	Mem::MemRecordStep& record,
-	const SimParams& params) const
+void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 {
 	using namespace Mem;
 	constexpr MemSpace memSpaceRAM = MemSpace::RAM;
@@ -947,7 +945,7 @@ void SimBackend_GPU::FillMemoryRecord(
 	// --- [ VRAM: neighbor search data structures ] -------------------------------------------------
 
 	{
-		const ParticleClassMemUsage usage = neighborSearch_->GetMemUsage(params);
+		const ParticleClassMemUsage usage = neighborSearch_->GetMemUsage();
 
 		// finalize
 		Set(record, memSpaceVRAM, MemBucket::Neighbors_SearchDataStructF, usage.fluid);

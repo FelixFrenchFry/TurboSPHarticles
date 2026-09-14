@@ -618,11 +618,8 @@ void NS_BruteForce_GPU::DataReOrder(
 	// no re-ordering in brute force implementation
 }
 
-Mem::ParticleClassMemUsage NS_BruteForce_GPU::GetMemUsage(
-	const SimParams& params) const
+Mem::ParticleClassMemUsage NS_BruteForce_GPU::GetMemUsage() const
 {
-	(void)params;
-
 	Mem::MemUsage usageF{};
 
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
@@ -1135,11 +1132,8 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	GPU::StreamSync(be_.stream_);
 }
 
-Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU::GetMemUsage(
-	const SimParams& params) const
+Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU::GetMemUsage() const
 {
-	(void)params;
-
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
 	Mem::MemUsage usageR{};

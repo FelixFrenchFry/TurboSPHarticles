@@ -51,7 +51,7 @@ namespace Sim
 
 		// computes & fills in the memory usage data for the current sim step
 		// (backend-specific so that the memory usage can be computed from the custom data structures efficiently)
-		void FillMemoryRecord(Mem::MemRecordStep& record, const SimParams& params) const override;
+		void FillMemoryRecord(Mem::MemRecordStep& record) const override;
 
 		// computes & fills in the stat data for the current sim step
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)

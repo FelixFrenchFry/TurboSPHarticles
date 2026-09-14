@@ -975,11 +975,8 @@ void NS_BruteForce_CPU::DataReOrder(
 	// no re-ordering in brute force implementation
 }
 
-Mem::ParticleClassMemUsage NS_BruteForce_CPU::GetMemUsage(
-	const SimParams& params) const
+Mem::ParticleClassMemUsage NS_BruteForce_CPU::GetMemUsage() const
 {
-	(void)params;
-
 	return {};
 }
 
@@ -2077,8 +2074,7 @@ bool NS_CellLinkedList_Compact_CPU::TryGetLastParticleReOrder(
 	return true;
 }
 
-Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU::GetMemUsage(
-	const SimParams& params) const
+Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU::GetMemUsage() const
 {
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};

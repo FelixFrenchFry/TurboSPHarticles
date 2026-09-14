@@ -145,7 +145,7 @@ namespace Dist
 		// manages per-rank CSV metric logging
 		void BeginRunLogging(const Sim::SimParams& params);
 		void EndRunLogging();
-		void AppendInitialMemoryMetricsLog(const Sim::SimParams& params) const;
+		void AppendInitialMemoryMetricsLog() const;
 		void AppendLatestMemoryMetricsLog() const;
 		void AppendLatestBenchmarkMetricsLog() const;
 
@@ -154,7 +154,7 @@ namespace Dist
 
 		// [ rank-reduced ] reduces rank-local partial stats into the global stat record
 		bool FillDistributedStatisticsRecord(const Sim::SimParams& params) const;
-		void FinalizeBenchMemMeasurements(const Sim::SimParams& params) const;
+		void FinalizeBenchMemMeasurements() const;
 		DistRankStepReport BuildRankStepReport(const Sim::SimParams& params, bool exportedStep) const;
 		DistRankBenchReport BuildRankBenchReport() const;
 		void DisplayMemoryUsageStats(const Sim::SimParams& params, bool force = false) const;

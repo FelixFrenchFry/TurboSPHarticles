@@ -582,11 +582,8 @@ uint32_t NeighborLists_ChunkedSELL_Explicit_CPU::CountRR(
 }
 
 Mem::ParticleClassMemUsage
-NeighborLists_ChunkedSELL_Explicit_CPU::GetMemUsage(
-	const SimParams& params) const
+NeighborLists_ChunkedSELL_Explicit_CPU::GetMemUsage() const
 {
-	(void)params;
-
 	Mem::MemUsage usageFF{};
 	Mem::MemUsage usageFB{};
 	Mem::MemUsage usageFR{};
@@ -1389,11 +1386,8 @@ uint32_t NeighborLists_ChunkedSELL_AdaptCompress_CPU::CountRR(
 }
 
 Mem::ParticleClassMemUsage
-NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage(
-	const SimParams& params) const
+NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 {
-	(void)params;
-
 	Mem::MemUsage usageFF{};
 	Mem::MemUsage usageFB{};
 	Mem::MemUsage usageFR{};

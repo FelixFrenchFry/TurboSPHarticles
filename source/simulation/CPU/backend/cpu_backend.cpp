@@ -526,9 +526,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	{
 		if (oldLocalIdx_FromNewLocalIdx.size() > N_old) { return false; }
 
+		#if defined(_DEBUG)
 		const uint32_t N_retained = static_cast<uint32_t>(oldLocalIdx_FromNewLocalIdx.size());
 
-		#if defined(_DEBUG)
 		// exhaustively validate they do not source from the retained prefix and do not contain duplicates
 		std::vector<uint8_t> oldLocalIdxUsed(N_old, 0);
 		for (uint32_t newLocalIdx = 0; newLocalIdx < N_retained; newLocalIdx++)
@@ -1116,9 +1116,7 @@ void SimBackend_CPU::FillScalarData(
 	throw std::runtime_error("Unsupported scalar data mode in CPU.");
 }
 
-void SimBackend_CPU::FillMemoryRecord(
-	Mem::MemRecordStep& record,
-	const SimParams& params) const
+void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 {
 	using namespace Mem;
 	constexpr MemSpace memSpace = MemSpace::RAM;
@@ -1184,7 +1182,7 @@ void SimBackend_CPU::FillMemoryRecord(
 	// --- [ neighbor search data structures ] -------------------------------------------------------
 
 	{
-		const ParticleClassMemUsage usage = neighborSearch_->GetMemUsage(params);
+		const ParticleClassMemUsage usage = neighborSearch_->GetMemUsage();
 
 		// finalize
 		Set(record, memSpace, MemBucket::Neighbors_SearchDataStructF, usage.fluid);
@@ -1195,7 +1193,7 @@ void SimBackend_CPU::FillMemoryRecord(
 	// --- [ neighbor list storage ] -----------------------------------------------------------------
 
 	{
-		const ParticleClassMemUsage usage = neighborList_->GetMemUsage(params);
+		const ParticleClassMemUsage usage = neighborList_->GetMemUsage();
 
 		// finalize
 		Set(record, memSpace, MemBucket::Neighbors_ListStorageF, usage.fluid);

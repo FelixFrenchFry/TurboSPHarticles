@@ -45,7 +45,7 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const override;
 
 	private:
 		
@@ -84,7 +84,7 @@ namespace Sim
 			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
 
-		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const override;
 
 	private:
 

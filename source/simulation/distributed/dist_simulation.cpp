@@ -849,7 +849,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 		if (!WriteExportSnapshot(paramsInit)) { runOk = false; }
 	}
 
-	AppendInitialMemoryMetricsLog(paramsInit);
+	AppendInitialMemoryMetricsLog();
 
 	while (true)
 	{
@@ -934,7 +934,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 		if (!stepOk)
 		{
-			FinalizeBenchMemMeasurements(params);
+			FinalizeBenchMemMeasurements();
 			runOk = false;
 			stopReason = "failed simulation step";
 			break;
@@ -969,7 +969,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 		// evaluate the benchmarks and memory usage for this step
 		if (runOk) { MarkTrace(Trace::TraceStage::Dist_Metrics); }
-		FinalizeBenchMemMeasurements(params);
+		FinalizeBenchMemMeasurements();
 		AppendLatestMemoryMetricsLog();
 		AppendLatestBenchmarkMetricsLog();
 
@@ -2003,7 +2003,7 @@ void DistSimulationMgr::EndRunLogging()
 	loggingMgr_.EndRun();
 }
 
-void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& params) const
+void DistSimulationMgr::AppendInitialMemoryMetricsLog() const
 {
 	if (!loggingMgr_.IsActive()) { return; }
 	if (!simBackend_) { return; }
@@ -2013,7 +2013,7 @@ void DistSimulationMgr::AppendInitialMemoryMetricsLog(const Sim::SimParams& para
 	record.simStep = simStep_;
 	record.simTime = simTime_;
 
-	simBackend_->FillMemoryRecord(record, params);
+	simBackend_->FillMemoryRecord(record);
 	FillDistributedMemoryRecord(record);
 	memoryTracker_->SampleProcessMemory();
 	record.process = memoryTracker_->GetCurrentRecord().process;
@@ -2109,15 +2109,14 @@ bool DistSimulationMgr::FillDistributedStatisticsRecord(
 	return true;
 }
 
-void DistSimulationMgr::FinalizeBenchMemMeasurements(
-	const Sim::SimParams& params) const
+void DistSimulationMgr::FinalizeBenchMemMeasurements() const
 {
 	if (!simBackend_) { return; }
 	if (!memoryTracker_) { return; }
 	if (!benchmarksTracker_) { return; }
 
 	// record memory usage, archive data and update aggregates
-	simBackend_->FillMemoryRecord(memoryTracker_->GetCurrentRecord(), params);
+	simBackend_->FillMemoryRecord(memoryTracker_->GetCurrentRecord());
 	FillDistributedMemoryRecord(memoryTracker_->GetCurrentRecord());
 	memoryTracker_->EndStep(simStep_, simTime_);
 

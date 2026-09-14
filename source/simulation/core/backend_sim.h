@@ -185,7 +185,7 @@ namespace Sim
 
 		// reports the simulation domain, so spatial acceleration structures can stay bounded by it
 		// instead of by particles that left it (an empty extent leaves the backend unbounded)
-		virtual void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) {}
+		virtual void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) = 0;
 
 		// copies & translates a universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) = 0;
@@ -217,7 +217,7 @@ namespace Sim
 
 		// computes & fills in the memory usage data for the current sim step
 		// (backend-specific so that the memory usage can be computed from the custom data structures efficiently)
-		virtual void FillMemoryRecord(Mem::MemRecordStep& record, const SimParams& params) const = 0;
+		virtual void FillMemoryRecord(Mem::MemRecordStep& record) const = 0;
 
 		// computes & fills in the stat data for the current sim step
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
@@ -353,7 +353,7 @@ namespace Sim
 			return false;
 		}
 
-		virtual Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const = 0;
+		virtual Mem::ParticleClassMemUsage GetMemUsage() const = 0;
 	};
 
 	struct NeighborSpan
@@ -414,7 +414,7 @@ namespace Sim
 		virtual uint32_t CountRR(uint32_t i) const { return RR(i).N; }
 
 		// stats
-		virtual Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const = 0;
+		virtual Mem::ParticleClassMemUsage GetMemUsage() const = 0;
 
 		// flags
 		virtual bool RunCountQuery() const = 0;

@@ -39,7 +39,7 @@ namespace Sim
 
 		void DataReOrder(const SimParams& params) override;
 
-		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const override;
 
 	private:
 
@@ -72,7 +72,7 @@ namespace Sim
 
 		void DataReOrder_SolverStep(const SimParams& params) override;
 
-		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const override;
 
 	private:
 

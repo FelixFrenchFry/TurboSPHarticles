@@ -26,12 +26,14 @@ namespace Sim
 			{
 				return std::make_unique<SimBackend_CPU>(simParamsMgr, benchmarksTracker, params);
 			}
-		#ifdef TURBOSPHARTICLES_WITH_CUDA
 		case Base::BackendType::GPU:
 			{
+			#ifdef TURBOSPHARTICLES_WITH_CUDA
 				return std::make_unique<SimBackend_GPU>(simParamsMgr, benchmarksTracker, params);
+			#else
+				throw std::runtime_error("GPU sim backend requested, but CUDA support is disabled.");
+			#endif
 			}
-		#endif
 		}
 
 		throw std::runtime_error("Unsupported sim backend type requested.");

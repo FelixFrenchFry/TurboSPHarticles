@@ -194,7 +194,7 @@ namespace Sim
 		uint32_t CountRB(uint32_t i) const override;
 		uint32_t CountRR(uint32_t i) const override;
 
-		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const override;
 
 		bool RunCountQuery() const override { return true; }
 		bool RunFillQuery() const override { return true; }
@@ -324,7 +324,7 @@ namespace Sim
 		uint32_t CountRB(uint32_t i) const override;
 		uint32_t CountRR(uint32_t i) const override;
 
-		Mem::ParticleClassMemUsage GetMemUsage(const SimParams& params) const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const override;
 
 		bool RunCountQuery() const override { return true; }
 		bool RunFillQuery() const override { return true; }
