@@ -39,7 +39,7 @@ SimulationMgr::SimulationMgr(Sim::SimParamsMgr& simParamsMgr,
 
 void SimulationMgr::Init(const std::string& restartCheckpoint)
 {
-	const auto initializationStart = std::chrono::steady_clock::now();
+	initTime_ = std::chrono::steady_clock::now();
 
 	// initial snapshot
 	SyncParameters(true);
@@ -68,7 +68,7 @@ void SimulationMgr::Init(const std::string& restartCheckpoint)
 	SyncParameters(true);
 
 	const double initializationTimeS = std::chrono::duration<double>(
-		std::chrono::steady_clock::now() - initializationStart).count();
+		std::chrono::steady_clock::now() - initTime_).count();
 	SPDLOG_INFO("Initialization finished after {:.2f}s", initializationTimeS);
 
 	DiagnosticsMgr::PrintSimParams(simParams_);
@@ -344,11 +344,22 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 
 	AppendInitialMemoryMetricsLog(paramsInit);
 	const char* stopReason = "unknown reason";
+	bool checkpointDue = false;
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
 	while (true)
 	{
+		checkpointDue = paramsInit.checkpointTime > 0.0 &&
+			std::chrono::duration<double>(std::chrono::steady_clock::now() - initTime_).count() >=
+			paramsInit.checkpointTime;
+		if (checkpointDue)
+		{
+			stopReason = "checkpoint time reached";
+			SPDLOG_INFO("Checkpoint time reached, saving checkpoint and stopping...");
+			break;
+		}
+
 		if (stopToken.stop_requested() ||
 			stopRequested_.load(std::memory_order_acquire))
 		{
@@ -455,7 +466,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	FinalizeRunState(paramsFinal);
+	FinalizeRunState(paramsFinal, checkpointDue);
 
 	DisplayMemoryUsageStats(paramsFinal, true);
 	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
@@ -496,11 +507,22 @@ void SimulationMgr::RunSim_Blocking()
 
 	AppendInitialMemoryMetricsLog(paramsInit);
 	const char* stopReason = "unknown reason";
+	bool checkpointDue = false;
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
 	while (true)
 	{
+		checkpointDue = paramsInit.checkpointTime > 0.0 &&
+			std::chrono::duration<double>(std::chrono::steady_clock::now() - initTime_).count() >=
+			paramsInit.checkpointTime;
+		if (checkpointDue)
+		{
+			stopReason = "checkpoint time reached";
+			SPDLOG_INFO("Checkpoint time reached, saving checkpoint and stopping...");
+			break;
+		}
+
 		if (stopRequested_.load(std::memory_order_acquire))
 		{
 			stopReason = "stop requested";
@@ -583,7 +605,7 @@ void SimulationMgr::RunSim_Blocking()
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	FinalizeRunState(paramsFinal);
+	FinalizeRunState(paramsFinal, checkpointDue);
 
 	DisplayMemoryUsageStats(paramsFinal, true);
 	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
@@ -644,9 +666,9 @@ void SimulationMgr::WriteExportSnapshot(const SimParams& params) const
 	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
 }
 
-void SimulationMgr::FinalizeRunState(const SimParams& params)
+void SimulationMgr::FinalizeRunState(const SimParams& params, const bool checkpointDue)
 {
-	if (!params.saveFinalState)
+	if (!params.saveFinalState && !checkpointDue)
 	{
 		simBackend_.reset();
 		return;

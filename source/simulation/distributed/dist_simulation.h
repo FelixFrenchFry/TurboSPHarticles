@@ -3,6 +3,7 @@
 
 // external
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -195,6 +196,7 @@ namespace Dist
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;
 		uint64_t simParamsVersion_ = 0;
+		std::chrono::steady_clock::time_point initTime_{};
 
 		// configuration profile
 		std::string configProfile_ = "default";

@@ -152,6 +152,7 @@ namespace Sim
 		bool saveFinalState     = false;
 		std::string exportDir   = "A";
 		uint32_t exportInterval = 10;
+		double checkpointTime   = 0.0;
 
 		// export surface classification
 		float surfaceNbrCountRatio = 0.75f; // near-surface neighborhood fill ratio

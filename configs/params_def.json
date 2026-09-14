@@ -1,5 +1,5 @@
 {
-  "backendType": "GPU",
+  "backendType": "CPU",
   "scenarioType": "SampledMeshCollection",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
@@ -60,5 +60,6 @@
   "saveFinalState": false,
   "exportDir": "test",
   "exportInterval": 10,
+  "checkpointTime": 0,
   "surfaceNbrCountRatio": 0.75
 }

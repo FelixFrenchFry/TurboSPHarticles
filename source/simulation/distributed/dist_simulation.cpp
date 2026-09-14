@@ -378,6 +378,11 @@ bool DistSimulationMgr::Init(
 	const bool logParamStatus,
 	const std::string& restartCheckpoint)
 {
+	initTime_ = std::chrono::steady_clock::now();
+
+	// initial snapshot
+	SyncParameters(true);
+
 	boundaryRedistributionRequired_ = true;
 	if (!LoadParamsFromProfileBroadcast(profile, logParamStatus))
 	{
@@ -387,9 +392,6 @@ bool DistSimulationMgr::Init(
 	configProfile_ = profile;
 	paramsFile_ = Base::ParamsPathForProfile(configProfile_);
 	scenariosFile_ = Base::ScenariosPathForProfile(configProfile_);
-
-	// initial snapshot
-	SyncParameters(true);
 
 	if (!LoadParamsFromCliOverrides(simOverrides, logParamStatus))
 	{
@@ -837,6 +839,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 	DistDiagnosticsMgr::ResetProgress(startStep);
 	bool runOk = true;
 	const char* stopReason = "unknown reason";
+	bool checkpointDue = false;
 
 	// restarted runs export after their next scheduled solver step,
 	// startup routing rebuilds halos but does not reconstruct their pressure/density fields
@@ -866,10 +869,29 @@ bool DistSimulationMgr::RunSim_Blocking()
 		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
 
-		// let any rank stop the whole MPI loop cleanly
+		// check checkpoint deadline on root
+		checkpointDue = mpiContext_.IsRoot() && paramsInit.checkpointTime > 0.0 &&
+			std::chrono::duration<double>(std::chrono::steady_clock::now() - initTime_).count() >=
+			paramsInit.checkpointTime;
+
+		// synchronize shutdown requests across ranks
 		const bool keepRunning = mpiContext_.AllTrue(
-			!stopRequested_.load(std::memory_order_acquire));
-		if (!keepRunning) { stopReason = "stop requested"; break; }
+			!stopRequested_.load(std::memory_order_acquire) && !checkpointDue);
+		if (!keepRunning)
+		{
+			// broadcast whether shutdown requires a checkpoint
+			int checkpointRequested = checkpointDue ? 1 : 0;
+			mpiContext_.BroadcastInt(checkpointRequested);
+			checkpointDue = checkpointRequested != 0;
+
+			stopReason = "stop requested";
+			if (checkpointDue)
+			{
+				stopReason = "checkpoint time reached";
+				SPDLOG_INFO_MPI("Checkpoint time reached, saving checkpoint and stopping...", mpiContext_);
+			}
+			break;
+		}
 
 		// explicit max number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
@@ -964,7 +986,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 	auto paramsFinal = simParams_;
 	paramsFinal.maxSteps = paramsInit.maxSteps;
-	const bool wantsFinalState = runOk && paramsFinal.saveFinalState;
+	const bool wantsFinalState = runOk && (paramsFinal.saveFinalState || checkpointDue);
 	if (wantsFinalState)
 	{
 		MarkTrace(Trace::TraceStage::Dist_FinalStateSerialization);

@@ -946,6 +946,24 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			params_.exportInterval = it->get<uint32_t>();
 		}
 
+		if (auto it = j.find("checkpointTime"); it != j.end())
+		{
+			if (!it->is_number())
+			{
+				SPDLOG_WARN("Invalid 'checkpointTime' value in JSON (must be finite seconds and >= 0).");
+				EndWrite();
+				return false;
+			}
+			const double checkpointTime = it->get<double>();
+			if (!std::isfinite(checkpointTime) || checkpointTime < 0.0)
+			{
+				SPDLOG_WARN("Invalid 'checkpointTime' value in JSON (must be finite seconds and >= 0).");
+				EndWrite();
+				return false;
+			}
+			params_.checkpointTime = checkpointTime;
+		}
+
 		EndWrite();
 	}
 
@@ -1173,6 +1191,7 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 	j["saveFinalState"] = par.saveFinalState;
 	j["exportDir"] = par.exportDir;
 	j["exportInterval"] = par.exportInterval;
+	j["checkpointTime"] = par.checkpointTime;
 
 	// --- [ export surface classification ] ---------------------------------------------------------
 

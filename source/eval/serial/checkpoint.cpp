@@ -25,8 +25,8 @@ namespace Export
 		if (!params.is_object()) { throw std::runtime_error("Invalid checkpoint parameters."); }
 
 		// exclude output, diagnostics, run limits and scene generation settings
-		for (const char* key : { "maxSteps", "maxThreadsSim", "exportEnabled", "exportDir",
-			"exportInterval", "saveFinalState", "maxBenchRecs", "timeUnit", "maxMemRecs",
+		for (const char* key : { "maxSteps", "maxThreadsSim", "exportEnabled",
+			"saveFinalState", "exportDir", "exportInterval", "checkpointTime", "maxBenchRecs", "timeUnit", "maxMemRecs",
 			"byteUnit", "maxStatRecs", "statGroupsEnabled", "progressReportMode",
 			"surfaceNbrCountRatio", "surfaceNbrCountThreshold",
 			"jitterFracF", "jitterSeedF", "jitterFracB", "jitterSeedB",

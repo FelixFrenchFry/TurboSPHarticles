@@ -72,7 +72,7 @@ namespace Sim
 		void SetConfigProfile(std::string profile);
 
 		void WriteExportSnapshot(const SimParams& params) const;
-		void FinalizeRunState(const SimParams& params);
+		void FinalizeRunState(const SimParams& params, bool checkpointDue = false);
 		void PublishVisualSnapshot();
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;
@@ -117,6 +117,7 @@ namespace Sim
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;
 		uint64_t simParamsVersion_ = 0;
+		std::chrono::steady_clock::time_point initTime_{};
 
 		// universal simulation state, and backend for compute
 		Sync::UniversalSimState universalSimState_;
