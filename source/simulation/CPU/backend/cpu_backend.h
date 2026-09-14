@@ -21,15 +21,10 @@ namespace Sim
 	{
 	public:
 
-		SimBackend_CPU(Sim::SimParamsMgr& simParamsMgr,
-						 Bench::BenchmarksTracker& benchmarksTracker,
-						 const SimParams& params);
+		SimBackend_CPU(Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params);
 
 		const char* Name() const override
 			{ return "CPU"; }
-
-		void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) override
-			{ neighborSearch_ = std::move(ns); }
 
 		void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) override
 			{ simDomainMin_ = min; simDomainMax_ = max; }
@@ -119,10 +114,6 @@ namespace Sim
 		// advances the simulation by N_steps
 		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
 
-		// IISPH fluid solver step
-		void Step_IISPH(const SimParams&) override;
-		void Step_IISPH_Distributed(const SimParams& params);
-
 		bool TerminationConditionSatisfied(const SimParams& params) const;
 
 		// provides the benchmark operation display order
@@ -134,6 +125,10 @@ namespace Sim
 		uint32_t GetNumRigidParticles() const override { return N_R_; }
 
 	private:
+
+		// IISPH fluid solver step
+		void Step_IISPH(const SimParams& params);
+		void Step_IISPH_Distributed(const SimParams& params);
 
 		// extra capacity for particle fields that grow during distributed redistribution
 		static constexpr float particleFieldExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune
@@ -159,8 +154,7 @@ namespace Sim
 		void ReduceRigidParticleForces();
 		void IntegrateRigidBodies(float timeStep);
 
-		// managers
-		Sim::SimParamsMgr& simParamsMgr_;
+		// benchmarks
 		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search

@@ -201,7 +201,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		volB, volR,
 		neighborList,
 		timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
-		cubicSplineAlpha, params.restDensity, massF,
+		cubicSplineAlpha, massF,
 		params.viscosityF, params.viscosityB,
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
 		xVelPredF, yVelPredF, zVelPredF);
@@ -490,7 +490,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			volB, volR,
 			neighborList,
 			timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
-			cubicSplineAlpha, params.restDensity, massF,
+			cubicSplineAlpha, massF,
 			params.viscosityF, params.viscosityB,
 			params.gravity.x, params.gravity.y, params.gravity.z, N_ownedF_,
 			xVelPredF, yVelPredF, zVelPredF, chunkIdxs, true);
@@ -916,7 +916,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF, const float kernelRadiusSqu,
-	const float cubicSplineAlpha, const float restDensity,
+	const float cubicSplineAlpha,
 	const float massF, const float viscosityF, const float viscosityB,
 	const float xGravity, const float yGravity, const float zGravity,
 	const uint32_t N_F,
@@ -927,8 +927,6 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 	const std::span<const uint32_t> selectedChunkIdxs,
 	const bool useSelectedChunks)
 {
-	(void)restDensity;
-
 	const uint32_t N_chunks = useSelectedChunks
 		? static_cast<uint32_t>(selectedChunkIdxs.size())
 		: neighborList.ChunkNumTotal();

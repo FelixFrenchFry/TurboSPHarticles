@@ -132,10 +132,9 @@ namespace
 // ---------------------------------------------------------------------------------------------------
 
 SimBackend_CPU::SimBackend_CPU(
-	Sim::SimParamsMgr& simParamsMgr,
 	Bench::BenchmarksTracker& benchmarksTracker,
 	const SimParams& params)
-	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_{ benchmarksTracker }
+	: benchmarksTracker_{ benchmarksTracker }
 {
 	affinityParts_ = std::make_unique<StepAffinityPartitioners>();
 
@@ -154,7 +153,7 @@ SimBackend_CPU::SimBackend_CPU(
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
-	neighborSearch_->Init(params);
+	neighborSearch_->Init();
 
 	// select neighbor list method
 	if (params.neighborListMethod ==

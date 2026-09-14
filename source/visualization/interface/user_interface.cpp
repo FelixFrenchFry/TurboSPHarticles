@@ -116,17 +116,17 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 
 	if (ImGui::CollapsingHeader("Scene Management", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		BuildSection_SceneManagement(simulationMgr, simParams, visParams);
+		BuildSection_SceneManagement(simulationMgr, visParams);
 	}
 
 	if (ImGui::CollapsingHeader("Simulation Control", ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		BuildSection_SimulationControl(simulationMgr, simParams, visParams);
+		BuildSection_SimulationControl(simulationMgr, simParams);
 	}
 
 	if (ImGui::CollapsingHeader("Simulation Parameters"))
 	{
-		BuildSection_SimulationParameters(simulationMgr, simParams, visParams);
+		BuildSection_SimulationParameters(simParams);
 	}
 
 	if (ImGui::CollapsingHeader("Visualization Settings"))
@@ -136,14 +136,14 @@ void UserInterfaceMgr::BuildUserInterfaceSections(
 
 	if (ImGui::CollapsingHeader("Simulation Statistics"))
 	{
-		BuildSection_SimulationStatistics(simulationMgr, statSnap, simParams, visParams);
+		BuildSection_SimulationStatistics(statSnap);
 	}
 
 	if (ImGui::CollapsingHeader("Performance Benchmarks"))
 	{
 		Bench::BenchOpList benchOps;
 		simulationMgr.GetBenchOps(benchOps);
-		BuildSection_PerformanceBenchmarks(simulationMgr, benchSnap, benchOps, simParams, visParams);
+		BuildSection_PerformanceBenchmarks(benchSnap, benchOps);
 	}
 
 	// show FPS
@@ -232,7 +232,6 @@ void UserInterfaceMgr::OnDPIScaleChanged(float dpiScale)
 
 void UserInterfaceMgr::BuildSection_SceneManagement(
 	Sim::SimulationMgr& simulationMgr,
-	const Sim::SimParams& simParams,
 	const Vis::VisParams& visParams)
 {
 	ImGui::Spacing();
@@ -432,8 +431,7 @@ void UserInterfaceMgr::BuildColorMapElement(
 
 void UserInterfaceMgr::BuildSection_SimulationControl(
 	const Sim::SimulationMgr& simulationMgr,
-	const Sim::SimParams& simParams,
-	const Vis::VisParams& visParams)
+	const Sim::SimParams& simParams)
 {
 	ImGui::Spacing(); ImGui::Spacing();
 
@@ -472,9 +470,7 @@ void UserInterfaceMgr::BuildSection_SimulationControl(
 }
 
 void UserInterfaceMgr::BuildSection_SimulationParameters(
-	const Sim::SimulationMgr& simulationMgr,
-	const Sim::SimParams& simParams,
-	const Vis::VisParams& visParams)
+	const Sim::SimParams& simParams)
 {
 	ImGui::Spacing();
 
@@ -528,10 +524,7 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 }
 
 void UserInterfaceMgr::BuildSection_SimulationStatistics(
-	const Sim::SimulationMgr& simulationMgr,
-	const Sync::StatSnapshot* statSnap,
-	const Sim::SimParams& simParams,
-	const Vis::VisParams& visParams)
+	const Sync::StatSnapshot* statSnap)
 {
 	using STV = StatTableView;
 
@@ -735,11 +728,8 @@ void UserInterfaceMgr::BuildSection_SimulationStatistics(
 
 // TODO: deal with threading, which data to show, update frequency, syncing, etc...
 void UserInterfaceMgr::BuildSection_PerformanceBenchmarks(
-	const Sim::SimulationMgr& simulationMgr,
 	const Sync::BenchSnapshot* benchSnap,
-	const Bench::BenchOpList& benchOps,
-	const Sim::SimParams& simParams,
-	const Vis::VisParams& visParams)
+	const Bench::BenchOpList& benchOps)
 {
 	using BTV = BenchTableView;
 

@@ -159,7 +159,6 @@ namespace Scene
 		// validate closed edges and build triangle adjacency
 		for (const auto& edgeEntry : edges)
 		{
-			const EdgeKey& key = edgeEntry.first;
 			const EdgeData& edge = edgeEntry.second;
 			if (edge.N_triangles != 2 || edge.orientation != 0)
 			{
@@ -169,7 +168,6 @@ namespace Scene
 
 			triangleNeighbors[edge.triangleIdx[0]].push_back(edge.triangleIdx[1]);
 			triangleNeighbors[edge.triangleIdx[1]].push_back(edge.triangleIdx[0]);
-			(void)key;
 		}
 
 		// validate that every vertex has one connected incident triangle fan

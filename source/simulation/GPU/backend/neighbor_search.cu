@@ -499,11 +499,8 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 // --- [ brute force implementation ] --------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_BruteForce_GPU::Init(
-	const SimParams& params)
+void NS_BruteForce_GPU::Init()
 {
-	(void)params;
-
 	// nothing to do
 }
 
@@ -631,7 +628,7 @@ Mem::ParticleClassMemUsage NS_BruteForce_GPU::GetMemUsage() const
 // --- [ cell linked list compact implementation ] -------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_CellLinkedList_Compact_GPU::Init(const SimParams& params)
+void NS_CellLinkedList_Compact_GPU::Init()
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;

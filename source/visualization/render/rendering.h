@@ -48,11 +48,8 @@ namespace Render
 	{
 	public:
 
-		RenderingMgr(Sim::SimParamsMgr& simParamsMgr,
-					 Vis::VisParamsMgr& visParamsMgr);
-
 		// create GL resources (buffers, shaders, mesh)
-		void Init(glm::ivec2 fbSize, float dpiScale);
+		void Init();
 
 		void Shutdown();
 
@@ -77,8 +74,7 @@ namespace Render
 								 const Sim::SimParams& simParams);
 
 		// upload latest render-specific sim state to the GPU instance buffers
-		void UpdateWireframes(const Vis::VisualSnapView& view,
-							  const Vis::VisParams& params);
+		void UpdateWireframes(const Vis::VisualSnapView& view);
 
 		// upload a new 256-entry RGB color map (assumed to be sRGB)
 		void UpdateColorMap(const ColorMapData& colorMap);
@@ -95,10 +91,6 @@ namespace Render
 		void Render(const Vis::RenderConfig& render, const Vis::CameraState& cam);
 
 	private:
-
-		// parameter managers for making changes to parameters
-		Sim::SimParamsMgr& simParamsMgr_;
-		Vis::VisParamsMgr& visParamsMgr_;
 
 		// addresses of GL objects (sphere impostors -> particles)
 		GLuint vao_ = 0;                    // vertex array object

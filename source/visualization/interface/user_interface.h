@@ -176,7 +176,6 @@ namespace Inter
 		// sections
 		void BuildSection_SceneManagement(
 			Sim::SimulationMgr& simulationMgr,
-			const Sim::SimParams& simParams,
 			const Vis::VisParams& visParams);
 
 		void BuildSection_VisualizationSettings(
@@ -184,26 +183,17 @@ namespace Inter
 
 		void BuildSection_SimulationControl(
 			const Sim::SimulationMgr& simulationMgr,
-			const Sim::SimParams& simParams,
-			const Vis::VisParams& visParams);
+			const Sim::SimParams& simParams);
 
 		void BuildSection_SimulationParameters(
-			const Sim::SimulationMgr& simulationMgr,
-			const Sim::SimParams& simParams,
-			const Vis::VisParams& visParams);
+			const Sim::SimParams& simParams);
 
 		void BuildSection_SimulationStatistics(
-			const Sim::SimulationMgr& simulationMgr,
-			const Sync::StatSnapshot* statSnap,
-			const Sim::SimParams& simParams,
-			const Vis::VisParams& visParams);
+			const Sync::StatSnapshot* statSnap);
 
 		void BuildSection_PerformanceBenchmarks(
-			const Sim::SimulationMgr& simulationMgr,
 			const Sync::BenchSnapshot* benchSnap,
-			const Bench::BenchOpList& benchOps,
-			const Sim::SimParams& simParams,
-			const Vis::VisParams& visParams);
+			const Bench::BenchOpList& benchOps);
 
 		// visualization setting elements
 		void BuildColorMapElement(

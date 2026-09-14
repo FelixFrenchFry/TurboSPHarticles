@@ -29,7 +29,7 @@ namespace Sim
 
 		const char* Name() const override { return "BruteForce_GPU"; }
 
-		void Init(const SimParams& params) override;
+		void Init() override;
 
 		void Construct(const SimParams& params) override;
 
@@ -60,7 +60,7 @@ namespace Sim
 
 		const char* Name() const override { return "CellLinkedList_Compact_GPU"; }
 
-		void Init(const SimParams& params) override;
+		void Init() override;
 
 		void Construct(const SimParams& params) override;
 

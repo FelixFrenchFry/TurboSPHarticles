@@ -519,7 +519,7 @@ void DistSimulationMgr::CreateSimBackend(const Base::BackendType backendType)
 	try
 	{
 		simBackend_ = Sim::MakeSimBackend(
-			backendType, simParamsMgr_, *benchmarksTracker_, simParams_);
+			backendType, *benchmarksTracker_, simParams_);
 	}
 	catch (const std::exception& ex)
 	{

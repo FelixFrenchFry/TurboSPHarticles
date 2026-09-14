@@ -27,7 +27,6 @@ VisualizationMgr::VisualizationMgr(Sim::SimulationMgr& simulationMgr,
 	, visParamsMgr_{ visParamsMgr }
 	, userInputMgr_{ simParamsMgr, visParamsMgr }
 	, userInterfaceMgr_{ simParamsMgr, visParamsMgr }
-	, renderingMgr_{ simParamsMgr, visParamsMgr }
 {
 }
 
@@ -124,7 +123,7 @@ void VisualizationMgr::Init(const WindowConfig& windowConfig)
 	// initialize sub-system managers
 	userInputMgr_.Init(visParams_);
 	userInterfaceMgr_.Init(window_, simParams_, VisConstants::glVersion.name);
-	renderingMgr_.Init(visParams_.frameBuffer.size, visParams_.frameBuffer.dpiScale);
+	renderingMgr_.Init();
 
 	// initial GL viewport
 	// TODO: outsource to renderingMgr
@@ -481,7 +480,7 @@ void VisualizationMgr::SyncVisSimState()
 		renderingMgr_.UpdateParticles(view_, simParams, visParams);
 	}
 	renderingMgr_.UpdateCentersOfMass(view_, simParams);
-	renderingMgr_.UpdateWireframes(view_, visParams);
+	renderingMgr_.UpdateWireframes(view_);
 }
 
 void VisualizationMgr::SyncBenchSnap()

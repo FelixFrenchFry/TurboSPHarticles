@@ -82,15 +82,7 @@ namespace
 
 } // namespace anonymous
 
-RenderingMgr::RenderingMgr(Sim::SimParamsMgr& simParamsMgr,
-						   Vis::VisParamsMgr& visParamsMgr)
-	: simParamsMgr_{ simParamsMgr }
-	, visParamsMgr_{ visParamsMgr }
-{
-	// handled by Init()
-}
-
-void RenderingMgr::Init(glm::ivec2 fbSize, float dpiScale)
+void RenderingMgr::Init()
 {
 	EnableDebugOutput();
 
@@ -418,7 +410,7 @@ void RenderingMgr::UpdateCentersOfMass(
 		vboCenterOfMassInstances_, N_bytes, transforms.data(), GL_DYNAMIC_DRAW);
 }
 
-void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view, const Vis::VisParams& params)
+void RenderingMgr::UpdateWireframes(const Vis::VisualSnapView& view)
 {
 	// get line vertices for all boxes
 	std::vector<glm::vec3> lineVertices{};

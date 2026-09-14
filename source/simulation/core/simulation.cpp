@@ -137,7 +137,7 @@ void SimulationMgr::CreateAndInitializeSimBackend(
 	}
 
 	// create new backend and initialize it with the universal state
-	simBackend_ = MakeSimBackend(backendType, simParamsMgr_, benchmarksTracker_, simParams_);
+	simBackend_ = MakeSimBackend(backendType, benchmarksTracker_, simParams_);
 	if (!simBackend_)
 	{
 		throw std::runtime_error("Failed to create simulation backend " +

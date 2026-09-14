@@ -35,7 +35,7 @@ namespace Sim
 
 		const char* Name() const override { return "BruteForce_CPU"; }
 
-		void Init(const SimParams& params) override;
+		void Init() override;
 
 		void Construct(const SimParams& params) override;
 
@@ -50,8 +50,6 @@ namespace Sim
 	private:
 		
 		SimBackend_CPU& be_;
-
-		float kernelRadiusSqu_ = 0.0f;
 	};
 
 	// ---------------------------------------------------------------------------------------------
@@ -68,7 +66,7 @@ namespace Sim
 
 		const char* Name() const override { return "CellLinkedList_Compact_CPU"; }
 
-		void Init(const SimParams& params) override;
+		void Init() override;
 
 		void Construct(const SimParams& params) override;
 
@@ -93,7 +91,6 @@ namespace Sim
 		// grid metadata
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
-		float kernelRadiusSqu_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CELL_FRAME_REBUILD_MARGIN = 8; // hysteresis buffer
 		static constexpr uint64_t N_CELL_SEARCH_LINEAR_TAIL = 32; // max elemnt count for linear search

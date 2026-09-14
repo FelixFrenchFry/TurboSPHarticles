@@ -181,8 +181,6 @@ namespace Sim
 
 		virtual const char* Name() const = 0;
 
-		virtual void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) = 0;
-
 		// reports the simulation domain, so spatial acceleration structures can stay bounded by it
 		// instead of by particles that left it (an empty extent leaves the backend unbounded)
 		virtual void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) = 0;
@@ -297,9 +295,6 @@ namespace Sim
 		// advances the simulation by N_steps
 		virtual void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps = 1) = 0;
 
-		// IISPH fluid solver step
-		virtual void Step_IISPH(const SimParams& params) = 0;
-
 		// provides the list defining which operations are shown in benchmark summaries
 		virtual void GetBenchOps(Bench::BenchOpList& out) const = 0;
 
@@ -311,7 +306,6 @@ namespace Sim
 
 	// backend factory
 	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendType backendType,
-												 Sim::SimParamsMgr& simParamsMgr,
 												 Bench::BenchmarksTracker& benchmarksTracker,
 												 const SimParams& params);
 
@@ -327,7 +321,7 @@ namespace Sim
 
 		virtual const char* Name() const = 0;
 
-		virtual void Init(const SimParams& params) = 0;
+		virtual void Init() = 0;
 
 		virtual void Construct(const SimParams& params) = 0;
 

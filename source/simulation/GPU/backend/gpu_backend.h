@@ -106,16 +106,12 @@ namespace Sim
 	{
 	public:
 
-		SimBackend_GPU(Sim::SimParamsMgr& simParamsMgr,
-						 Bench::BenchmarksTracker& benchmarksTracker,
+		SimBackend_GPU(Bench::BenchmarksTracker& benchmarksTracker,
 						 const SimParams& params);
 		~SimBackend_GPU() override;
 
 		const char* Name() const override
 			{ return "GPU"; }
-
-		void SetNeighborSearchMethod(std::unique_ptr<I_NeighborSearch> ns) override
-			{ neighborSearch_ = std::move(ns); }
 
 		void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) override;
 
@@ -151,9 +147,6 @@ namespace Sim
 		// advances the simulation by N_steps
 		void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps) override;
 
-		// IISPH fluid solver step
-		void Step_IISPH(const SimParams&) override;
-
 		bool TerminationConditionSatisfied(const SimParams& params) const;
 
 		// provides the benchmark operation display order
@@ -167,8 +160,7 @@ namespace Sim
 
 	private:
 
-		// managers
-		Sim::SimParamsMgr& simParamsMgr_;
+		// benchmarks
 		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search

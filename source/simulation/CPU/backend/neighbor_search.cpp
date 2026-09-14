@@ -568,16 +568,15 @@ namespace
 // --- [ brute force implementation ] --------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_BruteForce_CPU::Init(
-	const SimParams& params)
+void NS_BruteForce_CPU::Init()
 {
-	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	// nothing to do
 }
 
 void NS_BruteForce_CPU::Construct(
-	const SimParams& params)
+	[[maybe_unused]] const SimParams& params)
 {
-	kernelRadiusSqu_ = params.kernelRadiusSqu;
+	// no search structure to construct in brute force implementation
 }
 
 void NS_BruteForce_CPU::Query_Count(const SimParams& params)
@@ -984,11 +983,10 @@ Mem::ParticleClassMemUsage NS_BruteForce_CPU::GetMemUsage() const
 // --- [ cell linked list compact implementation ] -------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_CellLinkedList_Compact_CPU::Init(const SimParams& params)
+void NS_CellLinkedList_Compact_CPU::Init()
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
-	kernelRadiusSqu_ = params.kernelRadiusSqu;
 	cellQueryReach_ = 1;
 	cellFrame_ = {};
 	cellFrameValid_ = false;
@@ -1070,7 +1068,6 @@ void NS_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
 	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, cellSize);
 	const bool cellQueryReachChanged = (cellQueryReach_ != cellQueryReach);
 
-	kernelRadiusSqu_ = params.kernelRadiusSqu;
 	cellSize_ = cellSize;
 	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f)
 		? 0.0f : (1.0f / cellSize);
@@ -1927,7 +1924,6 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 	const bool cellSizeChanged = !Base::ApproxEqu(cellSize_, cellSize);
 	const bool cellQueryReachChanged = (cellQueryReach_ != cellQueryReach);
 
-	kernelRadiusSqu_ = params.kernelRadiusSqu;
 	cellSize_ = cellSize;
 	cellSizeInv_ = Base::ApproxEqu(cellSize, 0.0f) ? 0.0f : (1.0f / cellSize);
 	cellQueryReach_ = cellQueryReach;

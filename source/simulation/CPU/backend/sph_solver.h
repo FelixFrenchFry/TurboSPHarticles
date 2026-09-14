@@ -64,7 +64,7 @@ namespace CPU
 		const Sim::I_NeighborListSELL& neighborList,
 		float timeStep, float particleSizeInvF,
 		float particleSizeSquF, float kernelRadiusSqu,
-		float cubicSplineAlpha, float restDensity,
+		float cubicSplineAlpha,
 		float massF, float viscosityF, float viscosityB,
 		float xGravity, float yGravity, float zGravity,
 		uint32_t N_F,

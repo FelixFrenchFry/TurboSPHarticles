@@ -71,8 +71,8 @@ namespace
 } // namespace anonymous
 
 SimBackend_GPU::SimBackend_GPU(
-	Sim::SimParamsMgr& simParamsMgr, Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
-	: simParamsMgr_{ simParamsMgr }, benchmarksTracker_ { benchmarksTracker }
+	Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
+	: benchmarksTracker_ { benchmarksTracker }
 {
 	if (params.neighborListMethod != Base::NeighborListMethod::ChunkedSELLX_AdaptCompress)
 	{
@@ -98,7 +98,7 @@ SimBackend_GPU::SimBackend_GPU(
 	{
 		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
 	}
-	neighborSearch_->Init(params);
+	neighborSearch_->Init();
 
 	// TODO: select neighbor list method once implemented
 }
