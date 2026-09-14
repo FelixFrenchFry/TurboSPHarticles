@@ -48,7 +48,7 @@ free -h
 echo ""
 
 # run
-mpiexec.hydra -bootstrap slurm -n "$SLURM_NTASKS" ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim="$SLURM_CPUS_PER_TASK" -p H2
+mpiexec.hydra -bootstrap slurm -n "$SLURM_NTASKS" ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim="$SLURM_CPUS_PER_TASK" --sim checkpointTime=258600 -p H2
 rc=$?
 echo ""
 echo "--- [ job completion ] ---------------------------------------------------------"
