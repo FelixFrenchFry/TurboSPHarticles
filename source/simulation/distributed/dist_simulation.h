@@ -239,13 +239,15 @@ namespace Dist
 		mutable Stats::StatisticsPartial statisticsPartialScratch_{};
 		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint32_t> exportFluidParticleLocalIdxsScratch_{};
-		mutable DistExportSnapshotBuffer exportSnapGatherScratch_{};
 
 		// serialization management
 		Export::SerializationMgr serializationMgr_{};
 		mutable Export::LoggingMgr loggingMgr_;
 		Trace::TraceRecorder traceRecorder_{};
 		mutable Sync::ExportSnapshot exportSnapScratch_{};
+		std::string exportSnapshotBaseDir_;
+		std::string exportSnapshotDir_;
+		bool exportBoundaryWritten_ = false;
 
 		std::atomic<bool> running_{ false };
 		std::atomic<bool> stopRequested_{ false };

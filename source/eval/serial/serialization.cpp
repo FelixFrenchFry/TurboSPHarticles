@@ -3,6 +3,7 @@
 // external
 #include <algorithm>
 #include <cassert>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -73,18 +74,6 @@ namespace Export
 		uint64_t N_RB;
 	};
 
-	struct BinHeaderSnap
-	{
-		char magic[8];
-		uint32_t endianTag;
-		uint32_t headerBytes;
-		uint64_t step;
-		double time;
-		uint64_t N_F;
-		uint64_t N_B;
-		uint64_t N_R;
-		uint64_t N_rankF;
-	};
 	#pragma pack(pop)
 
 	static_assert(sizeof(BinHeaderSim) == 64);
@@ -242,30 +231,7 @@ namespace Export
 		return oss.str();
 	}
 
-	struct ExportSnapshotOffsets
-	{
-		uint64_t posF = 0;
-		uint64_t vF = 0;
-		uint64_t rankF = 0;
-
-		uint64_t posR = 0;
-		uint64_t volR = 0;
-		uint64_t bodyIdR = 0;
-
-		// total size implied by the arrays above, used to validate the stored layout
-		uint64_t totalBytes = 0;
-	};
-
-	// the static boundary never moves, so it lives in one file only
-	struct StaticBoundaryOffsets
-	{
-		uint64_t posB = 0;
-		uint64_t volB = 0;
-
-		uint64_t totalBytes = 0;
-	};
-
-	static ExportSnapshotOffsets ComputeExportSnapshotOffsets(
+	ExportSnapshotOffsets ComputeExportSnapshotOffsets(
 		const ExportSnapshotBinInfo& info)
 	{
 		uint64_t offset = sizeof(BinHeaderSnap);
@@ -292,7 +258,7 @@ namespace Export
 		return off;
 	}
 
-	static StaticBoundaryOffsets ComputeStaticBoundaryOffsets(
+	StaticBoundaryOffsets ComputeStaticBoundaryOffsets(
 		const ExportSnapshotBinInfo& info)
 	{
 		uint64_t offset = sizeof(BinHeaderSnap);
@@ -312,6 +278,59 @@ namespace Export
 		off.totalBytes = offset;
 
 		return off;
+	}
+
+	BinHeaderSnap MakeExportSnapshotHeader(const ExportSnapshotBinInfo& info)
+	{
+		static_assert(sizeof(float) == 4 && sizeof(double) == 8);
+		static_assert(std::numeric_limits<float>::is_iec559 && std::numeric_limits<double>::is_iec559);
+		if (!IsLittleEndian()) { throw std::runtime_error("Snapshot output requires little-endian data."); }
+
+		BinHeaderSnap hdr{};
+		std::memcpy(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic));
+		hdr.endianTag = kEndianLE;
+		hdr.headerBytes = sizeof(BinHeaderSnap);
+		hdr.step = info.step;
+		hdr.time = info.time;
+		hdr.N_F = info.N_F;
+		hdr.N_B = info.N_B;
+		hdr.N_R = info.N_R;
+		hdr.N_rankF = info.N_rankF;
+
+		return hdr;
+	}
+
+	DistributedExportLayout ComputeDistributedExportLayout(
+		const std::vector<uint64_t>& rankCounts,
+		const int rank)
+	{
+		const size_t N_ranks = rankCounts.size() / 3;
+		if (rankCounts.size() % 3 != 0 || N_ranks == 0 ||
+			N_ranks > uint64_t{1} + std::numeric_limits<uint16_t>::max() ||
+			rank < 0 || static_cast<size_t>(rank) >= N_ranks)
+		{
+			throw std::runtime_error("Invalid distributed snapshot count table.");
+		}
+
+		DistributedExportLayout layout{};
+		for (size_t rankIdx = 0; rankIdx < N_ranks; rankIdx++)
+		{
+			for (size_t populationIdx = 0; populationIdx < 3; populationIdx++)
+			{
+				const uint64_t N_particles = rankCounts[3 * rankIdx + populationIdx];
+				Sim::CheckedLocalParticleCount(N_particles, "rank-local export count");
+				if (rankIdx == static_cast<size_t>(rank))
+				{
+					layout.beginIdx[populationIdx] = layout.N_total[populationIdx];
+				}
+
+				// local counts and the rank limit keep the total within uint64_t
+				layout.N_total[populationIdx] += N_particles;
+				layout.N_max[populationIdx] = std::max(layout.N_max[populationIdx], N_particles);
+			}
+		}
+
+		return layout;
 	}
 
 	static bool IsExportSnapshotBinFileName(const std::string& fileName)
@@ -1145,16 +1164,11 @@ namespace Export
 			// posB (XYZ triples), volB
 
 			// N_F and N_R stay zero, this file holds boundary particles only
-			BinHeaderSnap hdr{};
-			std::memcpy(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic));
-			hdr.endianTag = kEndianLE;
-			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
-			hdr.step = snap.simStep;
-			hdr.time = snap.simTime;
-			hdr.N_F = 0;
-			hdr.N_B = snap.N_B;
-			hdr.N_R = 0;
-			hdr.N_rankF = 0;
+			ExportSnapshotBinInfo info{};
+			info.step = snap.simStep;
+			info.time = snap.simTime;
+			info.N_B = snap.N_B;
+			const BinHeaderSnap hdr = MakeExportSnapshotHeader(info);
 
 			WritePod(ofs, hdr);
 
@@ -1163,6 +1177,8 @@ namespace Export
 			WriteVec(ofs, snap.volB);
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
+			ofs.close();
+			EnsureStreamOk(ofs, "closing", tmpPath.string());
 		}
 
 		if (saveOptions_.atomicWrite)
@@ -1238,16 +1254,14 @@ namespace Export
 			// (boundary arrays live in the shared static boundary file)
 
 			// N_B is informational here, the boundary arrays are not part of this file
-			BinHeaderSnap hdr{};
-			std::memcpy(hdr.magic, kExportSnapshotMagic, sizeof(hdr.magic));
-			hdr.endianTag = kEndianLE;
-			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSnap));
-			hdr.step = snap.simStep;
-			hdr.time = snap.simTime;
-			hdr.N_F = N_F_size;
-			hdr.N_B = N_B_size;
-			hdr.N_R = N_R_size;
-			hdr.N_rankF = static_cast<uint32_t>(snap.rankF.size());
+			ExportSnapshotBinInfo info{};
+			info.step = snap.simStep;
+			info.time = snap.simTime;
+			info.N_F = N_F_size;
+			info.N_B = N_B_size;
+			info.N_R = N_R_size;
+			info.N_rankF = snap.rankF.size();
+			const BinHeaderSnap hdr = MakeExportSnapshotHeader(info);
 
 			WritePod(ofs, hdr);
 
@@ -1261,11 +1275,181 @@ namespace Export
 			WriteVec(ofs, snap.bodyIdR);
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
+			ofs.close();
+			EnsureStreamOk(ofs, "closing", tmpPath.string());
 		}
 
 		if (saveOptions_.atomicWrite)
 		{
 			AtomicReplace(tmpPath, dstPath);
+		}
+	}
+
+	std::string SerializationMgr::CreateDistributedExportDirectory(
+		const std::string& dir) const
+	{
+		const std::filesystem::path parent = std::filesystem::absolute(saveOptions_.baseDir / dir);
+		std::filesystem::create_directories(parent);
+
+		uint64_t nextIdx = 0;
+		for (const auto& entry : std::filesystem::directory_iterator(parent))
+		{
+			const std::string name = entry.path().filename().string();
+			if (!name.starts_with("run_") || name.size() == 4 ||
+				!std::all_of(name.begin() + 4, name.end(), [](const char ch)
+				{
+					return ch >= '0' && ch <= '9';
+				}))
+			{
+				continue;
+			}
+			uint64_t idx = 0;
+			const auto result = std::from_chars(name.data() + 4, name.data() + name.size(), idx);
+			if (result.ec != std::errc{} || idx == std::numeric_limits<uint64_t>::max())
+			{
+				throw std::runtime_error("Distributed export run index exceeds available uint64_t range.");
+			}
+
+			// include occupied file and symlink names when choosing the next index
+			nextIdx = std::max(nextIdx, idx + 1);
+		}
+
+		for (uint64_t idx = nextIdx; ; idx++)
+		{
+			std::ostringstream name;
+			name << "run_" << std::setw(3) << std::setfill('0') << idx;
+			const std::filesystem::path path = parent / name.str();
+			std::error_code ec;
+			// retry if another job reserved the same directory
+			if (std::filesystem::create_directory(path, ec)) { return path.string(); }
+			if (ec && ec != std::errc::file_exists)
+			{
+				throw std::filesystem::filesystem_error("Failed to reserve distributed export directory", path, ec);
+			}
+			if (idx == std::numeric_limits<uint64_t>::max())
+			{
+				throw std::runtime_error("Distributed export run index exceeds available uint64_t range.");
+			}
+		}
+	}
+
+	ExportSnapshotFilePaths SerializationMgr::GetDistributedExportFilePaths(
+		const std::string& dir,
+		const uint64_t step,
+		const bool staticBoundary) const
+	{
+		if (saveOptions_.tempSuffix.empty())
+		{
+			throw std::runtime_error("Distributed snapshots require a nonempty temporary suffix.");
+		}
+
+		ExportSnapshotFilePaths paths;
+		paths.path = saveOptions_.baseDir / dir / (staticBoundary
+			? std::string(kStaticBoundaryBinFileName) : "particle_data_step_" + FormatStepPadded(step) + ".bin");
+		paths.writePath = paths.path;
+		paths.writePath += saveOptions_.tempSuffix;
+		if (std::filesystem::exists(paths.path) || std::filesystem::exists(paths.writePath))
+		{
+			throw std::runtime_error("Distributed snapshot destination already exists: " + paths.path.string());
+		}
+
+		return paths;
+	}
+
+	void SerializationMgr::PublishDistributedExportFile(
+		const ExportSnapshotFilePaths& paths,
+		const uint64_t N_expectedBytes) const
+	{
+		if (!std::filesystem::is_regular_file(paths.writePath) || std::filesystem::exists(paths.path))
+		{
+			throw std::runtime_error("Cannot publish distributed snapshot: " + paths.path.string());
+		}
+		if (std::filesystem::file_size(paths.writePath) != N_expectedBytes)
+		{
+			throw std::runtime_error("Unexpected distributed snapshot file size: " + paths.writePath.string());
+		}
+		AtomicReplace(paths.writePath, paths.path);
+	}
+
+	void SerializationMgr::SaveDistributedExportSnapshotXdmfViews(
+		const uint64_t step,
+		const double time,
+		const std::vector<uint64_t>& rankCounts,
+		const std::string& dir) const
+	{
+		const DistributedExportLayout layout = ComputeDistributedExportLayout(rankCounts, 0);
+		const std::filesystem::path dirPath = saveOptions_.baseDir / dir;
+		const std::string binFileName = "particle_data_step_" + FormatStepPadded(step) + ".bin";
+		std::scoped_lock lock(exportDirStateMutex_);
+		if (distributedExportDir_ != dirPath)
+		{
+			distributedExportSnapshotInfos_.clear();
+			distributedExportDir_ = dirPath;
+		}
+		if (!distributedExportSnapshotInfos_.empty() &&
+			step <= distributedExportSnapshotInfos_.rbegin()->first)
+		{
+			throw std::runtime_error("Distributed export steps must increase within a snapshot directory.");
+		}
+
+		// validate the new shared files before adding the frame
+		ExportSnapshotBinInfo info{};
+		ExportSnapshotBinInfo boundaryInfo{};
+		const bool firstFrame = distributedExportSnapshotInfos_.empty();
+		if (!TryReadExportSnapshotBinInfo(dirPath / binFileName, info) ||
+			info.step != step || info.time != time || info.N_rankF != info.N_F ||
+			info.N_F != layout.N_total[0] || info.N_B != layout.N_total[1] || info.N_R != layout.N_total[2])
+		{
+			throw std::runtime_error("Missing or invalid distributed snapshot '" + (dirPath / binFileName).string() + "'.");
+		}
+		if (firstFrame && info.N_B > 0 &&
+			(!TryReadStaticBoundaryBinInfo(dirPath / kStaticBoundaryBinFileName, boundaryInfo) ||
+				boundaryInfo.N_B != info.N_B || boundaryInfo.step != step || boundaryInfo.time != time))
+		{
+			throw std::runtime_error("Missing or invalid distributed static boundary.");
+		}
+
+		// replace each XDMF file through a temporary file
+		SaveOptions options = saveOptions_;
+		options.atomicWrite = true;
+		distributedExportSnapshotInfos_.emplace(step, info);
+		try
+		{
+			const auto WriteCollection = [&](
+				const char* fileName,
+				const char* name,
+				XdmfGridWriter writeGrid)
+			{
+				WriteXdmfFile(dirPath / fileName, options, [&](std::ofstream& ofs)
+				{
+					ofs << "    <Grid Name=\"" << name
+						<< "\" GridType=\"Collection\" CollectionType=\"Temporal\">\n";
+					for (const auto& frame : distributedExportSnapshotInfos_)
+					{
+						writeGrid(ofs, frame.second);
+					}
+					ofs << "    </Grid>\n";
+				});
+			};
+			if (firstFrame && info.N_B > 0)
+			{
+				WriteXdmfStaticBoundaryFile(
+					dirPath / "static_boundary.xdmf", boundaryInfo, boundaryInfo.fileName, options);
+			}
+			const bool hasRigid = std::any_of(
+				distributedExportSnapshotInfos_.begin(),
+				distributedExportSnapshotInfos_.end(),
+				[](const auto& frame)
+				{
+					return frame.second.N_R > 0;
+				});
+			if (hasRigid) { WriteCollection("rigid_particles.xdmf", "RigidParticles", WriteRigidParticleGrid); }
+			WriteCollection("fluid_surface.xdmf", "FluidSurface", WriteFluidSurfaceGrid);
+		}
+		catch (...)
+		{
+			distributedExportSnapshotInfos_.erase(step);
+			throw;
 		}
 	}
 

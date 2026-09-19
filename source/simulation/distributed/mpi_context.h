@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <mpi.h>
 #include <string>
+#include <string_view>
 #include <vector>
 
 
@@ -65,15 +66,13 @@ namespace Dist
 		void BroadcastInt(int& value, int root = 0) const;
 		void BroadcastUint64(uint64_t& value, int root = 0) const;
 		void BroadcastFloats(std::vector<float>& values, int root = 0) const;
-		void BroadcastString(std::string& value, int root = 0) const;
+		void BroadcastString(std::string& value, int root = 0) const noexcept;
 
 		bool AllTrue(bool localValue, const char* context = nullptr) const;
 		uint64_t AllReduceSumUint64(uint64_t value) const;
 		void AllReduceSumUint64s(std::array<uint64_t, 4>& values) const;
 		void AllReduceSumUint64s(std::vector<uint64_t>& values) const;
-		void AllReduceSumDoubles(
-			std::array<double, 3>& values,
-			const char* context = nullptr) const;
+		void AllReduceSumDoubles(std::array<double, 3>& values, const char* context = nullptr) const;
 		uint32_t AllReduceMaxUint32(uint32_t value) const;
 		double AllReduceSumDouble(double value) const;
 		float AllReduceMinFloat(float value) const;
@@ -81,10 +80,18 @@ namespace Dist
 		void AllGatherDouble(double localValue, std::vector<double>& values) const;
 		void AllReduceSumUint32s(std::vector<uint32_t>& values) const;
 		void AllReduceSumFloats(std::vector<float>& values) const;
-		void AllToAllInts(
-			const std::vector<int>& sendValues,
-			std::vector<int>& recvValues,
-			int N_valuesPerRank = 1) const;
+		void AllToAllInts(const std::vector<int>& sendValues, std::vector<int>& recvValues, int N_valuesPerRank = 1) const;
+
+		// collective file operations, called in the same order by every rank
+		// (empty ranks participate too, but with zero-byte writes)
+		MPI_File OpenFileForWrite(const std::string& path, uint64_t N_bytes) const;
+		void WriteFileBytesAtAll(
+			MPI_File file,
+			uint64_t offset,
+			const void* data,
+			int N_bytes,
+			const char* context) const;
+		void CloseFile(MPI_File& file) const;
 
 		// point-to-point helpers for neighbor communication
 		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;
@@ -118,14 +125,13 @@ namespace Dist
 		void WaitAll(
 			std::vector<MPI_Request>& requests,
 			const char* context = nullptr,
-			const std::vector<MpiRequestInfo>* requestInfos = nullptr) const;
-		// aborts all ranks after an unrecoverable MPI operation error
+			const std::vector<MpiRequestInfo>* requestInfos = nullptr) const noexcept;
+
+		// aborts all ranks without allocating diagnostic strings
+		// (pass a fixed message when handling allocation failure)
 		[[noreturn]] void Abort(
-			const char* context = nullptr,
-			int errorCode = MPI_ERR_OTHER) const;
-		[[noreturn]] void AbortJob(
-			const std::string& reason,
-			int errorCode = MPI_ERR_OTHER) const;
+			std::string_view reason = {},
+			int errorCode = MPI_SUCCESS) const noexcept;
 
 		// helpers
 		static const char* ThreadSupportName(int threadSupport);
@@ -137,7 +143,7 @@ namespace Dist
 			MPI_Request* requests,
 			uint64_t N_requests,
 			const char* context,
-			const MpiRequestInfo* requestInfos) const;
+			const MpiRequestInfo* requestInfos) const noexcept;
 
 		int rank_ = 0;
 		int N_ranks_ = 1;

@@ -144,8 +144,8 @@ namespace
 		Export::LoggingOptions loggingOptions{};
 		// each rank writes its own CSV files to avoid shared log-file writes
 		loggingOptions.rankSubDir = FormatRankLogDirName(mpiContext.Rank());
-		// the export directory is written by the root rank only
-		loggingOptions.writeRunMetaToExportDir = mpiContext.IsRoot();
+		// root copies metadata into the reserved export directory
+		loggingOptions.writeRunMetaToExportDir = false;
 		loggingOptions.mpiRank = mpiContext.Rank();
 		loggingOptions.N_mpiRanks = mpiContext.Size();
 		return loggingOptions;
@@ -236,17 +236,6 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.volR));
-
-		return usage;
-	}
-
-	Mem::MemUsage MemoryUsageOfExportSnapshotGatherBuffer(
-		const DistExportSnapshotBuffer& gatherBuffer)
-	{
-		Mem::MemUsage usage{};
-
-		Mem::Add(usage, Mem::MemUsageOf_Vector(gatherBuffer.particlesF));
-		Mem::Add(usage, Mem::MemUsageOf_Vector(gatherBuffer.particlesB));
 
 		return usage;
 	}
@@ -644,6 +633,7 @@ bool DistSimulationMgr::ResetAndRebuildSimState()
 			simStep_ = 0;
 			simTime_ = 0.0;
 			serializationMgr_.ResetExportDirState();
+			exportSnapshotDir_.clear();
 
 			SyncParameters();
 
@@ -1298,13 +1288,13 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 	}
 	catch (const std::exception& ex)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to apply initial domain decomp profile: " +
 			std::string(ex.what()));
 	}
 	catch (...)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to apply initial domain decomp profile: unknown error.");
 	}
 
@@ -1724,13 +1714,13 @@ bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
 	}
 	catch (const std::exception& ex)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to rebuild distributed fluid solver synchronization: " +
 			std::string(ex.what()));
 	}
 	catch (...)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to rebuild distributed fluid solver synchronization: unknown error.");
 	}
 
@@ -1768,8 +1758,6 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	const Sync::RigidConstView particlesR =
 		distParticleBackend_->GetRigidParticleView();
 
-	DistSnapshotGatherStats stats{};
-
 	auto& exportFluidParticleLocalIdxs = exportFluidParticleLocalIdxsScratch_;
 	bool exportSelectionOk = true;
 	try
@@ -1790,48 +1778,101 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 		return false;
 	}
 
-	// fill export snapshot
-	auto& expSnap = exportSnapScratch_;
-	MarkTrace(Trace::TraceStage::Dist_ExportSnapshotGather);
-	const bool gatherOk = GatherExportSnapshotToRoot(
-		expSnap,
-		exportSnapGatherScratch_,
-		particlesF,
-		particlesB,
-		particlesR,
-		localSimState_.rigidBodies,
-		particleStateF_,
-		particleStateB_,
-		exportFluidParticleLocalIdxs,
-		mpiContext_,
-		simStep_,
-		simTime_,
-		&stats);
+	bool writeOk = true;
+	if (exportSnapshotDir_.empty() || exportSnapshotBaseDir_ != params.exportDir)
+	{
+		try
+		{
+			exportSnapshotBaseDir_ = params.exportDir;
+			if (mpiContext_.IsRoot())
+			{
+				exportSnapshotDir_ = serializationMgr_.CreateDistributedExportDirectory(params.exportDir);
+				loggingMgr_.CopyRunMetaToExportDir(exportSnapshotDir_);
+				SPDLOG_INFO("Distributed snapshots: {}", exportSnapshotDir_);
+			}
+		}
+		catch (const std::exception& ex)
+		{
+			SPDLOG_ERROR("Failed to prepare distributed snapshot directory or run metadata: {}", ex.what());
+			writeOk = false;
+		}
+		if (!mpiContext_.AllTrue(writeOk))
+		{
+			benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
+			return false;
+		}
+		mpiContext_.BroadcastString(exportSnapshotDir_, mpiContext_.RootRank());
+		exportBoundaryWritten_ = false;
+	}
 
-	if (!gatherOk)
+	// pack owned particles on each rank
+	auto& expSnap = exportSnapScratch_;
+	try
+	{
+		MarkTrace(Trace::TraceStage::Dist_ExportSnapshotPack);
+		writeOk = PackOwnedExportSnapshot(
+			expSnap,
+			particlesF,
+			particlesB,
+			particlesR,
+			localSimState_.rigidBodies,
+			particleStateF_,
+			particleStateB_,
+			exportFluidParticleLocalIdxs,
+			mpiContext_.Rank(),
+			mpiContext_.Size(),
+			!exportBoundaryWritten_,
+			simStep_,
+			simTime_);
+		if (!writeOk) { throw std::runtime_error("Invalid local snapshot particle selection."); }
+	}
+	catch (const std::exception& ex)
 	{
 		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to gather the distributed export snapshot on the root rank.",
-			mpiContext_.Rank(), mpiContext_.Size());
+			"[rank {}/{}] Failed to pack distributed snapshot: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		writeOk = false;
+	}
+	if (!mpiContext_.AllTrue(writeOk))
+	{
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
 	}
 
-	bool writeOk = true;
+	MarkTrace(Trace::TraceStage::Dist_ExportSnapshotSerialization);
+	std::vector<uint64_t> rankCounts;
+	if (!SaveDistributedExportSnapshot(
+		expSnap,
+		serializationMgr_,
+		exportSnapshotDir_,
+		!exportBoundaryWritten_,
+		mpiContext_,
+		rankCounts))
+	{
+		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
+		return false;
+	}
+	if (!exportBoundaryWritten_)
+	{
+		// boundary output keeps its initial partition after load balancing
+		exportBoundaryWritten_ = true;
+		expSnap.N_B = 0;
+		std::vector<float>().swap(expSnap.xPosB);
+		std::vector<float>().swap(expSnap.yPosB);
+		std::vector<float>().swap(expSnap.zPosB);
+		std::vector<float>().swap(expSnap.volB);
+	}
+
 	if (mpiContext_.IsRoot())
 	{
-		MarkTrace(Trace::TraceStage::Dist_ExportSnapshotSerialization);
 		try
 		{
-			// write export snapshot to files
-			serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-			serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
+			serializationMgr_.SaveDistributedExportSnapshotXdmfViews(
+				simStep_, simTime_, rankCounts, exportSnapshotDir_);
 		}
 		catch (const std::exception& ex)
 		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed to write distributed export snapshot: {}",
-				mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+			SPDLOG_ERROR("Failed to publish distributed snapshot views: {}", ex.what());
 			writeOk = false;
 		}
 	}
@@ -1953,6 +1994,8 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 
 void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
+	// start a fresh export session for this run
+	exportSnapshotDir_.clear();
 	// the root rank reserves the run directory shared by all ranks
 	uint64_t runIdx = mpiContext_.IsRoot() ? loggingMgr_.ReserveNextRunIdx() : 0;
 	mpiContext_.BroadcastUint64(runIdx, mpiContext_.RootRank());
@@ -2070,7 +2113,6 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(localNearSurfaceFlagsScratch_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(exportFluidParticleLocalIdxsScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfExportSnapshot(exportSnapScratch_));
-	Mem::Add(miscUsage, MemoryUsageOfExportSnapshotGatherBuffer(exportSnapGatherScratch_));
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_Misc, miscUsage);
 }
 
@@ -2379,12 +2421,12 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		}
 		catch (const std::exception& ex)
 		{
-			mpiContext_.AbortJob(
+			mpiContext_.Abort(
 				"Failed rank-local backend solver step: " + std::string(ex.what()));
 		}
 		catch (...)
 		{
-			mpiContext_.AbortJob(
+			mpiContext_.Abort(
 				"Failed rank-local backend solver step: unknown error.");
 		}
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_RankBackendStep);
@@ -2408,12 +2450,12 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		}
 		catch (const std::exception& ex)
 		{
-			mpiContext_.AbortJob(
+			mpiContext_.Abort(
 				"Failed to apply backend particle re-order: " + std::string(ex.what()));
 		}
 		catch (...)
 		{
-			mpiContext_.AbortJob(
+			mpiContext_.Abort(
 				"Failed to apply backend particle re-order: unknown error.");
 		}
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
@@ -2435,12 +2477,12 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 	}
 	catch (const std::exception& ex)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed distributed step: " + std::string(ex.what()));
 	}
 	catch (...)
 	{
-		mpiContext_.AbortJob("Failed distributed step: unknown error.");
+		mpiContext_.Abort("Failed distributed step: unknown error.");
 	}
 
 	return mpiContext_.AllTrue(localOk);
@@ -2495,12 +2537,12 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 	}
 	catch (const std::exception& ex)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to redistribute particles: " + std::string(ex.what()));
 	}
 	catch (...)
 	{
-		mpiContext_.AbortJob("Failed to redistribute particles: unknown error.");
+		mpiContext_.Abort("Failed to redistribute particles: unknown error.");
 	}
 
 	return AllRanksTrue(localOk);
@@ -2667,13 +2709,13 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	}
 	catch (const std::exception& ex)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to classify rank-local distributed work: " +
 			std::string(ex.what()));
 	}
 	catch (...)
 	{
-		mpiContext_.AbortJob(
+		mpiContext_.Abort(
 			"Failed to classify rank-local distributed work: unknown error.");
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
@@ -2830,12 +2872,12 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 		}
 		catch (const std::exception& ex)
 		{
-			mpiContext_.AbortJob(
+			mpiContext_.Abort(
 				"Failed to synchronize rigid body state: " + std::string(ex.what()));
 		}
 		catch (...)
 		{
-			mpiContext_.AbortJob(
+			mpiContext_.Abort(
 				"Failed to synchronize rigid body state: unknown error.");
 		}
 	}

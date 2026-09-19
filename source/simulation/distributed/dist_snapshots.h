@@ -13,98 +13,39 @@
 
 
 
+namespace Export
+{
+	class SerializationMgr;
+}
+
 namespace Dist
 {
-	// MPI tags for distributed export-snapshot gathering
-	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT = 7101;
-	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD = 7102;
-	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT = 7103;
-	inline constexpr int DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD = 7104;
-
 	class MpiContext;
 
-	// fluid particle payload used to gather distributed export snapshots
-	struct DistExportFluidParticlePacket
-	{
-		uint64_t id = Sim::INVALID_PARTICLE_ID;
-		uint32_t rank = 0;
+	// collective snapshot output and per-rank F/B/R counts for XDMF
+	bool SaveDistributedExportSnapshot(
+		const Sync::ExportSnapshot& exportSnap,
+		const Export::SerializationMgr& serializationMgr,
+		const std::string& dir,
+		bool includeB,
+		const MpiContext& mpiContext,
+		std::vector<uint64_t>& rankCounts);
 
-		float xPos = 0.0f;
-		float yPos = 0.0f;
-		float zPos = 0.0f;
-		float velMag = 0.0f;
-	};
-
-	// boundary particle payload used to gather distributed export snapshots
-	struct DistExportBoundaryParticlePacket
-	{
-		uint64_t id = Sim::INVALID_PARTICLE_ID;
-
-		float xPos = 0.0f;
-		float yPos = 0.0f;
-		float zPos = 0.0f;
-		float volB = 0.0f;
-	};
-
-	struct DistExportSnapshotBuffer
-	{
-		std::vector<DistExportFluidParticlePacket> particlesF;
-		std::vector<DistExportBoundaryParticlePacket> particlesB;
-
-		void Clear();
-	};
-
-	struct DistSnapshotGatherStats
-	{
-		uint32_t N_gatheredF = 0; // gathered fluid particles count
-		uint32_t N_gatheredB = 0; // gathered boundary particles count
-		uint32_t N_gatheredR = 0; // gathered rigid particle count
-	};
-
-	// allocation-free count and byte-size check for a root export snapshot
-	bool ValidateDistExportSnapshotRootCapacity(
-		uint64_t N_gatheredF,
-		uint64_t N_gatheredB,
-		uint64_t N_replicatedR,
-		uint64_t* rootStorageBytes = nullptr,
-		std::string* failMsg = nullptr);
-
-	bool PackOwnedExportSnapshotBuffer(
-		DistExportSnapshotBuffer& gatherBuffer,
-		const Sync::FluidConstView& particlesF,
-		const Sync::BoundaryConstView& particlesB,
-		const DistParticleState& particleStateF,
-		const DistParticleState& particleStateB,
-		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
-		int rank);
-
-	// sorts the gathered packets in place, where the gather storage doubles as the sort buffer
-	bool RebuildExportSnapshotFromGatheredParticles(
+	// compacts the sorted selection to owned particles and packs local output
+	// (replicated rigid particles are split into disjoint index ranges)
+	bool PackOwnedExportSnapshot(
 		Sync::ExportSnapshot& exportSnap,
-		DistExportSnapshotBuffer& gatherBuffer,
-		uint64_t simStep,
-		double simTime);
-
-	void PackReplicatedRigidExportSnapshot(
-		Sync::ExportSnapshot& exportSnap,
-		const Sync::RigidConstView& particlesR,
-		const Sync::RigidBodies& rigidBodies);
-
-	// reusable caller-owned gather storage, holding the locally packed packets on every rank
-	// and additionally the payloads received from all other ranks on the root rank
-	bool GatherExportSnapshotToRoot(
-		Sync::ExportSnapshot& exportSnap,
-		DistExportSnapshotBuffer& gatherBuffer,
 		const Sync::FluidConstView& particlesF,
 		const Sync::BoundaryConstView& particlesB,
 		const Sync::RigidConstView& particlesR,
 		const Sync::RigidBodies& rigidBodies,
 		const DistParticleState& particleStateF,
 		const DistParticleState& particleStateB,
-		const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
-		const MpiContext& mpiContext,
+		std::vector<uint32_t>& exportFluidParticleLocalIdxs,
+		int rank,
+		int N_ranks,
+		bool includeB,
 		uint64_t simStep,
-		double simTime,
-		DistSnapshotGatherStats* stats = nullptr);
+		double simTime);
 
 } // namespace Dist

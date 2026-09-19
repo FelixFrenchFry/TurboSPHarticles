@@ -99,6 +99,7 @@ namespace Export
 			Disable();
 			return false;
 		}
+		runMetaWritten_ = true;
 
 		if (!OpenMemoryMetricsCsv())
 		{
@@ -159,6 +160,7 @@ namespace Export
 		}
 
 		active_ = false;
+		runMetaWritten_ = false;
 		runDir_.clear();
 	}
 
@@ -441,7 +443,8 @@ namespace Export
 
 		out.imbue(std::locale::classic());
 		out << std::setw(4) << meta << '\n';
-		if (!out.good())
+		out.close();
+		if (!out)
 		{
 			return false;
 		}
@@ -453,6 +456,26 @@ namespace Export
 		}
 
 		return true;
+	}
+
+	void LoggingMgr::CopyRunMetaToExportDir(const std::string& exportDir) const
+	{
+		if (!runMetaWritten_)
+		{
+			SPDLOG_WARN("No completed run metadata is available for export to '{}'.", exportDir);
+			return;
+		}
+
+		// use the metadata captured at run startup
+		const std::filesystem::path metaPath = loggingOptions_.exportBaseDir / exportDir / "run_meta.json";
+		std::error_code ec;
+		std::filesystem::copy_file(
+			runDir_ / "run_meta.json",
+			metaPath, ec);
+		if (ec)
+		{
+			SPDLOG_WARN("Failed to copy run metadata to '{}': {}.", metaPath.string(), ec.message());
+		}
 	}
 
 	void LoggingMgr::WriteRunMetaToExportDir(

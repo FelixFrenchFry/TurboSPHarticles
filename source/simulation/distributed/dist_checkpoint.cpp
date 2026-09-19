@@ -29,26 +29,6 @@ namespace
 	// (fluid, boundary, and rigid particle counts, rigid body count, then file size)
 	constexpr size_t N_rankInfoFields = 5;
 
-	// broadcasts metadata and aborts on failure to avoid leaving peers in a collective
-	void BroadcastCheckpointString(
-		std::string& value,
-		const MpiContext& mpiContext)
-	{
-		try
-		{
-			if (value.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
-			{
-				throw std::length_error("Checkpoint metadata exceeds the MPI string limit.");
-			}
-			mpiContext.BroadcastString(value, mpiContext.RootRank());
-		}
-		catch (const std::exception& ex)
-		{
-			// a failed receive allocation must not leave peers waiting in the broadcast
-			mpiContext.AbortJob("Failed to broadcast checkpoint metadata: " + std::string(ex.what()));
-		}
-	}
-
 	std::string CheckpointRankFileName(const int rank)
 	{
 		return "rank_" + std::to_string(rank) + ".bin";
@@ -131,7 +111,7 @@ bool DistSimulationMgr::SaveCheckpoint(
 		}
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
-	BroadcastCheckpointString(directory, mpiContext_);
+	mpiContext_.BroadcastString(directory, mpiContext_.RootRank());
 
 	try
 	{
@@ -242,8 +222,8 @@ bool DistSimulationMgr::LoadCheckpoint(
 		}
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
-	BroadcastCheckpointString(directory, mpiContext_);
-	BroadcastCheckpointString(manifestText, mpiContext_);
+	mpiContext_.BroadcastString(directory, mpiContext_.RootRank());
+	mpiContext_.BroadcastString(manifestText, mpiContext_.RootRank());
 
 	try
 	{
@@ -314,6 +294,7 @@ bool DistSimulationMgr::LoadCheckpoint(
 		rigidBodySyncBuffers_.Resize(globalSimState_.rigidBodies.N_);
 		boundaryRedistributionRequired_ = true;
 		serializationMgr_.ResetExportDirState();
+		exportSnapshotDir_.clear();
 		localOk = ValidateRankLocalSimState(true);
 	}
 	catch (const std::exception& ex)

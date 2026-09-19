@@ -2,669 +2,391 @@
 
 // external
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
-#include <tbb/parallel_sort.h>
-#include <utility>
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
 
 // internal
 #include "dist_snapshots.h"
 #include "mpi_context.h"
+#include "source/eval/serial/serialization.h"
 
 
 
-using namespace Dist;
-
-namespace
+bool Dist::SaveDistributedExportSnapshot(
+	const Sync::ExportSnapshot& exportSnap,
+	const Export::SerializationMgr& serializationMgr,
+	const std::string& dir,
+	const bool includeB,
+	const MpiContext& mpiContext,
+	std::vector<uint64_t>& rankCounts)
 {
-	struct RankDistExportSnapshotGather
-	{
-		int rank = -1;
-
-		int N_recvF = 0;
-		int N_recvB = 0;
-
-		// packet slots reserved for this rank behind the locally packed packets
-		uint64_t recvFluidBeginIdx = 0;
-		uint64_t recvBoundaryBeginIdx = 0;
-	};
-
-	template <typename T>
-	int CheckedPacketCount(const std::vector<T>& packets)
-	{
-		if (packets.size() > static_cast<uint64_t>(std::numeric_limits<int>::max()))
-		{
-			throw std::runtime_error("Distributed snapshot packet count exceeds MPI int count range.");
-		}
-
-		return static_cast<int>(packets.size());
-	}
-
-	template <typename T>
-	uint64_t CheckedByteSize(const uint64_t N_packets)
-	{
-		const uint64_t N_max = std::numeric_limits<uint64_t>::max() / sizeof(T);
-
-		if (N_packets > N_max)
-		{
-			throw std::runtime_error(
-				"Distributed snapshot payload byte size exceeds uint64_t range.");
-		}
-
-		return N_packets * sizeof(T);
-	}
-
-	template <typename T>
-	uint64_t CheckedByteSize(const std::vector<T>& packets)
-	{
-		return CheckedByteSize<T>(packets.size());
-	}
-
-	uint64_t ByteChunkRequestCount(const uint64_t N_bytes)
-	{
-		return N_bytes > 0
-			? 1 + (N_bytes - 1) / MPI_CONTEXT_BYTE_CHUNK_SIZE
-			: 0;
-	}
-
-	template <typename T>
-	void* DataOrNull(std::vector<T>& packets)
-	{
-		return packets.empty() ? nullptr : packets.data();
-	}
-
-	// receive destination inside the shared gather storage,
-	// only addressed when that rank actually sends packets
-	template <typename T>
-	void* DataAtOrNull(
-		std::vector<T>& packets,
-		const uint64_t beginIdx,
-		const uint64_t N_packets)
-	{
-		return (N_packets == 0) ? nullptr : packets.data() + beginIdx;
-	}
-
-	DistExportFluidParticlePacket PackExportFluidParticle(
-		const Sync::FluidConstView& particlesF,
-		const uint32_t localIdx,
-		const int rank)
-	{
-		const float xVel = particlesF.xVel[localIdx];
-		const float yVel = particlesF.yVel[localIdx];
-		const float zVel = particlesF.zVel[localIdx];
-
-		DistExportFluidParticlePacket packet{};
-		packet.id = particlesF.id[localIdx];
-		packet.rank = static_cast<uint32_t>(rank);
-
-		packet.xPos = particlesF.xPos[localIdx];
-		packet.yPos = particlesF.yPos[localIdx];
-		packet.zPos = particlesF.zPos[localIdx];
-		packet.velMag = std::sqrt(xVel * xVel + yVel * yVel + zVel * zVel);
-
-		return packet;
-	}
-
-	DistExportBoundaryParticlePacket PackExportBoundaryParticle(
-		const Sync::BoundaryConstView& particlesB,
-		const uint32_t localIdx)
-	{
-		DistExportBoundaryParticlePacket packet{};
-		packet.id = particlesB.id[localIdx];
-
-		packet.xPos = particlesB.xPos[localIdx];
-		packet.yPos = particlesB.yPos[localIdx];
-		packet.zPos = particlesB.zPos[localIdx];
-		packet.volB = particlesB.volB[localIdx];
-
-		return packet;
-	}
-
-} // namespace anonymous
-
-void DistExportSnapshotBuffer::Clear()
-{
-	particlesF.clear();
-	particlesB.clear();
-}
-
-bool Dist::ValidateDistExportSnapshotRootCapacity(
-	const uint64_t N_gatheredF,
-	const uint64_t N_gatheredB,
-	const uint64_t N_replicatedR,
-	uint64_t* const rootStorageBytes,
-	std::string* const failMsg)
-{
-	if (rootStorageBytes) { *rootStorageBytes = 0; }
-	if (failMsg) { failMsg->clear(); }
 	try
 	{
-		Sim::CheckedLocalParticleCount(N_gatheredF, "fluid export root output");
-		Sim::CheckedLocalParticleCount(N_gatheredB, "boundary export root output");
-		Sim::CheckedLocalParticleCount(N_replicatedR, "rigid export root output");
+		bool writeOk = true;
+		try
+		{
+			if (mpiContext.Size() > int{std::numeric_limits<uint16_t>::max()} + 1 ||
+				!std::isfinite(exportSnap.simTime))
+			{
+				throw std::runtime_error("Invalid distributed snapshot rank count or time.");
+			}
 
-		constexpr uint64_t FluidSnapshotParticleBytes =
-			4ull * sizeof(float) + sizeof(uint16_t);
-		constexpr uint64_t BoundarySnapshotParticleBytes =
-			4ull * sizeof(float);
-		constexpr uint64_t RigidSnapshotParticleBytes =
-			sizeof(uint32_t) + 4ull * sizeof(float);
+			const auto ValidateArrays = [](
+				const uint64_t N_particles,
+				const auto& x,
+				const auto& y,
+				const auto& z,
+				const auto& values)
+			{
+				Sim::CheckedLocalParticleCount(N_particles, "rank-local export count");
+				if (x.size() != N_particles || y.size() != N_particles ||
+					z.size() != N_particles || values.size() != N_particles)
+				{
+					throw std::runtime_error("Inconsistent local snapshot array sizes.");
+				}
+			};
+			ValidateArrays(exportSnap.N_F, exportSnap.xPosF, exportSnap.yPosF, exportSnap.zPosF, exportSnap.velMagF);
+			ValidateArrays(exportSnap.N_B, exportSnap.xPosB, exportSnap.yPosB, exportSnap.zPosB, exportSnap.volB);
+			ValidateArrays(exportSnap.N_R, exportSnap.xPosR, exportSnap.yPosR, exportSnap.zPosR, exportSnap.volR);
+			if (exportSnap.rankF.size() != exportSnap.N_F || exportSnap.bodyIdR.size() != exportSnap.N_R ||
+				(!includeB && exportSnap.N_B != 0))
+			{
+				throw std::runtime_error("Inconsistent local snapshot rank, body or boundary counts.");
+			}
 
-		uint64_t N_bytes = CheckedByteSize<DistExportFluidParticlePacket>(N_gatheredF);
-		N_bytes = Sim::CheckedParticleAdd(
-			N_bytes,
-			CheckedByteSize<DistExportBoundaryParticlePacket>(N_gatheredB),
-			"distributed export gather storage");
-		N_bytes = Sim::CheckedParticleAdd(
-			N_bytes,
-			Sim::CheckedParticleMultiply(
-				N_gatheredF, FluidSnapshotParticleBytes, "fluid export snapshot storage"),
-			"distributed export root storage");
-		N_bytes = Sim::CheckedParticleAdd(
-			N_bytes,
-			Sim::CheckedParticleMultiply(
-				N_gatheredB, BoundarySnapshotParticleBytes, "boundary export snapshot storage"),
-			"distributed export root storage");
-		N_bytes = Sim::CheckedParticleAdd(
-			N_bytes,
-			Sim::CheckedParticleMultiply(
-				N_replicatedR, RigidSnapshotParticleBytes, "rigid export snapshot storage"),
-			"distributed export root storage");
+			rankCounts.assign(size_t{3} * mpiContext.Size(), 0);
+			rankCounts[3 * mpiContext.Rank()] = exportSnap.N_F;
+			rankCounts[3 * mpiContext.Rank() + 1] = exportSnap.N_B;
+			rankCounts[3 * mpiContext.Rank() + 2] = exportSnap.N_R;
+		}
+		catch (const std::exception& ex)
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to prepare distributed snapshot: {}",
+				mpiContext.Rank(), mpiContext.Size(), ex.what());
+			writeOk = false;
+		}
+		if (!mpiContext.AllTrue(writeOk, "Snapshot array validation")) { return false; }
 
-		if (rootStorageBytes) { *rootStorageBytes = N_bytes; }
-		return true;
-	}
-	catch (const std::exception& ex)
-	{
-		if (failMsg) { *failMsg = ex.what(); }
-		return false;
-	}
-}
-
-bool Dist::PackOwnedExportSnapshotBuffer(
-	DistExportSnapshotBuffer& gatherBuffer,
-	const Sync::FluidConstView& particlesF,
-	const Sync::BoundaryConstView& particlesB,
-	const DistParticleState& particleStateF,
-	const DistParticleState& particleStateB,
-	const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
-	const int rank)
-{
-	if (rank < 0) { return false; }
-
-	gatherBuffer.Clear();
-	gatherBuffer.particlesF.reserve(exportFluidParticleLocalIdxs.size());
-	gatherBuffer.particlesB.reserve(particleStateB.particleLocalIdx_Owned.size());
-
-	// fluid particles
-	std::vector<uint8_t> localIdxUsed(particlesF.N_, 0);
-	for (const uint32_t localIdx : exportFluidParticleLocalIdxs)
-	{
-		if (localIdx >= particlesF.N_ ||
-			localIdx >= particlesF.id.size()) { return false; }
-		if (!particleStateF.HasMetadataAtLocalIdx(localIdx)) { return false; }
-		if (localIdxUsed[localIdx] != 0) { return false; }
-		localIdxUsed[localIdx] = 1;
-
-		const DistParticleClass particleClass = particleStateF.particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { continue; }
-
-		if (particlesF.id[localIdx] == Sim::INVALID_PARTICLE_ID)
+		// all ranks must write the same frame and participate in the same file operations
+		uint64_t step = exportSnap.simStep;
+		uint64_t timeBits = std::bit_cast<uint64_t>(exportSnap.simTime);
+		int boundary = includeB ? 1 : 0;
+		mpiContext.BroadcastUint64(step, mpiContext.RootRank());
+		mpiContext.BroadcastUint64(timeBits, mpiContext.RootRank());
+		mpiContext.BroadcastInt(boundary, mpiContext.RootRank());
+		if (!mpiContext.AllTrue(
+			step == exportSnap.simStep && timeBits == std::bit_cast<uint64_t>(exportSnap.simTime) &&
+			boundary == (includeB ? 1 : 0), "Snapshot frame agreement"))
 		{
 			return false;
 		}
+		mpiContext.AllReduceSumUint64s(rankCounts);
 
-		gatherBuffer.particlesF.push_back(
-			PackExportFluidParticle(particlesF, localIdx, rank));
-	}
-
-	// boundary particles
-	for (const uint32_t localIdx : particleStateB.particleLocalIdx_Owned)
-	{
-		if (localIdx >= particlesB.N_ ||
-			localIdx >= particlesB.id.size()) { return false; }
-		if (!particleStateB.HasMetadataAtLocalIdx(localIdx)) { return false; }
-
-		const DistParticleClass particleClass = particleStateB.particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer) { return false; }
-
-		if (particlesB.id[localIdx] == Sim::INVALID_PARTICLE_ID)
+		Export::DistributedExportLayout layout{};
+		Export::ExportSnapshotOffsets off{};
+		Export::StaticBoundaryOffsets boundaryOff{};
+		Export::BinHeaderSnap header{};
+		Export::BinHeaderSnap boundaryHeader{};
+		std::array<Export::ExportSnapshotFilePaths, 2> paths;
+		std::array<std::string, 2> writePaths;
+		std::vector<float> xyz;
+		constexpr uint64_t N_xyzChunk = (64ull * 1024ull * 1024ull) / (3 * sizeof(float));
+		bool writeBoundary = false;
+		try
 		{
-			return false;
+			layout = Export::ComputeDistributedExportLayout(rankCounts, mpiContext.Rank());
+			Export::ExportSnapshotBinInfo info{};
+			info.step = exportSnap.simStep;
+			info.time = exportSnap.simTime;
+			info.N_F = info.N_rankF = layout.N_total[0];
+			info.N_B = layout.N_total[1];
+			info.N_R = layout.N_total[2];
+			header = Export::MakeExportSnapshotHeader(info);
+			off = Export::ComputeExportSnapshotOffsets(info);
+			info.N_F = info.N_R = info.N_rankF = 0;
+			boundaryHeader = Export::MakeExportSnapshotHeader(info);
+			boundaryOff = Export::ComputeStaticBoundaryOffsets(info);
+			const auto maxOffset = static_cast<uint64_t>(std::numeric_limits<MPI_Offset>::max());
+			if (off.totalBytes > maxOffset || boundaryOff.totalBytes > maxOffset)
+			{
+				throw std::runtime_error("Shared snapshot exceeds MPI_Offset range.");
+			}
+
+			const uint64_t N_localMax = std::max({ exportSnap.N_F, exportSnap.N_B, exportSnap.N_R });
+			xyz.resize(3 * std::min(N_localMax, N_xyzChunk));
+			writeBoundary = includeB && layout.N_total[1] > 0;
+			if (mpiContext.IsRoot())
+			{
+				paths[0] = serializationMgr.GetDistributedExportFilePaths(dir, exportSnap.simStep, false);
+				writePaths[0] = paths[0].writePath.string();
+				if (writeBoundary)
+				{
+					paths[1] = serializationMgr.GetDistributedExportFilePaths(dir, exportSnap.simStep, true);
+					writePaths[1] = paths[1].writePath.string();
+				}
+			}
 		}
-
-		gatherBuffer.particlesB.push_back(
-			PackExportBoundaryParticle(particlesB, localIdx));
-	}
-
-	return true;
-}
-
-bool Dist::RebuildExportSnapshotFromGatheredParticles(
-	Sync::ExportSnapshot& exportSnap,
-	DistExportSnapshotBuffer& gatherBuffer,
-	const uint64_t simStep,
-	const double simTime)
-{
-	if (gatherBuffer.particlesF.size() > Sim::MaxLocalParticleCount)
-	{
-		return false;
-	}
-	if (gatherBuffer.particlesB.size() > Sim::MaxLocalParticleCount)
-	{
-		return false;
-	}
-
-	// gathered packets are ordered by particle ID in place
-	std::vector<DistExportFluidParticlePacket>& sortedParticlesF = gatherBuffer.particlesF;
-	std::vector<DistExportBoundaryParticlePacket>& sortedParticlesB = gatherBuffer.particlesB;
-	tbb::parallel_sort(
-		sortedParticlesF.begin(),
-		sortedParticlesF.end(),
-		[](const DistExportFluidParticlePacket& a, const DistExportFluidParticlePacket& b)
+		catch (const std::exception& ex)
 		{
-			return a.id < b.id;
-		});
-	tbb::parallel_sort(
-		sortedParticlesB.begin(),
-		sortedParticlesB.end(),
-		[](const DistExportBoundaryParticlePacket& a, const DistExportBoundaryParticlePacket& b)
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to prepare shared snapshot files: {}",
+				mpiContext.Rank(), mpiContext.Size(), ex.what());
+			writeOk = false;
+		}
+		if (!mpiContext.AllTrue(writeOk, "Snapshot file preparation")) { return false; }
+		mpiContext.BroadcastString(writePaths[0], mpiContext.RootRank());
+		if (writeBoundary) { mpiContext.BroadcastString(writePaths[1], mpiContext.RootRank()); }
+
+		// offset each field to this rank's particle range
+		off.posF += layout.beginIdx[0] * 12;
+		off.vF += layout.beginIdx[0] * 4;
+		off.rankF += layout.beginIdx[0] * 2;
+		off.posR += layout.beginIdx[2] * 12;
+		off.volR += layout.beginIdx[2] * 4;
+		off.bodyIdR += layout.beginIdx[2] * 4;
+		boundaryOff.posB += layout.beginIdx[1] * 12;
+		boundaryOff.volB += layout.beginIdx[1] * 4;
+		const char dummy = 0;
+
+		// empty ranks participate in every chunk write
+		const auto WriteXyz = [&](
+			MPI_File file,
+			const auto& x,
+			const auto& y,
+			const auto& z,
+			const uint64_t offset,
+			const uint64_t N_max)
 		{
-			return a.id < b.id;
-		});
-
-	exportSnap.simStep = simStep;
-	exportSnap.simTime = simTime;
-	exportSnap.N_F = static_cast<uint32_t>(sortedParticlesF.size());
-	exportSnap.N_B = static_cast<uint32_t>(sortedParticlesB.size());
-	exportSnap.N_R = 0;
-
-	exportSnap.xPosF.resize(exportSnap.N_F);
-	exportSnap.yPosF.resize(exportSnap.N_F);
-	exportSnap.zPosF.resize(exportSnap.N_F);
-	exportSnap.velMagF.resize(exportSnap.N_F);
-	exportSnap.rankF.resize(exportSnap.N_F);
-	exportSnap.xPosB.resize(exportSnap.N_B);
-	exportSnap.yPosB.resize(exportSnap.N_B);
-	exportSnap.zPosB.resize(exportSnap.N_B);
-	exportSnap.volB.resize(exportSnap.N_B);
-	exportSnap.bodyIdR.clear();
-	exportSnap.xPosR.clear();
-	exportSnap.yPosR.clear();
-	exportSnap.zPosR.clear();
-	exportSnap.volR.clear();
-
-	uint64_t prevParticleId = Sim::INVALID_PARTICLE_ID;
-	for (uint32_t i = 0; i < exportSnap.N_F; i++)
-	{
-		const DistExportFluidParticlePacket& packet = sortedParticlesF[i];
-		if (packet.id == Sim::INVALID_PARTICLE_ID) { return false; }
-		if (packet.id == prevParticleId) { return false; }
-
-		exportSnap.xPosF[i] = packet.xPos;
-		exportSnap.yPosF[i] = packet.yPos;
-		exportSnap.zPosF[i] = packet.zPos;
-		exportSnap.velMagF[i] = packet.velMag;
-		exportSnap.rankF[i] = static_cast<uint16_t>(packet.rank);
-
-		prevParticleId = packet.id;
+			for (uint64_t beginIdx = 0; beginIdx < N_max; beginIdx += N_xyzChunk)
+			{
+				const uint64_t N_particles = beginIdx < x.size() ? std::min(N_xyzChunk, x.size() - beginIdx) : 0;
+				for (uint64_t i = 0; i < N_particles; i++)
+				{
+					xyz[3 * i] = x[beginIdx + i];
+					xyz[3 * i + 1] = y[beginIdx + i];
+					xyz[3 * i + 2] = z[beginIdx + i];
+				}
+				mpiContext.WriteFileBytesAtAll(
+					file,
+					N_particles ? offset + beginIdx * 12 : 0,
+					N_particles ? static_cast<const void*>(xyz.data()) : &dummy,
+					static_cast<int>(N_particles * 12),
+					"Snapshot XYZ write");
+			}
+		};
+		const auto WriteValues = [&](
+			MPI_File file,
+			const auto& values,
+			const uint64_t offset,
+			const uint64_t N_max)
+		{
+			const uint64_t valueBytes = sizeof(values[0]);
+			const uint64_t N_bytes = values.size() * valueBytes;
+			for (uint64_t byteOffset = 0; byteOffset < N_max * valueBytes; byteOffset += MPI_CONTEXT_BYTE_CHUNK_SIZE)
+			{
+				const uint64_t N_chunkBytes = byteOffset < N_bytes
+					? std::min(MPI_CONTEXT_BYTE_CHUNK_SIZE, N_bytes - byteOffset) : 0;
+				mpiContext.WriteFileBytesAtAll(
+					file,
+					N_chunkBytes ? offset + byteOffset : 0,
+					N_chunkBytes ? reinterpret_cast<const char*>(values.data()) + byteOffset : &dummy,
+					static_cast<int>(N_chunkBytes),
+					"Snapshot scalar write");
+			}
+		};
+		const auto WriteFile = [&](const bool staticBoundary)
+		{
+			const size_t fileIdx = staticBoundary ? 1 : 0;
+			const uint64_t N_bytes = staticBoundary ? boundaryOff.totalBytes : off.totalBytes;
+			MPI_File file = mpiContext.OpenFileForWrite(writePaths[fileIdx], N_bytes);
+			mpiContext.WriteFileBytesAtAll(
+				file,
+				0,
+				staticBoundary ? &boundaryHeader : &header,
+				mpiContext.IsRoot() ? static_cast<int>(sizeof(Export::BinHeaderSnap)) : 0,
+				"Snapshot header write");
+			if (staticBoundary)
+			{
+				WriteXyz(file, exportSnap.xPosB, exportSnap.yPosB, exportSnap.zPosB, boundaryOff.posB, layout.N_max[1]);
+				WriteValues(file, exportSnap.volB, boundaryOff.volB, layout.N_max[1]);
+			}
+			else
+			{
+				WriteXyz(file, exportSnap.xPosF, exportSnap.yPosF, exportSnap.zPosF, off.posF, layout.N_max[0]);
+				WriteValues(file, exportSnap.velMagF, off.vF, layout.N_max[0]);
+				WriteValues(file, exportSnap.rankF, off.rankF, layout.N_max[0]);
+				WriteXyz(file, exportSnap.xPosR, exportSnap.yPosR, exportSnap.zPosR, off.posR, layout.N_max[2]);
+				WriteValues(file, exportSnap.volR, off.volR, layout.N_max[2]);
+				WriteValues(file, exportSnap.bodyIdR, off.bodyIdR, layout.N_max[2]);
+			}
+			mpiContext.CloseFile(file);
+			// every rank must close the file before root checks its size and publishes it
+			mpiContext.Barrier();
+			if (mpiContext.IsRoot())
+			{
+				try
+				{
+					serializationMgr.PublishDistributedExportFile(paths[fileIdx], N_bytes);
+				}
+				catch (const std::exception& ex)
+				{
+					SPDLOG_ERROR("Failed to publish shared snapshot: {}", ex.what());
+					writeOk = false;
+				}
+			}
+			return mpiContext.AllTrue(writeOk, "Snapshot file publication");
+		};
+		if (writeBoundary && !WriteFile(true)) { return false; }
+		return WriteFile(false);
 	}
-
-	prevParticleId = Sim::INVALID_PARTICLE_ID;
-	for (uint32_t i = 0; i < exportSnap.N_B; i++)
+	catch (...)
 	{
-		const DistExportBoundaryParticlePacket& packet = sortedParticlesB[i];
-		if (packet.id == Sim::INVALID_PARTICLE_ID) { return false; }
-		if (packet.id == prevParticleId) { return false; }
-
-		exportSnap.xPosB[i] = packet.xPos;
-		exportSnap.yPosB[i] = packet.yPos;
-		exportSnap.zPosB[i] = packet.zPos;
-		exportSnap.volB[i] = packet.volB;
-
-		prevParticleId = packet.id;
-	}
-
-	return true;
-}
-
-void Dist::PackReplicatedRigidExportSnapshot(
-	Sync::ExportSnapshot& exportSnap,
-	const Sync::RigidConstView& particlesR,
-	const Sync::RigidBodies& rigidBodies)
-{
-	const Sync::RigidConstView& R = particlesR;
-	const Sync::RigidBodies& RB = rigidBodies;
-	const uint32_t N_R = Sim::CheckedLocalParticleCount(R.N_, "rigid export root output");
-
-	exportSnap.N_R = N_R;
-	exportSnap.bodyIdR.assign(R.bodyId.begin(), R.bodyId.end());
-	exportSnap.xPosR.resize(N_R);
-	exportSnap.yPosR.resize(N_R);
-	exportSnap.zPosR.resize(N_R);
-	exportSnap.volR.assign(R.volR.begin(), R.volR.end());
-
-	for (uint32_t rigidParticleIdx = 0; rigidParticleIdx < N_R; rigidParticleIdx++)
-	{
-		const uint32_t bodyIdx = R.bodyId[rigidParticleIdx];
-
-		const float lx = R.xRelPos[rigidParticleIdx];
-		const float ly = R.yRelPos[rigidParticleIdx];
-		const float lz = R.zRelPos[rigidParticleIdx];
-
-		exportSnap.xPosR[rigidParticleIdx] =
-			RB.xCM[bodyIdx] + std::fmaf(
-				RB.a00[bodyIdx], lx,
-				std::fmaf(RB.a01[bodyIdx], ly, RB.a02[bodyIdx] * lz));
-		exportSnap.yPosR[rigidParticleIdx] =
-			RB.yCM[bodyIdx] + std::fmaf(
-				RB.a10[bodyIdx], lx,
-				std::fmaf(RB.a11[bodyIdx], ly, RB.a12[bodyIdx] * lz));
-		exportSnap.zPosR[rigidParticleIdx] =
-			RB.zCM[bodyIdx] + std::fmaf(
-				RB.a20[bodyIdx], lx,
-				std::fmaf(RB.a21[bodyIdx], ly, RB.a22[bodyIdx] * lz));
+		mpiContext.Abort("Unexpected exception during collective snapshot output");
 	}
 }
 
-bool Dist::GatherExportSnapshotToRoot(
+bool Dist::PackOwnedExportSnapshot(
 	Sync::ExportSnapshot& exportSnap,
-	DistExportSnapshotBuffer& gatherBuffer,
 	const Sync::FluidConstView& particlesF,
 	const Sync::BoundaryConstView& particlesB,
 	const Sync::RigidConstView& particlesR,
 	const Sync::RigidBodies& rigidBodies,
 	const DistParticleState& particleStateF,
 	const DistParticleState& particleStateB,
-	const std::vector<uint32_t>& exportFluidParticleLocalIdxs,
-	const MpiContext& mpiContext,
+	std::vector<uint32_t>& exportFluidParticleLocalIdxs,
+	const int rank,
+	const int N_ranks,
+	const bool includeB,
 	const uint64_t simStep,
-	const double simTime,
-	DistSnapshotGatherStats* stats)
+	const double simTime)
 {
-	if (stats) { *stats = {}; }
+	if (rank < 0 || rank >= N_ranks || rank > std::numeric_limits<uint16_t>::max()) { return false; }
 
-	bool localOk = true;
-	int N_sendF = 0;
-	int N_sendB = 0;
-	std::vector<RankDistExportSnapshotGather> rankGathers{};
-	std::vector<MPI_Request> requests{};
-	try
+	// compact the sorted selection to owned fluid particles
+	size_t N_selected = 0;
+	uint32_t prevLocalIdx = 0;
+	bool first = true;
+
+	for (const uint32_t localIdx : exportFluidParticleLocalIdxs)
 	{
-		// locally packed packets occupy the front of the gather storage on every rank
-		localOk = PackOwnedExportSnapshotBuffer(
-			gatherBuffer,
-			particlesF,
-			particlesB,
-			particleStateF,
-			particleStateB,
-			exportFluidParticleLocalIdxs,
-			mpiContext.Rank());
+		if ((!first && localIdx <= prevLocalIdx) ||
+			localIdx >= particlesF.N_ ||
+			localIdx >= particlesF.id.size() ||
+			!particleStateF.HasMetadataAtLocalIdx(localIdx)) { return false; }
+		first = false;
+		prevLocalIdx = localIdx;
+		const DistParticleClass particleClass = particleStateF.particleClasses[localIdx];
+		if (particleClass != DistParticleClass::Inner &&
+			particleClass != DistParticleClass::Outer) { continue; }
+		if (particlesF.id[localIdx] == Sim::INVALID_PARTICLE_ID) { return false; }
+		exportFluidParticleLocalIdxs[N_selected++] = localIdx;
+	}
 
-		if (localOk)
-		{
-			N_sendF = CheckedPacketCount(gatherBuffer.particlesF);
-			N_sendB = CheckedPacketCount(gatherBuffer.particlesB);
-		}
+	exportFluidParticleLocalIdxs.resize(N_selected);
+	exportSnap.simStep = simStep;
+	exportSnap.simTime = simTime;
+	exportSnap.N_F = Sim::CheckedLocalParticleCount(N_selected, "rank-local fluid export");
+	exportSnap.xPosF.resize(exportSnap.N_F);
+	exportSnap.yPosF.resize(exportSnap.N_F);
+	exportSnap.zPosF.resize(exportSnap.N_F);
+	exportSnap.velMagF.resize(exportSnap.N_F);
+	exportSnap.rankF.resize(exportSnap.N_F);
 
-		if (mpiContext.IsRoot())
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, exportSnap.N_F),
+		[&](const tbb::blocked_range<uint32_t>& range)
 		{
-			rankGathers.reserve(
-				static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
-			for (int rank = 0; rank < mpiContext.Size(); rank++)
+			for (uint32_t i = range.begin(); i != range.end(); i++)
 			{
-				if (rank == mpiContext.RootRank()) { continue; }
+				const uint32_t localIdx = exportFluidParticleLocalIdxs[i];
+				exportSnap.xPosF[i] = particlesF.xPos[localIdx];
+				exportSnap.yPosF[i] = particlesF.yPos[localIdx];
+				exportSnap.zPosF[i] = particlesF.zPos[localIdx];
 
-				RankDistExportSnapshotGather rankGather{};
-				rankGather.rank = rank;
-				rankGathers.push_back(std::move(rankGather));
+				const float xVel = particlesF.xVel[localIdx];
+				const float yVel = particlesF.yVel[localIdx];
+				const float zVel = particlesF.zVel[localIdx];
+
+				exportSnap.velMagF[i] = std::sqrt(xVel * xVel + yVel * yVel + zVel * zVel);
+				exportSnap.rankF[i] = static_cast<uint16_t>(rank);
 			}
-		}
+		});
 
-		const uint64_t N_countRequests = mpiContext.IsRoot()
-			? static_cast<uint64_t>(rankGathers.size()) * 2
-			: 2;
-		requests.reserve(N_countRequests);
-	}
-	catch (const std::exception& ex)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to prepare distributed snapshot gather storage: {}",
-			mpiContext.Rank(), mpiContext.Size(), ex.what());
-		localOk = false;
-	}
-	if (!mpiContext.AllTrue(localOk)) { return false; }
+	exportSnap.N_B = includeB
+		? Sim::CheckedLocalParticleCount(particleStateB.particleLocalIdx_Owned.size(), "rank-local boundary export")
+		: 0;
+	exportSnap.xPosB.resize(exportSnap.N_B);
+	exportSnap.yPosB.resize(exportSnap.N_B);
+	exportSnap.zPosB.resize(exportSnap.N_B);
+	exportSnap.volB.resize(exportSnap.N_B);
 
-	// gather packet counts before gathering raw particle payloads
-	if (mpiContext.IsRoot())
-	{
-		for (RankDistExportSnapshotGather& rankGather : rankGathers)
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, exportSnap.N_B),
+		[&](const tbb::blocked_range<uint32_t>& range)
 		{
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvInt(
-				rankGather.N_recvF,
-				rankGather.rank,
-				DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT,
-				requests.back());
-			requests.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvInt(
-				rankGather.N_recvB,
-				rankGather.rank,
-				DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT,
-				requests.back());
-		}
-	}
-	else
-	{
-		requests.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendInt(
-			N_sendF,
-			mpiContext.RootRank(),
-			DIST_SNAPSHOT_TAG_EXPORT_FLUID_COUNT,
-			requests.back());
-		requests.emplace_back(MPI_REQUEST_NULL);
-		mpiContext.ISendInt(
-			N_sendB,
-			mpiContext.RootRank(),
-			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_COUNT,
-			requests.back());
-	}
-	mpiContext.WaitAll(requests, "distributed snapshot counts");
-	requests.clear();
-
-	uint64_t N_gatheredF = gatherBuffer.particlesF.size();
-	uint64_t N_gatheredB = gatherBuffer.particlesB.size();
-	uint32_t N_materializedF = 0;
-	uint32_t N_materializedB = 0;
-	uint32_t N_materializedR = 0;
-	uint64_t N_payloadRequests = 0;
-	try
-	{
-		if (mpiContext.IsRoot())
-		{
-			for (RankDistExportSnapshotGather& rankGather : rankGathers)
+			for (uint32_t i = range.begin(); i != range.end(); i++)
 			{
-				if (rankGather.N_recvF < 0 || rankGather.N_recvB < 0)
+				const uint32_t localIdx = particleStateB.particleLocalIdx_Owned[i];
+				if (localIdx >= particlesB.N_ ||
+					localIdx >= particlesB.id.size() ||
+					!particleStateB.HasMetadataAtLocalIdx(localIdx) || 
+					particlesB.id[localIdx] == Sim::INVALID_PARTICLE_ID ||
+					(particleStateB.particleClasses[localIdx] != DistParticleClass::Inner &&
+					 particleStateB.particleClasses[localIdx] != DistParticleClass::Outer))
 				{
-					SPDLOG_ERROR(
-						"[rank {}/{}] Distributed snapshot gather received a negative packet count "
-						"from rank {}.",
-						mpiContext.Rank(), mpiContext.Size(), rankGather.rank);
-					localOk = false;
-					break;
+					throw std::runtime_error("Invalid owned boundary particle during snapshot packing.");
 				}
-
-				rankGather.recvFluidBeginIdx = N_gatheredF;
-				rankGather.recvBoundaryBeginIdx = N_gatheredB;
-				const uint32_t N_rankF = static_cast<uint32_t>(rankGather.N_recvF);
-				const uint32_t N_rankB = static_cast<uint32_t>(rankGather.N_recvB);
-				N_gatheredF = Sim::CheckedParticleAdd(
-					N_gatheredF, N_rankF, "distributed export fluid count");
-				N_gatheredB = Sim::CheckedParticleAdd(
-					N_gatheredB, N_rankB, "distributed export boundary count");
-				N_payloadRequests = Sim::CheckedParticleAdd(
-					N_payloadRequests,
-					ByteChunkRequestCount(
-						CheckedByteSize<DistExportFluidParticlePacket>(N_rankF)),
-					"distributed export payload request count");
-				N_payloadRequests = Sim::CheckedParticleAdd(
-					N_payloadRequests,
-					ByteChunkRequestCount(
-						CheckedByteSize<DistExportBoundaryParticlePacket>(N_rankB)),
-					"distributed export payload request count");
+				exportSnap.xPosB[i] = particlesB.xPos[localIdx];
+				exportSnap.yPosB[i] = particlesB.yPos[localIdx];
+				exportSnap.zPosB[i] = particlesB.zPos[localIdx];
+				exportSnap.volB[i] = particlesB.volB[localIdx];
 			}
+		});
 
-			if (localOk)
+	// split the replicated rigid array into fixed export ranges
+	const Sync::RigidConstView& R = particlesR;
+	const Sync::RigidBodies& RB = rigidBodies;
+	const uint32_t beginR = static_cast<uint32_t>(static_cast<uint64_t>(R.N_) * rank / N_ranks);
+	const uint32_t endR = static_cast<uint32_t>(static_cast<uint64_t>(R.N_) * (rank + 1) / N_ranks);
+
+	exportSnap.N_R = Sim::CheckedLocalParticleCount(endR - beginR, "rank-local rigid export");
+	exportSnap.bodyIdR.resize(exportSnap.N_R);
+	exportSnap.xPosR.resize(exportSnap.N_R);
+	exportSnap.yPosR.resize(exportSnap.N_R);
+	exportSnap.zPosR.resize(exportSnap.N_R);
+	exportSnap.volR.resize(exportSnap.N_R);
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, exportSnap.N_R),
+		[&](const tbb::blocked_range<uint32_t>& range)
+		{
+			for (uint32_t i = range.begin(); i != range.end(); i++)
 			{
-				std::string capacityFailure{};
-				localOk = ValidateDistExportSnapshotRootCapacity(
-					N_gatheredF,
-					N_gatheredB,
-					particlesR.N_,
-					nullptr,
-					&capacityFailure);
-				if (!localOk)
-				{
-					SPDLOG_ERROR(
-						"[rank {}/{}] Cannot materialize requested distributed export: {}",
-						mpiContext.Rank(), mpiContext.Size(), capacityFailure);
-				}
-				else
-				{
-					N_materializedF = Sim::CheckedLocalParticleCount(
-						N_gatheredF, "fluid export root output");
-					N_materializedB = Sim::CheckedLocalParticleCount(
-						N_gatheredB, "boundary export root output");
-					N_materializedR = Sim::CheckedLocalParticleCount(
-						particlesR.N_, "rigid export root output");
-				}
+				const uint32_t localIdx = beginR + i;
+				const uint32_t bodyIdx = R.bodyId[localIdx];
+				if (bodyIdx >= RB.N_) { throw std::runtime_error("Invalid rigid export body index."); }
+
+				const float lx = R.xRelPos[localIdx];
+				const float ly = R.yRelPos[localIdx];
+				const float lz = R.zRelPos[localIdx];
+
+				exportSnap.bodyIdR[i] = bodyIdx;
+				exportSnap.volR[i] = R.volR[localIdx];
+				exportSnap.xPosR[i] = RB.xCM[bodyIdx] + std::fmaf(
+					RB.a00[bodyIdx], lx, std::fmaf(RB.a01[bodyIdx], ly, RB.a02[bodyIdx] * lz));
+				exportSnap.yPosR[i] = RB.yCM[bodyIdx] + std::fmaf(
+					RB.a10[bodyIdx], lx, std::fmaf(RB.a11[bodyIdx], ly, RB.a12[bodyIdx] * lz));
+				exportSnap.zPosR[i] = RB.zCM[bodyIdx] + std::fmaf(
+					RB.a20[bodyIdx], lx, std::fmaf(RB.a21[bodyIdx], ly, RB.a22[bodyIdx] * lz));
 			}
-		}
-		else
-		{
-			N_payloadRequests = Sim::CheckedParticleAdd(
-				ByteChunkRequestCount(CheckedByteSize(gatherBuffer.particlesF)),
-				ByteChunkRequestCount(CheckedByteSize(gatherBuffer.particlesB)),
-				"distributed export payload request count");
-		}
-	}
-	catch (const std::exception& ex)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Invalid distributed snapshot gather count or byte size: {}",
-			mpiContext.Rank(), mpiContext.Size(), ex.what());
-		localOk = false;
-	}
-	if (!mpiContext.AllTrue(localOk)) { return false; }
+		});
 
-	try
-	{
-		if (mpiContext.IsRoot())
-		{
-			exportSnap.xPosF.reserve(N_materializedF);
-			exportSnap.yPosF.reserve(N_materializedF);
-			exportSnap.zPosF.reserve(N_materializedF);
-			exportSnap.velMagF.reserve(N_materializedF);
-			exportSnap.rankF.reserve(N_materializedF);
-			exportSnap.xPosB.reserve(N_materializedB);
-			exportSnap.yPosB.reserve(N_materializedB);
-			exportSnap.zPosB.reserve(N_materializedB);
-			exportSnap.volB.reserve(N_materializedB);
-			exportSnap.bodyIdR.reserve(N_materializedR);
-			exportSnap.xPosR.reserve(N_materializedR);
-			exportSnap.yPosR.reserve(N_materializedR);
-			exportSnap.zPosR.reserve(N_materializedR);
-			exportSnap.volR.reserve(N_materializedR);
-			gatherBuffer.particlesF.resize(N_materializedF);
-			gatherBuffer.particlesB.resize(N_materializedB);
-		}
-		requests.reserve(N_payloadRequests);
-	}
-	catch (const std::exception& ex)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to allocate distributed snapshot storage "
-			"below the root-output capacity limit: {}",
-			mpiContext.Rank(), mpiContext.Size(), ex.what());
-		localOk = false;
-	}
-	if (!mpiContext.AllTrue(localOk)) { return false; }
-
-	// gather payloads after the root gather storage holds a slot range for every rank
-	if (mpiContext.IsRoot())
-	{
-		for (const RankDistExportSnapshotGather& rankGather : rankGathers)
-		{
-			const uint64_t N_recvF = static_cast<uint64_t>(rankGather.N_recvF);
-			const uint64_t N_recvB = static_cast<uint64_t>(rankGather.N_recvB);
-
-			mpiContext.IRecvBytesChunked(
-				DataAtOrNull(
-					gatherBuffer.particlesF, rankGather.recvFluidBeginIdx, N_recvF),
-				CheckedByteSize<DistExportFluidParticlePacket>(N_recvF),
-				rankGather.rank,
-				DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
-				requests);
-			mpiContext.IRecvBytesChunked(
-				DataAtOrNull(
-					gatherBuffer.particlesB, rankGather.recvBoundaryBeginIdx, N_recvB),
-				CheckedByteSize<DistExportBoundaryParticlePacket>(N_recvB),
-				rankGather.rank,
-				DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
-				requests);
-		}
-	}
-	else
-	{
-		mpiContext.ISendBytesChunked(
-			DataOrNull(gatherBuffer.particlesF),
-			CheckedByteSize(gatherBuffer.particlesF),
-			mpiContext.RootRank(),
-			DIST_SNAPSHOT_TAG_EXPORT_FLUID_PAYLOAD,
-			requests);
-		mpiContext.ISendBytesChunked(
-			DataOrNull(gatherBuffer.particlesB),
-			CheckedByteSize(gatherBuffer.particlesB),
-			mpiContext.RootRank(),
-			DIST_SNAPSHOT_TAG_EXPORT_BOUNDARY_PAYLOAD,
-			requests);
-	}
-	mpiContext.WaitAll(requests, "distributed snapshot payloads");
-
-	if (mpiContext.IsRoot())
-	{
-		try
-		{
-			localOk = RebuildExportSnapshotFromGatheredParticles(
-				exportSnap,
-				gatherBuffer,
-				simStep,
-				simTime);
-			if (localOk)
-			{
-				PackReplicatedRigidExportSnapshot(
-					exportSnap, particlesR, rigidBodies);
-			}
-
-			if (localOk && stats)
-			{
-				stats->N_gatheredF = exportSnap.N_F;
-				stats->N_gatheredB = exportSnap.N_B;
-				stats->N_gatheredR = exportSnap.N_R;
-			}
-		}
-		catch (const std::exception& ex)
-		{
-			SPDLOG_ERROR(
-				"[rank {}/{}] Failed to rebuild distributed export snapshot: {}",
-				mpiContext.Rank(), mpiContext.Size(), ex.what());
-			localOk = false;
-		}
-	}
-
-	return mpiContext.AllTrue(localOk);
+	return true;
 }

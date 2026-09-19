@@ -108,16 +108,17 @@ namespace Vis
 		static void GLFW_WindowSizeCB(GLFWwindow* window, int width, int height);
 		static void GLFW_WindowContentScaleCB(GLFWwindow* window, float xScale, float yScale);
 		static void GLFW_KeyCB(GLFWwindow* window, int key, int scancode, int action, int mods);
+		static void GLFW_CharCB(GLFWwindow* window, unsigned int codepoint);
 		static void GLFW_MouseButtonCB(GLFWwindow* window, int button, int action, int mods);
 		static void GLFW_CursorPosCB(GLFWwindow* window, double xPos, double yPos);
 		static void GLFW_ScrollCB(GLFWwindow* window, double xOff, double yOff);
-		// TODO: char callback?
 
 		// instance methods called by static callbacks
 		void OnFramebufferSize(int width, int height);
 		void OnWindowSize(int width, int height);
 		void OnWindowContentScale(float xScale, float yScale);
 		void OnKey(int key, int scancode, int action, int mods);
+		void OnChar(unsigned int codepoint);
 		void OnMouseButton(int button, int action, int mods);
 		void OnCursorPos(double xPos, double yPos);
 		void OnScroll(double xOff, double yOff);

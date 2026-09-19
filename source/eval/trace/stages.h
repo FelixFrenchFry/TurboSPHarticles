@@ -38,7 +38,7 @@ namespace Trace
 		Dist_FinalStateSerialization,
 		Dist_RigidParticleAuthorityValidation,
 		Dist_RigidForceCollection,
-		Dist_ExportSnapshotGather,
+		Dist_ExportSnapshotPack,
 		Dist_ExportSnapshotSerialization,
 		Dist_RankBackendStepComplete,
 		Count
@@ -186,9 +186,9 @@ namespace Trace
 				.alias = "dist_rigid_force_collection"
 			},
 			{
-				.stage = TraceStage::Dist_ExportSnapshotGather,
-				.name = "distributed export snapshot gather",
-				.alias = "dist_export_snapshot_gather"
+				.stage = TraceStage::Dist_ExportSnapshotPack,
+				.name = "distributed export snapshot pack",
+				.alias = "dist_export_snapshot_pack"
 			},
 			{
 				.stage = TraceStage::Dist_ExportSnapshotSerialization,

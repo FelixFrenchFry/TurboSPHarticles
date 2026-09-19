@@ -4,11 +4,14 @@
 // external
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 // internal
+#include "snapshot_format.h"
 #include "source/simulation/sync/snapshots.h"
 #include "source/simulation/sync/state_sim.h"
 
@@ -27,18 +30,10 @@ namespace Export
 		bool atomicWrite = true;
 	};
 
-	// header-only metadata for rebuilding XDMF time series
-	struct ExportSnapshotBinInfo
+	struct ExportSnapshotFilePaths
 	{
-		std::string fileName;
-
-		uint64_t step = 0;
-		double time = 0.0;
-
-		uint64_t N_F = 0;
-		uint64_t N_B = 0;
-		uint64_t N_R = 0;
-		uint64_t N_rankF = 0;
+		std::filesystem::path path;
+		std::filesystem::path writePath;
 	};
 
 	class SerializationMgr
@@ -61,8 +56,26 @@ namespace Export
 			const std::string& path) const;
 
 		// serialization of a subset of the simulation state and metadata into separate files
-		void SaveExportSnapshot(const Sync::ExportSnapshot& snap, const std::string& dir) const;
+		void SaveExportSnapshot(
+			const Sync::ExportSnapshot& snap,
+			const std::string& dir) const;
 		void SaveExportSnapshotXdmfViews(const Sync::ExportSnapshot& snap, const std::string& dir) const;
+
+		// distributed export directories and metadata, written by the root rank
+		// publish views after the shared particle files are complete
+		std::string CreateDistributedExportDirectory(const std::string& dir) const;
+		ExportSnapshotFilePaths GetDistributedExportFilePaths(
+			const std::string& dir,
+			uint64_t step,
+			bool staticBoundary) const;
+		// validate the completed file size after all writers have closed it
+		void PublishDistributedExportFile(
+			const ExportSnapshotFilePaths& paths, uint64_t N_expectedBytes) const;
+		void SaveDistributedExportSnapshotXdmfViews(
+			uint64_t step,
+			double time,
+			const std::vector<uint64_t>& rankCounts,
+			const std::string& dir) const;
 
 		// the next export rebuilds everything memorized about the export directory
 		void ResetExportDirState()
@@ -70,6 +83,7 @@ namespace Export
 			std::scoped_lock lock(exportDirStateMutex_);
 			staticBoundaryDir_.clear();
 			exportSnapshotInfos_.clear();
+			distributedExportSnapshotInfos_.clear();
 		}
 
 	private:
@@ -85,6 +99,10 @@ namespace Export
 		// parsed .bin headers of the export directory, keyed by file name
 		mutable std::filesystem::path exportSnapshotInfosDir_;
 		mutable std::unordered_map<std::string, ExportSnapshotBinInfo> exportSnapshotInfos_;
+
+		// shared snapshot metadata, keyed by simulation step
+		mutable std::filesystem::path distributedExportDir_;
+		mutable std::map<uint64_t, ExportSnapshotBinInfo> distributedExportSnapshotInfos_;
 
 		// helpers
 		void SaveStaticBoundaryBin(

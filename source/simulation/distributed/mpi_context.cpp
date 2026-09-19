@@ -23,6 +23,10 @@
 
 using namespace Dist;
 
+#if MPI_VERSION < 3 || (MPI_VERSION == 3 && MPI_SUBVERSION < 1)
+#error "Distributed snapshots require MPI 3.1 nonblocking collective file I/O."
+#endif
+
 namespace
 {
 	constexpr uint64_t MPI_WAIT_CLOCK_CHECK_INTERVAL = 64;
@@ -48,33 +52,40 @@ namespace
 
 	std::string MpiErrorMessage(
 		const int result,
-		const char* opName,
-		const bool includeErrorString = true)
+		const char* opName)
 	{
-		char errorString[MPI_MAX_ERROR_STRING]{};
-		int errorStringLength = 0;
-		const bool hasErrorString = includeErrorString && MPI_Error_string(
-			result, errorString, &errorStringLength) == MPI_SUCCESS &&
-			errorStringLength > 0;
-
+		// MPI_Error_string is unavailable before initialization succeeds
 		const char* operationName = opName && opName[0] != '\0'
 			? opName
 			: "MPI operation";
-		std::string message = std::string(operationName) + " failed with MPI error code " +
-			std::to_string(result);
-		if (hasErrorString)
-		{
-			message += " (" + std::string(errorString, errorStringLength) + ")";
-		}
-		return message + ".";
+		return std::string(operationName) + " failed with MPI error code " +
+			std::to_string(result) + ".";
 	}
 
 	[[noreturn]] void AbortMpiJob(
-		const std::string& message,
-		const int errorCode)
+		const std::string_view reason,
+		const int errorCode) noexcept
 	{
+		// avoid allocations in the abort path
 		const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
-		std::fprintf(stderr, "%s Aborting MPI job.\n", message.c_str());
+		if (reason.empty())
+		{
+			std::fputs(errorCode == MPI_SUCCESS ? "Application failure" : "MPI operation", stderr);
+		}
+		else { std::fwrite(reason.data(), 1, reason.size(), stderr); }
+		if (errorCode != MPI_SUCCESS)
+		{
+			std::fprintf(stderr, " (MPI error code %d", errorCode);
+			char errorString[MPI_MAX_ERROR_STRING]{};
+			int errorStringLength = 0;
+			if (MPI_Error_string(errorCode, errorString, &errorStringLength) == MPI_SUCCESS &&
+				errorStringLength > 0)
+			{
+				std::fprintf(stderr, ": %.*s", errorStringLength, errorString);
+			}
+			std::fputs(")", stderr);
+		}
+		std::fputs(". Aborting MPI job.\n", stderr);
 		std::fflush(stderr);
 
 		(void)MPI_Abort(MPI_COMM_WORLD, abortErrorCode);
@@ -88,12 +99,11 @@ namespace
 	{
 		if (result == MPI_SUCCESS) { return; }
 
-		const std::string message = MpiErrorMessage(result, opName, abortOnError);
 		if (abortOnError)
 		{
-			AbortMpiJob(message, result);
+			AbortMpiJob(opName ? opName : "MPI operation", result);
 		}
-		throw std::runtime_error(message);
+		throw std::runtime_error(MpiErrorMessage(result, opName));
 	}
 
 	template <typename T, typename MpiOp>
@@ -132,7 +142,7 @@ MpiContext::MpiContext(
 	}
 
 	int alreadyInitialized = 0;
-	// MPI_Abort is not valid until MPI initialization has succeeded.
+	// MPI_Abort requires successful initialization
 	CheckMpiResultImpl(
 		MPI_Initialized(&alreadyInitialized),
 		"MPI_Initialized",
@@ -201,26 +211,12 @@ MpiContext::~MpiContext()
 }
 
 [[noreturn]] void MpiContext::Abort(
-	const char* context,
-	const int errorCode) const
+	const std::string_view reason,
+	const int errorCode) const noexcept
 {
-	const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
-	const std::string message = "[rank " + std::to_string(rank_) + "/" +
-		std::to_string(N_ranks_) + " host=" + processorName_ +
-		" pid=" + std::to_string(processId_) + "] " +
-		MpiErrorMessage(abortErrorCode, context);
-	AbortMpiJob(message, abortErrorCode);
-}
-
-[[noreturn]] void MpiContext::AbortJob(
-	const std::string& reason,
-	const int errorCode) const
-{
-	const int abortErrorCode = errorCode == MPI_SUCCESS ? MPI_ERR_OTHER : errorCode;
-	AbortMpiJob(
-		"[rank " + std::to_string(rank_) + "/" + std::to_string(N_ranks_) +
-			" host=" + processorName_ + " pid=" + std::to_string(processId_) + "] " + reason,
-		abortErrorCode);
+	std::fprintf(stderr, "[rank %d/%d host=%s pid=%lld] ",
+		rank_, N_ranks_, processorName_.c_str(), static_cast<long long>(processId_));
+	AbortMpiJob(reason, errorCode);
 }
 
 void MpiContext::Barrier() const
@@ -270,30 +266,39 @@ void MpiContext::BroadcastFloats(
 		});
 }
 
-void MpiContext::BroadcastString(std::string& value, const int root) const
+void MpiContext::BroadcastString(std::string& value, const int root) const noexcept
 {
-	// broadcast length first, so non-root ranks can resize their receive buffer
-	int N_chars = (rank_ == root) ? static_cast<int>(value.size()) : 0;
-
-	BroadcastInt(N_chars, root);
-	if (N_chars < 0)
+	try
 	{
-		throw std::runtime_error("Invalid negative MPI string broadcast length.");
+		if (rank_ == root && value.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+		{
+			Abort("MPI string broadcast length exceeds int range");
+		}
+
+		// broadcast length first, so non-root ranks can resize their receive buffer
+		int N_chars = (rank_ == root) ? static_cast<int>(value.size()) : 0;
+		BroadcastInt(N_chars, root);
+		if (N_chars < 0) { Abort("Invalid negative MPI string broadcast length"); }
+
+		if (rank_ != root)
+		{
+			value.resize(static_cast<uint64_t>(N_chars));
+		}
+
+		if (N_chars > 0)
+		{
+			MPI_Request request = MPI_REQUEST_NULL;
+			CheckMpiResult(
+				MPI_Ibcast(
+					value.data(), N_chars, MPI_CHAR, root, MPI_COMM_WORLD, &request),
+				"MPI_Ibcast(string)");
+			Wait(&request, 1, "MPI string broadcast", nullptr);
+		}
 	}
-
-	if (rank_ != root)
+	catch (...)
 	{
-		value.resize(static_cast<uint64_t>(N_chars));
-	}
-
-	if (N_chars > 0)
-	{
-		MPI_Request request = MPI_REQUEST_NULL;
-		CheckMpiResult(
-			MPI_Ibcast(
-				value.data(), N_chars, MPI_CHAR, root, MPI_COMM_WORLD, &request),
-			"MPI_Ibcast(string)");
-		Wait(&request, 1, "MPI string broadcast", nullptr);
+		// a failed receive allocation must not leave peers waiting in the broadcast
+		Abort("Failed to broadcast MPI string");
 	}
 }
 
@@ -737,119 +742,227 @@ void MpiContext::ISendBytesChunked(
 void MpiContext::WaitAll(
 	std::vector<MPI_Request>& requests,
 	const char* context,
-	const std::vector<MpiRequestInfo>* requestInfos) const
+	const std::vector<MpiRequestInfo>* requestInfos) const noexcept
 {
 	if (requestInfos && requestInfos->size() != requests.size())
 	{
-		throw std::runtime_error("MPI request diagnostics do not match the request count.");
+		Abort("MPI request diagnostics do not match the request count");
 	}
 	Wait(
 		requests.data(), requests.size(), context,
 		requestInfos ? requestInfos->data() : nullptr);
 }
 
+MPI_File MpiContext::OpenFileForWrite(
+	const std::string& path,
+	const uint64_t N_bytes) const
+{
+	try
+	{
+		if (N_bytes > static_cast<uint64_t>(std::numeric_limits<MPI_Offset>::max()))
+		{
+			Abort("MPI file size exceeds MPI_Offset range");
+		}
+
+		MPI_File file = MPI_FILE_NULL;
+		CheckMpiResult(
+			MPI_File_open(
+				MPI_COMM_WORLD,
+				path.c_str(),
+				MPI_MODE_CREATE | MPI_MODE_WRONLY | MPI_MODE_EXCL,
+				MPI_INFO_NULL,
+				&file),
+			"MPI_File_open");
+		CheckMpiResult(
+			MPI_File_set_errhandler(file, MPI_ERRORS_RETURN),
+			"MPI_File_set_errhandler");
+		CheckMpiResult(
+			MPI_File_set_view(file, 0, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL),
+			"MPI_File_set_view");
+
+		// ranks write disjoint file ranges
+		CheckMpiResult(
+			MPI_File_set_atomicity(file, 0),
+			"MPI_File_set_atomicity");
+
+		return file;
+	}
+	catch (...)
+	{
+		Abort("Exception during collective MPI file open");
+	}
+}
+
+void MpiContext::WriteFileBytesAtAll(
+	MPI_File file,
+	const uint64_t offset,
+	const void* data,
+	const int N_bytes,
+	const char* context) const
+{
+	try
+	{
+		const auto maxOffset = static_cast<uint64_t>(std::numeric_limits<MPI_Offset>::max());
+		if (N_bytes < 0 || offset > maxOffset || static_cast<uint64_t>(N_bytes) > maxOffset - offset)
+		{
+			Abort("MPI file write exceeds offset/count range");
+		}
+
+		MPI_Request request = MPI_REQUEST_NULL;
+		CheckMpiResult(
+			MPI_File_iwrite_at_all(
+				file,
+				static_cast<MPI_Offset>(offset),
+				data,
+				N_bytes,
+				MPI_BYTE,
+				&request),
+			"MPI_File_iwrite_at_all");
+		Wait(&request, 1, context, nullptr);
+
+		int N_written = 0;
+		CheckMpiResult(
+			MPI_Get_count(&waitStatuses_[0], MPI_BYTE, &N_written),
+			"MPI_Get_count(file write)");
+		if (N_written != N_bytes) { Abort("Incomplete collective MPI file write"); }
+	}
+	catch (...)
+	{
+		Abort("Exception during collective MPI file write");
+	}
+}
+
+void MpiContext::CloseFile(MPI_File& file) const
+{
+	try
+	{
+		CheckMpiResult(MPI_File_sync(file), "MPI_File_sync");
+		CheckMpiResult(MPI_File_close(&file), "MPI_File_close");
+	}
+	catch (...)
+	{
+		Abort("Exception during collective MPI file close");
+	}
+}
+
 void MpiContext::Wait(
 	MPI_Request* requests,
 	const uint64_t N_requests,
 	const char* context,
-	const MpiRequestInfo* requestInfos) const
+	const MpiRequestInfo* requestInfos) const noexcept
 {
 	if (N_requests == 0) { return; }
 	if (N_requests > static_cast<uint64_t>(std::numeric_limits<int>::max()))
 	{
-		throw std::runtime_error("MPI request count exceeds int range.");
+		Abort("MPI request count exceeds int range");
 	}
 
-	const std::string opName = context && context[0] != '\0'
-		? std::string(context)
+	const char* opName = context && context[0] != '\0'
+		? context
 		: "MPI request completion";
-	waitStatuses_.resize(N_requests);
-	const auto waitStart = std::chrono::steady_clock::now();
-	bool warningPrinted = false;
-	uint64_t N_polls = 0;
-
-	while (true)
+	try
 	{
-		int complete = 0;
-		const int result = MPI_Testall(
-			static_cast<int>(N_requests),
-			requests,
-			&complete,
-			waitStatuses_.data());
-		if (result != MPI_SUCCESS)
+		waitStatuses_.resize(N_requests);
+		const auto waitStart = std::chrono::steady_clock::now();
+		bool warningPrinted = false;
+		uint64_t N_polls = 0;
+
+		while (true)
 		{
-			if (result == MPI_ERR_IN_STATUS)
+			int complete = 0;
+			const int result = MPI_Testall(
+				static_cast<int>(N_requests),
+				requests,
+				&complete,
+				waitStatuses_.data());
+			if (result != MPI_SUCCESS)
 			{
+				if (result == MPI_ERR_IN_STATUS)
+				{
+					for (uint64_t requestIdx = 0; requestIdx != N_requests; requestIdx++)
+					{
+						const int requestError = waitStatuses_[requestIdx].MPI_ERROR;
+						if (requestError == MPI_SUCCESS || requestError == MPI_ERR_PENDING) { continue; }
+
+						std::fprintf(
+							stderr,
+							"[rank %d/%d host=%s pid=%lld] MPI request %llu failed: %s.\n",
+							rank_, N_ranks_, processorName_.c_str(),
+							static_cast<long long>(processId_),
+							static_cast<unsigned long long>(requestIdx), opName);
+						Abort(opName, requestError);
+					}
+				}
+				Abort(opName, result);
+			}
+			if (complete) { return; }
+			N_polls += 1;
+			if (N_polls % MPI_WAIT_CLOCK_CHECK_INTERVAL != 0) { continue; }
+
+			const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - waitStart);
+			if (!warningPrinted && elapsed >= waitConfig_.warningTimeout)
+			{
+				warningPrinted = true;
+				std::fprintf(
+					stderr,
+					"[rank %d/%d host=%s pid=%lld] MPI wait is still pending after %lld ms: %s.\n",
+					rank_, N_ranks_, processorName_.c_str(),
+					static_cast<long long>(processId_),
+					static_cast<long long>(elapsed.count()), opName);
+
 				for (uint64_t requestIdx = 0; requestIdx != N_requests; requestIdx++)
 				{
-					const int requestError = waitStatuses_[requestIdx].MPI_ERROR;
-					if (requestError == MPI_SUCCESS || requestError == MPI_ERR_PENDING) { continue; }
+					if (requests[requestIdx] == MPI_REQUEST_NULL) { continue; }
+					int requestComplete = 0;
+					MPI_Status status{};
+					CheckMpiResult(
+						MPI_Request_get_status(requests[requestIdx], &requestComplete, &status),
+						"MPI_Request_get_status");
+					if (requestComplete) { continue; }
 
-					const std::string requestOpName = opName + " request " +
-						std::to_string(requestIdx);
-					Abort(requestOpName.c_str(), requestError);
+					if (requestInfos)
+					{
+						const MpiRequestInfo& info = requestInfos[requestIdx];
+						std::fprintf(
+							stderr,
+							"[rank %d/%d host=%s pid=%lld] Pending MPI request %llu: direction=%s peer=%d tag=%d bytes=%llu.\n",
+							rank_, N_ranks_, processorName_.c_str(),
+							static_cast<long long>(processId_),
+							static_cast<unsigned long long>(requestIdx),
+							info.direction == MpiRequestDirection::Receive ? "receive" : "send",
+							info.peerRank, info.tag,
+							static_cast<unsigned long long>(info.N_bytes));
+					}
+					else
+					{
+						std::fprintf(
+							stderr,
+							"[rank %d/%d host=%s pid=%lld] Pending MPI request %llu.\n",
+							rank_, N_ranks_, processorName_.c_str(),
+							static_cast<long long>(processId_),
+							static_cast<unsigned long long>(requestIdx));
+					}
 				}
+				std::fflush(stderr);
 			}
-			Abort(opName.c_str(), result);
-		}
-		if (complete) { return; }
-		N_polls += 1;
-		if (N_polls % MPI_WAIT_CLOCK_CHECK_INTERVAL != 0) { continue; }
 
-		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::steady_clock::now() - waitStart);
-		if (!warningPrinted && elapsed >= waitConfig_.warningTimeout)
-		{
-			warningPrinted = true;
-			std::fprintf(
-				stderr,
-				"[rank %d/%d host=%s pid=%lld] MPI wait is still pending after %lld ms: %s.\n",
-				rank_, N_ranks_, processorName_.c_str(),
-				static_cast<long long>(processId_),
-				static_cast<long long>(elapsed.count()), opName.c_str());
-
-			for (uint64_t requestIdx = 0; requestIdx != N_requests; requestIdx++)
+			if (elapsed >= waitConfig_.abortTimeout)
 			{
-				if (requests[requestIdx] == MPI_REQUEST_NULL) { continue; }
-				int requestComplete = 0;
-				MPI_Status status{};
-				CheckMpiResult(
-					MPI_Request_get_status(requests[requestIdx], &requestComplete, &status),
-					"MPI_Request_get_status");
-				if (requestComplete) { continue; }
-
-				if (requestInfos)
-				{
-					const MpiRequestInfo& info = requestInfos[requestIdx];
-					std::fprintf(
-						stderr,
-						"[rank %d/%d host=%s pid=%lld] Pending MPI request %llu: direction=%s peer=%d tag=%d bytes=%llu.\n",
-						rank_, N_ranks_, processorName_.c_str(),
-						static_cast<long long>(processId_),
-						static_cast<unsigned long long>(requestIdx),
-						info.direction == MpiRequestDirection::Receive ? "receive" : "send",
-						info.peerRank, info.tag,
-						static_cast<unsigned long long>(info.N_bytes));
-				}
-				else
-				{
-					std::fprintf(
-						stderr,
-						"[rank %d/%d host=%s pid=%lld] Pending MPI request %llu.\n",
-						rank_, N_ranks_, processorName_.c_str(),
-						static_cast<long long>(processId_),
-						static_cast<unsigned long long>(requestIdx));
-				}
+				std::fprintf(
+					stderr,
+					"[rank %d/%d host=%s pid=%lld] MPI wait timed out after %lld ms: %s.\n",
+					rank_, N_ranks_, processorName_.c_str(),
+					static_cast<long long>(processId_),
+					static_cast<long long>(elapsed.count()), opName);
+				Abort("MPI wait timed out");
 			}
-			std::fflush(stderr);
 		}
-
-		if (elapsed >= waitConfig_.abortTimeout)
-		{
-			AbortJob(
-				"MPI wait timed out after " + std::to_string(elapsed.count()) +
-				" ms: " + opName + ".");
-		}
+	}
+	catch (...)
+	{
+		// requests are already active, so failure must abort the job
+		Abort("Failed while waiting for MPI requests");
 	}
 }
 

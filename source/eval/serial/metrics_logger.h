@@ -33,7 +33,7 @@ namespace Export
 		std::filesystem::path exportBaseDir = "exports";
 	#endif
 
-		// disabled on non-root ranks, which write no export snapshots
+		// distributed runs copy metadata explicitly after reserving their export directory
 		bool writeRunMetaToExportDir = true;
 
 		// rank directory below the run directory, empty for non-distributed runs
@@ -74,6 +74,8 @@ namespace Export
 
 		const std::filesystem::path& GetRunDir() const { return runDir_; }
 
+		void CopyRunMetaToExportDir(const std::string& exportDir) const;
+
 	private:
 
 		LoggingOptions loggingOptions_;
@@ -84,6 +86,7 @@ namespace Export
 		std::ofstream benchmarkMetricsCsv_{};
 
 		bool active_ = false;
+		bool runMetaWritten_ = false;
 
 		bool CreateRunDirectory(uint64_t runIdx);
 		bool OpenBenchmarkMetricsCsv();

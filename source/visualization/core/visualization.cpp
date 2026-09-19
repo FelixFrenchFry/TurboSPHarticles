@@ -115,6 +115,7 @@ void VisualizationMgr::Init(const WindowConfig& windowConfig)
 	glfwSetWindowSizeCallback(window_, &VisualizationMgr::GLFW_WindowSizeCB);
 	glfwSetWindowContentScaleCallback(window_, &VisualizationMgr::GLFW_WindowContentScaleCB);
 	glfwSetKeyCallback(window_, &VisualizationMgr::GLFW_KeyCB);
+	glfwSetCharCallback(window_, &VisualizationMgr::GLFW_CharCB);
 	glfwSetMouseButtonCallback(window_, &VisualizationMgr::GLFW_MouseButtonCB);
 	glfwSetCursorPosCallback(window_, &VisualizationMgr::GLFW_CursorPosCB);
 	glfwSetScrollCallback(window_, &VisualizationMgr::GLFW_ScrollCB);
@@ -233,6 +234,14 @@ void VisualizationMgr::GLFW_KeyCB(GLFWwindow* window, int key, int scancode, int
 	}
 }
 
+void VisualizationMgr::GLFW_CharCB(GLFWwindow* window, unsigned int codepoint)
+{
+	if (auto* self = static_cast<VisualizationMgr*>(glfwGetWindowUserPointer(window)))
+	{
+		self->OnChar(codepoint);
+	}
+}
+
 void VisualizationMgr::GLFW_MouseButtonCB(GLFWwindow* window, int button, int action, int mods)
 {
 	if (auto* self = static_cast<VisualizationMgr*>(glfwGetWindowUserPointer(window)))
@@ -305,6 +314,11 @@ void VisualizationMgr::OnKey(int key, int scancode, int action, int mods)
 		userInputMgr_.OnKey(simParams_, visParams_.camera, visParams_.render,
 			key, scancode, action, mods);
 	}
+}
+
+void VisualizationMgr::OnChar(unsigned int codepoint)
+{
+	userInterfaceMgr_.OnChar(codepoint);
 }
 
 // pressed mouse buttons processed by user interface first
