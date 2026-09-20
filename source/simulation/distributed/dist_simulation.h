@@ -95,6 +95,9 @@ namespace Dist
 		// [ rank-reduced ] profiles a coarse probe scenario state to balance the initial domain decomposition
 		bool BuildInitialDomainDecomp();
 
+		// [ rank-reduced ] combines startup profiles and applies the selected repartition strategy
+		void ApplyInitialDomainDecompProfile(DomainDecompRepartitionProfile& profile);
+
 		// [ rank-reduced ] selects load metric and trigger policies for the current domain decomp
 		bool ConfigureLoadBalancing();
 
@@ -125,10 +128,10 @@ namespace Dist
 		// [ rank-reduced ] retires the backend and optionally saves a distributed checkpoint
 		bool WriteFinalState(const Sim::SimParams& params, bool enabled);
 
-		// [ rank-reduced ] writes owned rank states, then publishes the completion manifest
+		// [ rank-reduced ] writes shared simulation state, then publishes the completion manifest
 		bool SaveCheckpoint(const Sim::SimParams& params);
 
-		// [ rank-reduced ] restores owned rank states and the saved domain decomposition
+		// [ rank-reduced ] loads particles owned by the currently selected domain decomposition
 		bool LoadCheckpoint(const std::string& manifestPath);
 
 		// [ rank-reduced ] rebuilds the regular CPU fluid surface selection from authoritative rank data

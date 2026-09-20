@@ -28,7 +28,7 @@ namespace Trace
 			int mpiRank = 0);
 		void EndRun();
 
-		bool IsActive() const { return active_; }
+		bool IsActive() const { return logger_ != nullptr; }
 		void BeginStep(uint64_t simStep, double simTime);
 		void Mark(TraceStage stage);
 
@@ -44,7 +44,6 @@ namespace Trace
 		uint64_t simStep_ = 0;
 		double simTime_ = 0.0;
 		Clock::time_point stepStart_{};
-		bool active_ = false;
 
 		void Disable();
 		void WriteMarker(TraceStage stage);

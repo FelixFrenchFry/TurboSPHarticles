@@ -1263,6 +1263,12 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
+	ApplyInitialDomainDecompProfile(profile);
+	return true;
+}
+
+void DistSimulationMgr::ApplyInitialDomainDecompProfile(DomainDecompRepartitionProfile& profile)
+{
 	try
 	{
 		mpiContext_.AllReduceSumUint64s(profile.ownedFluidByUnit);
@@ -1297,8 +1303,6 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 		mpiContext_.Abort(
 			"Failed to apply initial domain decomp profile: unknown error.");
 	}
-
-	return mpiContext_.AllTrue(localOk);
 }
 
 bool DistSimulationMgr::ConfigureLoadBalancing()

@@ -4,14 +4,18 @@
 // external
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <glm/vec3.hpp>
 #include <map>
 #include <mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 // internal
 #include "snapshot_format.h"
+#include "state_format.h"
 #include "source/simulation/sync/snapshots.h"
 #include "source/simulation/sync/state_sim.h"
 
@@ -36,6 +40,14 @@ namespace Export
 		std::filesystem::path writePath;
 	};
 
+	// position spans are valid only for the duration of the scan callback
+	struct SimStatePositionView
+	{
+		std::span<const float> x;
+		std::span<const float> y;
+		std::span<const float> z;
+	};
+
 	class SerializationMgr
 	{
 	public:
@@ -54,6 +66,20 @@ namespace Export
 		// (relative paths are resolved below SaveOptions::baseDir)
 		void LoadUniversalSimState(Sync::UniversalSimState& state,
 			const std::string& path) const;
+
+		// scans one disjoint file partition in bounded position blocks, boundary identifies the particle type
+		BinHeaderSim VisitSimStatePositions(
+			const std::string& path,
+			int partIdx,
+			int N_parts,
+			const std::function<void(bool boundary, const SimStatePositionView&)>& visit) const;
+
+		// reads positions first, then selected fluid/boundary fields and all rigid state
+		// returned header counts describe the global file
+		BinHeaderSim LoadSelectedSimState(
+			Sync::UniversalSimState& state,
+			const std::string& path,
+			const std::function<bool(const glm::vec3&)>& select) const;
 
 		// serialization of a subset of the simulation state and metadata into separate files
 		void SaveExportSnapshot(

@@ -67,8 +67,6 @@ namespace Dist
 
 		virtual const char* Name() const = 0;
 		virtual void Build(const DomainDecompInput& input) = 0;
-		// restores checkpoint subdomains in rank order, including any load balancing
-		virtual void Restore(const DomainDecompInput& input, std::span<const AABB> ownedBounds);
 		virtual const AABB& GlobalExtentAABB() const = 0;
 
 		// owner query used for migration and local classification

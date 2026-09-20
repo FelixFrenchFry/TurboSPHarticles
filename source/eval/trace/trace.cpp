@@ -46,7 +46,6 @@ namespace Trace
 			simStep_ = 0;
 			simTime_ = 0.0;
 			stepStart_ = Clock::now();
-			active_ = true;
 		}
 		catch (const std::exception& ex)
 		{
@@ -93,7 +92,7 @@ namespace Trace
 		const uint64_t simStep,
 		const double simTime)
 	{
-		if (!active_ || !logger_) { return; }
+		if (!logger_) { return; }
 
 		simStep_ = simStep;
 		simTime_ = simTime;
@@ -115,12 +114,11 @@ namespace Trace
 		simStep_ = 0;
 		simTime_ = 0.0;
 		stepStart_ = {};
-		active_ = false;
 	}
 
 	void TraceRecorder::WriteMarker(const TraceStage stage)
 	{
-		if (!active_ || !logger_) { return; }
+		if (!logger_) { return; }
 
 		const uint8_t stageIdx = GetIdx(stage);
 		if (stageIdx >= GetIdx(TraceStage::Count))

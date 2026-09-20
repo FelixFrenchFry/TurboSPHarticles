@@ -20,7 +20,7 @@ namespace Export
 		return mode == CheckpointMode::Single ? "single" : "distributed";
 	}
 
-	static nlohmann::json GetCheckpointComparisonParams(nlohmann::json params)
+	static nlohmann::json GetCheckpointComparisonParams(nlohmann::json params, const CheckpointMode mode)
 	{
 		if (!params.is_object()) { throw std::runtime_error("Invalid checkpoint parameters."); }
 
@@ -37,6 +37,17 @@ namespace Export
 			"surfaceSamplingSeed" })
 		{
 			params.erase(key);
+		}
+		if (mode == CheckpointMode::Distributed)
+		{
+			// a shared checkpoint is assigned to a new layout with fresh balancing history
+			for (const char* key : { "domainDecompMethod", "distHaloMode", "distHaloRadius",
+				"loadBalanceMetric", "loadBalanceTrigger", "loadBalanceWeightModel",
+				"loadBalanceThreshold", "loadBalanceSustainSteps", "loadBalanceCooldownSteps",
+				"loadBalanceIntervalSteps" })
+			{
+				params.erase(key);
+			}
 		}
 		return params;
 	}
@@ -123,7 +134,7 @@ namespace Export
 
 		nlohmann::json manifest = nlohmann::json::object();
 		manifest["format"] = "TSPCheckpoint";
-		manifest["version"] = 1;
+		manifest["version"] = 2;
 		manifest["mode"] = GetCheckpointModeName(mode);
 		manifest["stateFormat"] = "TSPSIM-64";
 		manifest["step"] = step;
@@ -136,7 +147,8 @@ namespace Export
 	nlohmann::json ParseCheckpointManifest(const std::string& text)
 	{
 		auto manifest = nlohmann::json::parse(text);
-		if (manifest.at("format") != "TSPCheckpoint" || manifest.at("version") != 1 ||
+		if (manifest.at("format") != "TSPCheckpoint" ||
+			manifest.at("version") != 2 ||
 			manifest.at("stateFormat") != "TSPSIM-64")
 		{
 			throw std::runtime_error("Unsupported checkpoint format.");
@@ -157,8 +169,8 @@ namespace Export
 		{
 			throw std::runtime_error("Checkpoint contains no state files.");
 		}
-		const auto savedParams = GetCheckpointComparisonParams(manifest.at("params"));
-		const auto currentParams = GetCheckpointComparisonParams(Sim::ToJson(params));
+		const auto savedParams = GetCheckpointComparisonParams(manifest.at("params"), mode);
+		const auto currentParams = GetCheckpointComparisonParams(Sim::ToJson(params), mode);
 		if (savedParams != currentParams)
 		{
 			std::string message = "Checkpoint physics, solver, or decomposition parameters differ from this run.";

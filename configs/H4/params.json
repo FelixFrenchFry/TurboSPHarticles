@@ -57,7 +57,7 @@
   },
 
   "exportEnabled": true,
-  "saveFinalState": false,
+  "saveFinalState": true,
   "exportDir": "H4",
   "exportInterval": 20,
   "surfaceNbrCountRatio": 0.75

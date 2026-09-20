@@ -1,6 +1,9 @@
 // dist_checkpoint.cpp
 
 // external
+#include <algorithm>
+#include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -10,12 +13,12 @@
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <utility>
 #include <vector>
 
 // internal
 #include "source/eval/serial/checkpoint.h"
+#include "dist_checkpoint.h"
 #include "dist_helpers.h"
 #include "dist_simulation.h"
 
@@ -25,15 +28,6 @@ using namespace Dist;
 
 namespace
 {
-	// packed rank metadata
-	// (fluid, boundary, and rigid particle counts, rigid body count, then file size)
-	constexpr size_t N_rankInfoFields = 5;
-
-	std::string CheckpointRankFileName(const int rank)
-	{
-		return "rank_" + std::to_string(rank) + ".bin";
-	}
-
 	nlohmann::json CheckpointBoundsToJson(const AABB& bounds)
 	{
 		return Export::CheckpointBoundsToJson(bounds.min, bounds.max);
@@ -53,39 +47,211 @@ namespace
 		state.Clear();
 		state.N_owned = N_owned;
 
-		// mark all restored particles for routing, including those that crossed a subdomain wall
+		// mark all restored particles for startup routing and halo construction
 		state.particleClasses.assign(N_owned, DistParticleClass::Outer);
 		state.particleLocalIdx_Owned.resize(N_owned);
 		std::iota(state.particleLocalIdx_Owned.begin(), state.particleLocalIdx_Owned.end(), 0u);
 		state.particleLocalIdx_Outer = state.particleLocalIdx_Owned;
 	}
 
-	RebalanceTriggerState CheckpointTriggerStateFromJson(const nlohmann::json& value)
-	{
-		const uint64_t badStepCount = Export::CheckpointUint64(value.at("badStepCount"));
-		const uint64_t cooldownRemaining = Export::CheckpointUint64(value.at("cooldownRemaining"));
-		if (badStepCount > std::numeric_limits<uint32_t>::max() ||
-			cooldownRemaining > std::numeric_limits<uint32_t>::max())
-		{
-			throw std::runtime_error("Checkpoint load balance counters exceed the 32-bit limit.");
-		}
-		return { static_cast<uint32_t>(badStepCount), static_cast<uint32_t>(cooldownRemaining) };
-	}
-
 } // namespace anonymous
+
+void Dist::BuildCheckpointRepartitionProfile(
+	const Export::SerializationMgr& serializationMgr,
+	const std::string& path,
+	const IDomainDecomp& domainDecomp,
+	const Base::LoadBalanceWeightModel weightModel,
+	const int rank,
+	const int N_ranks,
+	DomainDecompRepartitionProfile& profile)
+{
+	DomainDecompRepartitionParticleInput input{};
+	input.weightModel = weightModel;
+	input.rank = rank;
+
+	// initialize the strategy's profile dimensions even when this rank has no particles
+	domainDecomp.BuildRepartitionProfile(input, profile);
+	DomainDecompRepartitionProfile chunkProfile{};
+	std::vector<uint32_t> localIdxs;
+	const auto AccumulatePositions = [&](const bool boundary, const Export::SimStatePositionView& positions)
+	{
+		localIdxs.resize(positions.x.size());
+		std::iota(localIdxs.begin(), localIdxs.end(), 0u);
+		input.fluid = {};
+		input.boundary = {};
+		auto& particleInput = boundary ? input.boundary : input.fluid;
+		particleInput = { positions.x, positions.y, positions.z, localIdxs };
+		domainDecomp.BuildRepartitionProfile(input, chunkProfile);
+		const auto AccumulateCounts = [](auto& total, const auto& chunk)
+		{
+			if (total.size() != chunk.size())
+			{
+				throw std::runtime_error("Checkpoint profile dimensions changed.");
+			}
+			for (size_t i = 0; i < total.size(); i++)
+			{
+				total[i] = Sim::CheckedParticleAdd(total[i], chunk[i], "checkpoint profile");
+			}
+		};
+		AccumulateCounts(profile.ownedFluidByUnit, chunkProfile.ownedFluidByUnit);
+		AccumulateCounts(profile.ownedBoundaryByUnit, chunkProfile.ownedBoundaryByUnit);
+	};
+	serializationMgr.VisitSimStatePositions(path, rank, N_ranks, AccumulatePositions);
+}
+
+Export::BinHeaderSim Dist::SaveDistributedCheckpointState(
+	const Sync::UniversalSimState& state,
+	const std::string& path,
+	const MpiContext& mpiContext)
+{
+	try
+	{
+		// packed rank metadata: F/B/R/RB counts, step, then exact time bits
+		constexpr size_t N_rankInfoFields = 6;
+		std::vector<uint64_t> rankInfo(static_cast<size_t>(mpiContext.Size()) * N_rankInfoFields, 0);
+		const size_t localOffset = static_cast<size_t>(mpiContext.Rank()) * N_rankInfoFields;
+		rankInfo[localOffset] = state.particlesF.N_;
+		rankInfo[localOffset + 1] = state.particlesB.N_;
+		rankInfo[localOffset + 2] = state.particlesR.N_;
+		rankInfo[localOffset + 3] = state.rigidBodies.N_;
+		rankInfo[localOffset + 4] = state.step;
+		rankInfo[localOffset + 5] = std::bit_cast<uint64_t>(state.time);
+		mpiContext.AllReduceSumUint64s(rankInfo);
+
+		// compute global counts and this rank's particle ranges
+		uint64_t N_totalF = 0;
+		uint64_t N_totalB = 0;
+		uint64_t beginIdxF = 0;
+		uint64_t beginIdxB = 0;
+		uint64_t N_maxF = 0;
+		uint64_t N_maxB = 0;
+		for (int rank = 0; rank < mpiContext.Size(); rank++)
+		{
+			const size_t offset = static_cast<size_t>(rank) * N_rankInfoFields;
+			if (rankInfo[offset + 2] != state.particlesR.N_ || rankInfo[offset + 3] != state.rigidBodies.N_ ||
+				rankInfo[offset + 4] != state.step || rankInfo[offset + 5] != std::bit_cast<uint64_t>(state.time))
+			{
+				throw std::runtime_error("Checkpoint ranks disagree on rigid counts or step/time.");
+			}
+			Sim::CheckedLocalParticleCount(rankInfo[offset], "checkpoint fluid count");
+			Sim::CheckedLocalParticleCount(rankInfo[offset + 1], "checkpoint boundary count");
+			if (rank == mpiContext.Rank())
+			{
+				beginIdxF = N_totalF;
+				beginIdxB = N_totalB;
+			}
+			N_totalF += rankInfo[offset];
+			N_totalB += rankInfo[offset + 1];
+			N_maxF = std::max(N_maxF, rankInfo[offset]);
+			N_maxB = std::max(N_maxB, rankInfo[offset + 1]);
+		}
+
+		// use the same field order for array validation and collective writes
+		const auto VisitFluidFields = [](auto visit, auto& particles) { Export::VisitFluidStateFields(visit, particles); };
+		const auto VisitBoundaryFields = [](auto visit, auto& particles) { Export::VisitBoundaryStateFields(visit, particles); };
+		const auto VisitRigidFields = [](auto visit, auto& particles) { Export::VisitRigidStateFields(visit, particles); };
+		const auto VisitBodyFields = [](auto visit, auto& bodies) { Export::VisitRigidBodyStateFields(visit, bodies); };
+		const auto ValidateArrays = [](const auto& particles, auto visitFields)
+		{
+			const auto ValidateField = [&](const auto& field)
+			{
+				if (field.size() != particles.N_)
+				{
+					throw std::runtime_error("Invalid checkpoint array size.");
+				}
+			};
+			visitFields(ValidateField, particles);
+		};
+		ValidateArrays(state.particlesF, VisitFluidFields);
+		ValidateArrays(state.particlesB, VisitBoundaryFields);
+		ValidateArrays(state.particlesR, VisitRigidFields);
+		ValidateArrays(state.rigidBodies, VisitBodyFields);
+
+		Sim::CheckedLocalParticleCount(state.particlesR.N_, "checkpoint rigid count");
+		for (const auto* ids : { &state.particlesF.id, &state.particlesB.id, &state.particlesR.id })
+		{
+			if (std::find(ids->begin(), ids->end(), Sim::INVALID_PARTICLE_ID) != ids->end())
+			{
+				throw std::runtime_error("Checkpoint contains an invalid particle ID.");
+			}
+		}
+		state.ValidateRigidAttachments();
+		if (!std::isfinite(state.time) || state.time < 0 || state.step == std::numeric_limits<uint64_t>::max())
+		{
+			throw std::runtime_error("Invalid checkpoint step/time.");
+		}
+
+		// root writes the header, all ranks participate in the collective call
+		const auto header = Export::MakeSimStateHeader(state.step, state.time, N_totalF, N_totalB,
+			state.particlesR.N_, state.rigidBodies.N_);
+		const auto off = Export::ComputeSimStateOffsets(header);
+		MPI_File file = mpiContext.OpenFileForWrite(path, off.totalBytes);
+		mpiContext.WriteFileBytesAtAll(
+			file,
+			0,
+			&header,
+			mpiContext.IsRoot() ? static_cast<int>(sizeof(header)) : 0,
+			"Checkpoint header write");
+
+		// empty ranks participate in every chunk write
+		const char dummy = 0;
+		const auto WritePopulation = [&](
+			const auto& particles,
+			uint64_t offset,
+			const uint64_t N_total,
+			const uint64_t beginIdx,
+			const uint64_t N_max,
+			const bool writeLocal,
+			auto visitFields)
+		{
+			const auto WriteField = [&](const auto& field)
+			{
+				const uint64_t valueBytes = sizeof(field[0]);
+				const uint64_t N_bytes = writeLocal ? field.size() * valueBytes : 0;
+				for (uint64_t byteOffset = 0; byteOffset < N_max * valueBytes; byteOffset += MPI_CONTEXT_BYTE_CHUNK_SIZE)
+				{
+					const uint64_t N_chunkBytes = byteOffset < N_bytes
+						? std::min(MPI_CONTEXT_BYTE_CHUNK_SIZE, N_bytes - byteOffset) : 0;
+					mpiContext.WriteFileBytesAtAll(
+						file,
+						N_chunkBytes ? offset + beginIdx * valueBytes + byteOffset : 0,
+						N_chunkBytes ? reinterpret_cast<const char*>(field.data()) + byteOffset : &dummy,
+						static_cast<int>(N_chunkBytes),
+						"Checkpoint field write");
+				}
+				offset += N_total * valueBytes;
+			};
+			visitFields(WriteField, particles);
+		};
+		WritePopulation(state.particlesF, off.fluid, N_totalF, beginIdxF, N_maxF, true, VisitFluidFields);
+		WritePopulation(state.particlesB, off.boundary, N_totalB, beginIdxB, N_maxB, true, VisitBoundaryFields);
+
+		// rigid particles and bodies are replicated, only root contributes their state
+		WritePopulation(state.particlesR, off.rigid, header.N_R, 0, header.N_R, mpiContext.IsRoot(), VisitRigidFields);
+		WritePopulation(state.rigidBodies, off.rigidBodies, header.N_RB, 0, header.N_RB, mpiContext.IsRoot(), VisitBodyFields);
+
+		mpiContext.CloseFile(file);
+		// every rank must close the file before root checks its size and publishes it
+		mpiContext.Barrier();
+		return header;
+	}
+	catch (...)
+	{
+		mpiContext.Abort("Failed during collective checkpoint state output");
+	}
+}
 
 bool DistSimulationMgr::SaveCheckpoint(
 	const Sim::SimParams& params)
 {
 	bool localOk = true;
 	std::string directory{};
-	std::vector<uint64_t> rankInfo{};
+	std::string writePath{};
 
-	// validate owned particles and allocate the rank metadata buffer
+	// validate owned particles before creating checkpoint files
 	try
 	{
 		localOk = ValidateRankLocalSimState(true);
-		rankInfo.resize(static_cast<size_t>(mpiContext_.Size()) * N_rankInfoFields, 0);
 	}
 	catch (const std::exception& ex)
 	{
@@ -115,84 +281,58 @@ bool DistSimulationMgr::SaveCheckpoint(
 
 	try
 	{
-		// remove halos from the validated [ owned ][ halo ] state and write this rank's file
+		// the validated state stores [ owned ][ halo ], halos are rebuilt on restart
 		localSimState_.particlesF.resizeAll(particleStateF_.N_owned);
 		localSimState_.particlesB.resizeAll(particleStateB_.N_owned);
-		const auto path = std::filesystem::path(directory) / CheckpointRankFileName(mpiContext_.Rank());
-		serializationMgr_.SaveUniversalSimState(localSimState_, path.string());
-
-		const size_t offset = static_cast<size_t>(mpiContext_.Rank()) * N_rankInfoFields;
-		rankInfo[offset] = localSimState_.particlesF.N_;
-		rankInfo[offset + 1] = localSimState_.particlesB.N_;
-		rankInfo[offset + 2] = localSimState_.particlesR.N_;
-		rankInfo[offset + 3] = localSimState_.rigidBodies.N_;
-		rankInfo[offset + 4] = std::filesystem::file_size(path);
+		localSimState_.step = simStep_;
+		localSimState_.time = simTime_;
+		writePath = (std::filesystem::path(directory) / "state.bin.tmp").string();
 	}
 	catch (const std::exception& ex)
 	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to write checkpoint rank file: {}",
+		SPDLOG_ERROR("[rank {}/{}] Failed to prepare shared checkpoint state: {}",
 			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
 		localOk = false;
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
+	const auto header = SaveDistributedCheckpointState(localSimState_, writePath, mpiContext_);
 
-	// collect file sizes and particle counts after every rank file has finished writing
-	mpiContext_.AllReduceSumUint64s(rankInfo);
-
-	// publish the common manifest with the saved domain decomposition
+	// every rank has closed the shared file, publish the manifest last
 	if (mpiContext_.IsRoot())
 	{
 		try
 		{
+			const uint64_t N_bytes = Export::ComputeSimStateOffsets(header).totalBytes;
+			const auto statePath = std::filesystem::path(directory) / "state.bin";
+			if (std::filesystem::exists(statePath) || std::filesystem::file_size(writePath) != N_bytes)
+			{
+				throw std::runtime_error("Cannot publish incomplete or existing checkpoint state.");
+			}
+			std::filesystem::rename(writePath, statePath);
 			auto manifest = Export::MakeCheckpointManifest(
 				Export::CheckpointMode::Distributed, simStep_, simTime_, params);
-			manifest["rankCount"] = mpiContext_.Size();
 			manifest["globalFluidCount"] = N_expectedGlobalF_;
 			manifest["globalBoundaryCount"] = N_expectedGlobalB_;
 			manifest["fluidIdChecksum"] = expectedOwnedIdChecksumF_;
 			manifest["boundaryIdChecksum"] = expectedOwnedIdChecksumB_;
 			manifest["globalBounds"] = CheckpointBoundsToJson(domainDecomp_->GlobalExtentAABB());
 
-			// save root's trigger history alongside the current subdomain boundaries
-			const auto triggerState = loadBalanceMgr_.GetTriggerState();
-			manifest["loadBalanceState"]["badStepCount"] = triggerState.badStepCount;
-			manifest["loadBalanceState"]["cooldownRemaining"] = triggerState.cooldownRemaining;
+			nlohmann::json fileInfo = nlohmann::json::object();
+			fileInfo["file"] = "state.bin";
+			fileInfo["fluidCount"] = header.N_F;
+			fileInfo["boundaryCount"] = header.N_B;
+			fileInfo["rigidCount"] = header.N_R;
+			fileInfo["bodyCount"] = header.N_RB;
+			fileInfo["bytes"] = N_bytes;
+			manifest["files"].push_back(std::move(fileInfo));
 
-			for (int rank = 0; rank < mpiContext_.Size(); rank++)
-			{
-				const size_t offset = static_cast<size_t>(rank) * N_rankInfoFields;
-				const auto path = std::filesystem::path(directory) / CheckpointRankFileName(rank);
-				std::error_code error{};
-				const auto fileSize = std::filesystem::file_size(path, error);
-				if (error || fileSize != rankInfo[offset + 4])
-				{
-					throw std::runtime_error("Checkpoint rank file '" + path.string() +
-						"' is missing, inaccessible, or has a different size on root. "
-						"Distributed checkpoints require a shared output directory.");
-				}
-				if (rankInfo[offset + 2] != localSimState_.particlesR.N_ ||
-					rankInfo[offset + 3] != localSimState_.rigidBodies.N_)
-				{
-					throw std::runtime_error("Checkpoint rigid counts differ across ranks.");
-				}
-
-				nlohmann::json fileInfo = nlohmann::json::object();
-				fileInfo["file"] = CheckpointRankFileName(rank);
-				fileInfo["fluidCount"] = rankInfo[offset];
-				fileInfo["boundaryCount"] = rankInfo[offset + 1];
-				fileInfo["rigidCount"] = rankInfo[offset + 2];
-				fileInfo["bodyCount"] = rankInfo[offset + 3];
-				fileInfo["bytes"] = rankInfo[offset + 4];
-				fileInfo["ownedBounds"] = CheckpointBoundsToJson(domainDecomp_->OwnedExtentAABB(rank));
-				manifest["files"].push_back(std::move(fileInfo));
-			}
 			Export::PublishCheckpointManifest(directory, manifest);
 			SPDLOG_INFO("Saved distributed checkpoint '{}'",
 				(std::filesystem::path(directory) / "manifest.json").string());
 		}
 		catch (const std::exception& ex)
 		{
-			SPDLOG_ERROR("Failed to publish distributed checkpoint manifest: {}", ex.what());
+			SPDLOG_ERROR("Failed to publish distributed checkpoint: {}", ex.what());
 			localOk = false;
 		}
 	}
@@ -225,32 +365,18 @@ bool DistSimulationMgr::LoadCheckpoint(
 	mpiContext_.BroadcastString(directory, mpiContext_.RootRank());
 	mpiContext_.BroadcastString(manifestText, mpiContext_.RootRank());
 
+	nlohmann::json manifest;
+	Export::CheckpointInfo info{};
+	DomainDecompInput input{};
+	std::filesystem::path statePath;
+	DomainDecompRepartitionProfile profile{};
+
 	try
 	{
-		// check restart settings and the saved rank layout
-		const auto manifest = Export::ParseCheckpointManifest(manifestText);
-		const auto info = Export::ValidateCheckpointManifest(
+		// validate the manifest and restore global simulation metadata
+		manifest = Export::ParseCheckpointManifest(manifestText);
+		info = Export::ValidateCheckpointManifest(
 			manifest, Export::CheckpointMode::Distributed, simParams_);
-		const auto& rankFiles = manifest.at("files");
-		if (Export::CheckpointUint64(manifest.at("rankCount")) != static_cast<uint64_t>(mpiContext_.Size()) ||
-			!rankFiles.is_array() || rankFiles.size() != static_cast<size_t>(mpiContext_.Size()))
-		{
-			throw std::runtime_error("Checkpoint restart requires the original MPI rank count.");
-		}
-
-		// restore trigger history after policy configuration and before the first resumed step
-		RebalanceTriggerState triggerState{};
-		if (const auto it = manifest.find("loadBalanceState"); it != manifest.end())
-		{
-			triggerState = CheckpointTriggerStateFromJson(*it);
-		}
-		else if (loadBalanceMgr_.Enabled() &&
-			simParams_.loadBalanceTrigger == Base::LoadBalanceTrigger::SustainedImbalance)
-		{
-			throw std::runtime_error("Checkpoint is missing load-balancing trigger state.");
-		}
-		loadBalanceMgr_.RestoreTriggerState(triggerState);
-
 		simStep_ = info.step;
 		simTime_ = info.time;
 		N_expectedGlobalF_ = Export::CheckpointUint64(manifest.at("globalFluidCount"));
@@ -258,40 +384,82 @@ bool DistSimulationMgr::LoadCheckpoint(
 		expectedOwnedIdChecksumF_ = Export::CheckpointUint64(manifest.at("fluidIdChecksum"));
 		expectedOwnedIdChecksumB_ = Export::CheckpointUint64(manifest.at("boundaryIdChecksum"));
 
-		// restore subdomain boundaries before loading rank-local particle state
-		std::vector<AABB> ownedBounds{};
-		for (int rank = 0; rank < mpiContext_.Size(); rank++)
+		// check the shared state file before loading particles
+		const auto& files = manifest.at("files");
+		if (files.size() != 1 || files[0].at("file") != "state.bin")
 		{
-			if (rankFiles[rank].at("file") != CheckpointRankFileName(rank) ||
-				rankFiles[rank].at("rigidCount") != rankFiles[0].at("rigidCount") ||
-				rankFiles[rank].at("bodyCount") != rankFiles[0].at("bodyCount"))
-			{
-				throw std::runtime_error("Inconsistent checkpoint rank metadata.");
-			}
-			ownedBounds.push_back(CheckpointBoundsFromJson(rankFiles[rank].at("ownedBounds")));
+			throw std::runtime_error("Shared checkpoint requires one state.bin file.");
 		}
-		const DomainDecompInput input
+		const auto& fileInfo = files[0];
+		statePath = std::filesystem::path(directory) / "state.bin";
+		if (std::filesystem::file_size(statePath) != Export::CheckpointUint64(fileInfo.at("bytes")))
+		{
+			throw std::runtime_error("Checkpoint state file length differs from the manifest.");
+		}
+
+		// build the current layout using the saved global bounds
+		input =
 		{
 			.globalBounds = CheckpointBoundsFromJson(manifest.at("globalBounds")),
 			.haloRadius = simParams_.distHaloRadius,
 			.N_ranks = mpiContext_.Size()
 		};
-		domainDecomp_->Restore(input, ownedBounds);
+		domainDecomp_->Build(input);
 		if (!domainDecomp_->IsValidForRankCount(mpiContext_.Size()))
 		{
-			throw std::runtime_error("Invalid restored checkpoint decomposition.");
+			throw std::runtime_error("Invalid checkpoint restart decomposition.");
 		}
-		simBackend_->SetSimDomainBounds(input.globalBounds.min, input.globalBounds.max);
 
-		// load this rank's file and rebuild ownership metadata for startup redistribution
-		const auto& rankInfo = rankFiles[mpiContext_.Rank()];
-		Export::LoadCheckpointState(serializationMgr_, localSimState_, directory, rankInfo, info);
+		// profile saved positions before allocating any owned particle state
+		BuildCheckpointRepartitionProfile(serializationMgr_, statePath.string(), *domainDecomp_,
+			simParams_.loadBalanceWeightModel, mpiContext_.Rank(), mpiContext_.Size(), profile);
+	}
+	catch (const std::exception& ex)
+	{
+		SPDLOG_ERROR("[rank {}/{}] Failed to build checkpoint domain decomp profile: {}",
+			mpiContext_.Rank(), mpiContext_.Size(), ex.what());
+		localOk = false;
+	}
+	// every rank must finish local reads successfully before reducing the profiles
+	if (!mpiContext_.AllTrue(localOk)) { return false; }
+	ApplyInitialDomainDecompProfile(profile);
+
+	try
+	{
+		const auto& fileInfo = manifest.at("files")[0];
+
+		// retain particles owned by this rank in the new layout
+		const auto IsLocalParticle = [&](const glm::vec3& position)
+		{
+			const int ownerRank = domainDecomp_->OwnerRank(position);
+			if (ownerRank < 0 || ownerRank >= mpiContext_.Size())
+			{
+				throw std::runtime_error("Checkpoint particle has no valid owner in the selected decomposition.");
+			}
+			return ownerRank == mpiContext_.Rank();
+		};
+		const auto header = serializationMgr_.LoadSelectedSimState(
+			localSimState_, statePath.string(), IsLocalParticle);
+		if (header.step != info.step || header.time != info.time ||
+			header.N_F != N_expectedGlobalF_ || header.N_B != N_expectedGlobalB_ ||
+			header.N_F != Export::CheckpointUint64(fileInfo.at("fluidCount")) ||
+			header.N_B != Export::CheckpointUint64(fileInfo.at("boundaryCount")) ||
+			header.N_R != Export::CheckpointUint64(fileInfo.at("rigidCount")) ||
+			header.N_RB != Export::CheckpointUint64(fileInfo.at("bodyCount")))
+		{
+			throw std::runtime_error("Checkpoint state differs from the manifest.");
+		}
+
+		// rebuild ownership metadata for startup redistribution and halo construction
+		simBackend_->SetSimDomainBounds(input.globalBounds.min, input.globalBounds.max);
 		RestoreCheckpointParticleMetadata(particleStateF_, localSimState_.particlesF.N_);
 		RestoreCheckpointParticleMetadata(particleStateB_, localSimState_.particlesB.N_);
+
 		globalSimState_ = {};
 		globalSimState_.particlesR = localSimState_.particlesR;
 		globalSimState_.rigidBodies = localSimState_.rigidBodies;
 		rigidBodySyncBuffers_.Resize(globalSimState_.rigidBodies.N_);
+
 		boundaryRedistributionRequired_ = true;
 		serializationMgr_.ResetExportDirState();
 		exportSnapshotDir_.clear();

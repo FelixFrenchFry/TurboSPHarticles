@@ -2,8 +2,10 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -60,23 +62,6 @@ namespace Export
 		return *reinterpret_cast<const uint8_t*>(&x) == 0x04u;
 	}
 
-	#pragma pack(push, 1)
-	struct BinHeaderSim
-	{
-		char magic[8];
-		uint32_t endianTag;
-		uint32_t headerBytes;
-		uint64_t step;
-		double time;
-		uint64_t N_F;
-		uint64_t N_B;
-		uint64_t N_R;
-		uint64_t N_RB;
-	};
-
-	#pragma pack(pop)
-
-	static_assert(sizeof(BinHeaderSim) == 64);
 	static_assert(sizeof(BinHeaderSnap) == 64);
 
 	static void EnsureStreamOk(const std::ios& s, const char* what, const std::string& path)
@@ -173,6 +158,88 @@ namespace Export
 			throw std::runtime_error(std::string(context) + " byte size overflow.");
 		}
 		return a + b;
+	}
+
+	BinHeaderSim MakeSimStateHeader(
+		const uint64_t step,
+		const double time,
+		const uint64_t N_F,
+		const uint64_t N_B,
+		const uint64_t N_R,
+		const uint64_t N_RB)
+	{
+		static_assert(sizeof(float) == 4 && sizeof(double) == 8);
+		static_assert(std::numeric_limits<float>::is_iec559 && std::numeric_limits<double>::is_iec559);
+		if (!IsLittleEndian())
+		{
+			throw std::runtime_error("Simulation state requires little-endian data.");
+		}
+
+		BinHeaderSim header{};
+		std::memcpy(header.magic, kSimStateMagic, sizeof(header.magic));
+		header.endianTag = kEndianLE;
+		header.headerBytes = sizeof(BinHeaderSim);
+		header.step = step;
+		header.time = time;
+		header.N_F = N_F;
+		header.N_B = N_B;
+		header.N_R = N_R;
+		header.N_RB = N_RB;
+
+		return header;
+	}
+
+	SimStateOffsets ComputeSimStateOffsets(const BinHeaderSim& header)
+	{
+		uint64_t offset = sizeof(BinHeaderSim);
+		const auto AppendPopulation = [&](const uint64_t count, const uint64_t particleBytes)
+		{
+			const uint64_t begin = offset;
+			offset = CheckedByteSum(offset,
+				CheckedByteProduct(count, particleBytes, "simulation state population"), "simulation state");
+			return begin;
+		};
+
+		SimStateOffsets off{};
+		off.fluid = AppendPopulation(header.N_F, sizeof(uint64_t) + 16ull * sizeof(float));
+		off.boundary = AppendPopulation(header.N_B, sizeof(uint64_t) + 5ull * sizeof(float));
+		off.rigid = AppendPopulation(header.N_R, sizeof(uint64_t) + sizeof(uint32_t) + 5ull * sizeof(float));
+		off.rigidBodies = AppendPopulation(header.N_RB, 3ull * sizeof(uint32_t) + 32ull * sizeof(float));
+		off.totalBytes = offset;
+
+		return off;
+	}
+
+	static BinHeaderSim ReadSimStateHeader(std::ifstream& ifs, const std::filesystem::path& path)
+	{
+		BinHeaderSim header{};
+
+		ReadPod(ifs, header);
+		if (!ifs || std::memcmp(header.magic, kSimStateMagic, sizeof(header.magic)) != 0 ||
+			!IsLittleEndian() || header.endianTag != kEndianLE || header.headerBytes != sizeof(BinHeaderSim))
+		{
+			throw std::runtime_error("Invalid simulation state header in '" + path.string() + "'.");
+		}
+		if (!std::isfinite(header.time) || header.time < 0 || header.step == std::numeric_limits<uint64_t>::max())
+		{
+			throw std::runtime_error("Invalid simulation state step/time.");
+		}
+		Sim::CheckedLocalParticleCount(header.N_R, "serialized rigid state");
+		if (header.N_RB > std::numeric_limits<uint32_t>::max())
+		{
+			throw std::length_error("Serialized rigid body count exceeds uint32_t range.");
+		}
+		const auto off = ComputeSimStateOffsets(header);
+		if (off.totalBytes > static_cast<uint64_t>(std::numeric_limits<std::streamoff>::max()))
+		{
+			throw std::length_error("Simulation state exceeds stream offset range.");
+		}
+		if (std::filesystem::file_size(path) != off.totalBytes)
+		{
+			throw std::runtime_error("Simulation state file length does not match its header in '" + path.string() + "'.");
+		}
+
+		return header;
 	}
 
 	static void ValidateParticleIds(
@@ -803,125 +870,16 @@ namespace Export
 			}
 
 			// header
-			BinHeaderSim hdr{};
-			std::memcpy(hdr.magic, kSimStateMagic, sizeof(hdr.magic));
-			hdr.endianTag = kEndianLE;
-			hdr.headerBytes = static_cast<uint32_t>(sizeof(BinHeaderSim));
-
-			hdr.step = state.step;
-			hdr.time = state.time;
-
-			hdr.N_F = state.particlesF.N_;
-			hdr.N_B = state.particlesB.N_;
-			hdr.N_R = state.particlesR.N_;
-			hdr.N_RB = state.rigidBodies.N_;
-
+			const auto hdr = MakeSimStateHeader(state.step, state.time,
+				state.particlesF.N_, state.particlesB.N_,
+				state.particlesR.N_, state.rigidBodies.N_);
 			WritePod(ofs, hdr);
 
-			// fluid particle data (fixed order)
-			{
-				const auto& F = state.particlesF;
-
-				WriteVec(ofs, F.id);
-
-				WriteVec(ofs, F.xPos);
-				WriteVec(ofs, F.yPos);
-				WriteVec(ofs, F.zPos);
-
-				WriteVec(ofs, F.xVel);
-				WriteVec(ofs, F.yVel);
-				WriteVec(ofs, F.zVel);
-
-				WriteVec(ofs, F.xVelPred);
-				WriteVec(ofs, F.yVelPred);
-				WriteVec(ofs, F.zVelPred);
-
-				WriteVec(ofs, F.xAccPress);
-				WriteVec(ofs, F.yAccPress);
-				WriteVec(ofs, F.zAccPress);
-
-				WriteVec(ofs, F.sourceTerm);
-				WriteVec(ofs, F.diagElem);
-				WriteVec(ofs, F.pressure);
-				WriteVec(ofs, F.density);
-			}
-
-			// boundary particle data (fixed order)
-			{
-				const auto& B = state.particlesB;
-
-				WriteVec(ofs, B.id);
-
-				WriteVec(ofs, B.xPos);
-				WriteVec(ofs, B.yPos);
-				WriteVec(ofs, B.zPos);
-
-				WriteVec(ofs, B.volB);
-				WriteVec(ofs, B.psiB);
-			}
-
-			// rigid particle data (fixed order)
-			{
-				const auto& R = state.particlesR;
-
-				WriteVec(ofs, R.id);
-				WriteVec(ofs, R.bodyId);
-
-				WriteVec(ofs, R.xRelPos);
-				WriteVec(ofs, R.yRelPos);
-				WriteVec(ofs, R.zRelPos);
-
-				WriteVec(ofs, R.volR);
-				WriteVec(ofs, R.psiR);
-			}
-
-			// rigid body data (fixed order)
-			{
-				const auto& RB = state.rigidBodies;
-
-				WriteVec(ofs, RB.id);
-				WriteVec(ofs, RB.rigidParticleBegin);
-				WriteVec(ofs, RB.rigidParticleCount);
-
-				WriteVec(ofs, RB.xCM);
-				WriteVec(ofs, RB.yCM);
-				WriteVec(ofs, RB.zCM);
-
-				WriteVec(ofs, RB.xVel);
-				WriteVec(ofs, RB.yVel);
-				WriteVec(ofs, RB.zVel);
-
-				WriteVec(ofs, RB.xOmega);
-				WriteVec(ofs, RB.yOmega);
-				WriteVec(ofs, RB.zOmega);
-
-				WriteVec(ofs, RB.xAngMom);
-				WriteVec(ofs, RB.yAngMom);
-				WriteVec(ofs, RB.zAngMom);
-
-				WriteVec(ofs, RB.a00);
-				WriteVec(ofs, RB.a01);
-				WriteVec(ofs, RB.a02);
-				WriteVec(ofs, RB.a10);
-				WriteVec(ofs, RB.a11);
-				WriteVec(ofs, RB.a12);
-				WriteVec(ofs, RB.a20);
-				WriteVec(ofs, RB.a21);
-				WriteVec(ofs, RB.a22);
-
-				WriteVec(ofs, RB.mass);
-				WriteVec(ofs, RB.massInv);
-
-				WriteVec(ofs, RB.iBodyInv00);
-				WriteVec(ofs, RB.iBodyInv01);
-				WriteVec(ofs, RB.iBodyInv02);
-				WriteVec(ofs, RB.iBodyInv10);
-				WriteVec(ofs, RB.iBodyInv11);
-				WriteVec(ofs, RB.iBodyInv12);
-				WriteVec(ofs, RB.iBodyInv20);
-				WriteVec(ofs, RB.iBodyInv21);
-				WriteVec(ofs, RB.iBodyInv22);
-			}
+			const auto WriteField = [&](const auto& field) { WriteVec(ofs, field); };
+			VisitFluidStateFields(WriteField, state.particlesF);
+			VisitBoundaryStateFields(WriteField, state.particlesB);
+			VisitRigidStateFields(WriteField, state.particlesR);
+			VisitRigidBodyStateFields(WriteField, state.rigidBodies);
 
 			ofs.close();
 			EnsureStreamOk(ofs, "closing simulation state", tmpPath.string());
@@ -947,59 +905,11 @@ namespace Export
 				"Failed to open file for read '" + srcPath.string() + "'.");
 		}
 
-		BinHeaderSim hdr{};
-		ReadPod(ifs, hdr);
-		if (!ifs)
-		{
-			throw std::runtime_error("Failed to read simulation state header from '" +
-				srcPath.string() + "'.");
-		}
-		if (std::memcmp(hdr.magic, kSimStateMagic, sizeof(hdr.magic)) != 0)
-		{
-			throw std::runtime_error("Invalid simulation state file magic in '" +
-				srcPath.string() + "'.");
-		}
-		if (!IsLittleEndian() || hdr.endianTag != kEndianLE)
-		{
-			throw std::runtime_error("Endianness mismatch in '" + srcPath.string() +
-				"': File and host must be little-endian.");
-		}
-		if (hdr.headerBytes != sizeof(BinHeaderSim))
-		{
-			throw std::runtime_error("Unexpected simulation state header size in '" +
-				srcPath.string() + "'.");
-		}
-
-		const uint64_t N_F = hdr.N_F, N_B = hdr.N_B, N_R = hdr.N_R, N_RB = hdr.N_RB;
-		const uint32_t N_localF = Sim::CheckedLocalParticleCount(N_F, "serialized fluid state");
-		const uint32_t N_localB = Sim::CheckedLocalParticleCount(N_B, "serialized boundary state");
-		const uint32_t N_localR = Sim::CheckedLocalParticleCount(N_R, "serialized rigid state");
-		if (N_RB > std::numeric_limits<uint32_t>::max())
-		{
-			throw std::length_error("Serialized rigid body count exceeds uint32_t range.");
-		}
-		const uint32_t N_localRB = static_cast<uint32_t>(N_RB);
-
-		uint64_t expectedBytes = sizeof(BinHeaderSim);
-		expectedBytes = CheckedByteSum(expectedBytes,
-			CheckedByteProduct(N_F, sizeof(uint64_t) + 16ull * sizeof(float), "fluid payload"),
-			"simulation state");
-		expectedBytes = CheckedByteSum(expectedBytes,
-			CheckedByteProduct(N_B, sizeof(uint64_t) + 5ull * sizeof(float), "boundary payload"),
-			"simulation state");
-		expectedBytes = CheckedByteSum(expectedBytes,
-			CheckedByteProduct(N_R, sizeof(uint64_t) + sizeof(uint32_t) + 5ull * sizeof(float),
-				"rigid particle payload"), "simulation state");
-		expectedBytes = CheckedByteSum(expectedBytes,
-			CheckedByteProduct(N_RB, 3ull * sizeof(uint32_t) + 32ull * sizeof(float),
-				"rigid body payload"), "simulation state");
-		std::error_code sizeEc;
-		const uint64_t fileBytes = std::filesystem::file_size(srcPath, sizeEc);
-		if (sizeEc || fileBytes != expectedBytes)
-		{
-			throw std::runtime_error("Simulation state file length does not match its header in '" +
-				srcPath.string() + "'.");
-		}
+		const BinHeaderSim hdr = ReadSimStateHeader(ifs, srcPath);
+		const uint32_t N_localF = Sim::CheckedLocalParticleCount(hdr.N_F, "serialized fluid state");
+		const uint32_t N_localB = Sim::CheckedLocalParticleCount(hdr.N_B, "serialized boundary state");
+		const uint32_t N_localR = Sim::CheckedLocalParticleCount(hdr.N_R, "serialized rigid state");
+		const uint32_t N_localRB = static_cast<uint32_t>(hdr.N_RB);
 
 		state.step = hdr.step;
 		state.time = hdr.time;
@@ -1008,118 +918,205 @@ namespace Export
 		state.ResizeRigid(N_localR);
 		state.ResizeRigidBodies(N_localRB);
 
-		// fluid particle data (read order must match SaveUniversalSimState)
-		{
-			auto& F = state.particlesF;
-
-			ReadVec(ifs, F.id);
-			ReadVec(ifs, F.xPos);
-			ReadVec(ifs, F.yPos);
-			ReadVec(ifs, F.zPos);
-
-			ReadVec(ifs, F.xVel);
-			ReadVec(ifs, F.yVel);
-			ReadVec(ifs, F.zVel);
-
-			ReadVec(ifs, F.xVelPred);
-			ReadVec(ifs, F.yVelPred);
-			ReadVec(ifs, F.zVelPred);
-
-			ReadVec(ifs, F.xAccPress);
-			ReadVec(ifs, F.yAccPress);
-			ReadVec(ifs, F.zAccPress);
-
-			ReadVec(ifs, F.sourceTerm);
-			ReadVec(ifs, F.diagElem);
-			ReadVec(ifs, F.pressure);
-			ReadVec(ifs, F.density);
-
-			// sanity check
-			F.N_ = N_localF;
-		}
-
-		// boundary particle data (fixed order)
-		{
-			auto& B = state.particlesB;
-
-			ReadVec(ifs, B.id);
-
-			ReadVec(ifs, B.xPos);
-			ReadVec(ifs, B.yPos);
-			ReadVec(ifs, B.zPos);
-
-			ReadVec(ifs, B.volB);
-			ReadVec(ifs, B.psiB);
-		}
-
-		// rigid particle data (fixed order)
-		{
-			auto& R = state.particlesR;
-
-			ReadVec(ifs, R.id);
-			ReadVec(ifs, R.bodyId);
-
-			ReadVec(ifs, R.xRelPos);
-			ReadVec(ifs, R.yRelPos);
-			ReadVec(ifs, R.zRelPos);
-
-			ReadVec(ifs, R.volR);
-			ReadVec(ifs, R.psiR);
-		}
-
-		// rigid body data (fixed order)
-		{
-			auto& RB = state.rigidBodies;
-
-			ReadVec(ifs, RB.id);
-			ReadVec(ifs, RB.rigidParticleBegin);
-			ReadVec(ifs, RB.rigidParticleCount);
-
-			ReadVec(ifs, RB.xCM);
-			ReadVec(ifs, RB.yCM);
-			ReadVec(ifs, RB.zCM);
-
-			ReadVec(ifs, RB.xVel);
-			ReadVec(ifs, RB.yVel);
-			ReadVec(ifs, RB.zVel);
-
-			ReadVec(ifs, RB.xOmega);
-			ReadVec(ifs, RB.yOmega);
-			ReadVec(ifs, RB.zOmega);
-
-			ReadVec(ifs, RB.xAngMom);
-			ReadVec(ifs, RB.yAngMom);
-			ReadVec(ifs, RB.zAngMom);
-
-			ReadVec(ifs, RB.a00);
-			ReadVec(ifs, RB.a01);
-			ReadVec(ifs, RB.a02);
-			ReadVec(ifs, RB.a10);
-			ReadVec(ifs, RB.a11);
-			ReadVec(ifs, RB.a12);
-			ReadVec(ifs, RB.a20);
-			ReadVec(ifs, RB.a21);
-			ReadVec(ifs, RB.a22);
-
-			ReadVec(ifs, RB.mass);
-			ReadVec(ifs, RB.massInv);
-
-			ReadVec(ifs, RB.iBodyInv00);
-			ReadVec(ifs, RB.iBodyInv01);
-			ReadVec(ifs, RB.iBodyInv02);
-			ReadVec(ifs, RB.iBodyInv10);
-			ReadVec(ifs, RB.iBodyInv11);
-			ReadVec(ifs, RB.iBodyInv12);
-			ReadVec(ifs, RB.iBodyInv20);
-			ReadVec(ifs, RB.iBodyInv21);
-			ReadVec(ifs, RB.iBodyInv22);
-		}
+		const auto ReadField = [&](auto& field) { ReadVec(ifs, field); };
+		VisitFluidStateFields(ReadField, state.particlesF);
+		VisitBoundaryStateFields(ReadField, state.particlesB);
+		VisitRigidStateFields(ReadField, state.particlesR);
+		VisitRigidBodyStateFields(ReadField, state.rigidBodies);
 
 		EnsureStreamOk(ifs, "reading", srcPath.string());
 		ValidateParticleIds(state.particlesF.id, "Fluid state");
 		ValidateParticleIds(state.particlesB.id, "Boundary state");
 		ValidateParticleIds(state.particlesR.id, "Rigid state");
 		state.ValidateRigidAttachments();
+	}
+
+	static constexpr uint32_t N_simStateChunk = 262144;
+
+	static void ReadSimStateRange(
+		std::ifstream& ifs,
+		const uint64_t offset,
+		void* data,
+		const uint64_t N_bytes)
+	{
+		ifs.seekg(static_cast<std::streamoff>(offset));
+		ifs.read(static_cast<char*>(data), static_cast<std::streamsize>(N_bytes));
+		if (!ifs)
+		{
+			throw std::runtime_error("Failed to read simulation state range.");
+		}
+	}
+
+	// both fluid and boundary arrays start with IDs followed by X/Y/Z positions
+	static void ReadSimStatePositions(
+		std::ifstream& ifs,
+		const uint64_t N_total,
+		const uint64_t populationOffset,
+		const uint64_t beginIdx,
+		const uint32_t N_particles,
+		std::array<std::vector<float>, 3>& positions)
+	{
+		uint64_t offset = populationOffset + N_total * sizeof(uint64_t);
+		for (auto& component : positions)
+		{
+			component.resize(N_particles);
+			ReadSimStateRange(ifs, offset + beginIdx * sizeof(float),
+				component.data(), N_particles * sizeof(float));
+			offset += N_total * sizeof(float);
+		}
+		for (uint32_t i = 0; i < N_particles; i++)
+		{
+			if (!std::isfinite(positions[0][i]) || !std::isfinite(positions[1][i]) ||
+				!std::isfinite(positions[2][i]))
+			{
+				throw std::runtime_error("Non-finite particle position in simulation state.");
+			}
+		}
+	}
+
+	BinHeaderSim SerializationMgr::VisitSimStatePositions(
+		const std::string& path,
+		const int partIdx,
+		const int N_parts,
+		const std::function<void(bool, const SimStatePositionView&)>& visit) const
+	{
+		if (N_parts <= 0 || partIdx < 0 || partIdx >= N_parts)
+		{
+			throw std::runtime_error("Invalid simulation state scan partition.");
+		}
+		const auto srcPath = ResolveStatePath(saveOptions_.baseDir, path);
+		std::ifstream ifs(srcPath, std::ios::binary);
+		if (!ifs)
+		{
+			throw std::runtime_error("Failed to open simulation state '" + srcPath.string() + "'.");
+		}
+		const auto header = ReadSimStateHeader(ifs, srcPath);
+		const auto off = ComputeSimStateOffsets(header);
+		std::array<std::vector<float>, 3> positions;
+		const auto ScanPopulation = [&](const uint64_t N_total, const uint64_t offset, const bool boundary)
+		{
+			// divide without multiplying the global count by the partition index
+			const uint64_t N_perPart = N_total / N_parts;
+			const uint64_t N_remainder = N_total % N_parts;
+			const uint64_t beginIdx = N_perPart * partIdx + std::min<uint64_t>(partIdx, N_remainder);
+			const uint64_t endIdx = beginIdx + N_perPart + (static_cast<uint64_t>(partIdx) < N_remainder ? 1 : 0);
+			for (uint64_t begin = beginIdx; begin < endIdx; begin += N_simStateChunk)
+			{
+				const uint32_t N_particles = static_cast<uint32_t>(std::min<uint64_t>(N_simStateChunk, endIdx - begin));
+				ReadSimStatePositions(ifs, N_total, offset, begin, N_particles, positions);
+				visit(boundary, { positions[0], positions[1], positions[2] });
+			}
+		};
+		ScanPopulation(header.N_F, off.fluid, false);
+		ScanPopulation(header.N_B, off.boundary, true);
+		return header;
+	}
+
+	// resolve ownership from positions before reading any other particle fields
+	template <class Particles, class Visit>
+	static void ReadSelectedParticles(
+		std::ifstream& ifs,
+		Particles& particles,
+		const uint64_t N_total,
+		const uint64_t populationOffset,
+		const std::function<bool(const glm::vec3&)>& select,
+		Visit visitFields)
+	{
+		std::array<std::vector<float>, 3> positions;
+		std::vector<uint32_t> selectedLocalIdxs;
+		for (uint64_t beginIdx = 0; beginIdx < N_total; beginIdx += N_simStateChunk)
+		{
+			const uint32_t N_particles = static_cast<uint32_t>(std::min<uint64_t>(N_simStateChunk, N_total - beginIdx));
+			ReadSimStatePositions(ifs, N_total, populationOffset, beginIdx, N_particles, positions);
+			selectedLocalIdxs.clear();
+			for (uint32_t i = 0; i < N_particles; i++)
+			{
+				if (select({ positions[0][i], positions[1][i], positions[2][i] })) { selectedLocalIdxs.push_back(i); }
+			}
+			if (selectedLocalIdxs.empty()) { continue; }
+
+			const uint32_t N_previous = particles.N_;
+			const uint32_t N_local = Sim::CheckedLocalParticleCount(
+				static_cast<uint64_t>(N_previous) + selectedLocalIdxs.size(), "selected simulation state");
+			uint64_t offset = populationOffset;
+			const auto ReadSelectedField = [&](auto& field)
+			{
+				const uint64_t fieldOffset = offset;
+				const uint64_t valueBytes = sizeof(field[0]);
+				offset += N_total * valueBytes;
+				field.resize(N_local);
+
+				// reuse positions already read for ownership selection
+				if constexpr (std::is_same_v<typename std::decay_t<decltype(field)>::value_type, float>)
+				{
+					const int axis = &field == &particles.xPos ? 0
+						: &field == &particles.yPos ? 1
+						: &field == &particles.zPos ? 2 : -1;
+					if (axis >= 0)
+					{
+						for (size_t i = 0; i < selectedLocalIdxs.size(); i++)
+						{
+							field[N_previous + i] = positions[axis][selectedLocalIdxs[i]];
+						}
+						return;
+					}
+				}
+
+				// consecutive selected indices form one contiguous file read
+				for (size_t first = 0; first < selectedLocalIdxs.size();)
+				{
+					size_t end = first + 1;
+					while (end < selectedLocalIdxs.size() && selectedLocalIdxs[end] == selectedLocalIdxs[end - 1] + 1)
+					{
+						end++;
+					}
+					ReadSimStateRange(ifs, fieldOffset + (beginIdx + selectedLocalIdxs[first]) * valueBytes,
+						field.data() + N_previous + first, (end - first) * valueBytes);
+					first = end;
+				}
+			};
+			visitFields(ReadSelectedField, particles);
+			ValidateParticleIds(std::span<const uint64_t>(particles.id).subspan(N_previous), "Selected state block");
+			particles.N_ = N_local;
+		}
+	}
+
+	BinHeaderSim SerializationMgr::LoadSelectedSimState(
+		Sync::UniversalSimState& state,
+		const std::string& path,
+		const std::function<bool(const glm::vec3&)>& select) const
+	{
+		const auto srcPath = ResolveStatePath(saveOptions_.baseDir, path);
+		std::ifstream ifs(srcPath, std::ios::binary);
+		if (!ifs)
+		{
+			throw std::runtime_error("Failed to open simulation state '" + srcPath.string() + "'.");
+		}
+
+		const auto header = ReadSimStateHeader(ifs, srcPath);
+		const auto off = ComputeSimStateOffsets(header);
+		state = {};
+		state.step = header.step;
+		state.time = header.time;
+
+		// fluid and boundary state follows the caller's ownership selection
+		ReadSelectedParticles(ifs, state.particlesF, header.N_F, off.fluid, select,
+			[](auto visit, auto&... states) { VisitFluidStateFields(visit, states...); });
+		ReadSelectedParticles(ifs, state.particlesB, header.N_B, off.boundary, select,
+			[](auto visit, auto&... states) { VisitBoundaryStateFields(visit, states...); });
+
+		// every rank needs the full rigid state
+		state.ResizeRigid(static_cast<uint32_t>(header.N_R));
+		state.ResizeRigidBodies(static_cast<uint32_t>(header.N_RB));
+		ifs.seekg(static_cast<std::streamoff>(off.rigid));
+		const auto ReadField = [&](auto& field) { ReadVec(ifs, field); };
+		VisitRigidStateFields(ReadField, state.particlesR);
+		VisitRigidBodyStateFields(ReadField, state.rigidBodies);
+		EnsureStreamOk(ifs, "reading", srcPath.string());
+		ValidateParticleIds(state.particlesR.id, "Rigid state");
+		state.ValidateRigidAttachments();
+
+		return header;
 	}
 
 	// --- [ ExportSnapshot (.bin) + XDMF ] --------------------------------------------------------

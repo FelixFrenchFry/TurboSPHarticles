@@ -56,19 +56,6 @@ bool PeriodicTrigger::ShouldRebalance(const LoadBalanceSnapshot& snapshot)
 	return snapshot.step > 0 && snapshot.step % intervalSteps_ == 0;
 }
 
-RebalanceTriggerState PeriodicTrigger::GetState() const
-{
-	return {};
-}
-
-void PeriodicTrigger::RestoreState(const RebalanceTriggerState& state)
-{
-	if (state.badStepCount != 0 || state.cooldownRemaining != 0)
-	{
-		throw std::runtime_error("Periodic load balance trigger has no saved counters.");
-	}
-}
-
 SustainedImbalanceTrigger::SustainedImbalanceTrigger(
 	const double imbalanceThreshold,
 	const uint32_t sustainSteps,
@@ -118,22 +105,6 @@ bool SustainedImbalanceTrigger::ShouldRebalance(const LoadBalanceSnapshot& snaps
 	badStepCount_ = 0;
 	cooldownRemaining_ = cooldownSteps_;
 	return true;
-}
-
-RebalanceTriggerState SustainedImbalanceTrigger::GetState() const
-{
-	return { badStepCount_, cooldownRemaining_ };
-}
-
-void SustainedImbalanceTrigger::RestoreState(const RebalanceTriggerState& state)
-{
-	if (state.badStepCount >= sustainSteps_ || state.cooldownRemaining > cooldownSteps_ ||
-		(state.cooldownRemaining > 0 && state.badStepCount != 0))
-	{
-		throw std::runtime_error("Invalid sustained load balance trigger state.");
-	}
-	badStepCount_ = state.badStepCount;
-	cooldownRemaining_ = state.cooldownRemaining;
 }
 
 std::unique_ptr<ILoadMetric> Dist::MakeLoadMetric(const Base::LoadBalanceMetric method)
@@ -205,23 +176,6 @@ bool LoadBalanceMgr::Configure(
 	}
 
 	return true;
-}
-
-RebalanceTriggerState LoadBalanceMgr::GetTriggerState() const
-{
-	return rebalanceTrigger_ ? rebalanceTrigger_->GetState() : RebalanceTriggerState{};
-}
-
-void LoadBalanceMgr::RestoreTriggerState(const RebalanceTriggerState& state)
-{
-	if (rebalanceTrigger_)
-	{
-		rebalanceTrigger_->RestoreState(state);
-	}
-	else if (state.badStepCount != 0 || state.cooldownRemaining != 0)
-	{
-		throw std::runtime_error("Disabled load balancing has no saved trigger counters.");
-	}
 }
 
 bool LoadBalanceMgr::EvaluateLoadAndRebalance(
