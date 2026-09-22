@@ -273,14 +273,9 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	{
 		mpiContext.AllReduceSumUint64s(profile.ownedFluidByUnit);
 		mpiContext.AllReduceSumUint64s(profile.ownedBoundaryByUnit);
+		mpiContext.AllReduceSumUint64s(profile.ownedRigidByUnit);
 
-		domainDecomp.Repartition(
-		{
-			.weightModel = weightModel_,
-			.loadByRank = loadByRank,
-			.ownedFluidByUnit = profile.ownedFluidByUnit,
-			.ownedBoundaryByUnit = profile.ownedBoundaryByUnit
-		});
+		domainDecomp.Repartition(profile, loadByRank, weightModel_);
 		if (!domainDecomp.IsValidForRankCount(mpiContext.Size()))
 		{
 			throw std::runtime_error("Load balancing produced an invalid domain decomposition.");
@@ -305,6 +300,7 @@ Mem::MemUsage LoadBalanceMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, Mem::MemUsageOf_Vector(loadByRank_));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(repartitionProfile_.ownedFluidByUnit));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(repartitionProfile_.ownedBoundaryByUnit));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(repartitionProfile_.ownedRigidByUnit));
 
 	return usage;
 }

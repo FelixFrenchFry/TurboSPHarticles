@@ -58,16 +58,17 @@ namespace Scene
 
 		ScenarioMgr() = default;
 
-		// restricts fluid and boundary particle generation to the given world-space region,
+		// restricts F/B/R particle generation to the given world-space region,
 		// distributed ranks build their own regions while particle IDs stay the global scenario indices
 		void BeginBuildRegion(const glm::vec3& min, const glm::vec3& max);
 		void EndBuildRegion();
-		void FinalizeGeneratedParticleIds(Sync::UniversalSimState& state);
+		void FinalizeGeneratedParticleCounts(const Sync::UniversalSimState& state);
 
 		// unfiltered particle counts of the build region session, identical on every rank
 		// because the generated particle set does not depend on the region
 		uint64_t GetBuiltGlobalFluidParticleCount() const { return N_builtGlobalF_; }
 		uint64_t GetBuiltGlobalBoundaryParticleCount() const { return N_builtGlobalB_; }
+		uint64_t GetBuiltGlobalRigidParticleCount() const { return N_builtGlobalR_; }
 
 		// builds a box-shaped boundary container around a given OBB
 		// (boundary particle layers grow outwards by default)
@@ -175,8 +176,10 @@ namespace Scene
 		glm::vec3 buildRegionMin_{ 0.0f };
 		glm::vec3 buildRegionMax_{ 0.0f };
 		bool hasBuildRegion_ = false;
-		uint64_t N_builtGlobalF_ = 0; // total fluid particles generated, before the region filter
-		uint64_t N_builtGlobalB_ = 0; // total boundary particles generated, before the region filter
+		// total F/B/R particles generated during build, before the region filter
+		uint64_t N_builtGlobalF_ = 0;
+		uint64_t N_builtGlobalB_ = 0;
+		uint64_t N_builtGlobalR_ = 0;
 	};
 
 } // namespace Scene

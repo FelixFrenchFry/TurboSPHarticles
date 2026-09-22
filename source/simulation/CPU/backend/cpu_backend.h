@@ -63,12 +63,15 @@ namespace Sim
 		Sync::FluidConstView GetFluidParticleView() const override;
 		Sync::BoundaryConstView GetBoundaryParticleView() const override;
 		Sync::RigidConstView GetRigidParticleView() const override;
+		Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const override;
 
 		bool ApplyParticleRedistribution(
 			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
 			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+			const std::vector<uint32_t>& retainedRigidOldLocalIdx_FromNewLocalIdx,
 			const Sync::FluidParticles& appendedParticlesF,
 			const Sync::BoundaryParticles& appendedParticlesB,
+			const Sync::RigidParticles& appendedParticlesR,
 			bool redistributeParticlesB,
 			const SimParams& params) override;
 
@@ -92,7 +95,7 @@ namespace Sim
 			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
 			bool pressureAccIsOwnedPrefix,
 			uint32_t N_ownedBoundaryParticles,
-			const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
+			uint32_t N_ownedRigidParticles,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
 		// classifies local fluid particles against the export near-surface threshold
@@ -142,7 +145,7 @@ namespace Sim
 		void ComputeStatisticsPartial(
 			Stats::StatisticsPartial& partial,
 			const SimParams& simParams,
-			bool useActiveParticleLocalIdxs) const;
+			bool ownedOnly) const;
 
 		void ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
 		void BuildDistributedSolverChunkIdxs();
@@ -166,12 +169,15 @@ namespace Sim
 		// metadata
 		uint64_t simStep_ = 0;
 		double simTime_ = 0.0;
-		uint32_t N_F_ = 0; // number of fluid particles
-		uint32_t N_B_ = 0; // number of boundary particles
-		uint32_t N_R_ = 0; // number of rigid particles
-		uint32_t N_RB_ = 0; // number of rigid bodies
-		uint32_t N_ownedF_ = 0; // prefix of owned fluid particles (distributed execution)
-		uint32_t N_ownedB_ = 0; // prefix of owned boundary particles (distributed execution)
+		// number of local F/B/R particles, including halos
+		uint32_t N_F_ = 0;
+		uint32_t N_B_ = 0;
+		uint32_t N_R_ = 0;
+		uint32_t N_RB_ = 0;
+		// number of actually owned F/B/R particles (distributed execution)
+		uint32_t N_ownedF_ = 0;
+		uint32_t N_ownedB_ = 0;
+		uint32_t N_ownedR_ = 0;
 		uint32_t N_solverIters_ = 0;
 
 		// simulation domain reported by the manager, empty extent while it is unknown
@@ -219,8 +225,11 @@ namespace Sim
 
 		// rigid bodies (using RB suffix to mark rigid body data structures)
 		std::vector<uint32_t> idRB_;
-		std::vector<uint32_t> rigidParticleBeginRB_; // first rigid particle
-		std::vector<uint32_t> rigidParticleCountRB_; // number of rigid particles
+		std::vector<uint32_t> rigidParticleCountRB_; // global particle count per body
+
+		// local particle indices grouped by body for force reduction
+		std::vector<uint32_t> rigidParticleOffsets_ByBody_;
+		std::vector<uint32_t> rigidParticleLocalIdxs_ByBody_;
 
 		// body state (in world frame)
 		std::vector<float> xCMRB_, yCMRB_, zCMRB_; // center of mass
@@ -252,8 +261,6 @@ namespace Sim
 		std::vector<uint32_t> pressureAccChunkIdxs_;
 		std::vector<uint32_t> innerFluidChunkIdxs_;
 		std::vector<uint32_t> outerFluidChunkIdxs_;
-		std::vector<uint32_t> activeRigidParticleLocalIdxs_;
-		std::vector<uint8_t> activeRigidParticleFlags_;
 		bool pressureAccIsOwnedPrefix_ = false;
 		bool useDistributedParticleLayout_ = false;
 		// inverted particle re-order, kept between steps and handed to the solver sync
@@ -264,7 +271,6 @@ namespace Sim
 		std::vector<uint32_t> particleFlagsScratch_;
 		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;
 		bool useDistributedStepWork_ = false;
-		bool useActiveRigidParticleLocalIdxs_ = false;
 		bool integrateRigidBodies_ = true;
 		bool applyRigidBodyExternalForces_ = true;
 

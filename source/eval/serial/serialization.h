@@ -67,19 +67,21 @@ namespace Export
 		void LoadUniversalSimState(Sync::UniversalSimState& state,
 			const std::string& path) const;
 
-		// scans one disjoint file partition in bounded position blocks, boundary identifies the particle type
+		// scans one disjoint file partition in bounded world-position blocks for each particle type
 		BinHeaderSim VisitSimStatePositions(
 			const std::string& path,
 			int partIdx,
 			int N_parts,
-			const std::function<void(bool boundary, const SimStatePositionView&)>& visit) const;
+			const std::function<void(Base::ParticleType, const SimStatePositionView&)>& visit) const;
 
-		// reads positions first, then selected fluid/boundary fields and all rigid state
+		// reads selected particles in bounded blocks and retains all body state
+		// selectRigid overrides select for rigid particles, e.g. to include halos
 		// returned header counts describe the global file
 		BinHeaderSim LoadSelectedSimState(
 			Sync::UniversalSimState& state,
 			const std::string& path,
-			const std::function<bool(const glm::vec3&)>& select) const;
+			const std::function<bool(const glm::vec3&)>& select,
+			const std::function<bool(const glm::vec3&)>& selectRigid = {}) const;
 
 		// serialization of a subset of the simulation state and metadata into separate files
 		void SaveExportSnapshot(

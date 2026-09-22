@@ -30,10 +30,11 @@ namespace Dist
 		int N_ranks,
 		DomainDecompRepartitionProfile& profile);
 
-	// collective output of owned fluid/boundary particles and one copy of rigid state
-	// closes the file on every rank before returning its header for publication
+	// writes owned fluid, boundary, and rigid particles collectively, with one copy of body state
+	// (all ranks close the file before returning its header)
 	Export::BinHeaderSim SaveDistributedCheckpointState(
 		const Sync::UniversalSimState& state,
 		const std::string& path,
 		const MpiContext& mpiContext);
+
 } // namespace Dist

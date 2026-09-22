@@ -164,6 +164,7 @@ void Decomp_AABB_Slabs::BuildRepartitionProfile(
 	// one fixed-resolution histogram is kept over the global domain
 	profile.ownedFluidByUnit.assign(PROFILE_BIN_COUNT, 0);
 	profile.ownedBoundaryByUnit.assign(PROFILE_BIN_COUNT, 0);
+	profile.ownedRigidByUnit.assign(PROFILE_BIN_COUNT, 0);
 
 	const AABB globalBounds = slabLayout_.GlobalExtentAABB();
 	AccumulateOwnedParticleCounts(
@@ -180,18 +181,28 @@ void Decomp_AABB_Slabs::BuildRepartitionProfile(
 		PROFILE_BIN_COUNT,
 		profile.ownedBoundaryByUnit,
 		"boundary");
+	AccumulateOwnedParticleCounts(
+		input.rigid,
+		globalBounds,
+		SPLIT_AXIS,
+		PROFILE_BIN_COUNT,
+		profile.ownedRigidByUnit,
+		"rigid");
 }
 
-void Decomp_AABB_Slabs::Repartition(const DomainDecompRepartitionInput& input)
+void Decomp_AABB_Slabs::Repartition(
+	const DomainDecompRepartitionProfile& profile,
+	const std::span<const double> loadByRank,
+	const Base::LoadBalanceWeightModel weightModel)
 {
-	if (input.weightModel != Base::LoadBalanceWeightModel::OwnedParticleCount)
+	if (weightModel != Base::LoadBalanceWeightModel::OwnedParticleCount)
 	{
 		throw std::runtime_error(
 			"Decomp_AABB_Slabs does not support the requested repartition weight model.");
 	}
 
 	// validate rank loads against the current slab layout
-	const int N_ranks = static_cast<int>(input.loadByRank.size());
+	const int N_ranks = static_cast<int>(loadByRank.size());
 	if (!slabLayout_.IsValidForRankCount(N_ranks))
 	{
 		throw std::runtime_error(
@@ -200,7 +211,7 @@ void Decomp_AABB_Slabs::Repartition(const DomainDecompRepartitionInput& input)
 	}
 
 	// validate rank loads supplied to the trigger
-	for (const double load : input.loadByRank)
+	for (const double load : loadByRank)
 	{
 		if (!std::isfinite(load) || load < 0.0)
 		{
@@ -209,8 +220,9 @@ void Decomp_AABB_Slabs::Repartition(const DomainDecompRepartitionInput& input)
 		}
 	}
 
-	if (input.ownedFluidByUnit.size() != PROFILE_BIN_COUNT ||
-		input.ownedBoundaryByUnit.size() != PROFILE_BIN_COUNT)
+	if (profile.ownedFluidByUnit.size() != PROFILE_BIN_COUNT ||
+		profile.ownedBoundaryByUnit.size() != PROFILE_BIN_COUNT ||
+		profile.ownedRigidByUnit.size() != PROFILE_BIN_COUNT)
 	{
 		throw std::runtime_error(
 			"Cannot repartition Decomp_AABB_Slabs with an invalid particle weight profile.");
@@ -219,7 +231,7 @@ void Decomp_AABB_Slabs::Repartition(const DomainDecompRepartitionInput& input)
 	const AABB globalBounds = slabLayout_.GlobalExtentAABB();
 
 	// TODO: restore a boundary-particle weight when boundary work is modeled?
-	const std::span<const uint64_t> weightByBin = input.ownedFluidByUnit;
+	const std::span<const uint64_t> weightByBin = profile.ownedFluidByUnit;
 
 	// an empty profile carries no balancing information, so the current layout is kept
 	uint64_t totalWeight = 0;

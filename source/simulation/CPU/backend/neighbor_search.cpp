@@ -707,6 +707,15 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				if (be_.useDistributedStepWork_ && i >= be_.N_ownedR_)
+				{
+					// clear halo counts before rebuilding neighbor-list offsets
+					be_.neighborList_->SetNbrCountRF(i, 0);
+					be_.neighborList_->SetNbrCountRB(i, 0);
+					be_.neighborList_->SetNbrCountRR(i, 0);
+					continue;
+				}
+
 				uint32_t countRF = 0;
 				uint32_t countRB = 0;
 				uint32_t countRR = 0;
@@ -903,6 +912,11 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 			std::vector<uint32_t> neighbors;
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
+				if (be_.useDistributedStepWork_ && i >= be_.N_ownedR_)
+				{
+					continue;
+				}
+
 				// check all fluid particles j
 				neighbors.clear();
 				for (uint32_t j = 0; j < N_F; j++)
@@ -1138,8 +1152,8 @@ void NS_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
 		cellIdsMatchCurrentParticleOrder_ = true;
 	}
 
-	// rigid particles keep their body-contiguous order, so only the cell keys are sorted
-	cellIdR_.resize(N_R);
+	// preserve rigid particle order by sorting only the cell keys and index permutation
+	cellIdR_.resize(N_R); // TODO: use own resize helpers?
 	particleOrderR_.resize(N_R);
 	if (N_R > 0)
 	{
@@ -1575,6 +1589,15 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 				auto& queryMetaScratch = queryMetaScratch_.local();
 				for (uint32_t i = range.begin(); i != range.end(); i++)
 				{
+					if (be_.useDistributedStepWork_ && i >= be_.N_ownedR_)
+					{
+						// clear halo counts before rebuilding neighbor-list offsets
+						be_.neighborList_->SetNbrCountRF(i, 0);
+						be_.neighborList_->SetNbrCountRB(i, 0);
+						be_.neighborList_->SetNbrCountRR(i, 0);
+						continue;
+					}
+
 					auto& fluidRanges = queryMetaScratch.fluidRanges;
 					auto& boundaryRanges = queryMetaScratch.boundaryRanges;
 					auto& rigidRanges = queryMetaScratch.rigidRanges;
@@ -1821,6 +1844,11 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 				std::vector<uint32_t> neighbors;
 				for (uint32_t i = range.begin(); i != range.end(); i++)
 				{
+					if (be_.useDistributedStepWork_ && i >= be_.N_ownedR_)
+					{
+						continue;
+					}
+
 					auto& fluidRanges = queryMetaScratch.fluidRanges;
 					auto& boundaryRanges = queryMetaScratch.boundaryRanges;
 					auto& rigidRanges = queryMetaScratch.rigidRanges;
@@ -1931,7 +1959,7 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 		cellFrame_.N_dimX, cellFrame_.N_dimY, cellFrame_.N_dimZ);
 
 	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
-	cellIdF_.resize(N_F);
+	cellIdF_.resize(N_F); // TODO: use own resize helpers?
 	particleOrderF_.resize(N_F);
 	if (N_F > 0)
 	{
@@ -1996,7 +2024,7 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 	}
 
 	// build the exact compact-CLL cell IDs and particle permutation for boundary particles
-	cellIdB_.resize(N_B);
+	cellIdB_.resize(N_B); // TODO: use own resize helpers?
 	particleOrderB_.resize(N_B);
 	if (N_B > 0)
 	{

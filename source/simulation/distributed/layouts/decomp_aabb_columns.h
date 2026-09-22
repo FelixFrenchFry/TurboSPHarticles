@@ -36,7 +36,10 @@ namespace Dist
 		void BuildRepartitionProfile(
 			const DomainDecompRepartitionParticleInput& input,
 			DomainDecompRepartitionProfile& profile) const override;
-		void Repartition(const DomainDecompRepartitionInput& input) override;
+		void Repartition(
+			const DomainDecompRepartitionProfile& profile,
+			std::span<const double> loadByRank,
+			Base::LoadBalanceWeightModel weightModel) override;
 
 	private:
 

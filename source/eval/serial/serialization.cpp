@@ -39,7 +39,7 @@ namespace Export
 	// binary format helpers
 	static constexpr uint32_t kEndianLE = 0x01020304u;
 	static constexpr char kSimStateMagic[8] =
-		{ 'T', 'S', 'P', 'S', 'I', 'M', '\0', '\0' };
+		{ 'T', 'S', 'P', 'S', 'I', 'M', '2', '\0' };
 	static constexpr char kExportSnapshotMagic[8] =
 		{ 'T', 'S', 'P', 'S', 'N', 'P', '4', '\0' };
 
@@ -204,7 +204,7 @@ namespace Export
 		off.fluid = AppendPopulation(header.N_F, sizeof(uint64_t) + 16ull * sizeof(float));
 		off.boundary = AppendPopulation(header.N_B, sizeof(uint64_t) + 5ull * sizeof(float));
 		off.rigid = AppendPopulation(header.N_R, sizeof(uint64_t) + sizeof(uint32_t) + 5ull * sizeof(float));
-		off.rigidBodies = AppendPopulation(header.N_RB, 3ull * sizeof(uint32_t) + 32ull * sizeof(float));
+		off.rigidBodies = AppendPopulation(header.N_RB, 2ull * sizeof(uint32_t) + 32ull * sizeof(float));
 		off.totalBytes = offset;
 
 		return off;
@@ -224,7 +224,6 @@ namespace Export
 		{
 			throw std::runtime_error("Invalid simulation state step/time.");
 		}
-		Sim::CheckedLocalParticleCount(header.N_R, "serialized rigid state");
 		if (header.N_RB > std::numeric_limits<uint32_t>::max())
 		{
 			throw std::length_error("Serialized rigid body count exceeds uint32_t range.");
@@ -808,7 +807,7 @@ namespace Export
 		[[maybe_unused]] const auto N = static_cast<size_t>(RB.N_);
 
 		assert(RB.id.size() == N);
-		assert(RB.rigidParticleBegin.size() == N && RB.rigidParticleCount.size() == N);
+		assert(RB.rigidParticleCount.size() == N);
 		assert(RB.xCM.size() == N && RB.yCM.size() == N && RB.zCM.size() == N);
 		assert(RB.xVel.size() == N && RB.yVel.size() == N && RB.zVel.size() == N);
 		assert(RB.xOmega.size() == N && RB.yOmega.size() == N && RB.zOmega.size() == N);
@@ -974,11 +973,38 @@ namespace Export
 		}
 	}
 
+	static glm::vec3 RigidWorldPosition(
+		const Sync::RigidBodies& bodies,
+		const uint32_t bodyIdx,
+		const float x,
+		const float y,
+		const float z)
+	{
+		if (bodyIdx >= bodies.N_)
+		{
+			throw std::runtime_error("Invalid rigid body index in simulation state.");
+		}
+		const glm::vec3 position
+		{
+			bodies.xCM[bodyIdx] + std::fmaf(bodies.a00[bodyIdx], x,
+				std::fmaf(bodies.a01[bodyIdx], y, bodies.a02[bodyIdx] * z)),
+			bodies.yCM[bodyIdx] + std::fmaf(bodies.a10[bodyIdx], x,
+				std::fmaf(bodies.a11[bodyIdx], y, bodies.a12[bodyIdx] * z)),
+			bodies.zCM[bodyIdx] + std::fmaf(bodies.a20[bodyIdx], x,
+				std::fmaf(bodies.a21[bodyIdx], y, bodies.a22[bodyIdx] * z))
+		};
+		if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+		{
+			throw std::runtime_error("Non-finite rigid world position in simulation state.");
+		}
+		return position;
+	}
+
 	BinHeaderSim SerializationMgr::VisitSimStatePositions(
 		const std::string& path,
 		const int partIdx,
 		const int N_parts,
-		const std::function<void(bool, const SimStatePositionView&)>& visit) const
+		const std::function<void(Base::ParticleType, const SimStatePositionView&)>& visit) const
 	{
 		if (N_parts <= 0 || partIdx < 0 || partIdx >= N_parts)
 		{
@@ -993,7 +1019,15 @@ namespace Export
 		const auto header = ReadSimStateHeader(ifs, srcPath);
 		const auto off = ComputeSimStateOffsets(header);
 		std::array<std::vector<float>, 3> positions;
-		const auto ScanPopulation = [&](const uint64_t N_total, const uint64_t offset, const bool boundary)
+		std::vector<uint32_t> bodyIds;
+		Sync::RigidBodies bodies;
+		if (header.N_R > 0)
+		{
+			bodies.resizeAll(Sim::CheckedLocalParticleCount(header.N_RB, "serialized rigid bodies"));
+			ifs.seekg(static_cast<std::streamoff>(off.rigidBodies));
+			VisitRigidBodyStateFields([&](auto& field) { ReadVec(ifs, field); }, bodies);
+		}
+		const auto ScanPopulation = [&](const uint64_t N_total, const uint64_t offset, const Base::ParticleType type)
 		{
 			// divide without multiplying the global count by the partition index
 			const uint64_t N_perPart = N_total / N_parts;
@@ -1003,12 +1037,33 @@ namespace Export
 			for (uint64_t begin = beginIdx; begin < endIdx; begin += N_simStateChunk)
 			{
 				const uint32_t N_particles = static_cast<uint32_t>(std::min<uint64_t>(N_simStateChunk, endIdx - begin));
-				ReadSimStatePositions(ifs, N_total, offset, begin, N_particles, positions);
-				visit(boundary, { positions[0], positions[1], positions[2] });
+				if (type == Base::ParticleType::Rigid)
+				{
+					// rigid arrays store body indices between IDs and relative positions
+					ReadSimStatePositions(
+						ifs, N_total, offset + N_total * sizeof(uint32_t), begin, N_particles, positions);
+					bodyIds.resize(N_particles);
+					ReadSimStateRange(ifs, offset + N_total * sizeof(uint64_t) + begin * sizeof(uint32_t),
+						bodyIds.data(), static_cast<uint64_t>(N_particles) * sizeof(uint32_t));
+					for (uint32_t i = 0; i != N_particles; i++)
+					{
+						const glm::vec3 position = RigidWorldPosition(
+							bodies, bodyIds[i], positions[0][i], positions[1][i], positions[2][i]);
+						positions[0][i] = position.x;
+						positions[1][i] = position.y;
+						positions[2][i] = position.z;
+					}
+				}
+				else
+				{
+					ReadSimStatePositions(ifs, N_total, offset, begin, N_particles, positions);
+				}
+				visit(type, { positions[0], positions[1], positions[2] });
 			}
 		};
-		ScanPopulation(header.N_F, off.fluid, false);
-		ScanPopulation(header.N_B, off.boundary, true);
+		ScanPopulation(header.N_F, off.fluid, Base::ParticleType::Fluid);
+		ScanPopulation(header.N_B, off.boundary, Base::ParticleType::Boundary);
+		ScanPopulation(header.N_R, off.rigid, Base::ParticleType::Rigid);
 		return header;
 	}
 
@@ -1081,10 +1136,60 @@ namespace Export
 		}
 	}
 
+	static void ReadSelectedRigidParticles(
+		std::ifstream& ifs,
+		Sync::RigidParticles& particles,
+		const Sync::RigidBodies& bodies,
+		const uint64_t N_total,
+		const uint64_t populationOffset,
+		const std::function<bool(const glm::vec3&)>& select)
+	{
+		Sync::RigidParticles chunk;
+		std::vector<uint32_t> selectedLocalIdxs;
+		std::vector<uint64_t> bodyParticleCounts(bodies.N_, 0);
+		for (uint64_t beginIdx = 0; beginIdx < N_total; beginIdx += N_simStateChunk)
+		{
+			chunk.resizeAll(static_cast<uint32_t>(std::min<uint64_t>(N_simStateChunk, N_total - beginIdx)));
+			uint64_t offset = populationOffset;
+			const auto ReadField = [&](auto& field)
+			{
+				const uint64_t valueBytes = sizeof(field[0]);
+				ReadSimStateRange(ifs, offset + beginIdx * valueBytes, field.data(), chunk.N_ * valueBytes);
+				offset += N_total * valueBytes;
+			};
+			VisitRigidStateFields(ReadField, chunk);
+			ValidateParticleIds(chunk.id, "Rigid state block");
+			selectedLocalIdxs.clear();
+			for (uint32_t i = 0; i < chunk.N_; i++)
+			{
+				const glm::vec3 position = RigidWorldPosition(bodies, chunk.bodyId[i],
+					chunk.xRelPos[i], chunk.yRelPos[i], chunk.zRelPos[i]);
+				bodyParticleCounts[chunk.bodyId[i]]++;
+				if (select(position)) { selectedLocalIdxs.push_back(i); }
+			}
+			const uint32_t N_local = Sim::CheckedLocalParticleCount(
+				static_cast<uint64_t>(particles.N_) + selectedLocalIdxs.size(), "selected rigid state");
+			const auto AppendSelectedField = [&](auto& destination, const auto& source)
+			{
+				for (const uint32_t localIdx : selectedLocalIdxs) { destination.push_back(source[localIdx]); }
+			};
+			VisitRigidStateFields(AppendSelectedField, particles, chunk);
+			particles.N_ = N_local;
+		}
+		for (uint32_t bodyIdx = 0; bodyIdx < bodies.N_; bodyIdx++)
+		{
+			if (bodyParticleCounts[bodyIdx] != bodies.rigidParticleCount[bodyIdx])
+			{
+				throw std::runtime_error("Rigid particle memberships do not match body counts.");
+			}
+		}
+	}
+
 	BinHeaderSim SerializationMgr::LoadSelectedSimState(
 		Sync::UniversalSimState& state,
 		const std::string& path,
-		const std::function<bool(const glm::vec3&)>& select) const
+		const std::function<bool(const glm::vec3&)>& select,
+		const std::function<bool(const glm::vec3&)>& selectRigid) const
 	{
 		const auto srcPath = ResolveStatePath(saveOptions_.baseDir, path);
 		std::ifstream ifs(srcPath, std::ios::binary);
@@ -1105,16 +1210,14 @@ namespace Export
 		ReadSelectedParticles(ifs, state.particlesB, header.N_B, off.boundary, select,
 			[](auto visit, auto&... states) { VisitBoundaryStateFields(visit, states...); });
 
-		// every rank needs the full rigid state
-		state.ResizeRigid(static_cast<uint32_t>(header.N_R));
+		// body transforms resolve rigid ownership in world space
 		state.ResizeRigidBodies(static_cast<uint32_t>(header.N_RB));
-		ifs.seekg(static_cast<std::streamoff>(off.rigid));
+		ifs.seekg(static_cast<std::streamoff>(off.rigidBodies));
 		const auto ReadField = [&](auto& field) { ReadVec(ifs, field); };
-		VisitRigidStateFields(ReadField, state.particlesR);
 		VisitRigidBodyStateFields(ReadField, state.rigidBodies);
 		EnsureStreamOk(ifs, "reading", srcPath.string());
-		ValidateParticleIds(state.particlesR.id, "Rigid state");
-		state.ValidateRigidAttachments();
+		ReadSelectedRigidParticles(ifs, state.particlesR, state.rigidBodies, header.N_R, off.rigid,
+			selectRigid ? selectRigid : select);
 
 		return header;
 	}

@@ -438,7 +438,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
 	// --- [ density computations ] ------------------------------------------------------------------
-	// exported outer values are complete before Begin; inner work cannot require halo results,
+	// exported outer values are complete before Begin, inner work cannot require halo results,
 	// and every consumer of received values runs only after End
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Density_Computation);
@@ -516,7 +516,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			volR,
 			neighborList,
 			sizeInvF, sizeSquF, kernelRadiusSqu,
-			cubicSplineAlpha, massF, params.viscosityB, N_R_,
+			cubicSplineAlpha, massF, params.viscosityB, N_ownedR_,
 			xForceR, yForceR, zForceR);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
@@ -690,7 +690,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			psiR,
 			neighborList,
 			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
-			massF, params.pressGamma, N_R_,
+			massF, params.pressGamma, N_ownedR_,
 			xForceR, yForceR, zForceR);
 
 		// reduce rigid particle forces into body force and torque

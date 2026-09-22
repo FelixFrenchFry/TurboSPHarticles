@@ -32,7 +32,6 @@ namespace Dist
 		std::vector<uint64_t>& rankCounts);
 
 	// compacts the sorted selection to owned particles and packs local output
-	// (replicated rigid particles are split into disjoint index ranges)
 	bool PackOwnedExportSnapshot(
 		Sync::ExportSnapshot& exportSnap,
 		const Sync::FluidConstView& particlesF,
@@ -41,6 +40,7 @@ namespace Dist
 		const Sync::RigidBodies& rigidBodies,
 		const DistParticleState& particleStateF,
 		const DistParticleState& particleStateB,
+		const DistParticleState& particleStateR,
 		std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 		int rank,
 		int N_ranks,

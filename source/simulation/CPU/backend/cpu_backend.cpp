@@ -180,6 +180,7 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	useDistributedParticleLayout_ = false;
 	N_ownedF_ = 0;
 	N_ownedB_ = 0;
+	N_ownedR_ = 0;
 	outerFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleFlags_.clear();
@@ -187,13 +188,12 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	innerFluidChunkIdxs_.clear();
 	outerFluidChunkIdxs_.clear();
 	pressureAccIsOwnedPrefix_ = false;
-	activeRigidParticleLocalIdxs_.clear();
-	activeRigidParticleFlags_.clear();
+	rigidParticleOffsets_ByBody_.clear();
+	rigidParticleLocalIdxs_ByBody_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
 	particleFlagsScratch_.clear();
 	useDistributedStepWork_ = false;
-	useActiveRigidParticleLocalIdxs_ = false;
 	integrateRigidBodies_ = true;
 	applyRigidBodyExternalForces_ = true;
 
@@ -216,7 +216,6 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	R.ensureParticleIdsPresent();
 	R.ensureRigidCoefficientsPresent(params.massB, params.restDensity);
 	RB.ensureRigidBodyIdsPresent();
-	src.ValidateRigidAttachments();
 
 	// (no resize, because it is included in the transfer operations)
 
@@ -267,7 +266,6 @@ void SimBackend_CPU::PullFromUniversalSimState(
 
 	// transfer to backend rigid body data structures
 	idRB_ = std::move(RB.id);
-	rigidParticleBeginRB_ = std::move(RB.rigidParticleBegin);
 	rigidParticleCountRB_ = std::move(RB.rigidParticleCount);
 	xCMRB_ = std::move(RB.xCM);
 	yCMRB_ = std::move(RB.yCM);
@@ -387,7 +385,6 @@ void SimBackend_CPU::PushToUniversalSimState(
 
 	// transfer from backend rigid body data structures
 	transferField(RB.id, idRB_);
-	transferField(RB.rigidParticleBegin, rigidParticleBeginRB_);
 	transferField(RB.rigidParticleCount, rigidParticleCountRB_);
 	transferField(RB.xCM, xCMRB_);
 	transferField(RB.yCM, yCMRB_);
@@ -465,11 +462,18 @@ Sync::RigidConstView SimBackend_CPU::GetRigidParticleView() const
 	};
 }
 
+Sync::ParticlePositionConstView SimBackend_CPU::GetRigidParticleWorldPositionView() const
+{
+	return { xPosR_, yPosR_, zPosR_ };
+}
+
 bool SimBackend_CPU::ApplyParticleRedistribution(
 	const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
 	const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+	const std::vector<uint32_t>& retainedRigidOldLocalIdx_FromNewLocalIdx,
 	const Sync::FluidParticles& appendedParticlesF,
 	const Sync::BoundaryParticles& appendedParticlesB,
+	const Sync::RigidParticles& appendedParticlesR,
 	const bool redistributeParticlesB,
 	const SimParams& params)
 {
@@ -484,6 +488,10 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	const auto boundarySizeValid = [&appendedParticlesB](const auto& values)
 	{
 		return values.size() == appendedParticlesB.N_;
+	};
+	const auto rigidSizeValid = [&appendedParticlesR](const auto& values)
+	{
+		return values.size() == appendedParticlesR.N_;
 	};
 
 	// check that the appended particle blocks have the expected sizes
@@ -507,6 +515,13 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		!fluidFieldOmitted(appendedParticlesF.diagElem) ||
 		!fluidFieldOmitted(appendedParticlesF.pressure) ||
 		!fluidFieldOmitted(appendedParticlesF.density) ||
+		!rigidSizeValid(appendedParticlesR.id) ||
+		!rigidSizeValid(appendedParticlesR.bodyId) ||
+		!rigidSizeValid(appendedParticlesR.xRelPos) ||
+		!rigidSizeValid(appendedParticlesR.yRelPos) ||
+		!rigidSizeValid(appendedParticlesR.zRelPos) ||
+		!rigidSizeValid(appendedParticlesR.volR) ||
+		!rigidSizeValid(appendedParticlesR.psiR) ||
 		(redistributeParticlesB &&
 			(!boundarySizeValid(appendedParticlesB.id) ||
 			 !boundarySizeValid(appendedParticlesB.xPos) ||
@@ -516,6 +531,11 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 			 !boundarySizeValid(appendedParticlesB.psiB))))
 	{
 		return false;
+	}
+
+	for (const uint32_t bodyIdx : appendedParticlesR.bodyId)
+	{
+		if (bodyIdx >= N_RB_) { return false; }
 	}
 
 	const auto compactionMapValid = [](
@@ -549,6 +569,7 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 
 	// check that the compaction maps are valid
 	if (!compactionMapValid(retainedFluidOldLocalIdx_FromNewLocalIdx, N_F_) ||
+		!compactionMapValid(retainedRigidOldLocalIdx_FromNewLocalIdx, N_R_) ||
 		(redistributeParticlesB &&
 		 !compactionMapValid(retainedBoundaryOldLocalIdx_FromNewLocalIdx, N_B_)))
 	{
@@ -560,18 +581,22 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	const uint32_t N_retainedB = redistributeParticlesB
 		? static_cast<uint32_t>(retainedBoundaryOldLocalIdx_FromNewLocalIdx.size())
 		: N_B_;
+	const uint32_t N_retainedR = static_cast<uint32_t>(retainedRigidOldLocalIdx_FromNewLocalIdx.size());
 	const uint64_t N_finalF_U64 = static_cast<uint64_t>(N_retainedF) + appendedParticlesF.N_;
 	const uint64_t N_finalB_U64 = redistributeParticlesB
 		? static_cast<uint64_t>(N_retainedB) + appendedParticlesB.N_
 		: N_B_;
+	const uint64_t N_finalR_U64 = static_cast<uint64_t>(N_retainedR) + appendedParticlesR.N_;
 	if (N_finalF_U64 > Sim::MaxLocalParticleCount ||
-		N_finalB_U64 > Sim::MaxLocalParticleCount)
+		N_finalB_U64 > Sim::MaxLocalParticleCount ||
+		N_finalR_U64 > Sim::MaxLocalParticleCount)
 	{
 		return false;
 	}
 
 	const uint32_t N_finalF = static_cast<uint32_t>(N_finalF_U64);
 	const uint32_t N_finalB = static_cast<uint32_t>(N_finalB_U64);
+	const uint32_t N_finalR = static_cast<uint32_t>(N_finalR_U64);
 
 	// reserve all required field capacity before compacting particles in place,
 	// so subsequent resize calls can then use this capacity without reallocating
@@ -601,6 +626,22 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		ReserveParticleFieldWithExtra(volB_, N_finalB, particleFieldExtraAllocCapacityPct_);
 		ReserveParticleFieldWithExtra(psiB_, N_finalB, particleFieldExtraAllocCapacityPct_);
 	}
+	ReserveParticleFieldWithExtra(idR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(bodyIdR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(xRelPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(yRelPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(zRelPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(volR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(psiR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(xPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(yPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(zPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(xVelR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(yVelR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(zVelR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(xForceR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(yForceR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(zForceR_, N_finalR, particleFieldExtraAllocCapacityPct_);
 
 	const auto copyFluidParticleOldToNew = [&](
 		const uint32_t oldLocalIdx,
@@ -666,6 +707,31 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 			tbb::auto_partitioner{});
 	}
 
+	const auto copyRigidParticleOldToNew = [&](
+		const uint32_t oldLocalIdx,
+		const uint32_t newLocalIdx)
+	{
+		idR_[newLocalIdx] = idR_[oldLocalIdx];
+		bodyIdR_[newLocalIdx] = bodyIdR_[oldLocalIdx];
+		xRelPosR_[newLocalIdx] = xRelPosR_[oldLocalIdx];
+		yRelPosR_[newLocalIdx] = yRelPosR_[oldLocalIdx];
+		zRelPosR_[newLocalIdx] = zRelPosR_[oldLocalIdx];
+		volR_[newLocalIdx] = volR_[oldLocalIdx];
+		psiR_[newLocalIdx] = psiR_[oldLocalIdx];
+	};
+
+	// compact retained rigid fields together
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_retainedR, particleCompactionBlockSize_),
+		[&](const tbb::blocked_range<uint32_t>& blockRange)
+		{
+			CompactParticles(
+				retainedRigidOldLocalIdx_FromNewLocalIdx,
+				blockRange,
+				copyRigidParticleOldToNew);
+		},
+		tbb::auto_partitioner{});
+
 	// resize fluid fields to their final particle count after compaction,
 	// keeping the old tail while retained particles are moved into the prefix
 	N_F_ = N_finalF;
@@ -696,6 +762,24 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		volB_.resize(N_B_);
 		psiB_.resize(N_B_);
 	}
+
+	N_R_ = N_finalR;
+	idR_.resize(N_R_);
+	bodyIdR_.resize(N_R_);
+	xRelPosR_.resize(N_R_);
+	yRelPosR_.resize(N_R_);
+	zRelPosR_.resize(N_R_);
+	volR_.resize(N_R_);
+	psiR_.resize(N_R_);
+	xPosR_.resize(N_R_);
+	yPosR_.resize(N_R_);
+	zPosR_.resize(N_R_);
+	xVelR_.resize(N_R_);
+	yVelR_.resize(N_R_);
+	zVelR_.resize(N_R_);
+	xForceR_.resize(N_R_);
+	yForceR_.resize(N_R_);
+	zForceR_.resize(N_R_);
 
 	// append migrated and halo fluid particles after the retained prefix to complete the new local layout
 	// (index blocks processed in parallel, and fields sequentially within each block)
@@ -741,9 +825,32 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 			tbb::auto_partitioner{});
 	}
 
+	// append migrated owners and halos after the retained rigid prefix
+	const uint32_t rigidAppendBegin = N_retainedR;
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, appendedParticlesR.N_, particleAppendBlockSize_),
+		[&](const tbb::blocked_range<uint32_t>& blockRange)
+		{
+			const Sync::RigidParticles& src = appendedParticlesR;
+
+			AppendParticleField(idR_, src.id, rigidAppendBegin, blockRange);
+			AppendParticleField(bodyIdR_, src.bodyId, rigidAppendBegin, blockRange);
+			AppendParticleField(xRelPosR_, src.xRelPos, rigidAppendBegin, blockRange);
+			AppendParticleField(yRelPosR_, src.yRelPos, rigidAppendBegin, blockRange);
+			AppendParticleField(zRelPosR_, src.zRelPos, rigidAppendBegin, blockRange);
+			AppendParticleField(volR_, src.volR, rigidAppendBegin, blockRange);
+			AppendParticleField(psiR_, src.psiR, rigidAppendBegin, blockRange);
+		},
+		tbb::auto_partitioner{});
+
+	rigidParticleOffsets_ByBody_.clear();
+	rigidParticleLocalIdxs_ByBody_.clear();
+	UpdateRigidParticles();
+
 	useDistributedParticleLayout_ = false;
 	N_ownedF_ = 0;
 	N_ownedB_ = 0;
+	N_ownedR_ = 0;
 	outerFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleFlags_.clear();
@@ -1225,13 +1332,12 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(pressureAccChunkIdxs_));
 		Add(usage, MemUsageOf_Vector(innerFluidChunkIdxs_));
 		Add(usage, MemUsageOf_Vector(outerFluidChunkIdxs_));
-		Add(usage, MemUsageOf_Vector(activeRigidParticleLocalIdxs_));
-		Add(usage, MemUsageOf_Vector(activeRigidParticleFlags_));
+		Add(usage, MemUsageOf_Vector(rigidParticleOffsets_ByBody_));
+		Add(usage, MemUsageOf_Vector(rigidParticleLocalIdxs_ByBody_));
 		Add(usage, MemUsageOf_Vector(newFluidLocalIdx_FromOldLocalIdx_));
 		Add(usage, MemUsageOf_Vector(chunkFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(particleFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(idRB_));
-		Add(usage, MemUsageOf_Vector(rigidParticleBeginRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
 		Add(usage, MemUsageOf_Vector(xCMRB_));
 		Add(usage, MemUsageOf_Vector(yCMRB_));
@@ -1297,29 +1403,19 @@ bool SimBackend_CPU::FillStatisticsPartial(
 void SimBackend_CPU::ComputeStatisticsPartial(
 	Stats::StatisticsPartial& partial,
 	const SimParams& simParams,
-	const bool useActiveParticleLocalIdxs) const
+	const bool ownedOnly) const
 {
 	using namespace Stats;
 
 	partial.Clear();
 
-	const uint32_t N_F = useActiveParticleLocalIdxs ? N_ownedF_ : N_F_;
-	const uint32_t N_R = useActiveParticleLocalIdxs
-		? static_cast<uint32_t>(activeRigidParticleLocalIdxs_.size())
-		: N_R_;
+	const uint32_t N_F = ownedOnly ? N_ownedF_ : N_F_;
+	const uint32_t N_R = ownedOnly ? N_ownedR_ : N_R_;
 
 	partial.N_F = N_F;
-	partial.N_B = useActiveParticleLocalIdxs ? 0 : N_B_;
+	partial.N_B = ownedOnly ? 0 : N_B_;
 	partial.N_R = N_R;
 	partial.N_solverIters = N_solverIters_;
-
-	const auto getFluidLocalIdx = [](const uint32_t i) { return i; };
-	const auto getRigidLocalIdx = [&](const uint32_t i)
-	{
-		return useActiveParticleLocalIdxs
-			? activeRigidParticleLocalIdxs_[i]
-			: i;
-	};
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Statistics_Computation);
 
@@ -1328,9 +1424,8 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 	if (simParams.statGroupsEnabled[GetIdx(StatGroup::Particles)])
 	{
 		const auto fillNbrCountPartial =
-			[&]<typename LocalIdxFunc, typename NbrCountFunc>(
+			[&]<typename NbrCountFunc>(
 				const uint32_t N_particles,
-				LocalIdxFunc getLocalIdx,
 				NbrCountFunc getNbrCount,
 				DistributionPartial& distribution)
 		{
@@ -1353,7 +1448,7 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const uint32_t N_nbrs = getNbrCount(getLocalIdx(i));
+						const uint32_t N_nbrs = getNbrCount(i);
 						local.sum += N_nbrs;
 						local.min = std::min(local.min, N_nbrs);
 						local.max = std::max(local.max, N_nbrs);
@@ -1379,14 +1474,13 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 
 			for (uint32_t i = 0; i < N_particles; i++)
 			{
-				const uint32_t N_nbrs = getNbrCount(getLocalIdx(i));
+				const uint32_t N_nbrs = getNbrCount(i);
 				distribution.histogram[N_nbrs]++;
 			}
 		};
 
 		fillNbrCountPartial(
 			N_F,
-			getFluidLocalIdx,
 			[&](const uint32_t localIdx)
 			{
 				return neighborList_->CountFF(localIdx);
@@ -1394,7 +1488,6 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 			partial.nbrCountFF);
 		fillNbrCountPartial(
 			N_F,
-			getFluidLocalIdx,
 			[&](const uint32_t localIdx)
 			{
 				return neighborList_->CountFB(localIdx);
@@ -1402,7 +1495,6 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 			partial.nbrCountFB);
 		fillNbrCountPartial(
 			N_F,
-			getFluidLocalIdx,
 			[&](const uint32_t localIdx)
 			{
 				return neighborList_->CountFR(localIdx);
@@ -1410,7 +1502,6 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 			partial.nbrCountFR);
 		fillNbrCountPartial(
 			N_R,
-			getRigidLocalIdx,
 			[&](const uint32_t localIdx)
 			{
 				return neighborList_->CountRF(localIdx);
@@ -1418,7 +1509,6 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 			partial.nbrCountRF);
 		fillNbrCountPartial(
 			N_R,
-			getRigidLocalIdx,
 			[&](const uint32_t localIdx)
 			{
 				return neighborList_->CountRB(localIdx);
@@ -1426,7 +1516,6 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 			partial.nbrCountRB);
 		fillNbrCountPartial(
 			N_R,
-			getRigidLocalIdx,
 			[&](const uint32_t localIdx)
 			{
 				return neighborList_->CountRR(localIdx);
@@ -1454,8 +1543,7 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
 				{
-					const uint32_t localIdx =
-						getFluidLocalIdx(i);
+					const uint32_t localIdx = i;
 					const float relErr =
 						(densityF_[localIdx] / simParams.restDensity) - 1.0f;
 					local.rawSum += relErr;
@@ -1505,8 +1593,7 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 				{
 					for (uint32_t i = r.begin(); i != r.end(); i++)
 					{
-						const uint32_t localIdx =
-							getFluidLocalIdx(i);
+						const uint32_t localIdx = i;
 						const float vx = xVelF_[localIdx];
 						const float vy = yVelF_[localIdx];
 						const float vz = zVelF_[localIdx];
@@ -1620,7 +1707,7 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 	const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
 	const bool pressureAccIsOwnedPrefix,
 	const uint32_t N_ownedBoundaryParticles,
-	const std::vector<uint32_t>& activeRigidParticleLocalIdxs,
+	const uint32_t N_ownedRigidParticles,
 	I_DistributedFluidSolverSync& distributedFluidSolverSync)
 {
 	const uint32_t N_ownedF = static_cast<uint32_t>(ownedFluidParticleLocalIdxs.size());
@@ -1699,33 +1786,17 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
-	const uint32_t N_activeR = static_cast<uint32_t>(activeRigidParticleLocalIdxs.size());
-	const auto isInvalidActiveRigidIdx = [&](const uint32_t activeIdx)
-	{
-		return activeRigidParticleLocalIdxs[activeIdx] >= N_R_;
-	};
-	if (Check::CountViolations(0, N_activeR, isInvalidActiveRigidIdx) != 0)
-	{
-		const uint32_t activeIdx = Check::FindFirstViolation(
-			0, N_activeR, isInvalidActiveRigidIdx);
-		SPDLOG_ERROR(
-			"Invalid active rigid particle local index {}.",
-			activeRigidParticleLocalIdxs[activeIdx]);
-		return false;
-	}
-
-	const uint32_t duplicateActiveRigidIdx = Check::FindFirstDuplicateIdx(
-		activeRigidParticleLocalIdxs, N_R_, particleFlagsScratch_);
-	if (duplicateActiveRigidIdx != N_activeR)
+	if (N_ownedRigidParticles > N_R_)
 	{
 		SPDLOG_ERROR(
-			"Duplicate active rigid particle local index {}.",
-			activeRigidParticleLocalIdxs[duplicateActiveRigidIdx]);
+			"Invalid owned rigid particle count {} for {} local particles.",
+			N_ownedRigidParticles, N_R_);
 		return false;
 	}
 
 	N_ownedF_ = N_ownedF;
 	N_ownedB_ = N_ownedBoundaryParticles;
+	N_ownedR_ = N_ownedRigidParticles;
 	useDistributedParticleLayout_ = true;
 	outerFluidParticleLocalIdxs_ = outerFluidParticleLocalIdxs;
 	pressureAccIsOwnedPrefix_ = pressureAccIsOwnedPrefix;
@@ -1737,15 +1808,8 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 	{
 		pressureAccFluidParticleLocalIdxs_ = pressureAccelerationFluidParticleLocalIdxs;
 	}
-	activeRigidParticleLocalIdxs_ = activeRigidParticleLocalIdxs;
-	activeRigidParticleFlags_.assign(N_R_, 0);
-	for (const uint32_t localIdx : activeRigidParticleLocalIdxs)
-	{
-		activeRigidParticleFlags_[localIdx] = 1;
-	}
 	distributedFluidSolverSync_ = &distributedFluidSolverSync;
 	useDistributedStepWork_ = true;
-	useActiveRigidParticleLocalIdxs_ = true;
 	integrateRigidBodies_ = false;
 	applyRigidBodyExternalForces_ = false;
 	return true;
@@ -2062,10 +2126,19 @@ void SimBackend_CPU::ClearRigidForcesAndAddGravity(const SimParams& params)
 
 void SimBackend_CPU::ReduceRigidParticleForces()
 {
+	// rebuild after import, redistribution, or an owned-prefix change
+	const uint32_t N_work = useDistributedStepWork_ ? N_ownedR_ : N_R_;
+	if (rigidParticleOffsets_ByBody_.empty() || rigidParticleLocalIdxs_ByBody_.size() != N_work)
+	{
+		Sync::BuildRigidParticleIndicesByBody(
+			std::span<const uint32_t>(bodyIdR_).first(N_work), N_RB_,
+			rigidParticleOffsets_ByBody_, rigidParticleLocalIdxs_ByBody_);
+	}
+
 	for (uint32_t bodyIdx = 0; bodyIdx < N_RB_; bodyIdx++)
 	{
-		const uint32_t begin = rigidParticleBeginRB_[bodyIdx];
-		const uint32_t end = begin + rigidParticleCountRB_[bodyIdx];
+		const uint32_t begin = rigidParticleOffsets_ByBody_[bodyIdx];
+		const uint32_t end = rigidParticleOffsets_ByBody_[bodyIdx + 1];
 
 		const float a00 = a00RB_[bodyIdx];
 		const float a01 = a01RB_[bodyIdx];
@@ -2083,13 +2156,9 @@ void SimBackend_CPU::ReduceRigidParticleForces()
 			RigidForceTorqueAccum{},
 			[&](const tbb::blocked_range<uint32_t>& r, RigidForceTorqueAccum local) -> RigidForceTorqueAccum
 			{
-				for (uint32_t rigidParticleIdx = r.begin(); rigidParticleIdx != r.end(); rigidParticleIdx++)
+				for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
 				{
-					if (useActiveRigidParticleLocalIdxs_ &&
-						activeRigidParticleFlags_[rigidParticleIdx] == 0)
-					{
-						continue;
-					}
+					const uint32_t rigidParticleIdx = rigidParticleLocalIdxs_ByBody_[workIdx];
 
 					const float lx = xRelPosR_[rigidParticleIdx];
 					const float ly = yRelPosR_[rigidParticleIdx];

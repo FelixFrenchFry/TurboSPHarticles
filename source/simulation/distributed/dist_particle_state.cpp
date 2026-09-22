@@ -3,9 +3,11 @@
 // external
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -44,6 +46,26 @@ namespace
 			particlesB.xPos[arrayIdx],
 			particlesB.yPos[arrayIdx],
 			particlesB.zPos[arrayIdx]
+		};
+	}
+
+	glm::vec3 RigidPositionAtArrayIdx(
+		const Sync::RigidParticles& particlesR,
+		const Sync::RigidBodies& rigidBodies,
+		const uint32_t arrayIdx)
+	{
+		const uint32_t bodyIdx = particlesR.bodyId[arrayIdx];
+		const float x = particlesR.xRelPos[arrayIdx];
+		const float y = particlesR.yRelPos[arrayIdx];
+		const float z = particlesR.zRelPos[arrayIdx];
+		return
+		{
+			rigidBodies.xCM[bodyIdx] + std::fmaf(rigidBodies.a00[bodyIdx], x,
+				std::fmaf(rigidBodies.a01[bodyIdx], y, rigidBodies.a02[bodyIdx] * z)),
+			rigidBodies.yCM[bodyIdx] + std::fmaf(rigidBodies.a10[bodyIdx], x,
+				std::fmaf(rigidBodies.a11[bodyIdx], y, rigidBodies.a12[bodyIdx] * z)),
+			rigidBodies.zCM[bodyIdx] + std::fmaf(rigidBodies.a20[bodyIdx], x,
+				std::fmaf(rigidBodies.a21[bodyIdx], y, rigidBodies.a22[bodyIdx] * z))
 		};
 	}
 
@@ -361,12 +383,29 @@ namespace
 		dst.psiB[dstIdx] = src.psiB[srcIdx];
 	}
 
-	template <typename PositionAtSrcIdx, typename ResizeLocalParticles, typename CopyParticleSourceToLocal>
+	void CopyRigidParticle(
+		const Sync::RigidParticles& src,
+		Sync::RigidParticles& dst,
+		const uint32_t srcIdx,
+		const uint32_t dstIdx)
+	{
+		dst.id[dstIdx] = src.id[srcIdx];
+		dst.bodyId[dstIdx] = src.bodyId[srcIdx];
+		dst.xRelPos[dstIdx] = src.xRelPos[srcIdx];
+		dst.yRelPos[dstIdx] = src.yRelPos[srcIdx];
+		dst.zRelPos[dstIdx] = src.zRelPos[srcIdx];
+		dst.volR[dstIdx] = src.volR[srcIdx];
+		dst.psiR[dstIdx] = src.psiR[srcIdx];
+	}
+
+	template <typename PositionAtSrcIdx, typename ResizeLocalParticles,
+		typename CopyParticleSourceToLocal, typename MoveSourceToLocal>
 	void BuildLocalParticleRangesFromSourceState_Parallel(
 		const uint32_t N_source,
 		const PositionAtSrcIdx& positionAtSrcIdx,
 		const ResizeLocalParticles& resizeLocalParticles,
 		const CopyParticleSourceToLocal& copyParticleSourceToLocal,
+		const MoveSourceToLocal& moveSourceToLocal,
 		const IDomainDecomp& domainDecomp,
 		const AABB& haloBounds,
 		const int rank,
@@ -400,6 +439,10 @@ namespace
 				for (uint32_t srcIdx = beginSrcIdx; srcIdx != endSrcIdx; srcIdx++)
 				{
 					const glm::vec3 position = positionAtSrcIdx(srcIdx);
+					if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+					{
+						throw std::runtime_error("Particle position is not finite.");
+					}
 					const int ownerRank = domainDecomp.OwnerRank(position);
 
 					if (ownerRank == rank)
@@ -427,9 +470,16 @@ namespace
 		N_owned = classTotals[PARTICLE_BUILD_CLASS_OWNED];
 		N_halo = classTotals[PARTICLE_BUILD_CLASS_HALO];
 
-		// allocate exact local particle storage before the compact ranges are filled
 		const uint32_t N_local = Sim::CheckedCombinedLocalParticleCount(
 			N_owned, N_halo, "Initial owned and halo particle count");
+
+		// reuse source storage when all particles already belong to this rank
+		if (N_owned == N_source)
+		{
+			moveSourceToLocal();
+			return;
+		}
+
 		resizeLocalParticles(N_local);
 
 		// copy owned particles into the compact prefix and halo particles into the suffix
@@ -473,21 +523,16 @@ namespace
 	// build compact rank-local fluid storage as [ owned particles ][ halo particles ]
 	void BuildLocalFluidParticlesFromGlobalState(
 		DistParticleState& particleState,
-		Sync::UniversalSimState& localState,
-		const Sync::UniversalSimState& globalState,
+		Sync::FluidParticles& localFluid,
+		Sync::FluidParticles& globalFluid,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
 		const float haloRadius)
 	{
-		const Sync::FluidParticles& globalFluid = globalState.particlesF;
-		Sync::FluidParticles& localFluid = localState.particlesF;
-
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
 
 		// reset metadata for the new compact layout
 		particleState.Clear();
-
-		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
 		// fill the compact prefix with particles owned by this rank, then append
 		// non-owned particles inside the halo bounds of this rank
@@ -501,11 +546,15 @@ namespace
 			},
 			[&](const uint32_t N_local)
 			{
-				localState.ResizeFluid(N_local);
+				localFluid.resizeAll(N_local);
 			},
 			[&](const uint32_t srcIdx, const uint32_t dstIdx)
 			{
 				CopyFluidParticle(globalFluid, localFluid, srcIdx, dstIdx);
+			},
+			[&]()
+			{
+				localFluid = std::move(globalFluid);
 			},
 			domainDecomp, haloBounds, rank, N_owned, N_halo);
 
@@ -518,21 +567,16 @@ namespace
 	// build compact rank-local boundary storage as [ owned particles ][ halo particles ]
 	void BuildLocalBoundaryParticlesFromGlobalState(
 		DistParticleState& particleState,
-		Sync::UniversalSimState& localState,
-		const Sync::UniversalSimState& globalState,
+		Sync::BoundaryParticles& localBoundary,
+		Sync::BoundaryParticles& globalBoundary,
 		const IDomainDecomp& domainDecomp,
 		const int rank,
 		const float haloRadius)
 	{
-		const Sync::BoundaryParticles& globalBoundary = globalState.particlesB;
-		Sync::BoundaryParticles& localBoundary = localState.particlesB;
-
 		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
 
 		// reset metadata for the new compact layout
 		particleState.Clear();
-
-		// particle IDs hold the global scenario index, so a rank-local build slice still maps back globally
 
 		// fill the compact prefix with particles owned by this rank, then append
 		// non-owned particles inside the halo bounds of this rank
@@ -546,17 +590,72 @@ namespace
 			},
 			[&](const uint32_t N_local)
 			{
-				localState.ResizeBoundary(N_local);
+				localBoundary.resizeAll(N_local);
 			},
 			[&](const uint32_t srcIdx, const uint32_t dstIdx)
 			{
 				CopyBoundaryParticle(globalBoundary, localBoundary, srcIdx, dstIdx);
+			},
+			[&]()
+			{
+				localBoundary = std::move(globalBoundary);
 			},
 			domainDecomp, haloBounds, rank, N_owned, N_halo);
 
 		// classify the compact prefix as inner or outer, then mark the suffix as halo
 		ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 			particleState, localBoundary, domainDecomp, rank, haloRadius);
+		ClassifyHaloParticleRange(particleState, N_owned, N_owned + N_halo);
+	}
+
+	// build compact rank-local rigid storage as [ owned particles ][ halo particles ]
+	void BuildLocalRigidParticlesFromGlobalState(
+		DistParticleState& particleState,
+		Sync::RigidParticles& localRigid,
+		Sync::RigidParticles& globalRigid,
+		const Sync::RigidBodies& rigidBodies,
+		const IDomainDecomp& domainDecomp,
+		const int rank,
+		const float haloRadius)
+	{
+		std::string failMsg{};
+		if (!ValidateLocalRigidParticleAttachments(globalRigid.constView(), rigidBodies, &failMsg))
+		{
+			throw std::runtime_error(failMsg);
+		}
+
+		const AABB haloBounds = domainDecomp.HaloExtentAABB(rank);
+
+		// reset metadata for the new compact layout
+		particleState.Clear();
+
+		// fill the compact prefix with particles owned by this rank,
+		// then append non-owned particles inside the halo bounds of this rank
+		uint32_t N_owned = 0;
+		uint32_t N_halo = 0;
+		BuildLocalParticleRangesFromSourceState_Parallel(
+			globalRigid.N_,
+			[&](const uint32_t srcIdx)
+			{
+				return RigidPositionAtArrayIdx(globalRigid, rigidBodies, srcIdx);
+			},
+			[&](const uint32_t N_local)
+			{
+				localRigid.resizeAll(N_local);
+			},
+			[&](const uint32_t srcIdx, const uint32_t dstIdx)
+			{
+				CopyRigidParticle(globalRigid, localRigid, srcIdx, dstIdx);
+			},
+			[&]()
+			{
+				localRigid = std::move(globalRigid);
+			},
+			domainDecomp, haloBounds, rank, N_owned, N_halo);
+
+		// classify the compact prefix as inner or outer, then mark the suffix as halo
+		ClassifyOwnedRigidParticlesIntoInnerOuter(
+			particleState, localRigid, rigidBodies, domainDecomp, rank, haloRadius);
 		ClassifyHaloParticleRange(particleState, N_owned, N_owned + N_halo);
 	}
 
@@ -662,30 +761,10 @@ bool DistParticleState::IsValidLocalParticleLayout(
 			"local index range in ascending order.");
 	}
 
-	// check that owned list entries point into the compact owned range
-	// TODO: parallelize with TBB?
-	for (const uint32_t localIdx : particleLocalIdx_Owned)
-	{
-		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
-		{
-			return fail("particleLocalIdx_Owned contains an index outside the owned local index range.");
-		}
-		const DistParticleClass particleClass = particleClasses[localIdx];
-		if (particleClass != DistParticleClass::Inner &&
-			particleClass != DistParticleClass::Outer)
-		{
-			return fail("particleLocalIdx_Owned contains an index whose class is not Inner or Outer.");
-		}
-	}
-
 	// check that inner list entries point to owned particles marked inner
 	// TODO: parallelize with TBB?
 	for (const uint32_t localIdx : particleLocalIdx_Inner)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
-		{
-			return fail("particleLocalIdx_Inner contains an index outside the owned local index range.");
-		}
 		if (particleClasses[localIdx] != DistParticleClass::Inner)
 		{
 			return fail("particleLocalIdx_Inner contains an index whose class is not Inner.");
@@ -696,29 +775,12 @@ bool DistParticleState::IsValidLocalParticleLayout(
 	// TODO: parallelize with TBB?
 	for (const uint32_t localIdx : particleLocalIdx_Outer)
 	{
-		if (!IsLocalIdxInRange(localIdx, 0, haloStartLocalIdx))
-		{
-			return fail("particleLocalIdx_Outer contains an index outside the owned local index range.");
-		}
 		if (particleClasses[localIdx] != DistParticleClass::Outer)
 		{
 			return fail("particleLocalIdx_Outer contains an index whose class is not Outer.");
 		}
 	}
 
-	// check that halo list entries point to non-owned particles marked halo
-	// TODO: parallelize with TBB?
-	for (const uint32_t localIdx : particleLocalIdx_Halo)
-	{
-		if (!IsLocalIdxInRange(localIdx, haloStartLocalIdx, N_local))
-		{
-			return fail("particleLocalIdx_Halo contains an index outside the halo local index range.");
-		}
-		if (particleClasses[localIdx] != DistParticleClass::Halo)
-		{
-			return fail("particleLocalIdx_Halo contains an index whose class is not Halo.");
-		}
-	}
 	#endif
 
 	return true;
@@ -769,6 +831,47 @@ bool DistParticleState::IsValidLocalParticleState(
 	(void)N_global;
 	#endif
 
+	return true;
+}
+
+bool Dist::ValidateLocalRigidParticleAttachments(
+	const Sync::RigidConstView& particlesR,
+	const Sync::RigidBodies& rigidBodies,
+	std::string* failMsg)
+{
+	if (failMsg) { failMsg->clear(); }
+
+	const auto fail = [failMsg](std::string message) -> bool
+	{
+		if (failMsg) { *failMsg = std::move(message); }
+		return false;
+	};
+
+	if (particlesR.id.size() != particlesR.N_ ||
+		particlesR.bodyId.size() != particlesR.N_ ||
+		particlesR.xRelPos.size() != particlesR.N_ ||
+		particlesR.yRelPos.size() != particlesR.N_ ||
+		particlesR.zRelPos.size() != particlesR.N_ ||
+		particlesR.volR.size() != particlesR.N_ ||
+		particlesR.psiR.size() != particlesR.N_ ||
+		rigidBodies.rigidParticleCount.size() != rigidBodies.N_)
+	{
+		return fail("Invalid local rigid field sizes.");
+	}
+
+	std::vector<uint32_t> bodyParticleCounts(rigidBodies.N_, 0);
+	for (const uint32_t bodyIdx : particlesR.bodyId)
+	{
+		if (bodyIdx >= rigidBodies.N_)
+		{
+			return fail("Invalid local rigid body index.");
+		}
+		bodyParticleCounts[bodyIdx]++;
+		if (bodyParticleCounts[bodyIdx] > rigidBodies.rigidParticleCount[bodyIdx])
+		{
+			return fail("Local rigid subset exceeds complete body count.");
+		}
+	}
 	return true;
 }
 
@@ -1218,11 +1321,39 @@ void Dist::ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		classificationWorkBuffers);
 }
 
+void Dist::ClassifyOwnedRigidParticlesIntoInnerOuter(
+	DistParticleState& particleState,
+	const Sync::RigidParticles& particlesR,
+	const Sync::RigidBodies& rigidBodies,
+	const IDomainDecomp& domainDecomp,
+	const int rank,
+	const float haloRadius,
+	ParticleClassificationWorkBuffers* workBuffers)
+{
+	// use caller-owned scratch when available to retain allocations across calls
+	ParticleClassificationWorkBuffers localWorkBuffers{};
+	ParticleClassificationWorkBuffers& classificationWorkBuffers =
+		workBuffers ? *workBuffers : localWorkBuffers;
+
+	ClassifyOwnedParticlesIntoInnerOuter_Parallel(
+		particleState,
+		particlesR.N_,
+		[&](const uint32_t localIdx)
+		{
+			return RigidPositionAtArrayIdx(particlesR, rigidBodies, localIdx);
+		},
+		domainDecomp,
+		rank,
+		haloRadius,
+		classificationWorkBuffers);
+}
+
 void Dist::BuildLocalParticlesFromGlobalState(
 	Sync::UniversalSimState& localState,
 	DistParticleState& particleStateF,
 	DistParticleState& particleStateB,
-	const Sync::UniversalSimState& globalState,
+	DistParticleState& particleStateR,
+	Sync::UniversalSimState&& globalState,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
 	const float haloRadius)
@@ -1231,14 +1362,21 @@ void Dist::BuildLocalParticlesFromGlobalState(
 	localState = {};
 	localState.step = globalState.step;
 	localState.time = globalState.time;
-	localState.particlesR = globalState.particlesR;
 	localState.rigidBodies = globalState.rigidBodies;
 
-	// build compact rank-local fluid and boundary particle layouts
+	// build compact rank-local F/B/R particle layouts
 	BuildLocalFluidParticlesFromGlobalState(
-		particleStateF, localState, globalState,
+		particleStateF, localState.particlesF, globalState.particlesF,
 		domainDecomp, rank, haloRadius);
 	BuildLocalBoundaryParticlesFromGlobalState(
-		particleStateB, localState, globalState,
+		particleStateB, localState.particlesB, globalState.particlesB,
 		domainDecomp, rank, haloRadius);
+	BuildLocalRigidParticlesFromGlobalState(
+		particleStateR, localState.particlesR, globalState.particlesR, globalState.rigidBodies,
+		domainDecomp, rank, haloRadius);
+
+	// release source particles while retaining replicated body state
+	globalState.particlesF = {};
+	globalState.particlesB = {};
+	globalState.particlesR = {};
 }

@@ -104,14 +104,14 @@ namespace Dist
 		// builds the full scenario state before rank-local compaction
 		bool BuildGlobalSimState();
 
-		// keeps owned + halo particles for this rank and releases the replicated scenario payload
+		// keeps owned + halo particles for this rank and releases source particle storage
 		bool BuildRankLocalSimState();
 
 		// validates rank-local [ owned ][ halo ] state
 		bool ValidateRankLocalSimState(bool includeRigidState) const;
 
 		// [ rank-reduced ] validates that the owned particle sums still add up to the global counts established during initialization
-		bool ValidateGlobalOwnedParticleCounts() const;
+		bool ValidateGlobalOwnedParticleCounts(bool useBackendState = true) const;
 
 		// [ rank-reduced ] transfers rank-local state into the selected backend
 		bool InitializeSimBackendFromState();
@@ -214,12 +214,18 @@ namespace Dist
 		std::unique_ptr<IDomainDecomp> domainDecomp_{ nullptr };
 		Sync::UniversalSimState globalSimState_{};
 		Sync::UniversalSimState localSimState_{};
-		uint64_t N_expectedGlobalF_ = 0; // expected global fluid particle count
-		uint64_t N_expectedGlobalB_ = 0; // expected global boundary particle count
-		uint64_t expectedOwnedIdChecksumF_ = 0; // checksum over the global fluid particle ID range
-		uint64_t expectedOwnedIdChecksumB_ = 0; // checksum over the global boundary particle ID range
+
+		// expected global F/B/R counts and ID checksums
+		uint64_t N_expectedGlobalF_ = 0;
+		uint64_t N_expectedGlobalB_ = 0;
+		uint64_t N_expectedGlobalR_ = 0;
+		uint64_t expectedOwnedIdChecksumF_ = 0;
+		uint64_t expectedOwnedIdChecksumB_ = 0;
+		uint64_t expectedOwnedIdChecksumR_ = 0;
+
 		DistParticleState particleStateF_{};
 		DistParticleState particleStateB_{};
+		DistParticleState particleStateR_{};
 		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
 		ParticleReOrderWorkBuffers boundaryParticleReOrderWorkBuffers_{};
 		ParticleRedistributionMgr particleRedistributionMgr_{};
@@ -227,8 +233,6 @@ namespace Dist
 		FluidSolverSyncMgr fluidSolverSyncMgr_{};
 		LoadBalanceMgr loadBalanceMgr_{};
 		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_{};
-		std::vector<uint32_t> activeRigidParticleLocalIdxs_{};
-		std::vector<uint32_t> activeRigidParticleRankCountScratch_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
 		RigidBodySyncBuffers rigidBodySyncBuffers_{};
 

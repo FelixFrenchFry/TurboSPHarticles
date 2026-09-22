@@ -201,7 +201,7 @@ void SimulationMgr::ResetAndRebuildSimState()
 	{
 		domainBounds_ = bounds;
 	}
-	scenarioMgr_.FinalizeGeneratedParticleIds(universalSimState_);
+	scenarioMgr_.FinalizeGeneratedParticleCounts(universalSimState_);
 	universalSimState_.particlesF.ensureParticleIdsPresent();
 	universalSimState_.particlesB.ensureParticleIdsPresent();
 	universalSimState_.particlesR.ensureParticleIdsPresent();

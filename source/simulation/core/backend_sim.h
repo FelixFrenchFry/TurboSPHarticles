@@ -145,6 +145,7 @@ namespace Sim
 		virtual Sync::FluidConstView GetFluidParticleView() const = 0;
 		virtual Sync::BoundaryConstView GetBoundaryParticleView() const = 0;
 		virtual Sync::RigidConstView GetRigidParticleView() const = 0;
+		virtual Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const = 0;
 
 		// compacts retained particles in place and appends migration + halo particles
 		// (the appended fluid particles carry only id, positions, and velocities, because the
@@ -152,8 +153,10 @@ namespace Sim
 		virtual bool ApplyParticleRedistribution(
 			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
 			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+			const std::vector<uint32_t>& retainedRigidOldLocalIdx_FromNewLocalIdx,
 			const Sync::FluidParticles& appendedParticlesF,
 			const Sync::BoundaryParticles& appendedParticlesB,
+			const Sync::RigidParticles& appendedParticlesR,
 			bool redistributeParticlesB,
 			const SimParams& params) = 0;
 
@@ -178,7 +181,7 @@ namespace Sim
 		// instead of by particles that left it (an empty extent leaves the backend unbounded)
 		virtual void SetSimDomainBounds(const glm::vec3& min, const glm::vec3& max) = 0;
 
-		// copies & translates a universal simulation state into -> backend-specific data structures
+		// transfers a validated universal simulation state into -> backend-specific data structures
 		virtual void PullFromUniversalSimState(Sync::UniversalSimState& src, const SimParams& params) = 0;
 
 		// materializes backend-specific data structures into -> universal simulation state
@@ -215,7 +218,12 @@ namespace Sim
 		virtual void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& params) const = 0;
 
 		// computes & fills in the partial stat data for the current sim step
-		virtual bool FillStatisticsPartial(Stats::StatisticsPartial&, const SimParams&) const { return false; }
+		virtual bool FillStatisticsPartial(Stats::StatisticsPartial& partial, const SimParams& simParams) const
+		{
+			(void)partial;
+			(void)simParams;
+			return false;
+		}
 
 		// reports whether the backend implements all components required for distributed execution
 		virtual bool SupportsDistributedSimulation() const { return false; }
@@ -238,42 +246,61 @@ namespace Sim
 		}
 
 		// configures the compact ownership boundary before any distributed backend re-order
-		virtual bool ConfigureDistributedParticleLayout(uint32_t, uint32_t)
+		virtual bool ConfigureDistributedParticleLayout(
+			uint32_t N_ownedFluidParticles,
+			uint32_t N_ownedBoundaryParticles)
 		{
+			(void)N_ownedFluidParticles;
+			(void)N_ownedBoundaryParticles;
 			return false;
 		}
 
 		// configures rank-authoritative particle work for distributed execution
 		virtual bool ConfigureDistributedStep(
-			const std::vector<uint32_t>&,
-			const std::vector<uint32_t>&,
-			const std::vector<uint32_t>&,
-			bool,
-			uint32_t,
-			const std::vector<uint32_t>&,
-			I_DistributedFluidSolverSync&)
+			const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
+			const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
+			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
+			bool pressureAccIsOwnedPrefix,
+			uint32_t N_ownedBoundaryParticles,
+			uint32_t N_ownedRigidParticles,
+			I_DistributedFluidSolverSync& distributedFluidSolverSync)
 		{
+			(void)ownedFluidParticleLocalIdxs;
+			(void)outerFluidParticleLocalIdxs;
+			(void)pressureAccelerationFluidParticleLocalIdxs;
+			(void)pressureAccIsOwnedPrefix;
+			(void)N_ownedBoundaryParticles;
+			(void)N_ownedRigidParticles;
+			(void)distributedFluidSolverSync;
 			return false;
 		}
 
 		// classifies fluid particles against the regular export near-surface threshold
 		virtual bool FillFluidParticleNearSurfaceFlags(
-			const SimParams&,
-			std::vector<uint8_t>&) const
+			const SimParams& simParams,
+			std::vector<uint8_t>& nearSurfaceFlags) const
 		{
+			(void)simParams;
+			(void)nearSurfaceFlags;
 			return false;
 		}
 
 		// selects regular export surface particles using authoritative near-surface flags
 		virtual bool BuildExportFluidParticleLocalIdxs(
-			const std::vector<uint8_t>&,
-			std::vector<uint32_t>&) const
+			const std::vector<uint8_t>& nearSurfaceFlags,
+			std::vector<uint32_t>& localIdxs) const
 		{
+			(void)nearSurfaceFlags;
+			(void)localIdxs;
 			return false;
 		}
 
 		// reads body-level force and torque accumulated during the latest backend step
-		virtual bool GetRigidBodyForceTorque(RigidBodyForceTorque&) const { return false; }
+		virtual bool GetRigidBodyForceTorque(RigidBodyForceTorque& dst) const
+		{
+			(void)dst;
+			return false;
+		}
 
 		// applies externally synchronized body force and torque through integrator of the backend
 		virtual bool ApplyRigidBodyForceTorque(

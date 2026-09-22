@@ -134,9 +134,9 @@ namespace Export
 
 		nlohmann::json manifest = nlohmann::json::object();
 		manifest["format"] = "TSPCheckpoint";
-		manifest["version"] = 2;
+		manifest["version"] = 3;
 		manifest["mode"] = GetCheckpointModeName(mode);
-		manifest["stateFormat"] = "TSPSIM-64";
+		manifest["stateFormat"] = "TSPSIM-2";
 		manifest["step"] = step;
 		manifest["time"] = time;
 		manifest["params"] = Sim::ToJson(params);
@@ -148,8 +148,8 @@ namespace Export
 	{
 		auto manifest = nlohmann::json::parse(text);
 		if (manifest.at("format") != "TSPCheckpoint" ||
-			manifest.at("version") != 2 ||
-			manifest.at("stateFormat") != "TSPSIM-64")
+			manifest.at("version") != 3 ||
+			manifest.at("stateFormat") != "TSPSIM-2")
 		{
 			throw std::runtime_error("Unsupported checkpoint format.");
 		}

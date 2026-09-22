@@ -793,6 +793,25 @@ namespace
 				report.N_outerB,
 				report.N_haloB);
 		}
+
+		PrintLine(N_lines);
+		PrintLine(N_lines,
+			"%-2s | %10s | %10s | %10s",
+			"r", "inner R", "outer R", "halo R");
+		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+
+		for (const DistRankStepReport& report : reports)
+		{
+			char rankLabel[32];
+			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+
+			PrintLine(N_lines,
+				"%-2s | %10u | %10u | %10u",
+				rankLabel,
+				report.N_innerR,
+				report.N_outerR,
+				report.N_haloR);
+		}
 	}
 
 	void PrintParticleExchangeTable(
@@ -822,6 +841,26 @@ namespace
 				report.N_recvHaloF,
 				report.N_sentHaloB,
 				report.N_recvHaloB);
+		}
+
+		PrintLine(N_lines);
+		PrintLine(N_lines,
+			"%-2s | %17s | %17s",
+			"r", "migr R send/recv", "halo R send/recv");
+		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+
+		for (const DistRankStepReport& report : reports)
+		{
+			char rankLabel[32];
+			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+
+			PrintLine(N_lines,
+				"%-2s | %7" PRIu32 " / %-7" PRIu32 " | %7" PRIu64 " / %-7" PRIu64,
+				rankLabel,
+				report.N_sentMigratedR,
+				report.N_recvMigratedR,
+				report.N_sentHaloR,
+				report.N_recvHaloR);
 		}
 	}
 
@@ -1036,6 +1075,10 @@ namespace
 			SumReportField(reports, &DistRankStepReport::N_ownedB);
 		const uint64_t totalHaloBoundary =
 			SumReportField(reports, &DistRankStepReport::N_haloB);
+		const uint64_t totalOwnedRigid =
+			SumReportField(reports, &DistRankStepReport::N_ownedR);
+		const uint64_t totalHaloRigid =
+			SumReportField(reports, &DistRankStepReport::N_haloR);
 		const uint64_t totalMigrationSent =
 			SumReportField(reports, &DistRankStepReport::N_sentMigratedF);
 		const uint64_t totalMigrationReceived =
@@ -1052,6 +1095,14 @@ namespace
 			SumReportField(reports, &DistRankStepReport::N_sentHaloB);
 		const uint64_t totalHaloBoundaryReceived =
 			SumReportField(reports, &DistRankStepReport::N_recvHaloB);
+		const uint64_t totalRigidMigrationSent =
+			SumReportField(reports, &DistRankStepReport::N_sentMigratedR);
+		const uint64_t totalRigidMigrationReceived =
+			SumReportField(reports, &DistRankStepReport::N_recvMigratedR);
+		const uint64_t totalHaloRigidSent =
+			SumReportField(reports, &DistRankStepReport::N_sentHaloR);
+		const uint64_t totalHaloRigidReceived =
+			SumReportField(reports, &DistRankStepReport::N_recvHaloR);
 
 		const double latestMin =
 			Bench::ConvertFromNs(params.timeUnit,
@@ -1067,17 +1118,24 @@ namespace
 		const char* timeUnitStr = Bench::UnitLabel(params.timeUnit);
 		PrintLine(N_lines,
 			"particles | owned F %" PRIu64 " | halo F %" PRIu64
-			" | owned B %" PRIu64 " | halo B %" PRIu64,
-			totalOwnedFluid, totalHaloFluid, totalOwnedBoundary, totalHaloBoundary);
+			" | owned B %" PRIu64 " | halo B %" PRIu64
+			" | owned R %" PRIu64 " | halo R %" PRIu64,
+			totalOwnedFluid, totalHaloFluid,
+			totalOwnedBoundary, totalHaloBoundary,
+			totalOwnedRigid, totalHaloRigid);
 		PrintLine(N_lines,
 			"traffic   | migrated F %" PRIu64 " / %" PRIu64
 			" | halo F sent/recv %" PRIu64 " / %" PRIu64
 			" | migrated B %" PRIu64 " / %" PRIu64
-			" | halo B sent/recv %" PRIu64 " / %" PRIu64,
+			" | halo B sent/recv %" PRIu64 " / %" PRIu64
+			" | migrated R %" PRIu64 " / %" PRIu64
+			" | halo R sent/recv %" PRIu64 " / %" PRIu64,
 			totalMigrationSent, totalMigrationReceived,
 			totalHaloFluidSent, totalHaloFluidReceived,
 			totalBoundaryMigrationSent, totalBoundaryMigrationReceived,
-			totalHaloBoundarySent, totalHaloBoundaryReceived);
+			totalHaloBoundarySent, totalHaloBoundaryReceived,
+			totalRigidMigrationSent, totalRigidMigrationReceived,
+			totalHaloRigidSent, totalHaloRigidReceived);
 		PrintLine(N_lines,
 			"timing    | min/avg/max %.3f / %.3f / %.3f %s | slowest rank %d",
 			latestMin, latestAvg, latestMax, timeUnitStr, slowestRank);
@@ -1241,7 +1299,7 @@ namespace Dist
 
 		std::printf("%-2s | %-19s | %-2s | %-9s | %10s | %10s | %10s\n",
 			"n", "host name", "r", "nbrs",
-			"initial F", "initial B", "initial R");
+			"owned F", "owned B", "owned R");
 		std::printf("%s\n", CLI_SECTION_SEPARATOR);
 
 		std::vector<std::string> nodeHosts{};
@@ -1284,7 +1342,7 @@ namespace Dist
 				neighborLines.front().c_str(),
 				report.N_ownedF,
 				report.N_ownedB,
-				report.N_replicatedR);
+				report.N_ownedR);
 
 			for (uint64_t wrappedLineIdx = 1;
 				wrappedLineIdx < N_wrappedLines; wrappedLineIdx++)
@@ -1300,6 +1358,22 @@ namespace Dist
 					"", hostLine, "", neighborLine,
 					"", "", "");
 			}
+		}
+
+		std::printf("\n");
+		std::printf("%-2s | %10s | %10s | %10s\n", "r", "halo F", "halo B", "halo R");
+		std::printf("%s\n", CLI_SECTION_SEPARATOR);
+
+		for (const DistStartupRankReport& report : reports)
+		{
+			char rankLabel[32];
+			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+
+			std::printf("%-2s | %10u | %10u | %10u\n",
+				rankLabel,
+				report.N_haloF,
+				report.N_haloB,
+				report.N_haloR);
 		}
 
 		std::printf("\n");

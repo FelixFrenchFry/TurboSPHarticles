@@ -142,10 +142,19 @@ void SimBackend_GPU::PullFromUniversalSimState(
 	R.ensureParticleIdsPresent();
 	R.ensureRigidCoefficientsPresent(params.massB, params.restDensity);
 	RB.ensureRigidBodyIdsPresent();
-	src.ValidateRigidAttachments();
 
 	EnsureCapacity(N_F_, N_B_);
 	EnsureRigidCapacity(N_RB_, N_R_);
+
+	// derived body membership remains valid until the next particle import
+	std::vector<uint32_t> rigidParticleOffsets_ByBody;
+	std::vector<uint32_t> rigidParticleLocalIdxs_ByBody;
+	Sync::BuildRigidParticleIndicesByBody(
+		R.bodyId, N_RB_, rigidParticleOffsets_ByBody, rigidParticleLocalIdxs_ByBody);
+	GPU::Copy_HostToDevice(d_rigidParticleOffsets_ByBody_.Data(),
+		rigidParticleOffsets_ByBody.data(), rigidParticleOffsets_ByBody.size(), stream_);
+	GPU::Copy_HostToDevice(d_rigidParticleLocalIdxs_ByBody_.Data(),
+		rigidParticleLocalIdxs_ByBody.data(), N_R_, stream_);
 
 	// copy fluid particle data to device
 	if (N_F_ > 0)
@@ -199,7 +208,6 @@ void SimBackend_GPU::PullFromUniversalSimState(
 	if (N_RB_ > 0)
 	{
 		GPU::Copy_HostToDevice(d_idRB_.Data(), RB.id.data(), N_RB_, stream_);
-		GPU::Copy_HostToDevice(d_rigidParticleBeginRB_.Data(), RB.rigidParticleBegin.data(), N_RB_, stream_);
 		GPU::Copy_HostToDevice(d_rigidParticleCountRB_.Data(), RB.rigidParticleCount.data(), N_RB_, stream_);
 		GPU::Copy_HostToDevice(d_xCMRB_.Data(), RB.xCM.data(), N_RB_, stream_);
 		GPU::Copy_HostToDevice(d_yCMRB_.Data(), RB.yCM.data(), N_RB_, stream_);
@@ -325,7 +333,6 @@ void SimBackend_GPU::PushToUniversalSimState(
 	if (N_RB_ > 0)
 	{
 		GPU::Copy_DeviceToHost(RB.id.data(), d_idRB_.Data(), N_RB_, stream_);
-		GPU::Copy_DeviceToHost(RB.rigidParticleBegin.data(), d_rigidParticleBeginRB_.Data(), N_RB_, stream_);
 		GPU::Copy_DeviceToHost(RB.rigidParticleCount.data(), d_rigidParticleCountRB_.Data(), N_RB_, stream_);
 		GPU::Copy_DeviceToHost(RB.xCM.data(), d_xCMRB_.Data(), N_RB_, stream_);
 		GPU::Copy_DeviceToHost(RB.yCM.data(), d_yCMRB_.Data(), N_RB_, stream_);
@@ -1040,7 +1047,8 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_DeviceBuffer(d_reorderIdScratch_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_sortParticleIdxScratch_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_idRB_));
-		Add(usage, MemUsageOf_DeviceBuffer(d_rigidParticleBeginRB_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_rigidParticleOffsets_ByBody_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_rigidParticleLocalIdxs_ByBody_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_rigidParticleCountRB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_xCMRB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_yCMRB_));
@@ -1528,8 +1536,8 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 
 			// reduce rigid particle forces into body force and torque
 			GPU::Launch_ReduceRigidParticleForces(
-				d_rigidParticleBeginRB_.Data(),
-				d_rigidParticleCountRB_.Data(),
+				d_rigidParticleOffsets_ByBody_.Data(),
+				d_rigidParticleLocalIdxs_ByBody_.Data(),
 				d_xRelPosR_.Data(),
 				d_yRelPosR_.Data(),
 				d_zRelPosR_.Data(),

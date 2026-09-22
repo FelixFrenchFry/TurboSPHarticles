@@ -333,6 +333,7 @@ void ScenarioMgr::BeginBuildRegion(const glm::vec3& min, const glm::vec3& max)
 
 	N_builtGlobalF_ = 0;
 	N_builtGlobalB_ = 0;
+	N_builtGlobalR_ = 0;
 }
 
 void ScenarioMgr::EndBuildRegion()
@@ -340,22 +341,13 @@ void ScenarioMgr::EndBuildRegion()
 	hasBuildRegion_ = false;
 }
 
-void ScenarioMgr::FinalizeGeneratedParticleIds(Sync::UniversalSimState& state)
+void ScenarioMgr::FinalizeGeneratedParticleCounts(const Sync::UniversalSimState& state)
 {
 	if (!hasBuildRegion_)
 	{
 		N_builtGlobalF_ = state.particlesF.N_;
 		N_builtGlobalB_ = state.particlesB.N_;
-	}
-
-	auto& particlesR = state.particlesR;
-	if (particlesR.N_ == 0) { return; }
-
-	(void)Sim::CheckedParticleId(N_builtGlobalB_, particlesR.N_ - 1, "Rigid particle IDs");
-	for (uint32_t localIdx = 0; localIdx != particlesR.N_; localIdx++)
-	{
-		particlesR.id[localIdx] = Sim::CheckedParticleId(
-			N_builtGlobalB_, localIdx, "Rigid particle ID");
+		N_builtGlobalR_ = state.particlesR.N_;
 	}
 }
 
@@ -913,18 +905,88 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	}
 
 	const uint32_t bodyIdx = RB.N_;
-	const uint32_t N_base = R.N_;
+	const uint32_t N_localBase = R.N_;
+	const uint32_t N_base = Sim::CheckedLocalParticleCount(
+		hasBuildRegion_ ? N_builtGlobalR_ : R.N_, "Global rigid count");
 	const uint32_t N_add = Sim::CheckedLocalParticleCount(N_keep, "Hollow rigid body");
-	const uint32_t N_final = Sim::CheckedLocalParticleCount(
+	const uint32_t N_globalEnd = Sim::CheckedLocalParticleCount(
 		Sim::CheckedParticleAdd(N_base, N_add, "Rigid append"), "Rigid append");
-
-	dst.ResizeRigidBodies(bodyIdx + 1);
-	dst.ResizeRigid(N_final);
 
 	const glm::vec3 center = box.origin
 						   + box.uHat * (0.5f * box.uLen)
 						   + box.vHat * (0.5f * box.vLen)
 						   + box.wHat * (0.5f * box.wLen);
+
+	// repeat the same generation sequence so region filtering does not change jitter or IDs
+	const auto VisitParticles = [&](const auto& visit)
+	{
+		// jittering params
+		const float jitAmp = params.jitterFracB * params.particleSizeB;
+		std::mt19937_64 rng(params.jitterSeedB);
+		std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
+
+		uint32_t sampleIdx = 0;
+
+		for (uint32_t kw = 0; kw < N_w; kw++) // depth
+		{
+			// interior particle beyond layers in w, and clamp to prevent drift
+			const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
+			float w = std::min(wLen_i, static_cast<float>(kw) * size);
+
+			for (uint32_t jv = 0; jv < N_v; jv++) // height
+			{
+				// interior particle beyond layers in v, and clamp to prevent drift
+				const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
+				float v = std::min(vLen_i, static_cast<float>(jv) * size);
+
+				for (uint32_t iu = 0; iu < N_u; iu++) // width
+				{
+					// interior particle beyond layers in u, and clamp to prevent drift
+					const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
+					float u = std::min(uLen_i, static_cast<float>(iu) * size);
+
+					if (uInside && vInside && wInside) { continue; }
+
+					if (jitAmp > 0.0f)
+					{
+						u += uniformDist(rng);
+						v += uniformDist(rng);
+						w += uniformDist(rng);
+					}
+
+					u = std::clamp(u, 0.0f, uLen_i);
+					v = std::clamp(v, 0.0f, vLen_i);
+					w = std::clamp(w, 0.0f, wLen_i);
+
+					const glm::vec3 pos = origin_i
+										+ box.uHat * u
+										+ box.vHat * v
+										+ box.wHat * w;
+					const glm::vec3 rel = pos - center;
+
+					const glm::vec3 localPos{ Dot(rel, box.uHat), Dot(rel, box.vHat), Dot(rel, box.wHat) };
+					visit(sampleIdx, pos, localPos);
+					sampleIdx++;
+				}
+			}
+		}
+		assert(sampleIdx == N_add);
+	};
+
+	uint32_t N_localAdd = N_add;
+	if (hasBuildRegion_)
+	{
+		N_localAdd = 0;
+		VisitParticles([&](const uint32_t, const glm::vec3& pos, const glm::vec3&)
+		{
+			if (IsInsideBuildRegion(pos)) { N_localAdd++; }
+		});
+	}
+	const uint32_t N_localEnd = Sim::CheckedLocalParticleCount(
+		Sim::CheckedParticleAdd(N_localBase, N_localAdd, "Local rigid append"), "Local rigid append");
+	N_builtGlobalR_ = N_globalEnd;
+	dst.ResizeRigidBodies(bodyIdx + 1);
+	dst.ResizeRigid(N_localEnd);
 
 	const float volume = box.uLen * box.vLen * box.wLen;
 	const float bodyMass = rigidDensity > 0.0f ? rigidDensity * volume : 0.0f;
@@ -934,7 +996,6 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 	RB.xCM[bodyIdx] = center.x;
 	RB.yCM[bodyIdx] = center.y;
 	RB.zCM[bodyIdx] = center.z;
-	RB.rigidParticleBegin[bodyIdx] = N_base;
 	RB.rigidParticleCount[bodyIdx] = N_add;
 	RB.mass[bodyIdx] = bodyMass;
 	RB.massInv[bodyIdx] = bodyMassInv;
@@ -953,62 +1014,20 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 		? 12.0f / (bodyMass * (box.uLen * box.uLen + box.vLen * box.vLen))
 		: 0.0f;
 
-	// jittering params
-	const float jitAmp = params.jitterFracB * params.particleSizeB;
-	std::mt19937_64 rng(params.jitterSeedB);
-	std::uniform_real_distribution<float> uniformDist(-jitAmp, +jitAmp);
-
-	uint32_t rigidParticleIdx = N_base;
-
-	for (uint32_t kw = 0; kw < N_w; kw++) // depth
+	uint32_t rigidParticleIdx = N_localBase;
+	VisitParticles([&](const uint32_t sampleIdx, const glm::vec3& pos, const glm::vec3& localPos)
 	{
-		// interior particle beyond layers in w, and clamp to prevent drift
-		const bool wInside = (kw >= layers) && (kw <= N_w - 1 - layers);
-		float w = std::min(wLen_i, static_cast<float>(kw) * size);
+		if (!IsInsideBuildRegion(pos)) { return; }
+		R.id[rigidParticleIdx] = Sim::CheckedParticleId(N_base, sampleIdx, "Hollow rigid ID");
+		R.bodyId[rigidParticleIdx] = bodyIdx;
+		R.xRelPos[rigidParticleIdx] = localPos.x;
+		R.yRelPos[rigidParticleIdx] = localPos.y;
+		R.zRelPos[rigidParticleIdx] = localPos.z;
+		rigidParticleIdx++;
+	});
+	assert(rigidParticleIdx == N_localEnd);
 
-		for (uint32_t jv = 0; jv < N_v; jv++) // height
-		{
-			// interior particle beyond layers in v, and clamp to prevent drift
-			const bool vInside = (jv >= layers) && (jv <= N_v - 1 - layers);
-			float v = std::min(vLen_i, static_cast<float>(jv) * size);
-
-			for (uint32_t iu = 0; iu < N_u; iu++) // width
-			{
-				// interior particle beyond layers in u, and clamp to prevent drift
-				const bool uInside = (iu >= layers) && (iu <= N_u - 1 - layers);
-				float u = std::min(uLen_i, static_cast<float>(iu) * size);
-
-				if (uInside && vInside && wInside) { continue; }
-
-				if (jitAmp > 0.0f)
-				{
-					u += uniformDist(rng);
-					v += uniformDist(rng);
-					w += uniformDist(rng);
-				}
-
-				u = std::clamp(u, 0.0f, uLen_i);
-				v = std::clamp(v, 0.0f, vLen_i);
-				w = std::clamp(w, 0.0f, wLen_i);
-
-				const glm::vec3 pos = origin_i
-									+ box.uHat * u
-									+ box.vHat * v
-									+ box.wHat * w;
-				const glm::vec3 rel = pos - center;
-
-				R.bodyId[rigidParticleIdx] = bodyIdx;
-				R.xRelPos[rigidParticleIdx] = Dot(rel, box.uHat);
-				R.yRelPos[rigidParticleIdx] = Dot(rel, box.vHat);
-				R.zRelPos[rigidParticleIdx] = Dot(rel, box.wHat);
-
-				rigidParticleIdx++;
-			}
-		}
-	}
-	assert(rigidParticleIdx == (N_base + N_add));
-
-	ComputeRigidCoefficients(R, params, N_base, N_base + N_add);
+	ComputeRigidCoefficients(R, params, N_localBase, N_localEnd);
 
 	return bodyIdx;
 }
@@ -1048,23 +1067,39 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	auto& RB = dst.rigidBodies;
 	const uint32_t N_add = Sim::CheckedLocalParticleCount(
 		bodyLocalSamples.size(), "Rigid surface sample count");
-	if (RB.N_ == std::numeric_limits<uint32_t>::max() ||
-		R.N_ > Sim::MaxLocalParticleCount ||
-		N_add > Sim::MaxLocalParticleCount - R.N_)
+	if (RB.N_ == std::numeric_limits<uint32_t>::max())
 	{
 		throw std::length_error("Rigid surface state exceeds the local particle limit.");
 	}
 
 	const uint32_t bodyIdx = RB.N_;
-	const uint32_t N_base = R.N_;
-	const uint32_t N_final = N_base + N_add;
+	const uint32_t N_localBase = R.N_;
+	const uint32_t N_base = Sim::CheckedLocalParticleCount(
+		hasBuildRegion_ ? N_builtGlobalR_ : R.N_, "Global rigid count");
+	const uint32_t N_globalEnd = Sim::CheckedLocalParticleCount(
+		Sim::CheckedParticleAdd(N_base, N_add, "Rigid append"), "Rigid append");
+	const auto ParticlePosition = [&](const glm::vec3& localPos)
+	{
+		return centerOfMass + orientation * localPos;
+	};
+	uint32_t N_localAdd = N_add;
+	if (hasBuildRegion_)
+	{
+		N_localAdd = 0;
+		for (const SurfaceSample& sample : bodyLocalSamples)
+		{
+			if (IsInsideBuildRegion(ParticlePosition(sample.pos))) { N_localAdd++; }
+		}
+	}
+	const uint32_t N_localEnd = Sim::CheckedLocalParticleCount(
+		Sim::CheckedParticleAdd(N_localBase, N_localAdd, "Local rigid append"), "Local rigid append");
+	N_builtGlobalR_ = N_globalEnd;
 
-	// append the rigid body and its rigid particle range
+	// append the rigid body and its local particles
 	dst.ResizeRigidBodies(bodyIdx + 1);
-	dst.ResizeRigid(N_final);
+	dst.ResizeRigid(N_localEnd);
 
 	RB.id[bodyIdx] = bodyIdx;
-	RB.rigidParticleBegin[bodyIdx] = N_base;
 	RB.rigidParticleCount[bodyIdx] = N_add;
 	RB.xCM[bodyIdx] = centerOfMass.x;
 	RB.yCM[bodyIdx] = centerOfMass.y;
@@ -1096,19 +1131,23 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	RB.iBodyInv22[bodyIdx] = bodyInertiaInv[2][2];
 
 	// append rigid particle ownership and body-local positions
+	uint32_t rigidParticleIdx = N_localBase;
 	for (uint32_t localIdx = 0; localIdx < N_add; localIdx++)
 	{
-		const uint32_t rigidParticleIdx = N_base + localIdx;
 		const glm::vec3 localPos = bodyLocalSamples[localIdx].pos;
+		if (!IsInsideBuildRegion(ParticlePosition(localPos))) { continue; }
 
+		R.id[rigidParticleIdx] = Sim::CheckedParticleId(N_base, localIdx, "Rigid surface ID");
 		R.bodyId[rigidParticleIdx] = bodyIdx;
 		R.xRelPos[rigidParticleIdx] = localPos.x;
 		R.yRelPos[rigidParticleIdx] = localPos.y;
 		R.zRelPos[rigidParticleIdx] = localPos.z;
+		rigidParticleIdx++;
 	}
+	assert(rigidParticleIdx == N_localEnd);
 
 	// derive per-particle volume and pseudo-mass from the sampled surface
-	ComputeRigidCoefficients(R, params, N_base, N_base + N_add);
+	ComputeRigidCoefficients(R, params, N_localBase, N_localEnd);
 	return bodyIdx;
 }
 

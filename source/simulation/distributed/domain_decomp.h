@@ -39,6 +39,7 @@ namespace Dist
 		int rank = 0;
 		DomainDecompParticlePositionView fluid;
 		DomainDecompParticlePositionView boundary;
+		DomainDecompParticlePositionView rigid;
 	};
 
 	// local strategy-defined spatial weights split by owned particle type
@@ -46,16 +47,7 @@ namespace Dist
 	{
 		std::vector<uint64_t> ownedFluidByUnit;
 		std::vector<uint64_t> ownedBoundaryByUnit;
-	};
-
-	// rank loads and global spatial weights supplied by the load balancing coordinator
-	struct DomainDecompRepartitionInput
-	{
-		Base::LoadBalanceWeightModel weightModel =
-			Base::LoadBalanceWeightModel::OwnedParticleCount;
-		std::span<const double> loadByRank;
-		std::span<const uint64_t> ownedFluidByUnit;
-		std::span<const uint64_t> ownedBoundaryByUnit;
+		std::vector<uint64_t> ownedRigidByUnit;
 	};
 
 	// interface for domain decomp strategies
@@ -91,7 +83,10 @@ namespace Dist
 			DomainDecompRepartitionProfile& profile) const = 0;
 
 		// re-derives the rank subdomains from the globally reduced weight profile
-		virtual void Repartition(const DomainDecompRepartitionInput& input) = 0;
+		virtual void Repartition(
+			const DomainDecompRepartitionProfile& profile,
+			std::span<const double> loadByRank,
+			Base::LoadBalanceWeightModel weightModel) = 0;
 	};
 
 	// domain decomp factory

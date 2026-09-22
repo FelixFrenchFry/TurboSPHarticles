@@ -214,7 +214,8 @@ namespace Sim
 
 		// rigid bodies
 		DeviceBuffer<uint32_t> d_idRB_;
-		DeviceBuffer<uint32_t> d_rigidParticleBeginRB_;
+		DeviceBuffer<uint32_t> d_rigidParticleOffsets_ByBody_;
+		DeviceBuffer<uint32_t> d_rigidParticleLocalIdxs_ByBody_;
 		DeviceBuffer<uint32_t> d_rigidParticleCountRB_;
 
 		// body state (in world frame)
@@ -407,7 +408,8 @@ namespace Sim
 
 			const bool needRigidBodies = force || N_newRB != N_RB_ ||
 				d_idRB_.Size() != N_newRB ||
-				d_rigidParticleBeginRB_.Size() != N_newRB || d_rigidParticleCountRB_.Size() != N_newRB ||
+				d_rigidParticleOffsets_ByBody_.Size() != static_cast<uint64_t>(N_newRB) + 1 ||
+				d_rigidParticleCountRB_.Size() != N_newRB ||
 				d_xCMRB_.Size() != N_newRB || d_yCMRB_.Size() != N_newRB || d_zCMRB_.Size() != N_newRB ||
 				d_xVelRB_.Size() != N_newRB || d_yVelRB_.Size() != N_newRB || d_zVelRB_.Size() != N_newRB ||
 				d_xOmegaRB_.Size() != N_newRB || d_yOmegaRB_.Size() != N_newRB || d_zOmegaRB_.Size() != N_newRB ||
@@ -423,6 +425,7 @@ namespace Sim
 				d_iBodyInv20RB_.Size() != N_newRB || d_iBodyInv21RB_.Size() != N_newRB || d_iBodyInv22RB_.Size() != N_newRB;
 			const bool needParticlesR = force || N_newR != N_R_ ||
 				d_idR_.Size() != N_newR || d_bodyIdR_.Size() != N_newR ||
+				d_rigidParticleLocalIdxs_ByBody_.Size() != N_newR ||
 				d_xPosR_.Size() != N_newR || d_yPosR_.Size() != N_newR || d_zPosR_.Size() != N_newR ||
 				d_xRelPosR_.Size() != N_newR || d_yRelPosR_.Size() != N_newR || d_zRelPosR_.Size() != N_newR ||
 				d_xVelR_.Size() != N_newR || d_yVelR_.Size() != N_newR || d_zVelR_.Size() != N_newR ||
@@ -449,7 +452,9 @@ namespace Sim
 			d_nbrOffsetsRR_.Resize(static_cast<uint64_t>(N_R_) + 1);
 
 			d_idRB_.Resize(N_RB_);
-			d_rigidParticleBeginRB_.Resize(N_RB_); d_rigidParticleCountRB_.Resize(N_RB_);
+			d_rigidParticleOffsets_ByBody_.Resize(static_cast<uint64_t>(N_RB_) + 1);
+			d_rigidParticleLocalIdxs_ByBody_.Resize(N_R_);
+			d_rigidParticleCountRB_.Resize(N_RB_);
 			d_xCMRB_.Resize(N_RB_); d_yCMRB_.Resize(N_RB_); d_zCMRB_.Resize(N_RB_);
 			d_xVelRB_.Resize(N_RB_); d_yVelRB_.Resize(N_RB_); d_zVelRB_.Resize(N_RB_);
 			d_xOmegaRB_.Resize(N_RB_); d_yOmegaRB_.Resize(N_RB_); d_zOmegaRB_.Resize(N_RB_);

@@ -3,13 +3,11 @@
 
 // external
 #include <cstdint>
-#include <string>
 #include <vector>
 
 // internal
 #include "source/simulation/core/backend_sim.h"
 #include "source/simulation/sync/state_sim.h"
-#include "domain_decomp.h"
 #include "mpi_context.h"
 
 
@@ -33,15 +31,6 @@ namespace Dist
 		void PackRigidBodyState(const Sync::RigidBodies& rigidBodies);
 		void UnpackRigidBodyState(Sync::RigidBodies& rigidBodies) const;
 	};
-
-	// assigns each replicated rigid particle to the rank owning its world position
-	bool BuildActiveRigidParticleLocalIdxs(
-		std::vector<uint32_t>& activeRigidParticleLocalIdxs,
-		const Sync::UniversalSimState& localState,
-		const IDomainDecomp& domainDecomp,
-		int rank,
-		int N_ranks,
-		std::string* failMsg = nullptr);
 
 	// sums body-level force and torque accumulated from rank-authoritative rigid particles
 	void SumRigidBodyForceTorqueAcrossRanks(

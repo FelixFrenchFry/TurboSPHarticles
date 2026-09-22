@@ -360,8 +360,8 @@ namespace GPU
 
 	__global__
 	void K_ReduceRigidParticleForces(
-		const uint32_t* __restrict__ rigidParticleBeginRB,
-		const uint32_t* __restrict__ rigidParticleCountRB,
+		const uint32_t* __restrict__ rigidParticleOffsets_ByBody,
+		const uint32_t* __restrict__ rigidParticleLocalIdxs_ByBody,
 		const float* __restrict__ xRelPosR,
 		const float* __restrict__ yRelPosR,
 		const float* __restrict__ zRelPosR,
@@ -381,12 +381,11 @@ namespace GPU
 		const uint32_t tid = threadIdx.x;
 		if (bodyIdx >= N_RB) { return; }
 
-		const uint32_t begin = rigidParticleBeginRB[bodyIdx];
-		const uint32_t N_rigidParticles = rigidParticleCountRB[bodyIdx];
+		const uint32_t begin = rigidParticleOffsets_ByBody[bodyIdx];
+		const uint32_t end = rigidParticleOffsets_ByBody[bodyIdx + 1];
 		#ifndef NDEBUG
-		if (begin > N_R || N_rigidParticles > N_R - begin) { return; }
+		if (begin > end || end > N_R) { return; }
 		#endif
-		const uint32_t end = begin + N_rigidParticles;
 
 		float sumXForce = 0.0f;
 		float sumYForce = 0.0f;
@@ -395,10 +394,11 @@ namespace GPU
 		float sumYTorque = 0.0f;
 		float sumZTorque = 0.0f;
 
-		for (uint32_t i = begin + tid;
-			 i < end;
-			 i += blockDim.x)
+		for (uint32_t workIdx = begin + tid;
+			 workIdx < end;
+			 workIdx += blockDim.x)
 		{
+			const uint32_t i = rigidParticleLocalIdxs_ByBody[workIdx];
 			const float lx = xRelPosR[i];
 			const float ly = yRelPosR[i];
 			const float lz = zRelPosR[i];
@@ -667,8 +667,8 @@ namespace GPU
 	}
 
 	void Launch_ReduceRigidParticleForces(
-		const uint32_t* rigidParticleBeginRB,
-		const uint32_t* rigidParticleCountRB,
+		const uint32_t* rigidParticleOffsets_ByBody,
+		const uint32_t* rigidParticleLocalIdxs_ByBody,
 		const float* xRelPosR,
 		const float* yRelPosR,
 		const float* zRelPosR,
@@ -692,8 +692,8 @@ namespace GPU
 		const uint32_t N_sharedBytes = 6u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 
 		K_ReduceRigidParticleForces<<<N_GRID_SIZE, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
-			rigidParticleBeginRB,
-			rigidParticleCountRB,
+			rigidParticleOffsets_ByBody,
+			rigidParticleLocalIdxs_ByBody,
 			xRelPosR,
 			yRelPosR,
 			zRelPosR,

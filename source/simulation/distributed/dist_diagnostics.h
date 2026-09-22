@@ -59,7 +59,10 @@ namespace Dist
 
 		uint32_t N_ownedF = 0;
 		uint32_t N_ownedB = 0;
-		uint32_t N_replicatedR = 0;
+		uint32_t N_ownedR = 0;
+		uint32_t N_haloF = 0;
+		uint32_t N_haloB = 0;
+		uint32_t N_haloR = 0;
 	};
 
 	// rank-local report gathered by root for distributed progress output
@@ -78,16 +81,24 @@ namespace Dist
 		uint32_t N_innerB = 0;
 		uint32_t N_outerB = 0;
 		uint32_t N_haloB = 0;
+		uint32_t N_ownedR = 0;
+		uint32_t N_innerR = 0;
+		uint32_t N_outerR = 0;
+		uint32_t N_haloR = 0;
 
 		uint32_t N_sentMigratedF = 0;
 		uint32_t N_recvMigratedF = 0;
 		uint32_t N_sentMigratedB = 0;
 		uint32_t N_recvMigratedB = 0;
+		uint32_t N_sentMigratedR = 0;
+		uint32_t N_recvMigratedR = 0;
 
 		uint64_t N_sentHaloF = 0;
 		uint64_t N_recvHaloF = 0;
 		uint64_t N_sentHaloB = 0;
 		uint64_t N_recvHaloB = 0;
+		uint64_t N_sentHaloR = 0;
+		uint64_t N_recvHaloR = 0;
 
 		uint64_t totalStepLatestNs = 0;
 		uint64_t totalStepAvgNs = 0;

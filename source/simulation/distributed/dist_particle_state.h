@@ -58,7 +58,7 @@ namespace Dist
 		ParticleClassificationWorkBuffers classification;
 	};
 
-	// stores all classification of particles (F/B) based on the domain decomp,
+	// stores all classification of particles (F/B/R) based on the domain decomp,
 	// backend re-ordering preserves [ owned particles ][ halo particles ] SoA layouts
 	struct DistParticleState
 	{
@@ -86,6 +86,12 @@ namespace Dist
 			uint64_t N_global,
 			std::string* failMsg = nullptr) const;
 	};
+
+	// validates rigid field sizes and body attachments independently of particle identity
+	bool ValidateLocalRigidParticleAttachments(
+		const Sync::RigidConstView& particlesR,
+		const Sync::RigidBodies& rigidBodies,
+		std::string* failMsg = nullptr);
 
 	struct OwnedParticleConflict
 	{
@@ -118,7 +124,7 @@ namespace Dist
 		std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
 		ParticleReOrderWorkBuffers* workBuffers = nullptr);
 
-	// rebuilds fluid/boundary particle class lists by keeping particles owned by this
+	// rebuilds F/B/R particle class lists by keeping particles owned by this
 	// rank and splitting them into inner / outer by selected halo extent
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
@@ -134,14 +140,23 @@ namespace Dist
 		int rank,
 		float haloRadius,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
+	void ClassifyOwnedRigidParticlesIntoInnerOuter(
+		DistParticleState& particleState,
+		const Sync::RigidParticles& particlesR,
+		const Sync::RigidBodies& rigidBodies,
+		const IDomainDecomp& domainDecomp,
+		int rank,
+		float haloRadius,
+		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
-	// extracts the fluid/boundary particles needed by this rank and
-	// replicates rigid particles and bodies into the rank-local sim state
+	// extracts F/B/R particles needed by this rank and replicates rigid body state
+	// consumes source particle storage, requiring distinct source and destination states
 	void BuildLocalParticlesFromGlobalState(
 		Sync::UniversalSimState& localState,
 		DistParticleState& particleStateF,
 		DistParticleState& particleStateB,
-		const Sync::UniversalSimState& globalState,
+		DistParticleState& particleStateR,
+		Sync::UniversalSimState&& globalState,
 		const IDomainDecomp& domainDecomp,
 		int rank, float haloRadius);
 

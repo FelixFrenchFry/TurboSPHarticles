@@ -260,6 +260,7 @@ bool Dist::PackOwnedExportSnapshot(
 	const Sync::RigidBodies& rigidBodies,
 	const DistParticleState& particleStateF,
 	const DistParticleState& particleStateB,
+	const DistParticleState& particleStateR,
 	std::vector<uint32_t>& exportFluidParticleLocalIdxs,
 	const int rank,
 	const int N_ranks,
@@ -350,13 +351,11 @@ bool Dist::PackOwnedExportSnapshot(
 			}
 		});
 
-	// split the replicated rigid array into fixed export ranges
+	// output the stored owners even if body integration crossed a split this step
 	const Sync::RigidConstView& R = particlesR;
 	const Sync::RigidBodies& RB = rigidBodies;
-	const uint32_t beginR = static_cast<uint32_t>(static_cast<uint64_t>(R.N_) * rank / N_ranks);
-	const uint32_t endR = static_cast<uint32_t>(static_cast<uint64_t>(R.N_) * (rank + 1) / N_ranks);
-
-	exportSnap.N_R = Sim::CheckedLocalParticleCount(endR - beginR, "rank-local rigid export");
+	exportSnap.N_R = Sim::CheckedLocalParticleCount(
+		particleStateR.particleLocalIdx_Owned.size(), "rank-local rigid export");
 	exportSnap.bodyIdR.resize(exportSnap.N_R);
 	exportSnap.xPosR.resize(exportSnap.N_R);
 	exportSnap.yPosR.resize(exportSnap.N_R);
@@ -369,7 +368,16 @@ bool Dist::PackOwnedExportSnapshot(
 		{
 			for (uint32_t i = range.begin(); i != range.end(); i++)
 			{
-				const uint32_t localIdx = beginR + i;
+				const uint32_t localIdx = particleStateR.particleLocalIdx_Owned[i];
+				if (localIdx >= R.N_ ||
+					localIdx >= R.id.size() ||
+					!particleStateR.HasMetadataAtLocalIdx(localIdx) ||
+					R.id[localIdx] == Sim::INVALID_PARTICLE_ID ||
+					(particleStateR.particleClasses[localIdx] != DistParticleClass::Inner &&
+					 particleStateR.particleClasses[localIdx] != DistParticleClass::Outer))
+				{
+					throw std::runtime_error("Invalid owned rigid particle during snapshot packing.");
+				}
 				const uint32_t bodyIdx = R.bodyId[localIdx];
 				if (bodyIdx >= RB.N_) { throw std::runtime_error("Invalid rigid export body index."); }
 

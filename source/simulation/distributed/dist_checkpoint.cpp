@@ -39,21 +39,6 @@ namespace
 		Export::CheckpointBoundsFromJson(value, bounds.min, bounds.max);
 		return bounds;
 	}
-
-	void RestoreCheckpointParticleMetadata(
-		DistParticleState& state,
-		const uint32_t N_owned)
-	{
-		state.Clear();
-		state.N_owned = N_owned;
-
-		// mark all restored particles for startup routing and halo construction
-		state.particleClasses.assign(N_owned, DistParticleClass::Outer);
-		state.particleLocalIdx_Owned.resize(N_owned);
-		std::iota(state.particleLocalIdx_Owned.begin(), state.particleLocalIdx_Owned.end(), 0u);
-		state.particleLocalIdx_Outer = state.particleLocalIdx_Owned;
-	}
-
 } // namespace anonymous
 
 void Dist::BuildCheckpointRepartitionProfile(
@@ -72,16 +57,39 @@ void Dist::BuildCheckpointRepartitionProfile(
 	// initialize the strategy's profile dimensions even when this rank has no particles
 	domainDecomp.BuildRepartitionProfile(input, profile);
 	DomainDecompRepartitionProfile chunkProfile{};
-	std::vector<uint32_t> localIdxs;
-	const auto AccumulatePositions = [&](const bool boundary, const Export::SimStatePositionView& positions)
+	std::vector<uint32_t> localIdxs{};
+
+	const auto AccumulatePositions = [&](
+		const Base::ParticleType particleType,
+		const Export::SimStatePositionView& positions)
 	{
 		localIdxs.resize(positions.x.size());
 		std::iota(localIdxs.begin(), localIdxs.end(), 0u);
+
+		DomainDecompParticlePositionView particleInput{};
+		particleInput.x = positions.x;
+		particleInput.y = positions.y;
+		particleInput.z = positions.z;
+		particleInput.ownedLocalIdx = localIdxs;
+
 		input.fluid = {};
 		input.boundary = {};
-		auto& particleInput = boundary ? input.boundary : input.fluid;
-		particleInput = { positions.x, positions.y, positions.z, localIdxs };
+		input.rigid = {};
+		if (particleType == Base::ParticleType::Fluid)
+		{
+			input.fluid = particleInput;
+		}
+		else if (particleType == Base::ParticleType::Boundary)
+		{
+			input.boundary = particleInput;
+		}
+		else
+		{
+			input.rigid = particleInput;
+		}
+
 		domainDecomp.BuildRepartitionProfile(input, chunkProfile);
+
 		const auto AccumulateCounts = [](auto& total, const auto& chunk)
 		{
 			if (total.size() != chunk.size())
@@ -95,6 +103,7 @@ void Dist::BuildCheckpointRepartitionProfile(
 		};
 		AccumulateCounts(profile.ownedFluidByUnit, chunkProfile.ownedFluidByUnit);
 		AccumulateCounts(profile.ownedBoundaryByUnit, chunkProfile.ownedBoundaryByUnit);
+		AccumulateCounts(profile.ownedRigidByUnit, chunkProfile.ownedRigidByUnit);
 	};
 	serializationMgr.VisitSimStatePositions(path, rank, N_ranks, AccumulatePositions);
 }
@@ -121,29 +130,37 @@ Export::BinHeaderSim Dist::SaveDistributedCheckpointState(
 		// compute global counts and this rank's particle ranges
 		uint64_t N_totalF = 0;
 		uint64_t N_totalB = 0;
+		uint64_t N_totalR = 0;
 		uint64_t beginIdxF = 0;
 		uint64_t beginIdxB = 0;
+		uint64_t beginIdxR = 0;
 		uint64_t N_maxF = 0;
 		uint64_t N_maxB = 0;
+		uint64_t N_maxR = 0;
 		for (int rank = 0; rank < mpiContext.Size(); rank++)
 		{
 			const size_t offset = static_cast<size_t>(rank) * N_rankInfoFields;
-			if (rankInfo[offset + 2] != state.particlesR.N_ || rankInfo[offset + 3] != state.rigidBodies.N_ ||
-				rankInfo[offset + 4] != state.step || rankInfo[offset + 5] != std::bit_cast<uint64_t>(state.time))
+			if (rankInfo[offset + 3] != state.rigidBodies.N_ ||
+				rankInfo[offset + 4] != state.step ||
+				rankInfo[offset + 5] != std::bit_cast<uint64_t>(state.time))
 			{
-				throw std::runtime_error("Checkpoint ranks disagree on rigid counts or step/time.");
+				throw std::runtime_error("Checkpoint ranks disagree on rigid body counts or step/time.");
 			}
 			Sim::CheckedLocalParticleCount(rankInfo[offset], "checkpoint fluid count");
 			Sim::CheckedLocalParticleCount(rankInfo[offset + 1], "checkpoint boundary count");
+			Sim::CheckedLocalParticleCount(rankInfo[offset + 2], "checkpoint rigid count");
 			if (rank == mpiContext.Rank())
 			{
 				beginIdxF = N_totalF;
 				beginIdxB = N_totalB;
+				beginIdxR = N_totalR;
 			}
 			N_totalF += rankInfo[offset];
 			N_totalB += rankInfo[offset + 1];
+			N_totalR += rankInfo[offset + 2];
 			N_maxF = std::max(N_maxF, rankInfo[offset]);
 			N_maxB = std::max(N_maxB, rankInfo[offset + 1]);
+			N_maxR = std::max(N_maxR, rankInfo[offset + 2]);
 		}
 
 		// use the same field order for array validation and collective writes
@@ -167,7 +184,6 @@ Export::BinHeaderSim Dist::SaveDistributedCheckpointState(
 		ValidateArrays(state.particlesR, VisitRigidFields);
 		ValidateArrays(state.rigidBodies, VisitBodyFields);
 
-		Sim::CheckedLocalParticleCount(state.particlesR.N_, "checkpoint rigid count");
 		for (const auto* ids : { &state.particlesF.id, &state.particlesB.id, &state.particlesR.id })
 		{
 			if (std::find(ids->begin(), ids->end(), Sim::INVALID_PARTICLE_ID) != ids->end())
@@ -175,15 +191,34 @@ Export::BinHeaderSim Dist::SaveDistributedCheckpointState(
 				throw std::runtime_error("Checkpoint contains an invalid particle ID.");
 			}
 		}
-		state.ValidateRigidAttachments();
+
 		if (!std::isfinite(state.time) || state.time < 0 || state.step == std::numeric_limits<uint64_t>::max())
 		{
 			throw std::runtime_error("Invalid checkpoint step/time.");
 		}
 
+		std::vector<uint64_t> bodyParticleCounts(state.rigidBodies.N_, 0);
+		for (const uint32_t bodyIdx : state.particlesR.bodyId)
+		{
+			if (bodyIdx >= state.rigidBodies.N_)
+			{
+				throw std::runtime_error("Invalid checkpoint rigid body index.");
+			}
+			bodyParticleCounts[bodyIdx]++;
+		}
+
+		mpiContext.AllReduceSumUint64s(bodyParticleCounts);
+		for (uint32_t bodyIdx = 0; bodyIdx < state.rigidBodies.N_; bodyIdx++)
+		{
+			if (bodyParticleCounts[bodyIdx] != state.rigidBodies.rigidParticleCount[bodyIdx])
+			{
+				throw std::runtime_error("Checkpoint rigid particle memberships do not match body counts.");
+			}
+		}
+
 		// root writes the header, all ranks participate in the collective call
-		const auto header = Export::MakeSimStateHeader(state.step, state.time, N_totalF, N_totalB,
-			state.particlesR.N_, state.rigidBodies.N_);
+		const auto header = Export::MakeSimStateHeader(
+			state.step, state.time, N_totalF, N_totalB, N_totalR, state.rigidBodies.N_);
 		const auto off = Export::ComputeSimStateOffsets(header);
 		MPI_File file = mpiContext.OpenFileForWrite(path, off.totalBytes);
 		mpiContext.WriteFileBytesAtAll(
@@ -225,10 +260,12 @@ Export::BinHeaderSim Dist::SaveDistributedCheckpointState(
 		};
 		WritePopulation(state.particlesF, off.fluid, N_totalF, beginIdxF, N_maxF, true, VisitFluidFields);
 		WritePopulation(state.particlesB, off.boundary, N_totalB, beginIdxB, N_maxB, true, VisitBoundaryFields);
+		WritePopulation(state.particlesR, off.rigid, N_totalR, beginIdxR, N_maxR, true, VisitRigidFields);
 
-		// rigid particles and bodies are replicated, only root contributes their state
-		WritePopulation(state.particlesR, off.rigid, header.N_R, 0, header.N_R, mpiContext.IsRoot(), VisitRigidFields);
-		WritePopulation(state.rigidBodies, off.rigidBodies, header.N_RB, 0, header.N_RB, mpiContext.IsRoot(), VisitBodyFields);
+		// root contributes the replicated body state
+		WritePopulation(
+			state.rigidBodies, off.rigidBodies, header.N_RB, 0, header.N_RB,
+			mpiContext.IsRoot(), VisitBodyFields);
 
 		mpiContext.CloseFile(file);
 		// every rank must close the file before root checks its size and publishes it
@@ -284,6 +321,7 @@ bool DistSimulationMgr::SaveCheckpoint(
 		// the validated state stores [ owned ][ halo ], halos are rebuilt on restart
 		localSimState_.particlesF.resizeAll(particleStateF_.N_owned);
 		localSimState_.particlesB.resizeAll(particleStateB_.N_owned);
+		localSimState_.particlesR.resizeAll(particleStateR_.N_owned);
 		localSimState_.step = simStep_;
 		localSimState_.time = simTime_;
 		writePath = (std::filesystem::path(directory) / "state.bin.tmp").string();
@@ -313,8 +351,10 @@ bool DistSimulationMgr::SaveCheckpoint(
 				Export::CheckpointMode::Distributed, simStep_, simTime_, params);
 			manifest["globalFluidCount"] = N_expectedGlobalF_;
 			manifest["globalBoundaryCount"] = N_expectedGlobalB_;
+			manifest["globalRigidCount"] = N_expectedGlobalR_;
 			manifest["fluidIdChecksum"] = expectedOwnedIdChecksumF_;
 			manifest["boundaryIdChecksum"] = expectedOwnedIdChecksumB_;
+			manifest["rigidIdChecksum"] = expectedOwnedIdChecksumR_;
 			manifest["globalBounds"] = CheckpointBoundsToJson(domainDecomp_->GlobalExtentAABB());
 
 			nlohmann::json fileInfo = nlohmann::json::object();
@@ -381,8 +421,10 @@ bool DistSimulationMgr::LoadCheckpoint(
 		simTime_ = info.time;
 		N_expectedGlobalF_ = Export::CheckpointUint64(manifest.at("globalFluidCount"));
 		N_expectedGlobalB_ = Export::CheckpointUint64(manifest.at("globalBoundaryCount"));
+		N_expectedGlobalR_ = Export::CheckpointUint64(manifest.at("globalRigidCount"));
 		expectedOwnedIdChecksumF_ = Export::CheckpointUint64(manifest.at("fluidIdChecksum"));
 		expectedOwnedIdChecksumB_ = Export::CheckpointUint64(manifest.at("boundaryIdChecksum"));
+		expectedOwnedIdChecksumR_ = Export::CheckpointUint64(manifest.at("rigidIdChecksum"));
 
 		// check the shared state file before loading particles
 		const auto& files = manifest.at("files");
@@ -438,10 +480,17 @@ bool DistSimulationMgr::LoadCheckpoint(
 			}
 			return ownerRank == mpiContext_.Rank();
 		};
+		const AABB haloBounds = domainDecomp_->HaloExtentAABB(mpiContext_.Rank());
+		const auto IsLocalRigidParticle = [&](const glm::vec3& position)
+		{
+			return IsLocalParticle(position) || haloBounds.Contains(position);
+		};
 		const auto header = serializationMgr_.LoadSelectedSimState(
-			localSimState_, statePath.string(), IsLocalParticle);
+			globalSimState_, statePath.string(), IsLocalParticle, IsLocalRigidParticle);
 		if (header.step != info.step || header.time != info.time ||
-			header.N_F != N_expectedGlobalF_ || header.N_B != N_expectedGlobalB_ ||
+			header.N_F != N_expectedGlobalF_ ||
+			header.N_B != N_expectedGlobalB_ ||
+			header.N_R != N_expectedGlobalR_ ||
 			header.N_F != Export::CheckpointUint64(fileInfo.at("fluidCount")) ||
 			header.N_B != Export::CheckpointUint64(fileInfo.at("boundaryCount")) ||
 			header.N_R != Export::CheckpointUint64(fileInfo.at("rigidCount")) ||
@@ -452,18 +501,13 @@ bool DistSimulationMgr::LoadCheckpoint(
 
 		// rebuild ownership metadata for startup redistribution and halo construction
 		simBackend_->SetSimDomainBounds(input.globalBounds.min, input.globalBounds.max);
-		RestoreCheckpointParticleMetadata(particleStateF_, localSimState_.particlesF.N_);
-		RestoreCheckpointParticleMetadata(particleStateB_, localSimState_.particlesB.N_);
-
-		globalSimState_ = {};
-		globalSimState_.particlesR = localSimState_.particlesR;
-		globalSimState_.rigidBodies = localSimState_.rigidBodies;
+		localOk = BuildRankLocalSimState();
 		rigidBodySyncBuffers_.Resize(globalSimState_.rigidBodies.N_);
 
 		boundaryRedistributionRequired_ = true;
 		serializationMgr_.ResetExportDirState();
 		exportSnapshotDir_.clear();
-		localOk = ValidateRankLocalSimState(true);
+		localOk = localOk && ValidateRankLocalSimState(true);
 	}
 	catch (const std::exception& ex)
 	{
@@ -472,7 +516,7 @@ bool DistSimulationMgr::LoadCheckpoint(
 		localOk = false;
 	}
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
-	if (!ValidateGlobalOwnedParticleCounts()) { return false; }
+	if (!ValidateGlobalOwnedParticleCounts(false)) { return false; }
 	SPDLOG_INFO_MPI("Restored distributed checkpoint at step {} (time {})",
 		mpiContext_, simStep_, simTime_);
 

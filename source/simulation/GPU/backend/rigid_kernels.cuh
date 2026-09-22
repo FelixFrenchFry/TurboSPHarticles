@@ -73,8 +73,8 @@ namespace GPU
 		float* xForceR, float* yForceR, float* zForceR);
 
 	void Launch_ReduceRigidParticleForces(
-		const uint32_t* rigidParticleBeginRB,
-		const uint32_t* rigidParticleCountRB,
+		const uint32_t* rigidParticleOffsets_ByBody,
+		const uint32_t* rigidParticleLocalIdxs_ByBody,
 		const float* xRelPosR,
 		const float* yRelPosR,
 		const float* zRelPosR,

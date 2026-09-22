@@ -31,8 +31,10 @@ namespace Dist
 
 		uint32_t N_ownedF = 0;
 		uint32_t N_ownedB = 0;
+		uint32_t N_ownedR = 0;
 		uint32_t N_haloF = 0;
 		uint32_t N_haloB = 0;
+		uint32_t N_haloR = 0;
 
 		uint64_t rankBackendStepTimeNs = 0;
 	};

@@ -95,7 +95,6 @@ namespace Export
 	void VisitRigidBodyStateFields(Visit visit, States&... states)
 	{
 		visit(states.id...);
-		visit(states.rigidParticleBegin...);
 		visit(states.rigidParticleCount...);
 		visit(states.xCM...);
 		visit(states.yCM...);

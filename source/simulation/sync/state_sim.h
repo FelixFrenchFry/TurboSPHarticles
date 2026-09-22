@@ -2,6 +2,7 @@
 #pragma once
 
 // external
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -17,6 +18,12 @@
 namespace Sync
 {
 	inline constexpr uint32_t InvalidRigidBodyId = std::numeric_limits<uint32_t>::max();
+
+	// non-owning world positions in backend local particle order
+	struct ParticlePositionConstView
+	{
+		std::span<const float> xPos, yPos, zPos;
+	};
 
 	// view into fluid particle data
 	// (non-owning, for read-only access)
@@ -469,7 +476,6 @@ namespace Sync
 		// metadata
 		uint32_t N_ = 0;
 		std::vector<uint32_t> id; // per-rigid-body ID
-		std::vector<uint32_t> rigidParticleBegin; // first rigid particle
 		std::vector<uint32_t> rigidParticleCount; // number of rigid particles
 
 		// body state (in world frame)
@@ -495,7 +501,6 @@ namespace Sync
 		void reserveAll(uint32_t N)
 		{
 			id.reserve(N);
-			rigidParticleBegin.reserve(N);
 			rigidParticleCount.reserve(N);
 
 			xCM.reserve(N); yCM.reserve(N); zCM.reserve(N);
@@ -519,7 +524,6 @@ namespace Sync
 			N_ = N;
 
 			id.resize(N_);
-			rigidParticleBegin.resize(N_);
 			rigidParticleCount.resize(N_);
 
 			xCM.resize(N_); yCM.resize(N_); zCM.resize(N_);
@@ -542,7 +546,6 @@ namespace Sync
 		void shrinkToFitAll()
 		{
 			id.shrink_to_fit();
-			rigidParticleBegin.shrink_to_fit();
 			rigidParticleCount.shrink_to_fit();
 
 			xCM.shrink_to_fit(); yCM.shrink_to_fit(); zCM.shrink_to_fit();
@@ -578,6 +581,31 @@ namespace Sync
 			assignSequentialIds();
 		}
 	};
+
+	// builds per-body particle index lists for use in rigid particle force reduction
+	inline void BuildRigidParticleIndicesByBody(
+		const std::span<const uint32_t> bodyIds,
+		const uint32_t N_bodies,
+		std::vector<uint32_t>& offsets,
+		std::vector<uint32_t>& localIdxs)
+	{
+		offsets.assign(static_cast<size_t>(N_bodies) + 1, 0);
+		for (const uint32_t bodyIdx : bodyIds)
+		{
+			assert(bodyIdx < N_bodies);
+			offsets[bodyIdx + 1]++;
+		}
+		for (uint32_t bodyIdx = 0; bodyIdx < N_bodies; bodyIdx++)
+		{
+			offsets[bodyIdx + 1] += offsets[bodyIdx];
+		}
+		localIdxs.resize(bodyIds.size());
+		auto writeOffsets = offsets;
+		for (uint32_t localIdx = 0; localIdx != bodyIds.size(); localIdx++)
+		{
+			localIdxs[writeOffsets[bodyIds[localIdx]]++] = localIdx;
+		}
+	}
 
 	// wrapper of backend-agnostic data structure for capturing the full simulation state,
 	// including all data making up the state, enabling lossless save & load
@@ -624,7 +652,7 @@ namespace Sync
 			particlesB.reserveAll(Sim::CheckedLocalParticleCount(total, "Boundary reserve"));
 		}
 
-		// validates rigid particle ownership before backend hot loops perform updates
+		// validates complete rigid particle membership independently of storage order
 		void ValidateRigidAttachments() const
 		{
 			const auto& R = particlesR;
@@ -641,42 +669,23 @@ namespace Sync
 				throw std::runtime_error("Invalid rigid particle array size.");
 			}
 
-			if (bodies.rigidParticleBegin.size() != static_cast<size_t>(bodies.N_) ||
-				bodies.rigidParticleCount.size() != static_cast<size_t>(bodies.N_))
+			if (bodies.rigidParticleCount.size() != static_cast<size_t>(bodies.N_))
 			{
-				throw std::runtime_error("Invalid rigid body particle range array size.");
+				throw std::runtime_error("Invalid rigid body particle count array size.");
 			}
 
-			uint32_t nextRigidParticleIdx = 0;
-			for (uint32_t bodyIdx = 0; bodyIdx < bodies.N_; bodyIdx++)
+			std::vector<uint32_t> bodyParticleCounts(bodies.N_, 0);
+			for (const uint32_t bodyIdx : R.bodyId)
 			{
-				const uint32_t begin = bodies.rigidParticleBegin[bodyIdx];
-				const uint32_t N_rigidParticles = bodies.rigidParticleCount[bodyIdx];
-				const uint32_t end = begin + N_rigidParticles;
-
-				if (begin != nextRigidParticleIdx)
+				if (bodyIdx >= bodies.N_)
 				{
-					throw std::runtime_error("Rigid body particle ranges are not contiguous.");
+					throw std::runtime_error("Invalid rigid body index.");
 				}
-				if (begin > R.N_ || N_rigidParticles > R.N_ - begin)
-				{
-					throw std::runtime_error("Invalid rigid body particle range.");
-				}
-
-				for (uint32_t rigidParticleIdx = begin; rigidParticleIdx < end; rigidParticleIdx++)
-				{
-					if (R.bodyId[rigidParticleIdx] != bodyIdx)
-					{
-						throw std::runtime_error("Rigid particle belongs to a different body.");
-					}
-				}
-
-				nextRigidParticleIdx = end;
+				bodyParticleCounts[bodyIdx]++;
 			}
-
-			if (nextRigidParticleIdx != R.N_)
+			if (bodyParticleCounts != bodies.rigidParticleCount)
 			{
-				throw std::runtime_error("Rigid body particle ranges do not cover all rigid particles.");
+				throw std::runtime_error("Rigid particle memberships do not match body counts.");
 			}
 		}
 
