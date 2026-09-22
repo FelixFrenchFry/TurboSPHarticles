@@ -852,6 +852,7 @@ bool DistSimulationMgr::RunSim_Blocking()
 		// the run length is fixed at launch, so progress reports match the step limit below
 		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
+		DistDiagnosticsMgr::SetProgressRunning(doSimStep);
 
 		// check checkpoint deadline on root
 		checkpointDue = mpiContext_.IsRoot() && paramsInit.checkpointTime > 0.0 &&

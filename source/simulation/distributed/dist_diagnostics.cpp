@@ -35,6 +35,8 @@ namespace
 		uint64_t startStep = 0;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
+		steady_clock::time_point pauseStart{};
+		bool running = false;
 		int N_lastLines = 0;
 	};
 
@@ -1158,6 +1160,7 @@ namespace
 		{
 			state.initialized = true;
 			state.startSteady = now;
+			state.pauseStart = now;
 			state.N_lastLines = 0;
 			state.startStep = step;
 			state.lastStep = step;
@@ -1171,8 +1174,10 @@ namespace
 			std::printf("\x1b[%dA\r", state.N_lastLines);
 		}
 
+		// cumulative running time, excluding startup and pauses
+		const auto end = state.running ? now : state.pauseStart;
 		double elapsedS = std::chrono::duration<double>(
-			now - state.startSteady).count();
+			end - state.startSteady).count();
 		elapsedS = std::max(elapsedS, 1e-14);
 
 		int N_lines = 0;
@@ -1388,6 +1393,24 @@ namespace Dist
 		state.startStep = step;
 		state.lastStep = step;
 		state.startSteady = steady_clock::now();
+		state.pauseStart = state.startSteady;
+	}
+
+	void DistDiagnosticsMgr::SetProgressRunning(const bool running)
+	{
+		ProgressState& state = GetProgressState();
+		if (state.running == running) { return; }
+
+		const auto now = steady_clock::now();
+		if (running)
+		{
+			state.startSteady += now - state.pauseStart;
+		}
+		else
+		{
+			state.pauseStart = now;
+		}
+		state.running = running;
 	}
 
 	void DistDiagnosticsMgr::PrintFinalProgressPeakRam(
@@ -1410,8 +1433,9 @@ namespace Dist
 		const int processPeakResidentMaxRank = RankWithMax(
 			reports, &DistRankStepReport::N_processPeakResidentBytes);
 
+		const auto end = state.running ? steady_clock::now() : state.pauseStart;
 		const double elapsedS = std::chrono::duration<double>(
-			steady_clock::now() - state.startSteady).count();
+			end - state.startSteady).count();
 		const std::string progressLine = FormatProgressLine(
 			reports, state.startStep, elapsedS,
 			processResidentMax, processResidentMaxRank,

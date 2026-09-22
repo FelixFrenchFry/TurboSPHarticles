@@ -374,6 +374,7 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		// the run length is fixed at launch, so progress reports match the step limit below
 		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
+		DiagnosticsMgr::SetProgressRunning(doSimStep);
 
 		// explicit max number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
@@ -536,6 +537,7 @@ void SimulationMgr::RunSim_Blocking()
 		// the run length is fixed at launch, so progress reports match the step limit below
 		params.maxSteps = paramsInit.maxSteps;
 		const bool doSimStep = (params.simRunning || params.simRunNextStep);
+		DiagnosticsMgr::SetProgressRunning(doSimStep);
 
 		// explicit max number of steps reached
 		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&

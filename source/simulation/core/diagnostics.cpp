@@ -39,6 +39,8 @@ namespace
 		uint64_t startStep = 0;
 		uint64_t lastStep = 0;
 		steady_clock::time_point startSteady{};
+		steady_clock::time_point pauseStart{};
+		bool running = false;
 		int N_lastLines = 0;
 		std::size_t lastProgressLen = 0;
 		std::string lastProgressLine{};
@@ -137,6 +139,24 @@ namespace Sim
 		state.startStep = step;
 		state.lastStep = step;
 		state.startSteady = steady_clock::now();
+		state.pauseStart = state.startSteady;
+	}
+
+	void DiagnosticsMgr::SetProgressRunning(const bool running)
+	{
+		ProgressState& state = GetProgressState();
+		if (state.running == running) { return; }
+
+		const auto now = steady_clock::now();
+		if (running)
+		{
+			state.startSteady += now - state.pauseStart;
+		}
+		else
+		{
+			state.pauseStart = now;
+		}
+		state.running = running;
 	}
 
 	void DiagnosticsMgr::PrintFinalProgressPeakRam(
@@ -337,18 +357,17 @@ namespace Sim
         // restart progress timing when the simulation step is reset
         if (!state.initialized || step == 0 || step < state.lastStep)
         {
-            state = ProgressState{};
-            state.initialized = true;
-            state.startStep = step;
-            state.lastStep = step;
-            state.startSteady = now;
+            const bool wasRunning = state.running;
+            ResetProgress(step);
+            SetProgressRunning(wasRunning);
         }
 
         if (step <= state.lastStep) { return; }
         state.lastStep = step;
 
-        // total elapsed time since start
-        double elapsedS = std::chrono::duration<double>(now - state.startSteady).count();
+        // cumulative running time, excluding startup and pauses
+        const auto end = state.running ? now : state.pauseStart;
+        double elapsedS = std::chrono::duration<double>(end - state.startSteady).count();
         elapsedS = std::max(elapsedS, 1e-14);
 
         const double stepsPerSec = static_cast<double>(step - state.startStep) / elapsedS;

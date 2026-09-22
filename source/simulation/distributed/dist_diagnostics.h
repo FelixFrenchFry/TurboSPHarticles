@@ -155,6 +155,7 @@ namespace Dist
 			const DistStartupRankReport& localReport);
 
 		static void ResetProgress(uint64_t step);
+		static void SetProgressRunning(bool running);
 
 		static void PrintFinalProgressPeakRam(
 			const MpiContext& mpiContext,
