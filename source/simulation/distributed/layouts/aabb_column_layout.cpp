@@ -502,7 +502,7 @@ AABBColumnLayout::BuildColumnSubdomains(
 			AABBRankSubdomain subdomain{};
 			subdomain.rank = ColumnRank(columnCounts, sectionX, sectionZ);
 			subdomain.ownedBounds = ownedBounds;
-			subdomain.haloBounds = ownedBounds.Expanded(haloRadius);
+			subdomain.haloBounds = ownedBounds.ExtendedAtGlobalBounds(globalBounds).Expanded(haloRadius);
 
 			subdomains.push_back(std::move(subdomain));
 		}

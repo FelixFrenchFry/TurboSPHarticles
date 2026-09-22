@@ -906,11 +906,9 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 
 	const uint32_t bodyIdx = RB.N_;
 	const uint32_t N_localBase = R.N_;
-	const uint32_t N_base = Sim::CheckedLocalParticleCount(
-		hasBuildRegion_ ? N_builtGlobalR_ : R.N_, "Global rigid count");
+	const uint64_t N_base = hasBuildRegion_ ? N_builtGlobalR_ : R.N_;
 	const uint32_t N_add = Sim::CheckedLocalParticleCount(N_keep, "Hollow rigid body");
-	const uint32_t N_globalEnd = Sim::CheckedLocalParticleCount(
-		Sim::CheckedParticleAdd(N_base, N_add, "Rigid append"), "Rigid append");
+	const uint64_t N_globalEnd = Sim::CheckedParticleAdd(N_base, N_add, "Rigid append");
 
 	const glm::vec3 center = box.origin
 						   + box.uHat * (0.5f * box.uLen)
@@ -1074,10 +1072,8 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 
 	const uint32_t bodyIdx = RB.N_;
 	const uint32_t N_localBase = R.N_;
-	const uint32_t N_base = Sim::CheckedLocalParticleCount(
-		hasBuildRegion_ ? N_builtGlobalR_ : R.N_, "Global rigid count");
-	const uint32_t N_globalEnd = Sim::CheckedLocalParticleCount(
-		Sim::CheckedParticleAdd(N_base, N_add, "Rigid append"), "Rigid append");
+	const uint64_t N_base = hasBuildRegion_ ? N_builtGlobalR_ : R.N_;
+	const uint64_t N_globalEnd = Sim::CheckedParticleAdd(N_base, N_add, "Rigid append");
 	const auto ParticlePosition = [&](const glm::vec3& localPos)
 	{
 		return centerOfMass + orientation * localPos;

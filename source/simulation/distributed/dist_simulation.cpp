@@ -2671,6 +2671,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 				distParticleBackend_->GetFluidParticleView();
 			const AABB singleHaloBounds =
 				domainDecomp_->OwnedExtentAABB(mpiContext_.Rank())
+					.ExtendedAtGlobalBounds(domainDecomp_->GlobalExtentAABB())
 					.Expanded(simParams_.kernelRadius);
 			const auto& haloLocalIdxs = particleStateF_.particleLocalIdx_Halo;
 			const uint32_t N_halo = static_cast<uint32_t>(haloLocalIdxs.size());

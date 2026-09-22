@@ -339,7 +339,8 @@ bool FluidSolverSyncMgr::Rebuild(
 
 	const bool useDoubleHalo = distHaloMode == Base::DistHaloMode::DoubleHalo;
 	const AABB singleHaloBounds =
-		domainDecomp.OwnedExtentAABB(mpiContext.Rank()).Expanded(singleHaloRadius);
+		domainDecomp.OwnedExtentAABB(mpiContext.Rank())
+			.ExtendedAtGlobalBounds(domainDecomp.GlobalExtentAABB()).Expanded(singleHaloRadius);
 	const uint32_t N_peerPlans = static_cast<uint32_t>(newPeerPlans.size());
 	const uint32_t N_buckets = N_peerPlans * N_HALO_EXTENTS;
 	const uint32_t N_outer = static_cast<uint32_t>(
@@ -388,7 +389,8 @@ bool FluidSolverSyncMgr::Rebuild(
 	{
 		const int peerRank = newPeerPlans[peerIdx].rank;
 		planBuildWorkBuffers.sendSingleBounds_ByPeer[peerIdx] =
-			domainDecomp.OwnedExtentAABB(peerRank).Expanded(singleHaloRadius);
+			domainDecomp.OwnedExtentAABB(peerRank)
+				.ExtendedAtGlobalBounds(domainDecomp.GlobalExtentAABB()).Expanded(singleHaloRadius);
 		if (useDoubleHalo)
 		{
 			planBuildWorkBuffers.sendDoubleBounds_ByPeer[peerIdx] =

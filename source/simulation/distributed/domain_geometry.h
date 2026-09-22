@@ -18,6 +18,10 @@ namespace Dist
 		[[nodiscard]] glm::vec3 Extents() const;
 		[[nodiscard]] AABB Expanded(float radius) const;
 
+		// extends outer faces for particle filtering, matching ownership beyond the global domain
+		// (call on bounded owned extents before adding a halo radius)
+		[[nodiscard]] AABB ExtendedAtGlobalBounds(const AABB& globalBounds) const;
+
 		// called per particle and halo destination by the particle routing
 		// (link-time optimization is off in CUDA builds)
 		[[nodiscard]] bool Contains(const glm::vec3& point) const

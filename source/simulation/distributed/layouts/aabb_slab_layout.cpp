@@ -368,7 +368,7 @@ AABBSlabLayout::BuildSlabSubdomains(
 		AABBRankSubdomain subdomain{};
 		subdomain.rank = rank;
 		subdomain.ownedBounds = ownedBounds;
-		subdomain.haloBounds = ownedBounds.Expanded(haloRadius);
+		subdomain.haloBounds = ownedBounds.ExtendedAtGlobalBounds(globalBounds).Expanded(haloRadius);
 
 		subdomains.push_back(std::move(subdomain));
 	}

@@ -71,7 +71,7 @@ namespace Dist
 
 		virtual const std::vector<int>& NeighborRanks(int rank) const = 0;
 
-		// rank-local owned / halo extents used for exchange and diagnostics
+		// bounded rank extents for diagnostics, particle halos extend past outer global faces
 		virtual AABB OwnedExtentAABB(int rank) const = 0;
 		virtual AABB HaloExtentAABB(int rank) const = 0;
 

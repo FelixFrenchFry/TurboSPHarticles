@@ -86,7 +86,7 @@ namespace Dist
 		{
 			int rank = 0;
 			AABB ownedBounds; // domain bounds owned by this rank
-			AABB haloBounds; // owned bounds expanded by halo radius
+			AABB haloBounds; // particle halo, unbounded past outer global faces
 			std::vector<int> neighborRanks; // ranks whose owned bounds overlap this halo
 		};
 
