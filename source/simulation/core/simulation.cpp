@@ -267,7 +267,7 @@ void SimulationMgr::Launch_Async()
 		{
 			try
 			{
-				RunSim_Async(stopToken);
+				RunSim(stopToken, true);
 			}
 			catch (const std::exception& ex)
 			{
@@ -310,11 +310,21 @@ void SimulationMgr::Launch_Blocking()
 
 	stopRequested_.store(false, std::memory_order_release);
 
-	// launch threads
-	RunSim_Blocking();
+	// run on the calling thread and leave exceptions for the app to report
+	try
+	{
+		RunSim(std::stop_token{}, false);
+	}
+	catch (...)
+	{
+		running_.store(false, std::memory_order_release);
+		EndRunLogging();
+		throw;
+	}
+	running_.store(false, std::memory_order_release);
 }
 
-void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
+void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishVis)
 {
 	printf("\n");
 	SPDLOG_INFO("Simulation started running...");
@@ -330,10 +340,13 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	// initial neighbor search for correct statistics
 	simBackend_->ExecuteNeighborSearch(simParams_);
 
-	PublishVisualSnapshot();
+	if (publishVis)
+	{
+		PublishVisualSnapshot();
 
-	// vis throttle starting point
-	lastVisWall_ = std::chrono::steady_clock::now();
+		// vis throttle starting point
+		lastVisWall_ = std::chrono::steady_clock::now();
+	}
 
 	// pack and serialize the initial export snapshot
 	if (paramsInit.exportEnabled && simStep_ == 0)
@@ -391,32 +404,28 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 			continue;
 		}
 
-		// execute one simulation step
-		if (doSimStep)
-		{
-			// reset data records for the new step
-			benchmarksTracker_.BeginStep();
-			memoryTracker_.BeginStep();
-			statisticsTracker_.BeginStep();
+		// reset data records for the new step
+		benchmarksTracker_.BeginStep();
+		memoryTracker_.BeginStep();
+		statisticsTracker_.BeginStep();
 
-			// starting point of total benchmark
-			benchmarksTracker_.StartBench(Bench::BenchOp::Total);
+		// starting point of total benchmark
+		benchmarksTracker_.StartBench(Bench::BenchOp::Total);
 
-			// perform the actual simulation step
-			simBackend_->ExecuteFullSimStep(params);
+		// perform the actual simulation step
+		simBackend_->ExecuteFullSimStep(params);
 
-			// update metadata
-			simStep_ += 1;
-			simTime_ += params.timeStep;
+		// update metadata
+		simStep_ += 1;
+		simTime_ += params.timeStep;
 
-			// reset single-step flag
-			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
-		}
+		// reset single-step flag
+		if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
 
 		// TODO: adjust update frequency with throttle
 		// TODO: add upper bound via a "new frame" flag from the visualizer
 		// TODO: add lower bound via ...
-		if (doSimStep)
+		if (publishVis)
 		{
 			const auto now = std::chrono::steady_clock::now();
 
@@ -446,12 +455,12 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 		}
 
 		// evaluate the benchmarks, memory usage, and statistics for this step
-		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
-		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
-		if (doSimStep) { AppendLatestBenchmarkMetricsLog(); }
+		FinalizeBenchMemStatMeasurements();
+		AppendLatestMemoryMetricsLog();
+		AppendLatestBenchmarkMetricsLog();
 
 		// pack and send benchmark and statistics snapshots
-		if (doSimStep) { HandleBenchMemStatSnapshots(); }
+		HandleBenchMemStatSnapshots();
 
 		SyncParameters();
 
@@ -472,147 +481,6 @@ void SimulationMgr::RunSim_Async(const std::stop_token& stopToken)
 	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
 	if (processMemoryChanged) { AppendLatestMemoryMetricsLog(); }
 
-	EndRunLogging();
-
-	printf("\n");
-	SPDLOG_INFO("Simulation stopped running ({})", stopReason);
-	DiagnosticsMgr::PrintFinalProgressPeakRam(
-		memoryTracker_.GetCurrentRecord().process.N_residentBytes,
-		memoryTracker_.GetCurrentRecord().process.N_peakResidentBytes,
-		memoryTracker_.GetCurrentRecord().device.N_residentBytes,
-		memoryTracker_.GetCurrentRecord().device.N_peakResidentBytes);
-}
-
-void SimulationMgr::RunSim_Blocking()
-{
-	printf("\n");
-	SPDLOG_INFO("Simulation started running...");
-
-	// --- [ initialize before entering the simulation loop ] ----------------------------------------
-
-	// local copy for thread safety
-	const auto paramsInit = simParams_;
-	const uint64_t startStep = simStep_;
-	BeginRunLogging(paramsInit);
-	DiagnosticsMgr::ResetProgress(startStep);
-
-	// initial neighbor search for correct statistics
-	simBackend_->ExecuteNeighborSearch(simParams_);
-
-	// pack and serialize the initial export snapshot
-	if (paramsInit.exportEnabled && simStep_ == 0)
-	{
-		WriteExportSnapshot(paramsInit);
-	}
-
-	AppendInitialMemoryMetricsLog();
-	const char* stopReason = "unknown reason";
-	bool checkpointDue = false;
-
-	// --- [ enter the simulation loop ] -------------------------------------------------------------
-
-	while (true)
-	{
-		checkpointDue = paramsInit.checkpointTime > 0.0 &&
-			std::chrono::duration<double>(std::chrono::steady_clock::now() - initTime_).count() >=
-			paramsInit.checkpointTime;
-		if (checkpointDue)
-		{
-			stopReason = "checkpoint time reached";
-			SPDLOG_INFO("Checkpoint time reached, saving checkpoint and stopping...");
-			break;
-		}
-
-		if (stopRequested_.load(std::memory_order_acquire))
-		{
-			stopReason = "stop requested";
-			break;
-		}
-
-		SyncParameters(true);
-
-		// local copy for thread safety
-		auto params = simParams_;
-
-		// the run length is fixed at launch, so progress reports match the step limit below
-		params.maxSteps = paramsInit.maxSteps;
-		const bool doSimStep = (params.simRunning || params.simRunNextStep);
-		DiagnosticsMgr::SetProgressRunning(doSimStep);
-
-		// explicit max number of steps reached
-		if (simStep_ >= static_cast<uint64_t>(paramsInit.maxSteps) &&
-			paramsInit.maxSteps > 0)
-		{
-			stopReason = "max number of steps reached";
-			break;
-		}
-
-		// small sleep to avoid busy spin when nothing to do yet
-		if (!doSimStep)
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			continue;
-		}
-
-		// execute one simulation step
-		if (doSimStep)
-		{
-			// reset data records for the new step
-			benchmarksTracker_.BeginStep();
-			memoryTracker_.BeginStep();
-			statisticsTracker_.BeginStep();
-
-			// starting point of total benchmark
-			benchmarksTracker_.StartBench(Bench::BenchOp::Total);
-
-			// perform the actual simulation step
-			simBackend_->ExecuteFullSimStep(params);
-
-			// update metadata
-			simStep_ += 1;
-			simTime_ += params.timeStep;
-
-			// reset single-step flag
-			if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
-		}
-
-		// pack and serialize export snapshot at given frequency
-		if (simStep_ % params.exportInterval == 0 &&
-			params.exportEnabled)
-		{
-			benchmarksTracker_.StartBench(Bench::BenchOp::Serialization);
-			WriteExportSnapshot(params);
-			benchmarksTracker_.StopBench(Bench::BenchOp::Serialization);
-		}
-
-		// evaluate the benchmarks, memory usage, and statistics for this step
-		if (doSimStep) { FinalizeBenchMemStatMeasurements(); }
-		if (doSimStep) { AppendLatestMemoryMetricsLog(); }
-		if (doSimStep) { AppendLatestBenchmarkMetricsLog(); }
-
-		// pack and send benchmark and statistics snapshots
-		if (doSimStep) { HandleBenchMemStatSnapshots(); }
-
-		SyncParameters();
-
-		DisplayMemoryUsageStats(params, simStep_ == startStep + 1);
-		DisplayPerformanceStats(params);
-
-		// TODO: check if scenario or backend need to be switched?
-	}
-
-	// --- [ finalize after exiting the simulation loop ] --------------------------------------------
-
-	// local copy for thread safety
-	const auto paramsFinal = simParams_;
-
-	FinalizeRunState(paramsFinal, checkpointDue);
-
-	DisplayMemoryUsageStats(paramsFinal, true);
-	const bool processMemoryChanged = memoryTracker_.SampleProcessMemory();
-	if (processMemoryChanged) { AppendLatestMemoryMetricsLog(); }
-
-	running_.store(false, std::memory_order_release);
 	EndRunLogging();
 
 	printf("\n");

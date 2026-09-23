@@ -61,10 +61,6 @@ namespace Sim
 		void Launch_Async();
 		void Launch_Blocking();
 
-		// main simulation loop
-		void RunSim_Async(const std::stop_token& stopToken);
-		void RunSim_Blocking();
-
 		void RequestStop();
 		void JoinThreads();
 
@@ -98,6 +94,9 @@ namespace Sim
 	private:
 
 		friend class DiagnosticsMgr;
+
+		// simulation loop, shared by blocking and async launch modes
+		void RunSim(const std::stop_token& stopToken, bool publishVis);
 
 		// captures the final backend state and publishes a completed checkpoint
 		void SaveCheckpoint(const SimParams& params);
@@ -144,7 +143,6 @@ namespace Sim
 		// controller thread spawns worker threads within OpenMP parallel regions
 		std::jthread controllerThread_;
 		std::atomic<bool> running_{ false };
-		// explicit stop request shared by blocking and async simulation loops
 		std::atomic<bool> stopRequested_{ false };
 		std::atomic<bool> initialized_{ false };
 
