@@ -4,6 +4,7 @@
 // external
 #include <atomic>
 #include <glm/vec3.hpp>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -183,8 +184,8 @@ namespace Sim
 		bool LoadSimParamsFromCliOverrides(
 			const std::vector<std::string>& overrides, bool verbose = false);
 
-		// returns the accumulated CLI override patch (empty object if none were applied)
-		const nlohmann::json& CliOverrides() const { return cliOverrides_; }
+		// returns a copy of the accumulated CLI override patch (empty object if none were applied)
+		nlohmann::json CliOverrides() const;
 
 		// setters for individual parameters and their dependent values
 		void Set_SimRunning(bool simRunning, bool verbose = false);
@@ -223,14 +224,18 @@ namespace Sim
 
 	private:
 
-		alignas(64) SimParams params_{}; // current active copy of visualization parameters
-		alignas(64) std::atomic<uint64_t> version_{ 0 }; // even = stable, odd = writing
+		mutable std::mutex paramsMutex_{}; // protects parameters and CLI overrides
+		alignas(64) SimParams params_{}; // current active copy of simulation parameters
+		alignas(64) std::atomic<uint64_t> version_{ 0 }; // completed updates, used for change detection only
 
 		// CLI override patch as applied on top of the profile
 		nlohmann::json cliOverrides_ = nlohmann::json::object();
 
 		// keeps the dilated export surface selection from covering the whole fluid domain
 		static constexpr float surfaceNbrCountRatioMax_ = 0.85f;
+
+		bool LoadSimParamsFromJson_(const nlohmann::json& j, bool verbose, bool recordCliOverrides);
+		bool ApplySimParamsFromJson_(const nlohmann::json& j, bool verbose);
 
 		void UpdateNeighborCountHeuristics_();
 		void UpdateDistHaloRadius_();
@@ -243,8 +248,6 @@ namespace Sim
 			float particleSizeF,
 			float particleSizeB);
 		static bool SurfaceNbrCountRatioValid_(float surfaceNbrCountRatio);
-		inline void BeginWrite(); // mark beginning of write operation
-		inline void EndWrite(); // mark end of write operation
 	};
 
 } // namespace Sim

@@ -1,8 +1,5 @@
 // parameters_vis.cpp
 
-// external
-#include <thread>
-
 // internal
 #include "source/base/helpers.h"
 #include "parameters_vis.h"
@@ -13,43 +10,19 @@ using namespace Vis;
 
 std::pair<VisParams, int64_t> VisParamsMgr::SnapshotParams() const
 {
-	while (true)
-	{
-		// check for ongoing write
-		int64_t before = version_.load(std::memory_order_acquire);
-		if (before % 2 != 0) { std::this_thread::yield(); continue; }
-
-		// copy parameters
-		VisParams res = params_;
-
-		// make sure no write happened during copy
-		int64_t after = version_.load(std::memory_order_acquire);
-		if (before == after) { return { res, after }; }
-
-		// else try again
-		std::this_thread::yield();
-	}
+	std::scoped_lock lock(paramsMutex_);
+	return { params_, version_.load(std::memory_order_relaxed) };
 }
 
 int64_t VisParamsMgr::StableVersion() const
 {
-	while (true)
-	{
-		// make sure no write is ongoing
-		int64_t a = version_.load(std::memory_order_acquire);
-		if (a % 2 == 0)
-		{
-			int64_t b = version_.load(std::memory_order_acquire);
-			if (a == b) { return a; }
-		}
-
-		// else try again
-		std::this_thread::yield();
-	}
+	return version_.load(std::memory_order_acquire);
 }
 
 void VisParamsMgr::SetParam(const WindowPatch& patch)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if any parameter would actually change
 	bool changed = false;
 
@@ -61,16 +34,17 @@ void VisParamsMgr::SetParam(const WindowPatch& patch)
 	if (!changed) { return; } // nothing to change
 
 	// apply changes
-	BeginWrite();
 	if (patch.size) { params_.window.size = *patch.size; }
 	if (patch.title) { params_.window.title = *patch.title; }
 	if (patch.resizable) { params_.window.resizable = *patch.resizable; }
 	if (patch.vsync) { params_.window.vsync = *patch.vsync; }
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void VisParamsMgr::SetParam(const FrameBufferPatch& patch)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if any parameter would actually change
 	bool changed = false;
 
@@ -80,14 +54,15 @@ void VisParamsMgr::SetParam(const FrameBufferPatch& patch)
 	if (!changed) { return; } // nothing to change
 
 	// apply changes
-	BeginWrite();
 	if (patch.size) { params_.frameBuffer.size = *patch.size; }
 	if (patch.dpiScale) { params_.frameBuffer.dpiScale = *patch.dpiScale; }
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void VisParamsMgr::SetParam(const CameraPatch& patch)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if any parameter would actually change
 	bool changed = false;
 
@@ -105,7 +80,6 @@ void VisParamsMgr::SetParam(const CameraPatch& patch)
 	if (!changed) { return; } // nothing to change
 
 	// apply changes
-	BeginWrite();
 	if (patch.viewMat) { params_.camera.viewMat = *patch.viewMat; }
 	if (patch.projMat) { params_.camera.projMat = *patch.projMat; }
 	if (patch.camPos) { params_.camera.camPos = *patch.camPos; }
@@ -116,11 +90,13 @@ void VisParamsMgr::SetParam(const CameraPatch& patch)
 	if (patch.yFovDeg) { params_.camera.yFovDeg = *patch.yFovDeg; }
 	if (patch.zNear) { params_.camera.zNear = *patch.zNear; }
 	if (patch.zFar) { params_.camera.zFar = *patch.zFar; }
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void VisParamsMgr::SetParam(const RenderPatch& patch)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if any parameter would actually change
 	bool changed = false;
 
@@ -144,7 +120,6 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (!changed) { return; } // nothing to change
 
 	// apply changes
-	BeginWrite();
 	if (patch.lightDirVS) { params_.render.lightDirVS = *patch.lightDirVS; }
 	if (patch.baseColor) { params_.render.baseColor = *patch.baseColor; }
 	if (patch.rigidParticleColor) { params_.render.rigidParticleColor = *patch.rigidParticleColor; }
@@ -161,9 +136,5 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (patch.showParticlesR) { params_.render.showParticlesR = *patch.showParticlesR; }
 	if (patch.showRigidBodyCentersOfMass) { params_.render.showRigidBodyCentersOfMass = *patch.showRigidBodyCentersOfMass; }
 	if (patch.rigidParticleRadiusScale) { params_.render.rigidParticleRadiusScale = *patch.rigidParticleRadiusScale; }
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
-
-void VisParamsMgr::BeginWrite() { version_.fetch_add(1); }
-
-void VisParamsMgr::EndWrite() { version_.fetch_add(1); }

@@ -8,7 +8,7 @@
 #include <limits>
 #include <numbers>
 #include <spdlog/spdlog.h>
-#include <thread>
+#include <utility>
 
 // internal
 #include "source/base/helpers.h"
@@ -21,42 +21,53 @@ using namespace Sim;
 
 std::pair<SimParams, uint64_t> SimParamsMgr::SnapshotParams() const
 {
-	while (true)
-	{
-		// check for ongoing write
-		uint64_t before = version_.load(std::memory_order_acquire);
-		if (before % 2 != 0) { std::this_thread::yield(); continue; }
-
-		// copy parameters
-		SimParams res = params_;
-
-		// make sure no write happened during copy
-		uint64_t after = version_.load(std::memory_order_acquire);
-		if (before == after) { return { res, after }; }
-
-		// else try again
-		std::this_thread::yield();
-	}
+	std::scoped_lock lock(paramsMutex_);
+	return { params_, version_.load(std::memory_order_relaxed) };
 }
 
 uint64_t SimParamsMgr::StableVersion() const
 {
-	while (true)
-	{
-		// make sure no write is ongoing
-		uint64_t a = version_.load(std::memory_order_acquire);
-		if (a % 2 == 0)
-		{
-			uint64_t b = version_.load(std::memory_order_acquire);
-			if (a == b) { return a; }
-		}
+	return version_.load(std::memory_order_acquire);
+}
 
-		// else try again
-		std::this_thread::yield();
-	}
+nlohmann::json SimParamsMgr::CliOverrides() const
+{
+	std::scoped_lock lock(paramsMutex_);
+	return cliOverrides_;
 }
 
 bool SimParamsMgr::LoadSimParamsFromJson(
+	const nlohmann::json& j, bool verbose)
+{
+	return LoadSimParamsFromJson_(j, verbose, false);
+}
+
+bool SimParamsMgr::LoadSimParamsFromJson_(
+	const nlohmann::json& j, bool verbose, bool recordCliOverrides)
+{
+	std::scoped_lock lock(paramsMutex_);
+
+	// keep the live state locked while applying the patch, so concurrent setters are not lost
+	// (the candidate has its own mutex, allowing the parser to reuse the existing setters)
+	SimParamsMgr candidate{};
+	candidate.params_ = params_;
+	if (!candidate.ApplySimParamsFromJson_(j, false)) { return false; }
+
+	// prepare the override record before committing either part of the update
+	nlohmann::json cliOverrides;
+	if (recordCliOverrides)
+	{
+		cliOverrides = cliOverrides_;
+		cliOverrides.merge_patch(j);
+	}
+
+	params_ = std::move(candidate.params_);
+	if (recordCliOverrides) { cliOverrides_.swap(cliOverrides); }
+	version_.fetch_add(1, std::memory_order_release);
+	return true;
+}
+
+bool SimParamsMgr::ApplySimParamsFromJson_(
 	const nlohmann::json& j, bool verbose)
 {
 	// --- [ modes ] ---------------------------------------------------------------------------------
@@ -320,8 +331,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	// TODO: implement actual setters for backend type and scenario type?
 	{
-		BeginWrite();
-
 		auto backendIt = j.find("backendType");
 		const char* backendKey = "backendType";
 		if (backendIt == j.end())
@@ -340,7 +349,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid '{}' value in JSON.", backendKey);
-				EndWrite();
 				return false;
 			}
 		}
@@ -368,7 +376,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'neighborSearchMethod' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -383,7 +390,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'neighborListStorage' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -398,7 +404,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'domainDecompMethod' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -414,7 +419,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'distHaloMode' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -429,7 +433,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'loadBalanceMetric' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -444,7 +447,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'loadBalanceTrigger' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -459,7 +461,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			else
 			{
 				SPDLOG_WARN("Invalid 'loadBalanceWeightModel' value in JSON.");
-				EndWrite();
 				return false;
 			}
 		}
@@ -492,8 +493,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				}
 			}
 		}
-
-		EndWrite();
 	}
 
 	// --- [ simulation state flags ] ----------------------------------------------------------------
@@ -527,9 +526,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	// --- [ neighbor count heuristics ] -------------------------------------------------------------
 
-	BeginWrite();
 	UpdateNeighborCountHeuristics_();
-	EndWrite();
 
 	// --- [ rest density ] --------------------------------------------------------------------------
 
@@ -576,8 +573,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 
 	// TODO: implement setters for these
 	{
-		BeginWrite();
-
 		if (auto it = j.find("densityDevTarget"); it != j.end())
 		{
 			params_.densityDevTarget = it->get<float>();
@@ -633,16 +628,12 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 				SPDLOG_WARN("Invalid 'solverTerminationCond' value in JSON.");
 			}
 		}
-
-		EndWrite();
 	}
 
 	// --- [ data structuring ] ----------------------------------------------------------------------
 
 	if (auto it = j.find("gridCellSizeRatio"); it != j.end())
 	{
-		BeginWrite();
-
 		const float gridCellSizeRatio = it->get<float>();
 		if (gridCellSizeRatio > 0.0f)
 		{
@@ -652,16 +643,12 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		{
 			SPDLOG_WARN("Invalid 'gridCellSizeRatio' value in JSON (must be > 0).");
 		}
-
-		EndWrite();
 	}
 
 	// --- [ jitter ] --------------------------------------------------------------------------------
 
 	// TODO: implement setters for jitterFrac/jitterSeed stuff?
 	{
-		BeginWrite();
-
 		if (auto it = j.find("jitterFracF"); it != j.end())
 		{
 			params_.jitterFracF = it->get<float>();
@@ -681,8 +668,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		{
 			params_.jitterSeedB = it->get<int64_t>();
 		}
-
-		EndWrite();
 	}
 
 	// --- [ boundary layers ] -----------------------------------------------------------------------
@@ -695,14 +680,11 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 	// --- [ distributed load balancing ] ------------------------------------------------------------
 
 	{
-		BeginWrite();
-
 		if (auto it = j.find("loadBalanceThreshold"); it != j.end())
 		{
 			if (!it->is_number())
 			{
 				SPDLOG_WARN("Invalid 'loadBalanceThreshold' value in JSON.");
-				EndWrite();
 				return false;
 			}
 
@@ -710,7 +692,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (!std::isfinite(threshold) || threshold < 0.0f)
 			{
 				SPDLOG_WARN("Invalid 'loadBalanceThreshold' value in JSON (must be finite and >= 0).");
-				EndWrite();
 				return false;
 			}
 			params_.loadBalanceThreshold = threshold;
@@ -748,11 +729,8 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			!ParseLoadBalanceStepCount(
 				"loadBalanceIntervalSteps", false, params_.loadBalanceIntervalSteps))
 		{
-			EndWrite();
 			return false;
 		}
-
-		EndWrite();
 	}
 
 	// --- [ surface sampling ] ----------------------------------------------------------------------
@@ -813,7 +791,6 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		}
 
-		BeginWrite();
 		params_.surfaceSamplingMinDistanceRatio = minDistanceRatio;
 		params_.surfaceSamplingMaxDistanceRatio = maxDistanceRatio;
 		params_.surfaceSamplingCoverageProbeSpacingRatio = coverageProbeSpacingRatio;
@@ -822,15 +799,12 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 		params_.surfaceSamplingSeed = seed;
 
 		UpdateSurfaceSamplingDistances_();
-		EndWrite();
 	}
 
 	// --- [ statistics, benchmarks, and exports ] ---------------------------------------------------
 
 	// TODO: implement setters for maxStatRecs/maxBenchRecs?
 	{
-		BeginWrite();
-
 		if (auto it = j.find("maxBenchRecs"); it != j.end())
 		{
 			params_.maxBenchRecs = it->get<uint32_t>();
@@ -949,20 +923,16 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			if (!it->is_number())
 			{
 				SPDLOG_WARN("Invalid 'checkpointTime' value in JSON (must be finite seconds and >= 0).");
-				EndWrite();
 				return false;
 			}
 			const double checkpointTime = it->get<double>();
 			if (!std::isfinite(checkpointTime) || checkpointTime < 0.0)
 			{
 				SPDLOG_WARN("Invalid 'checkpointTime' value in JSON (must be finite seconds and >= 0).");
-				EndWrite();
 				return false;
 			}
 			params_.checkpointTime = checkpointTime;
 		}
-
-		EndWrite();
 	}
 
 	// --- [ export surface classification ] ---------------------------------------------------------
@@ -981,11 +951,9 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			return false;
 		}
 
-		BeginWrite();
 		params_.surfaceNbrCountRatio = surfaceNbrCountRatio;
 
 		UpdateSurfaceNbrCountThreshold_();
-		EndWrite();
 	}
 
 	// --- [ misc ] ----------------------------------------------------------------------------------
@@ -1040,9 +1008,7 @@ bool SimParamsMgr::LoadSimParamsFromJson(
 			Base::ProgressReportMode mode;
 			if (ParseProgressReportMode(*it, mode))
 			{
-				BeginWrite();
 				params_.progressReportMode = mode;
-				EndWrite();
 			}
 			else
 			{
@@ -1315,14 +1281,14 @@ bool SimParamsMgr::LoadSimParamsFromCliOverrides(
 		}
 	}
 
-	cliOverrides_.merge_patch(j);
-
-	return LoadSimParamsFromJson(j, verbose);
+	return LoadSimParamsFromJson_(j, verbose, true);
 }
 
 void SimParamsMgr::Set_SimRunning(
 	bool simRunning, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(simRunning, params_.simRunning, changed);
@@ -1335,14 +1301,15 @@ void SimParamsMgr::Set_SimRunning(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.simRunning = simRunning;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_SimRunNextStep(
 	bool simRunNextStep, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(simRunNextStep, params_.simRunNextStep, changed);
@@ -1357,14 +1324,15 @@ void SimParamsMgr::Set_SimRunNextStep(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.simRunNextStep = simRunNextStep;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_TimeStep(
 	float timeStep, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!(timeStep > 0.0f))
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'timeStep' must be > 0.");
@@ -1383,14 +1351,15 @@ void SimParamsMgr::Set_TimeStep(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.timeStep = timeStep;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_ParticleSize(
 	float particleSize, Base::ParticleType type, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!(particleSize > 0.0f))
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'particleSize' must be > 0.");
@@ -1414,8 +1383,6 @@ void SimParamsMgr::Set_ParticleSize(
 	}
 
 	if (!changed) { return; } // nothing to change
-
-	BeginWrite();
 
 	if (type == Base::ParticleType::Fluid)
 	{
@@ -1456,12 +1423,14 @@ void SimParamsMgr::Set_ParticleSize(
 	}
 	UpdateDistHaloRadius_();
 
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_KernelSuppRatio(
 	float kernelSuppRatio, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!Base::ApproxEqu(kernelSuppRatio, CubicSplineKernelSuppRatio))
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'kernelSuppRatio' must be {} for hardcoded cubic-spline kernels.",
@@ -1481,18 +1450,19 @@ void SimParamsMgr::Set_KernelSuppRatio(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.kernelSuppRatio = kernelSuppRatio;
 	params_.kernelRadius = kernelSuppRatio * params_.particleSizeF;
 	params_.kernelRadiusSqu = params_.kernelRadius * params_.kernelRadius;
 	UpdateDistHaloRadius_();
 	UpdateNeighborCountHeuristics_();
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_KernelRadius(
 	float kernelRadius, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!(kernelRadius > 0.0f))
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'kernelRadius' must be > 0.");
@@ -1519,18 +1489,19 @@ void SimParamsMgr::Set_KernelRadius(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.kernelRadius = kernelRadius;
 	params_.kernelRadiusSqu = kernelRadius * kernelRadius;
 	params_.kernelSuppRatio = kernelSuppRatio;
 	UpdateDistHaloRadius_();
 	UpdateNeighborCountHeuristics_();
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_RestDensity(
 	float restDensity, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!(restDensity > 0.0f))
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'restDensity' must be > 0.");
@@ -1549,7 +1520,6 @@ void SimParamsMgr::Set_RestDensity(
 			params_.restDensity, restDensity);
 	}
 
-	BeginWrite();
 	params_.restDensity = restDensity;
 	params_.massF = restDensity * params_.particleSizeF
 								* params_.particleSizeF
@@ -1557,12 +1527,14 @@ void SimParamsMgr::Set_RestDensity(
 	params_.massB = restDensity * params_.particleSizeB
 								* params_.particleSizeB
 								* params_.particleSizeB;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_Mass(
 	float mass, Base::ParticleType type, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!(mass > 0.0f))
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'mass' must be > 0.");
@@ -1611,7 +1583,6 @@ void SimParamsMgr::Set_Mass(
 		}
 	}
 
-	BeginWrite();
 	params_.restDensity = restDensity;
 	params_.massF = restDensity * params_.particleSizeF
 								* params_.particleSizeF
@@ -1619,12 +1590,14 @@ void SimParamsMgr::Set_Mass(
 	params_.massB = restDensity * params_.particleSizeB
 								* params_.particleSizeB
 								* params_.particleSizeB;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_Viscosity(
 	float viscosity, Base::ParticleType type, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 
@@ -1642,8 +1615,6 @@ void SimParamsMgr::Set_Viscosity(
 	}
 
 	if (!changed) { return; } // nothing to change
-
-	BeginWrite();
 
 	if (type == Base::ParticleType::Fluid)
 	{
@@ -1668,12 +1639,14 @@ void SimParamsMgr::Set_Viscosity(
 		params_.viscosityB = viscosity;
 	}
 
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_Gravity(
 	glm::vec3 gravity, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(gravity, params_.gravity, changed);
@@ -1687,14 +1660,15 @@ void SimParamsMgr::Set_Gravity(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.gravity = gravity;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_PressGamma(
 	float pressGamma, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(pressGamma, params_.pressGamma, changed);
@@ -1707,14 +1681,15 @@ void SimParamsMgr::Set_PressGamma(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.pressGamma = pressGamma;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_JacobiOmega(
 	float jacobiOmega, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(jacobiOmega, params_.jacobiOmega, changed);
@@ -1727,14 +1702,15 @@ void SimParamsMgr::Set_JacobiOmega(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.jacobiOmega = jacobiOmega;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_DensityDevTarget(
 	float densityDevTarget, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(densityDevTarget, params_.densityDevTarget, changed);
@@ -1747,14 +1723,15 @@ void SimParamsMgr::Set_DensityDevTarget(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.densityDevTarget = densityDevTarget;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_MinSolverIters(
 	uint32_t minSolverIters, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (minSolverIters <= 0)
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'minSolverIters' must be > 0.");
@@ -1773,14 +1750,15 @@ void SimParamsMgr::Set_MinSolverIters(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.minSolverIters = minSolverIters;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_MaxSolverIters(
 	uint32_t maxSolverIters, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (maxSolverIters <= 0)
 	{
 		SPDLOG_ERROR("Parameter change cancelled: 'maxSolverIters' must be > 0.");
@@ -1799,14 +1777,15 @@ void SimParamsMgr::Set_MaxSolverIters(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.maxSolverIters = maxSolverIters;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_BoundaryLayers(
 	uint32_t boundaryLayers, bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	// detect if parameter would actually change
 	bool changed = false;
 	Base::MarkIfChanged(boundaryLayers, params_.boundaryLayers, changed);
@@ -1819,9 +1798,8 @@ void SimParamsMgr::Set_BoundaryLayers(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.boundaryLayers = boundaryLayers;
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_SurfaceSamplingDistanceRatios(
@@ -1830,6 +1808,8 @@ void SimParamsMgr::Set_SurfaceSamplingDistanceRatios(
 	const float coverageProbeSpacingRatio,
 	const bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!SurfaceSamplingDistanceRatiosValid_(
 		minDistanceRatio,
 		maxDistanceRatio,
@@ -1870,17 +1850,18 @@ void SimParamsMgr::Set_SurfaceSamplingDistanceRatios(
 			coverageProbeSpacingRatio);
 	}
 
-	BeginWrite();
 	params_.surfaceSamplingMinDistanceRatio = minDistanceRatio;
 	params_.surfaceSamplingMaxDistanceRatio = maxDistanceRatio;
 	params_.surfaceSamplingCoverageProbeSpacingRatio = coverageProbeSpacingRatio;
 	UpdateSurfaceSamplingDistances_();
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::Set_SurfaceNbrCountRatio(
 	const float surfaceNbrCountRatio, const bool verbose)
 {
+	std::scoped_lock lock(paramsMutex_);
+
 	if (!SurfaceNbrCountRatioValid_(surfaceNbrCountRatio))
 	{
 		SPDLOG_ERROR(
@@ -1901,10 +1882,9 @@ void SimParamsMgr::Set_SurfaceNbrCountRatio(
 	}
 
 	// apply changes
-	BeginWrite();
 	params_.surfaceNbrCountRatio = surfaceNbrCountRatio;
 	UpdateSurfaceNbrCountThreshold_();
-	EndWrite();
+	version_.fetch_add(1, std::memory_order_release);
 }
 
 void SimParamsMgr::UpdateNeighborCountHeuristics_()
@@ -2263,14 +2243,4 @@ uint32_t SimParamsMgr::HeuristicSurfaceNbrCountThreshold(
 		surfaceNbrCountRatio * static_cast<float>(expctdAvgNbrCountHardMax_FF));
 
 	return std::max(static_cast<uint32_t>(heuristic), 1u);
-}
-
-inline void SimParamsMgr::BeginWrite()
-{
-	version_.fetch_add(1, std::memory_order_acq_rel);
-}
-
-inline void SimParamsMgr::EndWrite()
-{
-	version_.fetch_add(1, std::memory_order_release);
 }

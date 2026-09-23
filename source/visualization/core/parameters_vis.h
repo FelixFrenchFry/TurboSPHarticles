@@ -6,6 +6,7 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/glm.hpp>
+#include <mutex>
 
 // internal
 #include "structs_vis.h"
@@ -155,11 +156,9 @@ namespace Vis
 
 	private:
 
+		mutable std::mutex paramsMutex_{};
 		alignas(64) VisParams params_{}; // current active copy of visualization parameters
-		alignas(64) std::atomic<int64_t> version_{ 0 }; // even = stable, odd = writing
-
-		inline void BeginWrite(); // mark beginning of write operation
-		inline void EndWrite(); // mark end of write operation
+		alignas(64) std::atomic<int64_t> version_{ 0 }; // completed updates, used for change detection only
 	};
 
 } // namespace Vis
