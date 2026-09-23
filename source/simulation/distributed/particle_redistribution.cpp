@@ -1840,9 +1840,8 @@ bool ParticleRedistributionMgr::RouteOwnedRigidParticles(
 		N_owned,
 		scratchBufferExtraAllocCapacityPct_);
 
-	// kept for the retained particle classification, so it outlives this routing pass
-	// and is indexed by local particle index instead of owned list position
-	// (only owned entries carry a value)
+	// used by the second routing pass to skip halo checks for inner particles
+	// indexed by local particle index (only owned entries carry a value)
 	auto& isOuterOwned_ByLocalIdx = routes_.rigidIsOuterOwned_ByLocalIdx;
 	ResizeVectorWithExtraCapacity(
 		isOuterOwned_ByLocalIdx,

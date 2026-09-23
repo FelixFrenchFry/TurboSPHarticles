@@ -95,7 +95,7 @@ namespace Sim
 			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
 			bool pressureAccIsOwnedPrefix,
 			uint32_t N_ownedBoundaryParticles,
-			uint32_t N_ownedRigidParticles,
+			uint32_t N_ownedR,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
 		// classifies local fluid particles against the export near-surface threshold
@@ -228,8 +228,8 @@ namespace Sim
 		std::vector<uint32_t> rigidParticleCountRB_; // global particle count per body
 
 		// local particle indices grouped by body for force reduction
-		std::vector<uint32_t> rigidParticleOffsets_ByBody_;
-		std::vector<uint32_t> rigidParticleLocalIdxs_ByBody_;
+		std::vector<uint32_t> particleOffsetsR_ByBody_;
+		std::vector<uint32_t> particleLocalIdxsR_ByBody_;
 
 		// body state (in world frame)
 		std::vector<float> xCMRB_, yCMRB_, zCMRB_; // center of mass

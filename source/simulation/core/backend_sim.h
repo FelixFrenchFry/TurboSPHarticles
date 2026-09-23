@@ -262,7 +262,7 @@ namespace Sim
 			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
 			bool pressureAccIsOwnedPrefix,
 			uint32_t N_ownedBoundaryParticles,
-			uint32_t N_ownedRigidParticles,
+			uint32_t N_ownedR,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync)
 		{
 			(void)ownedFluidParticleLocalIdxs;
@@ -270,7 +270,7 @@ namespace Sim
 			(void)pressureAccelerationFluidParticleLocalIdxs;
 			(void)pressureAccIsOwnedPrefix;
 			(void)N_ownedBoundaryParticles;
-			(void)N_ownedRigidParticles;
+			(void)N_ownedR;
 			(void)distributedFluidSolverSync;
 			return false;
 		}

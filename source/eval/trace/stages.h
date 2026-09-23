@@ -36,7 +36,6 @@ namespace Trace
 		Dist_ProgressReport,
 		StepComplete,
 		Dist_FinalStateSerialization,
-		Dist_RigidParticleAuthorityValidation,
 		Dist_RigidForceCollection,
 		Dist_ExportSnapshotPack,
 		Dist_ExportSnapshotSerialization,
@@ -174,11 +173,6 @@ namespace Trace
 				.stage = TraceStage::Dist_FinalStateSerialization,
 				.name = "distributed final-state serialization",
 				.alias = "dist_final_state_serialization"
-			},
-			{
-				.stage = TraceStage::Dist_RigidParticleAuthorityValidation,
-				.name = "distributed rigid-particle authority validation",
-				.alias = "dist_rigid_particle_authority_validation"
 			},
 			{
 				.stage = TraceStage::Dist_RigidForceCollection,

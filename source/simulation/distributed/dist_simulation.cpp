@@ -1203,9 +1203,9 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 	std::vector<uint32_t> probeFluidLocalIdxs{};
 	std::vector<uint32_t> probeBoundaryLocalIdxs{};
 	std::vector<uint32_t> probeRigidLocalIdxs{};
-	std::vector<float> probeRigidXPos{};
-	std::vector<float> probeRigidYPos{};
-	std::vector<float> probeRigidZPos{};
+	std::vector<float> probeXPosR{};
+	std::vector<float> probeYPosR{};
+	std::vector<float> probeZPosR{};
 
 	try
 	{
@@ -1225,20 +1225,20 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 			const auto& RB = probeState.rigidBodies;
 			probeRigidLocalIdxs.resize(R.N_);
 			std::iota(probeRigidLocalIdxs.begin(), probeRigidLocalIdxs.end(), 0u);
-			probeRigidXPos.resize(R.N_);
-			probeRigidYPos.resize(R.N_);
-			probeRigidZPos.resize(R.N_);
+			probeXPosR.resize(R.N_);
+			probeYPosR.resize(R.N_);
+			probeZPosR.resize(R.N_);
 			for (uint32_t i = 0; i != R.N_; i++)
 			{
 				const uint32_t bodyIdx = R.bodyId[i];
 				const float x = R.xRelPos[i];
 				const float y = R.yRelPos[i];
 				const float z = R.zRelPos[i];
-				probeRigidXPos[i] = RB.xCM[bodyIdx] + std::fmaf(RB.a00[bodyIdx], x,
+				probeXPosR[i] = RB.xCM[bodyIdx] + std::fmaf(RB.a00[bodyIdx], x,
 					std::fmaf(RB.a01[bodyIdx], y, RB.a02[bodyIdx] * z));
-				probeRigidYPos[i] = RB.yCM[bodyIdx] + std::fmaf(RB.a10[bodyIdx], x,
+				probeYPosR[i] = RB.yCM[bodyIdx] + std::fmaf(RB.a10[bodyIdx], x,
 					std::fmaf(RB.a11[bodyIdx], y, RB.a12[bodyIdx] * z));
-				probeRigidZPos[i] = RB.zCM[bodyIdx] + std::fmaf(RB.a20[bodyIdx], x,
+				probeZPosR[i] = RB.zCM[bodyIdx] + std::fmaf(RB.a20[bodyIdx], x,
 					std::fmaf(RB.a21[bodyIdx], y, RB.a22[bodyIdx] * z));
 			}
 		}
@@ -1270,9 +1270,9 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 			profileInput.boundary.y = probeState.particlesB.yPos;
 			profileInput.boundary.z = probeState.particlesB.zPos;
 			profileInput.boundary.ownedLocalIdx = probeBoundaryLocalIdxs;
-			profileInput.rigid.x = probeRigidXPos;
-			profileInput.rigid.y = probeRigidYPos;
-			profileInput.rigid.z = probeRigidZPos;
+			profileInput.rigid.x = probeXPosR;
+			profileInput.rigid.y = probeYPosR;
+			profileInput.rigid.z = probeZPosR;
 			profileInput.rigid.ownedLocalIdx = probeRigidLocalIdxs;
 		}
 
