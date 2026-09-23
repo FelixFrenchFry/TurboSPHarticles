@@ -293,10 +293,6 @@ namespace Sim
 			params.surfaceSamplingMaxTrialsPerCell);
 		printf("%-*s = %" PRIu64 "\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling seed", params.surfaceSamplingSeed);
-		printf("%-*s = [ %.3f / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
-			"surface nbr [ratio/count]",
-			params.surfaceNbrCountRatio,
-			params.surfaceNbrCountThreshold);
 
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportEnabled", params.exportEnabled ? "true" : "false");
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "saveFinalState", params.saveFinalState ? "true" : "false");
@@ -304,6 +300,10 @@ namespace Sim
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportDir", exportDir.c_str());
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "exportInterval", params.exportInterval);
 		printf("%-*s = %.3f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "checkpointTime [s]", params.checkpointTime);
+		printf("%-*s = [ %.3f / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"surface nbr [ratio/count]",
+			params.surfaceNbrCountRatio,
+			params.surfaceNbrCountThreshold);
 		printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"progressReportMode", Base::ToCString(params.progressReportMode));
     }

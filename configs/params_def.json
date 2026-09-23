@@ -14,8 +14,8 @@
   "particleSize": 0.01,
   "kernelSuppRatio": 2.0,
   "restDensity": 1000.0,
-  "viscosityF": 0.00012,
-  "viscosityB": 0.00012,
+  "viscosityF": 0.00004,
+  "viscosityB": 0.00008,
   "gravity": [ 0.0, -9.81, 0.0 ],
 
   "pressGamma": 0.5,
@@ -47,9 +47,10 @@
 
   "maxThreadsSim": -1,
   "maxBenchRecs": 100000,
-  "maxStatRecs": 100000,
   "timeUnit": "ms",
+  "maxMemRecs": 1000000,
   "byteUnit": "MB",
+  "maxStatRecs": 100000,
   "statGroupsEnabled": {
     "particles": false,
     "density": true,
@@ -61,5 +62,6 @@
   "exportDir": "test",
   "exportInterval": 10,
   "checkpointTime": 0,
-  "surfaceNbrCountRatio": 0.75
+  "surfaceNbrCountRatio": 0.75,
+  "progressReportMode": "Auto"
 }

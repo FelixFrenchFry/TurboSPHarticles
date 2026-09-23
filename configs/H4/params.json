@@ -47,9 +47,10 @@
 
   "maxThreadsSim": -1,
   "maxBenchRecs": 100000,
-  "maxStatRecs": 100000,
   "timeUnit": "ms",
+  "maxMemRecs": 1000000,
   "byteUnit": "MB",
+  "maxStatRecs": 100000,
   "statGroupsEnabled": {
     "particles": false,
     "density": true,
@@ -60,5 +61,7 @@
   "saveFinalState": true,
   "exportDir": "H4",
   "exportInterval": 20,
-  "surfaceNbrCountRatio": 0.75
+  "checkpointTime": 258600,
+  "surfaceNbrCountRatio": 0.75,
+  "progressReportMode": "Auto"
 }

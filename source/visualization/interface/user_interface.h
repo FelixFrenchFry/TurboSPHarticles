@@ -34,12 +34,12 @@ namespace Inter
 		bool timeStep;
 		bool viscosityF;
 		bool viscosityB;
+		bool gravity;
 		bool pressGamma;
 		bool jacobiOmega;
 		bool densityDevTarget;
 		bool minSolverIters;
 		bool maxSolverIters;
-		bool gravity;
 	};
 
 	// magnitudes of parameter changes
@@ -48,12 +48,12 @@ namespace Inter
 		std::array<float, 2> timeStep;
 		std::array<float, 2> viscosityF;
 		std::array<float, 2> viscosityB;
+		std::array<float, 2> gravity;
 		std::array<float, 2> pressGamma;
 		std::array<float, 2> jacobiOmega;
 		std::array<float, 2> densityDevTarget;
 		std::array<int, 2> minSolverIters;
 		std::array<int, 2> maxSolverIters;
-		std::array<float, 2> gravity;
 	};
 
 	// temporary copies for parameter changes
@@ -62,12 +62,12 @@ namespace Inter
 		float timeStep;
 		float viscosityF;
 		float viscosityB;
+		float gravity;
 		float pressGamma;
 		float jacobiOmega;
 		float densityDevTarget;
 		int minSolverIters;
 		int maxSolverIters;
-		float gravity;
 	};
 
 	// own and manage the ImGui lifecycle
@@ -135,24 +135,24 @@ namespace Inter
 			.timeStep = false,
 			.viscosityF = false,
 			.viscosityB = false,
+			.gravity = false,
 			.pressGamma = false,
 			.jacobiOmega = false,
 			.densityDevTarget = false,
 			.minSolverIters = false,
-			.maxSolverIters = false,
-			.gravity = false
+			.maxSolverIters = false
 		};
 		ParamMags mags_
 		{
 			.timeStep			= { 0.0001f,		0.00001f },
 			.viscosityF			= { 0.00001f,		0.000001f },
 			.viscosityB			= { 0.00001f,		0.000001f },
+			.gravity			= { 0.1f,			0.01f },
 			.pressGamma			= { 0.1f,			0.01f },
 			.jacobiOmega		= { 0.1f,			0.01f },
 			.densityDevTarget	= { 0.01f,		0.001f },
 			.minSolverIters		= { 1,			1 },
-			.maxSolverIters		= { 1,			1 },
-			.gravity			= { 0.1f,			0.01f }
+			.maxSolverIters		= { 1,			1 }
 		};
 		ParamTemp temp_{};
 
@@ -174,20 +174,15 @@ namespace Inter
 		void BuildSection_SceneManagement(
 			Sim::SimulationMgr& simulationMgr,
 			const Vis::VisParams& visParams);
-
 		void BuildSection_VisualizationSettings(
 			const Vis::VisParams& visParams);
-
 		void BuildSection_SimulationControl(
 			const Sim::SimulationMgr& simulationMgr,
 			const Sim::SimParams& simParams);
-
 		void BuildSection_SimulationParameters(
 			const Sim::SimParams& simParams);
-
 		void BuildSection_SimulationStatistics(
 			const Sync::StatSnapshot* statSnap);
-
 		void BuildSection_PerformanceBenchmarks(
 			const Sync::BenchSnapshot* benchSnap,
 			const Bench::BenchOpList& benchOps);
@@ -203,12 +198,12 @@ namespace Inter
 		void BuildParamElement_TimeStep(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityF(const Sim::SimParams& simParams);
 		void BuildParamElement_ViscosityB(const Sim::SimParams& simParams);
+		void BuildParamElement_Gravity(const Sim::SimParams& simParams);
 		void BuildParamElement_PressGamma(const Sim::SimParams& simParams);
 		void BuildParamElement_JacobiOmega(const Sim::SimParams& simParams);
 		void BuildParamElement_DensityDevTarget(const Sim::SimParams& simParams);
 		void BuildParamElement_MinSolverIters(const Sim::SimParams& simParams);
 		void BuildParamElement_MaxSolverIters(const Sim::SimParams& simParams);
-		void BuildParamElement_Gravity(const Sim::SimParams& simParams);
 
 		// helpers
 		void CreateContexts(const char* iniFilename);

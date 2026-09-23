@@ -469,30 +469,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		{
 			params_.maxSteps = it->get<int64_t>();
 		}
-
-		if (auto it = j.find("maxThreadsSim"); it != j.end())
-		{
-			if (!it->is_number_integer())
-			{
-				SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (must be -1 or > 0).");
-			}
-			else
-			{
-				const int64_t maxThreadsSim = it->get<int64_t>();
-				if (maxThreadsSim == -1 || maxThreadsSim > 0)
-				{
-					params_.maxThreadsSim = maxThreadsSim;
-				}
-				else if (maxThreadsSim == 0)
-				{
-					SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (0 is not allowed).");
-				}
-				else
-				{
-					SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (must be -1 or > 0).");
-				}
-			}
-		}
 	}
 
 	// --- [ simulation state flags ] ----------------------------------------------------------------
@@ -801,6 +777,32 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		UpdateSurfaceSamplingDistances_();
 	}
 
+	// --- [ threading ] -----------------------------------------------------------------------------
+
+	if (auto it = j.find("maxThreadsSim"); it != j.end())
+	{
+		if (!it->is_number_integer())
+		{
+			SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (must be -1 or > 0).");
+		}
+		else
+		{
+			const int64_t maxThreadsSim = it->get<int64_t>();
+			if (maxThreadsSim == -1 || maxThreadsSim > 0)
+			{
+				params_.maxThreadsSim = maxThreadsSim;
+			}
+			else if (maxThreadsSim == 0)
+			{
+				SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (0 is not allowed).");
+			}
+			else
+			{
+				SPDLOG_WARN("Invalid 'maxThreadsSim' value in JSON (must be -1 or > 0).");
+			}
+		}
+	}
+
 	// --- [ statistics, benchmarks, and exports ] ---------------------------------------------------
 
 	// TODO: implement setters for maxStatRecs/maxBenchRecs?
@@ -808,11 +810,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		if (auto it = j.find("maxBenchRecs"); it != j.end())
 		{
 			params_.maxBenchRecs = it->get<uint32_t>();
-		}
-
-		if (auto it = j.find("maxStatRecs"); it != j.end())
-		{
-			params_.maxStatRecs = it->get<uint32_t>();
 		}
 
 		auto ParseTimeUnit = [](const nlohmann::json& v, Bench::TimeUnit& out) -> bool
@@ -846,6 +843,11 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			}
 		}
 
+		if (auto it = j.find("maxMemRecs"); it != j.end())
+		{
+			params_.maxMemRecs = it->get<uint32_t>();
+		}
+
 		auto ParseByteUnit = [](const nlohmann::json& v, Mem::ByteUnit& out) -> bool
 			{
 				if (v.is_string())
@@ -876,6 +878,11 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			{
 				SPDLOG_WARN("Invalid 'byteUnit' value in JSON.");
 			}
+		}
+
+		if (auto it = j.find("maxStatRecs"); it != j.end())
+		{
+			params_.maxStatRecs = it->get<uint32_t>();
 		}
 
 		if (auto it = j.find("statGroupsEnabled"); it != j.end() && it->is_object())

@@ -81,8 +81,8 @@ namespace Sim
 		float massB             = 0.001f;
 
 		// non-pressure accelerations
-		float viscosityF        = 0.000003f;
-		float viscosityB        = 0.000003f;
+		float viscosityF        = 0.00001f;
+		float viscosityB        = 0.00001f;
 		glm::vec3 gravity       = { 0.0f, -9.81f, 0.0f };
 
 		// pressure solving

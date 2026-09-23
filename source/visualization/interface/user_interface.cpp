@@ -61,12 +61,12 @@ void UserInterfaceMgr::Init(GLFWwindow* window,
 		.timeStep = simParams.timeStep,
 		.viscosityF = simParams.viscosityF,
 		.viscosityB = simParams.viscosityB,
+		.gravity = simParams.gravity.y,
 		.pressGamma = simParams.pressGamma,
 		.jacobiOmega = simParams.jacobiOmega,
 		.densityDevTarget = simParams.densityDevTarget,
 		.minSolverIters = static_cast<int>(simParams.minSolverIters),
-		.maxSolverIters = static_cast<int>(simParams.maxSolverIters),
-		.gravity = simParams.gravity.y
+		.maxSolverIters = static_cast<int>(simParams.maxSolverIters)
 	};
 
 	// style & flags
@@ -477,12 +477,12 @@ void UserInterfaceMgr::BuildSection_SimulationParameters(
 	BuildParamElement_TimeStep(simParams);
 	BuildParamElement_ViscosityF(simParams);
 	BuildParamElement_ViscosityB(simParams);
+	BuildParamElement_Gravity(simParams);
 	BuildParamElement_PressGamma(simParams);
 	BuildParamElement_JacobiOmega(simParams);
 	BuildParamElement_DensityDevTarget(simParams);
 	BuildParamElement_MinSolverIters(simParams);
 	BuildParamElement_MaxSolverIters(simParams);
-	BuildParamElement_Gravity(simParams);
 
 	ImGui::Spacing();
 
@@ -1020,6 +1020,28 @@ void UserInterfaceMgr::BuildParamElement_ViscosityB(const Sim::SimParams& simPar
 	if (cached) { ImGui::PopStyleColor(); }
 }
 
+void UserInterfaceMgr::BuildParamElement_Gravity(const Sim::SimParams& simParams)
+{
+	const bool cached = changed_.gravity;
+	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
+	ImGui::SetNextItemWidth(170);
+	if (ImGui::InputFloat(" gravity##input_gravity",
+		&temp_.gravity, mags_.gravity[0], mags_.gravity[1], "%.2f"))
+	{
+		const bool changed = !Base::ApproxEqu(temp_.gravity, simParams.gravity.y);
+
+		if (changed && liveParamEditing_) // apply param changes immediately
+		{
+			simParamsMgr_.Set_Gravity(glm::vec3{ 0.f, temp_.gravity, 0.f });
+		}
+
+		// mark unsaved changes when not live editing
+		changed_.gravity = changed && !liveParamEditing_;
+		unsavedParamChanges_ = changed && !liveParamEditing_;
+	}
+	if (cached) { ImGui::PopStyleColor(); }
+}
+
 void UserInterfaceMgr::BuildParamElement_PressGamma(const Sim::SimParams& simParams)
 {
 	const bool cached = changed_.pressGamma;
@@ -1130,28 +1152,6 @@ void UserInterfaceMgr::BuildParamElement_MaxSolverIters(const Sim::SimParams& si
 	if (cached) { ImGui::PopStyleColor(); }
 }
 
-void UserInterfaceMgr::BuildParamElement_Gravity(const Sim::SimParams& simParams)
-{
-	const bool cached = changed_.gravity;
-	if (cached) { ImGui::PushStyleColor(ImGuiCol_Text, RGBA_unsaved_); }
-	ImGui::SetNextItemWidth(170);
-	if (ImGui::InputFloat(" gravity##input_gravity",
-		&temp_.gravity, mags_.gravity[0], mags_.gravity[1], "%.2f"))
-	{
-		const bool changed = !Base::ApproxEqu(temp_.gravity, simParams.gravity.y);
-
-		if (changed && liveParamEditing_) // apply param changes immediately
-		{
-			simParamsMgr_.Set_Gravity(glm::vec3{ 0.f, temp_.gravity, 0.f });
-		}
-
-		// mark unsaved changes when not live editing
-		changed_.gravity = changed && !liveParamEditing_;
-		unsavedParamChanges_ = changed && !liveParamEditing_;
-	}
-	if (cached) { ImGui::PopStyleColor(); }
-}
-
 // --- [ helpers ] --------------------------------------------------------------------------------
 
 void UserInterfaceMgr::CreateContexts(const char* iniFilename)
@@ -1226,6 +1226,11 @@ void UserInterfaceMgr::ApplyParamChanges()
 		simParamsMgr_.Set_Viscosity(temp_.viscosityB, Base::ParticleType::Boundary);
 		changed_.viscosityB = false;
 	}
+	if (changed_.gravity)
+	{
+		simParamsMgr_.Set_Gravity(glm::vec3{ 0.0f, temp_.gravity, 0.0f });
+		changed_.gravity = false;
+	}
 	if (changed_.pressGamma)
 	{
 		simParamsMgr_.Set_PressGamma(temp_.pressGamma);
@@ -1251,11 +1256,6 @@ void UserInterfaceMgr::ApplyParamChanges()
 		simParamsMgr_.Set_MaxSolverIters(static_cast<uint32_t>(temp_.maxSolverIters));
 		changed_.maxSolverIters = false;
 	}
-	if (changed_.gravity)
-	{
-		simParamsMgr_.Set_Gravity(glm::vec3{ 0.0f, temp_.gravity, 0.0f });
-		changed_.gravity = false;
-	}
 
 	unsavedParamChanges_ = false;
 }
@@ -1278,6 +1278,11 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 	{
 		temp_.viscosityB = simParams.viscosityB;
 		changed_.viscosityB = false;
+	}
+	if (changed_.gravity)
+	{
+		temp_.gravity = simParams.gravity.y;
+		changed_.gravity = false;
 	}
 	if (changed_.pressGamma)
 	{
@@ -1303,11 +1308,6 @@ void UserInterfaceMgr::ResetParamChanges(const Sim::SimParams& simParams)
 	{
 		temp_.maxSolverIters = static_cast<int>(simParams.maxSolverIters);
 		changed_.maxSolverIters = false;
-	}
-	if (changed_.gravity)
-	{
-		temp_.gravity = simParams.gravity.y;
-		changed_.gravity = false;
 	}
 
 	unsavedParamChanges_ = false;
