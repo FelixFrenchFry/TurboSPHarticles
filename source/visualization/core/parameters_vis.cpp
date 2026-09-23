@@ -1,5 +1,8 @@
 // parameters_vis.cpp
 
+// external
+#include <spdlog/spdlog.h>
+
 // internal
 #include "source/base/helpers.h"
 #include "parameters_vis.h"
@@ -23,6 +26,12 @@ void VisParamsMgr::SetParam(const WindowPatch& patch)
 {
 	std::scoped_lock lock(paramsMutex_);
 
+	if (patch.maxVisFps && *patch.maxVisFps < 0)
+	{
+		SPDLOG_ERROR("Parameter change cancelled: 'maxVisFps' must be >= 0.");
+		return;
+	}
+
 	// detect if any parameter would actually change
 	bool changed = false;
 
@@ -30,6 +39,7 @@ void VisParamsMgr::SetParam(const WindowPatch& patch)
 	Base::MarkIfChanged(patch.title, params_.window.title, changed);
 	Base::MarkIfChanged(patch.resizable, params_.window.resizable, changed);
 	Base::MarkIfChanged(patch.vsync, params_.window.vsync, changed);
+	Base::MarkIfChanged(patch.maxVisFps, params_.window.maxVisFps, changed);
 
 	if (!changed) { return; } // nothing to change
 
@@ -38,6 +48,7 @@ void VisParamsMgr::SetParam(const WindowPatch& patch)
 	if (patch.title) { params_.window.title = *patch.title; }
 	if (patch.resizable) { params_.window.resizable = *patch.resizable; }
 	if (patch.vsync) { params_.window.vsync = *patch.vsync; }
+	if (patch.maxVisFps) { params_.window.maxVisFps = *patch.maxVisFps; }
 	version_.fetch_add(1, std::memory_order_release);
 }
 

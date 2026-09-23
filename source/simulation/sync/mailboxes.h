@@ -20,6 +20,16 @@ namespace Sync
 	{
 	public:
 
+		void RequestSnapshot() noexcept
+		{
+			snapshotRequested_.store(true, std::memory_order_release);
+		}
+
+		bool TakeSnapshotRequest() noexcept
+		{
+			return snapshotRequested_.exchange(false, std::memory_order_acq_rel);
+		}
+
 		void StoreSnapshot(std::shared_ptr<VisualSnapshot> snap) noexcept
 		{
 			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
@@ -44,6 +54,7 @@ namespace Sync
 
 		// latest snapshot of the vis-specific simulation state
 		std::shared_ptr<VisualSnapshot> latestSnap_{ nullptr };
+		std::atomic<bool> snapshotRequested_{ false };
 
 		// additional mailbox for CUDA-device buffer snapshot
 	#ifdef TURBOSPHARTICLES_WITH_CUDA

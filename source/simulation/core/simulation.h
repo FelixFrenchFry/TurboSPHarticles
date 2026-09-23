@@ -69,7 +69,7 @@ namespace Sim
 
 		void WriteExportSnapshot(const SimParams& params) const;
 		void FinalizeRunState(const SimParams& params, bool checkpointDue = false);
-		void PublishVisualSnapshot();
+		bool PublishVisualSnapshot(bool force = false);
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;
 		void AppendInitialMemoryMetricsLog() const;
@@ -162,11 +162,11 @@ namespace Sim
 		mutable Sync::ExportSnapshot exportSnapScratch_;
 
 		// visualization management
-		std::chrono::steady_clock::time_point lastVisWall_{};
-		float visMaxHz_ = 60.0f;
+		std::optional<uint64_t> lastVisStep_{};
+		Base::ColorCodingMode lastVisScalarMode_{ Base::ColorCodingMode::None };
 
 		// misc
-		std::mutex stateMutex_; // protects universalSimState_
+		std::mutex stateMutex_; // serializes reset with simulation and snapshot reads
 	};
 
 } // namespace Sim

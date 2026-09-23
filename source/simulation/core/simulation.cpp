@@ -176,6 +176,8 @@ void SimulationMgr::ResetAndRebuildSimState()
 	// reset metadata
 	simStep_ = 0;
 	simTime_ = 0.0;
+	lastVisStep_.reset();
+	if (visualSnapMailbox_) { visualSnapMailbox_->RequestSnapshot(); }
 	serializationMgr_.ResetExportDirState();
 
 	// reset scenario and all its data
@@ -331,6 +333,8 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 
 	// --- [ initialize before entering the simulation loop ] ----------------------------------------
 
+	std::unique_lock stateLock(stateMutex_);
+
 	// local copy for thread safety
 	const auto paramsInit = simParams_;
 	const uint64_t startStep = simStep_;
@@ -342,10 +346,8 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 
 	if (publishVis)
 	{
-		PublishVisualSnapshot();
-
-		// vis throttle starting point
-		lastVisWall_ = std::chrono::steady_clock::now();
+		lastVisStep_.reset();
+		PublishVisualSnapshot(true);
 	}
 
 	// pack and serialize the initial export snapshot
@@ -360,8 +362,10 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 
 	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
+	stateLock.unlock();
 	while (true)
 	{
+		std::unique_lock stepLock(stateMutex_);
 		checkpointDue = paramsInit.checkpointTime > 0.0 &&
 			std::chrono::duration<double>(std::chrono::steady_clock::now() - initTime_).count() >=
 			paramsInit.checkpointTime;
@@ -400,6 +404,9 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 		// small sleep to avoid busy spin when nothing to do yet
 		if (!doSimStep)
 		{
+			// service requests arriving after a single step
+			if (publishVis) { PublishVisualSnapshot(); }
+			stepLock.unlock();
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			continue;
 		}
@@ -422,26 +429,14 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 		// reset single-step flag
 		if (simParams_.simRunNextStep) { simParamsMgr_.Set_SimRunNextStep(false); }
 
-		// TODO: adjust update frequency with throttle
-		// TODO: add upper bound via a "new frame" flag from the visualizer
-		// TODO: add lower bound via ...
 		if (publishVis)
 		{
-			const auto now = std::chrono::steady_clock::now();
-
-			// compute minimum interval from the target rate
-			const auto minInterval = std::chrono::duration_cast<std::chrono::microseconds>(
-				std::chrono::duration<double>(1.0 / fmaxf(1e-7f, visMaxHz_)));
-
-			if (now - lastVisWall_ >= minInterval)
+			const auto start = std::chrono::steady_clock::now();
+			if (PublishVisualSnapshot())
 			{
-				benchmarksTracker_.StartBench(Bench::BenchOp::Visualization);
-
-				PublishVisualSnapshot();
-
-				benchmarksTracker_.StopBench(Bench::BenchOp::Visualization);
-
-				lastVisWall_ = now;
+				const auto elapsed = std::chrono::steady_clock::now() - start;
+				benchmarksTracker_.AddTimingSample(Bench::BenchOp::Visualization,
+					static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count()));
 			}
 		}
 
@@ -472,8 +467,13 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 
 	// --- [ finalize after exiting the simulation loop ] --------------------------------------------
 
+	stateLock.lock();
+
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
+
+	// publish before finalization releases the backend
+	if (publishVis) { PublishVisualSnapshot(true); }
 
 	FinalizeRunState(paramsFinal, checkpointDue);
 
@@ -546,28 +546,46 @@ void SimulationMgr::FinalizeRunState(const SimParams& params, const bool checkpo
 	SaveCheckpoint(params);
 }
 
-void SimulationMgr::PublishVisualSnapshot()
+bool SimulationMgr::PublishVisualSnapshot(const bool force)
 {
+	const auto scalarMode = visualScalarMode_.load(std::memory_order_acquire);
+	if (lastVisStep_ == simStep_ && lastVisScalarMode_ == scalarMode) { return false; }
+
+	// preserve requests arriving during packing
+	const bool requested = visualSnapMailbox_->TakeSnapshotRequest();
+	if (!force && !requested) { return false; }
+
 	// create visual snapshot and push pack misc data that is not handled by the backend
 	// (if CUDA path is taken, the particle data buffers are not filled)
 	auto visSnap = std::make_shared<Sync::VisualSnapshot>();
 	visSnap->simStep = simStep_;
-	{
-		std::scoped_lock lock(stateMutex_);
-		visSnap->boxesB = boundaryBoxes_;
-	}
-	visSnap->scalarModeF = visualScalarMode_.load(std::memory_order_acquire);
+	visSnap->boxesB = boundaryBoxes_;
+	visSnap->scalarModeF = scalarMode;
 
 	// optionally pack particle data into CUDA-device buffers for OpenGL without going through the host
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 	auto& visualFrameMailboxCUDA = visualSnapMailbox_->GetFrameMailboxCUDA();
 	const auto result = simBackend_->TryPackVisualSnapshotCUDA(visualFrameMailboxCUDA, visSnap);
-	if (result != Sync::VisualPackResultCUDA::Unsupported) { return; } // skip host snapshot if successful
+	if (result == Sync::VisualPackResultCUDA::Skipped && !force)
+	{
+		visualSnapMailbox_->RequestSnapshot();
+		return false;
+	}
+	if (result == Sync::VisualPackResultCUDA::Published)
+	{
+		// discard stale host fallback
+		visualSnapMailbox_->StoreSnapshot(nullptr);
+	}
+	if (result != Sync::VisualPackResultCUDA::Published)
 #endif
-
-	// fallback to host snapshot packing if CUDA path is unavailable or unsupported
-	simBackend_->PackVisualSnapshot(*visSnap);
-	visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
+	{
+		// fallback to host snapshot packing if CUDA path is unavailable or unsupported
+		simBackend_->PackVisualSnapshot(*visSnap);
+		visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
+	}
+	lastVisStep_ = simStep_;
+	lastVisScalarMode_ = scalarMode;
+	return true;
 }
 
 void SimulationMgr::HandleBenchMemStatSnapshots() const

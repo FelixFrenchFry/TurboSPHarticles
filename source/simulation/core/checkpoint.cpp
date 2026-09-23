@@ -74,8 +74,6 @@ namespace
 void SimulationMgr::SaveCheckpoint(
 	const SimParams& params)
 {
-	// lock state and scene metadata against UI resets until saving is complete
-	std::scoped_lock lock(stateMutex_);
 	if (!simBackend_)
 	{
 		throw std::runtime_error("Cannot save checkpoint without a simulation backend.");

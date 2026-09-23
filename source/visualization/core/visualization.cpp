@@ -3,6 +3,7 @@
 // external
 #define GLFW_INCLUDE_NONE
 #include <algorithm>
+#include <chrono>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
@@ -149,7 +150,8 @@ void VisualizationMgr::RunVis()
 {
 	if (!window_) { return; }
 
-	double lastTime = glfwGetTime();
+	auto lastFrameTime = std::chrono::steady_clock::now();
+	bool firstFrame = true;
 
 	while (!glfwWindowShouldClose(window_) &&
 		   !stopRequested_.load(std::memory_order_acquire))
@@ -158,11 +160,26 @@ void VisualizationMgr::RunVis()
 		glfwPollEvents();
 		SyncParameters();
 
+		const auto now = std::chrono::steady_clock::now();
+		const double elapsed = std::chrono::duration<double>(now - lastFrameTime).count();
+		if (!firstFrame && visParams_.window.maxVisFps > 0)
+		{
+			const double remaining = 1.0 / visParams_.window.maxVisFps - elapsed;
+			if (remaining > 0.0)
+			{
+				// keep stop requests responsive
+				glfwWaitEventsTimeout(std::min(remaining, 0.05));
+				continue;
+			}
+		}
+		firstFrame = false;
+		lastFrameTime = now;
+
 		// time step for handling continuous input
-		double now = glfwGetTime();
-		float dt = static_cast<float>(now - lastTime);
-		lastTime = now;
+		const float dt = static_cast<float>(elapsed);
 		userInputMgr_.UpdateCamera(visParams_.camera, visParams_.frameBuffer, dt);
+
+		if (visualSnapMailbox_) { visualSnapMailbox_->RequestSnapshot(); }
 
 		// fetch latest visual snap and replace vis-specific simulation state
 		SyncVisSimState();

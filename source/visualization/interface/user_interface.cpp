@@ -247,7 +247,6 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 	if (ImGui::Button(" RESET ", { 185, 40 }))
 	{
 		simulationMgr.ResetAndRebuildSimState();
-		simParamsMgr_.Set_SimRunning(false);
 
 		// TODO: reset statistics and benchmarks
 	}

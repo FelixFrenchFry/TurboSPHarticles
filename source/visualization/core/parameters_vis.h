@@ -34,7 +34,8 @@ namespace Vis
 			.size			= {2120, 1316},
 			.title			= "TSP Visual",
 			.resizable		= true,
-			.vsync			= true
+			.vsync			= true,
+			.maxVisFps		= 60
 		};
 
 		FrameBufferConfig frameBuffer
@@ -94,6 +95,7 @@ namespace Vis
 		std::optional<const char*> title;
 		std::optional<bool> resizable;
 		std::optional<bool>	vsync;
+		std::optional<int> maxVisFps;
 	};
 
 	struct FrameBufferPatch

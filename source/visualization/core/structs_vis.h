@@ -50,6 +50,7 @@ namespace Vis
 		const char* title;
 		bool resizable;
 		bool vsync;
+		int maxVisFps; // 0 = unlimited
 	};
 
 	struct FrameBufferConfig
