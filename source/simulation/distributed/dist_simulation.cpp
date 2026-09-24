@@ -655,7 +655,7 @@ DistStartupRankReport DistSimulationMgr::BuildStartupRankReport() const
 	return report;
 }
 
-bool DistSimulationMgr::RunSim_Blocking()
+bool DistSimulationMgr::RunSim()
 {
 	stopRequested_.store(false, std::memory_order_release);
 
@@ -664,6 +664,8 @@ bool DistSimulationMgr::RunSim_Blocking()
 		printf("\n");
 	}
 	SPDLOG_INFO_MPI("Distributed simulation started running...", mpiContext_);
+
+	// --- [ initialize before entering the simulation loop ] ----------------------------------------
 
 	const Sim::SimParams& params = simParams_;
 	const uint64_t startStep = simStep_;
@@ -683,6 +685,8 @@ bool DistSimulationMgr::RunSim_Blocking()
 
 	AppendInitialMemoryMetricsLog();
 	DistDiagnosticsMgr::SetProgressRunning(true);
+
+	// --- [ enter the simulation loop ] -------------------------------------------------------------
 
 	while (true)
 	{
@@ -793,6 +797,8 @@ bool DistSimulationMgr::RunSim_Blocking()
 		if (runOk) { DisplayDistributedProgress(params, exportedStep); }
 		if (runOk) { MarkTrace(Trace::TraceStage::StepComplete); }
 	}
+
+	// --- [ finalize after exiting the simulation loop ] --------------------------------------------
 
 	const bool wantsFinalState = runOk && (params.saveFinalState || checkpointDue);
 	if (wantsFinalState)

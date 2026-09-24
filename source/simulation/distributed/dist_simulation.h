@@ -66,8 +66,8 @@ namespace Dist
 		// builds root-level startup diagnostics after initialization
 		DistSimSetupReport BuildDistSimSetupReport() const;
 
-		// main simulation loop
-		bool RunSim_Blocking();
+		// simulation loop on the calling thread
+		bool RunSim();
 
 		void RequestStop();
 

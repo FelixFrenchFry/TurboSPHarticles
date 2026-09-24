@@ -734,83 +734,91 @@ bool FluidSolverSyncMgr::Rebuild(
 		return false;
 	}
 
+	// --- [ peer count and ordered-ID fingerprint exchange ] ----------------------------------------
 	// peer counts and ordered-ID fingerprints are validated in every build,
 	// the full global-ID exchange remains available in debug/validation builds
-	const auto ValidatePeerPlan = [&](const Base::DistHaloMode haloExtent) -> bool
-	{
-		// --- [ peer count and ordered-ID fingerprint exchange ] ------------------------------------
 
-		std::vector<FluidSolverPeerPlanSummary> sendSummaries(newPeerPlans.size());
-		std::vector<FluidSolverPeerPlanSummary> recvSummaries(newPeerPlans.size());
-		requests_.clear();
-		requestInfos_.clear();
-		requests_.reserve(newPeerPlans.size() * 2);
-		requestInfos_.reserve(newPeerPlans.size() * 2);
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	const uint32_t N_activeHaloExtents = useDoubleHalo ? N_HALO_EXTENTS : 1;
+	const uint64_t N_summaryBytes = N_activeHaloExtents * sizeof(FluidSolverPeerPlanSummary);
+	std::vector<std::array<FluidSolverPeerPlanSummary, N_HALO_EXTENTS>> sendSummaries(newPeerPlans.size());
+	std::vector<std::array<FluidSolverPeerPlanSummary, N_HALO_EXTENTS>> recvSummaries(newPeerPlans.size());
+	requests_.clear();
+	requestInfos_.clear();
+	requests_.reserve(newPeerPlans.size() * 2);
+	requestInfos_.reserve(newPeerPlans.size() * 2);
+	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	{
+		for (uint32_t haloExtentIdx = 0; haloExtentIdx != N_activeHaloExtents; haloExtentIdx++)
 		{
 			const ParticlePlan& particlePlan =
-				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			sendSummaries[peerIdx] = {
+				newPeerPlans[peerIdx].particlePlans[haloExtentIdx];
+			sendSummaries[peerIdx][haloExtentIdx] = {
 				.N_particles = particlePlan.sendParticleIds.size(),
 				.fingerprint = BuildFluidSolverPlanFingerprint(particlePlan.sendParticleIds)
 			};
 		}
+	}
 
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-		{
-			mpiContext.IRecvBytesChunked(
-				&recvSummaries[peerIdx],
-				sizeof(FluidSolverPeerPlanSummary),
-				newPeerPlans[peerIdx].rank,
-				FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY,
-				requests_,
-				&requestInfos_);
-		}
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-		{
-			mpiContext.ISendBytesChunked(
-				&sendSummaries[peerIdx],
-				sizeof(FluidSolverPeerPlanSummary),
-				newPeerPlans[peerIdx].rank,
-				FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY,
-				requests_,
-				&requestInfos_);
-		}
-		mpiContext.WaitAll(
-			requests_, "fluid solver peer plan summaries", &requestInfos_);
+	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	{
+		mpiContext.IRecvBytesChunked(
+			recvSummaries[peerIdx].data(),
+			N_summaryBytes,
+			newPeerPlans[peerIdx].rank,
+			FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY,
+			requests_,
+			&requestInfos_);
+	}
+	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	{
+		mpiContext.ISendBytesChunked(
+			sendSummaries[peerIdx].data(),
+			N_summaryBytes,
+			newPeerPlans[peerIdx].rank,
+			FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY,
+			requests_,
+			&requestInfos_);
+	}
+	mpiContext.WaitAll(
+		requests_, "fluid solver peer plan summaries", &requestInfos_);
 
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
+	{
+		for (uint32_t haloExtentIdx = 0; haloExtentIdx != N_activeHaloExtents; haloExtentIdx++)
 		{
 			const ParticlePlan& particlePlan =
-				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
+				newPeerPlans[peerIdx].particlePlans[haloExtentIdx];
 			const uint64_t N_expectedRecv = particlePlan.recvParticleIds.size();
-			if (recvSummaries[peerIdx].N_particles != N_expectedRecv)
+			if (recvSummaries[peerIdx][haloExtentIdx].N_particles != N_expectedRecv)
 			{
 				localOk = SetFailure(localFailMsg,
 					"Fluid solver synchronization peer particle count does not match the local halo plan (peer rank " +
 					std::to_string(newPeerPlans[peerIdx].rank) + ", " +
-					(haloExtent == Base::DistHaloMode::SingleHalo ? "single" : "double") +
-					" halo: peer sent " + std::to_string(recvSummaries[peerIdx].N_particles) +
+					(haloExtentIdx == singleHaloIdx ? "single" : "double") +
+					" halo: peer sent " + std::to_string(recvSummaries[peerIdx][haloExtentIdx].N_particles) +
 					", local plan expects " + std::to_string(N_expectedRecv) + ").");
 			}
-			else if (recvSummaries[peerIdx].fingerprint !=
+			else if (recvSummaries[peerIdx][haloExtentIdx].fingerprint !=
 				BuildFluidSolverPlanFingerprint(particlePlan.recvParticleIds))
 			{
 				localOk = SetFailure(localFailMsg,
 					"Fluid solver synchronization peer plan fingerprint does not match "
 					"the local halo plan (peer rank " +
 					std::to_string(newPeerPlans[peerIdx].rank) + ", " +
-					(haloExtent == Base::DistHaloMode::SingleHalo ? "single" : "double") +
+					(haloExtentIdx == singleHaloIdx ? "single" : "double") +
 					" halo).");
 			}
 		}
-		if (!FinishCollectiveValidation(
-			mpiContext, localOk, localFailMsg, failMsg))
-		{
-			return false;
-		}
+	}
+	if (!FinishCollectiveValidation(
+		mpiContext, localOk, localFailMsg, failMsg))
+	{
+		return false;
+	}
 
 	#ifndef NDEBUG
+	const auto ValidatePeerParticleIds = [&](const Base::DistHaloMode haloExtent) -> bool
+	{
 		// --- [ peer global-index exchange ] --------------------------------------------------------
 
 		std::vector<std::vector<uint64_t>> receivedParticleIds(newPeerPlans.size());
@@ -857,16 +865,14 @@ bool FluidSolverSyncMgr::Rebuild(
 		}
 		return FinishCollectiveValidation(
 			mpiContext, localOk, localFailMsg, failMsg);
-	#else
-		return true;
-	#endif
 	};
 
-	if (!ValidatePeerPlan(Base::DistHaloMode::SingleHalo) ||
-		(useDoubleHalo && !ValidatePeerPlan(Base::DistHaloMode::DoubleHalo)))
+	if (!ValidatePeerParticleIds(Base::DistHaloMode::SingleHalo) ||
+		(useDoubleHalo && !ValidatePeerParticleIds(Base::DistHaloMode::DoubleHalo)))
 	{
 		return false;
 	}
+	#endif
 
 	// publish the locally validated plan after peer-plan validation
 	mpiContext_ = &mpiContext;

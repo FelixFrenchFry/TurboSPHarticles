@@ -87,7 +87,7 @@ int main(int argc, char** argv)
 			});
 
 		// simulation runs on the configured simulation thread budget
-		const bool runOk = distSimulationMgr.RunSim_Blocking();
+		const bool runOk = distSimulationMgr.RunSim();
 		stopWatcher.Stop();
 
         // --- [ shutdown ] ------------------------------------------------------------------------
