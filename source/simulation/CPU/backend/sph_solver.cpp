@@ -458,7 +458,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	sync.BeginSynchronizeFluidScalarField(
 		std::span<float>(densityF_.data(), N_F_),
 		Base::DistHaloMode::SingleHalo,
-		Sim::FluidSolverSyncPhase::Density, 0);
+		Sim::FluidSolverSyncPhase::Density);
 	benchmarksTracker_.StartBench(Bench::BenchOp::Density_Computation);
 	computeDensity(innerFluidChunkIdxs_);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Density_Computation);
@@ -499,7 +499,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		std::span<float>(yVelPredF_.data(), N_F_),
 		std::span<float>(zVelPredF_.data(), N_F_),
 		Base::DistHaloMode::SingleHalo,
-		Sim::FluidSolverSyncPhase::PredictedVelocity, 0);
+		Sim::FluidSolverSyncPhase::PredictedVelocity);
 	benchmarksTracker_.StartBench(Bench::BenchOp::NonPressure_Acceleration);
 	computeNonPressureAcceleration(innerFluidChunkIdxs_);
 	benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
@@ -544,7 +544,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 	sync.BeginSynchronizeFluidScalarField(
 		std::span<float>(pressureF_.data(), N_F_), params.distHaloMode,
-		Sim::FluidSolverSyncPhase::InitialPressure, 0);
+		Sim::FluidSolverSyncPhase::InitialPressure);
 	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 	computeSourceAndDiagonal(innerFluidChunkIdxs_);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
@@ -597,7 +597,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				std::span<float>(yAccPressF_.data(), N_F_),
 				std::span<float>(zAccPressF_.data(), N_F_),
 				Base::DistHaloMode::SingleHalo,
-				Sim::FluidSolverSyncPhase::PressureAcceleration, N_solverIters_);
+				Sim::FluidSolverSyncPhase::PressureAcceleration);
 			benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 			computePressureAcceleration(
 				innerFluidChunkIdxs_, N_ownedF_, nullptr, affinityParts_->inner);
@@ -631,7 +631,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 		sync.BeginSynchronizeFluidScalarField(
 			std::span<float>(pressureF_.data(), N_F_), params.distHaloMode,
-			Sim::FluidSolverSyncPhase::Pressure, N_solverIters_);
+			Sim::FluidSolverSyncPhase::Pressure);
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 		const PressureSolveErrorSums innerErrorSums = updatePressure(
 			innerFluidChunkIdxs_, affinityParts_->inner);
@@ -644,7 +644,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 
 		// make every rank use the same global convergence criterion
 		const PressureSolveErrorSums errorSums =
-			sync.GlobalizePressureSolveErrorSums(localErrorSums, N_solverIters_);
+			sync.GlobalizePressureSolveErrorSums(localErrorSums);
 		const uint64_t N_globalF = sync.GetGlobalFluidParticleCount();
 		if (N_globalF > 0)
 		{

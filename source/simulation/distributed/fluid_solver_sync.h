@@ -74,7 +74,7 @@ namespace Dist
 			Bench::BenchmarksTracker& benchmarksTracker,
 			std::string* failMsg = nullptr);
 
-		// remaps the plan onto re-ordered backend storage, leaving global particle IDs unchanged
+		// remaps the plan onto re-ordered backend storage
 		void ApplyFluidParticleReOrder(
 			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) override;
 
@@ -82,30 +82,22 @@ namespace Dist
 		void BeginSynchronizeFluidScalarField(
 			std::span<float> values,
 			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase,
-			uint32_t iteration) override;
+			Sim::FluidSolverSyncPhase phase) override;
 		void BeginSynchronizeFluidVectorField(
 			std::span<float> xValues,
 			std::span<float> yValues,
 			std::span<float> zValues,
 			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase,
-			uint32_t iteration) override;
+			Sim::FluidSolverSyncPhase phase) override;
 		void EndSynchronizeFluidFields() override;
 
-		void SynchronizeFluidScalarField(
-			std::span<float> values,
-			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase,
-			uint32_t iteration) override;
 		void SynchronizeFluidParticleFlagsToHalos(
 			std::span<uint8_t> flags,
 			Base::DistHaloMode haloExtent) override;
 
 		// sums rank-local solver errors, normalization happens in the solver
 		Sim::PressureSolveErrorSums GlobalizePressureSolveErrorSums(
-			const Sim::PressureSolveErrorSums& localSums,
-			uint32_t iteration) const override;
+			const Sim::PressureSolveErrorSums& localSums) const override;
 		uint64_t GetGlobalFluidParticleCount() const override { return N_globalF_; }
 
 		Mem::MemUsage GetExchangeBufferMemoryUsage() const;
@@ -119,8 +111,11 @@ namespace Dist
 			// local slots read from and written to, sorted by global particle ID
 			std::vector<uint32_t> sendLocalIdxs;
 			std::vector<uint32_t> recvLocalIdxs;
+		};
 
-			// global particle IDs matching the local index lists
+		// global particle IDs matching the local index lists of one plan under construction
+		struct ParticlePlanIds
+		{
 			std::vector<uint64_t> sendParticleIds;
 			std::vector<uint64_t> recvParticleIds;
 		};
@@ -172,6 +167,9 @@ namespace Dist
 
 			// owner peer selected during the receive count pass
 			std::vector<int> recvPeerIdx_ByHaloIdx;
+
+			// global particle IDs used to order and validate the plans, indexed by [peerIdx][haloExtentIdx]
+			std::vector<std::array<ParticlePlanIds, N_HALO_EXTENTS>> particlePlanIds_ByPeer;
 		};
 
 		// packs and posts exchange of up to three fields in one round of messages
@@ -179,8 +177,7 @@ namespace Dist
 			const std::array<std::span<float>, 3>& fields,
 			uint32_t N_fields,
 			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase,
-			uint32_t iteration);
+			Sim::FluidSolverSyncPhase phase);
 
 		// rebuilds both single and double halo work schedules from the published peer plans
 		void BuildFieldSyncSchedules();
@@ -215,9 +212,6 @@ namespace Dist
 		uint32_t N_pendingFields_ = 0;
 		Base::DistHaloMode pendingHaloExtent_ = Base::DistHaloMode::SingleHalo;
 		Sim::FluidSolverSyncPhase pendingPhase_ = Sim::FluidSolverSyncPhase::Density;
-		uint32_t pendingIteration_ = 0;
-		uint64_t pendingEpoch_ = 0;
-		mutable uint64_t synchronizationEpoch_ = 0;
 		bool fluidFieldExchangePending_ = false;
 
 		// reusable rebuild storage
