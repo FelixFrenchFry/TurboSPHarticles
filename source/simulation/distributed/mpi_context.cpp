@@ -557,42 +557,6 @@ void MpiContext::AllToAllInts(
 	Wait(&request, 1, "MPI int all-to-all", nullptr);
 }
 
-void MpiContext::IRecvInt(
-	int& recvValue,
-	const int peerRank,
-	const int tag,
-	MPI_Request& request) const
-{
-	CheckMpiResult(
-		MPI_Irecv(
-			&recvValue,
-			1,
-			MPI_INT,
-			peerRank,
-			tag,
-			MPI_COMM_WORLD,
-			&request),
-		"MPI_Irecv(int)");
-}
-
-void MpiContext::ISendInt(
-	const int& sendValue,
-	const int peerRank,
-	const int tag,
-	MPI_Request& request) const
-{
-	CheckMpiResult(
-		MPI_Isend(
-			&sendValue,
-			1,
-			MPI_INT,
-			peerRank,
-			tag,
-			MPI_COMM_WORLD,
-			&request),
-		"MPI_Isend(int)");
-}
-
 void MpiContext::IRecvBytes(
 	void* recvData,
 	const int N_recvBytes,

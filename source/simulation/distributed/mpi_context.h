@@ -94,8 +94,6 @@ namespace Dist
 		void CloseFile(MPI_File& file) const;
 
 		// point-to-point helpers for neighbor communication
-		void IRecvInt(int& recvValue, int peerRank, int tag, MPI_Request& request) const;
-		void ISendInt(const int& sendValue, int peerRank, int tag, MPI_Request& request) const;
 		void IRecvBytes(
 			void* recvData,
 			int N_recvBytes,

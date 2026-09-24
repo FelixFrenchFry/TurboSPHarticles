@@ -5,7 +5,6 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -172,6 +171,12 @@ namespace
 	}
 
 	using FluidSolverPlanFingerprint = std::array<uint64_t, 2>;
+
+	struct FluidSolverPeerPlanSummary
+	{
+		uint64_t N_particles = 0;
+		FluidSolverPlanFingerprint fingerprint{};
+	};
 
 	// compact, deterministic fingerprint of an ordered global-particle-ID plan
 	FluidSolverPlanFingerprint BuildFluidSolverPlanFingerprint(
@@ -733,10 +738,10 @@ bool FluidSolverSyncMgr::Rebuild(
 	// the full global-ID exchange remains available in debug/validation builds
 	const auto ValidatePeerPlan = [&](const Base::DistHaloMode haloExtent) -> bool
 	{
-		// --- [ peer count exchange ] ---------------------------------------------------------------
+		// --- [ peer count and ordered-ID fingerprint exchange ] ------------------------------------
 
-		std::vector<int> sendCounts(newPeerPlans.size(), 0);
-		std::vector<int> recvCounts(newPeerPlans.size(), 0);
+		std::vector<FluidSolverPeerPlanSummary> sendSummaries(newPeerPlans.size());
+		std::vector<FluidSolverPeerPlanSummary> recvSummaries(newPeerPlans.size());
 		requests_.clear();
 		requestInfos_.clear();
 		requests_.reserve(newPeerPlans.size() * 2);
@@ -745,112 +750,50 @@ bool FluidSolverSyncMgr::Rebuild(
 		{
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			const uint64_t N_send = particlePlan.sendParticleIds.size();
-			if (N_send > static_cast<uint64_t>(std::numeric_limits<int>::max()))
-			{
-				localOk = SetFailure(localFailMsg,
-					"Fluid solver synchronization count exceeds the MPI int range.");
-				continue;
-			}
-			sendCounts[peerIdx] = static_cast<int>(N_send);
+			sendSummaries[peerIdx] = {
+				.N_particles = particlePlan.sendParticleIds.size(),
+				.fingerprint = BuildFluidSolverPlanFingerprint(particlePlan.sendParticleIds)
+			};
 		}
-		if (!FinishCollectiveValidation(
-			mpiContext, localOk, localFailMsg, failMsg))
-		{
-			return false;
-		}
-
-		// exchange particle counts before comparing global-index lists
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-		{
-			requests_.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.IRecvInt(
-				recvCounts[peerIdx], newPeerPlans[peerIdx].rank,
-				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
-			requestInfos_.push_back({
-				.peerRank = newPeerPlans[peerIdx].rank,
-				.tag = FLUID_SOLVER_SYNC_TAG_COUNT,
-				.N_bytes = sizeof(int),
-				.direction = MpiRequestDirection::Receive
-			});
-		}
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-		{
-			requests_.emplace_back(MPI_REQUEST_NULL);
-			mpiContext.ISendInt(
-				sendCounts[peerIdx], newPeerPlans[peerIdx].rank,
-				FLUID_SOLVER_SYNC_TAG_COUNT, requests_.back());
-			requestInfos_.push_back({
-				.peerRank = newPeerPlans[peerIdx].rank,
-				.tag = FLUID_SOLVER_SYNC_TAG_COUNT,
-				.N_bytes = sizeof(int),
-				.direction = MpiRequestDirection::Send
-			});
-		}
-		mpiContext.WaitAll(
-			requests_, "fluid solver peer particle counts", &requestInfos_);
 
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
-			const ParticlePlan& particlePlan =
-				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			const uint64_t N_expectedRecv = particlePlan.recvParticleIds.size();
-			if (recvCounts[peerIdx] < 0 ||
-				static_cast<uint64_t>(recvCounts[peerIdx]) !=
-				N_expectedRecv)
-			{
-				localOk = SetFailure(localFailMsg,
-					"Fluid solver synchronization peer particle count does not match the local halo plan (peer rank " +
-					std::to_string(newPeerPlans[peerIdx].rank) + ", " +
-					(haloExtent == Base::DistHaloMode::SingleHalo ? "single" : "double") +
-					" halo: peer sent " + std::to_string(recvCounts[peerIdx]) +
-					", local plan expects " + std::to_string(N_expectedRecv) + ").");
-			}
-		}
-		if (!FinishCollectiveValidation(
-			mpiContext, localOk, localFailMsg, failMsg))
-		{
-			return false;
-		}
-
-		// --- [ peer ordered-ID fingerprint exchange ] -----------------------------------------------
-
-		std::vector<FluidSolverPlanFingerprint> sendFingerprints(newPeerPlans.size());
-		std::vector<FluidSolverPlanFingerprint> recvFingerprints(newPeerPlans.size());
-		requests_.clear();
-		requestInfos_.clear();
-		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
-		{
-			const ParticlePlan& particlePlan =
-				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			sendFingerprints[peerIdx] =
-				BuildFluidSolverPlanFingerprint(particlePlan.sendParticleIds);
 			mpiContext.IRecvBytesChunked(
-				recvFingerprints[peerIdx].data(),
-				sizeof(FluidSolverPlanFingerprint),
+				&recvSummaries[peerIdx],
+				sizeof(FluidSolverPeerPlanSummary),
 				newPeerPlans[peerIdx].rank,
-				FLUID_SOLVER_SYNC_TAG_FINGERPRINT,
+				FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY,
 				requests_,
 				&requestInfos_);
 		}
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			mpiContext.ISendBytesChunked(
-				sendFingerprints[peerIdx].data(),
-				sizeof(FluidSolverPlanFingerprint),
+				&sendSummaries[peerIdx],
+				sizeof(FluidSolverPeerPlanSummary),
 				newPeerPlans[peerIdx].rank,
-				FLUID_SOLVER_SYNC_TAG_FINGERPRINT,
+				FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY,
 				requests_,
 				&requestInfos_);
 		}
 		mpiContext.WaitAll(
-			requests_, "fluid solver peer plan fingerprints", &requestInfos_);
+			requests_, "fluid solver peer plan summaries", &requestInfos_);
 
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
 			const ParticlePlan& particlePlan =
 				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
-			if (recvFingerprints[peerIdx] !=
+			const uint64_t N_expectedRecv = particlePlan.recvParticleIds.size();
+			if (recvSummaries[peerIdx].N_particles != N_expectedRecv)
+			{
+				localOk = SetFailure(localFailMsg,
+					"Fluid solver synchronization peer particle count does not match the local halo plan (peer rank " +
+					std::to_string(newPeerPlans[peerIdx].rank) + ", " +
+					(haloExtent == Base::DistHaloMode::SingleHalo ? "single" : "double") +
+					" halo: peer sent " + std::to_string(recvSummaries[peerIdx].N_particles) +
+					", local plan expects " + std::to_string(N_expectedRecv) + ").");
+			}
+			else if (recvSummaries[peerIdx].fingerprint !=
 				BuildFluidSolverPlanFingerprint(particlePlan.recvParticleIds))
 			{
 				localOk = SetFailure(localFailMsg,
@@ -875,7 +818,9 @@ bool FluidSolverSyncMgr::Rebuild(
 		requestInfos_.clear();
 		for (uint32_t peerIdx = 0; peerIdx != newPeerPlans.size(); peerIdx++)
 		{
-			receivedParticleIds[peerIdx].resize(static_cast<uint32_t>(recvCounts[peerIdx]));
+			const ParticlePlan& particlePlan =
+				newPeerPlans[peerIdx].particlePlans[Base::GetIdx(haloExtent)];
+			receivedParticleIds[peerIdx].resize(particlePlan.recvParticleIds.size());
 			mpiContext.IRecvBytesChunked(
 				receivedParticleIds[peerIdx].data(),
 				Sim::CheckedParticleMultiply(receivedParticleIds[peerIdx].size(),

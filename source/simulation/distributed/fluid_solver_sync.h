@@ -24,11 +24,10 @@
 namespace Dist
 {
 	// separate tags for plan validation and solver payloads
-	inline constexpr int FLUID_SOLVER_SYNC_TAG_COUNT = 6200;
+	inline constexpr int FLUID_SOLVER_SYNC_TAG_PLAN_SUMMARY = 6200;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_GLOBAL_IDXS = 6201;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_DENSITY = 6202;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_BYTE_PAYLOAD = 6203;
-	inline constexpr int FLUID_SOLVER_SYNC_TAG_FINGERPRINT = 6204;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_PREDICTED_VELOCITY = 6205;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_INITIAL_PRESSURE = 6206;
 	inline constexpr int FLUID_SOLVER_SYNC_TAG_PRESSURE_ACCELERATION = 6207;
