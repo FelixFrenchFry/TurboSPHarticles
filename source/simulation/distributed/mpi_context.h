@@ -2,10 +2,10 @@
 #pragma once
 
 // external
-#include <array>
 #include <chrono>
 #include <cstdint>
 #include <mpi.h>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -70,11 +70,10 @@ namespace Dist
 
 		bool AllTrue(bool localValue, const char* context = nullptr) const;
 		uint64_t AllReduceSumUint64(uint64_t value) const;
-		void AllReduceSumUint64s(std::array<uint64_t, 4>& values) const;
+		void AllReduceSumUint64s(std::span<uint64_t> values) const;
 		void AllReduceSumUint64s(std::vector<uint64_t>& values) const;
-		void AllReduceSumDoubles(std::array<double, 3>& values, const char* context = nullptr) const;
-		uint32_t AllReduceMaxUint32(uint32_t value) const;
-		double AllReduceSumDouble(double value) const;
+		void AllReduceSumDoubles(std::span<double> values, const char* context = nullptr) const;
+		void AllReduceMaxUint32s(std::span<uint32_t> values) const;
 		float AllReduceMinFloat(float value) const;
 		float AllReduceMaxFloat(float value) const;
 		void AllGatherDouble(double localValue, std::vector<double>& values) const;

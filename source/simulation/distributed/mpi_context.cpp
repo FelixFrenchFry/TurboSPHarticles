@@ -336,14 +336,14 @@ uint64_t MpiContext::AllReduceSumUint64(const uint64_t value) const
 }
 
 void MpiContext::AllReduceSumUint64s(
-	std::array<uint64_t, 4>& values) const
+	const std::span<uint64_t> values) const
 {
 	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
 		MPI_Iallreduce(
 			MPI_IN_PLACE,
 			values.data(),
-			static_cast<int>(values.size()),
+			CheckedMpiCount(values.size()),
 			MPI_UINT64_T,
 			MPI_SUM,
 			MPI_COMM_WORLD,
@@ -374,7 +374,7 @@ void MpiContext::AllReduceSumUint64s(std::vector<uint64_t>& values) const
 }
 
 void MpiContext::AllReduceSumDoubles(
-	std::array<double, 3>& values,
+	const std::span<double> values,
 	const char* context) const
 {
 	MPI_Request request = MPI_REQUEST_NULL;
@@ -382,7 +382,7 @@ void MpiContext::AllReduceSumDoubles(
 		MPI_Iallreduce(
 			MPI_IN_PLACE,
 			values.data(),
-			static_cast<int>(values.size()),
+			CheckedMpiCount(values.size()),
 			MPI_DOUBLE,
 			MPI_SUM,
 			MPI_COMM_WORLD,
@@ -391,40 +391,20 @@ void MpiContext::AllReduceSumDoubles(
 	Wait(&request, 1, context ? context : "MPI double-sum reduction", nullptr);
 }
 
-uint32_t MpiContext::AllReduceMaxUint32(const uint32_t value) const
+void MpiContext::AllReduceMaxUint32s(const std::span<uint32_t> values) const
 {
-	uint32_t result = 0;
 	MPI_Request request = MPI_REQUEST_NULL;
 	CheckMpiResult(
 		MPI_Iallreduce(
-			&value,
-			&result,
-			1,
+			MPI_IN_PLACE,
+			values.data(),
+			CheckedMpiCount(values.size()),
 			MPI_UINT32_T,
 			MPI_MAX,
 			MPI_COMM_WORLD,
 			&request),
 		"MPI_Iallreduce(uint32 max)");
-	Wait(&request, 1, "MPI uint32-max reduction", nullptr);
-	return result;
-}
-
-double MpiContext::AllReduceSumDouble(const double value) const
-{
-	double result = 0.0;
-	MPI_Request request = MPI_REQUEST_NULL;
-	CheckMpiResult(
-		MPI_Iallreduce(
-			&value,
-			&result,
-			1,
-			MPI_DOUBLE,
-			MPI_SUM,
-			MPI_COMM_WORLD,
-			&request),
-		"MPI_Iallreduce(double sum)");
-	Wait(&request, 1, "MPI double-sum reduction", nullptr);
-	return result;
+	Wait(&request, 1, "MPI uint32-array max reduction", nullptr);
 }
 
 float MpiContext::AllReduceMinFloat(const float value) const
