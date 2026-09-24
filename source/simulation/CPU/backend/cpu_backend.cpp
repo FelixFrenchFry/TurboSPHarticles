@@ -191,7 +191,6 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	particleLocalIdxsR_ByBody_.clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
-	particleFlagsScratch_.clear();
 	useDistributedStepWork_ = false;
 	integrateRigidBodies_ = true;
 	applyRigidBodyExternalForces_ = true;
@@ -866,7 +865,6 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	innerFluidChunkIdxs_.clear();
 	outerFluidChunkIdxs_.clear();
 	chunkFlagsScratch_.clear();
-	particleFlagsScratch_.clear();
 	useDistributedStepWork_ = false;
 	neighborList_->Resize(N_F_, N_B_, N_R_, params);
 	return true;
@@ -1343,7 +1341,6 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(particleLocalIdxsR_ByBody_));
 		Add(usage, MemUsageOf_Vector(newFluidLocalIdx_FromOldLocalIdx_));
 		Add(usage, MemUsageOf_Vector(chunkFlagsScratch_));
-		Add(usage, MemUsageOf_Vector(particleFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(idRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
 		Add(usage, MemUsageOf_Vector(xCMRB_));
@@ -1735,13 +1732,15 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
-	const uint32_t duplicateOuterIdx = Check::FindFirstDuplicateIdx(
-		outerLocalIdxsF, N_ownedF_, particleFlagsScratch_);
-	if (duplicateOuterIdx != N_outerF)
+	if (Check::CountAdjacentViolations(
+		0,
+		N_outerF,
+		[&](const uint32_t previousIdx, const uint32_t currentIdx)
+		{
+			return outerLocalIdxsF[previousIdx] >= outerLocalIdxsF[currentIdx];
+		}) != 0)
 	{
-		SPDLOG_ERROR(
-			"Duplicate outer fluid particle local index {}.",
-			outerLocalIdxsF[duplicateOuterIdx]);
+		SPDLOG_ERROR("Outer fluid particle local indices must be strictly ascending.");
 		return false;
 	}
 
@@ -1761,13 +1760,15 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
-	const uint32_t duplicatePressureAccHaloIdx = Check::FindFirstDuplicateIdx(
-		pressureAccHaloLocalIdxsF, N_F_, particleFlagsScratch_);
-	if (duplicatePressureAccHaloIdx != N_pressureAccHaloF)
+	if (Check::CountAdjacentViolations(
+		0,
+		N_pressureAccHaloF,
+		[&](const uint32_t previousIdx, const uint32_t currentIdx)
+		{
+			return pressureAccHaloLocalIdxsF[previousIdx] >= pressureAccHaloLocalIdxsF[currentIdx];
+		}) != 0)
 	{
-		SPDLOG_ERROR(
-			"Duplicate halo pressure-acceleration fluid particle local index {}.",
-			pressureAccHaloLocalIdxsF[duplicatePressureAccHaloIdx]);
+		SPDLOG_ERROR("Halo pressure-acceleration fluid particle local indices must be strictly ascending.");
 		return false;
 	}
 

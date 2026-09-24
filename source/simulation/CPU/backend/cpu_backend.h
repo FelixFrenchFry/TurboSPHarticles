@@ -268,8 +268,6 @@ namespace Sim
 		std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx_;
 		// marks the SIMD chunks holding at least one selected particle during the chunk build
 		std::vector<uint8_t> chunkFlagsScratch_;
-		// marks claimed particle indices in one bit each while validating distributed work lists
-		std::vector<uint32_t> particleFlagsScratch_;
 		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;
 		bool useDistributedStepWork_ = false;
 		bool integrateRigidBodies_ = true;

@@ -250,6 +250,7 @@ namespace Sim
 		}
 
 		// configures rank-authoritative particle work for distributed execution
+		// (both index lists must be strictly ascending in the current local layout)
 		// (the owned fluid prefix always computes pressure acceleration, the halo list adds to it)
 		virtual bool ConfigureDistributedStep(
 			const std::vector<uint32_t>& outerLocalIdxsF,
