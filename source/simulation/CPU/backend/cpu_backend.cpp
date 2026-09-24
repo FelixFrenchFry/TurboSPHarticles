@@ -1732,15 +1732,17 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
-	if (Check::CountAdjacentViolations(
-		0,
-		N_outerF,
-		[&](const uint32_t previousIdx, const uint32_t currentIdx)
-		{
-			return outerLocalIdxsF[previousIdx] >= outerLocalIdxsF[currentIdx];
-		}) != 0)
+	const auto isNotAscendingOuterIdx = [&](const uint32_t outerIdx)
 	{
-		SPDLOG_ERROR("Outer fluid particle local indices must be strictly ascending.");
+		return outerLocalIdxsF[outerIdx - 1] >= outerLocalIdxsF[outerIdx];
+	};
+	if (Check::CountViolations(1, N_outerF, isNotAscendingOuterIdx) != 0)
+	{
+		const uint32_t outerIdx = Check::FindFirstViolation(1, N_outerF, isNotAscendingOuterIdx);
+		SPDLOG_ERROR(
+			"Outer fluid particle local indices must be strictly ascending "
+			"(outerIdx={}, localIdx={}, previousLocalIdx={}).",
+			outerIdx, outerLocalIdxsF[outerIdx], outerLocalIdxsF[outerIdx - 1]);
 		return false;
 	}
 
@@ -1760,15 +1762,20 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
-	if (Check::CountAdjacentViolations(
-		0,
-		N_pressureAccHaloF,
-		[&](const uint32_t previousIdx, const uint32_t currentIdx)
-		{
-			return pressureAccHaloLocalIdxsF[previousIdx] >= pressureAccHaloLocalIdxsF[currentIdx];
-		}) != 0)
+	const auto isNotAscendingPressureAccHaloIdx = [&](const uint32_t pressureAccHaloIdx)
 	{
-		SPDLOG_ERROR("Halo pressure-acceleration fluid particle local indices must be strictly ascending.");
+		return pressureAccHaloLocalIdxsF[pressureAccHaloIdx - 1] >=
+			pressureAccHaloLocalIdxsF[pressureAccHaloIdx];
+	};
+	if (Check::CountViolations(1, N_pressureAccHaloF, isNotAscendingPressureAccHaloIdx) != 0)
+	{
+		const uint32_t pressureAccHaloIdx = Check::FindFirstViolation(
+			1, N_pressureAccHaloF, isNotAscendingPressureAccHaloIdx);
+		SPDLOG_ERROR(
+			"Halo pressure-acceleration fluid particle local indices must be strictly ascending "
+			"(pressureAccHaloIdx={}, localIdx={}, previousLocalIdx={}).",
+			pressureAccHaloIdx, pressureAccHaloLocalIdxsF[pressureAccHaloIdx],
+			pressureAccHaloLocalIdxsF[pressureAccHaloIdx - 1]);
 		return false;
 	}
 
