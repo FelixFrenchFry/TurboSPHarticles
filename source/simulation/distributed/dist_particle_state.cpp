@@ -587,12 +587,6 @@ bool Dist::ValidateLocalRigidParticleAttachments(
 {
 	if (failMsg) { failMsg->clear(); }
 
-	const auto fail = [failMsg](std::string message) -> bool
-	{
-		if (failMsg) { *failMsg = std::move(message); }
-		return false;
-	};
-
 	if (particlesR.id.size() != particlesR.N_ ||
 		particlesR.bodyId.size() != particlesR.N_ ||
 		particlesR.xRelPos.size() != particlesR.N_ ||
@@ -602,20 +596,16 @@ bool Dist::ValidateLocalRigidParticleAttachments(
 		particlesR.psiR.size() != particlesR.N_ ||
 		rigidBodies.rigidParticleCount.size() != rigidBodies.N_)
 	{
-		return fail("Invalid local rigid field sizes.");
+		if (failMsg) { *failMsg = "Invalid local rigid field sizes."; }
+		return false;
 	}
 
-	std::vector<uint32_t> bodyParticleCounts(rigidBodies.N_, 0);
 	for (const uint32_t bodyIdx : particlesR.bodyId)
 	{
 		if (bodyIdx >= rigidBodies.N_)
 		{
-			return fail("Invalid local rigid body index.");
-		}
-		bodyParticleCounts[bodyIdx]++;
-		if (bodyParticleCounts[bodyIdx] > rigidBodies.rigidParticleCount[bodyIdx])
-		{
-			return fail("Local rigid subset exceeds complete body count.");
+			if (failMsg) { *failMsg = "Invalid local rigid body index."; }
+			return false;
 		}
 	}
 	return true;

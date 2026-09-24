@@ -2168,7 +2168,6 @@ bool ParticleRedistributionMgr::PrepareRigidParticleMutation(
 	}
 
 	// validate the final layout through the compaction map and appended block
-	std::vector<uint32_t> bodyParticleCounts(rigidBodies.N_, 0);
 	const Sync::RigidConstView appendedView = appendedParticles.constView();
 	#if defined(_DEBUG)
 	ResizeVectorWithExtraCapacity(migratedParticleIdScratch_, N_local, scratchBufferExtraAllocCapacityPct_);
@@ -2188,12 +2187,6 @@ bool ParticleRedistributionMgr::PrepareRigidParticleMutation(
 		if (bodyIdx >= rigidBodies.N_)
 		{
 			if (failMsg) { *failMsg = "Invalid local rigid body index."; }
-			return false;
-		}
-		bodyParticleCounts[bodyIdx]++;
-		if (bodyParticleCounts[bodyIdx] > rigidBodies.rigidParticleCount[bodyIdx])
-		{
-			if (failMsg) { *failMsg = "Local rigid subset exceeds complete body count."; }
 			return false;
 		}
 		#if defined(_DEBUG)
