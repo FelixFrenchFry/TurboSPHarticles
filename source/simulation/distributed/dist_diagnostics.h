@@ -109,7 +109,6 @@ namespace Dist
 		uint64_t N_maxMemAllocBytes = 0;
 
 		uint64_t N_maxBackendMemAllocBytes = 0;
-		uint64_t N_maxDistGlobalStateMemAllocBytes = 0;
 		uint64_t N_maxDistLocalStateMemAllocBytes = 0;
 		uint64_t N_maxDistParticleMetadataMemAllocBytes = 0;
 		uint64_t N_maxDistExchangeBuffersMemAllocBytes = 0;

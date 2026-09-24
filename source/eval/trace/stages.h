@@ -13,9 +13,6 @@ namespace Trace
 	enum class TraceStage : uint8_t
 	{
 		StepBegin,
-		Dist_LoopParameterSync,
-		Dist_InputValidation,
-		Dist_ParameterSync,
 		Dist_ParticleRedistribution,
 		Dist_GlobalCountValidation,
 		Dist_RankParticlePreparation,
@@ -31,7 +28,6 @@ namespace Trace
 		Dist_Statistics,
 		Dist_LoadBalancing,
 		Dist_Metrics,
-		Dist_PostStepParameterSync,
 		Dist_ProgressReport,
 		StepComplete,
 		Dist_FinalStateSerialization,
@@ -57,21 +53,6 @@ namespace Trace
 				.stage = TraceStage::StepBegin,
 				.name = "step begin",
 				.alias = "step_begin"
-			},
-			{
-				.stage = TraceStage::Dist_LoopParameterSync,
-				.name = "distributed loop parameter synchronization",
-				.alias = "dist_loop_parameter_sync"
-			},
-			{
-				.stage = TraceStage::Dist_InputValidation,
-				.name = "distributed input validation",
-				.alias = "dist_input_validation"
-			},
-			{
-				.stage = TraceStage::Dist_ParameterSync,
-				.name = "distributed parameter synchronization",
-				.alias = "dist_parameter_sync"
 			},
 			{
 				.stage = TraceStage::Dist_ParticleRedistribution,
@@ -147,11 +128,6 @@ namespace Trace
 				.stage = TraceStage::Dist_Metrics,
 				.name = "distributed metrics",
 				.alias = "dist_metrics"
-			},
-			{
-				.stage = TraceStage::Dist_PostStepParameterSync,
-				.name = "distributed post-step parameter synchronization",
-				.alias = "dist_post_step_parameter_sync"
 			},
 			{
 				.stage = TraceStage::Dist_ProgressReport,

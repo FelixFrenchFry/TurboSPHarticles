@@ -479,8 +479,9 @@ bool DistSimulationMgr::LoadCheckpoint(
 		{
 			return IsLocalParticle(position) || haloBounds.Contains(position);
 		};
+		Sync::UniversalSimState globalSimState{};
 		const auto header = serializationMgr_.LoadSelectedSimState(
-			globalSimState_, statePath.string(), IsLocalParticle, IsLocalRigidParticle);
+			globalSimState, statePath.string(), IsLocalParticle, IsLocalRigidParticle);
 		if (header.step != info.step || header.time != info.time ||
 			header.N_F != N_expectedGlobalF_ ||
 			header.N_B != N_expectedGlobalB_ ||
@@ -495,13 +496,13 @@ bool DistSimulationMgr::LoadCheckpoint(
 
 		// rebuild ownership metadata for startup redistribution and halo construction
 		simBackend_->SetSimDomainBounds(input.globalBounds.min, input.globalBounds.max);
-		localOk = BuildRankLocalSimState();
-		rigidBodySyncBuffers_.Resize(globalSimState_.rigidBodies.N_);
+		BuildRankLocalSimState(std::move(globalSimState));
+		rigidBodySyncBuffers_.Resize(localSimState_.rigidBodies.N_);
 
 		boundaryRedistributionRequired_ = true;
 		serializationMgr_.ResetExportDirState();
 		exportSnapshotDir_.clear();
-		localOk = localOk && ValidateRankLocalSimState(true);
+		localOk = ValidateRankLocalSimState(true);
 	}
 	catch (const std::exception& ex)
 	{

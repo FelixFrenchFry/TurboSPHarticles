@@ -69,7 +69,6 @@ namespace Mem
 		Neighbors_ListStorageB,         // data structures used for the storage of references involving boundary particles
 		Neighbors_ListStorageR,         // data structures used for the storage of references involving rigid particles
 
-		Dist_GlobalState,               // additional full scenario state held by the distributed simulation manager
 		Dist_LocalState,                // backend-agnostic rank-local owned + halo particle state
 		Dist_ParticleMetadata,          // distributed ownership/classification/index-map metadata
 		Dist_ExchangeBuffers,           // persistent distributed send/receive/aggregation buffers
@@ -203,14 +202,6 @@ namespace Mem
 				.tip =
 				"Memory used/allocated by data structures used for storing references\n"
 				"involving rigid particles"
-			},
-			{
-				.bucket = MemBucket::Dist_GlobalState,
-				.type = Base::ParticleType::Fluid,
-				.name = "dist global state",
-				.tip =
-				"Memory used/allocated by the full scenario state retained by the\n"
-				"distributed simulation manager"
 			},
 			{
 				.bucket = MemBucket::Dist_LocalState,

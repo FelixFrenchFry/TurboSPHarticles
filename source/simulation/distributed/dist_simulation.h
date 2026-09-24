@@ -47,9 +47,6 @@ namespace Dist
 		// destroy sub-systems and free up resources
 		void Shutdown();
 
-		// pulls latest parameter snapshot and version if they have changed
-		void SyncParameters(bool force = false);
-
 		// create or switch scenario
 		// (destroys previous scenario and all its data)
 		void SelectSimScenario(Base::ScenarioType type, const std::string& profile);
@@ -102,10 +99,10 @@ namespace Dist
 		bool ConfigureLoadBalancing();
 
 		// builds the full scenario state before rank-local compaction
-		bool BuildGlobalSimState();
+		void BuildGlobalSimState(Sync::UniversalSimState& globalSimState);
 
 		// keeps owned + halo particles for this rank and releases source particle storage
-		bool BuildRankLocalSimState();
+		void BuildRankLocalSimState(Sync::UniversalSimState&& globalSimState);
 
 		// validates rank-local [ owned ][ halo ] state
 		bool ValidateRankLocalSimState(bool includeRigidState) const;
@@ -181,7 +178,7 @@ namespace Dist
 		// [ rank-reduced ] reduces rigid loads, integrates on root, and broadcasts body dynamics
 		bool FinishRankLocalBackendStep(const Sim::SimParams& params);
 
-		// validates particle identity metadata and rigid state against the materialized backend state
+		// validates particle identity metadata and rigid attachments of the materialized backend state
 		bool ValidateRankLocalBackendParticleState() const;
 
 		// validates particle identity metadata without comparing changed solver payload
@@ -195,7 +192,6 @@ namespace Dist
 		// parameter manager and snapshot to be managed and passed to sub-systems
 		Sim::SimParamsMgr& simParamsMgr_;
 		Sim::SimParams simParams_;
-		uint64_t simParamsVersion_ = 0;
 		std::chrono::steady_clock::time_point initTime_{};
 
 		// configuration profile
@@ -209,7 +205,6 @@ namespace Dist
 
 		// distributed domain and simulation state
 		std::unique_ptr<IDomainDecomp> domainDecomp_{ nullptr };
-		Sync::UniversalSimState globalSimState_{};
 		Sync::UniversalSimState localSimState_{};
 
 		// expected global F/B/R counts and ID checksums
@@ -254,9 +249,7 @@ namespace Dist
 		std::string exportSnapshotDir_;
 		bool exportBoundaryWritten_ = false;
 
-		std::atomic<bool> running_{ false };
 		std::atomic<bool> stopRequested_{ false };
-		std::atomic<bool> initialized_{ false };
 	};
 
 } // namespace Dist

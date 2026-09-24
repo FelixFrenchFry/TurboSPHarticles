@@ -1029,7 +1029,6 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
 			const uint64_t N_maxDistMiscAndStateMemAllocBytes =
-				report.N_maxDistGlobalStateMemAllocBytes +
 				report.N_maxDistLocalStateMemAllocBytes +
 				report.N_maxDistMiscMemAllocBytes;
 

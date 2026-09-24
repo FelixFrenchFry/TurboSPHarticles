@@ -76,8 +76,6 @@ int main(int argc, char** argv)
 		Dist::DistDiagnosticsMgr::PrintSimParams(
 			mpiContext, simParamsMgr.SnapshotParams().first);
 
-		simParamsMgr.Set_SimRunning(true);
-
 		// --- [ main loop ] -----------------------------------------------------------------------
 
 		distSimulationMgr.RunStartupCheck();
