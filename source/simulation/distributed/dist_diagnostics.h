@@ -24,7 +24,7 @@ namespace Dist
 	inline constexpr int DIST_DIAGNOSTICS_TAG_HARDWARE_REPORT = 8100;
 	inline constexpr int DIST_DIAGNOSTICS_TAG_STEP_REPORT = 8101;
 	inline constexpr int DIST_DIAGNOSTICS_TAG_STARTUP_REPORT = 8102;
-	inline constexpr int DIST_DIAGNOSTICS_TAG_BENCH_REPORT = 8103;
+	inline constexpr int DIST_DIAGNOSTICS_TAG_PROGRESS_REPORT = 8103;
 
 	constexpr int DIST_STARTUP_REPORT_TEXT_CHARS = 128;
 

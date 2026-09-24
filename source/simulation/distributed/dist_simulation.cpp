@@ -364,7 +364,7 @@ bool DistSimulationMgr::Init(
 	if (!RunRankLocalBackendStartupCheck()) { return false; }
 
 	// build the fluid solver synchronization plan required by the initial export
-	if (!mpiContext_.AllTrue(RebuildFluidSolverSyncPlan())) { return false; }
+	if (!RebuildFluidSolverSyncPlan()) { return false; }
 
 	return true;
 }
@@ -2167,7 +2167,7 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 		mpiContext_.Abort("Failed to redistribute particles: unknown error.");
 	}
 
-	return mpiContext_.AllTrue(localOk);
+	return localOk;
 }
 
 bool DistSimulationMgr::MaterializeRankLocalState(const bool backendWillBeRetired)

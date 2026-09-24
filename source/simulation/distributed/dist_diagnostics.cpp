@@ -49,6 +49,12 @@ namespace
 		uint32_t N_visThreads = 0;
 	};
 
+	struct DistRankProgressReport
+	{
+		DistRankStepReport stepReport;
+		DistRankBenchReport benchReport;
+	};
+
 	ProgressState& GetProgressState()
 	{
 		static ProgressState state{};
@@ -429,16 +435,16 @@ namespace
 		mpiContext.WaitAll(requests, "step diagnostic reports");
 	}
 
-	void GatherRankBenchReports(
+	void GatherRankProgressReports(
 		const MpiContext& mpiContext,
-		const DistRankBenchReport& localReport,
-		std::vector<DistRankBenchReport>& reports)
+		const DistRankProgressReport& localReport,
+		std::vector<DistRankProgressReport>& reports)
 	{
 		std::vector<MPI_Request> requests{};
 
 		if (mpiContext.IsRoot())
 		{
-			reports.assign(static_cast<uint64_t>(mpiContext.Size()), DistRankBenchReport{});
+			reports.assign(static_cast<uint64_t>(mpiContext.Size()), DistRankProgressReport{});
 			reports[static_cast<uint64_t>(mpiContext.Rank())] = localReport;
 			requests.reserve(static_cast<uint64_t>(std::max(0, mpiContext.Size() - 1)));
 
@@ -449,9 +455,9 @@ namespace
 				requests.emplace_back(MPI_REQUEST_NULL);
 				mpiContext.IRecvBytes(
 					&reports[static_cast<uint64_t>(rank)],
-					static_cast<int>(sizeof(DistRankBenchReport)),
+					static_cast<int>(sizeof(DistRankProgressReport)),
 					rank,
-					DIST_DIAGNOSTICS_TAG_BENCH_REPORT,
+					DIST_DIAGNOSTICS_TAG_PROGRESS_REPORT,
 					requests.back());
 			}
 		}
@@ -460,13 +466,13 @@ namespace
 			requests.emplace_back(MPI_REQUEST_NULL);
 			mpiContext.ISendBytes(
 				&localReport,
-				static_cast<int>(sizeof(DistRankBenchReport)),
+				static_cast<int>(sizeof(DistRankProgressReport)),
 				mpiContext.RootRank(),
-				DIST_DIAGNOSTICS_TAG_BENCH_REPORT,
+				DIST_DIAGNOSTICS_TAG_PROGRESS_REPORT,
 				requests.back());
 		}
 
-		mpiContext.WaitAll(requests, "benchmark diagnostic reports");
+		mpiContext.WaitAll(requests, "progress diagnostic reports");
 	}
 
 	uint64_t SumReportField(
@@ -1446,13 +1452,23 @@ namespace Dist
 		const DistRankStepReport& localStepReport,
 		const DistRankBenchReport& localBenchReport)
 	{
-		std::vector<DistRankStepReport> reports{};
-		GatherRankStepReports(mpiContext, localStepReport, reports);
-
-		std::vector<DistRankBenchReport> benchReports{};
-		GatherRankBenchReports(mpiContext, localBenchReport, benchReports);
-
+		const DistRankProgressReport localReport{
+			.stepReport = localStepReport,
+			.benchReport = localBenchReport
+		};
+		std::vector<DistRankProgressReport> progressReports{};
+		GatherRankProgressReports(mpiContext, localReport, progressReports);
 		if (!mpiContext.IsRoot()) { return; }
+
+		std::vector<DistRankStepReport> reports{};
+		std::vector<DistRankBenchReport> benchReports{};
+		reports.reserve(progressReports.size());
+		benchReports.reserve(progressReports.size());
+		for (const DistRankProgressReport& report : progressReports)
+		{
+			reports.push_back(report.stepReport);
+			benchReports.push_back(report.benchReport);
+		}
 
 		PrintDashboard(
 			reports, benchReports, benchOps, params);
