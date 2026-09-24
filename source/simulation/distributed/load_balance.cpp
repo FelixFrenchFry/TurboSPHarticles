@@ -213,11 +213,18 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 	{
 		*failMsg = "Load balance manager has no rebalance trigger.";
 	}
-	if (!mpiContext.AllTrue(localOk)) { return false; }
-
-	// gather loads in rank order
+	// negative loads signal failed evaluation
 	std::vector<double>& loadByRank = loadByRank_;
-	mpiContext.AllGatherDouble(localLoad, loadByRank);
+	mpiContext.AllGatherDouble(localOk ? localLoad : -1.0, loadByRank);
+	if (std::any_of(loadByRank.begin(), loadByRank.end(),
+		[](const double load) { return load < 0.0; }))
+	{
+		if (failMsg && failMsg->empty())
+		{
+			*failMsg = "Load evaluation failed on another rank.";
+		}
+		return false;
+	}
 
 	// build trigger inputs from the gathered loads
 	const double totalLoad = std::accumulate(loadByRank.begin(), loadByRank.end(), 0.0);
@@ -247,11 +254,18 @@ bool LoadBalanceMgr::EvaluateLoadAndRebalance(
 		catch (const std::exception& ex)
 		{
 			if (failMsg) { *failMsg = ex.what(); }
-			localOk = false;
+			shouldRebalance = -1;
 		}
 	}
-	if (!mpiContext.AllTrue(localOk)) { return false; }
 	mpiContext.BroadcastInt(shouldRebalance, mpiContext.RootRank());
+	if (shouldRebalance < 0)
+	{
+		if (failMsg && failMsg->empty())
+		{
+			*failMsg = "Load balance trigger failed on root.";
+		}
+		return false;
+	}
 	if (shouldRebalance == 0) { return true; }
 
 	// build and combine the strategy-defined spatial particle profile
