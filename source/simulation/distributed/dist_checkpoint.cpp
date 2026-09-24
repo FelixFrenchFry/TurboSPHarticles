@@ -9,7 +9,6 @@
 #include <filesystem>
 #include <limits>
 #include <nlohmann/json.hpp>
-#include <numeric>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
@@ -57,20 +56,15 @@ void Dist::BuildCheckpointRepartitionProfile(
 	// initialize the strategy's profile dimensions even when this rank has no particles
 	domainDecomp.BuildRepartitionProfile(input, profile);
 	DomainDecompRepartitionProfile chunkProfile{};
-	std::vector<uint32_t> localIdxs{};
 
 	const auto AccumulatePositions = [&](
 		const Base::ParticleType particleType,
 		const Export::SimStatePositionView& positions)
 	{
-		localIdxs.resize(positions.x.size());
-		std::iota(localIdxs.begin(), localIdxs.end(), 0u);
-
 		DomainDecompParticlePositionView particleInput{};
 		particleInput.x = positions.x;
 		particleInput.y = positions.y;
 		particleInput.z = positions.z;
-		particleInput.ownedLocalIdx = localIdxs;
 
 		input.fluid = {};
 		input.boundary = {};

@@ -25,13 +25,6 @@ namespace Dist
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t PARTICLE_GATHER_BLOCK_SIZE = 2048;
 
-	// owned particles classified per chunk, so workers fill disjoint output ranges
-	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
-	inline constexpr uint32_t OWNED_CLASSIFICATION_CHUNK_SIZE = 4096;
-	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_COUNT = 2;
-	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_INNER = 0;
-	inline constexpr uint32_t OWNED_CLASSIFICATION_CLASS_OUTER = 1;
-
 	// packed payload field blocks, ordered as they are gathered, sent, and copied out
 	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_COUNT = 6;
 	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_X_POS = 0;
@@ -160,11 +153,13 @@ namespace Dist
 			std::string* failMsg = nullptr);
 
 		// routes and exchanges F/B/R particles, then updates backend storage
+		// (outer fluid particles index the rebuilt layout until the backend re-orders it)
 		bool RedistributeParticles(
 			Sim::I_DistributedParticleBackend& distParticleBackend,
 			DistParticleState& particleStateF,
 			DistParticleState& particleStateB,
 			DistParticleState& particleStateR,
+			std::vector<uint32_t>& outerLocalIdxsF,
 			const Sync::RigidBodies& rigidBodies,
 			const IDomainDecomp& domainDecomp,
 			const MpiContext& mpiContext,
@@ -226,7 +221,6 @@ namespace Dist
 			uint32_t Size() const { return N_particles_; }
 			bool IsEmpty() const { return Size() == 0; }
 			int CheckedCount() const;
-			uint64_t ParticleIdAt(uint32_t bufferIdx) const; // returns the particle ID at the buffer index
 			Mem::MemUsage GetMemoryUsage() const;
 
 		private:
@@ -273,7 +267,6 @@ namespace Dist
 			uint32_t Size() const { return N_particles_; }
 			bool IsEmpty() const { return Size() == 0; }
 			int CheckedCount() const;
-			uint64_t ParticleIdAt(uint32_t bufferIdx) const; // returns the particle ID at the buffer index
 			Mem::MemUsage GetMemoryUsage() const;
 
 		private:
@@ -400,23 +393,12 @@ namespace Dist
 			uint32_t srcLocalIdx,
 			uint32_t dstLocalIdx);
 
-		// dense compaction and rebuilt metadata construction
+		// dense compaction construction
 		static bool BuildDenseCompactionMap(
 			uint32_t N_oldLocal,
 			const std::vector<uint32_t>& retainedOldLocalIdxs,
 			std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
 			std::string* failMsg);
-		static void PrepareRebuiltParticleState(
-			DistParticleState& particleState,
-			uint32_t N_owned,
-			uint32_t N_halo,
-			uint32_t N_local);
-		static bool AddHaloParticleMetadata(
-			DistParticleState& particleState,
-			uint64_t N_global,
-			uint64_t particleId,
-			uint32_t localIdx,
-			uint32_t haloIdx);
 		static bool ValidateParticleViews(
 			const Sync::FluidConstView& particlesF,
 			const Sync::BoundaryConstView& particlesB,
@@ -517,6 +499,7 @@ namespace Dist
 		DistParticleState rebuiltParticleStateF_;
 		DistParticleState rebuiltParticleStateB_;
 		DistParticleState rebuiltParticleStateR_;
+		std::vector<uint32_t> rebuiltOuterLocalIdxsF_;
 
 		// latest per-step network traffic
 		ParticleRedistributionStats redistStats_{};

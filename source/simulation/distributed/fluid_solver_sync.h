@@ -66,6 +66,7 @@ namespace Dist
 		bool Rebuild(
 			const Sync::FluidConstView& particlesF,
 			const DistParticleState& particleStateF,
+			std::span<const uint32_t> outerLocalIdxsF,
 			const IDomainDecomp& domainDecomp,
 			float singleHaloRadius,
 			Base::DistHaloMode distHaloMode,

@@ -117,15 +117,15 @@ namespace
 				"Cannot build a column AABB repartition profile from an invalid global extent.");
 		}
 
-		for (const uint32_t localIdx : particles.ownedLocalIdx)
+		if (particles.x.size() != particles.z.size())
 		{
-			if (localIdx >= particles.x.size() || localIdx >= particles.z.size())
-			{
-				throw std::runtime_error(
-					std::string("Cannot build a column AABB repartition profile with an invalid ") +
-					particleType + " particle index.");
-			}
+			throw std::runtime_error(
+				std::string("Cannot build a column AABB repartition profile with inconsistent ") +
+				particleType + " particle positions.");
+		}
 
+		for (uint64_t localIdx = 0; localIdx != particles.x.size(); localIdx++)
+		{
 			const float xCoordinate = particles.x[localIdx];
 			const float zCoordinate = particles.z[localIdx];
 			if (!std::isfinite(xCoordinate) || !std::isfinite(zCoordinate))

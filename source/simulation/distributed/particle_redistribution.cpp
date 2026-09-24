@@ -198,173 +198,40 @@ namespace
 		#endif
 	}
 
-	// rebuild metadata for retained owned particles in the compacted backend prefix,
-	// where local index matches compaction map position and the owned list is identity
-	bool ClassifyRetainedOwnedParticles_Parallel(
-		DistParticleState& rebuiltParticleState,
+	// checks that retained and appended particle IDs land inside the global particle range
+	bool ValidatePreparedParticleIds(
 		const std::vector<uint32_t>& retainedOldLocalIdxs,
 		const std::span<const uint64_t> oldParticleIds,
-		const std::vector<uint8_t>& isOuterOwned_ByLocalIdx,
+		const std::span<const uint64_t> appendedParticleIds,
 		const uint64_t N_global,
-		const char* const invalidParticleIdMsg,
+		const char* const particleTypeName,
 		std::string* failMsg)
 	{
-		const uint32_t N_retained =
-			static_cast<uint32_t>(retainedOldLocalIdxs.size());
-
-		// first failure seen by the classification pass, reported once it completes
-		std::atomic<const char*> classifyFailMsg{ nullptr };
-
-		// classify retained particles and fill the identity owned index list
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_retained),
-			[&](const tbb::blocked_range<uint32_t>& range)
-		{
-			for (uint32_t localIdx = range.begin(); localIdx != range.end(); localIdx++)
+		if (Check::CountViolations(0, static_cast<uint32_t>(retainedOldLocalIdxs.size()),
+			[&](const uint32_t localIdx)
 			{
 				const uint32_t oldLocalIdx = retainedOldLocalIdxs[localIdx];
-				if (oldLocalIdx >= oldParticleIds.size())
-				{
-					classifyFailMsg.store(invalidParticleIdMsg, std::memory_order_relaxed);
-					continue;
-				}
-
-				const uint64_t particleId = oldParticleIds[oldLocalIdx];
-				if (particleId >= N_global)
-				{
-					classifyFailMsg.store(invalidParticleIdMsg, std::memory_order_relaxed);
-					continue;
-				}
-
-				// routing already flagged every retained particle a neighbor requested as outer
-				const bool isInner = isOuterOwned_ByLocalIdx[oldLocalIdx] == 0;
-				rebuiltParticleState.particleClasses[localIdx] = isInner
-					? DistParticleClass::Inner
-					: DistParticleClass::Outer;
-				rebuiltParticleState.particleLocalIdx_Owned[localIdx] = localIdx;
-			}
-		});
-
-		if (const char* const classifyFail =
-			classifyFailMsg.load(std::memory_order_relaxed))
+				return oldLocalIdx >= oldParticleIds.size() || oldParticleIds[oldLocalIdx] >= N_global;
+			}) != 0)
 		{
-			if (failMsg) { *failMsg = classifyFail; }
+			if (failMsg) { *failMsg = std::string("Invalid owned ") + particleTypeName + " particle ID."; }
+			return false;
+		}
+
+		if (Check::CountViolations(0, static_cast<uint32_t>(appendedParticleIds.size()),
+			[&](const uint32_t appendIdx)
+			{
+				return appendedParticleIds[appendIdx] >= N_global;
+			}) != 0)
+		{
+			if (failMsg)
+			{
+				*failMsg = std::string("Invalid migrated or halo ") + particleTypeName + " particle ID.";
+			}
 			return false;
 		}
 
 		return true;
-	}
-
-	// fill the inner and outer index lists from the class of every owned particle
-	void BuildOwnedClassIndexLists_Parallel(
-		DistParticleState& rebuiltParticleState,
-		ParticleClassificationWorkBuffers& workBuffers,
-		const uint32_t N_owned,
-		const float extraAllocCapacityPct)
-	{
-		const uint32_t N_chunks = N_owned > 0
-			? 1 + (N_owned - 1) / OWNED_CLASSIFICATION_CHUNK_SIZE
-			: 0;
-
-		ResizeVectorWithExtraCapacity(
-			workBuffers.classCounts_ByChunkClass,
-			static_cast<uint64_t>(N_chunks) * OWNED_CLASSIFICATION_CLASS_COUNT,
-			extraAllocCapacityPct);
-		ResizeVectorWithExtraCapacity(
-			workBuffers.classWriteOffsets_ByChunkClass,
-			static_cast<uint64_t>(N_chunks) * OWNED_CLASSIFICATION_CLASS_COUNT,
-			extraAllocCapacityPct);
-		ResizeVectorWithExtraCapacity(
-			workBuffers.classTotals,
-			OWNED_CLASSIFICATION_CLASS_COUNT,
-			extraAllocCapacityPct);
-
-		// count each class per chunk
-		// (chunks processed in parallel, with each worker writing only its own count row)
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_chunks),
-			[&](const tbb::blocked_range<uint32_t>& range)
-		{
-			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
-			{
-				const uint32_t beginLocalIdx =
-					chunkIdx * OWNED_CLASSIFICATION_CHUNK_SIZE;
-				const uint32_t endLocalIdx =
-					beginLocalIdx + std::min(
-						OWNED_CLASSIFICATION_CHUNK_SIZE,
-						N_owned - beginLocalIdx);
-				uint32_t* const chunkCounts =
-					workBuffers.classCounts_ByChunkClass.data() +
-					static_cast<uint64_t>(chunkIdx) * OWNED_CLASSIFICATION_CLASS_COUNT;
-				std::fill(chunkCounts, chunkCounts + OWNED_CLASSIFICATION_CLASS_COUNT, uint32_t{ 0 });
-
-				for (uint32_t localIdx = beginLocalIdx; localIdx != endLocalIdx; localIdx++)
-				{
-					const bool isInner = rebuiltParticleState.particleClasses[localIdx] ==
-						DistParticleClass::Inner;
-					chunkCounts[isInner
-						? OWNED_CLASSIFICATION_CLASS_INNER
-						: OWNED_CLASSIFICATION_CLASS_OUTER]++;
-				}
-			}
-		});
-
-		// prefix chunk-local class counts to compute each chunk's output range
-		PrefixCountsByChunkAndBucket_ParallelScan(
-			workBuffers.classCounts_ByChunkClass,
-			workBuffers.classWriteOffsets_ByChunkClass,
-			workBuffers.classTotals,
-			N_chunks,
-			OWNED_CLASSIFICATION_CLASS_COUNT);
-
-		Base::ResizeScratchVector(
-			rebuiltParticleState.particleLocalIdx_Inner,
-			workBuffers.classTotals[OWNED_CLASSIFICATION_CLASS_INNER],
-			extraAllocCapacityPct);
-		Base::ResizeScratchVector(
-			rebuiltParticleState.particleLocalIdx_Outer,
-			workBuffers.classTotals[OWNED_CLASSIFICATION_CLASS_OUTER],
-			extraAllocCapacityPct);
-
-		// fill inner and outer index lists while preserving local-index order
-		// (chunks processed in parallel, with each worker writing to disjoint ranges)
-		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_chunks),
-			[&](const tbb::blocked_range<uint32_t>& range)
-		{
-			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
-			{
-				const uint32_t beginLocalIdx =
-					chunkIdx * OWNED_CLASSIFICATION_CHUNK_SIZE;
-				const uint32_t endLocalIdx =
-					beginLocalIdx + std::min(
-						OWNED_CLASSIFICATION_CHUNK_SIZE,
-						N_owned - beginLocalIdx);
-				const uint64_t chunkClassBase =
-					static_cast<uint64_t>(chunkIdx) * OWNED_CLASSIFICATION_CLASS_COUNT;
-				uint32_t innerWriteIdx =
-					workBuffers.classWriteOffsets_ByChunkClass[
-						chunkClassBase + OWNED_CLASSIFICATION_CLASS_INNER];
-				uint32_t outerWriteIdx =
-					workBuffers.classWriteOffsets_ByChunkClass[
-						chunkClassBase + OWNED_CLASSIFICATION_CLASS_OUTER];
-
-				for (uint32_t localIdx = beginLocalIdx;
-					 localIdx != endLocalIdx;
-					 localIdx++)
-				{
-					if (rebuiltParticleState.particleClasses[localIdx] ==
-						DistParticleClass::Inner)
-					{
-						rebuiltParticleState.particleLocalIdx_Inner[innerWriteIdx++] = localIdx;
-					}
-					else
-					{
-						rebuiltParticleState.particleLocalIdx_Outer[outerWriteIdx++] = localIdx;
-					}
-				}
-			}
-		});
 	}
 
 	// gather one field of a particle block, reading the source at scattered local
@@ -622,12 +489,6 @@ int ParticleRedistributionMgr::FluidExchangeBuffer::CheckedCount() const
 	return static_cast<int>(Size());
 }
 
-uint64_t ParticleRedistributionMgr::FluidExchangeBuffer::ParticleIdAt(
-	const uint32_t bufferIdx) const
-{
-	return particleIds_[bufferIdx];
-}
-
 Mem::MemUsage ParticleRedistributionMgr::FluidExchangeBuffer::GetMemoryUsage() const
 {
 	Mem::MemUsage usage{};
@@ -760,12 +621,6 @@ int ParticleRedistributionMgr::BoundaryExchangeBuffer::CheckedCount() const
 	}
 
 	return static_cast<int>(Size());
-}
-
-uint64_t ParticleRedistributionMgr::BoundaryExchangeBuffer::ParticleIdAt(
-	const uint32_t bufferIdx) const
-{
-	return particleIds_[bufferIdx];
 }
 
 Mem::MemUsage ParticleRedistributionMgr::BoundaryExchangeBuffer::GetMemoryUsage() const
@@ -980,9 +835,7 @@ Mem::MemUsage ParticleRedistributionMgr::GetScratchMemoryUsage() const
 	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesF_));
 	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesB_));
 	Mem::Add(usage, GetParticleMemoryUsage(appendedParticlesR_));
-	Mem::Add(usage, GetParticleMemoryUsage(rebuiltParticleStateF_));
-	Mem::Add(usage, GetParticleMemoryUsage(rebuiltParticleStateB_));
-	Mem::Add(usage, GetParticleMemoryUsage(rebuiltParticleStateR_));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(rebuiltOuterLocalIdxsF_));
 
 	return usage;
 }
@@ -1171,55 +1024,6 @@ bool ParticleRedistributionMgr::BuildDenseCompactionMap(
 	return true;
 }
 
-void ParticleRedistributionMgr::PrepareRebuiltParticleState(
-	DistParticleState& particleState,
-	const uint32_t N_owned,
-	const uint32_t N_halo,
-	const uint32_t N_local)
-{
-	// initialize compact local metadata, while retaining per-particle storage
-	particleState.N_owned = N_owned;
-	particleState.N_halo = N_halo;
-	Base::ResizeScratchVector(
-		particleState.particleClasses,
-		N_local,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// reset particle classes in parallel
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_local),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t localIdx = range.begin(); localIdx != range.end(); localIdx++)
-		{
-			particleState.particleClasses[localIdx] = DistParticleClass::None;
-		}
-	});
-
-	Base::ResizeScratchVector(
-		particleState.particleLocalIdx_Owned,
-		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-}
-
-bool ParticleRedistributionMgr::AddHaloParticleMetadata(
-	DistParticleState& particleState,
-	const uint64_t N_global,
-	const uint64_t particleId,
-	const uint32_t localIdx,
-	const uint32_t haloIdx)
-{
-	if (particleId >= N_global)
-	{
-		return false;
-	}
-
-	particleState.particleClasses[localIdx] = DistParticleClass::Halo;
-	particleState.particleLocalIdx_Halo[haloIdx] = localIdx;
-
-	return true;
-}
-
 bool ParticleRedistributionMgr::ValidateParticleViews(
 	const Sync::FluidConstView& particlesF,
 	const Sync::BoundaryConstView& particlesB,
@@ -1275,18 +1079,11 @@ bool ParticleRedistributionMgr::ValidateParticleViews(
 		return false;
 	}
 
-	#if defined(_DEBUG)
-	// exhaustively validate distributed particle metadata
+	// check that the particle layouts match the views (exhaustive in debug builds)
 	if (!particleStateF.IsValidLocalParticleState(
 		particlesF.id, N_globalF, failMsg)) { return false; }
 	if (!particleStateB.IsValidLocalParticleState(
 		particlesB.id, N_globalB, failMsg)) { return false; }
-	#else
-	(void)particleStateF;
-	(void)particleStateB;
-	(void)N_globalF;
-	(void)N_globalB;
-	#endif
 
 	return true;
 }
@@ -1366,9 +1163,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
-	const std::vector<uint32_t>& ownedLocalIdxs =
-		particleStateF.particleLocalIdx_Owned;
-	const uint32_t N_owned = static_cast<uint32_t>(ownedLocalIdxs.size());
+	const uint32_t N_owned = particleStateF.N_owned;
 	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
 	const uint32_t N_buckets = 2 * N_ranks_U32;
 	const uint32_t N_chunks = N_owned > 0
@@ -1431,19 +1226,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
-				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
-
-				#if defined(_DEBUG)
-				if (localIdx >= particlesF.N_ ||
-					!particleStateF.HasMetadataAtLocalIdx(localIdx) ||
-					(particleStateF.particleClasses[localIdx] != DistParticleClass::Inner &&
-					 particleStateF.particleClasses[localIdx] != DistParticleClass::Outer))
-				{
-					routeFailMsg.store(
-						"Invalid owned fluid particle metadata.", std::memory_order_relaxed);
-					continue;
-				}
-				#endif
+				const uint32_t localIdx = ownedIdx;
 
 				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
 				const int ownerRank = domainDecomp.OwnerRank(position);
@@ -1544,7 +1327,7 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
+				const uint32_t localIdx = ownedIdx;
 
 				if (ownerRank == rank) [[likely]]
 				{
@@ -1588,9 +1371,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
-	const std::vector<uint32_t>& ownedLocalIdxs =
-		particleStateB.particleLocalIdx_Owned;
-	const uint32_t N_owned = static_cast<uint32_t>(ownedLocalIdxs.size());
+	const uint32_t N_owned = particleStateB.N_owned;
 	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
 	const uint32_t N_buckets = 2 * N_ranks_U32;
 	const uint32_t N_chunks = N_owned > 0
@@ -1653,19 +1434,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
-				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
-
-				#if defined(_DEBUG)
-				if (localIdx >= particlesB.N_ ||
-					!particleStateB.HasMetadataAtLocalIdx(localIdx) ||
-					(particleStateB.particleClasses[localIdx] != DistParticleClass::Inner &&
-					 particleStateB.particleClasses[localIdx] != DistParticleClass::Outer))
-				{
-					routeFailMsg.store(
-						"Invalid owned boundary particle metadata.", std::memory_order_relaxed);
-					continue;
-				}
-				#endif
+				const uint32_t localIdx = ownedIdx;
 
 				const glm::vec3 position = BoundaryPositionAtLocalIdx(particlesB, localIdx);
 				const int ownerRank = domainDecomp.OwnerRank(position);
@@ -1765,7 +1534,7 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
+				const uint32_t localIdx = ownedIdx;
 
 				if (ownerRank == rank) [[likely]]
 				{
@@ -1810,9 +1579,7 @@ bool ParticleRedistributionMgr::RouteOwnedRigidParticles(
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
-	const std::vector<uint32_t>& ownedLocalIdxs =
-		particleStateR.particleLocalIdx_Owned;
-	const uint32_t N_owned = static_cast<uint32_t>(ownedLocalIdxs.size());
+	const uint32_t N_owned = particleStateR.N_owned;
 	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
 	const uint32_t N_buckets = 2 * N_ranks_U32;
 	const uint32_t N_chunks = N_owned > 0
@@ -1874,19 +1641,7 @@ bool ParticleRedistributionMgr::RouteOwnedRigidParticles(
 
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
-				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
-
-				#if defined(_DEBUG)
-				if (localIdx >= particlesR.N_ ||
-					!particleStateR.HasMetadataAtLocalIdx(localIdx) ||
-					(particleStateR.particleClasses[localIdx] != DistParticleClass::Inner &&
-					 particleStateR.particleClasses[localIdx] != DistParticleClass::Outer))
-				{
-					routeFailMsg.store(
-						"Invalid owned rigid particle metadata.", std::memory_order_relaxed);
-					continue;
-				}
-				#endif
+				const uint32_t localIdx = ownedIdx;
 
 				const glm::vec3 position = RigidPositionAtLocalIdx(particlesR, rigidBodies, localIdx);
 				if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
@@ -1991,7 +1746,7 @@ bool ParticleRedistributionMgr::RouteOwnedRigidParticles(
 			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
 			{
 				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				const uint32_t localIdx = ownedLocalIdxs[ownedIdx];
+				const uint32_t localIdx = ownedIdx;
 
 				if (ownerRank == rank) [[likely]]
 				{
@@ -2422,90 +2177,18 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 			N_appended,
 			scratchBufferExtraAllocCapacityPct_);
 		ResizeFluidPayloadFields(appendedParticles, N_appended);
-		PrepareRebuiltParticleState(
-			rebuiltParticleState,
-			N_owned,
-			N_halo,
-			N_local);
+		rebuiltParticleState = { .N_owned = N_owned, .N_halo = N_halo };
 	}
 
-	uint32_t dstLocalIdx = 0;
 	uint32_t appendLocalIdx = 0;
-
-	// rebuild metadata for owned particles retained in backend storage
-	{
-		if (!ClassifyRetainedOwnedParticles_Parallel(
-			rebuiltParticleState,
-			retainedFluidOldLocalIdx_FromNewLocalIdx_,
-			oldParticles.id,
-			routes_.fluidIsOuterOwned_ByLocalIdx,
-			N_global,
-			"Invalid owned fluid particle ID.", failMsg))
-		{
-			return false;
-		}
-
-		dstLocalIdx =
-			static_cast<uint32_t>(retainedFluidOldLocalIdx_FromNewLocalIdx_.size());
-	}
 
 	// append owned particles migrated from other ranks
 	{
-		// first failure seen by the migrated append pass, reported once it completes
-		std::atomic<const char*> migratedFailMsg{ nullptr };
-
 		for (const auto& rankBuffers : rankBuffers_)
 		{
 			const auto& recvParticles = rankBuffers.recvOwnedParticlesF;
-			const uint32_t N_recvOwned = recvParticles.Size();
-			if (N_recvOwned == 0) { continue; }
-
 			recvParticles.CopyBulkToLocalParticles(appendedParticles, appendLocalIdx);
-
-			// migrated particles occupy one contiguous local index range per peer,
-			// so every particle knows its destination slot up front
-			const uint32_t appendLocalIdxBase = appendLocalIdx;
-			const uint32_t dstLocalIdxBase = dstLocalIdx;
-
-			tbb::parallel_for(
-				tbb::blocked_range<uint32_t>(0, N_recvOwned),
-				[&](const tbb::blocked_range<uint32_t>& range)
-			{
-				for (uint32_t bufferIdx = range.begin(); bufferIdx != range.end(); bufferIdx++)
-				{
-					const uint32_t appendIdx = appendLocalIdxBase + bufferIdx;
-					const uint32_t localIdx = dstLocalIdxBase + bufferIdx;
-					const uint64_t particleId = recvParticles.ParticleIdAt(bufferIdx);
-					if (particleId >= N_global)
-					{
-						migratedFailMsg.store(
-							"Invalid migrated fluid particle ID.",
-							std::memory_order_relaxed);
-						continue;
-					}
-
-					const glm::vec3 position
-					{
-						appendedParticles.xPos[appendIdx],
-						appendedParticles.yPos[appendIdx],
-						appendedParticles.zPos[appendIdx]
-					};
-					rebuiltParticleState.particleClasses[localIdx] =
-						domainDecomp.IsInnerOwnedParticle(rank, position, haloRadius)
-							? DistParticleClass::Inner
-							: DistParticleClass::Outer;
-					rebuiltParticleState.particleLocalIdx_Owned[localIdx] = localIdx;
-				}
-			});
-
-			appendLocalIdx += N_recvOwned;
-			dstLocalIdx += N_recvOwned;
-		}
-
-		if (const char* const migratedFail = migratedFailMsg.load(std::memory_order_relaxed))
-		{
-			if (failMsg) { *failMsg = migratedFail; }
-			return false;
+			appendLocalIdx += recvParticles.Size();
 		}
 
 		// check that no two ranks migrated the same owned fluid particle into this rank
@@ -2517,30 +2200,13 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 			if (failMsg) { *failMsg = "Duplicate migrated fluid particle ID."; }
 			return false;
 		}
-
-		// owned local index range is complete, so its class index lists can be filled
-		BuildOwnedClassIndexLists_Parallel(
-			rebuiltParticleState,
-			ownedClassificationWorkBuffers_,
-			N_owned,
-			scratchBufferExtraAllocCapacityPct_);
 	}
 
 	// append local and received fluid halos
 	{
-		// halos occupy one contiguous local index range, so every particle knows its
-		// destination slot up front and the index list needs no shared append
 		const uint32_t N_localHalo =
 			static_cast<uint32_t>(routes_.localHaloFluidLocalIdxs.size());
-		const uint32_t haloDstLocalIdxBase = dstLocalIdx;
 		const uint32_t haloAppendLocalIdxBase = appendLocalIdx;
-		Base::ResizeScratchVector(
-			rebuiltParticleState.particleLocalIdx_Halo,
-			N_halo,
-			scratchBufferExtraAllocCapacityPct_);
-
-		// first failure seen by the halo append passes, reported once they complete
-		std::atomic<const char*> haloFailMsg{ nullptr };
 
 		// append halos created locally from particles migrating away
 		// TODO: use explicit SIMD for particle field gathers similarly to sph_solver.cpp?
@@ -2550,81 +2216,55 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 		{
 			for (uint32_t haloIdx = range.begin(); haloIdx != range.end(); haloIdx++)
 			{
-				const uint32_t oldLocalIdx = routes_.localHaloFluidLocalIdxs[haloIdx];
-
 				CopyFluidParticle(
-					oldParticles, appendedParticles, oldLocalIdx,
+					oldParticles, appendedParticles,
+					routes_.localHaloFluidLocalIdxs[haloIdx],
 					haloAppendLocalIdxBase + haloIdx);
-
-				if (!AddHaloParticleMetadata(
-					rebuiltParticleState, N_global,
-					oldParticles.id[oldLocalIdx],
-					haloDstLocalIdxBase + haloIdx,
-					haloIdx))
-				{
-					haloFailMsg.store(
-						"Invalid local fluid halo particle ID.",
-						std::memory_order_relaxed);
-				}
 			}
 		});
+		appendLocalIdx += N_localHalo;
 
 		// append halo particles received from other ranks
-		uint32_t recvHaloIdxBase = N_localHalo;
 		for (const auto& rankBuffers : rankBuffers_)
 		{
 			const auto& recvParticles = rankBuffers.recvHaloParticlesF;
-			const uint32_t N_recvHalo = recvParticles.Size();
-			if (N_recvHalo == 0) { continue; }
-
-			recvParticles.CopyBulkToLocalParticles(
-				appendedParticles,
-				haloAppendLocalIdxBase + recvHaloIdxBase);
-
-			tbb::parallel_for(
-				tbb::blocked_range<uint32_t>(0, N_recvHalo),
-				[&](const tbb::blocked_range<uint32_t>& range)
-			{
-				for (uint32_t bufferIdx = range.begin(); bufferIdx != range.end(); bufferIdx++)
-				{
-					const uint32_t haloIdx = recvHaloIdxBase + bufferIdx;
-
-					if (!AddHaloParticleMetadata(
-						rebuiltParticleState, N_global,
-						recvParticles.ParticleIdAt(bufferIdx),
-						haloDstLocalIdxBase + haloIdx,
-						haloIdx))
-					{
-						haloFailMsg.store(
-							"Invalid received fluid halo particle ID.",
-							std::memory_order_relaxed);
-					}
-				}
-			});
-
-			recvHaloIdxBase += N_recvHalo;
+			recvParticles.CopyBulkToLocalParticles(appendedParticles, appendLocalIdx);
+			appendLocalIdx += recvParticles.Size();
 		}
-
-		if (const char* const haloFail = haloFailMsg.load(std::memory_order_relaxed))
-		{
-			if (failMsg) { *failMsg = haloFail; }
-			return false;
-		}
-
-		appendLocalIdx = haloAppendLocalIdxBase + N_halo;
-		dstLocalIdx = haloDstLocalIdxBase + N_halo;
 	}
 
-	// validate rebuilt fluid metadata
+	// validate rebuilt fluid counts and particle IDs
+	if (appendLocalIdx != N_appended ||
+		retainedFluidOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
 	{
-		if (appendLocalIdx != N_appended || dstLocalIdx != N_local ||
-			retainedFluidOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
-		{
-			if (failMsg) { *failMsg = "Prepared fluid particle mutation count is inconsistent."; }
-			return false;
-		}
-		return rebuiltParticleState.IsValidLocalParticleLayout(N_local, failMsg);
+		if (failMsg) { *failMsg = "Prepared fluid particle mutation count is inconsistent."; }
+		return false;
 	}
+	if (!ValidatePreparedParticleIds(
+		retainedFluidOldLocalIdx_FromNewLocalIdx_,
+		oldParticles.id,
+		appendedParticles.id,
+		N_global,
+		"fluid",
+		failMsg))
+	{
+		return false;
+	}
+
+	// classify the rebuilt owned prefix, where routing already flagged retained outer particles
+	rebuiltParticleState.N_outer = CollectPreparedOuterFluidLocalIdxs(
+		N_owned,
+		retainedFluidOldLocalIdx_FromNewLocalIdx_,
+		routes_.fluidIsOuterOwned_ByLocalIdx,
+		appendedParticles.constView(),
+		domainDecomp,
+		rank,
+		haloRadius,
+		ownedClassificationWorkBuffers_,
+		rebuiltOuterLocalIdxsF_,
+		scratchBufferExtraAllocCapacityPct_);
+
+	return rebuiltParticleState.IsValidLocalParticleLayout(N_local, failMsg);
 }
 
 // prepare retained compaction, appended particles, and matching boundary metadata
@@ -2693,90 +2333,18 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 			N_appended,
 			scratchBufferExtraAllocCapacityPct_);
 		appendedParticles.resizeAll(N_appended);
-		PrepareRebuiltParticleState(
-			rebuiltParticleState,
-			N_owned,
-			N_halo,
-			N_local);
+		rebuiltParticleState = { .N_owned = N_owned, .N_halo = N_halo };
 	}
 
-	uint32_t dstLocalIdx = 0;
 	uint32_t appendLocalIdx = 0;
-
-	// rebuild metadata for owned boundary particles retained in backend storage
-	{
-		if (!ClassifyRetainedOwnedParticles_Parallel(
-			rebuiltParticleState,
-			retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
-			oldParticles.id,
-			routes_.boundaryIsOuterOwned_ByLocalIdx,
-			N_global,
-			"Invalid owned boundary particle ID.", failMsg))
-		{
-			return false;
-		}
-
-		dstLocalIdx =
-			static_cast<uint32_t>(retainedBoundaryOldLocalIdx_FromNewLocalIdx_.size());
-	}
 
 	// append owned particles migrated from other ranks
 	{
-		// first failure seen by the migrated append pass, reported once it completes
-		std::atomic<const char*> migratedFailMsg{ nullptr };
-
 		for (const auto& rankBuffers : rankBuffers_)
 		{
 			const auto& recvParticles = rankBuffers.recvOwnedParticlesB;
-			const uint32_t N_recvOwned = recvParticles.Size();
-			if (N_recvOwned == 0) { continue; }
-
 			recvParticles.CopyBulkToLocalParticles(appendedParticles, appendLocalIdx);
-
-			// migrated particles occupy one contiguous local index range per peer,
-			// so every particle knows its destination slot up front
-			const uint32_t appendLocalIdxBase = appendLocalIdx;
-			const uint32_t dstLocalIdxBase = dstLocalIdx;
-
-			tbb::parallel_for(
-				tbb::blocked_range<uint32_t>(0, N_recvOwned),
-				[&](const tbb::blocked_range<uint32_t>& range)
-			{
-				for (uint32_t bufferIdx = range.begin(); bufferIdx != range.end(); bufferIdx++)
-				{
-					const uint32_t appendIdx = appendLocalIdxBase + bufferIdx;
-					const uint32_t localIdx = dstLocalIdxBase + bufferIdx;
-					const uint64_t particleId = recvParticles.ParticleIdAt(bufferIdx);
-					if (particleId >= N_global)
-					{
-						migratedFailMsg.store(
-							"Invalid migrated boundary particle ID.",
-							std::memory_order_relaxed);
-						continue;
-					}
-
-					const glm::vec3 position
-					{
-						appendedParticles.xPos[appendIdx],
-						appendedParticles.yPos[appendIdx],
-						appendedParticles.zPos[appendIdx]
-					};
-					rebuiltParticleState.particleClasses[localIdx] =
-						domainDecomp.IsInnerOwnedParticle(rank, position, haloRadius)
-							? DistParticleClass::Inner
-							: DistParticleClass::Outer;
-					rebuiltParticleState.particleLocalIdx_Owned[localIdx] = localIdx;
-				}
-			});
-
-			appendLocalIdx += N_recvOwned;
-			dstLocalIdx += N_recvOwned;
-		}
-
-		if (const char* const migratedFail = migratedFailMsg.load(std::memory_order_relaxed))
-		{
-			if (failMsg) { *failMsg = migratedFail; }
-			return false;
+			appendLocalIdx += recvParticles.Size();
 		}
 
 		// check that no two ranks migrated the same owned boundary particle into this rank
@@ -2788,29 +2356,13 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 			if (failMsg) { *failMsg = "Duplicate migrated boundary particle ID."; }
 			return false;
 		}
-
-		// owned local index range is complete, so its class index lists can be filled
-		BuildOwnedClassIndexLists_Parallel(
-			rebuiltParticleState,
-			ownedClassificationWorkBuffers_,
-			N_owned,
-			scratchBufferExtraAllocCapacityPct_);
 	}
 
 	// append local and received boundary halos
 	{
-		// halos occupy one contiguous local index range, so every particle knows its
-		// destination slot up front and the index list needs no shared append
-		const uint32_t N_localHalo = static_cast<uint32_t>(routes_.localHaloBoundaryLocalIdxs.size());
-		const uint32_t haloDstLocalIdxBase = dstLocalIdx;
+		const uint32_t N_localHalo =
+			static_cast<uint32_t>(routes_.localHaloBoundaryLocalIdxs.size());
 		const uint32_t haloAppendLocalIdxBase = appendLocalIdx;
-		Base::ResizeScratchVector(
-			rebuiltParticleState.particleLocalIdx_Halo,
-			N_halo,
-			scratchBufferExtraAllocCapacityPct_);
-
-		// first failure seen by the halo append passes, reported once they complete
-		std::atomic<const char*> haloFailMsg{ nullptr };
 
 		// append halos created locally from particles migrating away
 		// TODO: use explicit SIMD for particle field gathers similarly to sph_solver.cpp?
@@ -2820,81 +2372,52 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		{
 			for (uint32_t haloIdx = range.begin(); haloIdx != range.end(); haloIdx++)
 			{
-				const uint32_t oldLocalIdx = routes_.localHaloBoundaryLocalIdxs[haloIdx];
-
 				CopyBoundaryParticle(
-					oldParticles, appendedParticles, oldLocalIdx,
+					oldParticles, appendedParticles,
+					routes_.localHaloBoundaryLocalIdxs[haloIdx],
 					haloAppendLocalIdxBase + haloIdx);
-
-				if (!AddHaloParticleMetadata(
-					rebuiltParticleState, N_global,
-					oldParticles.id[oldLocalIdx],
-					haloDstLocalIdxBase + haloIdx,
-					haloIdx))
-				{
-					haloFailMsg.store(
-						"Invalid local boundary halo particle ID.",
-						std::memory_order_relaxed);
-				}
 			}
 		});
+		appendLocalIdx += N_localHalo;
 
 		// append halo particles received from other ranks
-		uint32_t recvHaloIdxBase = N_localHalo;
 		for (const auto& rankBuffers : rankBuffers_)
 		{
 			const auto& recvParticles = rankBuffers.recvHaloParticlesB;
-			const uint32_t N_recvHalo = recvParticles.Size();
-			if (N_recvHalo == 0) { continue; }
-
-			recvParticles.CopyBulkToLocalParticles(
-				appendedParticles,
-				haloAppendLocalIdxBase + recvHaloIdxBase);
-
-			tbb::parallel_for(
-				tbb::blocked_range<uint32_t>(0, N_recvHalo),
-				[&](const tbb::blocked_range<uint32_t>& range)
-			{
-				for (uint32_t bufferIdx = range.begin(); bufferIdx != range.end(); bufferIdx++)
-				{
-					const uint32_t haloIdx = recvHaloIdxBase + bufferIdx;
-
-					if (!AddHaloParticleMetadata(
-						rebuiltParticleState, N_global,
-						recvParticles.ParticleIdAt(bufferIdx),
-						haloDstLocalIdxBase + haloIdx,
-						haloIdx))
-					{
-						haloFailMsg.store(
-							"Invalid received boundary halo particle ID.",
-							std::memory_order_relaxed);
-					}
-				}
-			});
-
-			recvHaloIdxBase += N_recvHalo;
+			recvParticles.CopyBulkToLocalParticles(appendedParticles, appendLocalIdx);
+			appendLocalIdx += recvParticles.Size();
 		}
-
-		if (const char* const haloFail = haloFailMsg.load(std::memory_order_relaxed))
-		{
-			if (failMsg) { *failMsg = haloFail; }
-			return false;
-		}
-
-		appendLocalIdx = haloAppendLocalIdxBase + N_halo;
-		dstLocalIdx = haloDstLocalIdxBase + N_halo;
 	}
 
-	// validate rebuilt boundary metadata
+	// validate rebuilt boundary counts and particle IDs
+	if (appendLocalIdx != N_appended ||
+		retainedBoundaryOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
 	{
-		if (appendLocalIdx != N_appended || dstLocalIdx != N_local ||
-			retainedBoundaryOldLocalIdx_FromNewLocalIdx_.size() != N_retained)
-		{
-			if (failMsg) { *failMsg = "Prepared boundary particle mutation count is inconsistent."; }
-			return false;
-		}
-		return rebuiltParticleState.IsValidLocalParticleLayout(N_local, failMsg);
+		if (failMsg) { *failMsg = "Prepared boundary particle mutation count is inconsistent."; }
+		return false;
 	}
+	if (!ValidatePreparedParticleIds(
+		retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
+		oldParticles.id,
+		appendedParticles.id,
+		N_global,
+		"boundary",
+		failMsg))
+	{
+		return false;
+	}
+
+	// classify the rebuilt owned prefix, where routing already flagged retained outer particles
+	rebuiltParticleState.N_outer = CountPreparedOuterBoundaryParticles(
+		N_owned,
+		retainedBoundaryOldLocalIdx_FromNewLocalIdx_,
+		routes_.boundaryIsOuterOwned_ByLocalIdx,
+		appendedParticles.constView(),
+		domainDecomp,
+		rank,
+		haloRadius);
+
+	return rebuiltParticleState.IsValidLocalParticleLayout(N_local, failMsg);
 }
 
 // prepare retained compaction, appended particles, and matching rigid metadata
@@ -2936,9 +2459,7 @@ bool ParticleRedistributionMgr::PrepareRigidParticleMutation(
 			ParticleCapacityWithExtra(N_appended, scratchBufferExtraAllocCapacityPct_));
 	}
 	appendedParticles.resizeAll(N_appended);
-	PrepareRebuiltParticleState(rebuiltParticleState, N_owned, N_halo, N_local);
-	Base::ResizeScratchVector(
-		rebuiltParticleState.particleLocalIdx_Halo, N_halo, scratchBufferExtraAllocCapacityPct_);
+	rebuiltParticleState = { .N_owned = N_owned, .N_halo = N_halo };
 
 	// migrated owners precede all halos in the append-only block
 	uint32_t appendLocalIdx = 0;
@@ -3005,33 +2526,15 @@ bool ParticleRedistributionMgr::PrepareRigidParticleMutation(
 		migratedParticleIdScratch_[localIdx] = src.id[srcLocalIdx];
 		#endif
 	}
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_local),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t localIdx = range.begin(); localIdx != range.end(); localIdx++)
-		{
-			if (localIdx < N_owned)
-			{
-				const bool retained = localIdx < N_retained;
-				const auto& src = retained ? oldParticles : appendedView;
-				const uint32_t srcLocalIdx = retained
-					? retainedRigidOldLocalIdx_FromNewLocalIdx_[localIdx] : localIdx - N_retained;
-				const bool isInner = domainDecomp.IsInnerOwnedParticle(
-					rank, RigidPositionAtLocalIdx(src, rigidBodies, srcLocalIdx), haloRadius);
-				rebuiltParticleState.particleClasses[localIdx] =
-					isInner ? DistParticleClass::Inner : DistParticleClass::Outer;
-				rebuiltParticleState.particleLocalIdx_Owned[localIdx] = localIdx;
-			}
-			else
-			{
-				rebuiltParticleState.particleClasses[localIdx] = DistParticleClass::Halo;
-				rebuiltParticleState.particleLocalIdx_Halo[localIdx - N_owned] = localIdx;
-			}
-		}
-	});
-	BuildOwnedClassIndexLists_Parallel(
-		rebuiltParticleState, ownedClassificationWorkBuffers_, N_owned, scratchBufferExtraAllocCapacityPct_);
+	rebuiltParticleState.N_outer = CountPreparedOuterRigidParticles(
+		N_owned,
+		retainedRigidOldLocalIdx_FromNewLocalIdx_,
+		oldParticles,
+		appendedView,
+		rigidBodies,
+		domainDecomp,
+		rank,
+		haloRadius);
 	#if defined(_DEBUG)
 	return rebuiltParticleState.IsValidLocalParticleState(migratedParticleIdScratch_, N_global, failMsg);
 	#else
@@ -3110,6 +2613,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	DistParticleState& particleStateF,
 	DistParticleState& particleStateB,
 	DistParticleState& particleStateR,
+	std::vector<uint32_t>& outerLocalIdxsF,
 	const Sync::RigidBodies& rigidBodies,
 	const IDomainDecomp& domainDecomp,
 	const MpiContext& mpiContext,
@@ -3227,6 +2731,11 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 			appendedParticlesF_,
 			appendedParticlesB_,
 			appendedParticlesR_,
+			rebuiltParticleStateF_.N_owned,
+			redistributeParticlesB
+				? rebuiltParticleStateB_.N_owned
+				: particleStateB.N_owned,
+			rebuiltParticleStateR_.N_owned,
 			redistributeParticlesB,
 			simParams);
 		if (!localOk && failMsg)
@@ -3243,6 +2752,7 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 
 	// publish matching metadata only after every backend mutation succeeded
 	std::swap(particleStateF, rebuiltParticleStateF_);
+	std::swap(outerLocalIdxsF, rebuiltOuterLocalIdxsF_);
 	if (redistributeParticlesB)
 	{
 		std::swap(particleStateB, rebuiltParticleStateB_);

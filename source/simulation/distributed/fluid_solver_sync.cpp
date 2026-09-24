@@ -248,6 +248,7 @@ void FluidSolverSyncMgr::ClearParticlePlan(ParticlePlan& particlePlan)
 bool FluidSolverSyncMgr::Rebuild(
 	const Sync::FluidConstView& particlesF,
 	const DistParticleState& particleStateF,
+	const std::span<const uint32_t> outerLocalIdxsF,
 	const IDomainDecomp& domainDecomp,
 	const float singleHaloRadius,
 	const Base::DistHaloMode distHaloMode,
@@ -291,6 +292,11 @@ bool FluidSolverSyncMgr::Rebuild(
 		particlesF.id, N_expectedGlobalF, &localFailMsg))
 	{
 		localOk = false;
+	}
+	if (localOk && outerLocalIdxsF.size() != particleStateF.N_outer)
+	{
+		localOk = SetFailure(localFailMsg,
+			"Outer fluid particle list does not match the outer particle count.");
 	}
 
 	// validate the domain-decomposition neighbors used by the solver plan
@@ -343,10 +349,9 @@ bool FluidSolverSyncMgr::Rebuild(
 			.ExtendedAtGlobalBounds(domainDecomp.GlobalExtentAABB()).Expanded(singleHaloRadius);
 	const uint32_t N_peerPlans = static_cast<uint32_t>(newPeerPlans.size());
 	const uint32_t N_buckets = N_peerPlans * N_HALO_EXTENTS;
-	const uint32_t N_outer = static_cast<uint32_t>(
-		particleStateF.particleLocalIdx_Outer.size());
-	const uint32_t N_halo = static_cast<uint32_t>(
-		particleStateF.particleLocalIdx_Halo.size());
+	const uint32_t N_outer = static_cast<uint32_t>(outerLocalIdxsF.size());
+	const uint32_t N_owned = particleStateF.N_owned;
+	const uint32_t N_halo = particleStateF.N_halo;
 	const uint32_t N_sendChunks = N_outer > 0
 		? 1 + (N_outer - 1) / FLUID_SOLVER_SYNC_PLAN_CHUNK_SIZE
 		: 0;
@@ -425,8 +430,7 @@ bool FluidSolverSyncMgr::Rebuild(
 					 outerIdx != endOuterIdx;
 					 outerIdx++)
 				{
-					const uint32_t localIdx =
-						particleStateF.particleLocalIdx_Outer[outerIdx];
+					const uint32_t localIdx = outerLocalIdxsF[outerIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
 						particlesF.yPos[localIdx],
@@ -497,8 +501,7 @@ bool FluidSolverSyncMgr::Rebuild(
 					 outerIdx != endOuterIdx;
 					 outerIdx++)
 				{
-					const uint32_t localIdx =
-						particleStateF.particleLocalIdx_Outer[outerIdx];
+					const uint32_t localIdx = outerLocalIdxsF[outerIdx];
 					const uint64_t particleId = particlesF.id[localIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
@@ -557,8 +560,7 @@ bool FluidSolverSyncMgr::Rebuild(
 					 haloIdx != endHaloIdx;
 					 haloIdx++)
 				{
-					const uint32_t localIdx =
-						particleStateF.particleLocalIdx_Halo[haloIdx];
+					const uint32_t localIdx = N_owned + haloIdx;
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],
 						particlesF.yPos[localIdx],
@@ -652,8 +654,7 @@ bool FluidSolverSyncMgr::Rebuild(
 						planBuildWorkBuffers.recvPeerIdx_ByHaloIdx[haloIdx];
 					if (peerIdx < 0) { continue; }
 
-					const uint32_t localIdx =
-						particleStateF.particleLocalIdx_Halo[haloIdx];
+					const uint32_t localIdx = N_owned + haloIdx;
 					const uint64_t particleId = particlesF.id[localIdx];
 					const glm::vec3 position{
 						particlesF.xPos[localIdx],

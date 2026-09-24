@@ -41,16 +41,8 @@ namespace
 				"Cannot build a slab AABB repartition profile from an invalid global extent.");
 		}
 
-		for (const uint32_t localIdx : particles.ownedLocalIdx)
+		for (const float splitCoordinate : splitCoordinates)
 		{
-			if (localIdx >= splitCoordinates.size())
-			{
-				throw std::runtime_error(
-					std::string("Cannot build a slab AABB repartition profile with an invalid ") +
-					particleType + " particle index.");
-			}
-
-			const float splitCoordinate = splitCoordinates[localIdx];
 			if (!std::isfinite(splitCoordinate))
 			{
 				throw std::runtime_error(

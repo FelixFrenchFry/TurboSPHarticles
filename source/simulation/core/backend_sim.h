@@ -157,6 +157,9 @@ namespace Sim
 			const Sync::FluidParticles& appendedParticlesF,
 			const Sync::BoundaryParticles& appendedParticlesB,
 			const Sync::RigidParticles& appendedParticlesR,
+			uint32_t N_ownedF,
+			uint32_t N_ownedB,
+			uint32_t N_ownedR,
 			bool redistributeParticlesB,
 			const SimParams& params) = 0;
 
@@ -234,43 +237,27 @@ namespace Sim
 		// executes only the neighbor search (construction and query of the data NS structure)
 		virtual void ExecuteNeighborSearch(const SimParams& params, bool bench = false) = 0;
 
-		// provides views onto the latest local re-order permutation, if neighbor search exposes it
-		// (non-owning, valid until the next re-order or construction)
-		virtual bool TryGetLastParticleReOrder(
-			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
-		{
-			(void)oldFluidLocalIdx_FromNewLocalIdx;
-			(void)oldBoundaryLocalIdx_FromNewLocalIdx;
-			return false;
-		}
-
-		// configures the compact ownership boundary before any distributed backend re-order
+		// configures the compact [ owned ][ halo ] layout of pulled particles before any distributed re-order
 		virtual bool ConfigureDistributedParticleLayout(
-			uint32_t N_ownedFluidParticles,
-			uint32_t N_ownedBoundaryParticles)
+			uint32_t N_ownedF,
+			uint32_t N_ownedB,
+			uint32_t N_ownedR)
 		{
-			(void)N_ownedFluidParticles;
-			(void)N_ownedBoundaryParticles;
+			(void)N_ownedF;
+			(void)N_ownedB;
+			(void)N_ownedR;
 			return false;
 		}
 
 		// configures rank-authoritative particle work for distributed execution
+		// (the owned fluid prefix always computes pressure acceleration, the halo list adds to it)
 		virtual bool ConfigureDistributedStep(
-			const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
-			const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
-			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
-			bool pressureAccIsOwnedPrefix,
-			uint32_t N_ownedBoundaryParticles,
-			uint32_t N_ownedR,
+			const std::vector<uint32_t>& outerLocalIdxsF,
+			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync)
 		{
-			(void)ownedFluidParticleLocalIdxs;
-			(void)outerFluidParticleLocalIdxs;
-			(void)pressureAccelerationFluidParticleLocalIdxs;
-			(void)pressureAccIsOwnedPrefix;
-			(void)N_ownedBoundaryParticles;
-			(void)N_ownedR;
+			(void)outerLocalIdxsF;
+			(void)pressureAccHaloLocalIdxsF;
 			(void)distributedFluidSolverSync;
 			return false;
 		}

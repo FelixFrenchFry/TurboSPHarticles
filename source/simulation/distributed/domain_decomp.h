@@ -23,13 +23,12 @@ namespace Dist
 		int N_ranks = 1;
 	};
 
-	// local positions and ownership indices used to build repartition profiles
+	// positions of the owned particles used to build repartition profiles
 	struct DomainDecompParticlePositionView
 	{
 		std::span<const float> x;
 		std::span<const float> y;
 		std::span<const float> z;
-		std::span<const uint32_t> ownedLocalIdx;
 	};
 
 	struct DomainDecompRepartitionParticleInput

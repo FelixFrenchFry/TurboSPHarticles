@@ -559,7 +559,6 @@ namespace
 		return op == Bench::BenchOp::Dist_ParticleRedistribution ||
 			op == Bench::BenchOp::Dist_PlanRebuild ||
 			op == Bench::BenchOp::Dist_HaloFieldExchange ||
-			op == Bench::BenchOp::Dist_ParticlePermutation ||
 			op == Bench::BenchOp::Dist_LoadBalancing ||
 			op == Bench::BenchOp::Dist_Misc;
 	}
@@ -725,7 +724,6 @@ namespace
 		uint64_t redistributionAvgNs = 0;
 		uint64_t planRebuildAvgNs = 0;
 		uint64_t haloFieldExchangeAvgNs = 0;
-		uint64_t particlePermutationAvgNs = 0;
 		uint64_t loadBalancingAvgNs = 0;
 		uint64_t miscAvgNs = 0;
 	};
@@ -752,8 +750,6 @@ namespace
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_PlanRebuild, true);
 			summary.haloFieldExchangeAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_HaloFieldExchange, true);
-			summary.particlePermutationAvgNs =
-				BenchOpTimeNs(report, Bench::BenchOp::Dist_ParticlePermutation, true);
 			summary.loadBalancingAvgNs =
 				BenchOpTimeNs(report, Bench::BenchOp::Dist_LoadBalancing, true);
 			summary.miscAvgNs =
@@ -985,8 +981,8 @@ namespace
 		std::snprintf(unitLabel, sizeof(unitLabel), "avg [%s]", Bench::UnitLabel(unit));
 
 		PrintLine(N_lines,
-			"%-2s | %8s | %8s | %8s | %8s | %8s | %8s | %9s",
-			"r", "redist", "plan", "halo", "perm", "load", "misc", "");
+			"%-2s | %8s | %8s | %8s | %8s | %8s | %9s",
+			"r", "redist", "plan", "halo", "load", "misc", "");
 		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
 
 		for (const DistRankTimingSummary& summary : summaries)
@@ -995,14 +991,13 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9s",
+				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9s",
 				rankLabel,
 				Bench::ConvertFromNs(
 					unit,
 					summary.redistributionAvgNs),
 				Bench::ConvertFromNs(unit, summary.planRebuildAvgNs),
 				Bench::ConvertFromNs(unit, summary.haloFieldExchangeAvgNs),
-				Bench::ConvertFromNs(unit, summary.particlePermutationAvgNs),
 				Bench::ConvertFromNs(unit, summary.loadBalancingAvgNs),
 				Bench::ConvertFromNs(unit, summary.miscAvgNs),
 				unitLabel);

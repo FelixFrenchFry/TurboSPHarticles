@@ -48,9 +48,8 @@ namespace Bench
 
 		// distributed simulation
 		Dist_ParticleRedistribution,        // particle migration, halo exchange, and rebuild of rank-local particle state
-		Dist_PlanRebuild,                   // construction of the sync plan for the solver steps and backend reconfiguration
+		Dist_PlanRebuild,                   // selection of solver work, construction of the sync plan, and backend reconfiguration
 		Dist_HaloFieldExchange,             // field values of halo particles repeatedly exchanged during the solver steps
-		Dist_ParticlePermutation,           // rank-local index lists and the index remap onto the backend permutation of particles
 		Dist_LoadBalancing,                 // evaluation of rank loads, load balancing policy, and optional domain repartitioning
 		Dist_Misc,                          // sim step barriers, metadata validation, and rigid body sync, etc...
 		Dist_RankBackendStep,               // rank-local backend step time used only for load balancing (OVERLAPS WITH THE OTHERS)
@@ -175,12 +174,6 @@ namespace Bench
 				.op = BenchOp::Dist_HaloFieldExchange,
 				.name = "dist halo field exchange",
 				.alias = "distHaloFieldExchange",
-				.unit = "ns"
-			},
-			{
-				.op = BenchOp::Dist_ParticlePermutation,
-				.name = "dist particle permutation",
-				.alias = "distParticlePermutation",
 				.unit = "ns"
 			},
 			{

@@ -10,6 +10,7 @@
 #include <limits>
 #include <span>
 #include <spdlog/spdlog.h>
+#include <string>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/parallel_scan.h>
@@ -1930,6 +1931,11 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 	const uint32_t N_B = be_.N_B_;
 	const uint32_t N_ownedF = be_.useDistributedParticleLayout_ ? be_.N_ownedF_ : N_F;
 	const uint32_t N_ownedB = be_.useDistributedParticleLayout_ ? be_.N_ownedB_ : N_B;
+	if (N_ownedF > N_F || N_ownedB > N_B)
+	{
+		throw std::runtime_error(
+			"CPU particle re-order split exceeds the local particle count.");
+	}
 	if (N_F == 0 && N_B == 0)
 	{
 		cellIdsMatchCurrentParticleOrder_ = false;
@@ -2078,6 +2084,40 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 			ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
 		}
 	}
+
+	#if defined(_DEBUG)
+	// exhaustively validate that distributed permutations are complete and keep the [ owned ][ halo ] layout
+	// TODO: parallelize with TBB?
+	const auto validateParticleOrder = [](
+		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+		const uint32_t N_owned,
+		const char* particleType)
+	{
+		const uint32_t N_local = static_cast<uint32_t>(oldLocalIdx_FromNewLocalIdx.size());
+		std::vector<uint8_t> oldLocalIdxUsed(N_local, 0);
+		for (uint32_t newLocalIdx = 0; newLocalIdx != N_local; newLocalIdx++)
+		{
+			const uint32_t oldLocalIdx = oldLocalIdx_FromNewLocalIdx[newLocalIdx];
+			if (oldLocalIdx >= N_local || oldLocalIdxUsed[oldLocalIdx] != 0)
+			{
+				throw std::runtime_error(
+					std::string("Invalid CPU ") + particleType + " particle re-order index.");
+			}
+			if ((newLocalIdx < N_owned) != (oldLocalIdx < N_owned))
+			{
+				throw std::runtime_error(
+					std::string("CPU ") + particleType + " particle re-order crosses the owned/halo boundary.");
+			}
+
+			oldLocalIdxUsed[oldLocalIdx] = 1;
+		}
+	};
+	if (be_.useDistributedParticleLayout_)
+	{
+		validateParticleOrder(particleOrderF_, N_ownedF, "fluid");
+		validateParticleOrder(particleOrderB_, N_ownedB, "boundary");
+	}
+	#endif
 
 	cellIdsMatchCurrentParticleOrder_ = true;
 }

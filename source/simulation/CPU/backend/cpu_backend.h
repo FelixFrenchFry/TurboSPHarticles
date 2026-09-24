@@ -72,6 +72,9 @@ namespace Sim
 			const Sync::FluidParticles& appendedParticlesF,
 			const Sync::BoundaryParticles& appendedParticlesB,
 			const Sync::RigidParticles& appendedParticlesR,
+			uint32_t N_ownedF,
+			uint32_t N_ownedB,
+			uint32_t N_ownedR,
 			bool redistributeParticlesB,
 			const SimParams& params) override;
 
@@ -81,21 +84,20 @@ namespace Sim
 		// executes only the neighbor search (construction and query of the data NS structure)
 		void ExecuteNeighborSearch(const SimParams& params, bool bench = false) override;
 
+		// provides views onto the latest local re-order permutation, if neighbor search exposes it
+		// (valid until the next re-order or construction)
 		bool TryGetLastParticleReOrder(
 			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const;
 		bool ConfigureDistributedParticleLayout(
-			uint32_t N_ownedFluidParticles,
-			uint32_t N_ownedBoundaryParticles) override;
+			uint32_t N_ownedF,
+			uint32_t N_ownedB,
+			uint32_t N_ownedR) override;
 
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
-			const std::vector<uint32_t>& ownedFluidParticleLocalIdxs,
-			const std::vector<uint32_t>& outerFluidParticleLocalIdxs,
-			const std::vector<uint32_t>& pressureAccelerationFluidParticleLocalIdxs,
-			bool pressureAccIsOwnedPrefix,
-			uint32_t N_ownedBoundaryParticles,
-			uint32_t N_ownedR,
+			const std::vector<uint32_t>& outerLocalIdxsF,
+			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
 		// classifies local fluid particles against the export near-surface threshold
@@ -256,12 +258,11 @@ namespace Sim
 		// flags for particle filtering in distributed execution
 		// TODO: rework this?
 		std::vector<uint32_t> outerFluidParticleLocalIdxs_;
-		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_;
+		std::vector<uint32_t> pressureAccHaloLocalIdxsF_; // halo part of the pressure-acceleration work
 		std::vector<uint8_t> pressureAccFluidParticleFlags_;
 		std::vector<uint32_t> pressureAccChunkIdxs_;
 		std::vector<uint32_t> innerFluidChunkIdxs_;
 		std::vector<uint32_t> outerFluidChunkIdxs_;
-		bool pressureAccIsOwnedPrefix_ = false;
 		bool useDistributedParticleLayout_ = false;
 		// inverted particle re-order, kept between steps and handed to the solver sync
 		std::vector<uint32_t> newFluidLocalIdx_FromOldLocalIdx_;

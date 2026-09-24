@@ -187,9 +187,6 @@ namespace Dist
 		// validates particle identity metadata without comparing changed solver payload
 		bool ValidateRankLocalParticleMetadata() const;
 
-		// keeps particle identity metadata in sync with backend data ordering
-		bool ApplyLastBackendParticleReOrder();
-
 		// reads raw params config text, parsing happens after broadcast
 		static bool TryReadProfileJson(const std::string& profile, std::string& jsonText);
 
@@ -226,13 +223,14 @@ namespace Dist
 		DistParticleState particleStateF_{};
 		DistParticleState particleStateB_{};
 		DistParticleState particleStateR_{};
-		ParticleReOrderWorkBuffers fluidParticleReOrderWorkBuffers_{};
-		ParticleReOrderWorkBuffers boundaryParticleReOrderWorkBuffers_{};
 		ParticleRedistributionMgr particleRedistributionMgr_{};
 		bool boundaryRedistributionRequired_ = true;
 		FluidSolverSyncMgr fluidSolverSyncMgr_{};
 		LoadBalanceMgr loadBalanceMgr_{};
-		std::vector<uint32_t> pressureAccFluidParticleLocalIdxs_{};
+
+		// distributed step preparation, indexing the local layout until the backend step re-orders it
+		std::vector<uint32_t> outerLocalIdxsF_{};
+		std::vector<uint32_t> pressureAccHaloLocalIdxsF_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
 		RigidBodySyncBuffers rigidBodySyncBuffers_{};
 

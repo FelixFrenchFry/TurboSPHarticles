@@ -22,7 +22,6 @@ namespace Trace
 		Dist_FluidSyncPlanRebuild,
 		Dist_BackendConfiguration,
 		Dist_RankBackendStep,
-		Dist_ParticlePermutation,
 		Dist_RigidBodySynchronization,
 		Dist_RigidForceReduction,
 		Dist_RigidForceIntegration,
@@ -103,11 +102,6 @@ namespace Trace
 				.stage = TraceStage::Dist_RankBackendStep,
 				.name = "distributed rank backend step",
 				.alias = "dist_rank_backend_step"
-			},
-			{
-				.stage = TraceStage::Dist_ParticlePermutation,
-				.name = "distributed particle permutation",
-				.alias = "dist_particle_permutation"
 			},
 			{
 				.stage = TraceStage::Dist_RigidBodySynchronization,

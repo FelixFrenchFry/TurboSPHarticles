@@ -12,7 +12,6 @@
 #include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
-#include <numeric>
 #include <optional>
 #include <span>
 #include <spdlog/spdlog.h>
@@ -50,12 +49,12 @@ namespace
 	{
 		uint64_t checksum = 0;
 
-		for (const uint32_t localIdx : particleState.particleLocalIdx_Owned)
+		// owned particles occupy the compact local prefix
+		const uint64_t N_owned = std::min<uint64_t>(particleState.N_owned, particleIds.size());
+		for (const uint64_t particleId : particleIds.first(N_owned))
 		{
-			if (localIdx >= particleIds.size()) { continue; }
-
 			// using SplitMix64-style mix
-			uint64_t x = particleIds[localIdx] + 0x9E3779B97F4A7C15ull;
+			uint64_t x = particleId + 0x9E3779B97F4A7C15ull;
 			x ^= x >> 30;
 			x *= 0xBF58476D1CE4E5B9ull;
 			x ^= x >> 27;
@@ -530,7 +529,6 @@ void DistSimulationMgr::CreateSimBackend(const Base::BackendType backendType)
 		Bench::BenchOp::Dist_ParticleRedistribution,
 		Bench::BenchOp::Dist_PlanRebuild,
 		Bench::BenchOp::Dist_HaloFieldExchange,
-		Bench::BenchOp::Dist_ParticlePermutation,
 		Bench::BenchOp::Dist_LoadBalancing,
 		Bench::BenchOp::Dist_Misc
 	};
@@ -1200,9 +1198,6 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
 	Sync::UniversalSimState probeState{};
-	std::vector<uint32_t> probeFluidLocalIdxs{};
-	std::vector<uint32_t> probeBoundaryLocalIdxs{};
-	std::vector<uint32_t> probeRigidLocalIdxs{};
 	std::vector<float> probeXPosR{};
 	std::vector<float> probeYPosR{};
 	std::vector<float> probeZPosR{};
@@ -1216,15 +1211,8 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 			simScenario_->Build(probeState, probeParams);
 			scenarioMgr_.FinalizeGeneratedParticleCounts(probeState);
 
-			probeFluidLocalIdxs.resize(probeState.particlesF.xPos.size());
-			std::iota(probeFluidLocalIdxs.begin(), probeFluidLocalIdxs.end(), 0u);
-			probeBoundaryLocalIdxs.resize(probeState.particlesB.xPos.size());
-			std::iota(probeBoundaryLocalIdxs.begin(), probeBoundaryLocalIdxs.end(), 0u);
-
 			const auto& R = probeState.particlesR;
 			const auto& RB = probeState.rigidBodies;
-			probeRigidLocalIdxs.resize(R.N_);
-			std::iota(probeRigidLocalIdxs.begin(), probeRigidLocalIdxs.end(), 0u);
 			probeXPosR.resize(R.N_);
 			probeYPosR.resize(R.N_);
 			probeZPosR.resize(R.N_);
@@ -1265,15 +1253,12 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 			profileInput.fluid.x = probeState.particlesF.xPos;
 			profileInput.fluid.y = probeState.particlesF.yPos;
 			profileInput.fluid.z = probeState.particlesF.zPos;
-			profileInput.fluid.ownedLocalIdx = probeFluidLocalIdxs;
 			profileInput.boundary.x = probeState.particlesB.xPos;
 			profileInput.boundary.y = probeState.particlesB.yPos;
 			profileInput.boundary.z = probeState.particlesB.zPos;
-			profileInput.boundary.ownedLocalIdx = probeBoundaryLocalIdxs;
 			profileInput.rigid.x = probeXPosR;
 			profileInput.rigid.y = probeYPosR;
 			profileInput.rigid.z = probeZPosR;
-			profileInput.rigid.ownedLocalIdx = probeRigidLocalIdxs;
 		}
 
 		domainDecomp_->BuildRepartitionProfile(profileInput, profile);
@@ -1408,7 +1393,8 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 	}
 
 	// reset rank-local work buffers
-	pressureAccFluidParticleLocalIdxs_.clear();
+	outerLocalIdxsF_.clear();
+	pressureAccHaloLocalIdxsF_.clear();
 	rigidBodyForceTorque_ = {};
 
 	// keep owned particles first, then append halo particles
@@ -1419,8 +1405,7 @@ bool DistSimulationMgr::BuildRankLocalSimState()
 		particleStateR_,
 		std::move(globalSimState_),
 		*domainDecomp_,
-		mpiContext_.Rank(),
-		simParams_.distHaloRadius);
+		mpiContext_.Rank());
 
 	localSimState_.ShrinkToFitAll();
 
@@ -1573,8 +1558,7 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts(const bool useBackendS
 			std::optional<OwnedParticleConflict> conflict{};
 			std::string diagnosticFailure{};
 			if (!FindFirstOwnedParticleConflict(
-				particleIds,
-				particleState.particleLocalIdx_Owned,
+				particleIds.first(std::min<uint64_t>(particleState.N_owned, particleIds.size())),
 				N_global,
 				mpiContext_,
 				conflict,
@@ -1670,6 +1654,18 @@ bool DistSimulationMgr::InitializeSimBackendFromState()
 					mpiContext_.Rank(), mpiContext_.Size());
 				localOk = false;
 			}
+
+			// configure compact [ owned ][ halo ] layout before any backend re-order
+			if (localOk && !simBackend_->ConfigureDistributedParticleLayout(
+				particleStateF_.N_owned,
+				particleStateB_.N_owned,
+				particleStateR_.N_owned))
+			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Failed to configure rank-local backend particle layout.",
+					mpiContext_.Rank(), mpiContext_.Size());
+				localOk = false;
+			}
 		}
 	}
 	catch (const std::exception& ex)
@@ -1696,24 +1692,19 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 		}
 		else
 		{
-			// configure compact [ owned ][ halo ] layout before the startup neighbor search
-			const bool configured = simBackend_->ConfigureDistributedParticleLayout(
-				particleStateF_.N_owned,
-				particleStateB_.N_owned);
-			if (!configured)
-			{
-				SPDLOG_ERROR(
-					"[rank {}/{}] Failed to configure rank-local backend startup check.",
-					mpiContext_.Rank(), mpiContext_.Size());
-				localOk = false;
-			}
-
 			// first backend smoke test on compact [ owned ][ halo ] layout
-			if (localOk)
-			{
-				simBackend_->ExecuteNeighborSearch(simParams_);
-				if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
-			}
+			simBackend_->ExecuteNeighborSearch(simParams_);
+
+			// classify the re-ordered owned particles for the startup synchronization plan
+			ClassifyOwnedFluidParticlesIntoInnerOuter(
+				particleStateF_, distParticleBackend_->GetFluidParticleView(), *domainDecomp_,
+				mpiContext_.Rank(), simParams_.distHaloRadius, &outerLocalIdxsF_);
+			ClassifyOwnedBoundaryParticlesIntoInnerOuter(
+				particleStateB_, distParticleBackend_->GetBoundaryParticleView(), *domainDecomp_,
+				mpiContext_.Rank(), simParams_.distHaloRadius);
+			ClassifyOwnedRigidParticlesIntoInnerOuter(
+				particleStateR_, distParticleBackend_->GetRigidParticleView(), localSimState_.rigidBodies,
+				*domainDecomp_, mpiContext_.Rank(), simParams_.distHaloRadius);
 
 			Sync::UniversalSimState backendSimState{};
 			simBackend_->PushToUniversalSimState(backendSimState, false);
@@ -1749,6 +1740,7 @@ bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
 		if (!fluidSolverSyncMgr_.Rebuild(
 			distParticleBackend_->GetFluidParticleView(),
 			particleStateF_,
+			outerLocalIdxsF_,
 			*domainDecomp_,
 			simParams_.kernelRadius,
 			simParams_.distHaloMode,
@@ -1973,49 +1965,26 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 		localOk = false;
 	}
 
-	if (localOk)
+	if (localOk && !particleStateF_.IsValidLocalParticleLayout(particlesF.N_))
 	{
-		for (const uint32_t localIdx : particleStateF_.particleLocalIdx_Owned)
-		{
-			if (localIdx >= particlesF.N_ ||
-				localIdx >= particlesF.id.size() ||
-				!particleStateF_.HasMetadataAtLocalIdx(localIdx))
-			{
-				SPDLOG_ERROR(
-					"[rank {}/{}] Invalid owned fluid particle metadata "
-					"during distributed surface export.",
-					mpiContext_.Rank(), mpiContext_.Size());
-				localOk = false;
-				break;
-			}
-
-			const uint64_t particleId = particlesF.id[localIdx];
-			if (particleId >= N_expectedGlobalF_)
-			{
-				SPDLOG_ERROR(
-					"[rank {}/{}] Invalid owned fluid particle ID "
-					"during distributed surface export (localIdx={}, particleId={}).",
-					mpiContext_.Rank(), mpiContext_.Size(), localIdx, particleId);
-				localOk = false;
-				break;
-			}
-		}
+		SPDLOG_ERROR(
+			"[rank {}/{}] Invalid fluid particle layout "
+			"during distributed surface export.",
+			mpiContext_.Rank(), mpiContext_.Size());
+		localOk = false;
 	}
 
 	if (localOk)
 	{
 		for (uint32_t localIdx = 0; localIdx < particlesF.N_; localIdx++)
 		{
-			if (!particleStateF_.HasMetadataAtLocalIdx(localIdx) ||
-				localIdx >= particlesF.id.size())
+			if (localIdx >= particlesF.id.size() ||
+				particlesF.id[localIdx] >= N_expectedGlobalF_)
 			{
-				localOk = false;
-				break;
-			}
-
-			const uint64_t particleId = particlesF.id[localIdx];
-			if (particleId >= N_expectedGlobalF_)
-			{
+				SPDLOG_ERROR(
+					"[rank {}/{}] Invalid fluid particle ID "
+					"during distributed surface export (localIdx={}).",
+					mpiContext_.Rank(), mpiContext_.Size(), localIdx);
 				localOk = false;
 				break;
 			}
@@ -2136,12 +2105,8 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 		GetParticleMemoryUsage(globalSimState_));
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_LocalState,
 		GetParticleMemoryUsage(localSimState_));
-
-	Mem::MemUsage particleMetadataUsage{};
-	Mem::Add(particleMetadataUsage, GetParticleMemoryUsage(particleStateF_));
-	Mem::Add(particleMetadataUsage, GetParticleMemoryUsage(particleStateB_));
-	Mem::Add(particleMetadataUsage, GetParticleMemoryUsage(particleStateR_));
-	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_ParticleMetadata, particleMetadataUsage);
+	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_ParticleMetadata,
+		Mem::MemUsageOf_Vector(outerLocalIdxsF_));
 
 	Mem::MemUsage exchangeBufferUsage{};
 	Mem::Add(exchangeBufferUsage, particleRedistributionMgr_.GetExchangeBufferMemoryUsage());
@@ -2152,9 +2117,7 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, particleRedistributionMgr_.GetScratchMemoryUsage());
 	Mem::Add(miscUsage, fluidSolverSyncMgr_.GetPlanMemoryUsage());
 	Mem::Add(miscUsage, loadBalanceMgr_.GetScratchMemoryUsage());
-	Mem::Add(miscUsage, GetParticleMemoryUsage(fluidParticleReOrderWorkBuffers_));
-	Mem::Add(miscUsage, GetParticleMemoryUsage(boundaryParticleReOrderWorkBuffers_));
-	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(pressureAccFluidParticleLocalIdxs_));
+	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(pressureAccHaloLocalIdxsF_));
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodyForceTorque(rigidBodyForceTorque_));
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodySyncBuffers(rigidBodySyncBuffers_));
 	Mem::Add(miscUsage, MemoryUsageOfStatisticsPartial(statisticsPartialScratch_));
@@ -2225,16 +2188,16 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 	report.maxSteps = params.maxSteps;
 
 	report.N_ownedF = particleStateF_.N_owned;
-	report.N_innerF = static_cast<uint32_t>(particleStateF_.particleLocalIdx_Inner.size());
-	report.N_outerF = static_cast<uint32_t>(particleStateF_.particleLocalIdx_Outer.size());
+	report.N_innerF = particleStateF_.N_owned - particleStateF_.N_outer;
+	report.N_outerF = particleStateF_.N_outer;
 	report.N_haloF = particleStateF_.N_halo;
 	report.N_ownedB = particleStateB_.N_owned;
-	report.N_innerB = static_cast<uint32_t>(particleStateB_.particleLocalIdx_Inner.size());
-	report.N_outerB = static_cast<uint32_t>(particleStateB_.particleLocalIdx_Outer.size());
+	report.N_innerB = particleStateB_.N_owned - particleStateB_.N_outer;
+	report.N_outerB = particleStateB_.N_outer;
 	report.N_haloB = particleStateB_.N_halo;
 	report.N_ownedR = particleStateR_.N_owned;
-	report.N_innerR = static_cast<uint32_t>(particleStateR_.particleLocalIdx_Inner.size());
-	report.N_outerR = static_cast<uint32_t>(particleStateR_.particleLocalIdx_Outer.size());
+	report.N_innerR = particleStateR_.N_owned - particleStateR_.N_outer;
+	report.N_outerR = particleStateR_.N_outer;
 	report.N_haloR = particleStateR_.N_halo;
 
 	const ParticleRedistributionStats& redistributionStats =
@@ -2383,24 +2346,21 @@ bool DistSimulationMgr::UpdateLoadBalancing()
 		.rank = mpiContext_.Rank(),
 		.fluid =
 		{
-			.x = particlesF.xPos,
-			.y = particlesF.yPos,
-			.z = particlesF.zPos,
-			.ownedLocalIdx = particleStateF_.particleLocalIdx_Owned
+			.x = particlesF.xPos.first(particleStateF_.N_owned),
+			.y = particlesF.yPos.first(particleStateF_.N_owned),
+			.z = particlesF.zPos.first(particleStateF_.N_owned)
 		},
 		.boundary =
 		{
-			.x = particlesB.xPos,
-			.y = particlesB.yPos,
-			.z = particlesB.zPos,
-			.ownedLocalIdx = particleStateB_.particleLocalIdx_Owned
+			.x = particlesB.xPos.first(particleStateB_.N_owned),
+			.y = particlesB.yPos.first(particleStateB_.N_owned),
+			.z = particlesB.zPos.first(particleStateB_.N_owned)
 		},
 		.rigid =
 		{
-			.x = particlesR.xPos,
-			.y = particlesR.yPos,
-			.z = particlesR.zPos,
-			.ownedLocalIdx = particleStateR_.particleLocalIdx_Owned
+			.x = particlesR.xPos.first(particleStateR_.N_owned),
+			.y = particlesR.yPos.first(particleStateR_.N_owned),
+			.z = particlesR.zPos.first(particleStateR_.N_owned)
 		}
 	};
 
@@ -2500,33 +2460,6 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_RankBackendStep);
 		MarkTrace(Trace::TraceStage::Dist_RankBackendStepComplete);
 
-		MarkTrace(Trace::TraceStage::Dist_ParticlePermutation);
-		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticlePermutation);
-		try
-		{
-			// skip solver step if no fluid particles to avoid neighbor search particle re-order
-			if (simBackend_->GetNumFluidParticles() > 0)
-			{
-				if (!ApplyLastBackendParticleReOrder()) { localOk = false; }
-			}
-		}
-		catch (const std::exception& ex)
-		{
-			mpiContext_.Abort(
-				"Failed to apply backend particle re-order: " + std::string(ex.what()));
-		}
-		catch (...)
-		{
-			mpiContext_.Abort(
-				"Failed to apply backend particle re-order: unknown error.");
-		}
-		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
-
-		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
-		const bool reOrderOk = mpiContext_.AllTrue(localOk);
-		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
-		if (!reOrderOk) { return false; }
-
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
 		const bool finishOk = FinishRankLocalBackendStep(params);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
@@ -2580,6 +2513,7 @@ bool DistSimulationMgr::RedistributeRankLocalParticles(
 			particleStateF_,
 			particleStateB_,
 			particleStateR_,
+			outerLocalIdxsF_,
 			localSimState_.rigidBodies,
 			*domainDecomp_,
 			mpiContext_,
@@ -2649,24 +2583,15 @@ bool DistSimulationMgr::MaterializeRankLocalState(const bool backendWillBeRetire
 
 bool DistSimulationMgr::PrepareRankLocalBackendStep()
 {
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_ParticlePermutation);
+	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 
 	bool localOk = true;
-	const bool computeFirstHaloLayerPressureAcc =
-		simParams_.distHaloMode == Base::DistHaloMode::DoubleHalo;
-	if (computeFirstHaloLayerPressureAcc)
-	{
-		// upper bound for the owned indices plus the appended first halo layer
-		pressureAccFluidParticleLocalIdxs_.reserve(
-			particleStateF_.N_owned + particleStateF_.N_halo);
-	}
-	pressureAccFluidParticleLocalIdxs_ =
-		particleStateF_.particleLocalIdx_Owned;
+	pressureAccHaloLocalIdxsF_.clear();
 
 	try
 	{
 		// computes pressure acceleration for the first halo layer locally
-		if (computeFirstHaloLayerPressureAcc)
+		if (simParams_.distHaloMode == Base::DistHaloMode::DoubleHalo)
 		{
 			const Sync::FluidConstView particlesF =
 				distParticleBackend_->GetFluidParticleView();
@@ -2674,14 +2599,13 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 				domainDecomp_->OwnedExtentAABB(mpiContext_.Rank())
 					.ExtendedAtGlobalBounds(domainDecomp_->GlobalExtentAABB())
 					.Expanded(simParams_.kernelRadius);
-			const auto& haloLocalIdxs = particleStateF_.particleLocalIdx_Halo;
-			const uint32_t N_halo = static_cast<uint32_t>(haloLocalIdxs.size());
+			const uint32_t N_owned = particleStateF_.N_owned;
+			const uint32_t N_halo = particleStateF_.N_halo;
 
 			if (N_halo > 0u)
 			{
-				const uint32_t N_owned = static_cast<uint32_t>(
-					pressureAccFluidParticleLocalIdxs_.size());
-				pressureAccFluidParticleLocalIdxs_.resize(N_owned + N_halo);
+				// upper bound for the selected halo particles
+				pressureAccHaloLocalIdxsF_.resize(N_halo);
 
 				const uint32_t N_firstHalo = tbb::parallel_scan(
 					tbb::blocked_range<uint32_t>(0, N_halo),
@@ -2694,7 +2618,8 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 					for (uint32_t haloIdx = range.begin();
 						haloIdx != range.end(); haloIdx++)
 					{
-						const uint32_t localIdx = haloLocalIdxs[haloIdx];
+						// halo particles occupy the local suffix behind the owned prefix
+						const uint32_t localIdx = N_owned + haloIdx;
 						const glm::vec3 position{
 							particlesF.xPos[localIdx],
 							particlesF.yPos[localIdx],
@@ -2704,7 +2629,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 
 						if (isFinalScan)
 						{
-							pressureAccFluidParticleLocalIdxs_[N_owned + N_selected] = localIdx;
+							pressureAccHaloLocalIdxsF_[N_selected] = localIdx;
 						}
 						N_selected++;
 					}
@@ -2717,7 +2642,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 				tbb::auto_partitioner{}
 				);
 
-				pressureAccFluidParticleLocalIdxs_.resize(N_owned + N_firstHalo);
+				pressureAccHaloLocalIdxsF_.resize(N_firstHalo);
 			}
 		}
 	}
@@ -2732,13 +2657,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		mpiContext_.Abort(
 			"Failed to classify rank-local distributed work: unknown error.");
 	}
-	benchmarksTracker_->StopBench(Bench::BenchOp::Dist_ParticlePermutation);
 
-	const bool pressureAccIsOwnedPrefix =
-		pressureAccFluidParticleLocalIdxs_.size() ==
-		particleStateF_.particleLocalIdx_Owned.size();
-
-	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 	try
 	{
 		MarkTrace(Trace::TraceStage::Dist_FluidSyncPlanRebuild);
@@ -2749,12 +2668,8 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		{
 			MarkTrace(Trace::TraceStage::Dist_BackendConfiguration);
 			configured = simBackend_->ConfigureDistributedStep(
-				particleStateF_.particleLocalIdx_Owned,
-				particleStateF_.particleLocalIdx_Outer,
-				pressureAccFluidParticleLocalIdxs_,
-				pressureAccIsOwnedPrefix,
-				particleStateB_.N_owned,
-				particleStateR_.N_owned,
+				outerLocalIdxsF_,
+				pressureAccHaloLocalIdxsF_,
 				fluidSolverSyncMgr_);
 		}
 		if (localOk && !configured)
@@ -3001,45 +2916,6 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata() const
 	}
 
 	return true;
-}
-
-bool DistSimulationMgr::ApplyLastBackendParticleReOrder()
-{
-	if (!simBackend_) { return false; }
-
-	std::span<const uint32_t> oldFluidLocalIdx_FromNewLocalIdx;
-	std::span<const uint32_t> oldBoundaryLocalIdx_FromNewLocalIdx;
-
-	const bool hasParticleReOrder =
-		simBackend_->TryGetLastParticleReOrder(
-			oldFluidLocalIdx_FromNewLocalIdx,
-			oldBoundaryLocalIdx_FromNewLocalIdx);
-
-	if (!hasParticleReOrder) { return true; }
-
-	bool localOk = true;
-
-	if (!ApplyLocalParticleReOrder(
-		particleStateF_,
-		oldFluidLocalIdx_FromNewLocalIdx,
-		&fluidParticleReOrderWorkBuffers_))
-	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to apply backend fluid particle re-order.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		localOk = false;
-	}
-
-	if (!ApplyLocalParticleReOrder(
-		particleStateB_,
-		oldBoundaryLocalIdx_FromNewLocalIdx,
-		&boundaryParticleReOrderWorkBuffers_))
-	{
-		SPDLOG_ERROR("[rank {}/{}] Failed to apply backend boundary particle re-order.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		localOk = false;
-	}
-
-	return localOk;
 }
 
 bool DistSimulationMgr::TryReadProfileJson(

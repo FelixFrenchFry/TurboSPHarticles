@@ -19,67 +19,31 @@ namespace Dist
 {
 	class MpiContext;
 
-	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
-	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CHUNK_SIZE = 16384;
-	inline constexpr uint32_t N_PARTICLE_CLASSIFICATION_CLASSES = 3;
-	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_OWNED = 0;
-	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_INNER = 1;
-	inline constexpr uint32_t PARTICLE_CLASSIFICATION_CLASS_OUTER = 2;
-
 	inline constexpr uint32_t PARTICLE_BUILD_CHUNK_SIZE = 16384;
 	inline constexpr uint32_t N_PARTICLE_BUILD_CLASSES = 2;
 	inline constexpr uint32_t PARTICLE_BUILD_CLASS_OWNED = 0;
 	inline constexpr uint32_t PARTICLE_BUILD_CLASS_HALO = 1;
 
-	enum class DistParticleClass : uint8_t
-	{
-		Inner,  // particle owned by this rank, NOT exported to other ranks
-		Outer,  // particle owned by this rank, exported to other ranks
-		Halo,   // particle NOT owned by this rank, received from neighbor domains within the selected halo radius
-		None    // particle is not active in this rank (e.g. outside owned AND halo bounds)
-	};
-
 	// reusable scratch for parallelized classification process of owned particles
 	struct ParticleClassificationWorkBuffers
 	{
-		std::vector<uint32_t> classCounts_ByChunkClass; // how many owned/inner/outer particles each chunk contains
+		std::vector<uint32_t> classCounts_ByChunkClass; // how many outer particles each chunk contains
 		std::vector<uint32_t> classWriteOffsets_ByChunkClass; // where each chunk writes into the final list
-		std::vector<uint32_t> classTotals; // total owned/inner/outer counts across all chunks
+		std::vector<uint32_t> classTotals; // total outer count across all chunks
 	};
 
-	// reusable scratch for parallelized local particle re-ordering
-	struct ParticleReOrderWorkBuffers
-	{
-		std::vector<DistParticleClass> particleClasses;
-		std::vector<uint32_t> particleLocalIdx_Owned;
-		std::vector<uint32_t> particleLocalIdx_Inner;
-		std::vector<uint32_t> particleLocalIdx_Outer;
-		std::vector<uint32_t> particleLocalIdx_Halo;
-		ParticleClassificationWorkBuffers classification;
-	};
-
-	// stores all classification of particles (F/B/R) based on the domain decomp,
-	// backend re-ordering preserves [ owned particles ][ halo particles ] SoA layouts
+	// counts of the compact [ owned particles ][ halo particles ] SoA layout of one particle species (F/B/R),
+	// which backend re-ordering preserves, so owned particles occupy the local indices [ 0, N_owned )
 	struct DistParticleState
 	{
 		// compact local SoA ranges
 		uint32_t N_owned = 0;
 		uint32_t N_halo = 0;
 
-		// per-local-particle class flag, indexed by localIdx
-		std::vector<DistParticleClass> particleClasses;
-
-		// cached local particle indices for each class
-		std::vector<uint32_t> particleLocalIdx_Owned;
-		std::vector<uint32_t> particleLocalIdx_Inner;
-		std::vector<uint32_t> particleLocalIdx_Outer;
-		std::vector<uint32_t> particleLocalIdx_Halo;
-
-		// clears all particle classification metadata and compact range counts
-		void Clear();
+		// owned particles that at least one neighbor rank needs as halos
+		uint32_t N_outer = 0;
 
 		// validation helpers
-		bool HasMetadataAtLocalIdx(uint32_t localIdx) const;
 		bool IsValidLocalParticleLayout(uint32_t N_local, std::string* failMsg = nullptr) const;
 		bool IsValidLocalParticleState(
 			std::span<const uint64_t> particleIds,
@@ -100,54 +64,76 @@ namespace Dist
 	};
 
 	bool FindFirstOwnedParticleConflict(
-		std::span<const uint64_t> particleIds,
-		std::span<const uint32_t> ownedParticleLocalIdxs,
+		std::span<const uint64_t> ownedParticleIds,
 		uint64_t N_global,
 		const MpiContext& mpiContext,
 		std::optional<OwnedParticleConflict>& conflict,
 		std::string* failMsg = nullptr);
 
-	// TODO: move these functions into the DistParticleState class?
-
-	// memory accounting shared by distributed particle storage and metadata owners
+	// memory accounting shared by distributed particle storage owners
 	Mem::MemUsage GetParticleMemoryUsage(const Sync::FluidParticles& particles);
 	Mem::MemUsage GetParticleMemoryUsage(const Sync::BoundaryParticles& particles);
 	Mem::MemUsage GetParticleMemoryUsage(const Sync::RigidParticles& particles);
 	Mem::MemUsage GetParticleMemoryUsage(const Sync::UniversalSimState& state);
-	Mem::MemUsage GetParticleMemoryUsage(const DistParticleState& particleState);
-	Mem::MemUsage GetParticleMemoryUsage(const ParticleReOrderWorkBuffers& workBuffers);
 
-	// rebuilds particle classes and class index lists
-	// after the backend changes local particle order
-	bool ApplyLocalParticleReOrder(
-		DistParticleState& particleState,
-		std::span<const uint32_t> oldLocalIdx_FromNewLocalIdx,
-		ParticleReOrderWorkBuffers* workBuffers = nullptr);
-
-	// rebuilds F/B/R particle class lists by keeping particles owned by this
-	// rank and splitting them into inner / outer by selected halo extent
+	// counts the owned F/B/R particles in the compact prefix that are not inner owned particles
+	// for the selected halo extent, and collects their ascending local indices if a list is given
 	void ClassifyOwnedFluidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
-		const Sync::FluidParticles& particlesF,
+		const Sync::FluidConstView& particlesF,
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		float haloRadius,
+		std::vector<uint32_t>* outerLocalIdxs = nullptr,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 	void ClassifyOwnedBoundaryParticlesIntoInnerOuter(
 		DistParticleState& particleState,
-		const Sync::BoundaryParticles& particlesB,
+		const Sync::BoundaryConstView& particlesB,
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		float haloRadius,
+		std::vector<uint32_t>* outerLocalIdxs = nullptr,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 	void ClassifyOwnedRigidParticlesIntoInnerOuter(
 		DistParticleState& particleState,
-		const Sync::RigidParticles& particlesR,
+		const Sync::RigidConstView& particlesR,
 		const Sync::RigidBodies& rigidBodies,
 		const IDomainDecomp& domainDecomp,
 		int rank,
 		float haloRadius,
+		std::vector<uint32_t>* outerLocalIdxs = nullptr,
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
+
+	// classifies prepared owned particles before applying redistribution
+	// (retained indices map the new prefix to old storage, followed by appended owners)
+	uint32_t CollectPreparedOuterFluidLocalIdxs(
+		uint32_t N_owned,
+		std::span<const uint32_t> retainedOldLocalIdxs,
+		std::span<const uint8_t> isOuterOwned_ByLocalIdx,
+		const Sync::FluidConstView& appendedParticles,
+		const IDomainDecomp& domainDecomp,
+		int rank,
+		float haloRadius,
+		ParticleClassificationWorkBuffers& workBuffers,
+		std::vector<uint32_t>& outerLocalIdxs,
+		float extraAllocCapacityPct);
+	uint32_t CountPreparedOuterBoundaryParticles(
+		uint32_t N_owned,
+		std::span<const uint32_t> retainedOldLocalIdxs,
+		std::span<const uint8_t> isOuterOwned_ByLocalIdx,
+		const Sync::BoundaryConstView& appendedParticles,
+		const IDomainDecomp& domainDecomp,
+		int rank,
+		float haloRadius);
+	uint32_t CountPreparedOuterRigidParticles(
+		uint32_t N_owned,
+		std::span<const uint32_t> retainedOldLocalIdxs,
+		const Sync::RigidConstView& oldParticles,
+		const Sync::RigidConstView& appendedParticles,
+		const Sync::RigidBodies& rigidBodies,
+		const IDomainDecomp& domainDecomp,
+		int rank,
+		float haloRadius);
 
 	// extracts F/B/R particles needed by this rank and replicates rigid body state
 	// consumes source particle storage, requiring distinct source and destination states
@@ -158,6 +144,6 @@ namespace Dist
 		DistParticleState& particleStateR,
 		Sync::UniversalSimState&& globalState,
 		const IDomainDecomp& domainDecomp,
-		int rank, float haloRadius);
+		int rank);
 
 } // namespace Dist
