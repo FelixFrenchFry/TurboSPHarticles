@@ -311,6 +311,234 @@ namespace
 			requests);
 	}
 
+	struct ParticleRouteOutputs
+	{
+		std::vector<std::vector<uint32_t>>& ownedLocalIdxs_ByDstRank;
+		std::vector<std::vector<uint32_t>>& haloLocalIdxs_ByDstRank;
+		std::vector<uint32_t>& keptOwnedLocalIdxs;
+		std::vector<uint32_t>& localHaloLocalIdxs;
+		std::vector<uint8_t>& isOuterOwned_ByLocalIdx;
+	};
+
+	template <bool CheckFinitePosition, typename PositionAtLocalIdx>
+	bool RouteOwnedParticleIndices_Parallel(
+		const uint32_t N_owned,
+		const uint32_t N_local,
+		const PositionAtLocalIdx& positionAtLocalIdx,
+		const ParticleRouteOutputs& outputs,
+		ParticleRoutingWorkBuffers& workBuffers,
+		const IDomainDecomp& domainDecomp,
+		const int rank, const int N_ranks,
+		const float extraAllocCapacityPct,
+		const char* const particleTypeName,
+		std::string* failMsg)
+	{
+		const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
+		const uint32_t N_buckets = 2 * N_ranks_U32;
+		const uint32_t N_chunks = N_owned > 0
+			? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
+			: 0;
+		const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
+		// self-rank buckets are stored in the retained and local-halo routes
+		outputs.ownedLocalIdxs_ByDstRank[rank].clear();
+		outputs.haloLocalIdxs_ByDstRank[rank].clear();
+
+		Base::ResizeGrowScratchVector(
+			workBuffers.routeCounts_ByChunkBucket,
+			N_chunkBuckets,
+			extraAllocCapacityPct);
+		Base::ResizeGrowScratchVector(
+			workBuffers.routeWriteOffsets_ByChunkBucket,
+			N_chunkBuckets,
+			extraAllocCapacityPct);
+		Base::ResizeGrowScratchVector(
+			workBuffers.routeTotals,
+			N_buckets,
+			extraAllocCapacityPct);
+		Base::ResizeGrowScratchVector(
+			workBuffers.ownerRank_ByOwnedIdx,
+			N_owned,
+			extraAllocCapacityPct);
+
+		// used to skip halo checks for inner particles and retained for later classification
+		// indexed by local particle index (only owned entries carry a value)
+		auto& isOuterOwned_ByLocalIdx = outputs.isOuterOwned_ByLocalIdx;
+		ResizeVectorWithExtraCapacity(
+			isOuterOwned_ByLocalIdx,
+			N_local,
+			extraAllocCapacityPct);
+
+		// filled by the caller
+		const std::vector<AABB>& haloExtentAABB_ByRank =
+			workBuffers.haloExtentAABB_ByRank;
+
+		// first failure seen by the counting pass, reported once it completes
+		std::atomic<const char*> routeFailMsg{ nullptr };
+
+		// decide every destination and count each bucket per chunk
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			[&](const tbb::blocked_range<uint32_t>& range)
+		{
+			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			{
+				const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
+				const uint32_t endOwnedIdx =
+					beginOwnedIdx + std::min(
+						PARTICLE_ROUTING_CHUNK_SIZE,
+						N_owned - beginOwnedIdx);
+				uint32_t* const chunkCounts =
+					workBuffers.routeCounts_ByChunkBucket.data() +
+					static_cast<uint64_t>(chunkIdx) * N_buckets;
+				std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
+
+				for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
+				{
+					const uint32_t localIdx = ownedIdx;
+
+					const glm::vec3 position = positionAtLocalIdx(localIdx);
+					if constexpr (CheckFinitePosition)
+					{
+						if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+						{
+							routeFailMsg.store(" particle position is not finite.", std::memory_order_relaxed);
+							continue;
+						}
+					}
+					const int ownerRank = domainDecomp.OwnerRank(position);
+					if (ownerRank < 0 || ownerRank >= N_ranks)
+					{
+						routeFailMsg.store(
+							" particle owner rank is out of range.", std::memory_order_relaxed);
+						continue;
+					}
+
+					workBuffers.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
+					chunkCounts[static_cast<uint32_t>(ownerRank)]++;
+
+					// testing every neighbor halo directly, so inclusive halo boundaries stay
+					// symmetric with the distributed solver exchange plan
+					uint8_t isOuterOwned = 0;
+					for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
+					{
+						#if defined(_DEBUG)
+						if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
+						{
+							routeFailMsg.store(
+								" halo destination rank is invalid.", std::memory_order_relaxed);
+							continue;
+						}
+						#endif
+
+						if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
+
+						isOuterOwned = 1;
+						chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
+					}
+
+					isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
+				}
+			}
+		});
+
+		if (const char* const routeFail = routeFailMsg.load(std::memory_order_relaxed))
+		{
+			if (failMsg) { *failMsg = std::string(particleTypeName) + routeFail; }
+			return false;
+		}
+
+		PrefixCountsByChunkAndBucket_ParallelScan(
+			workBuffers.routeCounts_ByChunkBucket,
+			workBuffers.routeWriteOffsets_ByChunkBucket,
+			workBuffers.routeTotals,
+			N_chunks,
+			N_buckets);
+
+		Base::ResizeScratchVector(
+			outputs.keptOwnedLocalIdxs,
+			workBuffers.routeTotals[static_cast<uint32_t>(rank)],
+			extraAllocCapacityPct);
+		Base::ResizeScratchVector(
+			outputs.localHaloLocalIdxs,
+			workBuffers.routeTotals[N_ranks_U32 + static_cast<uint32_t>(rank)],
+			extraAllocCapacityPct);
+
+		for (int dstRank = 0; dstRank != N_ranks; dstRank++)
+		{
+			if (dstRank == rank) { continue; }
+
+			Base::ResizeScratchVector(
+				outputs.ownedLocalIdxs_ByDstRank[dstRank],
+				workBuffers.routeTotals[static_cast<uint32_t>(dstRank)],
+				extraAllocCapacityPct);
+			Base::ResizeScratchVector(
+				outputs.haloLocalIdxs_ByDstRank[dstRank],
+				workBuffers.routeTotals[N_ranks_U32 + static_cast<uint32_t>(dstRank)],
+				extraAllocCapacityPct);
+		}
+
+		uint32_t* const keptOwnedDst = outputs.keptOwnedLocalIdxs.data();
+		uint32_t* const localHaloDst = outputs.localHaloLocalIdxs.data();
+		const uint32_t rank_U32 = static_cast<uint32_t>(rank);
+
+		// scatter into the reserved ranges, preserving owned index order within every bucket
+		tbb::parallel_for(
+			tbb::blocked_range<uint32_t>(0, N_chunks),
+			[&](const tbb::blocked_range<uint32_t>& range)
+		{
+			for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			{
+				const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
+				const uint32_t endOwnedIdx =
+					beginOwnedIdx + std::min(
+						PARTICLE_ROUTING_CHUNK_SIZE,
+						N_owned - beginOwnedIdx);
+
+				// each chunk owns its offset row and advances it in place while writing
+				uint32_t* const chunkWriteIdxs =
+					workBuffers.routeWriteOffsets_ByChunkBucket.data() +
+					static_cast<uint64_t>(chunkIdx) * N_buckets;
+
+				for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
+				{
+					const int ownerRank = workBuffers.ownerRank_ByOwnedIdx[ownedIdx];
+					const uint32_t localIdx = ownedIdx;
+
+					if (ownerRank == rank) [[likely]]
+					{
+						keptOwnedDst[chunkWriteIdxs[rank_U32]++] = localIdx;
+					}
+					else
+					{
+						outputs.ownedLocalIdxs_ByDstRank[ownerRank][
+							chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
+					}
+
+					if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
+
+					// halo destinations are re-tested on the outer subset
+					const glm::vec3 position = positionAtLocalIdx(localIdx);
+					for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
+					{
+						if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
+
+						if (haloRank == rank)
+						{
+							localHaloDst[chunkWriteIdxs[N_ranks_U32 + rank_U32]++] = localIdx;
+						}
+						else
+						{
+							outputs.haloLocalIdxs_ByDstRank[haloRank][
+								chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
+						}
+					}
+				}
+			}
+		});
+
+		return true;
+	}
+
 } // namespace anonymous
 
 uint64_t Dist::AggregateParticleTrafficCounts(
@@ -1163,205 +1391,21 @@ bool ParticleRedistributionMgr::RouteOwnedFluidParticles(
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
-	const uint32_t N_owned = particleStateF.N_owned;
-	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
-	const uint32_t N_buckets = 2 * N_ranks_U32;
-	const uint32_t N_chunks = N_owned > 0
-		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
-		: 0;
-	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
-	// self-rank buckets are stored in the retained and local-halo routes
-	routes_.ownedFluidLocalIdxs_ByDstRank[rank].clear();
-	routes_.haloFluidLocalIdxs_ByDstRank[rank].clear();
-
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeCounts_ByChunkBucket,
-		N_chunkBuckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
-		N_chunkBuckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeTotals,
-		N_buckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.ownerRank_ByOwnedIdx,
-		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// kept for the retained particle classification, so it outlives this routing pass
-	// and is indexed by local particle index instead of owned list position
-	// (only owned entries carry a value)
-	auto& isOuterOwned_ByLocalIdx = routes_.fluidIsOuterOwned_ByLocalIdx;
-	ResizeVectorWithExtraCapacity(
-		isOuterOwned_ByLocalIdx,
-		particlesF.N_,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// filled by the caller
-	const std::vector<AABB>& haloExtentAABB_ByRank =
-		routingWorkBuffers_.haloExtentAABB_ByRank;
-
-	// first failure seen by the counting pass, reported once it completes
-	std::atomic<const char*> routeFailMsg{ nullptr };
-
-	// decide every destination and count each bucket per chunk
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+	return RouteOwnedParticleIndices_Parallel<false>(
+		particleStateF.N_owned, particlesF.N_,
+		[&](const uint32_t localIdx)
 		{
-			const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
-			const uint32_t endOwnedIdx =
-				beginOwnedIdx + std::min(
-					PARTICLE_ROUTING_CHUNK_SIZE,
-					N_owned - beginOwnedIdx);
-			uint32_t* const chunkCounts =
-				routingWorkBuffers_.routeCounts_ByChunkBucket.data() +
-				static_cast<uint64_t>(chunkIdx) * N_buckets;
-			std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
-
-			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
-			{
-				const uint32_t localIdx = ownedIdx;
-
-				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
-				const int ownerRank = domainDecomp.OwnerRank(position);
-				if (ownerRank < 0 || ownerRank >= N_ranks)
-				{
-					routeFailMsg.store(
-						"Fluid particle owner rank is out of range.", std::memory_order_relaxed);
-					continue;
-				}
-
-				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
-				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
-
-				// testing every neighbor halo directly, so inclusive halo boundaries stay
-				// symmetric with the distributed solver exchange plan
-				uint8_t isOuterOwned = 0;
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
-				{
-					#if defined(_DEBUG)
-					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
-					{
-						routeFailMsg.store(
-							"Fluid halo destination rank is invalid.", std::memory_order_relaxed);
-						continue;
-					}
-					#endif
-
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					isOuterOwned = 1;
-					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
-				}
-
-				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
-			}
-		}
-	});
-
-	if (const char* const routeFail = routeFailMsg.load(std::memory_order_relaxed))
-	{
-		if (failMsg) { *failMsg = routeFail; }
-		return false;
-	}
-
-	PrefixCountsByChunkAndBucket_ParallelScan(
-		routingWorkBuffers_.routeCounts_ByChunkBucket,
-		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
-		routingWorkBuffers_.routeTotals,
-		N_chunks,
-		N_buckets);
-
-	Base::ResizeScratchVector(
-		routes_.keptOwnedFluidLocalIdxs,
-		routingWorkBuffers_.routeTotals[static_cast<uint32_t>(rank)],
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeScratchVector(
-		routes_.localHaloFluidLocalIdxs,
-		routingWorkBuffers_.routeTotals[
-			N_ranks_U32 + static_cast<uint32_t>(rank)],
-		scratchBufferExtraAllocCapacityPct_);
-
-	for (int dstRank = 0; dstRank != N_ranks; dstRank++)
-	{
-		if (dstRank == rank) { continue; }
-
-		Base::ResizeScratchVector(
-			routes_.ownedFluidLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[static_cast<uint32_t>(dstRank)],
-			scratchBufferExtraAllocCapacityPct_);
-		Base::ResizeScratchVector(
-			routes_.haloFluidLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(dstRank)],
-			scratchBufferExtraAllocCapacityPct_);
-	}
-
-	uint32_t* const keptOwnedDst = routes_.keptOwnedFluidLocalIdxs.data();
-	uint32_t* const localHaloDst = routes_.localHaloFluidLocalIdxs.data();
-	const uint32_t rank_U32 = static_cast<uint32_t>(rank);
-
-	// scatter into the reserved ranges, preserving owned index order within every bucket
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			return FluidPositionAtLocalIdx(particlesF, localIdx);
+		},
 		{
-			const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
-			const uint32_t endOwnedIdx =
-				beginOwnedIdx + std::min(
-					PARTICLE_ROUTING_CHUNK_SIZE,
-					N_owned - beginOwnedIdx);
-
-			// each chunk owns its offset row and advances it in place while writing
-			uint32_t* const chunkWriteIdxs =
-				routingWorkBuffers_.routeWriteOffsets_ByChunkBucket.data() +
-				static_cast<uint64_t>(chunkIdx) * N_buckets;
-
-			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
-			{
-				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				const uint32_t localIdx = ownedIdx;
-
-				if (ownerRank == rank) [[likely]]
-				{
-					keptOwnedDst[chunkWriteIdxs[rank_U32]++] = localIdx;
-				}
-				else
-				{
-					routes_.ownedFluidLocalIdxs_ByDstRank[ownerRank][
-						chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
-				}
-
-				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
-
-				// halo destinations are re-tested on the outer boundary subset
-				const glm::vec3 position = FluidPositionAtLocalIdx(particlesF, localIdx);
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
-				{
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					if (haloRank == rank)
-					{
-						localHaloDst[chunkWriteIdxs[N_ranks_U32 + rank_U32]++] = localIdx;
-					}
-					else
-					{
-						routes_.haloFluidLocalIdxs_ByDstRank[haloRank][
-							chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
-					}
-				}
-			}
-		}
-	});
-
-	return true;
+			.ownedLocalIdxs_ByDstRank = routes_.ownedFluidLocalIdxs_ByDstRank,
+			.haloLocalIdxs_ByDstRank = routes_.haloFluidLocalIdxs_ByDstRank,
+			.keptOwnedLocalIdxs = routes_.keptOwnedFluidLocalIdxs,
+			.localHaloLocalIdxs = routes_.localHaloFluidLocalIdxs,
+			.isOuterOwned_ByLocalIdx = routes_.fluidIsOuterOwned_ByLocalIdx
+		},
+		routingWorkBuffers_, domainDecomp, rank, N_ranks,
+		scratchBufferExtraAllocCapacityPct_, "Fluid", failMsg);
 }
 
 bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
@@ -1371,204 +1415,21 @@ bool ParticleRedistributionMgr::RouteOwnedBoundaryParticles(
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
-	const uint32_t N_owned = particleStateB.N_owned;
-	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
-	const uint32_t N_buckets = 2 * N_ranks_U32;
-	const uint32_t N_chunks = N_owned > 0
-		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
-		: 0;
-	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
-	// self-rank buckets are stored in the retained and local-halo routes
-	routes_.ownedBoundaryLocalIdxs_ByDstRank[rank].clear();
-	routes_.haloBoundaryLocalIdxs_ByDstRank[rank].clear();
-
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeCounts_ByChunkBucket,
-		N_chunkBuckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
-		N_chunkBuckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeTotals,
-		N_buckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.ownerRank_ByOwnedIdx,
-		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// kept for the retained particle classification, so it outlives this routing pass
-	// and is indexed by local particle index instead of owned list position
-	// (only owned entries carry a value)
-	auto& isOuterOwned_ByLocalIdx = routes_.boundaryIsOuterOwned_ByLocalIdx;
-	ResizeVectorWithExtraCapacity(
-		isOuterOwned_ByLocalIdx,
-		particlesB.N_,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// filled by the caller
-	const std::vector<AABB>& haloExtentAABB_ByRank =
-		routingWorkBuffers_.haloExtentAABB_ByRank;
-
-	// first failure seen by the counting pass, reported once it completes
-	std::atomic<const char*> routeFailMsg{ nullptr };
-
-	// decide every destination and count each bucket per chunk
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+	return RouteOwnedParticleIndices_Parallel<false>(
+		particleStateB.N_owned, particlesB.N_,
+		[&](const uint32_t localIdx)
 		{
-			const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
-			const uint32_t endOwnedIdx =
-				beginOwnedIdx + std::min(
-					PARTICLE_ROUTING_CHUNK_SIZE,
-					N_owned - beginOwnedIdx);
-			uint32_t* const chunkCounts =
-				routingWorkBuffers_.routeCounts_ByChunkBucket.data() +
-				static_cast<uint64_t>(chunkIdx) * N_buckets;
-			std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
-
-			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
-			{
-				const uint32_t localIdx = ownedIdx;
-
-				const glm::vec3 position = BoundaryPositionAtLocalIdx(particlesB, localIdx);
-				const int ownerRank = domainDecomp.OwnerRank(position);
-				if (ownerRank < 0 || ownerRank >= N_ranks)
-				{
-					routeFailMsg.store(
-						"Boundary particle owner rank is out of range.", std::memory_order_relaxed);
-					continue;
-				}
-
-				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
-				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
-
-				// testing every neighbor halo directly, so inclusive halo boundaries stay
-				// symmetric with the distributed solver exchange plan
-				uint8_t isOuterOwned = 0;
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
-				{
-					#if defined(_DEBUG)
-					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
-					{
-						routeFailMsg.store(
-							"Boundary halo destination rank is invalid.", std::memory_order_relaxed);
-						continue;
-					}
-					#endif
-
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					isOuterOwned = 1;
-					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
-				}
-
-				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
-			}
-		}
-	});
-
-	if (const char* const routeFail = routeFailMsg.load(std::memory_order_relaxed))
-	{
-		if (failMsg) { *failMsg = routeFail; }
-		return false;
-	}
-
-	PrefixCountsByChunkAndBucket_ParallelScan(
-		routingWorkBuffers_.routeCounts_ByChunkBucket,
-		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
-		routingWorkBuffers_.routeTotals,
-		N_chunks,
-		N_buckets);
-
-	Base::ResizeScratchVector(
-		routes_.keptOwnedBoundaryLocalIdxs,
-		routingWorkBuffers_.routeTotals[static_cast<uint32_t>(rank)],
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeScratchVector(
-		routes_.localHaloBoundaryLocalIdxs,
-		routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(rank)],
-		scratchBufferExtraAllocCapacityPct_);
-
-	for (int dstRank = 0; dstRank != N_ranks; dstRank++)
-	{
-		if (dstRank == rank) { continue; }
-
-		Base::ResizeScratchVector(
-			routes_.ownedBoundaryLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[static_cast<uint32_t>(dstRank)],
-			scratchBufferExtraAllocCapacityPct_);
-		Base::ResizeScratchVector(
-			routes_.haloBoundaryLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(dstRank)],
-			scratchBufferExtraAllocCapacityPct_);
-	}
-
-	uint32_t* const keptOwnedDst = routes_.keptOwnedBoundaryLocalIdxs.data();
-	uint32_t* const localHaloDst = routes_.localHaloBoundaryLocalIdxs.data();
-	const uint32_t rank_U32 = static_cast<uint32_t>(rank);
-
-	// scatter into the reserved ranges, preserving owned index order within every bucket
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			return BoundaryPositionAtLocalIdx(particlesB, localIdx);
+		},
 		{
-			const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
-			const uint32_t endOwnedIdx =
-				beginOwnedIdx + std::min(
-					PARTICLE_ROUTING_CHUNK_SIZE,
-					N_owned - beginOwnedIdx);
-
-			// each chunk owns its offset row and advances it in place while writing
-			uint32_t* const chunkWriteIdxs =
-				routingWorkBuffers_.routeWriteOffsets_ByChunkBucket.data() +
-				static_cast<uint64_t>(chunkIdx) * N_buckets;
-
-			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
-			{
-				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				const uint32_t localIdx = ownedIdx;
-
-				if (ownerRank == rank) [[likely]]
-				{
-					keptOwnedDst[chunkWriteIdxs[rank_U32]++] = localIdx;
-				}
-				else
-				{
-					routes_.ownedBoundaryLocalIdxs_ByDstRank[ownerRank][
-						chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
-				}
-
-				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
-
-				// halo destinations are re-tested on the outer boundary subset
-				const glm::vec3 position = BoundaryPositionAtLocalIdx(particlesB, localIdx);
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
-				{
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					if (haloRank == rank)
-					{
-						localHaloDst[chunkWriteIdxs[N_ranks_U32 + rank_U32]++] = localIdx;
-					}
-					else
-					{
-						routes_.haloBoundaryLocalIdxs_ByDstRank[haloRank][
-							chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
-					}
-				}
-			}
-		}
-	});
-
-	return true;
+			.ownedLocalIdxs_ByDstRank = routes_.ownedBoundaryLocalIdxs_ByDstRank,
+			.haloLocalIdxs_ByDstRank = routes_.haloBoundaryLocalIdxs_ByDstRank,
+			.keptOwnedLocalIdxs = routes_.keptOwnedBoundaryLocalIdxs,
+			.localHaloLocalIdxs = routes_.localHaloBoundaryLocalIdxs,
+			.isOuterOwned_ByLocalIdx = routes_.boundaryIsOuterOwned_ByLocalIdx
+		},
+		routingWorkBuffers_, domainDecomp, rank, N_ranks,
+		scratchBufferExtraAllocCapacityPct_, "Boundary", failMsg);
 }
 
 bool ParticleRedistributionMgr::RouteOwnedRigidParticles(
@@ -1579,208 +1440,21 @@ bool ParticleRedistributionMgr::RouteOwnedRigidParticles(
 	const int rank, const int N_ranks,
 	std::string* failMsg)
 {
-	const uint32_t N_owned = particleStateR.N_owned;
-	const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
-	const uint32_t N_buckets = 2 * N_ranks_U32;
-	const uint32_t N_chunks = N_owned > 0
-		? 1 + (N_owned - 1) / PARTICLE_ROUTING_CHUNK_SIZE
-		: 0;
-	const uint64_t N_chunkBuckets = static_cast<uint64_t>(N_chunks) * N_buckets;
-	// self-rank buckets are stored in the retained and local-halo routes
-	routes_.ownedRigidLocalIdxs_ByDstRank[rank].clear();
-	routes_.haloRigidLocalIdxs_ByDstRank[rank].clear();
-
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeCounts_ByChunkBucket,
-		N_chunkBuckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
-		N_chunkBuckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.routeTotals,
-		N_buckets,
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeGrowScratchVector(
-		routingWorkBuffers_.ownerRank_ByOwnedIdx,
-		N_owned,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// used by the second routing pass to skip halo checks for inner particles
-	// indexed by local particle index (only owned entries carry a value)
-	auto& isOuterOwned_ByLocalIdx = routes_.rigidIsOuterOwned_ByLocalIdx;
-	ResizeVectorWithExtraCapacity(
-		isOuterOwned_ByLocalIdx,
-		particlesR.N_,
-		scratchBufferExtraAllocCapacityPct_);
-
-	// filled by the caller
-	const std::vector<AABB>& haloExtentAABB_ByRank =
-		routingWorkBuffers_.haloExtentAABB_ByRank;
-
-	// first failure seen by the counting pass, reported once it completes
-	std::atomic<const char*> routeFailMsg{ nullptr };
-
-	// decide every destination and count each bucket per chunk
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+	return RouteOwnedParticleIndices_Parallel<true>(
+		particleStateR.N_owned, particlesR.N_,
+		[&](const uint32_t localIdx)
 		{
-			const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
-			const uint32_t endOwnedIdx =
-				beginOwnedIdx + std::min(
-					PARTICLE_ROUTING_CHUNK_SIZE,
-					N_owned - beginOwnedIdx);
-			uint32_t* const chunkCounts =
-				routingWorkBuffers_.routeCounts_ByChunkBucket.data() +
-				static_cast<uint64_t>(chunkIdx) * N_buckets;
-			std::fill(chunkCounts, chunkCounts + N_buckets, uint32_t{ 0 });
-
-			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
-			{
-				const uint32_t localIdx = ownedIdx;
-
-				const glm::vec3 position = RigidPositionAtLocalIdx(particlesR, rigidBodies, localIdx);
-				if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
-				{
-					routeFailMsg.store("Rigid particle position is not finite.", std::memory_order_relaxed);
-					continue;
-				}
-				const int ownerRank = domainDecomp.OwnerRank(position);
-				if (ownerRank < 0 || ownerRank >= N_ranks)
-				{
-					routeFailMsg.store(
-						"Rigid particle owner rank is out of range.", std::memory_order_relaxed);
-					continue;
-				}
-
-				routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
-				chunkCounts[static_cast<uint32_t>(ownerRank)]++;
-
-				// testing every neighbor halo directly, so inclusive halo boundaries stay
-				// symmetric with the distributed solver exchange plan
-				uint8_t isOuterOwned = 0;
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
-				{
-					#if defined(_DEBUG)
-					if (haloRank < 0 || haloRank >= N_ranks || haloRank == ownerRank)
-					{
-						routeFailMsg.store(
-							"Rigid halo destination rank is invalid.", std::memory_order_relaxed);
-						continue;
-					}
-					#endif
-
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					isOuterOwned = 1;
-					chunkCounts[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++;
-				}
-
-				isOuterOwned_ByLocalIdx[localIdx] = isOuterOwned;
-			}
-		}
-	});
-
-	if (const char* const routeFail = routeFailMsg.load(std::memory_order_relaxed))
-	{
-		if (failMsg) { *failMsg = routeFail; }
-		return false;
-	}
-
-	PrefixCountsByChunkAndBucket_ParallelScan(
-		routingWorkBuffers_.routeCounts_ByChunkBucket,
-		routingWorkBuffers_.routeWriteOffsets_ByChunkBucket,
-		routingWorkBuffers_.routeTotals,
-		N_chunks,
-		N_buckets);
-
-	Base::ResizeScratchVector(
-		routes_.keptOwnedRigidLocalIdxs,
-		routingWorkBuffers_.routeTotals[static_cast<uint32_t>(rank)],
-		scratchBufferExtraAllocCapacityPct_);
-	Base::ResizeScratchVector(
-		routes_.localHaloRigidLocalIdxs,
-		routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(rank)],
-		scratchBufferExtraAllocCapacityPct_);
-
-	for (int dstRank = 0; dstRank != N_ranks; dstRank++)
-	{
-		if (dstRank == rank) { continue; }
-
-		Base::ResizeScratchVector(
-			routes_.ownedRigidLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[static_cast<uint32_t>(dstRank)],
-			scratchBufferExtraAllocCapacityPct_);
-		Base::ResizeScratchVector(
-			routes_.haloRigidLocalIdxs_ByDstRank[dstRank],
-			routingWorkBuffers_.routeTotals[N_ranks_U32 + static_cast<uint32_t>(dstRank)],
-			scratchBufferExtraAllocCapacityPct_);
-	}
-
-	uint32_t* const keptOwnedDst = routes_.keptOwnedRigidLocalIdxs.data();
-	uint32_t* const localHaloDst = routes_.localHaloRigidLocalIdxs.data();
-	const uint32_t rank_U32 = static_cast<uint32_t>(rank);
-
-	// scatter into the reserved ranges, preserving owned index order within every bucket
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& range)
-	{
-		for (uint32_t chunkIdx = range.begin(); chunkIdx != range.end(); chunkIdx++)
+			return RigidPositionAtLocalIdx(particlesR, rigidBodies, localIdx);
+		},
 		{
-			const uint32_t beginOwnedIdx = chunkIdx * PARTICLE_ROUTING_CHUNK_SIZE;
-			const uint32_t endOwnedIdx =
-				beginOwnedIdx + std::min(
-					PARTICLE_ROUTING_CHUNK_SIZE,
-					N_owned - beginOwnedIdx);
-
-			// each chunk owns its offset row and advances it in place while writing
-			uint32_t* const chunkWriteIdxs =
-				routingWorkBuffers_.routeWriteOffsets_ByChunkBucket.data() +
-				static_cast<uint64_t>(chunkIdx) * N_buckets;
-
-			for (uint32_t ownedIdx = beginOwnedIdx; ownedIdx != endOwnedIdx; ownedIdx++)
-			{
-				const int ownerRank = routingWorkBuffers_.ownerRank_ByOwnedIdx[ownedIdx];
-				const uint32_t localIdx = ownedIdx;
-
-				if (ownerRank == rank) [[likely]]
-				{
-					keptOwnedDst[chunkWriteIdxs[rank_U32]++] = localIdx;
-				}
-				else
-				{
-					routes_.ownedRigidLocalIdxs_ByDstRank[ownerRank][
-						chunkWriteIdxs[static_cast<uint32_t>(ownerRank)]++] = localIdx;
-				}
-
-				if (isOuterOwned_ByLocalIdx[localIdx] == 0) { continue; }
-
-				// halo destinations are re-tested on the outer rigid subset
-				const glm::vec3 position = RigidPositionAtLocalIdx(particlesR, rigidBodies, localIdx);
-				for (const int haloRank : domainDecomp.NeighborRanks(ownerRank))
-				{
-					if (!haloExtentAABB_ByRank[haloRank].Contains(position)) { continue; }
-
-					if (haloRank == rank)
-					{
-						localHaloDst[chunkWriteIdxs[N_ranks_U32 + rank_U32]++] = localIdx;
-					}
-					else
-					{
-						routes_.haloRigidLocalIdxs_ByDstRank[haloRank][
-							chunkWriteIdxs[N_ranks_U32 + static_cast<uint32_t>(haloRank)]++] = localIdx;
-					}
-				}
-			}
-		}
-	});
-
-	return true;
+			.ownedLocalIdxs_ByDstRank = routes_.ownedRigidLocalIdxs_ByDstRank,
+			.haloLocalIdxs_ByDstRank = routes_.haloRigidLocalIdxs_ByDstRank,
+			.keptOwnedLocalIdxs = routes_.keptOwnedRigidLocalIdxs,
+			.localHaloLocalIdxs = routes_.localHaloRigidLocalIdxs,
+			.isOuterOwned_ByLocalIdx = routes_.rigidIsOuterOwned_ByLocalIdx
+		},
+		routingWorkBuffers_, domainDecomp, rank, N_ranks,
+		scratchBufferExtraAllocCapacityPct_, "Rigid", failMsg);
 }
 
 bool ParticleRedistributionMgr::RouteOwnedParticles(
