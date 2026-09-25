@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate deterministic geometry metadata for assets/models/models.json."""
+"""Generate deterministic geometry metadata for assets/models/rigid_models.json."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-DEFAULT_CATALOG = pathlib.Path(__file__).resolve().parent / "models.json"
-DEFAULT_MODEL_DIR = pathlib.Path(__file__).resolve().parent / "meshes"
+DEFAULT_CATALOG = pathlib.Path(__file__).resolve().parent / "rigid_models.json"
+DEFAULT_MODEL_DIR = pathlib.Path(__file__).resolve().parent / "rigid_meshes"
 
 
 class MetadataError(RuntimeError):

@@ -96,7 +96,7 @@ namespace Scene
 
 			const std::filesystem::path modelDirectory =
 				std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
-				"assets" / "models" / "meshes";
+				"assets" / "models" / "rigid_meshes";
 			const ObjMeshLoader loader(modelDirectory);
 			TriangleSurfaceMesh mesh = loader.Load(cfg_.modelFile);
 
@@ -526,9 +526,9 @@ namespace Scene
 		const std::filesystem::path assetDirectory =
 			std::filesystem::path(TSP_CONFIG_DIR).parent_path() / "assets";
 		const std::filesystem::path modelDirectory =
-			assetDirectory / "models" / "meshes";
+			assetDirectory / "models" / "rigid_meshes";
 		const std::filesystem::path modelCatalogPath =
-			assetDirectory / "models" / "models.json";
+			assetDirectory / "models" / "rigid_models.json";
 
 		auto LoadProfile = [&](const std::string& profileName)
 			-> std::optional<SampledMeshConfig>

@@ -38,8 +38,10 @@ build.ninja
 # MSVC
 *.obj
 !assets/models/
-!assets/models/meshes/
-!assets/models/meshes/*.obj
+!assets/models/rigid_meshes/
+!assets/models/rigid_meshes/*.obj
+!assets/models/boundary_meshes/
+!assets/models/boundary_meshes/*.obj
 *.lib
 *.exp
 *.dll
