@@ -3,6 +3,7 @@
 
 // external
 #include <cstdint>
+#include <string>
 
 // internal
 #include "parameters_sim.h"
@@ -12,11 +13,18 @@
 
 namespace Sim
 {
+	inline constexpr int N_CLI_TABLE_CHARS = 90;
+	inline constexpr int N_CLI_BENCH_LABEL_CHARS = N_CLI_TABLE_CHARS - 50;
+	inline const std::string CLI_SEPARATOR(N_CLI_TABLE_CHARS, '-');
+
 	class DiagnosticsMgr
 	{
 	public:
 
 		DiagnosticsMgr() = delete;
+
+		static void PrintCliSeparator();
+		static void PrintCliSectionHeader(const char* title);
 
 		static void PrintBuildConfig();
 

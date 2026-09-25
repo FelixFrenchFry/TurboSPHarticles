@@ -28,10 +28,7 @@ namespace
 {
 	using steady_clock = std::chrono::steady_clock;
 
-	constexpr int N_CLI_SEPARATOR_CHARS = 80;
 	constexpr int N_CLI_SIM_PARAM_LABEL_CHARS = 38;
-	constexpr const char* CLI_SEPARATOR =
-		"--------------------------------------------------------------------------------";
 
 	struct ProgressState
 	{
@@ -85,24 +82,6 @@ namespace
 		return label;
 	}
 
-	void PrintCliSeparator()
-	{
-		std::printf("%s\n", CLI_SEPARATOR);
-	}
-
-	void PrintCliSectionHeader(const char* title)
-	{
-		int N_chars = std::printf("--- [ %s ] ", title);
-		N_chars = std::max(0, N_chars);
-
-		for (int i = N_chars; i < N_CLI_SEPARATOR_CHARS; i++)
-		{
-			std::putchar('-');
-		}
-
-		std::putchar('\n');
-	}
-
 	std::string MakeDisplayExportDir(const std::string& exportDir)
 	{
 		if (exportDir.empty()) { return "/"; }
@@ -116,6 +95,24 @@ namespace
 
 namespace Sim
 {
+	void DiagnosticsMgr::PrintCliSeparator()
+	{
+		std::printf("%s\n", CLI_SEPARATOR.c_str());
+	}
+
+	void DiagnosticsMgr::PrintCliSectionHeader(const char* title)
+	{
+		int N_chars = std::printf("--- [ %s ] ", title);
+		N_chars = std::max(0, N_chars);
+
+		for (int i = N_chars; i < N_CLI_TABLE_CHARS; i++)
+		{
+			std::putchar('-');
+		}
+
+		std::putchar('\n');
+	}
+
 	bool DiagnosticsMgr::ShouldOverwriteProgress(
 		const Base::ProgressReportMode mode)
 	{
@@ -463,8 +460,8 @@ namespace Sim
         std::printf("\n");
         N_lines++;
         // header
-        printf("%-30.30s | %12s  %8s | %12s  %8s\n",
-            "benchmark summary", latestLabel, "% total", avgLabel, "% total");
+        printf("%-*.*s | %12s  %8s | %12s  %8s\n",
+            N_CLI_BENCH_LABEL_CHARS, N_CLI_BENCH_LABEL_CHARS, "benchmark summary", latestLabel, "% total", avgLabel, "% total");
         N_lines++;
 		PrintCliSeparator();
         N_lines++;
@@ -497,8 +494,8 @@ namespace Sim
 
                 if (isTotal)
                 {
-                    std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
-                        name, t_latest, "---", t_avg, "---");
+                    std::printf("%-*.*s | %12.2f  %8s | %12.2f  %8s\n",
+                        N_CLI_BENCH_LABEL_CHARS, N_CLI_BENCH_LABEL_CHARS, name, t_latest, "---", t_avg, "---");
                 }
                 else
                 {
@@ -509,8 +506,8 @@ namespace Sim
 					std::snprintf(pctAvgLabel, sizeof(pctAvgLabel),
 						"%.1f %%", pctAvg);
 
-                    std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
-                        name, t_latest, pctLatestLabel, t_avg, pctAvgLabel);
+                    std::printf("%-*.*s | %12.2f  %8s | %12.2f  %8s\n",
+                        N_CLI_BENCH_LABEL_CHARS, N_CLI_BENCH_LABEL_CHARS, name, t_latest, pctLatestLabel, t_avg, pctAvgLabel);
                 }
 
                 N_lines++;
@@ -626,8 +623,8 @@ namespace Sim
 				}
 
 				std::printf("\n");
-				std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
-					title, usedLabel, "% fluid", allocLabel, "% fluid");
+				std::printf("%-*.*s | %12s  %8s | %12s  %8s\n",
+					N_CLI_BENCH_LABEL_CHARS, N_CLI_BENCH_LABEL_CHARS, title, usedLabel, "% fluid", allocLabel, "% fluid");
 				PrintCliSeparator();
 
 				auto GetMemBytes = [&](const Mem::MemBucket bucket, const bool alloc)
@@ -645,8 +642,8 @@ namespace Sim
 						const double vMaxUsed = Mem::ConvertFromBytes(unit, N_maxUsedBytes);
 						const double vMaxAlloc = Mem::ConvertFromBytes(unit, N_maxAllocBytes);
 
-						std::printf("%-30.30s | %12.2f  %8s | %12.2f  %8s\n",
-							name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
+						std::printf("%-*.*s | %12.2f  %8s | %12.2f  %8s\n",
+							N_CLI_BENCH_LABEL_CHARS, N_CLI_BENCH_LABEL_CHARS, name, vMaxUsed, pctUsedLabel, vMaxAlloc, pctAllocLabel);
 					};
 
 				auto PrintParticleClassMem = [&](const char* name,
@@ -720,8 +717,8 @@ namespace Sim
 				char totalAllocValueLabel[32];
 				std::snprintf(totalUsedValueLabel, sizeof(totalUsedValueLabel), "> %.2f", tMaxUsed);
 				std::snprintf(totalAllocValueLabel, sizeof(totalAllocValueLabel), "> %.2f", tMaxAlloc);
-				std::printf("%-30.30s | %12s  %8s | %12s  %8s\n",
-					totalLabel, totalUsedValueLabel, "---", totalAllocValueLabel, "---");
+				std::printf("%-*.*s | %12s  %8s | %12s  %8s\n",
+					N_CLI_BENCH_LABEL_CHARS, N_CLI_BENCH_LABEL_CHARS, totalLabel, totalUsedValueLabel, "---", totalAllocValueLabel, "---");
 			};
 
 		switch (backendType)

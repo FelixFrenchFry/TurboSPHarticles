@@ -60,6 +60,7 @@ namespace Dist
 		uint32_t N_ownedF = 0;
 		uint32_t N_ownedB = 0;
 		uint32_t N_ownedR = 0;
+		uint32_t N_outerF = 0;
 		uint32_t N_haloF = 0;
 		uint32_t N_haloB = 0;
 		uint32_t N_haloR = 0;
@@ -74,16 +75,11 @@ namespace Dist
 		int64_t maxSteps = -1;
 
 		uint32_t N_ownedF = 0;
-		uint32_t N_innerF = 0;
 		uint32_t N_outerF = 0;
 		uint32_t N_haloF = 0;
 		uint32_t N_ownedB = 0;
-		uint32_t N_innerB = 0;
-		uint32_t N_outerB = 0;
 		uint32_t N_haloB = 0;
 		uint32_t N_ownedR = 0;
-		uint32_t N_innerR = 0;
-		uint32_t N_outerR = 0;
 		uint32_t N_haloR = 0;
 
 		uint32_t N_sentMigratedF = 0;

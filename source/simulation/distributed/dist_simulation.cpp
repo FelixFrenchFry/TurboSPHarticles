@@ -117,7 +117,7 @@ namespace
 		oss << '[';
 		for (uint64_t i = 0; i < neighborRanks.size(); i++)
 		{
-			if (i > 0) { oss << ", "; }
+			if (i > 0) { oss << ","; }
 			oss << neighborRanks[i];
 		}
 		oss << ']';
@@ -648,6 +648,7 @@ DistStartupRankReport DistSimulationMgr::BuildStartupRankReport() const
 	report.N_ownedF = particleStateF_.N_owned;
 	report.N_ownedB = particleStateB_.N_owned;
 	report.N_ownedR = particleStateR_.N_owned;
+	report.N_outerF = particleStateF_.N_outer;
 	report.N_haloF = particleStateF_.N_halo;
 	report.N_haloB = particleStateB_.N_halo;
 	report.N_haloR = particleStateR_.N_halo;
@@ -1878,16 +1879,11 @@ DistRankStepReport DistSimulationMgr::BuildRankStepReport(
 	report.maxSteps = params.maxSteps;
 
 	report.N_ownedF = particleStateF_.N_owned;
-	report.N_innerF = particleStateF_.N_owned - particleStateF_.N_outer;
 	report.N_outerF = particleStateF_.N_outer;
 	report.N_haloF = particleStateF_.N_halo;
 	report.N_ownedB = particleStateB_.N_owned;
-	report.N_innerB = particleStateB_.N_owned - particleStateB_.N_outer;
-	report.N_outerB = particleStateB_.N_outer;
 	report.N_haloB = particleStateB_.N_halo;
 	report.N_ownedR = particleStateR_.N_owned;
-	report.N_innerR = particleStateR_.N_owned - particleStateR_.N_outer;
-	report.N_outerR = particleStateR_.N_outer;
 	report.N_haloR = particleStateR_.N_halo;
 
 	const ParticleRedistributionStats& redistributionStats =

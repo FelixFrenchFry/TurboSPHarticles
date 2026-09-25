@@ -4,6 +4,7 @@
 // external
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 // internal
 #include "snapshots.h"
@@ -15,8 +16,40 @@
 
 namespace Sync
 {
-	// single-producer, single-consumer, lock-free mailbox for vis-specific simulation state snapshots
-	class VisualSnapMailbox
+	// single-producer, single-consumer mailbox for the latest snapshot
+	template <typename Snapshot>
+	class LatestSnapMailbox
+	{
+	public:
+
+		void StoreSnapshot(std::shared_ptr<Snapshot> snap) noexcept
+		{
+			std::scoped_lock lock(mutex_);
+			latestSnap_.swap(snap);
+		}
+
+		bool TryFetchLatestSnapshot(std::shared_ptr<Snapshot>& dst) noexcept
+		{
+			std::shared_ptr<Snapshot> snap{};
+			{
+				std::scoped_lock lock(mutex_);
+				snap = std::move(latestSnap_);
+			}
+			if (!snap) { return false; } // failed fetch
+
+			// successful fetch
+			dst = std::move(snap);
+			return true;
+		}
+
+	private:
+
+		std::mutex mutex_;
+		std::shared_ptr<Snapshot> latestSnap_{ nullptr };
+	};
+
+	// mailbox for vis-specific simulation state snapshots
+	class VisualSnapMailbox : public LatestSnapMailbox<VisualSnapshot>
 	{
 	public:
 
@@ -30,21 +63,6 @@ namespace Sync
 			return snapshotRequested_.exchange(false, std::memory_order_acq_rel);
 		}
 
-		void StoreSnapshot(std::shared_ptr<VisualSnapshot> snap) noexcept
-		{
-			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
-		}
-
-		bool TryFetchLatestSnapshot(std::shared_ptr<VisualSnapshot>& dst) noexcept
-		{
-			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<VisualSnapshot>{}, std::memory_order_acq_rel);
-			if (!snap) { return false; } // failed fetch
-
-			// successful fetch
-			dst = std::move(snap);
-			return true;
-		}
-
 		// access to the additional mailbox for CUDA-device buffer snapshot
 	#ifdef TURBOSPHARTICLES_WITH_CUDA
 		VisualFrameMailboxCUDA& GetFrameMailboxCUDA() noexcept { return visualFrameMailboxCUDA_; }
@@ -52,8 +70,6 @@ namespace Sync
 
 	private:
 
-		// latest snapshot of the vis-specific simulation state
-		std::shared_ptr<VisualSnapshot> latestSnap_{ nullptr };
 		std::atomic<bool> snapshotRequested_{ false };
 
 		// additional mailbox for CUDA-device buffer snapshot
@@ -62,82 +78,8 @@ namespace Sync
 	#endif
 	};
 
-	// single-producer, single-consumer, lock-free mailbox for operation benchmark snapshots
-	class BenchSnapMailbox
-	{
-	public:
-
-		void StoreSnapshot(std::shared_ptr<BenchSnapshot> snap) noexcept
-		{
-			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
-		}
-
-		bool TryFetchLatestSnapshot(std::shared_ptr<BenchSnapshot>& dst) noexcept
-		{
-			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<BenchSnapshot>{}, std::memory_order_acq_rel);
-			if (!snap) { return false; } // failed fetch
-
-			// successful fetch
-			dst = std::move(snap);
-			return true;
-		}
-
-	private:
-
-		// latest snapshot of the operation benchmarks
-		std::shared_ptr<BenchSnapshot> latestSnap_{ nullptr };
-	};
-
-	// single-producer, single-consumer, lock-free mailbox for memory usage snapshots
-	class MemSnapMailbox
-	{
-	public:
-
-		void StoreSnapshot(std::shared_ptr<MemSnapshot> snap) noexcept
-		{
-			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
-		}
-
-		bool TryFetchLatestSnapshot(std::shared_ptr<MemSnapshot>& dst) noexcept
-		{
-			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<MemSnapshot>{}, std::memory_order_acq_rel);
-			if (!snap) { return false; } // failed fetch
-
-			// successful fetch
-			dst = std::move(snap);
-			return true;
-		}
-
-	private:
-
-		// latest snapshot of the operation benchmarks
-		std::shared_ptr<MemSnapshot> latestSnap_{ nullptr };
-	};
-
-	// single-producer, single-consumer, lock-free mailbox for statistics data snapshots
-	class StatSnapMailbox
-	{
-	public:
-
-		void StoreSnapshot(std::shared_ptr<StatSnapshot> snap) noexcept
-		{
-			std::atomic_store_explicit(&latestSnap_, std::move(snap), std::memory_order_release);
-		}
-
-		bool TryFetchLatestSnapshot(std::shared_ptr<StatSnapshot>& dst) noexcept
-		{
-			auto snap = std::atomic_exchange_explicit(&latestSnap_, std::shared_ptr<StatSnapshot>{}, std::memory_order_acq_rel);
-			if (!snap) { return false; } // failed fetch
-
-			// successful fetch
-			dst = std::move(snap);
-			return true;
-		}
-
-	private:
-
-		// latest snapshot of the statistics data
-		std::shared_ptr<StatSnapshot> latestSnap_{ nullptr };
-	};
+	using BenchSnapMailbox = LatestSnapMailbox<BenchSnapshot>;
+	using MemSnapMailbox = LatestSnapMailbox<MemSnapshot>;
+	using StatSnapMailbox = LatestSnapMailbox<StatSnapshot>;
 
 } // namespace Sync

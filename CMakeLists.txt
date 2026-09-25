@@ -181,7 +181,7 @@ add_library(Project_Warnings INTERFACE)
 target_compile_options(Project_Warnings INTERFACE
     # MSVC C++ compilation
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
-        /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /utf-8
+        /W4 /wd4324 /permissive- /Zc:__cplusplus /Zc:preprocessor /EHsc /utf-8
     >
     # NVCC compiling CUDA (.cu) with MSVC as host compiler
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CUDA>>:

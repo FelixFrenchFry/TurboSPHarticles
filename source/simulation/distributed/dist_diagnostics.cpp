@@ -2,6 +2,7 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
@@ -23,9 +24,6 @@ using namespace Dist;
 namespace
 {
 	constexpr int DIST_DIAGNOSTICS_RANK_TABLE_LIMIT = 16;
-	constexpr int N_CLI_SECTION_SEPARATOR_CHARS = 80;
-	constexpr const char* CLI_SECTION_SEPARATOR =
-		"--------------------------------------------------------------------------------";
 
 	using steady_clock = std::chrono::steady_clock;
 	struct ProgressState
@@ -134,24 +132,6 @@ namespace
 		}
 
 		return progressLine;
-	}
-
-	void PrintCliSeparator()
-	{
-		std::printf("%s\n", CLI_SECTION_SEPARATOR);
-	}
-
-	void PrintCliSectionHeader(const char* title)
-	{
-		int N_chars = std::printf("--- [ %s ] ", title);
-		N_chars = std::max(0, N_chars);
-
-		for (int i = N_chars; i < N_CLI_SECTION_SEPARATOR_CHARS; i++)
-		{
-			std::putchar('-');
-		}
-
-		std::putchar('\n');
 	}
 
 	void PrintLine(int& N_lines)
@@ -337,13 +317,13 @@ namespace
 	void PrintHardwareReports(const std::vector<DistHardwareReport>& reports)
 	{
 		std::printf("\n");
-		PrintCliSectionHeader("distributed hardware specifications");
-		PrintCliSeparator();
+		Sim::DiagnosticsMgr::PrintCliSectionHeader("distributed hardware specifications");
+		Sim::DiagnosticsMgr::PrintCliSeparator();
 
-		std::printf("%-2s | %-19s | %-2s | %14s | %14s | %14s\n",
+		std::printf("%-3s | %-24s | %-3s | %15s | %15s | %15s\n",
 			"n", "host name", "r", "avail threads",
 			"sim budget", "vis budget");
-		std::printf("%s\n", CLI_SECTION_SEPARATOR);
+		std::printf("%s\n", Sim::CLI_SEPARATOR.c_str());
 
 		std::vector<std::string> nodeHosts{};
 		nodeHosts.reserve(reports.size());
@@ -372,10 +352,10 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
 
 			const std::vector<std::string> hostLines = firstRankOnNode
-				? WrapCliField(report.host, 19)
+				? WrapCliField(report.host, 24)
 				: std::vector<std::string>{};
 
-			std::printf("%-2s | %-19.19s | %-2s | %14u | %14u | %14u\n",
+			std::printf("%-3s | %-24.24s | %-3s | %15u | %15u | %15u\n",
 				firstRankOnNode ? nodeLabel : "",
 				hostLines.empty() ? "" : hostLines.front().c_str(),
 				rankLabel,
@@ -386,7 +366,7 @@ namespace
 			for (uint64_t hostLineIdx = 1;
 				hostLineIdx < hostLines.size(); hostLineIdx++)
 			{
-				std::printf("%-2s | %-19s | %-2s | %14s | %14s | %14s\n",
+				std::printf("%-3s | %-24s | %-3s | %15s | %15s | %15s\n",
 					"", hostLines[hostLineIdx].c_str(), "",
 					"", "", "");
 			}
@@ -772,99 +752,161 @@ namespace
 		std::snprintf(buffer, bufferSize, "%.1f %%", std::max(0.0, pct));
 	}
 
-	void PrintParticleLayoutTable(
-		int& N_lines,
-		const std::vector<DistRankStepReport>& reports)
+	void PrintStartupParticleTable(const std::vector<DistStartupRankReport>& reports)
 	{
-		PrintLine(N_lines,
-			"%-2s | %10s | %10s | %10s | %10s | %10s | %10s",
-			"r", "inner F", "outer F", "halo F",
-			"inner B", "outer B", "halo B");
-		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
-
-		for (const DistRankStepReport& report : reports)
+		bool hasF = false;
+		bool hasB = false;
+		bool hasR = false;
+		for (const DistStartupRankReport& report : reports)
 		{
-			char rankLabel[32];
-			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
-
-			PrintLine(N_lines,
-				"%-2s | %10u | %10u | %10u | %10u | %10u | %10u",
-				rankLabel,
-				report.N_innerF,
-				report.N_outerF,
-				report.N_haloF,
-				report.N_innerB,
-				report.N_outerB,
-				report.N_haloB);
+			hasF |= report.N_ownedF != 0 || report.N_haloF != 0;
+			hasB |= report.N_ownedB != 0 || report.N_haloB != 0;
+			hasR |= report.N_ownedR != 0 || report.N_haloR != 0;
 		}
 
-		PrintLine(N_lines);
-		PrintLine(N_lines,
-			"%-2s | %10s | %10s | %10s",
-			"r", "inner R", "outer R", "halo R");
-		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+		std::printf("%-3s | %-16s | %-3s | %-9s | %1s | %10s | %10s | %10s |%5s\n",
+			"n", "host name", "r", "nbrs", "t", "owned", "outer", "halo", "%");
+		Sim::DiagnosticsMgr::PrintCliSeparator();
 
-		for (const DistRankStepReport& report : reports)
+		std::vector<std::string> nodeHosts{};
+		nodeHosts.reserve(reports.size());
+		for (size_t reportIdx = 0; reportIdx < reports.size(); reportIdx++)
 		{
-			char rankLabel[32];
-			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+			const DistStartupRankReport& report = reports[reportIdx];
+			const std::string host = report.host;
+			const auto nodeIt = std::find(nodeHosts.begin(), nodeHosts.end(), host);
+			int node = 0;
+			if (nodeIt == nodeHosts.end())
+			{
+				node = static_cast<int>(nodeHosts.size());
+				nodeHosts.emplace_back(host);
+			}
+			else
+			{
+				node = static_cast<int>(nodeIt - nodeHosts.begin());
+			}
+			const bool firstRankOnNode = reportIdx == 0 ||
+				std::strcmp(reports[reportIdx - 1].host, report.host) != 0;
+			const std::vector<std::string> hostLines = firstRankOnNode
+				? WrapCliField(report.host, 16)
+				: std::vector<std::string>{};
+			const std::vector<std::string> neighborLines =
+				WrapCliField(report.neighborRanks, 9, ",");
 
-			PrintLine(N_lines,
-				"%-2s | %10u | %10u | %10u",
-				rankLabel,
-				report.N_innerR,
-				report.N_outerR,
-				report.N_haloR);
+			std::vector<std::array<std::string, 5>> particleRows;
+			auto AppendRow = [&](const char* type, const uint32_t N_owned,
+				const uint32_t N_outer, const uint32_t N_halo)
+			{
+				char haloPct[32] = "-";
+				if (N_owned > 0)
+				{
+					std::snprintf(haloPct, sizeof(haloPct), "%.1f",
+						100.0 * static_cast<double>(N_halo) / N_owned);
+				}
+				particleRows.push_back({ type, std::to_string(N_owned),
+					type[0] == 'F' ? std::to_string(N_outer) : "-",
+					std::to_string(N_halo), haloPct });
+			};
+			if (hasF) { AppendRow("F", report.N_ownedF, report.N_outerF, report.N_haloF); }
+			if (hasB) { AppendRow("B", report.N_ownedB, 0, report.N_haloB); }
+			if (hasR) { AppendRow("R", report.N_ownedR, 0, report.N_haloR); }
+
+			char nodeLabel[32];
+			char rankLabel[32];
+			FormatRankLabel(nodeLabel, sizeof(nodeLabel), node);
+			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+			const size_t N_rows = std::max({ hostLines.size(), neighborLines.size(), particleRows.size() });
+			if (reportIdx > 0) { Sim::DiagnosticsMgr::PrintCliSeparator(); }
+			for (size_t rowIdx = 0; rowIdx < N_rows; rowIdx++)
+			{
+				const std::array<std::string, 5> emptyRow{};
+				const auto& row = rowIdx < particleRows.size() ? particleRows[rowIdx] : emptyRow;
+				std::printf("%-3s | %-16s | %-3s | %-9s | %1s | %10s | %10s | %10s |%5s\n",
+					rowIdx == 0 && firstRankOnNode ? nodeLabel : "",
+					rowIdx < hostLines.size() ? hostLines[rowIdx].c_str() : "",
+					rowIdx == 0 ? rankLabel : "",
+					rowIdx < neighborLines.size() ? neighborLines[rowIdx].c_str() : "",
+					row[0].c_str(), row[1].c_str(), row[2].c_str(), row[3].c_str(), row[4].c_str());
+			}
 		}
 	}
 
-	void PrintParticleExchangeTable(
+	void PrintParticleTable(
 		int& N_lines,
 		const std::vector<DistRankStepReport>& reports)
 	{
-		PrintLine(N_lines,
-			"%-2s | %17s | %16s | %17s | %16s",
-			"r", "migr F send/recv", "migr B send/recv",
-			"halo F send/recv", "halo B send/recv");
-		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+		bool hasF = false;
+		bool hasB = false;
+		bool hasR = false;
+		for (const DistRankStepReport& report : reports)
+		{
+			hasF |= report.N_ownedF != 0 || report.N_haloF != 0;
+			hasB |= report.N_ownedB != 0 || report.N_haloB != 0;
+			hasR |= report.N_ownedR != 0 || report.N_haloR != 0;
+		}
+		if (!hasF && !hasB && !hasR) { return; }
 
+		std::array<int, 7> widths{ 3, 1, Sim::N_CLI_TABLE_CHARS - 80, 10, 10, 19, 19 };
+		std::vector<std::array<std::string, 7>> rows;
+		rows.reserve(reports.size() * 3);
 		for (const DistRankStepReport& report : reports)
 		{
 			char rankLabel[32];
 			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
+			auto AppendRow = [&](const char* type,
+				const uint32_t N_owned,
+				const uint32_t N_outer, const uint32_t N_halo,
+				const uint32_t N_sentMigrated, const uint32_t N_recvMigrated,
+				const uint64_t N_sentHalo, const uint64_t N_recvHalo)
+			{
+				rows.push_back({ rankLabel, type, std::to_string(N_owned),
+					type[0] == 'F' ? std::to_string(N_outer) : "-",
+					std::to_string(N_halo),
+					std::to_string(N_sentMigrated) + "/" + std::to_string(N_recvMigrated),
+					std::to_string(N_sentHalo) + "/" + std::to_string(N_recvHalo) });
+				for (size_t i = 0; i < widths.size(); i++)
+				{
+					widths[i] = std::max(widths[i], static_cast<int>(rows.back()[i].size()));
+				}
+				rankLabel[0] = '\0';
+			};
 
-			PrintLine(N_lines,
-				"%-2s | %7" PRIu32 " / %-7" PRIu32 " | %6" PRIu32 " / %-7" PRIu32
-				" | %7" PRIu64 " / %-7" PRIu64 " | %6" PRIu64 " / %-7" PRIu64,
-				rankLabel,
-				report.N_sentMigratedF,
-				report.N_recvMigratedF,
-				report.N_sentMigratedB,
-				report.N_recvMigratedB,
-				report.N_sentHaloF,
-				report.N_recvHaloF,
-				report.N_sentHaloB,
-				report.N_recvHaloB);
+			if (hasF)
+			{
+				AppendRow("F", report.N_ownedF, report.N_outerF, report.N_haloF,
+					report.N_sentMigratedF, report.N_recvMigratedF, report.N_sentHaloF, report.N_recvHaloF);
+			}
+			if (hasB)
+			{
+				AppendRow("B", report.N_ownedB, 0, report.N_haloB,
+					report.N_sentMigratedB, report.N_recvMigratedB, report.N_sentHaloB, report.N_recvHaloB);
+			}
+			if (hasR)
+			{
+				AppendRow("R", report.N_ownedR, 0, report.N_haloR,
+					report.N_sentMigratedR, report.N_recvMigratedR, report.N_sentHaloR, report.N_recvHaloR);
+			}
 		}
 
-		PrintLine(N_lines);
-		PrintLine(N_lines,
-			"%-2s | %17s | %17s",
-			"r", "migr R send/recv", "halo R send/recv");
-		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
-
-		for (const DistRankStepReport& report : reports)
+		auto PrintRow = [&](const std::array<std::string, 7>& row)
 		{
-			char rankLabel[32];
-			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
-
-			PrintLine(N_lines,
-				"%-2s | %7" PRIu32 " / %-7" PRIu32 " | %7" PRIu64 " / %-7" PRIu64,
-				rankLabel,
-				report.N_sentMigratedR,
-				report.N_recvMigratedR,
-				report.N_sentHaloR,
-				report.N_recvHaloR);
+			PrintLine(N_lines, "%-*s | %*s | %*s | %*s | %*s | %*s | %*s",
+				widths[0], row[0].c_str(), widths[1], row[1].c_str(),
+				widths[2], row[2].c_str(), widths[3], row[3].c_str(),
+				widths[4], row[4].c_str(), widths[5], row[5].c_str(),
+				widths[6], row[6].c_str());
+		};
+		size_t tableWidth = 3 * (widths.size() - 1);
+		for (const int width : widths) { tableWidth += width; }
+		const std::string separator(tableWidth, '-');
+		PrintRow({ "r", "t", "owned", "outer", "halo", "migr send/recv", "halo send/recv" });
+		PrintLine(N_lines, "%s", separator.c_str());
+		bool firstRow = true;
+		for (const auto& row : rows)
+		{
+			if (!firstRow && !row[0].empty()) { PrintLine(N_lines, "%s", separator.c_str()); }
+			PrintRow(row);
+			firstRow = false;
 		}
 	}
 
@@ -896,9 +938,9 @@ namespace
 		std::snprintf(avgLabel, sizeof(avgLabel), "avg [%s]", unitStr);
 
 		PrintLine(N_lines,
-			"%-33.33s | %11s  %8s | %10s  %8s",
-			"benchmark summary", latestLabel, "% total", avgLabel, "% total");
-		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+			"%-*.*s | %12s  %8s | %12s  %8s",
+			Sim::N_CLI_BENCH_LABEL_CHARS, Sim::N_CLI_BENCH_LABEL_CHARS, "benchmark summary", latestLabel, "% total", avgLabel, "% total");
+		PrintLine(N_lines, "%s", Sim::CLI_SEPARATOR.c_str());
 
 		auto PrintBenchRow =
 			[&](const char* name,
@@ -933,8 +975,8 @@ namespace
 			}
 
 			PrintLine(N_lines,
-				"%-33.33s | %11.2f  %8s | %10.2f  %8s",
-				name, latestTime, pctLatestLabel,
+				"%-*.*s | %12.2f  %8s | %12.2f  %8s",
+				Sim::N_CLI_BENCH_LABEL_CHARS, Sim::N_CLI_BENCH_LABEL_CHARS, name, latestTime, pctLatestLabel,
 				avgTime, pctAvgLabel);
 		};
 
@@ -949,7 +991,7 @@ namespace
 				{
 					PrintBenchRow("other", tableSummary.other, false);
 				}
-				PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+				PrintLine(N_lines, "%s", Sim::CLI_SEPARATOR.c_str());
 				distSeparatorPrinted = true;
 			}
 
@@ -959,15 +1001,15 @@ namespace
 
 		if (tableSummary.totalIdx >= 0)
 		{
-			PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+			PrintLine(N_lines, "%s", Sim::CLI_SEPARATOR.c_str());
 			PrintBenchRow(
 				"total",
 				tableSummary.ops[static_cast<std::size_t>(
 					tableSummary.totalIdx)],
 				true);
 			PrintLine(N_lines,
-				"%-33.33s | %11d  %8s | %10d  %8s",
-				"critical rank for latest/avg",
+				"%-*.*s | %12d  %8s | %12d  %8s",
+				Sim::N_CLI_BENCH_LABEL_CHARS, Sim::N_CLI_BENCH_LABEL_CHARS, "critical rank for latest/avg",
 				tableSummary.latestCriticalRank, "---",
 				tableSummary.avgCriticalRank, "---");
 		}
@@ -987,9 +1029,9 @@ namespace
 		std::snprintf(unitLabel, sizeof(unitLabel), "avg [%s]", Bench::UnitLabel(unit));
 
 		PrintLine(N_lines,
-			"%-2s | %8s | %8s | %8s | %8s | %8s | %9s",
+			"%-3s | %12s | %12s | %12s | %12s | %12s | %9s",
 			"r", "redist", "plan", "halo", "load", "misc", "");
-		PrintLine(N_lines, "%s", CLI_SECTION_SEPARATOR);
+		PrintLine(N_lines, "%s", Sim::CLI_SEPARATOR.c_str());
 
 		for (const DistRankTimingSummary& summary : summaries)
 		{
@@ -997,7 +1039,7 @@ namespace
 			FormatRankLabel(rankLabel, sizeof(rankLabel), summary.rank);
 
 			PrintLine(N_lines,
-				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9s",
+				"%-3s | %12.2f | %12.2f | %12.2f | %12.2f | %12.2f | %9s",
 				rankLabel,
 				Bench::ConvertFromNs(
 					unit,
@@ -1022,11 +1064,11 @@ namespace
 
 		char line[256];
 		std::snprintf(line, sizeof(line),
-			"%-2s | %8s | %8s | %8s | %8s | %8s | %8s | %9s",
+			"%-3s | %10s | %10s | %9s | %9s | %9s | %9s | %10s",
 			"r", "backend", "metadata", "exchange", "misc", "total", "HWM", "");
 		table += line;
 		table += '\n';
-		table += CLI_SECTION_SEPARATOR;
+		table += Sim::CLI_SEPARATOR.c_str();
 		table += '\n';
 
 		for (const DistRankStepReport& report : reports)
@@ -1039,7 +1081,7 @@ namespace
 				report.N_maxDistMiscMemAllocBytes;
 
 			std::snprintf(line, sizeof(line),
-				"%-2s | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %8.2f | %9s",
+				"%-3s | %10.2f | %10.2f | %9.2f | %9.2f | %9.2f | %9.2f | %10s",
 				rankLabel,
 				Mem::ConvertFromBytes(unit, report.N_maxBackendMemAllocBytes),
 				Mem::ConvertFromBytes(unit, report.N_maxDistParticleMetadataMemAllocBytes),
@@ -1183,9 +1225,7 @@ namespace
 		int N_lines = 0;
 		if (static_cast<int>(reports.size()) <= DIST_DIAGNOSTICS_RANK_TABLE_LIMIT)
 		{
-			PrintParticleLayoutTable(N_lines, reports);
-			PrintLine(N_lines);
-			PrintParticleExchangeTable(N_lines, reports);
+			PrintParticleTable(N_lines, reports);
 		}
 		else
 		{
@@ -1213,6 +1253,10 @@ namespace
 			processResidentMax, processResidentMaxRank,
 			processPeakResidentMax, processPeakResidentMaxRank);
 		PrintLine(N_lines, "%s", progressLine.c_str());
+		if (state.overwriteProgress && N_lines < state.N_lastLines)
+		{
+			std::printf("\x1b[J");
+		}
 		std::fflush(stdout);
 		state.N_lastLines = N_lines;
 	}
@@ -1275,8 +1319,8 @@ namespace Dist
 		if (!mpiContext.IsRoot()) { return; }
 
 		std::printf("\n");
-		PrintCliSectionHeader("distributed simulation setup");
-		PrintCliSeparator();
+		Sim::DiagnosticsMgr::PrintCliSectionHeader("distributed simulation setup");
+		Sim::DiagnosticsMgr::PrintCliSeparator();
 
 		std::printf("%-30s = %s\n", "sim backend", setup.backendType);
 		std::printf("%-30s = %s\n", "sim scenario", setup.scenarioType);
@@ -1302,85 +1346,7 @@ namespace Dist
 			setup.N_globalRB);
 		std::printf("\n");
 
-		std::printf("%-2s | %-19s | %-2s | %-9s | %10s | %10s | %10s\n",
-			"n", "host name", "r", "nbrs",
-			"owned F", "owned B", "owned R");
-		std::printf("%s\n", CLI_SECTION_SEPARATOR);
-
-		std::vector<std::string> nodeHosts{};
-		nodeHosts.reserve(reports.size());
-
-		for (uint64_t reportIdx = 0; reportIdx < reports.size(); reportIdx++)
-		{
-			const DistStartupRankReport& report = reports[reportIdx];
-			const std::string host = report.host;
-			const auto nodeIt = std::find(nodeHosts.begin(), nodeHosts.end(), host);
-			int node = 0;
-			if (nodeIt == nodeHosts.end())
-			{
-				node = static_cast<int>(nodeHosts.size());
-				nodeHosts.emplace_back(host);
-			}
-			else
-			{
-				node = static_cast<int>(nodeIt - nodeHosts.begin());
-			}
-			const bool firstRankOnNode = reportIdx == 0 ||
-				std::strcmp(reports[reportIdx - 1].host, report.host) != 0;
-
-			char nodeLabel[32];
-			char rankLabel[32];
-			const std::vector<std::string> hostLines = firstRankOnNode
-				? WrapCliField(report.host, 19)
-				: std::vector<std::string>{};
-			const std::vector<std::string> neighborLines =
-				WrapCliField(report.neighborRanks, 9, ", ");
-			const uint64_t N_wrappedLines = std::max(
-				hostLines.size(), neighborLines.size());
-			FormatRankLabel(nodeLabel, sizeof(nodeLabel), node);
-			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
-
-			std::printf("%-2s | %-19.19s | %-2s | %-9s | %10u | %10u | %10u\n",
-				firstRankOnNode ? nodeLabel : "",
-				hostLines.empty() ? "" : hostLines.front().c_str(),
-				rankLabel,
-				neighborLines.front().c_str(),
-				report.N_ownedF,
-				report.N_ownedB,
-				report.N_ownedR);
-
-			for (uint64_t wrappedLineIdx = 1;
-				wrappedLineIdx < N_wrappedLines; wrappedLineIdx++)
-			{
-				const char* hostLine = wrappedLineIdx < hostLines.size()
-					? hostLines[wrappedLineIdx].c_str()
-					: "";
-				const char* neighborLine = wrappedLineIdx < neighborLines.size()
-					? neighborLines[wrappedLineIdx].c_str()
-					: "";
-
-				std::printf("%-2s | %-19s | %-2s | %-9s | %10s | %10s | %10s\n",
-					"", hostLine, "", neighborLine,
-					"", "", "");
-			}
-		}
-
-		std::printf("\n");
-		std::printf("%-2s | %10s | %10s | %10s\n", "r", "halo F", "halo B", "halo R");
-		std::printf("%s\n", CLI_SECTION_SEPARATOR);
-
-		for (const DistStartupRankReport& report : reports)
-		{
-			char rankLabel[32];
-			FormatRankLabel(rankLabel, sizeof(rankLabel), report.rank);
-
-			std::printf("%-2s | %10u | %10u | %10u\n",
-				rankLabel,
-				report.N_haloF,
-				report.N_haloB,
-				report.N_haloR);
-		}
-
+		PrintStartupParticleTable(reports);
 		std::printf("\n");
 		std::fflush(stdout);
 	}
