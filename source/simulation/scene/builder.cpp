@@ -1142,9 +1142,82 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	}
 	assert(rigidParticleIdx == N_localEnd);
 
-	// derive per-particle volume and pseudo-mass from the sampled surface
+	// derive per-particle volume and pseudo-mass for the rigid particles in the sampled surface
 	ComputeRigidCoefficients(R, params, N_localBase, N_localEnd);
 	return bodyIdx;
+}
+
+void ScenarioMgr::BuildBoundary_FromSurfaceSamples(
+	const std::vector<SurfaceSample>& meshLocalSamples,
+	const glm::vec3& centerOfPosition,
+	const glm::mat3& orientation,
+	Sync::UniversalSimState& dst,
+	const Sim::SimParams& params)
+{
+	// validate supplied samples and boundary surface pose
+	if (meshLocalSamples.empty()) { return; }
+	if (meshLocalSamples.size() > Sim::MaxLocalParticleCount)
+	{
+		throw std::length_error("Boundary surface sample count exceeds the local particle limit.");
+	}
+	if (!IsFinite(centerOfPosition) || !IsFinite(orientation) || !IsRotationMatrix(orientation))
+	{
+		throw std::runtime_error("Boundary surface pose is invalid.");
+	}
+
+	for (const SurfaceSample& sample : meshLocalSamples)
+	{
+		if (!IsFinite(sample.pos))
+		{
+			throw std::runtime_error("Boundary surface contains a non-finite sample position.");
+		}
+	}
+
+	// validate state growth before appending any particles
+	auto& B = dst.particlesB;
+	const uint32_t N_add = Sim::CheckedLocalParticleCount(
+		meshLocalSamples.size(), "Boundary surface sample count");
+	const uint64_t N_base = hasBuildRegion_
+		? N_builtGlobalB_
+		: B.xPos.size();
+	const uint64_t N_end = Sim::CheckedParticleAdd(
+		N_base, N_add, "Boundary surface");
+
+	// pre-reserve memory for all samples, unless a build region discards part of them
+	if (!hasBuildRegion_)
+	{
+		dst.ReserveBoundaryAdditional(N_add);
+	}
+
+	// append boundary particle IDs and world positions
+	const float defaultVolB = DefaultBoundaryVolB(params);
+	const float defaultPsiB = DefaultBoundaryPsiB(params);
+
+	for (uint32_t sampleIdx = 0; sampleIdx < N_add; sampleIdx++)
+	{
+		const glm::vec3 pos = centerOfPosition + orientation * meshLocalSamples[sampleIdx].pos;
+		const uint64_t particleId = Sim::CheckedParticleId(
+			N_base, sampleIdx, "Boundary surface ID");
+
+		if (!IsInsideBuildRegion(pos)) { continue; }
+		(void)Sim::CheckedLocalParticleCount(
+			Sim::CheckedParticleAdd(B.xPos.size(), 1, "Boundary append"), "Boundary append");
+
+		B.id.push_back(particleId);
+		B.xPos.push_back(pos.x);
+		B.yPos.push_back(pos.y);
+		B.zPos.push_back(pos.z);
+		B.volB.push_back(defaultVolB);
+		B.psiB.push_back(defaultPsiB);
+	}
+	N_builtGlobalB_ = N_end;
+
+	// update boundary particle count
+	B.N_ = Sim::CheckedLocalParticleCount(B.xPos.size(), "Boundary particle count");
+
+	// derive per-particle volume and pseudo-mass for all boundary particles
+	// (including existing ones, so they are aware of the new neighbors)
+	ComputeBoundaryCoefficients(B, params, 0, B.N_);
 }
 
 glm::mat3 ScenarioMgr::MakeOrientation_FromEulerAngles(

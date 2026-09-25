@@ -112,6 +112,15 @@ namespace Scene
 			Sync::UniversalSimState& dst,
 			const Sim::SimParams& params);
 
+		// appends mesh-local surface samples as a single layer to the existing boundary particle state
+		// (recomputes the coefficients of all boundary particles)
+		void BuildBoundary_FromSurfaceSamples(
+			const std::vector<SurfaceSample>& meshLocalSamples,
+			const glm::vec3& centerOfPosition,
+			const glm::mat3& orientation,
+			Sync::UniversalSimState& dst,
+			const Sim::SimParams& params);
+
 		// builds a local-to-world orientation from yaw, pitch, and roll angles
 		glm::mat3 MakeOrientation_FromEulerAngles(
 			float yawDeg,

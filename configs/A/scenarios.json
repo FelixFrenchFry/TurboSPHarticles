@@ -1,7 +1,7 @@
 {
   "scenarios": {
-    "SampledMesh": {
-      "type": "SampledMesh",
+    "RigidMesh": {
+      "type": "RigidMesh",
       "model": "HouseBoat",
       "modelTargetExtent": 5.0,
       "container": {

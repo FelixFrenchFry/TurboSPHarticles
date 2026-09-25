@@ -1,0 +1,34 @@
+{
+  "models": {
+    "RockyCoastlineV1": {
+      "file": "rocky_coastline_v1.obj",
+      "metadata": {
+        "vertexCount": 196533,
+        "triangleCount": 393066,
+        "sourceExtent": [59.200002, 10.852571, 47.130540999999994],
+        "enclosedVolume": 9044.425740748591,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV2": {
+      "file": "rocky_coastline_v2.obj",
+      "metadata": {
+        "vertexCount": 277786,
+        "triangleCount": 555608,
+        "sourceExtent": [59.900002, 19.02549, 47.685757],
+        "enclosedVolume": 14712.782849198991,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV3": {
+      "file": "rocky_coastline_v3.obj",
+      "metadata": {
+        "vertexCount": 52057,
+        "triangleCount": 104110,
+        "sourceExtent": [60.0, 16.874086, 47.629393],
+        "enclosedVolume": 14305.28734011497,
+        "watertight": true
+      }
+    }
+  }
+}

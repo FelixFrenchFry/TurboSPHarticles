@@ -2,10 +2,10 @@
 #pragma once
 
 // external
-#include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 #include <string>
 
 // internal
@@ -55,48 +55,24 @@ namespace Scene
 		BreakingDamConfig cfg_;
 	};
 
-	inline BreakingDamConfig MakeBreakingDamConfig_Default(ScenarioMgr& scenarioMgr)
-	{
-		constexpr glm::vec3 U{ 1, 0, 0 }; // forward
-		constexpr glm::vec3 V{ 0, 1, 0 }; // up
-		constexpr glm::vec3 W{ 0, 0, 1 }; // right
-
-		BreakingDamConfig cfg{};
-
-		cfg.container = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{0,0,0},
-			/* uDir, uLen */	U, 1.0f,
-			/* vDir, vLen */	V, 1.0f,
-			/* wDir, wLen */	W, 1.0f
-		);
-
-		cfg.fluid = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{0.0,0.0,0.0},
-			/* uDir, uLen */	U, 0.5f,
-			/* vDir, vLen */	V, 0.5f,
-			/* wDir, wLen */	W, 0.5f
-		);
-
-		return cfg;
-	}
-
 	inline BreakingDamConfig LoadBreakingDamConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
-		// cache default config
-		BreakingDamConfig cfg = MakeBreakingDamConfig_Default(scenarioMgr);
+		BreakingDamConfig cfg{};
 
-		if (auto it = j.find("container"); it != j.end())
+		auto container = j.find("container");
+		if (container == j.end())
 		{
-			cfg.container = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("BreakingDam requires a 'container' object.");
 		}
+		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
 
-		if (auto it = j.find("fluid"); it != j.end())
+		auto fluid = j.find("fluid");
+		if (fluid == j.end())
 		{
-			cfg.fluid = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("BreakingDam requires a 'fluid' object.");
 		}
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
 
 		// sanitize values
 		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen), 
@@ -166,9 +142,8 @@ namespace Scene
 			SPDLOG_WARN("Could not load BreakingDam from '/{}'.", file);
 		}
 
-		// final fallback to built-in defaults
-		SPDLOG_WARN("Using built-in BreakingDam defaults.");
-		return MakeBreakingDamConfig_Default(scenarioMgr);
+		throw std::runtime_error(
+			"BreakingDam is not defined in profile '" + profile + "' or the default profile.");
 	}
 
 } // namespace Scene

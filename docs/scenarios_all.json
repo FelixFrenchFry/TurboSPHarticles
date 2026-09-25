@@ -85,8 +85,8 @@
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     },
-    "SampledMesh": {
-      "type": "SampledMesh",
+    "RigidMesh": {
+      "type": "RigidMesh",
       "model": "UnitCube",
       "modelTargetExtent": 0.16,
       "container": {
@@ -117,8 +117,37 @@
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     },
-    "SampledMeshCollection": {
-      "type": "SampledMeshCollection",
+    "BoundaryMesh": {
+      "type": "BoundaryMesh",
+      "model": "RockyCoastlineV3",
+      "modelTargetExtent": 2.0,
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 2.0,
+        "vLen": 1.0,
+        "wLen": 3.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 2.0,
+        "vLen": 0.5,
+        "wLen": 1.4073
+      },
+      "boundaryMesh": {
+        "centerOfPosition": [ 1.0, 0.2812, 2.2062 ],
+        "yawDeg": 180.0,
+        "pitchDeg": 0.0,
+        "rollDeg": 0.0
+      }
+    },
+    "RigidMeshGroup": {
+      "type": "RigidMeshGroup",
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],

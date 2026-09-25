@@ -12,8 +12,9 @@
 #include "converging_dam.h"
 #include "big_droplet.h"
 #include "rigid_cube.h"
-#include "sampled_mesh.h"
-#include "sampled_mesh_collection.h"
+#include "rigid_mesh.h"
+#include "boundary_mesh.h"
+#include "rigid_mesh_group.h"
 
 
 
@@ -93,19 +94,26 @@ namespace Scene
 
 			return std::make_unique<RigidCubeScene>(scenarioMgr, cfg);
 		}
-		case Base::ScenarioType::SampledMesh:
+		case Base::ScenarioType::RigidMesh:
 		{
-			SampledMeshConfig cfg;
-			cfg = LoadSampledMeshConfigFromProfile(profile, scenarioMgr);
+			RigidMeshConfig cfg;
+			cfg = LoadRigidMeshConfigFromProfile(profile, scenarioMgr);
 
-			return std::make_unique<SampledMeshScene>(scenarioMgr, cfg);
+			return std::make_unique<RigidMeshScene>(scenarioMgr, cfg);
 		}
-		case Base::ScenarioType::SampledMeshCollection:
+		case Base::ScenarioType::BoundaryMesh:
 		{
-			SampledMeshCollectionConfig cfg;
-			cfg = LoadSampledMeshCollectionConfigFromProfile(profile, scenarioMgr);
+			BoundaryMeshConfig cfg;
+			cfg = LoadBoundaryMeshConfigFromProfile(profile, scenarioMgr);
 
-			return std::make_unique<SampledMeshCollectionScene>(scenarioMgr, cfg);
+			return std::make_unique<BoundaryMeshScene>(scenarioMgr, cfg);
+		}
+		case Base::ScenarioType::RigidMeshGroup:
+		{
+			RigidMeshGroupConfig cfg;
+			cfg = LoadRigidMeshGroupConfigFromProfile(profile, scenarioMgr);
+
+			return std::make_unique<RigidMeshGroupScene>(scenarioMgr, cfg);
 		}
 		default:
 			throw std::runtime_error("Unsupported simulation scenario type requested.");

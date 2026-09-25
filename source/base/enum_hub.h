@@ -54,12 +54,13 @@ namespace Base
 
 	enum class ScenarioType : uint8_t
 	{
-		BreakingDam,        // 0
-		ConvergingDam,      // 1
-		BigDroplet,         // 2
-		RigidCube,          // 3
-		SampledMesh,        // 4
-		SampledMeshCollection, // 5
+		BreakingDam,            // 0
+		ConvergingDam,          // 1
+		BigDroplet,             // 2
+		RigidCube,              // 3
+		RigidMesh,              // 4
+		BoundaryMesh,           // 5
+		RigidMeshGroup,         // 6
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
@@ -73,10 +74,12 @@ namespace Base
 			return "BigDroplet";
 		case ScenarioType::RigidCube:
 			return "RigidCube";
-		case ScenarioType::SampledMesh:
-			return "SampledMesh";
-		case ScenarioType::SampledMeshCollection:
-			return "SampledMeshCollection";
+		case ScenarioType::RigidMesh:
+			return "RigidMesh";
+		case ScenarioType::BoundaryMesh:
+			return "BoundaryMesh";
+		case ScenarioType::RigidMeshGroup:
+			return "RigidMeshGroup";
 		}
 		return "ScenarioType::<unknown>";
 	}

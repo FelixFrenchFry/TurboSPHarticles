@@ -3,10 +3,10 @@
 
 // external
 #include <algorithm>
-#include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 #include <string>
 
 // internal
@@ -85,48 +85,31 @@ namespace Scene
 		ConvergingDamConfig cfg_;
 	};
 
-	inline ConvergingDamConfig MakeConvergingDamConfig_Default(ScenarioMgr& scenarioMgr)
-	{
-		constexpr glm::vec3 U{ 1, 0, 0 }; // forward
-		constexpr glm::vec3 V{ 0, 1, 0 }; // up
-		constexpr glm::vec3 W{ 0, 0, 1 }; // right
-
-		ConvergingDamConfig cfg{};
-
-		cfg.container = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{ 0,0,0 },
-			/* uDir, uLen */	U, 1.0f,
-			/* vDir, vLen */	V, 1.0f,
-			/* wDir, wLen */	W, 1.0f
-		);
-
-		cfg.fluidHeight = 0.5f;
-		cfg.holeSize = 0.25f;
-
-		return cfg;
-	}
-
 	inline ConvergingDamConfig LoadConvergingDamConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
-		// cache default config
-		ConvergingDamConfig cfg = MakeConvergingDamConfig_Default(scenarioMgr);
+		ConvergingDamConfig cfg{};
 
-		if (auto it = j.find("container"); it != j.end())
+		auto container = j.find("container");
+		if (container == j.end())
 		{
-			cfg.container = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("ConvergingDam requires a 'container' object.");
 		}
+		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
 
-		if (auto it = j.find("fluidHeight"); it != j.end())
+		auto fluidHeight = j.find("fluidHeight");
+		if (fluidHeight == j.end())
 		{
-			cfg.fluidHeight = it->get<float>();
+			throw std::runtime_error("ConvergingDam requires a 'fluidHeight' value.");
 		}
+		cfg.fluidHeight = fluidHeight->get<float>();
 
-		if (auto it = j.find("holeSize"); it != j.end())
+		auto holeSize = j.find("holeSize");
+		if (holeSize == j.end())
 		{
-			cfg.holeSize = it->get<float>();
+			throw std::runtime_error("ConvergingDam requires a 'holeSize' value.");
 		}
+		cfg.holeSize = holeSize->get<float>();
 
 		// sanitize values
 		cfg.fluidHeight = std::min(std::max(0.0f, cfg.fluidHeight),
@@ -183,9 +166,8 @@ namespace Scene
 			SPDLOG_WARN("Could not load ConvergingDam from '/{}'.", file);
 		}
 
-		// final fallback to built-in defaults
-		SPDLOG_WARN("Using built-in ConvergingDam defaults.");
-		return MakeConvergingDamConfig_Default(scenarioMgr);
+		throw std::runtime_error(
+			"ConvergingDam is not defined in profile '" + profile + "' or the default profile.");
 	}
 
 } // namespace Scene

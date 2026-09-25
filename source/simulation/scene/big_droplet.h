@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 #include <string>
 #include <tbb/parallel_for.h>
 
@@ -132,71 +133,57 @@ namespace Scene
 		BigDropletConfig cfg_;
 	};
 
-	inline BigDropletConfig MakeBigDropletConfig_Default(ScenarioMgr& scenarioMgr)
-	{
-		constexpr glm::vec3 U{ 1, 0, 0 }; // forward
-		constexpr glm::vec3 V{ 0, 1, 0 }; // up
-		constexpr glm::vec3 W{ 0, 0, 1 }; // right
-
-		BigDropletConfig cfg{};
-
-		cfg.container = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{ 0,0,0 },
-			/* uDir, uLen */	U, 1.0f,
-			/* vDir, vLen */	V, 1.0f,
-			/* wDir, wLen */	W, 1.0f
-		);
-
-		cfg.poolDepth = 0.2f;
-		cfg.dropletRadius = 0.1f;
-		cfg.dropletGap = 0.4f;
-		cfg.dropletOffset = { 0.0f, 0.0f };
-		cfg.dropletInitVel = { 0.0f, 0.0f, 0.0f };
-
-		return cfg;
-	}
-
 	inline BigDropletConfig LoadBigDropletConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
-		// cache default config
-		BigDropletConfig cfg = MakeBigDropletConfig_Default(scenarioMgr);
+		BigDropletConfig cfg{};
 
-		if (auto it = j.find("container"); it != j.end())
+		auto container = j.find("container");
+		if (container == j.end())
 		{
-			cfg.container = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("BigDroplet requires a 'container' object.");
 		}
+		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
 
-		if (auto it = j.find("poolDepth"); it != j.end())
+		auto poolDepth = j.find("poolDepth");
+		if (poolDepth == j.end())
 		{
-			cfg.poolDepth = it->get<float>();
+			throw std::runtime_error("BigDroplet requires a 'poolDepth' value.");
 		}
+		cfg.poolDepth = poolDepth->get<float>();
 
-		if (auto it = j.find("dropletRadius"); it != j.end())
+		auto dropletRadius = j.find("dropletRadius");
+		if (dropletRadius == j.end())
 		{
-			cfg.dropletRadius = it->get<float>();
+			throw std::runtime_error("BigDroplet requires a 'dropletRadius' value.");
 		}
+		cfg.dropletRadius = dropletRadius->get<float>();
 
-		if (auto it = j.find("dropletGap"); it != j.end())
+		auto dropletGap = j.find("dropletGap");
+		if (dropletGap == j.end())
 		{
-			cfg.dropletGap = it->get<float>();
+			throw std::runtime_error("BigDroplet requires a 'dropletGap' value.");
 		}
+		cfg.dropletGap = dropletGap->get<float>();
 
-		if (auto it = j.find("dropletOffset"); it != j.end() &&
-			it->is_array() && it->size() == 2)
+		auto dropletOffset = j.find("dropletOffset");
+		if (dropletOffset == j.end() ||
+			!dropletOffset->is_array() || dropletOffset->size() != 2)
 		{
-			cfg.dropletOffset.x = (*it)[0].get<float>();
-			cfg.dropletOffset.y = (*it)[1].get<float>();
+			throw std::runtime_error("BigDroplet requires a two-value 'dropletOffset'.");
 		}
+		cfg.dropletOffset.x = (*dropletOffset)[0].get<float>();
+		cfg.dropletOffset.y = (*dropletOffset)[1].get<float>();
 
-		if (auto it = j.find("dropletInitVel"); it != j.end() &&
-			it->is_array() && it->size() == 3)
+		auto dropletInitVel = j.find("dropletInitVel");
+		if (dropletInitVel == j.end() ||
+			!dropletInitVel->is_array() || dropletInitVel->size() != 3)
 		{
-			cfg.dropletInitVel.x = (*it)[0].get<float>();
-			cfg.dropletInitVel.y = (*it)[1].get<float>();
-			cfg.dropletInitVel.z = (*it)[2].get<float>();
+			throw std::runtime_error("BigDroplet requires a three-value 'dropletInitVel'.");
 		}
+		cfg.dropletInitVel.x = (*dropletInitVel)[0].get<float>();
+		cfg.dropletInitVel.y = (*dropletInitVel)[1].get<float>();
+		cfg.dropletInitVel.z = (*dropletInitVel)[2].get<float>();
 
 		// sanitize values
 		cfg.poolDepth = std::min(std::max(0.0f, cfg.poolDepth),
@@ -266,9 +253,8 @@ namespace Scene
 			SPDLOG_WARN("Could not load BigDroplet from '/{}'.", file);
 		}
 
-		// final fallback to built-in defaults
-		SPDLOG_WARN("Using built-in BigDroplet defaults.");
-		return MakeBigDropletConfig_Default(scenarioMgr);
+		throw std::runtime_error(
+			"BigDroplet is not defined in profile '" + profile + "' or the default profile.");
 	}
 
 } // namespace Scene

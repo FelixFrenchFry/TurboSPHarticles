@@ -1,7 +1,7 @@
 {
   "scenarios": {
-    "SampledMeshCollection": {
-      "type": "SampledMeshCollection",
+    "RigidMeshGroup": {
+      "type": "RigidMeshGroup",
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],

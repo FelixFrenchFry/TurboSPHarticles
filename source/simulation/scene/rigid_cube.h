@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 #include <string>
 
 // internal
@@ -121,86 +122,58 @@ namespace Scene
 		RigidCubeConfig cfg_;
 	};
 
-	inline RigidCubeConfig MakeRigidCubeConfig_Default(ScenarioMgr& scenarioMgr)
-	{
-		constexpr glm::vec3 U{ 1, 0, 0 }; // forward
-		constexpr glm::vec3 V{ 0, 1, 0 }; // up
-		constexpr glm::vec3 W{ 0, 0, 1 }; // right
-
-		RigidCubeConfig cfg{};
-
-		cfg.container = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{ 0,0,0 },
-			/* uDir, uLen */	U, 1.0f,
-			/* vDir, vLen */	V, 1.0f,
-			/* wDir, wLen */	W, 1.0f
-		);
-
-		cfg.fluid = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{ 0.0f,0.0f,0.0f },
-			/* uDir, uLen */	U, 0.45f,
-			/* vDir, vLen */	V, 0.45f,
-			/* wDir, wLen */	W, 0.45f
-		);
-
-		cfg.rigidBody = scenarioMgr.MakeOBB_FromAxes
-		(
-			/* origin */		{ 0.62f,0.12f,0.42f },
-			/* uDir, uLen */	U, 0.16f,
-			/* vDir, vLen */	V, 0.16f,
-			/* wDir, wLen */	W, 0.16f
-		);
-
-		cfg.rigidDensity = 1'000.0f;
-		cfg.rigidInitVel = { 0.0f, 0.0f, 0.0f };
-		cfg.rigidInitOmega = { 0.0f, 0.0f, 0.0f };
-
-		return cfg;
-	}
-
 	inline RigidCubeConfig LoadRigidCubeConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
-		// cache default config
-		RigidCubeConfig cfg = MakeRigidCubeConfig_Default(scenarioMgr);
+		RigidCubeConfig cfg{};
 
-		if (auto it = j.find("container"); it != j.end())
+		auto container = j.find("container");
+		if (container == j.end())
 		{
-			cfg.container = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("RigidCube requires a 'container' object.");
 		}
+		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
 
-		if (auto it = j.find("fluid"); it != j.end())
+		auto fluid = j.find("fluid");
+		if (fluid == j.end())
 		{
-			cfg.fluid = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("RigidCube requires a 'fluid' object.");
 		}
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
 
-		if (auto it = j.find("rigidBody"); it != j.end())
+		auto rigidBody = j.find("rigidBody");
+		if (rigidBody == j.end())
 		{
-			cfg.rigidBody = ScenarioMgr::ParseOBBFromJson(*it, scenarioMgr);
+			throw std::runtime_error("RigidCube requires a 'rigidBody' object.");
 		}
+		cfg.rigidBody = ScenarioMgr::ParseOBBFromJson(*rigidBody, scenarioMgr);
 
-		if (auto it = j.find("rigidDensity"); it != j.end())
+		auto rigidDensity = j.find("rigidDensity");
+		if (rigidDensity == j.end())
 		{
-			cfg.rigidDensity = it->get<float>();
+			throw std::runtime_error("RigidCube requires a 'rigidDensity' value.");
 		}
+		cfg.rigidDensity = rigidDensity->get<float>();
 
-		if (auto it = j.find("rigidInitVel"); it != j.end() &&
-			it->is_array() && it->size() == 3)
+		auto rigidInitVel = j.find("rigidInitVel");
+		if (rigidInitVel == j.end() ||
+			!rigidInitVel->is_array() || rigidInitVel->size() != 3)
 		{
-			cfg.rigidInitVel.x = (*it)[0].get<float>();
-			cfg.rigidInitVel.y = (*it)[1].get<float>();
-			cfg.rigidInitVel.z = (*it)[2].get<float>();
+			throw std::runtime_error("RigidCube requires a three-value 'rigidInitVel'.");
 		}
+		cfg.rigidInitVel.x = (*rigidInitVel)[0].get<float>();
+		cfg.rigidInitVel.y = (*rigidInitVel)[1].get<float>();
+		cfg.rigidInitVel.z = (*rigidInitVel)[2].get<float>();
 
-		if (auto it = j.find("rigidInitOmega"); it != j.end() &&
-			it->is_array() && it->size() == 3)
+		auto rigidInitOmega = j.find("rigidInitOmega");
+		if (rigidInitOmega == j.end() ||
+			!rigidInitOmega->is_array() || rigidInitOmega->size() != 3)
 		{
-			cfg.rigidInitOmega.x = (*it)[0].get<float>();
-			cfg.rigidInitOmega.y = (*it)[1].get<float>();
-			cfg.rigidInitOmega.z = (*it)[2].get<float>();
+			throw std::runtime_error("RigidCube requires a three-value 'rigidInitOmega'.");
 		}
+		cfg.rigidInitOmega.x = (*rigidInitOmega)[0].get<float>();
+		cfg.rigidInitOmega.y = (*rigidInitOmega)[1].get<float>();
+		cfg.rigidInitOmega.z = (*rigidInitOmega)[2].get<float>();
 
 		// sanitize values
 		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen),
@@ -265,9 +238,8 @@ namespace Scene
 			SPDLOG_WARN("Could not load RigidCube from '/{}'.", file);
 		}
 
-		// final fallback to built-in defaults
-		SPDLOG_WARN("Using built-in RigidCube defaults.");
-		return MakeRigidCubeConfig_Default(scenarioMgr);
+		throw std::runtime_error(
+			"RigidCube is not defined in profile '" + profile + "' or the default profile.");
 	}
 
 } // namespace Scene

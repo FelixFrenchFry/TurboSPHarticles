@@ -16,4 +16,7 @@ namespace Scene
 		std::vector<glm::uvec3> triangles;
 	};
 
+	// scales the mesh uniformly to the target extent and returns its bounding box center
+	glm::vec3 ScaleToTargetExtent(TriangleSurfaceMesh& mesh, float targetExtent);
+
 } // namespace Scene
