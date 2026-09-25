@@ -14,6 +14,7 @@
 #include "source/simulation/sync/state_sim.h"
 #include "builder.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -58,21 +59,13 @@ namespace Scene
 	inline BreakingDamConfig LoadBreakingDamConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "BreakingDam");
 		BreakingDamConfig cfg{};
 
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("BreakingDam requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto fluid = j.find("fluid");
-		if (fluid == j.end())
-		{
-			throw std::runtime_error("BreakingDam requires a 'fluid' object.");
-		}
-		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "BreakingDam"), scenarioMgr, "BreakingDam.container");
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "fluid", "BreakingDam"), scenarioMgr, "BreakingDam.fluid");
 
 		// sanitize values
 		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen), 
@@ -105,22 +98,12 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["BreakingDam"] object
-				if (!scenarios.contains("BreakingDam") || !scenarios["BreakingDam"].is_object())
+				if (!scenarios.contains("BreakingDam"))
 				{
 					return std::nullopt;
 				}
 
 				const auto& jBD = scenarios["BreakingDam"];
-
-				// sanity check of "type" field
-				if (auto it = jBD.find("type"); it != jBD.end() && it->is_string())
-				{
-					const std::string t = it->get<std::string>();
-					if (t != "BreakingDam")
-					{
-						SPDLOG_WARN("BreakingDam entry has type '{}' (expected 'BreakingDam').", t);
-					}
-				}
 
 				return LoadBreakingDamConfigFromJson(jBD, scenarioMgr);
 			};

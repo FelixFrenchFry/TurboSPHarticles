@@ -20,6 +20,7 @@
 #include "boundary_mesh.h"
 #include "rigid_mesh.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -80,32 +81,13 @@ namespace Scene
 	inline RigidMeshGroupConfig LoadRigidMeshGroupConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "RigidMeshGroup");
 		RigidMeshGroupConfig cfg{};
 
-		if (auto it = j.find("type"); it != j.end() && it->is_string())
-		{
-			const std::string type = it->get<std::string>();
-			if (type != "RigidMeshGroup")
-			{
-				SPDLOG_WARN(
-					"RigidMeshGroup entry has type '{}' (expected 'RigidMeshGroup').",
-					type);
-			}
-		}
-
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("RigidMeshGroup requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto fluid = j.find("fluid");
-		if (fluid == j.end())
-		{
-			throw std::runtime_error("RigidMeshGroup requires a 'fluid' object.");
-		}
-		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "RigidMeshGroup"), scenarioMgr, "RigidMeshGroup.container");
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "fluid", "RigidMeshGroup"), scenarioMgr, "RigidMeshGroup.fluid");
 
 		auto rigidBodies = j.find("rigidBodies");
 		if (rigidBodies == j.end() || !rigidBodies->is_array() || rigidBodies->empty())
@@ -115,10 +97,11 @@ namespace Scene
 		}
 
 		cfg.rigidMeshes.reserve(rigidBodies->size());
-		for (const nlohmann::json& rigidMeshJson : *rigidBodies)
+		for (size_t i = 0; i < rigidBodies->size(); i++)
 		{
 			cfg.rigidMeshes.push_back(
-				LoadRigidMeshEntryConfigFromJson(rigidMeshJson, "RigidMeshGroup"));
+				LoadRigidMeshEntryConfigFromJson((*rigidBodies)[i],
+					"RigidMeshGroup.rigidBodies[" + std::to_string(i) + "]"));
 		}
 
 		if (auto boundaryMeshes = j.find("boundaryMeshes"); boundaryMeshes != j.end())
@@ -130,10 +113,11 @@ namespace Scene
 			}
 
 			cfg.boundaryMeshes.reserve(boundaryMeshes->size());
-			for (const nlohmann::json& boundaryMeshJson : *boundaryMeshes)
+			for (size_t i = 0; i < boundaryMeshes->size(); i++)
 			{
 				cfg.boundaryMeshes.push_back(
-					LoadBoundaryMeshEntryConfigFromJson(boundaryMeshJson, "RigidMeshGroup"));
+					LoadBoundaryMeshEntryConfigFromJson((*boundaryMeshes)[i],
+						"RigidMeshGroup.boundaryMeshes[" + std::to_string(i) + "]"));
 			}
 		}
 
@@ -167,8 +151,7 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["RigidMeshGroup"] object
-				if (!scenarios.contains("RigidMeshGroup") ||
-					!scenarios["RigidMeshGroup"].is_object())
+				if (!scenarios.contains("RigidMeshGroup"))
 				{
 					return std::nullopt;
 				}

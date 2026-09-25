@@ -22,6 +22,7 @@
 #include "source/base/helpers.h"
 #include "source/simulation/core/solver_constants.h"
 #include "builder.h"
+#include "scenario_json.h"
 
 
 
@@ -1306,30 +1307,29 @@ std::array<OBBFace, 6> inline ScenarioMgr::GetFacesFromOBB(const OBB& box)
 	return faces;
 }
 
-OBB ScenarioMgr::ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr)
+OBB ScenarioMgr::ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr,
+	const std::string& context)
 {
-	auto readVec3 = [](const json& v, glm::vec3 defaultVal) -> glm::vec3
-		{
-			if (!v.is_array() || v.size() != 3) return defaultVal;
+	const glm::vec3 origin = ReadScenarioVector<3>(j, "origin", context);
+	const glm::vec3 uDir = ReadScenarioVector<3>(j, "uDir", context);
+	const glm::vec3 vDir = ReadScenarioVector<3>(j, "vDir", context);
+	const glm::vec3 wDir = ReadScenarioVector<3>(j, "wDir", context);
+	const float uLen = ReadScenarioFloat(j, "uLen", context);
+	const float vLen = ReadScenarioFloat(j, "vLen", context);
+	const float wLen = ReadScenarioFloat(j, "wLen", context);
 
-			return { v[0].get<float>(),
-					   v[1].get<float>(),
-					   v[2].get<float>() };
-		};
-
-	glm::vec3 origin = readVec3(j.value("origin",
-		json::array({ 0.0f, 0.0f, 0.0f })), { 0,0,0 });
-	glm::vec3 uDir = readVec3(j.value("uDir",
-		json::array({ 1.0f, 0.0f, 0.0f })), { 1,0,0 });
-	glm::vec3 vDir = readVec3(j.value("vDir",
-		json::array({ 0.0f, 1.0f, 0.0f })), { 0,1,0 });
-	glm::vec3 wDir = readVec3(j.value("wDir",
-		json::array({ 0.0f, 0.0f, 1.0f })), { 0,0,1 });
-
-	float uLen = j.value("uLen", 1.0f);
-	float vLen = j.value("vLen", 1.0f);
-	float wLen = j.value("wLen", 1.0f);
-
+	if (Base::ApproxEqu(uDir, glm::vec3(0)))
+	{
+		throw std::runtime_error(context + ".uDir must be nonzero.");
+	}
+	if (Base::ApproxEqu(vDir, glm::vec3(0)))
+	{
+		throw std::runtime_error(context + ".vDir must be nonzero.");
+	}
+	if (Base::ApproxEqu(wDir, glm::vec3(0)))
+	{
+		throw std::runtime_error(context + ".wDir must be nonzero.");
+	}
 	return scenarioMgr.MakeOBB_FromAxes(origin, uDir, uLen, vDir, vLen, wDir, wLen);
 }
 

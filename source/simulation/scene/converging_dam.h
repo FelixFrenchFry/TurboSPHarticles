@@ -15,6 +15,7 @@
 #include "source/simulation/sync/state_sim.h"
 #include "builder.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -88,28 +89,13 @@ namespace Scene
 	inline ConvergingDamConfig LoadConvergingDamConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "ConvergingDam");
 		ConvergingDamConfig cfg{};
 
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("ConvergingDam requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto fluidHeight = j.find("fluidHeight");
-		if (fluidHeight == j.end())
-		{
-			throw std::runtime_error("ConvergingDam requires a 'fluidHeight' value.");
-		}
-		cfg.fluidHeight = fluidHeight->get<float>();
-
-		auto holeSize = j.find("holeSize");
-		if (holeSize == j.end())
-		{
-			throw std::runtime_error("ConvergingDam requires a 'holeSize' value.");
-		}
-		cfg.holeSize = holeSize->get<float>();
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "ConvergingDam"), scenarioMgr, "ConvergingDam.container");
+		cfg.fluidHeight = ReadScenarioFloat(j, "fluidHeight", "ConvergingDam");
+		cfg.holeSize = ReadScenarioFloat(j, "holeSize", "ConvergingDam");
 
 		// sanitize values
 		cfg.fluidHeight = std::min(std::max(0.0f, cfg.fluidHeight),
@@ -141,7 +127,7 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["ConvergingDam"] object
-				if (!scenarios.contains("ConvergingDam") || !scenarios["ConvergingDam"].is_object())
+				if (!scenarios.contains("ConvergingDam"))
 				{
 					return std::nullopt;
 				}

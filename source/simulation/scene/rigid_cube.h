@@ -16,6 +16,7 @@
 #include "source/simulation/sync/state_sim.h"
 #include "builder.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -125,55 +126,18 @@ namespace Scene
 	inline RigidCubeConfig LoadRigidCubeConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "RigidCube");
 		RigidCubeConfig cfg{};
 
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("RigidCube requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto fluid = j.find("fluid");
-		if (fluid == j.end())
-		{
-			throw std::runtime_error("RigidCube requires a 'fluid' object.");
-		}
-		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
-
-		auto rigidBody = j.find("rigidBody");
-		if (rigidBody == j.end())
-		{
-			throw std::runtime_error("RigidCube requires a 'rigidBody' object.");
-		}
-		cfg.rigidBody = ScenarioMgr::ParseOBBFromJson(*rigidBody, scenarioMgr);
-
-		auto rigidDensity = j.find("rigidDensity");
-		if (rigidDensity == j.end())
-		{
-			throw std::runtime_error("RigidCube requires a 'rigidDensity' value.");
-		}
-		cfg.rigidDensity = rigidDensity->get<float>();
-
-		auto rigidInitVel = j.find("rigidInitVel");
-		if (rigidInitVel == j.end() ||
-			!rigidInitVel->is_array() || rigidInitVel->size() != 3)
-		{
-			throw std::runtime_error("RigidCube requires a three-value 'rigidInitVel'.");
-		}
-		cfg.rigidInitVel.x = (*rigidInitVel)[0].get<float>();
-		cfg.rigidInitVel.y = (*rigidInitVel)[1].get<float>();
-		cfg.rigidInitVel.z = (*rigidInitVel)[2].get<float>();
-
-		auto rigidInitOmega = j.find("rigidInitOmega");
-		if (rigidInitOmega == j.end() ||
-			!rigidInitOmega->is_array() || rigidInitOmega->size() != 3)
-		{
-			throw std::runtime_error("RigidCube requires a three-value 'rigidInitOmega'.");
-		}
-		cfg.rigidInitOmega.x = (*rigidInitOmega)[0].get<float>();
-		cfg.rigidInitOmega.y = (*rigidInitOmega)[1].get<float>();
-		cfg.rigidInitOmega.z = (*rigidInitOmega)[2].get<float>();
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "RigidCube"), scenarioMgr, "RigidCube.container");
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "fluid", "RigidCube"), scenarioMgr, "RigidCube.fluid");
+		cfg.rigidBody = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "rigidBody", "RigidCube"), scenarioMgr, "RigidCube.rigidBody");
+		cfg.rigidDensity = ReadScenarioFloat(j, "rigidDensity", "RigidCube");
+		cfg.rigidInitVel = ReadScenarioVector<3>(j, "rigidInitVel", "RigidCube");
+		cfg.rigidInitOmega = ReadScenarioVector<3>(j, "rigidInitOmega", "RigidCube");
 
 		// sanitize values
 		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen),
@@ -213,7 +177,7 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["RigidCube"] object
-				if (!scenarios.contains("RigidCube") || !scenarios["RigidCube"].is_object())
+				if (!scenarios.contains("RigidCube"))
 				{
 					return std::nullopt;
 				}

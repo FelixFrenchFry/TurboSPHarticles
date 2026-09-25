@@ -8,6 +8,7 @@
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <string>
 #include <vector>
 
 // internal
@@ -134,7 +135,8 @@ namespace Scene
 
 		std::array<OBBFace, 6> inline GetFacesFromOBB(const OBB& box);
 
-		static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr);
+		static OBB ParseOBBFromJson(const json& j, ScenarioMgr& scenarioMgr,
+			const std::string& context = "OBB");
 
 	private:
 

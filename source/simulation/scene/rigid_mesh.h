@@ -28,6 +28,7 @@
 #include "geometry/surface_sampling.h"
 #include "builder.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -38,20 +39,20 @@ namespace Scene
 		// model asset nickname and resolved OBJ file
 		std::string modelName;
 		std::string modelFile;
-		float modelTargetExtent = 1.0f; // target length of the largest local bounding box extent
+		float modelTargetExtent; // target length of the largest local bounding box extent
 		glm::mat3 modelSourceToCanonical{ 1.0f }; // local to canonical body orientation
 		glm::vec3 modelCenterOfMassOffset{ 0.0f }; // canonical offset relative to target extent
 
 		// initial rigid body pose
-		glm::vec3 rigidBodyCenterOfPosition{ 0.0f }; // world position of the volume centroid
-		float rigidBodyYawDeg = 0.0f; // turn around world Y
-		float rigidBodyPitchDeg = 0.0f; // tilt around local Z
-		float rigidBodyRollDeg = 0.0f; // tilt around local X
+		glm::vec3 rigidBodyCenterOfPosition; // world position of the volume centroid
+		float rigidBodyYawDeg; // turn around world Y
+		float rigidBodyPitchDeg; // tilt around local Z
+		float rigidBodyRollDeg; // tilt around local X
 
 		// rigid body material and motion
-		float rigidDensity = 1'000.0f;
-		glm::vec3 rigidInitVel{ 0.0f };
-		glm::vec3 rigidInitOmega{ 0.0f };
+		float rigidDensity;
+		glm::vec3 rigidInitVel;
+		glm::vec3 rigidInitOmega;
 	};
 
 	struct RigidMeshConfig
@@ -174,99 +175,19 @@ namespace Scene
 	inline RigidMeshEntryConfig LoadRigidMeshEntryConfigFromJson(
 		const nlohmann::json& j, const std::string& scenarioName)
 	{
-		if (!j.is_object())
-		{
-			throw std::runtime_error(
-				scenarioName + " rigid mesh entries must be objects.");
-		}
-
-		auto ReadVec3 = [](const nlohmann::json& value, glm::vec3& dst)
-			{
-				if (value.is_array() && value.size() == 3)
-				{
-					dst.x = value[0].get<float>();
-					dst.y = value[1].get<float>();
-					dst.z = value[2].get<float>();
-				}
-			};
-
 		RigidMeshEntryConfig cfg{};
-		auto model = j.find("model");
-		if (model == j.end() || !model->is_string())
-		{
-			throw std::runtime_error(
-				scenarioName + " rigid mesh requires a string 'model'.");
-		}
-		cfg.modelName = model->get<std::string>();
+		cfg.modelName = ReadScenarioString(j, "model", scenarioName);
+		cfg.modelTargetExtent = ReadScenarioFloat(j, "modelTargetExtent", scenarioName);
 
-		if (auto value = j.find("modelTargetExtent"); value != j.end())
-		{
-			cfg.modelTargetExtent = value->get<float>();
-		}
-		if (j.find("modelScale") != j.end())
-		{
-			throw std::runtime_error(
-				scenarioName + " configuration uses 'modelScale'; use 'modelTargetExtent' instead.");
-		}
-
-		auto rigidBody = j.find("rigidBody");
-		if (rigidBody == j.end() || !rigidBody->is_object())
-		{
-			throw std::runtime_error(
-				scenarioName + " rigid mesh requires a 'rigidBody' object.");
-		}
-		if (rigidBody->contains("centerOfMass"))
-		{
-			throw std::runtime_error(
-				scenarioName + " rigidBody uses 'centerOfMass'; use 'centerOfPosition' instead.");
-		}
-		auto centerOfPosition = rigidBody->find("centerOfPosition");
-		if (centerOfPosition == rigidBody->end() ||
-			!centerOfPosition->is_array() || centerOfPosition->size() != 3 ||
-			!(*centerOfPosition)[0].is_number() ||
-			!(*centerOfPosition)[1].is_number() ||
-			!(*centerOfPosition)[2].is_number())
-		{
-			throw std::runtime_error(
-				scenarioName + " rigid mesh requires a three-value 'centerOfPosition'.");
-		}
-		ReadVec3(*centerOfPosition, cfg.rigidBodyCenterOfPosition);
-
-		if (rigidBody->contains("uDir") ||
-			rigidBody->contains("vDir") ||
-			rigidBody->contains("wDir"))
-		{
-			throw std::runtime_error(
-				scenarioName + " rigidBody uses 'uDir/vDir/wDir'; use 'yawDeg/pitchDeg/rollDeg' instead.");
-		}
-
-		if (auto value = rigidBody->find("yawDeg"); value != rigidBody->end())
-		{
-			cfg.rigidBodyYawDeg = value->get<float>();
-		}
-		if (auto value = rigidBody->find("pitchDeg"); value != rigidBody->end())
-		{
-			cfg.rigidBodyPitchDeg = value->get<float>();
-		}
-		if (auto value = rigidBody->find("rollDeg"); value != rigidBody->end())
-		{
-			cfg.rigidBodyRollDeg = value->get<float>();
-		}
-
-		if (auto value = j.find("rigidDensity"); value != j.end())
-		{
-			cfg.rigidDensity = value->get<float>();
-		}
-
-		if (auto value = j.find("rigidInitVel"); value != j.end())
-		{
-			ReadVec3(*value, cfg.rigidInitVel);
-		}
-
-		if (auto value = j.find("rigidInitOmega"); value != j.end())
-		{
-			ReadVec3(*value, cfg.rigidInitOmega);
-		}
+		const auto& rigidBody = ReadScenarioObject(j, "rigidBody", scenarioName);
+		const std::string pose = scenarioName + ".rigidBody";
+		cfg.rigidBodyCenterOfPosition = ReadScenarioVector<3>(rigidBody, "centerOfPosition", pose);
+		cfg.rigidBodyYawDeg = ReadScenarioFloat(rigidBody, "yawDeg", pose);
+		cfg.rigidBodyPitchDeg = ReadScenarioFloat(rigidBody, "pitchDeg", pose);
+		cfg.rigidBodyRollDeg = ReadScenarioFloat(rigidBody, "rollDeg", pose);
+		cfg.rigidDensity = ReadScenarioFloat(j, "rigidDensity", scenarioName);
+		cfg.rigidInitVel = ReadScenarioVector<3>(j, "rigidInitVel", scenarioName);
+		cfg.rigidInitOmega = ReadScenarioVector<3>(j, "rigidInitOmega", scenarioName);
 
 		return cfg;
 	}
@@ -428,32 +349,13 @@ namespace Scene
 	inline RigidMeshConfig LoadRigidMeshConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "RigidMesh");
 		RigidMeshConfig cfg{};
 
-		if (auto it = j.find("type"); it != j.end() && it->is_string())
-		{
-			const std::string type = it->get<std::string>();
-			if (type != "RigidMesh")
-			{
-				SPDLOG_WARN("RigidMesh entry has type '{}' (expected 'RigidMesh').", type);
-			}
-		}
-
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("RigidMesh requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto fluid = j.find("fluid");
-		if (fluid == j.end())
-		{
-			throw std::runtime_error("RigidMesh requires a 'fluid' object.");
-		}
-		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
-
-		// the scenario object itself holds the rigid mesh entry keys
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "RigidMesh"), scenarioMgr, "RigidMesh.container");
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "fluid", "RigidMesh"), scenarioMgr, "RigidMesh.fluid");
 		cfg.rigidMesh = LoadRigidMeshEntryConfigFromJson(j, "RigidMesh");
 
 		// sanitize fluid lengths
@@ -486,7 +388,7 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["RigidMesh"] object
-				if (!scenarios.contains("RigidMesh") || !scenarios["RigidMesh"].is_object())
+				if (!scenarios.contains("RigidMesh"))
 				{
 					return std::nullopt;
 				}

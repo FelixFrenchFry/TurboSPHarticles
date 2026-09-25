@@ -17,6 +17,7 @@
 #include "source/simulation/sync/state_sim.h"
 #include "builder.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -136,54 +137,16 @@ namespace Scene
 	inline BigDropletConfig LoadBigDropletConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "BigDroplet");
 		BigDropletConfig cfg{};
 
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("BigDroplet requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto poolDepth = j.find("poolDepth");
-		if (poolDepth == j.end())
-		{
-			throw std::runtime_error("BigDroplet requires a 'poolDepth' value.");
-		}
-		cfg.poolDepth = poolDepth->get<float>();
-
-		auto dropletRadius = j.find("dropletRadius");
-		if (dropletRadius == j.end())
-		{
-			throw std::runtime_error("BigDroplet requires a 'dropletRadius' value.");
-		}
-		cfg.dropletRadius = dropletRadius->get<float>();
-
-		auto dropletGap = j.find("dropletGap");
-		if (dropletGap == j.end())
-		{
-			throw std::runtime_error("BigDroplet requires a 'dropletGap' value.");
-		}
-		cfg.dropletGap = dropletGap->get<float>();
-
-		auto dropletOffset = j.find("dropletOffset");
-		if (dropletOffset == j.end() ||
-			!dropletOffset->is_array() || dropletOffset->size() != 2)
-		{
-			throw std::runtime_error("BigDroplet requires a two-value 'dropletOffset'.");
-		}
-		cfg.dropletOffset.x = (*dropletOffset)[0].get<float>();
-		cfg.dropletOffset.y = (*dropletOffset)[1].get<float>();
-
-		auto dropletInitVel = j.find("dropletInitVel");
-		if (dropletInitVel == j.end() ||
-			!dropletInitVel->is_array() || dropletInitVel->size() != 3)
-		{
-			throw std::runtime_error("BigDroplet requires a three-value 'dropletInitVel'.");
-		}
-		cfg.dropletInitVel.x = (*dropletInitVel)[0].get<float>();
-		cfg.dropletInitVel.y = (*dropletInitVel)[1].get<float>();
-		cfg.dropletInitVel.z = (*dropletInitVel)[2].get<float>();
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "BigDroplet"), scenarioMgr, "BigDroplet.container");
+		cfg.poolDepth = ReadScenarioFloat(j, "poolDepth", "BigDroplet");
+		cfg.dropletRadius = ReadScenarioFloat(j, "dropletRadius", "BigDroplet");
+		cfg.dropletGap = ReadScenarioFloat(j, "dropletGap", "BigDroplet");
+		cfg.dropletOffset = ReadScenarioVector<2>(j, "dropletOffset", "BigDroplet");
+		cfg.dropletInitVel = ReadScenarioVector<3>(j, "dropletInitVel", "BigDroplet");
 
 		// sanitize values
 		cfg.poolDepth = std::min(std::max(0.0f, cfg.poolDepth),
@@ -228,7 +191,7 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["BigDroplet"] object
-				if (!scenarios.contains("BigDroplet") || !scenarios["BigDroplet"].is_object())
+				if (!scenarios.contains("BigDroplet"))
 				{
 					return std::nullopt;
 				}

@@ -26,6 +26,7 @@
 #include "geometry/surface_sampling.h"
 #include "builder.h"
 #include "scenario_sim.h"
+#include "scenario_json.h"
 
 
 
@@ -36,14 +37,14 @@ namespace Scene
 		// model asset nickname and resolved OBJ file
 		std::string modelName;
 		std::string modelFile;
-		float modelTargetExtent = 1.0f; // target length of the largest local bounding box extent
+		float modelTargetExtent; // target length of the largest local bounding box extent
 		glm::mat3 modelSourceToCanonical{ 1.0f }; // local to canonical mesh orientation
 
 		// static boundary mesh pose
-		glm::vec3 boundaryMeshCenterOfPosition{ 0.0f }; // world position of the bounding box center
-		float boundaryMeshYawDeg = 0.0f; // turn around world Y
-		float boundaryMeshPitchDeg = 0.0f; // tilt around local Z
-		float boundaryMeshRollDeg = 0.0f; // tilt around local X
+		glm::vec3 boundaryMeshCenterOfPosition; // world position of the bounding box center
+		float boundaryMeshYawDeg; // turn around world Y
+		float boundaryMeshPitchDeg; // tilt around local Z
+		float boundaryMeshRollDeg; // tilt around local X
 	};
 
 	struct BoundaryMeshConfig
@@ -103,66 +104,16 @@ namespace Scene
 	inline BoundaryMeshEntryConfig LoadBoundaryMeshEntryConfigFromJson(
 		const nlohmann::json& j, const std::string& scenarioName)
 	{
-		if (!j.is_object())
-		{
-			throw std::runtime_error(
-				scenarioName + " boundary mesh entries must be objects.");
-		}
-
-		auto ReadVec3 = [](const nlohmann::json& value, glm::vec3& dst)
-			{
-				if (value.is_array() && value.size() == 3)
-				{
-					dst.x = value[0].get<float>();
-					dst.y = value[1].get<float>();
-					dst.z = value[2].get<float>();
-				}
-			};
-
 		BoundaryMeshEntryConfig cfg{};
-		auto model = j.find("model");
-		if (model == j.end() || !model->is_string())
-		{
-			throw std::runtime_error(
-				scenarioName + " boundary mesh requires a string 'model'.");
-		}
-		cfg.modelName = model->get<std::string>();
+		cfg.modelName = ReadScenarioString(j, "model", scenarioName);
+		cfg.modelTargetExtent = ReadScenarioFloat(j, "modelTargetExtent", scenarioName);
 
-		if (auto value = j.find("modelTargetExtent"); value != j.end())
-		{
-			cfg.modelTargetExtent = value->get<float>();
-		}
-
-		auto boundaryMesh = j.find("boundaryMesh");
-		if (boundaryMesh == j.end() || !boundaryMesh->is_object())
-		{
-			throw std::runtime_error(
-				scenarioName + " boundary mesh requires a 'boundaryMesh' object.");
-		}
-		auto centerOfPosition = boundaryMesh->find("centerOfPosition");
-		if (centerOfPosition == boundaryMesh->end() ||
-			!centerOfPosition->is_array() || centerOfPosition->size() != 3 ||
-			!(*centerOfPosition)[0].is_number() ||
-			!(*centerOfPosition)[1].is_number() ||
-			!(*centerOfPosition)[2].is_number())
-		{
-			throw std::runtime_error(
-				scenarioName + " boundary mesh requires a three-value 'centerOfPosition'.");
-		}
-		ReadVec3(*centerOfPosition, cfg.boundaryMeshCenterOfPosition);
-
-		if (auto value = boundaryMesh->find("yawDeg"); value != boundaryMesh->end())
-		{
-			cfg.boundaryMeshYawDeg = value->get<float>();
-		}
-		if (auto value = boundaryMesh->find("pitchDeg"); value != boundaryMesh->end())
-		{
-			cfg.boundaryMeshPitchDeg = value->get<float>();
-		}
-		if (auto value = boundaryMesh->find("rollDeg"); value != boundaryMesh->end())
-		{
-			cfg.boundaryMeshRollDeg = value->get<float>();
-		}
+		const auto& boundaryMesh = ReadScenarioObject(j, "boundaryMesh", scenarioName);
+		const std::string pose = scenarioName + ".boundaryMesh";
+		cfg.boundaryMeshCenterOfPosition = ReadScenarioVector<3>(boundaryMesh, "centerOfPosition", pose);
+		cfg.boundaryMeshYawDeg = ReadScenarioFloat(boundaryMesh, "yawDeg", pose);
+		cfg.boundaryMeshPitchDeg = ReadScenarioFloat(boundaryMesh, "pitchDeg", pose);
+		cfg.boundaryMeshRollDeg = ReadScenarioFloat(boundaryMesh, "rollDeg", pose);
 
 		return cfg;
 	}
@@ -284,32 +235,13 @@ namespace Scene
 	inline BoundaryMeshConfig LoadBoundaryMeshConfigFromJson(
 		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
 	{
+		ValidateScenarioType(j, "BoundaryMesh");
 		BoundaryMeshConfig cfg{};
 
-		if (auto it = j.find("type"); it != j.end() && it->is_string())
-		{
-			const std::string type = it->get<std::string>();
-			if (type != "BoundaryMesh")
-			{
-				SPDLOG_WARN("BoundaryMesh entry has type '{}' (expected 'BoundaryMesh').", type);
-			}
-		}
-
-		auto container = j.find("container");
-		if (container == j.end())
-		{
-			throw std::runtime_error("BoundaryMesh requires a 'container' object.");
-		}
-		cfg.container = ScenarioMgr::ParseOBBFromJson(*container, scenarioMgr);
-
-		auto fluid = j.find("fluid");
-		if (fluid == j.end())
-		{
-			throw std::runtime_error("BoundaryMesh requires a 'fluid' object.");
-		}
-		cfg.fluid = ScenarioMgr::ParseOBBFromJson(*fluid, scenarioMgr);
-
-		// the scenario object itself holds the boundary mesh entry keys
+		cfg.container = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "container", "BoundaryMesh"), scenarioMgr, "BoundaryMesh.container");
+		cfg.fluid = ScenarioMgr::ParseOBBFromJson(
+			ReadScenarioObject(j, "fluid", "BoundaryMesh"), scenarioMgr, "BoundaryMesh.fluid");
 		cfg.boundaryMesh = LoadBoundaryMeshEntryConfigFromJson(j, "BoundaryMesh");
 
 		// sanitize fluid lengths
@@ -342,7 +274,7 @@ namespace Scene
 				const auto& scenarios = root["scenarios"];
 
 				// expect scenarios["BoundaryMesh"] object
-				if (!scenarios.contains("BoundaryMesh") || !scenarios["BoundaryMesh"].is_object())
+				if (!scenarios.contains("BoundaryMesh"))
 				{
 					return std::nullopt;
 				}
