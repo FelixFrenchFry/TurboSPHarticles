@@ -113,6 +113,7 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 
 	Base::MarkIfChanged(patch.lightDirVS, params_.render.lightDirVS, changed);
 	Base::MarkIfChanged(patch.baseColor, params_.render.baseColor, changed);
+	Base::MarkIfChanged(patch.boundaryParticleColor, params_.render.boundaryParticleColor, changed);
 	Base::MarkIfChanged(patch.rigidParticleColor, params_.render.rigidParticleColor, changed);
 	Base::MarkIfChanged(patch.centerOfMassXAxisColor, params_.render.centerOfMassXAxisColor, changed);
 	Base::MarkIfChanged(patch.centerOfMassYAxisColor, params_.render.centerOfMassYAxisColor, changed);
@@ -124,6 +125,7 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	Base::MarkIfChanged(patch.colorMap, params_.render.colorMap, changed);
 	Base::MarkIfChanged(patch.scalarModeF, params_.render.scalarModeF, changed);
 	Base::MarkIfChanged(patch.showParticlesF, params_.render.showParticlesF, changed);
+	Base::MarkIfChanged(patch.showParticlesB, params_.render.showParticlesB, changed);
 	Base::MarkIfChanged(patch.showParticlesR, params_.render.showParticlesR, changed);
 	Base::MarkIfChanged(patch.showRigidBodyCentersOfMass, params_.render.showRigidBodyCentersOfMass, changed);
 	Base::MarkIfChanged(patch.rigidParticleRadiusScale, params_.render.rigidParticleRadiusScale, changed);
@@ -133,6 +135,7 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	// apply changes
 	if (patch.lightDirVS) { params_.render.lightDirVS = *patch.lightDirVS; }
 	if (patch.baseColor) { params_.render.baseColor = *patch.baseColor; }
+	if (patch.boundaryParticleColor) { params_.render.boundaryParticleColor = *patch.boundaryParticleColor; }
 	if (patch.rigidParticleColor) { params_.render.rigidParticleColor = *patch.rigidParticleColor; }
 	if (patch.centerOfMassXAxisColor) { params_.render.centerOfMassXAxisColor = *patch.centerOfMassXAxisColor; }
 	if (patch.centerOfMassYAxisColor) { params_.render.centerOfMassYAxisColor = *patch.centerOfMassYAxisColor; }
@@ -144,6 +147,7 @@ void VisParamsMgr::SetParam(const RenderPatch& patch)
 	if (patch.colorMap) { params_.render.colorMap = *patch.colorMap; }
 	if (patch.scalarModeF) { params_.render.scalarModeF = *patch.scalarModeF; }
 	if (patch.showParticlesF) { params_.render.showParticlesF = *patch.showParticlesF; }
+	if (patch.showParticlesB) { params_.render.showParticlesB = *patch.showParticlesB; }
 	if (patch.showParticlesR) { params_.render.showParticlesR = *patch.showParticlesR; }
 	if (patch.showRigidBodyCentersOfMass) { params_.render.showRigidBodyCentersOfMass = *patch.showRigidBodyCentersOfMass; }
 	if (patch.rigidParticleRadiusScale) { params_.render.rigidParticleRadiusScale = *patch.rigidParticleRadiusScale; }

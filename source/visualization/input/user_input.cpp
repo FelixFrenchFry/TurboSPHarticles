@@ -152,7 +152,17 @@ bool UserInputMgr::OnKey(const Sim::SimParams& simParams,
 
 			return true;
 		}
-		case GLFW_KEY_2: // toggle rigid particle rendering
+		case GLFW_KEY_2: // toggle boundary mesh particle rendering
+		{
+			bool toggle = !render.showParticlesB;
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showParticlesB = toggle
+				});
+
+			return true;
+		}
+		case GLFW_KEY_3: // toggle rigid particle rendering
 		{
 			bool toggle = !render.showParticlesR;
 			visParamsMgr_.SetParam(Vis::RenderPatch
@@ -162,7 +172,7 @@ bool UserInputMgr::OnKey(const Sim::SimParams& simParams,
 
 			return true;
 		}
-		case GLFW_KEY_3: // toggle rigid body center-of-mass rendering
+		case GLFW_KEY_4: // toggle rigid body center-of-mass rendering
 		{
 			bool toggle = !render.showRigidBodyCentersOfMass;
 			visParamsMgr_.SetParam(Vis::RenderPatch

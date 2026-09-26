@@ -124,11 +124,12 @@ namespace Export
 		const std::vector<float>& z)
 	{
 		assert(x.size() == y.size() && x.size() == z.size());
+		const size_t N_particles = x.size();
 		constexpr size_t N_block = 16384;
-		std::vector<float> xyz(3 * std::min(x.size(), N_block));
-		for (size_t begin = 0; begin < x.size();)
+		std::vector<float> xyz(3 * std::min(N_particles, N_block));
+		for (size_t begin = 0; begin < N_particles;)
 		{
-			const size_t N_points = std::min(x.size() - begin, N_block);
+			const size_t N_points = std::min(N_particles - begin, N_block);
 			for (size_t i = 0; i < N_points; i++)
 			{
 				xyz[3 * i] = x[begin + i];
@@ -337,10 +338,11 @@ namespace Export
 			return start;
 		};
 
-		// offsets must match SaveStaticBoundaryBin write order
+		// offsets must match SaveBoundaryBin write order
 		StaticBoundaryOffsets off{};
 		off.posB = AppendField(info.N_B, 3 * sizeof(float));
 		off.volB = AppendField(info.N_B, sizeof(float));
+		off.isMeshB = AppendField(info.N_B, sizeof(uint8_t));
 		off.totalBytes = offset;
 
 		return off;
@@ -619,7 +621,7 @@ namespace Export
 	}
 
 	// no <Time> element, so the reader reports no time steps and stays visible for the whole animation
-	static void WriteStaticBoundaryGrid(
+	static void WriteBoundaryGrid(
 		std::ofstream& ofs,
 		const ExportSnapshotBinInfo& info,
 		const std::string& fileName)
@@ -633,6 +635,8 @@ namespace Export
 			off.posB, fileName);
 		WriteScalarAttribute(ofs, "volB", info.N_B,
 			"Float", 4, off.volB, fileName);
+		WriteScalarAttribute(ofs, "isMeshB", info.N_B,
+			"UChar", 1, off.isMeshB, fileName);
 		ofs << "      </Grid>\n";
 	}
 
@@ -748,7 +752,7 @@ namespace Export
 		});
 	}
 
-	static void WriteXdmfStaticBoundaryFile(
+	static void WriteXdmfBoundaryFile(
 		const std::filesystem::path& path,
 		const ExportSnapshotBinInfo& info,
 		const std::string& fileName,
@@ -756,7 +760,7 @@ namespace Export
 	{
 		WriteXdmfFile(path, saveOptions, [&](std::ofstream& ofs)
 		{
-			WriteStaticBoundaryGrid(ofs, info, fileName);
+			WriteBoundaryGrid(ofs, info, fileName);
 		});
 	}
 
@@ -1224,26 +1228,23 @@ namespace Export
 
 	// --- [ ExportSnapshot (.bin) + XDMF ] --------------------------------------------------------
 
-	// the static boundary is identical in every step, so all steps share one file
-	void SerializationMgr::SaveStaticBoundaryBin(
+	// boundary particles are static, so all steps share one file
+	void SerializationMgr::SaveBoundaryBin(
 		const Sync::ExportSnapshot& snap,
 		const std::filesystem::path& dirPath) const
 	{
 		std::scoped_lock lock(exportDirStateMutex_);
 
-		const std::filesystem::path dstPath = dirPath / kStaticBoundaryBinFileName;
-
-		// a boundary-less scenario writes no file, so its absence is the finished state
-		std::error_code existsEc;
-		const bool dirHoldsThisBoundary =
-			std::filesystem::exists(dstPath, existsEc) == (snap.N_B > 0);
-		if (staticBoundaryDir_ == dirPath && dirHoldsThisBoundary) { return; }
-
-		std::error_code removeEc;
-		if (snap.N_B == 0)
+		if (snap.isMeshB.size() != snap.N_B)
 		{
+			throw std::runtime_error("Inconsistent boundary classification count.");
+		}
+		const uint32_t N_B = snap.N_B;
+		const std::filesystem::path dstPath = dirPath / kStaticBoundaryBinFileName;
+		if (N_B == 0)
+		{
+			std::error_code removeEc;
 			std::filesystem::remove(dstPath, removeEc);
-			staticBoundaryDir_ = dirPath;
 			return;
 		}
 
@@ -1256,25 +1257,20 @@ namespace Export
 			std::ofstream ofs(tmpPath, std::ios::binary | std::ios::out | std::ios::trunc);
 			if (!ofs)
 			{
-				throw std::runtime_error("Failed to open static boundary file for write '" +
-					tmpPath.string() + "'.");
+				throw std::runtime_error("Failed to open boundary file for write '" + tmpPath.string() + "'.");
 			}
-
-			// arrays are written in the same order as referenced by the XDMF file:
-			// posB (XYZ triples), volB
 
 			// N_F and N_R stay zero, this file holds boundary particles only
 			ExportSnapshotBinInfo info{};
 			info.step = snap.simStep;
 			info.time = snap.simTime;
-			info.N_B = snap.N_B;
-			const BinHeaderSnap hdr = MakeExportSnapshotHeader(info);
+			info.N_B = N_B;
+			WritePod(ofs, MakeExportSnapshotHeader(info));
 
-			WritePod(ofs, hdr);
-
-			// arrays (fixed order)
+			// arrays in XDMF order: posB (XYZ triples), volB, isMeshB
 			WriteXyz(ofs, snap.xPosB, snap.yPosB, snap.zPosB);
 			WriteVec(ofs, snap.volB);
+			WriteVec(ofs, snap.isMeshB);
 
 			EnsureStreamOk(ofs, "writing", tmpPath.string());
 			ofs.close();
@@ -1285,13 +1281,12 @@ namespace Export
 		{
 			AtomicReplace(tmpPath, dstPath);
 		}
-
-		staticBoundaryDir_ = dirPath;
 	}
 
 	void SerializationMgr::SaveExportSnapshot(
 		const Sync::ExportSnapshot& snap,
-		const std::string& dir) const
+		const std::string& dir,
+		const bool includeB) const
 	{
 		// binary payload owns the data, XDMF only references offsets into it
 		const std::string binFileName =
@@ -1325,7 +1320,10 @@ namespace Export
 		assert(snap.zPosR.size() == N_R_size);
 		assert(snap.volR.size() == N_R_size);
 
-		SaveStaticBoundaryBin(snap, saveOptions_.baseDir / dir);
+		if (includeB)
+		{
+			SaveBoundaryBin(snap, saveOptions_.baseDir / dir);
+		}
 
 		// since a re-run overwrites the snapshots of the previous one
 		{
@@ -1533,7 +1531,7 @@ namespace Export
 			};
 			if (firstFrame && info.N_B > 0)
 			{
-				WriteXdmfStaticBoundaryFile(
+				WriteXdmfBoundaryFile(
 					dirPath / "static_boundary.xdmf", boundaryInfo, boundaryInfo.fileName, options);
 			}
 			const bool hasRigid = std::any_of(
@@ -1626,7 +1624,7 @@ namespace Export
 		if (TryReadStaticBoundaryBinInfo(
 			dirPath / kStaticBoundaryBinFileName, boundaryInfo))
 		{
-			WriteXdmfStaticBoundaryFile(staticBoundaryXdmfPath, boundaryInfo,
+			WriteXdmfBoundaryFile(staticBoundaryXdmfPath, boundaryInfo,
 				kStaticBoundaryBinFileName, saveOptions_);
 		}
 		else

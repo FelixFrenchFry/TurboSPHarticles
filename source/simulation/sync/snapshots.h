@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
+#include <optional>
 #include <vector>
 
 // internal
@@ -14,11 +15,20 @@
 #include "source/eval/memory/categories.h"
 #include "source/eval/stats/metrics.h"
 #include "source/simulation/scene/builder.h"
+#include "state_sim.h"
 
 
 
 namespace Sync
 {
+	// collects boundary mesh particles by their global IDs
+	// (global IDs remain stable across sorting)
+	void CollectBoundaryMeshParticles(
+		const BoundaryConstView& particlesB,
+		std::optional<uint64_t> meshIdBeginB,
+		std::vector<glm::vec3>& meshPosB,
+		std::vector<float>& meshVolB);
+
 	// data structure for exporting parts of the simulation state
 	// (including a minimal subset of the data requested to analyze/model the simulation offline)
 	// TODO: have one export snapshot per field (e.g. positions, velocities, etc...) and
@@ -37,12 +47,13 @@ namespace Sync
 		std::vector<float> velMagF;
 		std::vector<uint16_t> rankF; // owner rank, empty outside the distributed path
 
-		// data for boundary particle export
+		// data for all boundary particle export, including boundary meshes
 		uint32_t N_B;
 		std::vector<float> xPosB;
 		std::vector<float> yPosB;
 		std::vector<float> zPosB;
 		std::vector<float> volB;
+		std::vector<uint8_t> isMeshB; // 1 for boundary mesh particles, 0 for other boundaries
 
 		// data for rigid particle export
 		uint32_t N_R;
@@ -71,6 +82,8 @@ namespace Sync
 		std::vector<glm::vec3> posB;        // positions of all boundary particles
 		std::vector<float> volB;            // contribution volumes of all boundary particles
 		std::vector<Scene::OBB> boxesB;     // OBBs of boundary structures
+		std::vector<glm::vec3> meshPosB;    // positions of boundary mesh particles
+		std::vector<float> meshVolB;        // contribution volumes of boundary mesh particles
 
 		// data for rigid particle vis
 		uint32_t N_R;                       // number of rigid particles

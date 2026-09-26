@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -202,6 +203,7 @@ namespace Dist
 		// scenario management
 		Scene::ScenarioMgr scenarioMgr_;
 		std::unique_ptr<Scene::ISimScenario> simScenario_{ nullptr };
+		std::optional<uint64_t> meshIdBeginB_{};
 
 		// distributed domain and simulation state
 		std::unique_ptr<IDomainDecomp> domainDecomp_{ nullptr };

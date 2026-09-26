@@ -929,15 +929,23 @@ bool SimBackend_CPU::ApplyRigidBodyStateFrom(
 }
 
 void SimBackend_CPU::PackExportSnapshot(
-	Sync::ExportSnapshot& snap, const SimParams& simParams) const
+	Sync::ExportSnapshot& snap, const SimParams& simParams,
+	const bool includeB, const std::optional<uint64_t> meshIdBeginB) const
 {
 	snap.simStep = simStep_;
 	snap.simTime = simTime_;
 
 	// copy boundary particles
-	snap.N_B = N_B_;
-	snap.xPosB = xPosB_; snap.yPosB = yPosB_; snap.zPosB = zPosB_;
-	snap.volB = volB_;
+	snap.N_B = includeB ? N_B_ : 0;
+	snap.xPosB.assign(xPosB_.begin(), xPosB_.begin() + snap.N_B);
+	snap.yPosB.assign(yPosB_.begin(), yPosB_.begin() + snap.N_B);
+	snap.zPosB.assign(zPosB_.begin(), zPosB_.begin() + snap.N_B);
+	snap.volB.assign(volB_.begin(), volB_.begin() + snap.N_B);
+	snap.isMeshB.resize(snap.N_B);
+	for (uint32_t i = 0; i < snap.N_B; i++)
+	{
+		snap.isMeshB[i] = meshIdBeginB && idB_[i] >= *meshIdBeginB;
+	}
 
 	// copy rigid particles
 	snap.N_R = N_R_;

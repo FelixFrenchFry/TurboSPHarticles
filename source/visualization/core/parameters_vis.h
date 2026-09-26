@@ -69,6 +69,7 @@ namespace Vis
 			.lightDirVS             = {0.3f, 0.6f, 0.6f},
 			.clearColor             = {0.2f, 0.2f, 0.2f, 1.0f},
 			.baseColor              = {0.2f, 0.4f, 1.0f},
+			.boundaryParticleColor  = {0.47f, 0.35f, 0.24f},
 			.rigidParticleColor     = {0.65f, 0.65f, 0.65f},
 			.centerOfMassXAxisColor = {250.0f / 255.0f, 0.0f, 50.0f / 255.0f},
 			.centerOfMassYAxisColor = {40.0f / 255.0f, 180.0f / 255.0f, 80.0f / 255.0f},
@@ -81,6 +82,7 @@ namespace Vis
 			.colorMap               = Base::ColorMap::Coolwarm,
 			.scalarModeF            = Base::ColorCodingMode::VelocityMag,
 			.showParticlesF         = true,
+			.showParticlesB         = true,
 			.showParticlesR         = true,
 			.showRigidBodyCentersOfMass = false,
 			.rigidParticleRadiusScale = 1.0f,
@@ -122,6 +124,7 @@ namespace Vis
 	{
 		std::optional<glm::vec3> lightDirVS;
 		std::optional<glm::vec3> baseColor;
+		std::optional<glm::vec3> boundaryParticleColor;
 		std::optional<glm::vec3> rigidParticleColor;
 		std::optional<glm::vec3> centerOfMassXAxisColor;
 		std::optional<glm::vec3> centerOfMassYAxisColor;
@@ -133,6 +136,7 @@ namespace Vis
 		std::optional<Base::ColorMap> colorMap;
 		std::optional<Base::ColorCodingMode> scalarModeF;
 		std::optional<bool> showParticlesF;
+		std::optional<bool> showParticlesB;
 		std::optional<bool> showParticlesR;
 		std::optional<bool> showRigidBodyCentersOfMass;
 		std::optional<float> rigidParticleRadiusScale;

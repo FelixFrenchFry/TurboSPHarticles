@@ -8,6 +8,7 @@
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -122,6 +123,11 @@ namespace Scene
 			Sync::UniversalSimState& dst,
 			const Sim::SimParams& params);
 
+		// first global ID of the surface-sampled boundary mesh particles, empty without boundary meshes
+		// (boundary meshes are built after regular boundaries, so all later boundary IDs belong to meshes)
+		std::optional<uint64_t> GetBoundaryMeshParticleIdBegin() const { return meshIdBeginB_; }
+		void ResetBoundaryMeshParticleIdBegin() { meshIdBeginB_.reset(); }
+
 		// builds a local-to-world orientation from yaw, pitch, and roll angles
 		glm::mat3 MakeOrientation_FromEulerAngles(
 			float yawDeg,
@@ -191,6 +197,8 @@ namespace Scene
 		uint64_t N_builtGlobalF_ = 0;
 		uint64_t N_builtGlobalB_ = 0;
 		uint64_t N_builtGlobalR_ = 0;
+		// boundary mesh classification
+		std::optional<uint64_t> meshIdBeginB_{};
 	};
 
 } // namespace Scene

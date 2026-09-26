@@ -335,6 +335,8 @@ void ScenarioMgr::BeginBuildRegion(const glm::vec3& min, const glm::vec3& max)
 	N_builtGlobalF_ = 0;
 	N_builtGlobalB_ = 0;
 	N_builtGlobalR_ = 0;
+
+	meshIdBeginB_.reset();
 }
 
 void ScenarioMgr::EndBuildRegion()
@@ -795,6 +797,10 @@ void ScenarioMgr::BuildBoundaryBlock_OBB_Hollow(const OBB& box,
 	// compute number of particles we keep to make the box hollow
 	const uint64_t N_keep = ParticleCountHollowBox(N_u, N_v, N_w, layers);
 	if (N_keep <= 0) { return; }
+	if (meshIdBeginB_)
+	{
+		throw std::runtime_error("Non-mesh boundary particles must be built before boundary meshes.");
+	}
 
 	auto& B = dst.particlesB;
 
@@ -1213,6 +1219,9 @@ void ScenarioMgr::BuildBoundary_FromSurfaceSamples(
 	}
 	N_builtGlobalB_ = N_end;
 
+	// record the first mesh boundary ID across all boundary meshes
+	if (!meshIdBeginB_) { meshIdBeginB_ = N_base; }
+
 	// update boundary particle count
 	B.N_ = Sim::CheckedLocalParticleCount(B.xPos.size(), "Boundary particle count");
 
@@ -1344,6 +1353,10 @@ void ScenarioMgr::BuildBoundaryLayersOnFace(const OBBFace& face,
 	const uint64_t N_face = Sim::CheckedParticleMultiply(
 		Sim::CheckedParticleMultiply(N_u, N_v, "Boundary face"),
 		params.boundaryLayers, "Boundary face");
+	if (N_face > 0 && meshIdBeginB_)
+	{
+		throw std::runtime_error("Non-mesh boundary particles must be built before boundary meshes.");
+	}
 
 	const float defaultVolB = DefaultBoundaryVolB(params);
 	const float defaultPsiB = DefaultBoundaryPsiB(params);

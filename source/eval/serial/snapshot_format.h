@@ -60,6 +60,7 @@ namespace Export
 	{
 		uint64_t posB = 0;
 		uint64_t volB = 0;
+		uint64_t isMeshB = 0;
 
 		uint64_t totalBytes = 0;
 	};

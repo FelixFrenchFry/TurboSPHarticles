@@ -3,6 +3,7 @@
 
 // external
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,7 @@ namespace Dist
 		int rank,
 		int N_ranks,
 		bool includeB,
+		std::optional<uint64_t> meshIdBeginB,
 		uint64_t simStep,
 		double simTime);
 

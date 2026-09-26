@@ -61,8 +61,8 @@ namespace
 		return transforms;
 	}
 
-	// computes rigid particle radius from represented volume
-	float ComputeRigidParticleRenderRadius(
+	// computes rigid or boundary particle radius from represented volume
+	float ComputeParticleRenderRadius(
 		const float volume,
 		const float particleSizeB,
 		const float radiusScale)
@@ -92,6 +92,7 @@ void RenderingMgr::Init()
 
 	// create VAOs and buffers
 	CreateSphereImpostorVAOandBuffers();
+	CreateBoundaryMeshImpostorVAOandBuffers();
 	CreateCenterOfMassVAOandBuffers();
 	CreateLineVAOandBuffers();
 	#ifdef TURBOSPHARTICLES_WITH_CUDA
@@ -130,6 +131,7 @@ void RenderingMgr::Shutdown()
 		progLines_ = 0;
 	}
 
+	DestroyBoundaryMeshImpostorVAOandBuffers();
 	DestroySphereImpostorVAOandBuffers();
 	DestroyCenterOfMassVAOandBuffers();
 	DestroyLineVAOandBuffers();
@@ -245,7 +247,7 @@ void RenderingMgr::UpdateParticles(const Vis::VisualSnapView& view,
 	{
 		const glm::vec3 pos = view.posR[i];
 		const float volume = hasVolR ? view.volR[i] : 0.0f;
-		const float radius = ComputeRigidParticleRenderRadius(
+		const float radius = ComputeParticleRenderRadius(
 			volume,
 			simParams.particleSizeB,
 			visParams.render.rigidParticleRadiusScale);
@@ -376,6 +378,40 @@ bool RenderingMgr::UpdateParticlesCUDA(
 	return true;
 }
 #endif
+
+void RenderingMgr::UpdateBoundaryMeshParticles(
+	const Vis::VisualSnapView& view,
+	const Sim::SimParams& simParams)
+{
+	N_meshImpostorInstancesB_ = 0;
+	if (view.meshPosB.size() != view.N_meshB ||
+		view.meshVolB.size() != view.N_meshB)
+	{
+		return;
+	}
+
+	std::vector<InstanceData> instances;
+	instances.reserve(view.N_meshB);
+	for (uint32_t i = 0; i < view.N_meshB; i++)
+	{
+		const glm::vec3 pos = view.meshPosB[i];
+		const float radius = ComputeParticleRenderRadius(
+			view.meshVolB[i],
+			simParams.particleSizeB,
+			1.0f);
+		instances.push_back(InstanceData{
+			pos.x, pos.y, pos.z, radius, 0.0f,
+			{ 0.0f, 0.0f, 0.0f } });
+	}
+
+	N_meshImpostorInstancesB_ = view.N_meshB;
+	if (N_meshImpostorInstancesB_ == 0) { return; }
+
+	const GLsizeiptr N_bytes =
+		static_cast<GLsizeiptr>(instances.size() * sizeof(InstanceData));
+	glNamedBufferData(
+		vboMeshInstancesB_, N_bytes, instances.data(), GL_DYNAMIC_DRAW);
+}
 
 void RenderingMgr::UpdateCentersOfMass(
 	const Vis::VisualSnapView& view,
@@ -510,11 +546,10 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 	// make sure params cached on the GPU are up to date
 	UpdateCameraUBO(cam);
 
-	if (N_fluidImpostorInstances_ > 0 || N_rigidImpostorInstances_ > 0)
+	if (N_fluidImpostorInstances_ > 0 || N_meshImpostorInstancesB_ > 0 || N_rigidImpostorInstances_ > 0)
 	{
 		// bind state and bind color LUT
 		glUseProgram(progSphereImpostors_);
-		glBindVertexArray(vao_);
 		glBindTextureUnit(0, texColorMap_);
 
 		// draw 4-vertex quads (2 triangles), instanced N times
@@ -522,11 +557,27 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 		if (render.showParticlesF && N_fluidImpostorInstances_ > 0)
 		{
 			// render fluid particle instances
+			glBindVertexArray(vao_);
 			UpdateParamsUBO(render);
 			glDrawArraysInstanced(
 				GL_TRIANGLE_FAN,
 				0, 4,
 				static_cast<GLsizei>(N_fluidImpostorInstances_));
+		}
+		if (render.showParticlesB && N_meshImpostorInstancesB_ > 0)
+		{
+			Vis::RenderConfig boundaryRender = render;
+			boundaryRender.baseColor = render.boundaryParticleColor;
+			boundaryRender.alpha = 1.0f;
+			boundaryRender.scalarModeF = Base::ColorCodingMode::None;
+
+			// render boundary mesh particle instances
+			glBindVertexArray(vaoMeshB_);
+			UpdateParamsUBO(boundaryRender);
+			glDrawArraysInstanced(
+				GL_TRIANGLE_FAN,
+				0, 4,
+				static_cast<GLsizei>(N_meshImpostorInstancesB_));
 		}
 		if (render.showParticlesR && N_rigidImpostorInstances_ > 0)
 		{
@@ -536,6 +587,7 @@ void RenderingMgr::Render(const Vis::RenderConfig& render, const Vis::CameraStat
 			rigidRender.scalarModeF = Base::ColorCodingMode::None;
 
 			// render rigid particle instances
+			glBindVertexArray(vao_);
 			UpdateParamsUBO(rigidRender);
 			glDrawArraysInstancedBaseInstance(
 				GL_TRIANGLE_FAN,
@@ -844,6 +896,34 @@ void RenderingMgr::CreateSphereImpostorVAOandBuffers()
 	// glGenQueries(1, &timerQuery_);
 }
 
+void RenderingMgr::CreateBoundaryMeshImpostorVAOandBuffers()
+{
+	// create VAO that shares the impostor quad with the particle VAO
+	glCreateVertexArrays(1, &vaoMeshB_);
+	glVertexArrayVertexBuffer(vaoMeshB_, 0, vboQuad_, 0, sizeof(glm::vec2));
+
+	// attribute 0 = vec2 corner
+	glEnableVertexArrayAttrib(vaoMeshB_, 0);
+	glVertexArrayAttribFormat(vaoMeshB_, 0, 2, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vaoMeshB_, 0, 0);
+
+	// instance buffer, bound to index 1
+	glCreateBuffers(1, &vboMeshInstancesB_);
+	glVertexArrayVertexBuffer(vaoMeshB_, 1, vboMeshInstancesB_, 0, sizeof(InstanceData));
+
+	// attribute 1 = vec4 posAndRad (with offset 0)
+	glEnableVertexArrayAttrib(vaoMeshB_, 1);
+	glVertexArrayAttribFormat(vaoMeshB_, 1, 4, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vaoMeshB_, 1, 1);
+	glVertexArrayBindingDivisor(vaoMeshB_, 1, 1);
+
+	// attribute 2 = float scalar (with offset 16)
+	glEnableVertexArrayAttrib(vaoMeshB_, 2);
+	glVertexArrayAttribFormat(vaoMeshB_, 2, 1, GL_FLOAT, GL_FALSE, 16);
+	glVertexArrayAttribBinding(vaoMeshB_, 2, 1);
+	glVertexArrayBindingDivisor(vaoMeshB_, 2, 1);
+}
+
 void RenderingMgr::CreateCenterOfMassVAOandBuffers()
 {
 	constexpr float H = 0.5f;
@@ -923,6 +1003,13 @@ void RenderingMgr::DestroySphereImpostorVAOandBuffers()
 	if (vboInstances_) { glDeleteBuffers(1, &vboInstances_); vboInstances_ = 0; }
 	if (vboQuad_) { glDeleteBuffers(1, &vboQuad_); vboQuad_ = 0; }
 	if (vao_) { glDeleteVertexArrays(1, &vao_); vao_ = 0; }
+}
+
+void RenderingMgr::DestroyBoundaryMeshImpostorVAOandBuffers()
+{
+	if (vboMeshInstancesB_) { glDeleteBuffers(1, &vboMeshInstancesB_); vboMeshInstancesB_ = 0; }
+	if (vaoMeshB_) { glDeleteVertexArrays(1, &vaoMeshB_); vaoMeshB_ = 0; }
+	N_meshImpostorInstancesB_ = 0;
 }
 
 void RenderingMgr::DestroyCenterOfMassVAOandBuffers()

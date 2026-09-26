@@ -350,6 +350,8 @@ bool DistSimulationMgr::SaveCheckpoint(
 			manifest["boundaryIdChecksum"] = expectedOwnedIdChecksumB_;
 			manifest["rigidIdChecksum"] = expectedOwnedIdChecksumR_;
 			manifest["globalBounds"] = CheckpointBoundsToJson(domainDecomp_->GlobalExtentAABB());
+			manifest["boundaryMeshParticleIdBegin"] = meshIdBeginB_
+				? nlohmann::json(*meshIdBeginB_) : nlohmann::json(nullptr);
 
 			nlohmann::json fileInfo = nlohmann::json::object();
 			fileInfo["file"] = "state.bin";
@@ -419,6 +421,14 @@ bool DistSimulationMgr::LoadCheckpoint(
 		expectedOwnedIdChecksumF_ = Export::CheckpointUint64(manifest.at("fluidIdChecksum"));
 		expectedOwnedIdChecksumB_ = Export::CheckpointUint64(manifest.at("boundaryIdChecksum"));
 		expectedOwnedIdChecksumR_ = Export::CheckpointUint64(manifest.at("rigidIdChecksum"));
+		const auto& meshId = manifest.at("boundaryMeshParticleIdBegin");
+		meshIdBeginB_ = meshId.is_null()
+			? std::nullopt
+			: std::optional<uint64_t>(Export::CheckpointUint64(meshId));
+		if (meshIdBeginB_ && *meshIdBeginB_ >= N_expectedGlobalB_)
+		{
+			throw std::runtime_error("Checkpoint boundary mesh particle ID is outside the global boundary range.");
+		}
 
 		// check the shared state file before loading particles
 		const auto& files = manifest.at("files");

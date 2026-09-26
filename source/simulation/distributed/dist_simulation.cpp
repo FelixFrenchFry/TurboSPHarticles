@@ -227,6 +227,7 @@ namespace
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.zPosB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.volB));
+		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.isMeshB));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.bodyIdR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.xPosR));
 		Mem::Add(usage, Mem::MemUsageOf_Vector(snap.yPosR));
@@ -1140,6 +1141,7 @@ void DistSimulationMgr::BuildGlobalSimState(Sync::UniversalSimState& globalSimSt
 
 	scenarioMgr_.BeginBuildRegion(buildRegion.min, buildRegion.max);
 	simScenario_->Build(globalSimState, simParams_);
+	meshIdBeginB_ = scenarioMgr_.GetBoundaryMeshParticleIdBegin();
 	scenarioMgr_.FinalizeGeneratedParticleCounts(globalSimState);
 	scenarioMgr_.EndBuildRegion();
 
@@ -1591,6 +1593,7 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 			mpiContext_.Rank(),
 			mpiContext_.Size(),
 			!exportBoundaryWritten_,
+			meshIdBeginB_,
 			simStep_,
 			simTime_);
 		if (!writeOk) { throw std::runtime_error("Invalid local snapshot particle selection."); }
@@ -1621,16 +1624,6 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 		benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 		return false;
 	}
-	if (!exportBoundaryWritten_)
-	{
-		// boundary output keeps its initial partition after load balancing
-		exportBoundaryWritten_ = true;
-		expSnap.N_B = 0;
-		std::vector<float>().swap(expSnap.xPosB);
-		std::vector<float>().swap(expSnap.yPosB);
-		std::vector<float>().swap(expSnap.zPosB);
-		std::vector<float>().swap(expSnap.volB);
-	}
 
 	if (mpiContext_.IsRoot())
 	{
@@ -1648,7 +1641,20 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 
 	benchmarksTracker_->StopBench(Bench::BenchOp::Serialization);
 
-	return mpiContext_.AllTrue(writeOk);
+	if (!mpiContext_.AllTrue(writeOk)) { return false; }
+	if (!exportBoundaryWritten_)
+	{
+		// boundary output keeps its initial partition after load balancing
+		exportBoundaryWritten_ = true;
+		std::vector<uint8_t>().swap(expSnap.isMeshB);
+		expSnap.N_B = 0;
+		std::vector<float>().swap(expSnap.xPosB);
+		std::vector<float>().swap(expSnap.yPosB);
+		std::vector<float>().swap(expSnap.zPosB);
+		std::vector<float>().swap(expSnap.volB);
+	}
+
+	return true;
 }
 
 bool DistSimulationMgr::WriteFinalState(

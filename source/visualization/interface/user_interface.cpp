@@ -267,6 +267,16 @@ void UserInterfaceMgr::BuildSection_SceneManagement(
 				});
 		}
 
+		bool showParticlesB = visParams.render.showParticlesB;
+		if (ImGui::Checkbox("show boundary mesh particles",
+			&showParticlesB))
+		{
+			visParamsMgr_.SetParam(Vis::RenderPatch
+				{
+					.showParticlesB = showParticlesB
+				});
+		}
+
 		bool showParticlesR = visParams.render.showParticlesR;
 		if (ImGui::Checkbox("show rigid particles",
 			&showParticlesR))

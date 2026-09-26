@@ -86,7 +86,8 @@ namespace Export
 		// serialization of a subset of the simulation state and metadata into separate files
 		void SaveExportSnapshot(
 			const Sync::ExportSnapshot& snap,
-			const std::string& dir) const;
+			const std::string& dir,
+			bool includeB = true) const;
 		void SaveExportSnapshotXdmfViews(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
 		// reserve a fresh run directory below the configured export directory
@@ -111,7 +112,6 @@ namespace Export
 		void ResetExportDirState()
 		{
 			std::scoped_lock lock(exportDirStateMutex_);
-			staticBoundaryDir_.clear();
 			exportSnapshotInfos_.clear();
 			distributedExportSnapshotInfos_.clear();
 		}
@@ -123,9 +123,6 @@ namespace Export
 		// the export runs on the simulation thread, while a reset comes from the GUI thread
 		mutable std::mutex exportDirStateMutex_;
 
-		// the export directory the static boundary file was last written to
-		mutable std::filesystem::path staticBoundaryDir_;
-
 		// parsed .bin headers of the export directory, keyed by file name
 		mutable std::filesystem::path exportSnapshotInfosDir_;
 		mutable std::unordered_map<std::string, ExportSnapshotBinInfo> exportSnapshotInfos_;
@@ -135,7 +132,7 @@ namespace Export
 		mutable std::map<uint64_t, ExportSnapshotBinInfo> distributedExportSnapshotInfos_;
 
 		// helpers
-		void SaveStaticBoundaryBin(
+		void SaveBoundaryBin(
 			const Sync::ExportSnapshot& snap,
 			const std::filesystem::path& dirPath) const;
 	};

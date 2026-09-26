@@ -55,7 +55,7 @@ bool Dist::SaveDistributedExportSnapshot(
 			ValidateArrays(exportSnap.N_B, exportSnap.xPosB, exportSnap.yPosB, exportSnap.zPosB, exportSnap.volB);
 			ValidateArrays(exportSnap.N_R, exportSnap.xPosR, exportSnap.yPosR, exportSnap.zPosR, exportSnap.volR);
 			if (exportSnap.rankF.size() != exportSnap.N_F || exportSnap.bodyIdR.size() != exportSnap.N_R ||
-				(!includeB && exportSnap.N_B != 0))
+				exportSnap.isMeshB.size() != exportSnap.N_B || (!includeB && exportSnap.N_B != 0))
 			{
 				throw std::runtime_error("Inconsistent local snapshot rank, body or boundary counts.");
 			}
@@ -153,6 +153,7 @@ bool Dist::SaveDistributedExportSnapshot(
 		off.bodyIdR += layout.beginIdx[2] * 4;
 		boundaryOff.posB += layout.beginIdx[1] * 12;
 		boundaryOff.volB += layout.beginIdx[1] * 4;
+		boundaryOff.isMeshB += layout.beginIdx[1];
 		const char dummy = 0;
 
 		// empty ranks participate in every chunk write
@@ -216,6 +217,7 @@ bool Dist::SaveDistributedExportSnapshot(
 			{
 				WriteXyz(file, exportSnap.xPosB, exportSnap.yPosB, exportSnap.zPosB, boundaryOff.posB, layout.N_max[1]);
 				WriteValues(file, exportSnap.volB, boundaryOff.volB, layout.N_max[1]);
+				WriteValues(file, exportSnap.isMeshB, boundaryOff.isMeshB, layout.N_max[1]);
 			}
 			else
 			{
@@ -265,6 +267,7 @@ bool Dist::PackOwnedExportSnapshot(
 	const int rank,
 	const int N_ranks,
 	const bool includeB,
+	const std::optional<uint64_t> meshIdBeginB,
 	const uint64_t simStep,
 	const double simTime)
 {
@@ -324,6 +327,7 @@ bool Dist::PackOwnedExportSnapshot(
 	exportSnap.yPosB.resize(exportSnap.N_B);
 	exportSnap.zPosB.resize(exportSnap.N_B);
 	exportSnap.volB.resize(exportSnap.N_B);
+	exportSnap.isMeshB.resize(exportSnap.N_B);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, exportSnap.N_B),
@@ -343,6 +347,7 @@ bool Dist::PackOwnedExportSnapshot(
 				exportSnap.yPosB[i] = particlesB.yPos[localIdx];
 				exportSnap.zPosB[i] = particlesB.zPos[localIdx];
 				exportSnap.volB[i] = particlesB.volB[localIdx];
+				exportSnap.isMeshB[i] = meshIdBeginB && particlesB.id[localIdx] >= *meshIdBeginB;
 			}
 		});
 

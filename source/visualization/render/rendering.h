@@ -69,6 +69,11 @@ namespace Render
 			const Vis::VisParams& visParams);
 	#endif
 
+		// upload boundary mesh particle instances from the latest visual snapshot
+		void UpdateBoundaryMeshParticles(
+			const Vis::VisualSnapView& view,
+			const Sim::SimParams& simParams);
+
 		// upload rigid body center-of-mass marker transforms
 		void UpdateCentersOfMass(const Vis::VisualSnapView& view,
 								 const Sim::SimParams& simParams);
@@ -100,6 +105,10 @@ namespace Render
 		GLuint texColorMap_ = 0;            // color lookup-table
 		Base::ColorMap colorMap_ = Base::ColorMap::Coolwarm; // currently uploaded color map
 
+		// addresses of GL objects (sphere impostors -> boundary mesh particles)
+		GLuint vaoMeshB_ = 0;               // vertex array object sharing the impostor quad
+		GLuint vboMeshInstancesB_ = 0;      // instance data
+
 		// addresses of GL objects (cuboids -> rigid body centers of mass)
 		GLuint vaoCenterOfMass_ = 0;
 		GLuint vboCenterOfMassCube_ = 0;
@@ -127,6 +136,7 @@ namespace Render
 
 		// draw state
 		uint32_t N_fluidImpostorInstances_ = 0;
+		uint32_t N_meshImpostorInstancesB_ = 0;
 		uint32_t N_rigidImpostorInstances_ = 0;
 		uint32_t N_centerOfMassInstances_ = 0;
 		uint64_t N_lineVertices_ = 0;
@@ -149,10 +159,12 @@ namespace Render
 		GLuint Link(GLuint vertS, GLuint fragS, const char* programName);
 
 		void CreateSphereImpostorVAOandBuffers();
+		void CreateBoundaryMeshImpostorVAOandBuffers();
 		void CreateCenterOfMassVAOandBuffers();
 		void CreateLineVAOandBuffers();
 
 		void DestroySphereImpostorVAOandBuffers();
+		void DestroyBoundaryMeshImpostorVAOandBuffers();
 		void DestroyCenterOfMassVAOandBuffers();
 		void DestroyLineVAOandBuffers();
 

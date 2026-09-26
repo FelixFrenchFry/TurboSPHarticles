@@ -372,23 +372,32 @@ void SimBackend_GPU::PushToUniversalSimState(
 }
 
 void SimBackend_GPU::PackExportSnapshot(
-	Sync::ExportSnapshot& snap, const SimParams& simParams) const
+	Sync::ExportSnapshot& snap, const SimParams& simParams,
+	const bool includeB, const std::optional<uint64_t> meshIdBeginB) const
 {
 	snap.simStep = simStep_;
 	snap.simTime = simTime_;
 
 	// copy boundary particles
-	snap.N_B = N_B_;
+	snap.N_B = includeB ? N_B_ : 0;
 	snap.xPosB.resize(snap.N_B);
 	snap.yPosB.resize(snap.N_B);
 	snap.zPosB.resize(snap.N_B);
 	snap.volB.resize(snap.N_B);
-	if (N_B_ > 0)
+	snap.isMeshB.assign(snap.N_B, 0);
+	std::vector<uint64_t> idB(meshIdBeginB ? snap.N_B : 0);
+	if (snap.N_B > 0)
 	{
-		GPU::Copy_DeviceToHost(snap.xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(snap.yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(snap.zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(snap.volB.data(), d_volB_.Data(), N_B_, stream_);
+		GPU::Copy_DeviceToHost(snap.xPosB.data(), d_xPosB_.Data(), snap.N_B, stream_);
+		GPU::Copy_DeviceToHost(snap.yPosB.data(), d_yPosB_.Data(), snap.N_B, stream_);
+		GPU::Copy_DeviceToHost(snap.zPosB.data(), d_zPosB_.Data(), snap.N_B, stream_);
+		GPU::Copy_DeviceToHost(snap.volB.data(), d_volB_.Data(), snap.N_B, stream_);
+		if (!idB.empty()) { GPU::Copy_DeviceToHost(idB.data(), d_idB_.Data(), snap.N_B, stream_); }
+	}
+	GPU::StreamSync(stream_);
+	for (size_t i = 0; i < idB.size(); i++)
+	{
+		snap.isMeshB[i] = idB[i] >= *meshIdBeginB;
 	}
 
 	// copy rigid particles

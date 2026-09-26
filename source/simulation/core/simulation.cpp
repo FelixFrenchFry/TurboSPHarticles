@@ -196,7 +196,9 @@ void SimulationMgr::ResetAndRebuildSimState()
 	}
 
 	// re-build initial scenario state by transferring into universal state
+	scenarioMgr_.ResetBoundaryMeshParticleIdBegin();
 	simScenario_->Build(universalSimState_, simParams_);
+	meshIdBeginB_ = scenarioMgr_.GetBoundaryMeshParticleIdBegin();
 	boundaryBoxes_ = simScenario_->GetBoundaryBoxes();
 	DomainBounds bounds{};
 	domainBounds_.reset();
@@ -213,6 +215,8 @@ void SimulationMgr::ResetAndRebuildSimState()
 	universalSimState_.particlesR.ensureRigidCoefficientsPresent(
 		simParams_.massB, simParams_.restDensity);
 	universalSimState_.ValidateRigidAttachments();
+	Sync::CollectBoundaryMeshParticles(
+		universalSimState_.particlesB.constView(), meshIdBeginB_, meshPosB_, meshVolB_);
 
 	// compact staged particle vectors once after scenario construction
 	universalSimState_.ShrinkToFitAll();
@@ -530,19 +534,21 @@ void SimulationMgr::WriteExportSnapshot(const SimParams& params)
 		exportSnapshotBaseDir_ = params.exportDir;
 		exportSnapshotDir_ = serializationMgr_.CreateExportDirectory(params.exportDir);
 		loggingMgr_.CopyRunMetaToExportDir(exportSnapshotDir_);
+		exportBoundaryWritten_ = false;
 		SPDLOG_INFO("Snapshots: {}", exportSnapshotDir_);
 	}
 
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
-	simBackend_->PackExportSnapshot(expSnap, simParams_);
+	simBackend_->PackExportSnapshot(expSnap, simParams_, !exportBoundaryWritten_, meshIdBeginB_);
 
 	// the non-distributed path owns every fluid particle, so the ranks are not exported
 	expSnap.rankF.clear();
 
 	// write export snapshot to files
-	serializationMgr_.SaveExportSnapshot(expSnap, exportSnapshotDir_);
+	serializationMgr_.SaveExportSnapshot(expSnap, exportSnapshotDir_, !exportBoundaryWritten_);
 	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, exportSnapshotDir_);
+	exportBoundaryWritten_ = true;
 }
 
 void SimulationMgr::FinalizeRunState(const SimParams& params, const bool checkpointDue)
@@ -570,6 +576,8 @@ bool SimulationMgr::PublishVisualSnapshot(const bool force)
 	auto visSnap = std::make_shared<Sync::VisualSnapshot>();
 	visSnap->simStep = simStep_;
 	visSnap->boxesB = boundaryBoxes_;
+	visSnap->meshPosB = meshPosB_;
+	visSnap->meshVolB = meshVolB_;
 	visSnap->scalarModeF = scalarMode;
 
 	// optionally pack particle data into CUDA-device buffers for OpenGL without going through the host

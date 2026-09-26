@@ -4,6 +4,7 @@
 // external
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -183,7 +184,8 @@ namespace Sim
 
 		// packs the current simulation state into a snapshot used for exporting or visualization
 		// (implementation is backend-specific for better performance)
-		virtual void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params) const = 0;
+		virtual void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params,
+			bool includeB, std::optional<uint64_t> meshIdBeginB) const = 0;
 		virtual void PackVisualSnapshot(Sync::VisualSnapshot& snap) const = 0;
 
 		// additional CUDA-OpenGL interop for visualization (if the backend supports it)

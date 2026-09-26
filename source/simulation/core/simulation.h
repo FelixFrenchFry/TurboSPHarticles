@@ -126,6 +126,9 @@ namespace Sim
 		Scene::ScenarioMgr& scenarioMgr_;
 		std::unique_ptr<Scene::ISimScenario> simScenario_{ nullptr };
 		std::vector<Scene::OBB> boundaryBoxes_{};
+		std::optional<uint64_t> meshIdBeginB_{};
+		std::vector<glm::vec3> meshPosB_;
+		std::vector<float> meshVolB_;
 		struct DomainBounds
 		{
 			glm::vec3 min{};
@@ -162,6 +165,7 @@ namespace Sim
 		mutable Sync::ExportSnapshot exportSnapScratch_;
 		std::string exportSnapshotBaseDir_;
 		std::string exportSnapshotDir_;
+		bool exportBoundaryWritten_ = false;
 
 		// visualization management
 		std::optional<uint64_t> lastVisStep_{};

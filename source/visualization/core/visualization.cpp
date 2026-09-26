@@ -449,6 +449,8 @@ void VisualizationMgr::SyncVisSimState()
 	posB_[back_].swap(snap->posB);
 	volB_[back_].swap(snap->volB);
 	boxesB_[back_].swap(snap->boxesB);
+	meshPosB_[back_].swap(snap->meshPosB);
+	meshVolB_[back_].swap(snap->meshVolB);
 	posR_[back_].swap(snap->posR);
 	volR_[back_].swap(snap->volR);
 	centerOfMassRB_[back_].swap(snap->centerOfMassRB);
@@ -485,6 +487,9 @@ void VisualizationMgr::SyncVisSimState()
 	view_.posB = std::span<const glm::vec3>(posB_[front_].data(), posB_[front_].size());
 	view_.volB = std::span<const float>(volB_[front_].data(), volB_[front_].size());
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
+	view_.N_meshB = static_cast<uint32_t>(meshPosB_[front_].size());
+	view_.meshPosB = std::span<const glm::vec3>(meshPosB_[front_].data(), meshPosB_[front_].size());
+	view_.meshVolB = std::span<const float>(meshVolB_[front_].data(), meshVolB_[front_].size());
 	view_.N_R = static_cast<uint32_t>(posR_[front_].size());
 	view_.posR = std::span<const glm::vec3>(posR_[front_].data(), posR_[front_].size());
 	view_.volR = std::span<const float>(volR_[front_].data(), volR_[front_].size());
@@ -511,6 +516,7 @@ void VisualizationMgr::SyncVisSimState()
 	}
 	renderingMgr_.UpdateCentersOfMass(view_, simParams);
 	renderingMgr_.UpdateWireframes(view_);
+	renderingMgr_.UpdateBoundaryMeshParticles(view_, simParams);
 }
 
 void VisualizationMgr::SyncBenchSnap()

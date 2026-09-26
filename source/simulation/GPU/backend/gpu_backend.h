@@ -123,7 +123,8 @@ namespace Sim
 
 		// packs the current simulation state into a snapshot used for exporting or visualization
 		// (implementation is backend-specific for better performance)
-		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params) const override;
+		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params,
+			bool includeB, std::optional<uint64_t> meshIdBeginB) const override;
 		void PackVisualSnapshot(Sync::VisualSnapshot& snap) const override;
 		Sync::VisualPackResultCUDA TryPackVisualSnapshotCUDA(
 			Sync::VisualFrameMailboxCUDA& visualFrameMailboxCUDA,

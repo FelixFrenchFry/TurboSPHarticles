@@ -32,6 +32,9 @@ namespace Vis
 		std::span<const glm::vec3> posB;    // positions of all boundary particles
 		std::span<const float> volB;        // contribution volumes of all boundary particles
 		std::span<const Scene::OBB> boxesB; // OBBs of boundary structures
+		uint32_t N_meshB;                   // number of boundary particles drawn as spheres
+		std::span<const glm::vec3> meshPosB;// positions of boundary particles drawn as spheres
+		std::span<const float> meshVolB;	// contribution volumes of boundary particles drawn as spheres
 
 		// data for rigid particle vis
 		uint32_t N_R;                       // number of rigid particles
@@ -83,14 +86,15 @@ namespace Vis
 
 	struct RenderConfig
 	{
-		glm::vec3 lightDirVS;           // light direction in view space
-		glm::vec4 clearColor;           // background color RGBA
-		glm::vec3 baseColor;            // base sphere impostor color RGB
-		glm::vec3 rigidParticleColor;   // rigid particle color RGB
-		glm::vec3 centerOfMassXAxisColor; // center-of-mass local X-axis color RGB
-		glm::vec3 centerOfMassYAxisColor; // center-of-mass local Y-axis color RGB
-		glm::vec3 centerOfMassZAxisColor; // center-of-mass local Z-axis color RGB
-		glm::vec3 lineColor;            // wireframe color RGB
+		glm::vec3 lightDirVS;              // light direction in view space
+		glm::vec4 clearColor;              // background color RGBA
+		glm::vec3 baseColor;               // base sphere impostor color RGB
+		glm::vec3 boundaryParticleColor;   // boundary mesh particle color RGB
+		glm::vec3 rigidParticleColor;      // rigid particle color RGB
+		glm::vec3 centerOfMassXAxisColor;  // center-of-mass local X-axis color RGB
+		glm::vec3 centerOfMassYAxisColor;  // center-of-mass local Y-axis color RGB
+		glm::vec3 centerOfMassZAxisColor;  // center-of-mass local Z-axis color RGB
+		glm::vec3 lineColor;               // wireframe color RGB
 		float alpha;
 		float centerOfMassXRayAlpha;
 		float scalarMin;
@@ -98,6 +102,7 @@ namespace Vis
 		Base::ColorMap colorMap;
 		Base::ColorCodingMode scalarModeF;
 		bool showParticlesF;
+		bool showParticlesB;
 		bool showParticlesR;
 		bool showRigidBodyCentersOfMass;
 		float rigidParticleRadiusScale;

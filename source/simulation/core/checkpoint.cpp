@@ -92,6 +92,9 @@ void SimulationMgr::SaveCheckpoint(
 		? Export::CheckpointBoundsToJson(domainBounds_->min, domainBounds_->max)
 		: nlohmann::json(nullptr);
 	manifest["boundaryBoxes"] = CheckpointBoundaryBoxesToJson(boundaryBoxes_);
+	manifest["boundaryMeshParticleIdBegin"] = meshIdBeginB_
+		? nlohmann::json(*meshIdBeginB_)
+		: nlohmann::json(nullptr);
 
 	// write the full state into a new checkpoint directory
 	const auto checkpointDir = Export::CreateCheckpointDirectory(
@@ -140,11 +143,22 @@ void SimulationMgr::LoadCheckpoint(
 	}
 	Sync::UniversalSimState state{};
 	Export::LoadCheckpointState(serializationMgr_, state, path.parent_path(), files[0], info);
+	const auto& meshId = manifest.at("boundaryMeshParticleIdBegin");
+	const std::optional<uint64_t> meshIdBeginB = meshId.is_null()
+		? std::nullopt
+		: std::optional<uint64_t>(Export::CheckpointUint64(meshId));
+	if (meshIdBeginB && *meshIdBeginB >= state.particlesB.N_)
+	{
+		throw std::runtime_error("Checkpoint boundary mesh particle ID is outside the global boundary range.");
+	}
 
 	// replace the simulation state after all checkpoint data has been validated
 	universalSimState_ = std::move(state);
 	boundaryBoxes_ = std::move(boxes);
 	domainBounds_ = domainBounds;
+	meshIdBeginB_ = meshIdBeginB;
+	Sync::CollectBoundaryMeshParticles(
+		universalSimState_.particlesB.constView(), meshIdBeginB_, meshPosB_, meshVolB_);
 	simScenario_.reset();
 	simStep_ = info.step;
 	simTime_ = info.time;
