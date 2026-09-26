@@ -142,8 +142,6 @@ namespace
 		Export::LoggingOptions loggingOptions{};
 		// each rank writes its own CSV files to avoid shared log-file writes
 		loggingOptions.rankSubDir = FormatRankLogDirName(mpiContext.Rank());
-		// root copies metadata into the reserved export directory
-		loggingOptions.writeRunMetaToExportDir = false;
 		loggingOptions.mpiRank = mpiContext.Rank();
 		loggingOptions.N_mpiRanks = mpiContext.Size();
 		return loggingOptions;
@@ -1548,6 +1546,7 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 	}
 
 	bool writeOk = true;
+	// reserve the export directory on the first snapshot of this session
 	if (exportSnapshotDir_.empty() || exportSnapshotBaseDir_ != params.exportDir)
 	{
 		try
@@ -1555,7 +1554,7 @@ bool DistSimulationMgr::WriteExportSnapshot(const Sim::SimParams& params)
 			exportSnapshotBaseDir_ = params.exportDir;
 			if (mpiContext_.IsRoot())
 			{
-				exportSnapshotDir_ = serializationMgr_.CreateDistributedExportDirectory(params.exportDir);
+				exportSnapshotDir_ = serializationMgr_.CreateExportDirectory(params.exportDir);
 				loggingMgr_.CopyRunMetaToExportDir(exportSnapshotDir_);
 				SPDLOG_INFO("Distributed snapshots: {}", exportSnapshotDir_);
 			}
@@ -1733,6 +1732,7 @@ void DistSimulationMgr::BeginRunLogging(const Sim::SimParams& params)
 {
 	// start a fresh export session for this run
 	exportSnapshotDir_.clear();
+
 	// the root rank reserves the run directory shared by all ranks
 	uint64_t runIdx = mpiContext_.IsRoot() ? loggingMgr_.ReserveNextRunIdx() : 0;
 	mpiContext_.BroadcastUint64(runIdx, mpiContext_.RootRank());

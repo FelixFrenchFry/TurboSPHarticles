@@ -449,12 +449,6 @@ namespace Export
 			return false;
 		}
 
-		// second copy next to the exported particle data
-		if (loggingOptions_.writeRunMetaToExportDir && simParams.exportEnabled)
-		{
-			WriteRunMetaToExportDir(meta, simParams.exportDir);
-		}
-
 		return true;
 	}
 
@@ -475,38 +469,6 @@ namespace Export
 		if (ec)
 		{
 			SPDLOG_WARN("Failed to copy run metadata to '{}': {}.", metaPath.string(), ec.message());
-		}
-	}
-
-	void LoggingMgr::WriteRunMetaToExportDir(
-		const nlohmann::json& meta,
-		const std::string& exportDir) const
-	{
-		const std::filesystem::path dirPath = loggingOptions_.exportBaseDir / exportDir;
-
-		std::error_code ec;
-		std::filesystem::create_directories(dirPath, ec);
-		if (ec)
-		{
-			SPDLOG_WARN("Failed to create export directory '{}': {}.",
-				dirPath.string(), ec.message());
-			return;
-		}
-
-		const std::filesystem::path metaPath = dirPath / "run_meta.json";
-		std::ofstream out(metaPath, std::ios::out | std::ios::trunc);
-		if (!out.is_open())
-		{
-			SPDLOG_WARN("Failed to write run metadata to '{}'.", metaPath.string());
-			return;
-		}
-
-		out.imbue(std::locale::classic());
-		out << std::setw(4) << meta << '\n';
-
-		if (!out.good())
-		{
-			SPDLOG_WARN("Failed to write run metadata to '{}'.", metaPath.string());
 		}
 	}
 

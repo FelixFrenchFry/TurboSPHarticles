@@ -179,6 +179,7 @@ void SimulationMgr::ResetAndRebuildSimState()
 	lastVisStep_.reset();
 	if (visualSnapMailbox_) { visualSnapMailbox_->RequestSnapshot(); }
 	serializationMgr_.ResetExportDirState();
+	exportSnapshotDir_.clear();
 
 	// reset scenario and all its data
 	universalSimState_ = {};
@@ -521,8 +522,17 @@ void SimulationMgr::SetConfigProfile(std::string profile)
 	scenariosFile_ = Base::ScenariosPathForProfile(configProfile_);
 }
 
-void SimulationMgr::WriteExportSnapshot(const SimParams& params) const
+void SimulationMgr::WriteExportSnapshot(const SimParams& params)
 {
+	// reserve the export directory on the first snapshot of this session
+	if (exportSnapshotDir_.empty() || exportSnapshotBaseDir_ != params.exportDir)
+	{
+		exportSnapshotBaseDir_ = params.exportDir;
+		exportSnapshotDir_ = serializationMgr_.CreateExportDirectory(params.exportDir);
+		loggingMgr_.CopyRunMetaToExportDir(exportSnapshotDir_);
+		SPDLOG_INFO("Snapshots: {}", exportSnapshotDir_);
+	}
+
 	// fill export snapshot
 	auto& expSnap = exportSnapScratch_;
 	simBackend_->PackExportSnapshot(expSnap, simParams_);
@@ -531,8 +541,8 @@ void SimulationMgr::WriteExportSnapshot(const SimParams& params) const
 	expSnap.rankF.clear();
 
 	// write export snapshot to files
-	serializationMgr_.SaveExportSnapshot(expSnap, params.exportDir);
-	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, params.exportDir);
+	serializationMgr_.SaveExportSnapshot(expSnap, exportSnapshotDir_);
+	serializationMgr_.SaveExportSnapshotXdmfViews(expSnap, exportSnapshotDir_);
 }
 
 void SimulationMgr::FinalizeRunState(const SimParams& params, const bool checkpointDue)
@@ -652,6 +662,9 @@ void SimulationMgr::FinalizeBenchMemStatMeasurements() const
 
 void SimulationMgr::BeginRunLogging(const SimParams& params)
 {
+	// start a fresh export session for this run
+	exportSnapshotDir_.clear();
+
 	loggingMgr_.BeginRun(configProfile_, paramsFile_, scenariosFile_, params,
 		simParamsMgr_.CliOverrides());
 }

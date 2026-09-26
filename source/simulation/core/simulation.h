@@ -67,7 +67,7 @@ namespace Sim
 		// helpers
 		void SetConfigProfile(std::string profile);
 
-		void WriteExportSnapshot(const SimParams& params) const;
+		void WriteExportSnapshot(const SimParams& params);
 		void FinalizeRunState(const SimParams& params, bool checkpointDue = false);
 		bool PublishVisualSnapshot(bool force = false);
 		void HandleBenchMemStatSnapshots() const;
@@ -160,6 +160,8 @@ namespace Sim
 		Export::SerializationMgr& serializationMgr_;
 		mutable Export::LoggingMgr loggingMgr_;
 		mutable Sync::ExportSnapshot exportSnapScratch_;
+		std::string exportSnapshotBaseDir_;
+		std::string exportSnapshotDir_;
 
 		// visualization management
 		std::optional<uint64_t> lastVisStep_{};

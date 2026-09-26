@@ -1385,7 +1385,7 @@ namespace Export
 		}
 	}
 
-	std::string SerializationMgr::CreateDistributedExportDirectory(
+	std::string SerializationMgr::CreateExportDirectory(
 		const std::string& dir) const
 	{
 		const std::filesystem::path parent = std::filesystem::absolute(saveOptions_.baseDir / dir);
@@ -1407,7 +1407,7 @@ namespace Export
 			const auto result = std::from_chars(name.data() + 4, name.data() + name.size(), idx);
 			if (result.ec != std::errc{} || idx == std::numeric_limits<uint64_t>::max())
 			{
-				throw std::runtime_error("Distributed export run index exceeds available uint64_t range.");
+				throw std::runtime_error("Export run index exceeds available uint64_t range.");
 			}
 
 			// include occupied file and symlink names when choosing the next index
@@ -1424,11 +1424,11 @@ namespace Export
 			if (std::filesystem::create_directory(path, ec)) { return path.string(); }
 			if (ec && ec != std::errc::file_exists)
 			{
-				throw std::filesystem::filesystem_error("Failed to reserve distributed export directory", path, ec);
+				throw std::filesystem::filesystem_error("Failed to reserve export directory", path, ec);
 			}
 			if (idx == std::numeric_limits<uint64_t>::max())
 			{
-				throw std::runtime_error("Distributed export run index exceeds available uint64_t range.");
+				throw std::runtime_error("Export run index exceeds available uint64_t range.");
 			}
 		}
 	}

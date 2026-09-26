@@ -149,5 +149,6 @@ void SimulationMgr::LoadCheckpoint(
 	simStep_ = info.step;
 	simTime_ = info.time;
 	serializationMgr_.ResetExportDirState();
+	exportSnapshotDir_.clear();
 	SPDLOG_INFO("Restored checkpoint at step {} (time {})", simStep_, simTime_);
 }

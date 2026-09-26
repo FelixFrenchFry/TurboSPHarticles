@@ -33,9 +33,6 @@ namespace Export
 		std::filesystem::path exportBaseDir = "exports";
 	#endif
 
-		// distributed runs copy metadata explicitly after reserving their export directory
-		bool writeRunMetaToExportDir = true;
-
 		// rank directory below the run directory, empty for non-distributed runs
 		std::filesystem::path rankSubDir{};
 
@@ -74,6 +71,7 @@ namespace Export
 
 		const std::filesystem::path& GetRunDir() const { return runDir_; }
 
+		// copy startup metadata after the simulation reserves its export directory
 		void CopyRunMetaToExportDir(const std::string& exportDir) const;
 
 	private:
@@ -96,8 +94,6 @@ namespace Export
 						  const std::string& scenariosFile,
 						  const Sim::SimParams& simParams,
 						  const nlohmann::json& cliOverrides) const;
-		void WriteRunMetaToExportDir(const nlohmann::json& meta,
-									 const std::string& exportDir) const;
 		void WriteBenchmarkMetricsHeader();
 		void WriteMemoryMetricsHeader();
 		void Disable();

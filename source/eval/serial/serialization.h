@@ -89,9 +89,11 @@ namespace Export
 			const std::string& dir) const;
 		void SaveExportSnapshotXdmfViews(const Sync::ExportSnapshot& snap, const std::string& dir) const;
 
-		// distributed export directories and metadata, written by the root rank
+		// reserve a fresh run directory below the configured export directory
+		std::string CreateExportDirectory(const std::string& dir) const;
+
+		// distributed export metadata, written by the root rank
 		// publish views after the shared particle files are complete
-		std::string CreateDistributedExportDirectory(const std::string& dir) const;
 		ExportSnapshotFilePaths GetDistributedExportFilePaths(
 			const std::string& dir,
 			uint64_t step,
