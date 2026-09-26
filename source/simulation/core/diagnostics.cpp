@@ -275,15 +275,25 @@ namespace Sim
 		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"loadBalanceIntervalSteps", params.loadBalanceIntervalSteps);
 		printf("%-*s = [ %.3f / %.3f / %.3f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
-			"sampling ratio [min/max/probe]",
-			params.surfaceSamplingMinDistanceRatio,
-			params.surfaceSamplingMaxDistanceRatio,
-			params.surfaceSamplingCoverageProbeSpacingRatio);
+			"sampling B ratio [min/max/probe]",
+			params.surfaceSamplingMinDistanceRatioB,
+			params.surfaceSamplingMaxDistanceRatioB,
+			params.surfaceSamplingCoverageProbeSpacingRatioB);
 		printf("%-*s = [ %.6f / %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
-			"sampling dist [min/max/probe]",
-			params.surfaceSamplingMinDistance,
-			params.surfaceSamplingMaxDistance,
-			params.surfaceSamplingCoverageProbeSpacing);
+			"sampling B dist [min/max/probe]",
+			params.surfaceSamplingMinDistanceB,
+			params.surfaceSamplingMaxDistanceB,
+			params.surfaceSamplingCoverageProbeSpacingB);
+		printf("%-*s = [ %.3f / %.3f / %.3f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling R ratio [min/max/probe]",
+			params.surfaceSamplingMinDistanceRatioR,
+			params.surfaceSamplingMaxDistanceRatioR,
+			params.surfaceSamplingCoverageProbeSpacingRatioR);
+		printf("%-*s = [ %.6f / %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling R dist [min/max/probe]",
+			params.surfaceSamplingMinDistanceR,
+			params.surfaceSamplingMaxDistanceR,
+			params.surfaceSamplingCoverageProbeSpacingR);
 		printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling candidates / trials",
 			params.surfaceSamplingCandidateMultiplier,

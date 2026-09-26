@@ -101,12 +101,18 @@ namespace
 		probeParams.massB = probeParams.restDensity * probeParams.particleSizeB
 			* probeParams.particleSizeB * probeParams.particleSizeB;
 
-		probeParams.surfaceSamplingMinDistance =
-			probeParams.surfaceSamplingMinDistanceRatio * probeParams.particleSizeB;
-		probeParams.surfaceSamplingMaxDistance =
-			probeParams.surfaceSamplingMaxDistanceRatio * probeParams.particleSizeB;
-		probeParams.surfaceSamplingCoverageProbeSpacing =
-			probeParams.surfaceSamplingCoverageProbeSpacingRatio * probeParams.particleSizeB;
+		probeParams.surfaceSamplingMinDistanceB =
+			probeParams.surfaceSamplingMinDistanceRatioB * probeParams.particleSizeB;
+		probeParams.surfaceSamplingMaxDistanceB =
+			probeParams.surfaceSamplingMaxDistanceRatioB * probeParams.particleSizeB;
+		probeParams.surfaceSamplingCoverageProbeSpacingB =
+			probeParams.surfaceSamplingCoverageProbeSpacingRatioB * probeParams.particleSizeB;
+		probeParams.surfaceSamplingMinDistanceR =
+			probeParams.surfaceSamplingMinDistanceRatioR * probeParams.particleSizeB;
+		probeParams.surfaceSamplingMaxDistanceR =
+			probeParams.surfaceSamplingMaxDistanceRatioR * probeParams.particleSizeB;
+		probeParams.surfaceSamplingCoverageProbeSpacingR =
+			probeParams.surfaceSamplingCoverageProbeSpacingRatioR * probeParams.particleSizeB;
 
 		return probeParams;
 	}

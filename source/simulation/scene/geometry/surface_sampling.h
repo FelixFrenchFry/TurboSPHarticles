@@ -48,7 +48,10 @@ namespace Scene
 
 		SurfaceSampler(
 			const TriangleSurfaceMesh& mesh,
-			const Sim::SimParams& params);
+			const Sim::SimParams& params,
+			float minDistance,
+			float maxDistance,
+			float coverageProbeSpacing);
 		~SurfaceSampler();
 
 		SurfaceSampler(const SurfaceSampler&) = delete;
@@ -69,6 +72,9 @@ namespace Scene
 		struct Storage;
 		std::unique_ptr<Storage> storage_;
 		Sim::SimParams params_; // param snapshot used by sampling stages
+		float minDistance_ = 0.0f;
+		float maxDistance_ = 0.0f;
+		float coverageProbeSpacing_ = 0.0f;
 	};
 
 } // namespace Scene

@@ -152,7 +152,10 @@ namespace Scene
 		}
 
 		SPDLOG_INFO("Sampling rigid model '{}' surfaces...", cfg.modelName);
-		SurfaceSampler sampler(mesh, params);
+		SurfaceSampler sampler(mesh, params,
+			params.surfaceSamplingMinDistanceR,
+			params.surfaceSamplingMaxDistanceR,
+			params.surfaceSamplingCoverageProbeSpacingR);
 		const SurfaceSamplingResult sampling = sampler.Sample();
 		const uint32_t bodyIdx = scenarioMgr.BuildRigidBody_FromSurfaceSamples(
 			sampling.samples,

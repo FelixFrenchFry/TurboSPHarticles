@@ -33,6 +33,12 @@ namespace Export
 			"surfaceSamplingMinDistanceRatio", "surfaceSamplingMaxDistanceRatio",
 			"surfaceSamplingCoverageProbeSpacingRatio", "surfaceSamplingMinDistance",
 			"surfaceSamplingMaxDistance", "surfaceSamplingCoverageProbeSpacing",
+			"surfaceSamplingMinDistanceRatioB", "surfaceSamplingMaxDistanceRatioB",
+			"surfaceSamplingCoverageProbeSpacingRatioB", "surfaceSamplingMinDistanceB",
+			"surfaceSamplingMaxDistanceB", "surfaceSamplingCoverageProbeSpacingB",
+			"surfaceSamplingMinDistanceRatioR", "surfaceSamplingMaxDistanceRatioR",
+			"surfaceSamplingCoverageProbeSpacingRatioR", "surfaceSamplingMinDistanceR",
+			"surfaceSamplingMaxDistanceR", "surfaceSamplingCoverageProbeSpacingR",
 			"surfaceSamplingCandidateMultiplier", "surfaceSamplingMaxTrialsPerCell",
 			"surfaceSamplingSeed" })
 		{

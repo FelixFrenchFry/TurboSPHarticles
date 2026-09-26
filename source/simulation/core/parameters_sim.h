@@ -114,14 +114,20 @@ namespace Sim
 		uint32_t loadBalanceIntervalSteps = 50;
 
 		// surface sampling spacing
-		float surfaceSamplingMinDistanceRatio = 0.8f; // minimum accepted sample spacing / particleSizeB
-		float surfaceSamplingMaxDistanceRatio = 1.0f; // maximum surface-to-sample gap / particleSizeB
-		float surfaceSamplingCoverageProbeSpacingRatio = 0.2f; // coverage probe spacing / particleSizeB
+		float surfaceSamplingMinDistanceRatioB = 0.8f; // minimum accepted sample spacing / particleSizeB
+		float surfaceSamplingMaxDistanceRatioB = 1.0f; // maximum surface-to-sample gap / particleSizeB
+		float surfaceSamplingCoverageProbeSpacingRatioB = 0.2f; // coverage probe spacing / particleSizeB
+		float surfaceSamplingMinDistanceRatioR = 0.8f; // minimum accepted sample spacing / particleSizeB
+		float surfaceSamplingMaxDistanceRatioR = 1.0f; // maximum surface-to-sample gap / particleSizeB
+		float surfaceSamplingCoverageProbeSpacingRatioR = 0.2f; // coverage probe spacing / particleSizeB
 
 		// resolved surface sampling distances
-		float surfaceSamplingMinDistance = 0.008f; // minimum accepted sample spacing
-		float surfaceSamplingMaxDistance = 0.01f; // maximum surface-to-sample gap
-		float surfaceSamplingCoverageProbeSpacing = 0.002f; // spacing of coverage probes
+		float surfaceSamplingMinDistanceB = 0.008f; // minimum accepted sample spacing
+		float surfaceSamplingMaxDistanceB = 0.01f; // maximum surface-to-sample gap
+		float surfaceSamplingCoverageProbeSpacingB = 0.002f; // spacing of coverage probes
+		float surfaceSamplingMinDistanceR = 0.008f; // minimum accepted sample spacing
+		float surfaceSamplingMaxDistanceR = 0.01f; // maximum surface-to-sample gap
+		float surfaceSamplingCoverageProbeSpacingR = 0.002f; // spacing of coverage probes
 
 		// candidate generation
 		uint32_t surfaceSamplingCandidateMultiplier = 8; // candidate pool size multiplier
@@ -208,6 +214,7 @@ namespace Sim
 			float minDistanceRatio,
 			float maxDistanceRatio,
 			float coverageProbeSpacingRatio,
+			Base::ParticleType type,
 			bool verbose = false);
 		void Set_SurfaceNbrCountRatio(float surfaceNbrCountRatio, bool verbose = false);
 

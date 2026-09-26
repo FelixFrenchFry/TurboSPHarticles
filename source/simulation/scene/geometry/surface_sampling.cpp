@@ -224,36 +224,35 @@ namespace Scene
 		}
 
 		// validate SPH particle scales used by the sampling policy
-		if (!std::isfinite(params.particleSizeF) || params.particleSizeF <= 0.0f ||
-			!std::isfinite(params.particleSizeB) || params.particleSizeB <= 0.0f)
+		if (!std::isfinite(params.particleSizeF) || params.particleSizeF <= 0.0f)
 		{
-			throw std::runtime_error("Surface sampling requires finite positive particle sizes.");
+			throw std::runtime_error("Surface sampling requires a finite positive fluid particle size.");
 		}
 
 		// prevent boundary sampling from becoming coarser than the fluid
 		const float particleSizeEpsilon = DistanceEpsilon(params.particleSizeF);
-		if (params.surfaceSamplingMaxDistance > params.particleSizeF + particleSizeEpsilon)
+		if (maxDistance_ > params.particleSizeF + particleSizeEpsilon)
 		{
-			throw std::runtime_error("Rigid surface sampling is coarser than the fluid spacing.");
+			throw std::runtime_error("Surface sampling is coarser than the fluid spacing.");
 		}
 
 		// validate sampling distance constraints
-		if (!std::isfinite(params.surfaceSamplingMinDistance) || params.surfaceSamplingMinDistance <= 0.0f)
+		if (!std::isfinite(minDistance_) || minDistance_ <= 0.0f)
 		{
 			throw std::runtime_error("Surface sample minimum distance must be finite and positive.");
 		}
-		if (!std::isfinite(params.surfaceSamplingMaxDistance) || params.surfaceSamplingMaxDistance < params.surfaceSamplingMinDistance)
+		if (!std::isfinite(maxDistance_) || maxDistance_ < minDistance_)
 		{
 			throw std::runtime_error("Surface sample maximum distance must be finite and not smaller than the minimum distance.");
 		}
-		if (!std::isfinite(params.surfaceSamplingCoverageProbeSpacing) || params.surfaceSamplingCoverageProbeSpacing <= 0.0f)
+		if (!std::isfinite(coverageProbeSpacing_) || coverageProbeSpacing_ <= 0.0f)
 		{
 			throw std::runtime_error("Surface coverage probe spacing must be finite and positive.");
 		}
 
-		const float distanceEpsilon = DistanceEpsilon(params.surfaceSamplingMaxDistance);
-		if (params.surfaceSamplingMaxDistance + distanceEpsilon <
-			params.surfaceSamplingMinDistance + params.surfaceSamplingCoverageProbeSpacing)
+		const float distanceEpsilon = DistanceEpsilon(maxDistance_);
+		if (maxDistance_ + distanceEpsilon <
+			minDistance_ + coverageProbeSpacing_)
 		{
 			throw std::runtime_error("Surface coverage maximum distance must be at least the minimum distance plus the probe spacing.");
 		}
@@ -358,7 +357,7 @@ namespace Scene
 		// derive candidate and estimated sample counts from surface area
 		const double N_estimatedSamplesD = std::ceil(
 			surfaceArea /
-			(static_cast<double>(params.surfaceSamplingMinDistance) * static_cast<double>(params.surfaceSamplingMinDistance)));
+			(static_cast<double>(minDistance_) * static_cast<double>(minDistance_)));
 		const double N_candidatesD =
 			N_estimatedSamplesD * params.surfaceSamplingCandidateMultiplier;
 		if (!std::isfinite(N_candidatesD) ||
@@ -374,11 +373,11 @@ namespace Scene
 
 		// reserve persistent selection state from estimated sample count
 		samples.reserve(N_estimatedSamples);
-		SampleSpatialHash spatialHash(params.surfaceSamplingMinDistance, samples);
+		SampleSpatialHash spatialHash(minDistance_, samples);
 		spatialHash.Reserve(N_estimatedSamples);
 		std::unordered_map<CellCoord, uint32_t, CellCoordHash> trialsPerCell;
 		trialsPerCell.reserve(N_estimatedSamples);
-		const float cellSizeInv = 1.0f / params.surfaceSamplingMinDistance;
+		const float cellSizeInv = 1.0f / minDistance_;
 
 		// generate and select candidate batches in stable global order
 		const uint32_t N_candidateBatch = std::min(N_samplingBatch, N_candidates);
@@ -452,12 +451,12 @@ namespace Scene
 
 				const bool hasDistanceConflict = spatialHash.AnyNearby(
 					candidate.pos,
-					params.surfaceSamplingMinDistance,
+					minDistance_,
 					[&](const uint32_t sampleIdx)
 					{
 						return SurfaceDistance(
 							candidate,
-							samples[sampleIdx]) < params.surfaceSamplingMinDistance;
+							samples[sampleIdx]) < minDistance_;
 					});
 				if (hasDistanceConflict) { continue; }
 
@@ -474,10 +473,16 @@ namespace Scene
 
 	SurfaceSampler::SurfaceSampler(
 		const TriangleSurfaceMesh& mesh,
-		const Sim::SimParams& params)
+		const Sim::SimParams& params,
+		const float minDistance,
+		const float maxDistance,
+		const float coverageProbeSpacing)
 		:
 		storage_(std::make_unique<Storage>())
 		, params_(params)
+		, minDistance_(minDistance)
+		, maxDistance_(maxDistance)
+		, coverageProbeSpacing_(coverageProbeSpacing)
 	{
 		PreprocessMesh(mesh);
 	}
@@ -487,7 +492,6 @@ namespace Scene
 	void SurfaceSampler::RepairCoverage()
 	{
 		const auto& triangles = storage_->triangles;
-		const Sim::SimParams& params = params_;
 		auto& samples = storage_->samples;
 
 		// count barycentric coverage probes and validate allocation limits
@@ -496,7 +500,7 @@ namespace Scene
 		{
 			const double N_subdivisionsD = std::ceil(
 				static_cast<double>(triangle.longestEdge) /
-				static_cast<double>(params.surfaceSamplingCoverageProbeSpacing));
+				static_cast<double>(coverageProbeSpacing_));
 			if (!std::isfinite(N_subdivisionsD) ||
 				N_subdivisionsD > std::numeric_limits<uint32_t>::max())
 			{
@@ -529,7 +533,7 @@ namespace Scene
 		}
 
 		// rebuild the spatial hash from the initially accepted samples
-		SampleSpatialHash spatialHash(params.surfaceSamplingMinDistance, samples);
+		SampleSpatialHash spatialHash(minDistance_, samples);
 		spatialHash.Reserve(static_cast<uint32_t>(samples.size()));
 		for (uint32_t sampleIdx = 0; sampleIdx < static_cast<uint32_t>(samples.size()); sampleIdx++)
 		{
@@ -538,8 +542,8 @@ namespace Scene
 
 		// reserve probe spacing as the continuous coverage error budget
 		const float probeTargetDistance = std::max(
-			params.surfaceSamplingMinDistance,
-			params.surfaceSamplingMaxDistance - params.surfaceSamplingCoverageProbeSpacing);
+			minDistance_,
+			maxDistance_ - coverageProbeSpacing_);
 		uint32_t& N_repairs = storage_->stats.N_coverageRepairs;
 		N_repairs = 0;
 
@@ -618,7 +622,7 @@ namespace Scene
 			const uint32_t N_subdivisions = std::max<uint32_t>(
 				1,
 				static_cast<uint32_t>(std::ceil(
-					triangle.longestEdge / params.surfaceSamplingCoverageProbeSpacing)));
+					triangle.longestEdge / coverageProbeSpacing_)));
 			const float N_subdivisionsInv = 1.0f / static_cast<float>(N_subdivisions);
 
 			for (uint32_t i = 0; i <= N_subdivisions; i++)

@@ -90,7 +90,10 @@ namespace Scene
 		}
 
 		SPDLOG_INFO("Sampling boundary model '{}' surfaces...", cfg.modelName);
-		SurfaceSampler sampler(mesh, params);
+		SurfaceSampler sampler(mesh, params,
+			params.surfaceSamplingMinDistanceB,
+			params.surfaceSamplingMaxDistanceB,
+			params.surfaceSamplingCoverageProbeSpacingB);
 		const SurfaceSamplingResult sampling = sampler.Sample();
 		scenarioMgr.BuildBoundary_FromSurfaceSamples(
 			sampling.samples,
