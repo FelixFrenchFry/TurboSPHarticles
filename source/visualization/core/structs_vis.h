@@ -7,6 +7,8 @@
 #include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
+#include <memory>
+#include <vector>
 
 // internal
 #include "source/base/enum_hub.h"
@@ -28,13 +30,9 @@ namespace Vis
 		Base::ColorCodingMode scalarModeF;  // color coding mode
 
 		// data for boundary structures vis
-		uint32_t N_B;                       // number of boundary particles
-		std::span<const glm::vec3> posB;    // positions of all boundary particles
-		std::span<const float> volB;        // contribution volumes of all boundary particles
 		std::span<const Scene::OBB> boxesB; // OBBs of boundary structures
-		uint32_t N_meshB;                   // number of boundary particles drawn as spheres
-		std::span<const glm::vec3> meshPosB;// positions of boundary particles drawn as spheres
-		std::span<const float> meshVolB;	// contribution volumes of boundary particles drawn as spheres
+		std::shared_ptr<const std::vector<glm::vec3>> meshPosB;
+		std::shared_ptr<const std::vector<float>> meshVolB;
 
 		// data for rigid particle vis
 		uint32_t N_R;                       // number of rigid particles

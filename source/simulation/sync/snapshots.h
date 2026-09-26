@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -26,8 +27,8 @@ namespace Sync
 	void CollectBoundaryMeshParticles(
 		const BoundaryConstView& particlesB,
 		std::optional<uint64_t> meshIdBeginB,
-		std::vector<glm::vec3>& meshPosB,
-		std::vector<float>& meshVolB);
+		std::shared_ptr<const std::vector<glm::vec3>>& meshPosB,
+		std::shared_ptr<const std::vector<float>>& meshVolB);
 
 	// data structure for exporting parts of the simulation state
 	// (including a minimal subset of the data requested to analyze/model the simulation offline)
@@ -78,12 +79,10 @@ namespace Sync
 		Base::ColorCodingMode scalarModeF;  // color coding mode
 
 		// data for boundary structures vis
-		uint32_t N_B;                       // number of boundary particles
-		std::vector<glm::vec3> posB;        // positions of all boundary particles
-		std::vector<float> volB;            // contribution volumes of all boundary particles
 		std::vector<Scene::OBB> boxesB;     // OBBs of boundary structures
-		std::vector<glm::vec3> meshPosB;    // positions of boundary mesh particles
-		std::vector<float> meshVolB;        // contribution volumes of boundary mesh particles
+		// immutable geometry shared across snapshots until the scene changes
+		std::shared_ptr<const std::vector<glm::vec3>> meshPosB;
+		std::shared_ptr<const std::vector<float>> meshVolB;
 
 		// data for rigid particle vis
 		uint32_t N_R;                       // number of rigid particles

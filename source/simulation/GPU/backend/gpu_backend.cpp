@@ -581,7 +581,6 @@ void SimBackend_GPU::PackExportSnapshot(
 void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	snap.N_F = N_F_;
-	snap.N_B = N_B_;
 	snap.N_R = N_R_;
 	snap.N_RB = N_RB_;
 	snap.simStep = simStep_;
@@ -615,18 +614,6 @@ void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 		FillScalarData(snap, snap.scalarModeF);
 	}
 
-	// copy boundary particles
-	snap.posB.resize(snap.N_B);
-	snap.volB.resize(snap.N_B);
-	std::vector<float> xPosB(N_B_), yPosB(N_B_), zPosB(N_B_);
-	if (N_B_ > 0)
-	{
-		GPU::Copy_DeviceToHost(xPosB.data(), d_xPosB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(yPosB.data(), d_yPosB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(zPosB.data(), d_zPosB_.Data(), N_B_, stream_);
-		GPU::Copy_DeviceToHost(snap.volB.data(), d_volB_.Data(), N_B_, stream_);
-	}
-
 	// copy rigid particles
 	snap.posR.resize(snap.N_R);
 	snap.volR.resize(snap.N_R);
@@ -639,17 +626,6 @@ void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 		GPU::Copy_DeviceToHost(snap.volR.data(), d_volR_.Data(), N_R_, stream_);
 	}
 	GPU::StreamSync(stream_);
-
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, snap.N_B),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				snap.posB[i] = glm::vec3{ xPosB[i], yPosB[i], zPosB[i] };
-			}
-		},
-		tbb::auto_partitioner{});
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, snap.N_R),
@@ -691,7 +667,6 @@ Sync::VisualPackResultCUDA SimBackend_GPU::TryPackVisualSnapshotCUDA(
 
 		// pack remaining rigid body state into auxiliary host snapshot
 		auxiliarySnap->N_F = 0;
-		auxiliarySnap->N_B = 0;
 		auxiliarySnap->N_R = 0;
 		auxiliarySnap->N_RB = N_RB_;
 		PackVisualRigidBodyState(*auxiliarySnap);

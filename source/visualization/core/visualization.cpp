@@ -183,6 +183,8 @@ void VisualizationMgr::RunVis()
 
 		// fetch latest visual snap and replace vis-specific simulation state
 		SyncVisSimState();
+		// also refresh cached mesh instances when sizing changes while paused
+		renderingMgr_.UpdateBoundaryMeshParticles(view_, simParams_);
 
 		// fetch latest bench and stat snaps to make local copies
 		SyncBenchSnap();
@@ -446,11 +448,9 @@ void VisualizationMgr::SyncVisSimState()
 	view_.simStep = snap->simStep;
 	posF_[back_].swap(snap->posF);
 	scalarDataF_[back_].swap(snap->scalarDataF);
-	posB_[back_].swap(snap->posB);
-	volB_[back_].swap(snap->volB);
 	boxesB_[back_].swap(snap->boxesB);
-	meshPosB_[back_].swap(snap->meshPosB);
-	meshVolB_[back_].swap(snap->meshVolB);
+	view_.meshPosB = std::move(snap->meshPosB);
+	view_.meshVolB = std::move(snap->meshVolB);
 	posR_[back_].swap(snap->posR);
 	volR_[back_].swap(snap->volR);
 	centerOfMassRB_[back_].swap(snap->centerOfMassRB);
@@ -483,13 +483,7 @@ void VisualizationMgr::SyncVisSimState()
 		? std::span<const float>()
 		: std::span<const float>(scalarDataF_[front_].data(), scalarDataF_[front_].size());
 	view_.scalarModeF = scalarMode_;
-	view_.N_B = static_cast<uint32_t>(posB_[front_].size());
-	view_.posB = std::span<const glm::vec3>(posB_[front_].data(), posB_[front_].size());
-	view_.volB = std::span<const float>(volB_[front_].data(), volB_[front_].size());
 	view_.boxesB = std::span<const Scene::OBB>(boxesB_[front_].data(), boxesB_[front_].size());
-	view_.N_meshB = static_cast<uint32_t>(meshPosB_[front_].size());
-	view_.meshPosB = std::span<const glm::vec3>(meshPosB_[front_].data(), meshPosB_[front_].size());
-	view_.meshVolB = std::span<const float>(meshVolB_[front_].data(), meshVolB_[front_].size());
 	view_.N_R = static_cast<uint32_t>(posR_[front_].size());
 	view_.posR = std::span<const glm::vec3>(posR_[front_].data(), posR_[front_].size());
 	view_.volR = std::span<const float>(volR_[front_].data(), volR_[front_].size());
@@ -516,7 +510,6 @@ void VisualizationMgr::SyncVisSimState()
 	}
 	renderingMgr_.UpdateCentersOfMass(view_, simParams);
 	renderingMgr_.UpdateWireframes(view_);
-	renderingMgr_.UpdateBoundaryMeshParticles(view_, simParams);
 }
 
 void VisualizationMgr::SyncBenchSnap()

@@ -1112,7 +1112,6 @@ void SimBackend_CPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 {
 	snap.simStep = simStep_;
 	snap.N_F = N_F_;
-	snap.N_B = N_B_;
 	snap.N_R = N_R_;
 	snap.N_RB = N_RB_;
 
@@ -1138,21 +1137,6 @@ void SimBackend_CPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 		);
 		FillScalarData(snap, snap.scalarModeF);
 	}
-
-	// copy boundary particles
-	snap.posB.resize(snap.N_B);
-	snap.volB = volB_;
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_B_),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				snap.posB[i] = glm::vec3{ xPosB_[i], yPosB_[i], zPosB_[i] };
-			}
-		},
-		tbb::auto_partitioner{}
-	);
 
 	// copy rigid particles
 	snap.posR.resize(snap.N_R);

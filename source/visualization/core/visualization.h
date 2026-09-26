@@ -78,11 +78,7 @@ namespace Vis
 		// double-buffered vis-specific state
 		std::vector<glm::vec3> posF_[2];            // positions of fluid particles
 		std::vector<float> scalarDataF_[2];         // data according to color coding mode
-		std::vector<glm::vec3> posB_[2];            // positions of boundary particles
-		std::vector<float> volB_[2];                // contribution volumes of boundary particles
 		std::vector<Scene::OBB> boxesB_[2];         // OBBs of boundary structures
-		std::vector<glm::vec3> meshPosB_[2];        // positions of boundary mesh particles
-		std::vector<float> meshVolB_[2];            // contribution volumes of boundary mesh particles
 		std::vector<glm::vec3> posR_[2];            // positions of rigid particles
 		std::vector<float> volR_[2];                // contribution volumes of rigid particles
 		std::vector<glm::vec3> centerOfMassRB_[2];  // rigid body centers of mass

@@ -69,7 +69,7 @@ namespace Render
 			const Vis::VisParams& visParams);
 	#endif
 
-		// upload boundary mesh particle instances from the latest visual snapshot
+		// upload boundary mesh particle instances only when geometry or sizing changes
 		void UpdateBoundaryMeshParticles(
 			const Vis::VisualSnapView& view,
 			const Sim::SimParams& simParams);
@@ -108,6 +108,9 @@ namespace Render
 		// addresses of GL objects (sphere impostors -> boundary mesh particles)
 		GLuint vaoMeshB_ = 0;               // vertex array object sharing the impostor quad
 		GLuint vboMeshInstancesB_ = 0;      // instance data
+		std::shared_ptr<const std::vector<glm::vec3>> meshPosB_;
+		std::shared_ptr<const std::vector<float>> meshVolB_;
+		float particleSizeB_ = 0.0f;        // fallback size used for cached mesh instances
 
 		// addresses of GL objects (cuboids -> rigid body centers of mass)
 		GLuint vaoCenterOfMass_ = 0;

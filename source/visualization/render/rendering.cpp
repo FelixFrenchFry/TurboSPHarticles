@@ -383,20 +383,31 @@ void RenderingMgr::UpdateBoundaryMeshParticles(
 	const Vis::VisualSnapView& view,
 	const Sim::SimParams& simParams)
 {
-	N_meshImpostorInstancesB_ = 0;
-	if (view.meshPosB.size() != view.N_meshB ||
-		view.meshVolB.size() != view.N_meshB)
+	// keep ownership of the uploaded geometry so its identity remains stable
+	if (meshPosB_ == view.meshPosB && meshVolB_ == view.meshVolB &&
+		particleSizeB_ == simParams.particleSizeB)
 	{
 		return;
 	}
+	N_meshImpostorInstancesB_ = 0;
+	if (!view.meshPosB || !view.meshVolB ||
+		view.meshPosB->size() != view.meshVolB->size())
+	{
+		meshPosB_.reset();
+		meshVolB_.reset();
+		particleSizeB_ = simParams.particleSizeB;
+		return;
+	}
+	const auto& posB = *view.meshPosB;
+	const auto& volB = *view.meshVolB;
 
 	std::vector<InstanceData> instances;
-	instances.reserve(view.N_meshB);
-	for (uint32_t i = 0; i < view.N_meshB; i++)
+	instances.reserve(posB.size());
+	for (size_t i = 0; i < posB.size(); i++)
 	{
-		const glm::vec3 pos = view.meshPosB[i];
+		const glm::vec3 pos = posB[i];
 		const float radius = ComputeParticleRenderRadius(
-			view.meshVolB[i],
+			volB[i],
 			simParams.particleSizeB,
 			1.0f);
 		instances.push_back(InstanceData{
@@ -404,13 +415,16 @@ void RenderingMgr::UpdateBoundaryMeshParticles(
 			{ 0.0f, 0.0f, 0.0f } });
 	}
 
-	N_meshImpostorInstancesB_ = view.N_meshB;
+	meshPosB_ = view.meshPosB;
+	meshVolB_ = view.meshVolB;
+	particleSizeB_ = simParams.particleSizeB;
+	N_meshImpostorInstancesB_ = static_cast<uint32_t>(posB.size());
 	if (N_meshImpostorInstancesB_ == 0) { return; }
 
 	const GLsizeiptr N_bytes =
 		static_cast<GLsizeiptr>(instances.size() * sizeof(InstanceData));
 	glNamedBufferData(
-		vboMeshInstancesB_, N_bytes, instances.data(), GL_DYNAMIC_DRAW);
+		vboMeshInstancesB_, N_bytes, instances.data(), GL_STATIC_DRAW);
 }
 
 void RenderingMgr::UpdateCentersOfMass(
@@ -1010,6 +1024,9 @@ void RenderingMgr::DestroyBoundaryMeshImpostorVAOandBuffers()
 	if (vboMeshInstancesB_) { glDeleteBuffers(1, &vboMeshInstancesB_); vboMeshInstancesB_ = 0; }
 	if (vaoMeshB_) { glDeleteVertexArrays(1, &vaoMeshB_); vaoMeshB_ = 0; }
 	N_meshImpostorInstancesB_ = 0;
+	meshPosB_.reset();
+	meshVolB_.reset();
+	particleSizeB_ = 0.0f;
 }
 
 void RenderingMgr::DestroyCenterOfMassVAOandBuffers()
