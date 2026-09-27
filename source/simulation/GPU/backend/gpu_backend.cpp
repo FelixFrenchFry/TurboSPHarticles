@@ -578,14 +578,15 @@ void SimBackend_GPU::PackExportSnapshot(
 	}
 }
 
-void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
+void SimBackend_GPU::PackVisualSnapshot(
+	Sync::VisualSnapshot& snap, const bool includeF, const bool includeR) const
 {
-	snap.N_F = N_F_;
-	snap.N_R = N_R_;
+	snap.N_F = includeF ? N_F_ : 0;
+	snap.N_R = includeR ? N_R_ : 0;
 	snap.N_RB = N_RB_;
 	snap.simStep = simStep_;
 
-	if (N_F_ == 0)
+	if (snap.N_F == 0)
 	{
 		snap.posF.clear();
 		snap.scalarDataF.clear();
@@ -593,15 +594,15 @@ void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	else
 	{
 		// copy fluid particles
-		std::vector<float> xPosF(N_F_), yPosF(N_F_), zPosF(N_F_);
-		GPU::Copy_DeviceToHost(xPosF.data(), d_xPosF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(yPosF.data(), d_yPosF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(zPosF.data(), d_zPosF_.Data(), N_F_, stream_);
+		std::vector<float> xPosF(snap.N_F), yPosF(snap.N_F), zPosF(snap.N_F);
+		GPU::Copy_DeviceToHost(xPosF.data(), d_xPosF_.Data(), snap.N_F, stream_);
+		GPU::Copy_DeviceToHost(yPosF.data(), d_yPosF_.Data(), snap.N_F, stream_);
+		GPU::Copy_DeviceToHost(zPosF.data(), d_zPosF_.Data(), snap.N_F, stream_);
 		GPU::StreamSync(stream_);
 
-		snap.posF.resize(N_F_);
+		snap.posF.resize(snap.N_F);
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F_),
+			tbb::blocked_range<uint32_t>(0, snap.N_F),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
@@ -617,13 +618,13 @@ void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 	// copy rigid particles
 	snap.posR.resize(snap.N_R);
 	snap.volR.resize(snap.N_R);
-	std::vector<float> xPosR(N_R_), yPosR(N_R_), zPosR(N_R_);
-	if (N_R_ > 0)
+	std::vector<float> xPosR(snap.N_R), yPosR(snap.N_R), zPosR(snap.N_R);
+	if (snap.N_R > 0)
 	{
-		GPU::Copy_DeviceToHost(xPosR.data(), d_xPosR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(yPosR.data(), d_yPosR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(zPosR.data(), d_zPosR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(snap.volR.data(), d_volR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(xPosR.data(), d_xPosR_.Data(), snap.N_R, stream_);
+		GPU::Copy_DeviceToHost(yPosR.data(), d_yPosR_.Data(), snap.N_R, stream_);
+		GPU::Copy_DeviceToHost(zPosR.data(), d_zPosR_.Data(), snap.N_R, stream_);
+		GPU::Copy_DeviceToHost(snap.volR.data(), d_volR_.Data(), snap.N_R, stream_);
 	}
 	GPU::StreamSync(stream_);
 
@@ -643,11 +644,14 @@ void SimBackend_GPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 
 Sync::VisualPackResultCUDA SimBackend_GPU::TryPackVisualSnapshotCUDA(
 	Sync::VisualFrameMailboxCUDA& visualFrameMailboxCUDA,
-	std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap) const
+	std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap, const bool includeF, const bool includeR) const
 {
+	const uint32_t N_F = includeF ? N_F_ : 0;
+	const uint32_t N_R = includeR ? N_R_ : 0;
+
 	// acquire reusable CUDA mailbox slot for particle data
 	Sync::VisualFrameWriteCUDA write{};
-	if (!visualFrameMailboxCUDA.TryAcquireWrite(N_F_, N_R_, write))
+	if (!visualFrameMailboxCUDA.TryAcquireWrite(N_F, N_R, write))
 	{
 		return visualFrameMailboxCUDA.IsEnabled()
 			? Sync::VisualPackResultCUDA::Skipped
@@ -662,7 +666,7 @@ Sync::VisualPackResultCUDA SimBackend_GPU::TryPackVisualSnapshotCUDA(
 			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 			d_densityF_.Data(), d_pressureF_.Data(),
 			d_xPosR_.Data(), d_yPosR_.Data(), d_zPosR_.Data(), d_volR_.Data(),
-			auxiliarySnap->scalarModeF, N_F_, N_R_, stream_,
+			auxiliarySnap->scalarModeF, N_F, N_R, stream_,
 			write.fluid, write.rigid);
 
 		// pack remaining rigid body state into auxiliary host snapshot

@@ -1108,24 +1108,25 @@ bool SimBackend_CPU::BuildExportFluidParticleLocalIdxs(
 	return true;
 }
 
-void SimBackend_CPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
+void SimBackend_CPU::PackVisualSnapshot(
+	Sync::VisualSnapshot& snap, const bool includeF, const bool includeR) const
 {
 	snap.simStep = simStep_;
-	snap.N_F = N_F_;
-	snap.N_R = N_R_;
+	snap.N_F = includeF ? N_F_ : 0;
+	snap.N_R = includeR ? N_R_ : 0;
 	snap.N_RB = N_RB_;
 
 	// copy fluid particles
-	if (N_F_ == 0)
+	if (snap.N_F == 0)
 	{
 		snap.posF.clear();
 		snap.scalarDataF.clear();
 	}
 	else
 	{
-		snap.posF.resize(N_F_);
+		snap.posF.resize(snap.N_F);
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_F_),
+			tbb::blocked_range<uint32_t>(0, snap.N_F),
 			[&](const tbb::blocked_range<uint32_t>& r)
 			{
 				for (uint32_t i = r.begin(); i != r.end(); i++)
@@ -1140,14 +1141,15 @@ void SimBackend_CPU::PackVisualSnapshot(Sync::VisualSnapshot& snap) const
 
 	// copy rigid particles
 	snap.posR.resize(snap.N_R);
-	snap.volR = volR_;
+	snap.volR.resize(snap.N_R);
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_R_),
+		tbb::blocked_range<uint32_t>(0, snap.N_R),
 		[&](const tbb::blocked_range<uint32_t>& r)
 		{
 			for (uint32_t i = r.begin(); i != r.end(); i++)
 			{
 				snap.posR[i] = glm::vec3{ xPosR_[i], yPosR_[i], zPosR_[i] };
+				snap.volR[i] = volR_[i];
 			}
 		},
 		tbb::auto_partitioner{}

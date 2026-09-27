@@ -69,7 +69,7 @@ namespace Sim
 
 		void WriteExportSnapshot(const SimParams& params);
 		void FinalizeRunState(const SimParams& params, bool checkpointDue = false);
-		bool PublishVisualSnapshot(bool force = false);
+		bool PublishVisualSnapshot(bool force = false, bool includeAllParticles = false);
 		void HandleBenchMemStatSnapshots() const;
 		void FinalizeBenchMemStatMeasurements() const;
 		void AppendInitialMemoryMetricsLog() const;
@@ -82,6 +82,7 @@ namespace Sim
 
 		void SetVisualMailbox(Sync::VisualSnapMailbox* visualSnapMailbox) { visualSnapMailbox_ = visualSnapMailbox; }
 		void SetVisualScalarMode(Base::ColorCodingMode scalarMode) { visualScalarMode_.store(scalarMode, std::memory_order_release); }
+		void SetVisualParticleVisibility(bool showParticlesF, bool showParticlesR);
 		void SetBenchMailbox(Sync::BenchSnapMailbox* benchSnapMailbox) { benchSnapMailbox_ = benchSnapMailbox; }
 		void SetMemMailbox(Sync::MemSnapMailbox* memSnapMailbox) { memSnapMailbox_ = memSnapMailbox; }
 		void SetStatMailbox(Sync::StatSnapMailbox* statSnapMailbox) { statSnapMailbox_ = statSnapMailbox; }
@@ -142,6 +143,9 @@ namespace Sim
 		Sync::MemSnapMailbox* memSnapMailbox_{ nullptr };
 		Sync::StatSnapMailbox* statSnapMailbox_{ nullptr };
 		std::atomic<Base::ColorCodingMode> visualScalarMode_{ Base::ColorCodingMode::None };
+		static constexpr uint8_t visualParticleMaskF_ = 1 << 0;
+		static constexpr uint8_t visualParticleMaskR_ = 1 << 1;
+		std::atomic<uint8_t> visualParticleMask_{ visualParticleMaskF_ | visualParticleMaskR_ };
 
 		// controller thread spawns worker threads within OpenMP parallel regions
 		std::jthread controllerThread_;
@@ -170,6 +174,7 @@ namespace Sim
 		// visualization management
 		std::optional<uint64_t> lastVisStep_{};
 		Base::ColorCodingMode lastVisScalarMode_{ Base::ColorCodingMode::None };
+		uint8_t lastVisParticleMask_ = visualParticleMaskF_ | visualParticleMaskR_;
 
 		// misc
 		std::mutex stateMutex_; // serializes reset with simulation and snapshot reads

@@ -39,7 +39,7 @@ namespace Sim
 		// (implementation is backend-specific for better performance)
 		void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& simParams,
 			bool includeB, std::optional<uint64_t> meshIdBeginB) const override;
-		void PackVisualSnapshot(Sync::VisualSnapshot& snap) const override;
+		void PackVisualSnapshot(Sync::VisualSnapshot& snap, bool includeF, bool includeR) const override;
 
 		// fills in the scalar data based on given different color coding modes
 		// (backend-specific such that possible transformations can be applied efficiently)

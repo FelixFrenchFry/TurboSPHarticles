@@ -402,6 +402,7 @@ void VisualizationMgr::SyncParameters(bool force)
 		visParams_ = std::get<0>(snapshot);
 		visParamsVersion_ = std::get<1>(snapshot);
 		simulationMgr_.SetVisualScalarMode(visParams_.render.scalarModeF);
+		simulationMgr_.SetVisualParticleVisibility(visParams_.render.showParticlesF, visParams_.render.showParticlesR);
 	}
 }
 

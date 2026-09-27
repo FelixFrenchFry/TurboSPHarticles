@@ -477,8 +477,8 @@ void SimulationMgr::RunSim(const std::stop_token& stopToken, const bool publishV
 	// local copy for thread safety
 	const auto paramsFinal = simParams_;
 
-	// publish before finalization releases the backend
-	if (publishVis) { PublishVisualSnapshot(true); }
+	// retain all particles so visibility can change after finalization releases the backend
+	if (publishVis) { PublishVisualSnapshot(true, true); }
 
 	FinalizeRunState(paramsFinal, checkpointDue);
 
@@ -562,14 +562,27 @@ void SimulationMgr::FinalizeRunState(const SimParams& params, const bool checkpo
 	SaveCheckpoint(params);
 }
 
-bool SimulationMgr::PublishVisualSnapshot(const bool force)
+void SimulationMgr::SetVisualParticleVisibility(const bool showParticlesF, const bool showParticlesR)
+{
+	const uint8_t particleMask = (showParticlesF ? visualParticleMaskF_ : 0) |
+		(showParticlesR ? visualParticleMaskR_ : 0);
+	visualParticleMask_.store(particleMask, std::memory_order_release);
+}
+
+bool SimulationMgr::PublishVisualSnapshot(const bool force, const bool includeAllParticles)
 {
 	const auto scalarMode = visualScalarMode_.load(std::memory_order_acquire);
-	if (lastVisStep_ == simStep_ && lastVisScalarMode_ == scalarMode) { return false; }
+	const uint8_t particleMask = includeAllParticles
+		? visualParticleMaskF_ | visualParticleMaskR_
+		: visualParticleMask_.load(std::memory_order_acquire);
+	if (lastVisStep_ == simStep_ && lastVisScalarMode_ == scalarMode &&
+		lastVisParticleMask_ == particleMask) { return false; }
 
 	// preserve requests arriving during packing
 	const bool requested = visualSnapMailbox_->TakeSnapshotRequest();
 	if (!force && !requested) { return false; }
+	const bool includeF = (particleMask & visualParticleMaskF_) != 0;
+	const bool includeR = (particleMask & visualParticleMaskR_) != 0;
 
 	// create visual snapshot and push pack misc data that is not handled by the backend
 	// (if CUDA path is taken, the particle data buffers are not filled)
@@ -583,7 +596,7 @@ bool SimulationMgr::PublishVisualSnapshot(const bool force)
 	// optionally pack particle data into CUDA-device buffers for OpenGL without going through the host
 #ifdef TURBOSPHARTICLES_WITH_CUDA
 	auto& visualFrameMailboxCUDA = visualSnapMailbox_->GetFrameMailboxCUDA();
-	const auto result = simBackend_->TryPackVisualSnapshotCUDA(visualFrameMailboxCUDA, visSnap);
+	const auto result = simBackend_->TryPackVisualSnapshotCUDA(visualFrameMailboxCUDA, visSnap, includeF, includeR);
 	if (result == Sync::VisualPackResultCUDA::Skipped && !force)
 	{
 		visualSnapMailbox_->RequestSnapshot();
@@ -598,11 +611,17 @@ bool SimulationMgr::PublishVisualSnapshot(const bool force)
 #endif
 	{
 		// fallback to host snapshot packing if CUDA path is unavailable or unsupported
-		simBackend_->PackVisualSnapshot(*visSnap);
+		simBackend_->PackVisualSnapshot(*visSnap, includeF, includeR);
 		visualSnapMailbox_->StoreSnapshot(std::move(visSnap));
 	}
 	lastVisStep_ = simStep_;
 	lastVisScalarMode_ = scalarMode;
+	lastVisParticleMask_ = particleMask;
+	// a visibility change may have arrived before this snapshot consumed its request
+	if (!includeAllParticles && visualParticleMask_.load(std::memory_order_acquire) != particleMask)
+	{
+		visualSnapMailbox_->RequestSnapshot();
+	}
 	return true;
 }
 

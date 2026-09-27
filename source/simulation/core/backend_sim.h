@@ -186,16 +186,18 @@ namespace Sim
 		// (implementation is backend-specific for better performance)
 		virtual void PackExportSnapshot(Sync::ExportSnapshot& snap, const SimParams& params,
 			bool includeB, std::optional<uint64_t> meshIdBeginB) const = 0;
-		virtual void PackVisualSnapshot(Sync::VisualSnapshot& snap) const = 0;
+		virtual void PackVisualSnapshot(Sync::VisualSnapshot& snap, bool includeF, bool includeR) const = 0;
 
 		// additional CUDA-OpenGL interop for visualization (if the backend supports it)
 	#ifdef TURBOSPHARTICLES_WITH_CUDA
 		virtual Sync::VisualPackResultCUDA TryPackVisualSnapshotCUDA(
 			Sync::VisualFrameMailboxCUDA& visualFrameMailboxCUDA,
-			std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap) const
+			std::shared_ptr<Sync::VisualSnapshot> auxiliarySnap, bool includeF, bool includeR) const
 		{
 			(void)visualFrameMailboxCUDA;
 			(void)auxiliarySnap;
+			(void)includeF;
+			(void)includeR;
 			return Sync::VisualPackResultCUDA::Unsupported;
 		}
 	#endif
