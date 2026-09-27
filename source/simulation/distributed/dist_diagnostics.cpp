@@ -1307,6 +1307,7 @@ namespace Dist
 
 	void DistDiagnosticsMgr::PrintDistSimSetup(
 		const MpiContext& mpiContext,
+		const Sim::SimParams& params,
 		const DistSimSetupReport& setup,
 		const DistStartupRankReport& localReport)
 	{
@@ -1322,21 +1323,22 @@ namespace Dist
 		Sim::DiagnosticsMgr::PrintCliSectionHeader("distributed simulation setup");
 		Sim::DiagnosticsMgr::PrintCliSeparator();
 
-		std::printf("%-30s = %s\n", "sim backend", setup.backendType);
-		std::printf("%-30s = %s\n", "sim scenario", setup.scenarioType);
-		std::printf("%-30s = %s\n", "neighbor search method",
-			setup.neighborSearchMethod);
+		std::printf("%-30s = %s\n", "sim backend", Base::ToCString(params.backendType));
+		std::printf("%-30s = %s\n", "sim scenario", Base::ToCString(params.scenarioType));
+		std::printf("%-30s = %s\n", "neighbor search method", Base::ToCString(params.neighborSearchMethod));
 		std::printf("%-30s = %s\n", "neighbor list storage",
-			setup.neighborListStorage);
+			Base::ToEffectiveNeighborListStorageCString(params.backendType, params.neighborListMethod));
+		std::printf("%-30s = %s\n", "rigid coupling mode", Base::ToCString(params.rigidCouplingMode));
+		std::printf("%-30s = %s\n", "rigid contact diagonal", Base::ToCString(params.rigidContactDiagonal));
 
-		std::printf("%-30s = %s\n", "domain decomp method", setup.domainDecompMethod);
-		std::printf("%-30s = %s\n", "distributed halo mode", setup.distHaloMode);
-		std::printf("%-30s = %s\n", "load balance metric", setup.loadBalanceMetric);
-		std::printf("%-30s = %s\n", "load balance trigger", setup.loadBalanceTrigger);
+		std::printf("%-30s = %s\n", "domain decomp method", Base::ToCString(params.domainDecompMethod));
+		std::printf("%-30s = %s\n", "distributed halo mode", Base::ToCString(params.distHaloMode));
+		std::printf("%-30s = %s\n", "load balance metric", Base::ToCString(params.loadBalanceMetric));
+		std::printf("%-30s = %s\n", "load balance trigger", Base::ToCString(params.loadBalanceTrigger));
 		std::printf("%-30s = %s\n", "load balance weight model",
-			setup.loadBalanceWeightModel);
+			Base::ToCString(params.loadBalanceWeightModel));
 		std::printf("%-30s = %s\n", "mpi thread support",
-			MpiContext::ThreadSupportName(setup.mpiThreadSupport));
+			MpiContext::ThreadSupportName(mpiContext.ThreadSupport()));
 		std::printf("%-30s = [ %" PRIu64 " / %" PRIu64 " / %" PRIu64 " ]\n",
 			"global particles [F / B / R]",
 			setup.N_globalF,

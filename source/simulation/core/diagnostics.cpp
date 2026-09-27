@@ -334,6 +334,11 @@ namespace Sim
 				params.backendType,
 				params.neighborListMethod));
 
+		printf("%-30s = %s\n", "rigid coupling mode",
+			Base::ToCString(params.rigidCouplingMode));
+		printf("%-30s = %s\n", "rigid contact diagonal",
+			Base::ToCString(params.rigidContactDiagonal));
+
         // particle counts
         printf("%-30s = [ %u / %u / %u ]\n", "particles [F / B / R]",
             simMgr.simBackend_->GetNumFluidParticles(),

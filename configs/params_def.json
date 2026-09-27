@@ -3,6 +3,8 @@
   "scenarioType": "BoundaryMesh",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
+  "rigidCouplingMode": "Sequential",
+  "rigidContactDiagonal": "Full",
   "domainDecompMethod": 0,
   "distHaloMode": 0,
   "loadBalanceMetric": 1,

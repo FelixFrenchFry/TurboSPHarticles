@@ -33,6 +33,10 @@ namespace Sim
 			Base::NeighborSearchMethod::CellLinkedList_Compact;
 		Base::NeighborListMethod neighborListMethod =
 			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
+		Base::RigidCouplingMode rigidCouplingMode =
+			Base::RigidCouplingMode::Sequential;
+		Base::RigidContactDiagonal rigidContactDiagonal =
+			Base::RigidContactDiagonal::Full;
 		Base::DomainDecompMethod domainDecompMethod =
 			Base::DomainDecompMethod::AABB_Slabs; // (distributed only)
 		Base::DistHaloMode distHaloMode =

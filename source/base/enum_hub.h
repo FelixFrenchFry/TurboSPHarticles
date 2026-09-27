@@ -143,6 +143,43 @@ namespace Base
 		return "ChunkedSELLX::<unknown>";
 	}
 
+	enum class RigidCouplingMode : uint8_t
+	{
+		Sequential,  // 0 Algorithm 1 ordering; rigid contact response is not implemented yet
+		Interleaved, // 1 Algorithm 2
+		Interlinked  // 2 Algorithm 3
+	};
+	constexpr const char* ToCString(const RigidCouplingMode v) noexcept
+	{
+		switch (v)
+		{
+		case RigidCouplingMode::Sequential:
+			return "Sequential";
+		case RigidCouplingMode::Interleaved:
+			return "Interleaved";
+		case RigidCouplingMode::Interlinked:
+			return "Interlinked";
+		}
+		return "RigidCouplingMode::<unknown>";
+	}
+
+	enum class RigidContactDiagonal : uint8_t
+	{
+		Full,  // 0 reserved default until the rigid contact solver is implemented
+		Approx // 1
+	};
+	constexpr const char* ToCString(const RigidContactDiagonal v) noexcept
+	{
+		switch (v)
+		{
+		case RigidContactDiagonal::Full:
+			return "Full";
+		case RigidContactDiagonal::Approx:
+			return "Approx";
+		}
+		return "RigidContactDiagonal::<unknown>";
+	}
+
 	enum class DomainDecompMethod : uint8_t
 	{
 		AABB_Slabs,   // 0 dynamically sized AABB slabs, split along the selected axis

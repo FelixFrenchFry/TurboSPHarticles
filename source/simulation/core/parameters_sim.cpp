@@ -184,6 +184,67 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			return false;
 		};
 
+	auto ParseRigidCouplingMode = [](const nlohmann::json& v, Base::RigidCouplingMode& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "Sequential" || s == "sequential")
+					{ out = Base::RigidCouplingMode::Sequential; return true; }
+				if (s == "Interleaved" || s == "interleaved")
+					{ out = Base::RigidCouplingMode::Interleaved; return true; }
+				if (s == "Interlinked" || s == "interlinked")
+					{ out = Base::RigidCouplingMode::Interlinked; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				if (v < 0 || v > 2) { return false; }
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::RigidCouplingMode::Sequential;
+					return true;
+				case 1:
+					out = Base::RigidCouplingMode::Interleaved;
+					return true;
+				case 2:
+					out = Base::RigidCouplingMode::Interlinked;
+					return true;
+				}
+			}
+			return false;
+		};
+
+	auto ParseRigidContactDiagonal = [](const nlohmann::json& v, Base::RigidContactDiagonal& out) -> bool
+		{
+			if (v.is_string())
+			{
+				const std::string s = v.get<std::string>();
+				if (s == "Full" || s == "full")
+					{ out = Base::RigidContactDiagonal::Full; return true; }
+				if (s == "Approx" || s == "approx")
+					{ out = Base::RigidContactDiagonal::Approx; return true; }
+				return false;
+			}
+			else if (v.is_number_integer())
+			{
+				if (v < 0 || v > 1) { return false; }
+				const int i = v.get<int>();
+				switch (i)
+				{
+				case 0:
+					out = Base::RigidContactDiagonal::Full;
+					return true;
+				case 1:
+					out = Base::RigidContactDiagonal::Approx;
+					return true;
+				}
+			}
+			return false;
+		};
+
 	auto ParseDomainDecompMethod = [](const nlohmann::json& v, Base::DomainDecompMethod& out) -> bool
 		{
 			if (v.is_string())
@@ -392,6 +453,40 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 				SPDLOG_WARN("Invalid 'neighborListStorage' value in JSON.");
 				return false;
 			}
+		}
+
+		if (auto it = j.find("rigidCouplingMode"); it != j.end())
+		{
+			Base::RigidCouplingMode mode;
+			if (!ParseRigidCouplingMode(*it, mode))
+			{
+				SPDLOG_WARN("Invalid 'rigidCouplingMode' value in JSON.");
+				return false;
+			}
+			if (mode != Base::RigidCouplingMode::Sequential)
+			{
+				SPDLOG_ERROR("rigidCouplingMode={} is not implemented; only Sequential is currently available.",
+					Base::ToCString(mode));
+				return false;
+			}
+			params_.rigidCouplingMode = mode;
+		}
+
+		if (auto it = j.find("rigidContactDiagonal"); it != j.end())
+		{
+			Base::RigidContactDiagonal diagonal;
+			if (!ParseRigidContactDiagonal(*it, diagonal))
+			{
+				SPDLOG_WARN("Invalid 'rigidContactDiagonal' value in JSON.");
+				return false;
+			}
+			if (diagonal != Base::RigidContactDiagonal::Full)
+			{
+				SPDLOG_ERROR("rigidContactDiagonal={} is not implemented; Full is reserved for the future rigid contact solver.",
+					Base::ToCString(diagonal));
+				return false;
+			}
+			params_.rigidContactDiagonal = diagonal;
 		}
 
 		if (auto it = j.find("domainDecompMethod"); it != j.end())
@@ -1083,6 +1178,8 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 	j["neighborListStorage"] = Base::ToCString(par.neighborListMethod);
 	j["neighborListStorageEffective"] = Base::ToEffectiveNeighborListStorageCString(
 		par.backendType, par.neighborListMethod);
+	j["rigidCouplingMode"] = Base::ToCString(par.rigidCouplingMode);
+	j["rigidContactDiagonal"] = Base::ToCString(par.rigidContactDiagonal);
 	j["domainDecompMethod"] = Base::ToCString(par.domainDecompMethod);
 	j["distHaloMode"] = Base::ToCString(par.distHaloMode);
 	j["loadBalanceMetric"] = Base::ToCString(par.loadBalanceMetric);

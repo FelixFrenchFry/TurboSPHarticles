@@ -28,21 +28,9 @@ namespace Dist
 
 	constexpr int DIST_STARTUP_REPORT_TEXT_CHARS = 128;
 
-	// root-only summary of the distributed setup after initialization
+	// global particle and rigid body counts after initialization
 	struct DistSimSetupReport
 	{
-		int mpiThreadSupport = 0;
-
-		const char* domainDecompMethod = "";
-		const char* distHaloMode = "";
-		const char* loadBalanceMetric = "";
-		const char* loadBalanceTrigger = "";
-		const char* loadBalanceWeightModel = "";
-		const char* backendType = "";
-		const char* scenarioType = "";
-		const char* neighborSearchMethod = "";
-		const char* neighborListStorage = "";
-
 		uint64_t N_globalF = 0;
 		uint64_t N_globalB = 0;
 		uint64_t N_globalR = 0;
@@ -146,6 +134,7 @@ namespace Dist
 
 		static void PrintDistSimSetup(
 			const MpiContext& mpiContext,
+			const Sim::SimParams& params,
 			const DistSimSetupReport& setup,
 			const DistStartupRankReport& localReport);
 

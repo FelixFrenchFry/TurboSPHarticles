@@ -612,6 +612,7 @@ void DistSimulationMgr::RunStartupCheck() const
 {
 	DistDiagnosticsMgr::PrintDistSimSetup(
 		mpiContext_,
+		simParams_,
 		BuildDistSimSetupReport(),
 		BuildStartupRankReport());
 }
@@ -619,19 +620,6 @@ void DistSimulationMgr::RunStartupCheck() const
 DistSimSetupReport DistSimulationMgr::BuildDistSimSetupReport() const
 {
 	DistSimSetupReport report{};
-	report.mpiThreadSupport = mpiContext_.ThreadSupport();
-
-	report.domainDecompMethod = Base::ToCString(simParams_.domainDecompMethod);
-	report.distHaloMode = Base::ToCString(simParams_.distHaloMode);
-	report.loadBalanceMetric = Base::ToCString(simParams_.loadBalanceMetric);
-	report.loadBalanceTrigger = Base::ToCString(simParams_.loadBalanceTrigger);
-	report.loadBalanceWeightModel = Base::ToCString(simParams_.loadBalanceWeightModel);
-	report.backendType = Base::ToCString(simParams_.backendType);
-	report.scenarioType = Base::ToCString(simParams_.scenarioType);
-	report.neighborSearchMethod = Base::ToCString(simParams_.neighborSearchMethod);
-	report.neighborListStorage = Base::ToEffectiveNeighborListStorageCString(
-		simParams_.backendType,
-		simParams_.neighborListMethod);
 
 	report.N_globalF = N_expectedGlobalF_;
 	report.N_globalB = N_expectedGlobalB_;
