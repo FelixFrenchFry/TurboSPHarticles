@@ -40,9 +40,9 @@ namespace Dist
 	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_VOL = 3;
 	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_PSI = 4;
 	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_COUNT = 5;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_X_REL_POS = 0;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_Y_REL_POS = 1;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_Z_REL_POS = 2;
+	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_X_POS_REL = 0;
+	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_Y_POS_REL = 1;
+	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_Z_POS_REL = 2;
 	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_VOL = 3;
 	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_PSI = 4;
 

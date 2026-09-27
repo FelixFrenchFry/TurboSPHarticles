@@ -132,6 +132,8 @@ namespace Sim
 
 	private:
 
+		friend struct RigidMotionPredictionTest;
+
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams& params);
 		void Step_IISPH_Distributed(const SimParams& params);
@@ -155,7 +157,9 @@ namespace Sim
 
 		void ClassifyExportSurfaceParticles(const std::vector<uint8_t>& nearSurfaceFlags) const;
 
-		void UpdateRigidParticles();
+		void UpdateRigidParticles(bool predicted = false);
+		void PredictRigidBodies(float timeStep);
+		void PredictRigidParticleVelocities();
 		void ClearRigidForcesAndAddGravity(const SimParams& params);
 		void ReduceRigidParticleForces();
 		void IntegrateRigidBodies(float timeStep);
@@ -220,8 +224,9 @@ namespace Sim
 		std::vector<uint64_t> idR_;
 		std::vector<uint32_t> bodyIdR_;
 		std::vector<float> xPosR_, yPosR_, zPosR_;
-		std::vector<float> xRelPosR_, yRelPosR_, zRelPosR_;
+		std::vector<float> xPosRelR_, yPosRelR_, zPosRelR_;
 		std::vector<float> xVelR_, yVelR_, zVelR_;
+		std::vector<float> xVelPredR_, yVelPredR_, zVelPredR_; // predicted velocities at current geometry
 		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated before body reduction
 		std::vector<float> volR_; // non-uniform volumes for non-uniform rigid particle spacing
 		std::vector<float> psiR_; // non-uniform pseudo-masses for non-uniform rigid particle spacing
@@ -239,6 +244,10 @@ namespace Sim
 		std::vector<float> xVelRB_, yVelRB_, zVelRB_; // linear velocity (time rate of change of center of mass)
 		std::vector<float> xOmegaRB_, yOmegaRB_, zOmegaRB_; // angular velocity (time rate of change of orientation)
 		std::vector<float> xAngMomRB_, yAngMomRB_, zAngMomRB_; // angular momentum (angular velocity * mass distribution)
+		// predicted body motion (not exported)
+		std::vector<float> xVelPredRB_, yVelPredRB_, zVelPredRB_;
+		std::vector<float> xOmegaPredRB_, yOmegaPredRB_, zOmegaPredRB_;
+		std::vector<float> xAngMomPredRB_, yAngMomPredRB_, zAngMomPredRB_;
 		std::vector<float> xForceRB_, yForceRB_, zForceRB_; // force accumulated from rigid particles (time rate of change of linear momentum)
 		std::vector<float> xTorqueRB_, yTorqueRB_, zTorqueRB_; // torque accumulated from rigid particles (time rate of change of angular momentum)
 

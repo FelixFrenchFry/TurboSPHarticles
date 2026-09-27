@@ -891,12 +891,12 @@ void ParticleRedistributionMgr::RigidExchangeBuffer::SetBulkFromParticleView(
 
 	const std::span<uint64_t> ids{ particleIds_.data(), N_particles_ };
 	const std::span<uint32_t> bodyIds{ bodyIds_.data(), N_particles_ };
-	const std::span<float> xRelPos =
-		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_X_REL_POS, N_particles_);
-	const std::span<float> yRelPos =
-		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Y_REL_POS, N_particles_);
-	const std::span<float> zRelPos =
-		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Z_REL_POS, N_particles_);
+	const std::span<float> xPosRel =
+		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_X_POS_REL, N_particles_);
+	const std::span<float> yPosRel =
+		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Y_POS_REL, N_particles_);
+	const std::span<float> zPosRel =
+		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Z_POS_REL, N_particles_);
 	const std::span<float> volR =
 		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_VOL, N_particles_);
 	const std::span<float> psiR =
@@ -909,9 +909,9 @@ void ParticleRedistributionMgr::RigidExchangeBuffer::SetBulkFromParticleView(
 	{
 		GatherParticleField(ids, src.id, localIdxs, blockRange);
 		GatherParticleField(bodyIds, src.bodyId, localIdxs, blockRange);
-		GatherParticleField(xRelPos, src.xRelPos, localIdxs, blockRange);
-		GatherParticleField(yRelPos, src.yRelPos, localIdxs, blockRange);
-		GatherParticleField(zRelPos, src.zRelPos, localIdxs, blockRange);
+		GatherParticleField(xPosRel, src.xPosRel, localIdxs, blockRange);
+		GatherParticleField(yPosRel, src.yPosRel, localIdxs, blockRange);
+		GatherParticleField(zPosRel, src.zPosRel, localIdxs, blockRange);
 		GatherParticleField(volR, src.volR, localIdxs, blockRange);
 		GatherParticleField(psiR, src.psiR, localIdxs, blockRange);
 	});
@@ -925,12 +925,12 @@ void ParticleRedistributionMgr::RigidExchangeBuffer::CopyBulkToLocalParticles(
 
 	const std::span<const uint64_t> ids{ particleIds_.data(), N_particles_ };
 	const std::span<const uint32_t> bodyIds{ bodyIds_.data(), N_particles_ };
-	const std::span<const float> xRelPos =
-		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_X_REL_POS, N_particles_);
-	const std::span<const float> yRelPos =
-		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Y_REL_POS, N_particles_);
-	const std::span<const float> zRelPos =
-		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Z_REL_POS, N_particles_);
+	const std::span<const float> xPosRel =
+		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_X_POS_REL, N_particles_);
+	const std::span<const float> yPosRel =
+		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Y_POS_REL, N_particles_);
+	const std::span<const float> zPosRel =
+		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_Z_POS_REL, N_particles_);
 	const std::span<const float> volR =
 		PayloadFieldValues(fieldValues_, RIGID_PAYLOAD_FIELD_VOL, N_particles_);
 	const std::span<const float> psiR =
@@ -943,9 +943,9 @@ void ParticleRedistributionMgr::RigidExchangeBuffer::CopyBulkToLocalParticles(
 	{
 		CopyParticleField(dst.id, ids, dstBeginLocalIdx, blockRange);
 		CopyParticleField(dst.bodyId, bodyIds, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.xRelPos, xRelPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.yRelPos, yRelPos, dstBeginLocalIdx, blockRange);
-		CopyParticleField(dst.zRelPos, zRelPos, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.xPosRel, xPosRel, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.yPosRel, yPosRel, dstBeginLocalIdx, blockRange);
+		CopyParticleField(dst.zPosRel, zPosRel, dstBeginLocalIdx, blockRange);
 		CopyParticleField(dst.volR, volR, dstBeginLocalIdx, blockRange);
 		CopyParticleField(dst.psiR, psiR, dstBeginLocalIdx, blockRange);
 	});
@@ -1098,9 +1098,9 @@ glm::vec3 ParticleRedistributionMgr::RigidPositionAtLocalIdx(
 	const uint32_t localIdx)
 {
 	const uint32_t bodyIdx = particles.bodyId[localIdx];
-	const float x = particles.xRelPos[localIdx];
-	const float y = particles.yRelPos[localIdx];
-	const float z = particles.zRelPos[localIdx];
+	const float x = particles.xPosRel[localIdx];
+	const float y = particles.yPosRel[localIdx];
+	const float z = particles.zPosRel[localIdx];
 	return
 	{
 		bodies.xCM[bodyIdx] + std::fmaf(bodies.a00[bodyIdx], x,
@@ -1153,9 +1153,9 @@ void ParticleRedistributionMgr::CopyRigidParticle(
 {
 	dst.id[dstLocalIdx] = src.id[srcLocalIdx];
 	dst.bodyId[dstLocalIdx] = src.bodyId[srcLocalIdx];
-	dst.xRelPos[dstLocalIdx] = src.xRelPos[srcLocalIdx];
-	dst.yRelPos[dstLocalIdx] = src.yRelPos[srcLocalIdx];
-	dst.zRelPos[dstLocalIdx] = src.zRelPos[srcLocalIdx];
+	dst.xPosRel[dstLocalIdx] = src.xPosRel[srcLocalIdx];
+	dst.yPosRel[dstLocalIdx] = src.yPosRel[srcLocalIdx];
+	dst.zPosRel[dstLocalIdx] = src.zPosRel[srcLocalIdx];
 	dst.volR[dstLocalIdx] = src.volR[srcLocalIdx];
 	dst.psiR[dstLocalIdx] = src.psiR[srcLocalIdx];
 }

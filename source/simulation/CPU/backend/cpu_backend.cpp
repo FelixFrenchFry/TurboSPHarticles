@@ -250,9 +250,9 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	xPosR_.resize(N_R_);
 	yPosR_.resize(N_R_);
 	zPosR_.resize(N_R_);
-	xRelPosR_ = std::move(R.xRelPos);
-	yRelPosR_ = std::move(R.yRelPos);
-	zRelPosR_ = std::move(R.zRelPos);
+	xPosRelR_ = std::move(R.xPosRel);
+	yPosRelR_ = std::move(R.yPosRel);
+	zPosRelR_ = std::move(R.zPosRel);
 	xVelR_.resize(N_R_);
 	yVelR_.resize(N_R_);
 	zVelR_.resize(N_R_);
@@ -375,9 +375,9 @@ void SimBackend_CPU::PushToUniversalSimState(
 	// transfer from backend rigid particle data structures
 	transferField(R.id, idR_);
 	transferField(R.bodyId, bodyIdR_);
-	transferField(R.xRelPos, xRelPosR_);
-	transferField(R.yRelPos, yRelPosR_);
-	transferField(R.zRelPos, zRelPosR_);
+	transferField(R.xPosRel, xPosRelR_);
+	transferField(R.yPosRel, yPosRelR_);
+	transferField(R.zPosRel, zPosRelR_);
 	transferField(R.volR, volR_);
 	transferField(R.psiR, psiR_);
 
@@ -454,7 +454,7 @@ Sync::RigidConstView SimBackend_CPU::GetRigidParticleView() const
 		.N_ = N_R_,
 		.id = idR_,
 		.bodyId = bodyIdR_,
-		.xRelPos = xRelPosR_, .yRelPos = yRelPosR_, .zRelPos = zRelPosR_,
+		.xPosRel = xPosRelR_, .yPosRel = yPosRelR_, .zPosRel = zPosRelR_,
 		.volR = volR_,
 		.psiR = psiR_
 	};
@@ -518,9 +518,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		!fluidFieldOmitted(appendedParticlesF.density) ||
 		!rigidSizeValid(appendedParticlesR.id) ||
 		!rigidSizeValid(appendedParticlesR.bodyId) ||
-		!rigidSizeValid(appendedParticlesR.xRelPos) ||
-		!rigidSizeValid(appendedParticlesR.yRelPos) ||
-		!rigidSizeValid(appendedParticlesR.zRelPos) ||
+		!rigidSizeValid(appendedParticlesR.xPosRel) ||
+		!rigidSizeValid(appendedParticlesR.yPosRel) ||
+		!rigidSizeValid(appendedParticlesR.zPosRel) ||
 		!rigidSizeValid(appendedParticlesR.volR) ||
 		!rigidSizeValid(appendedParticlesR.psiR) ||
 		(redistributeParticlesB &&
@@ -634,9 +634,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	}
 	ReserveParticleFieldWithExtra(idR_, N_finalR, particleFieldExtraAllocCapacityPct_);
 	ReserveParticleFieldWithExtra(bodyIdR_, N_finalR, particleFieldExtraAllocCapacityPct_);
-	ReserveParticleFieldWithExtra(xRelPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
-	ReserveParticleFieldWithExtra(yRelPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
-	ReserveParticleFieldWithExtra(zRelPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(xPosRelR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(yPosRelR_, N_finalR, particleFieldExtraAllocCapacityPct_);
+	ReserveParticleFieldWithExtra(zPosRelR_, N_finalR, particleFieldExtraAllocCapacityPct_);
 	ReserveParticleFieldWithExtra(volR_, N_finalR, particleFieldExtraAllocCapacityPct_);
 	ReserveParticleFieldWithExtra(psiR_, N_finalR, particleFieldExtraAllocCapacityPct_);
 	ReserveParticleFieldWithExtra(xPosR_, N_finalR, particleFieldExtraAllocCapacityPct_);
@@ -719,9 +719,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	{
 		idR_[newLocalIdx] = idR_[oldLocalIdx];
 		bodyIdR_[newLocalIdx] = bodyIdR_[oldLocalIdx];
-		xRelPosR_[newLocalIdx] = xRelPosR_[oldLocalIdx];
-		yRelPosR_[newLocalIdx] = yRelPosR_[oldLocalIdx];
-		zRelPosR_[newLocalIdx] = zRelPosR_[oldLocalIdx];
+		xPosRelR_[newLocalIdx] = xPosRelR_[oldLocalIdx];
+		yPosRelR_[newLocalIdx] = yPosRelR_[oldLocalIdx];
+		zPosRelR_[newLocalIdx] = zPosRelR_[oldLocalIdx];
 		volR_[newLocalIdx] = volR_[oldLocalIdx];
 		psiR_[newLocalIdx] = psiR_[oldLocalIdx];
 	};
@@ -772,9 +772,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	N_R_ = N_finalR;
 	idR_.resize(N_R_);
 	bodyIdR_.resize(N_R_);
-	xRelPosR_.resize(N_R_);
-	yRelPosR_.resize(N_R_);
-	zRelPosR_.resize(N_R_);
+	xPosRelR_.resize(N_R_);
+	yPosRelR_.resize(N_R_);
+	zPosRelR_.resize(N_R_);
 	volR_.resize(N_R_);
 	psiR_.resize(N_R_);
 	xPosR_.resize(N_R_);
@@ -841,9 +841,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 
 			AppendParticleField(idR_, src.id, rigidAppendBegin, blockRange);
 			AppendParticleField(bodyIdR_, src.bodyId, rigidAppendBegin, blockRange);
-			AppendParticleField(xRelPosR_, src.xRelPos, rigidAppendBegin, blockRange);
-			AppendParticleField(yRelPosR_, src.yRelPos, rigidAppendBegin, blockRange);
-			AppendParticleField(zRelPosR_, src.zRelPos, rigidAppendBegin, blockRange);
+			AppendParticleField(xPosRelR_, src.xPosRel, rigidAppendBegin, blockRange);
+			AppendParticleField(yPosRelR_, src.yPosRel, rigidAppendBegin, blockRange);
+			AppendParticleField(zPosRelR_, src.zPosRel, rigidAppendBegin, blockRange);
 			AppendParticleField(volR_, src.volR, rigidAppendBegin, blockRange);
 			AppendParticleField(psiR_, src.psiR, rigidAppendBegin, blockRange);
 		},
@@ -1265,12 +1265,15 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usageR, MemUsageOf_Vector(xPosR_));
 		Add(usageR, MemUsageOf_Vector(yPosR_));
 		Add(usageR, MemUsageOf_Vector(zPosR_));
-		Add(usageR, MemUsageOf_Vector(xRelPosR_));
-		Add(usageR, MemUsageOf_Vector(yRelPosR_));
-		Add(usageR, MemUsageOf_Vector(zRelPosR_));
+		Add(usageR, MemUsageOf_Vector(xPosRelR_));
+		Add(usageR, MemUsageOf_Vector(yPosRelR_));
+		Add(usageR, MemUsageOf_Vector(zPosRelR_));
 		Add(usageR, MemUsageOf_Vector(xVelR_));
 		Add(usageR, MemUsageOf_Vector(yVelR_));
 		Add(usageR, MemUsageOf_Vector(zVelR_));
+		Add(usageR, MemUsageOf_Vector(xVelPredR_));
+		Add(usageR, MemUsageOf_Vector(yVelPredR_));
+		Add(usageR, MemUsageOf_Vector(zVelPredR_));
 		Add(usageR, MemUsageOf_Vector(xForceR_));
 		Add(usageR, MemUsageOf_Vector(yForceR_));
 		Add(usageR, MemUsageOf_Vector(zForceR_));
@@ -1349,6 +1352,15 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(xAngMomRB_));
 		Add(usage, MemUsageOf_Vector(yAngMomRB_));
 		Add(usage, MemUsageOf_Vector(zAngMomRB_));
+		Add(usage, MemUsageOf_Vector(xVelPredRB_));
+		Add(usage, MemUsageOf_Vector(yVelPredRB_));
+		Add(usage, MemUsageOf_Vector(zVelPredRB_));
+		Add(usage, MemUsageOf_Vector(xOmegaPredRB_));
+		Add(usage, MemUsageOf_Vector(yOmegaPredRB_));
+		Add(usage, MemUsageOf_Vector(zOmegaPredRB_));
+		Add(usage, MemUsageOf_Vector(xAngMomPredRB_));
+		Add(usage, MemUsageOf_Vector(yAngMomPredRB_));
+		Add(usage, MemUsageOf_Vector(zAngMomPredRB_));
 		Add(usage, MemUsageOf_Vector(xForceRB_));
 		Add(usage, MemUsageOf_Vector(yForceRB_));
 		Add(usage, MemUsageOf_Vector(zForceRB_));
@@ -1807,6 +1819,7 @@ bool SimBackend_CPU::ApplyRigidBodyForceTorque(
 	zTorqueRB_ = forceTorque.zTorque;
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
+	PredictRigidBodies(timeStep);
 	IntegrateRigidBodies(timeStep);
 	UpdateRigidParticles();
 	benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_StateUpdate);
@@ -1960,8 +1973,26 @@ void SimBackend_CPU::BuildDistributedSolverChunkIdxs()
 	}
 }
 
-void SimBackend_CPU::UpdateRigidParticles()
+void SimBackend_CPU::PredictRigidParticleVelocities()
 {
+	xVelPredR_.resize(N_R_);
+	yVelPredR_.resize(N_R_);
+	zVelPredR_.resize(N_R_);
+	UpdateRigidParticles(true);
+}
+
+void SimBackend_CPU::UpdateRigidParticles(const bool predicted)
+{
+	const auto& xVelRB = predicted ? xVelPredRB_ : xVelRB_;
+	const auto& yVelRB = predicted ? yVelPredRB_ : yVelRB_;
+	const auto& zVelRB = predicted ? zVelPredRB_ : zVelRB_;
+	const auto& xOmegaRB = predicted ? xOmegaPredRB_ : xOmegaRB_;
+	const auto& yOmegaRB = predicted ? yOmegaPredRB_ : yOmegaRB_;
+	const auto& zOmegaRB = predicted ? zOmegaPredRB_ : zOmegaRB_;
+	auto& xVelR = predicted ? xVelPredR_ : xVelR_;
+	auto& yVelR = predicted ? yVelPredR_ : yVelR_;
+	auto& zVelR = predicted ? zVelPredR_ : zVelR_;
+
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_R_),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -1975,9 +2006,9 @@ void SimBackend_CPU::UpdateRigidParticles()
 						"Invalid CPU rigid particle attachment.");
 				}
 
-				const float lx = xRelPosR_[i];
-				const float ly = yRelPosR_[i];
-				const float lz = zRelPosR_[i];
+				const float lx = xPosRelR_[i];
+				const float ly = yPosRelR_[i];
+				const float lz = zPosRelR_[i];
 
 				const float rx = std::fmaf(a00RB_[bodyIdx], lx,
 					std::fmaf(a01RB_[bodyIdx], ly, a02RB_[bodyIdx] * lz));
@@ -1986,17 +2017,20 @@ void SimBackend_CPU::UpdateRigidParticles()
 				const float rz = std::fmaf(a20RB_[bodyIdx], lx,
 					std::fmaf(a21RB_[bodyIdx], ly, a22RB_[bodyIdx] * lz));
 
-				xPosR_[i] = xCMRB_[bodyIdx] + rx;
-				yPosR_[i] = yCMRB_[bodyIdx] + ry;
-				zPosR_[i] = zCMRB_[bodyIdx] + rz;
+				if (!predicted)
+				{
+					xPosR_[i] = xCMRB_[bodyIdx] + rx;
+					yPosR_[i] = yCMRB_[bodyIdx] + ry;
+					zPosR_[i] = zCMRB_[bodyIdx] + rz;
+				}
 
-				const float wx = xOmegaRB_[bodyIdx];
-				const float wy = yOmegaRB_[bodyIdx];
-				const float wz = zOmegaRB_[bodyIdx];
+				const float wx = xOmegaRB[bodyIdx];
+				const float wy = yOmegaRB[bodyIdx];
+				const float wz = zOmegaRB[bodyIdx];
 
-				xVelR_[i] = xVelRB_[bodyIdx] + wy * rz - wz * ry;
-				yVelR_[i] = yVelRB_[bodyIdx] + wz * rx - wx * rz;
-				zVelR_[i] = zVelRB_[bodyIdx] + wx * ry - wy * rx;
+				xVelR[i] = xVelRB[bodyIdx] + wy * rz - wz * ry;
+				yVelR[i] = yVelRB[bodyIdx] + wz * rx - wx * rz;
+				zVelR[i] = zVelRB[bodyIdx] + wx * ry - wy * rx;
 			}
 		},
 		tbb::auto_partitioner{}
@@ -2063,9 +2097,9 @@ void SimBackend_CPU::ReduceRigidParticleForces()
 				{
 					const uint32_t rigidParticleIdx = particleLocalIdxsR_ByBody_[workIdx];
 
-					const float lx = xRelPosR_[rigidParticleIdx];
-					const float ly = yRelPosR_[rigidParticleIdx];
-					const float lz = zRelPosR_[rigidParticleIdx];
+					const float lx = xPosRelR_[rigidParticleIdx];
+					const float ly = yPosRelR_[rigidParticleIdx];
+					const float lz = zPosRelR_[rigidParticleIdx];
 
 					const float xForce = xForceR_[rigidParticleIdx];
 					const float yForce = yForceR_[rigidParticleIdx];
@@ -2101,24 +2135,31 @@ void SimBackend_CPU::ReduceRigidParticleForces()
 	}
 }
 
-void SimBackend_CPU::IntegrateRigidBodies(const float timeStep)
+void SimBackend_CPU::PredictRigidBodies(const float timeStep)
 {
+	xVelPredRB_.resize(N_RB_);
+	yVelPredRB_.resize(N_RB_);
+	zVelPredRB_.resize(N_RB_);
+	xOmegaPredRB_.resize(N_RB_);
+	yOmegaPredRB_.resize(N_RB_);
+	zOmegaPredRB_.resize(N_RB_);
+	xAngMomPredRB_.resize(N_RB_);
+	yAngMomPredRB_.resize(N_RB_);
+	zAngMomPredRB_.resize(N_RB_);
+
+	// predict from current state to avoid accumulating impulses across iterations
 	// TODO: parallelize with TBB?
 	for (uint32_t bodyIdx = 0; bodyIdx < N_RB_; bodyIdx++)
 	{
 		const float massInv = massInvRB_[bodyIdx];
 
-		xVelRB_[bodyIdx] += timeStep * xForceRB_[bodyIdx] * massInv;
-		yVelRB_[bodyIdx] += timeStep * yForceRB_[bodyIdx] * massInv;
-		zVelRB_[bodyIdx] += timeStep * zForceRB_[bodyIdx] * massInv;
+		xVelPredRB_[bodyIdx] = xVelRB_[bodyIdx] + timeStep * xForceRB_[bodyIdx] * massInv;
+		yVelPredRB_[bodyIdx] = yVelRB_[bodyIdx] + timeStep * yForceRB_[bodyIdx] * massInv;
+		zVelPredRB_[bodyIdx] = zVelRB_[bodyIdx] + timeStep * zForceRB_[bodyIdx] * massInv;
 
-		xCMRB_[bodyIdx] += timeStep * xVelRB_[bodyIdx];
-		yCMRB_[bodyIdx] += timeStep * yVelRB_[bodyIdx];
-		zCMRB_[bodyIdx] += timeStep * zVelRB_[bodyIdx];
-
-		xAngMomRB_[bodyIdx] += timeStep * xTorqueRB_[bodyIdx];
-		yAngMomRB_[bodyIdx] += timeStep * yTorqueRB_[bodyIdx];
-		zAngMomRB_[bodyIdx] += timeStep * zTorqueRB_[bodyIdx];
+		xAngMomPredRB_[bodyIdx] = xAngMomRB_[bodyIdx] + timeStep * xTorqueRB_[bodyIdx];
+		yAngMomPredRB_[bodyIdx] = yAngMomRB_[bodyIdx] + timeStep * yTorqueRB_[bodyIdx];
+		zAngMomPredRB_[bodyIdx] = zAngMomRB_[bodyIdx] + timeStep * zTorqueRB_[bodyIdx];
 
 		const float a00 = a00RB_[bodyIdx], a01 = a01RB_[bodyIdx], a02 = a02RB_[bodyIdx];
 		const float a10 = a10RB_[bodyIdx], a11 = a11RB_[bodyIdx], a12 = a12RB_[bodyIdx];
@@ -2148,16 +2189,41 @@ void SimBackend_CPU::IntegrateRigidBodies(const float timeStep)
 		const float i21 = t20 * a10 + t21 * a11 + t22 * a12;
 		const float i22 = t20 * a20 + t21 * a21 + t22 * a22;
 
-		const float lx = xAngMomRB_[bodyIdx];
-		const float ly = yAngMomRB_[bodyIdx];
-		const float lz = zAngMomRB_[bodyIdx];
-		const float wx = std::fmaf(i00, lx, std::fmaf(i01, ly, i02 * lz));
-		const float wy = std::fmaf(i10, lx, std::fmaf(i11, ly, i12 * lz));
-		const float wz = std::fmaf(i20, lx, std::fmaf(i21, ly, i22 * lz));
+		const float lx = xAngMomPredRB_[bodyIdx];
+		const float ly = yAngMomPredRB_[bodyIdx];
+		const float lz = zAngMomPredRB_[bodyIdx];
+		xOmegaPredRB_[bodyIdx] = std::fmaf(i00, lx, std::fmaf(i01, ly, i02 * lz));
+		yOmegaPredRB_[bodyIdx] = std::fmaf(i10, lx, std::fmaf(i11, ly, i12 * lz));
+		zOmegaPredRB_[bodyIdx] = std::fmaf(i20, lx, std::fmaf(i21, ly, i22 * lz));
+	}
+}
+
+void SimBackend_CPU::IntegrateRigidBodies(const float timeStep)
+{
+	for (uint32_t bodyIdx = 0; bodyIdx < N_RB_; bodyIdx++)
+	{
+		xVelRB_[bodyIdx] = xVelPredRB_[bodyIdx];
+		yVelRB_[bodyIdx] = yVelPredRB_[bodyIdx];
+		zVelRB_[bodyIdx] = zVelPredRB_[bodyIdx];
+		xAngMomRB_[bodyIdx] = xAngMomPredRB_[bodyIdx];
+		yAngMomRB_[bodyIdx] = yAngMomPredRB_[bodyIdx];
+		zAngMomRB_[bodyIdx] = zAngMomPredRB_[bodyIdx];
+
+		xCMRB_[bodyIdx] += timeStep * xVelRB_[bodyIdx];
+		yCMRB_[bodyIdx] += timeStep * yVelRB_[bodyIdx];
+		zCMRB_[bodyIdx] += timeStep * zVelRB_[bodyIdx];
+
+		const float wx = xOmegaPredRB_[bodyIdx];
+		const float wy = yOmegaPredRB_[bodyIdx];
+		const float wz = zOmegaPredRB_[bodyIdx];
 
 		xOmegaRB_[bodyIdx] = wx;
 		yOmegaRB_[bodyIdx] = wy;
 		zOmegaRB_[bodyIdx] = wz;
+
+		const float a00 = a00RB_[bodyIdx], a01 = a01RB_[bodyIdx], a02 = a02RB_[bodyIdx];
+		const float a10 = a10RB_[bodyIdx], a11 = a11RB_[bodyIdx], a12 = a12RB_[bodyIdx];
+		const float a20 = a20RB_[bodyIdx], a21 = a21RB_[bodyIdx], a22 = a22RB_[bodyIdx];
 
 		a00RB_[bodyIdx] += timeStep * (-wz * a10 + wy * a20);
 		a01RB_[bodyIdx] += timeStep * (-wz * a11 + wy * a21);

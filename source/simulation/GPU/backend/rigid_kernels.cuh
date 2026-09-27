@@ -11,7 +11,7 @@ namespace GPU
 {
 	void Launch_UpdateRigidParticles(
 		const uint32_t* bodyIdR,
-		const float* xRelPosR, const float* yRelPosR, const float* zRelPosR,
+		const float* xPosRelR, const float* yPosRelR, const float* zPosRelR,
 		const float* xCMRB, const float* yCMRB, const float* zCMRB,
 		const float* xVelRB, const float* yVelRB, const float* zVelRB,
 		const float* xOmegaRB, const float* yOmegaRB, const float* zOmegaRB,
@@ -75,9 +75,9 @@ namespace GPU
 	void Launch_ReduceRigidParticleForces(
 		const uint32_t* rigidParticleOffsets_ByBody,
 		const uint32_t* rigidParticleLocalIdxs_ByBody,
-		const float* xRelPosR,
-		const float* yRelPosR,
-		const float* zRelPosR,
+		const float* xPosRelR,
+		const float* yPosRelR,
+		const float* zPosRelR,
 		const float* xForceR,
 		const float* yForceR,
 		const float* zForceR,

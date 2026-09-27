@@ -1004,9 +1004,9 @@ bool DistSimulationMgr::BuildInitialDomainDecomp()
 			for (uint32_t i = 0; i != R.N_; i++)
 			{
 				const uint32_t bodyIdx = R.bodyId[i];
-				const float x = R.xRelPos[i];
-				const float y = R.yRelPos[i];
-				const float z = R.zRelPos[i];
+				const float x = R.xPosRel[i];
+				const float y = R.yPosRel[i];
+				const float z = R.zPosRel[i];
 				probeXPosR[i] = RB.xCM[bodyIdx] + std::fmaf(RB.a00[bodyIdx], x,
 					std::fmaf(RB.a01[bodyIdx], y, RB.a02[bodyIdx] * z));
 				probeYPosR[i] = RB.yCM[bodyIdx] + std::fmaf(RB.a10[bodyIdx], x,

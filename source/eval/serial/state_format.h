@@ -84,9 +84,9 @@ namespace Export
 	{
 		visit(states.id...);
 		visit(states.bodyId...);
-		visit(states.xRelPos...);
-		visit(states.yRelPos...);
-		visit(states.zRelPos...);
+		visit(states.xPosRel...);
+		visit(states.yPosRel...);
+		visit(states.zPosRel...);
 		visit(states.volR...);
 		visit(states.psiR...);
 	}

@@ -194,9 +194,9 @@ void SimBackend_GPU::PullFromUniversalSimState(
 	{
 		GPU::Copy_HostToDevice(d_idR_.Data(), R.id.data(), N_R_, stream_);
 		GPU::Copy_HostToDevice(d_bodyIdR_.Data(), R.bodyId.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_xRelPosR_.Data(), R.xRelPos.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_yRelPosR_.Data(), R.yRelPos.data(), N_R_, stream_);
-		GPU::Copy_HostToDevice(d_zRelPosR_.Data(), R.zRelPos.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_xPosRelR_.Data(), R.xPosRel.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_yPosRelR_.Data(), R.yPosRel.data(), N_R_, stream_);
+		GPU::Copy_HostToDevice(d_zPosRelR_.Data(), R.zPosRel.data(), N_R_, stream_);
 		GPU::MemsetZero(d_xForceR_.Data(), N_R_, stream_);
 		GPU::MemsetZero(d_yForceR_.Data(), N_R_, stream_);
 		GPU::MemsetZero(d_zForceR_.Data(), N_R_, stream_);
@@ -322,9 +322,9 @@ void SimBackend_GPU::PushToUniversalSimState(
 	{
 		GPU::Copy_DeviceToHost(R.id.data(), d_idR_.Data(), N_R_, stream_);
 		GPU::Copy_DeviceToHost(R.bodyId.data(), d_bodyIdR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.xRelPos.data(), d_xRelPosR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.yRelPos.data(), d_yRelPosR_.Data(), N_R_, stream_);
-		GPU::Copy_DeviceToHost(R.zRelPos.data(), d_zRelPosR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.xPosRel.data(), d_xPosRelR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.yPosRel.data(), d_yPosRelR_.Data(), N_R_, stream_);
+		GPU::Copy_DeviceToHost(R.zPosRel.data(), d_zPosRelR_.Data(), N_R_, stream_);
 		GPU::Copy_DeviceToHost(R.volR.data(), d_volR_.Data(), N_R_, stream_);
 		GPU::Copy_DeviceToHost(R.psiR.data(), d_psiR_.Data(), N_R_, stream_);
 	}
@@ -919,9 +919,9 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usageR, MemUsageOf_DeviceBuffer(d_xPosR_));
 		Add(usageR, MemUsageOf_DeviceBuffer(d_yPosR_));
 		Add(usageR, MemUsageOf_DeviceBuffer(d_zPosR_));
-		Add(usageR, MemUsageOf_DeviceBuffer(d_xRelPosR_));
-		Add(usageR, MemUsageOf_DeviceBuffer(d_yRelPosR_));
-		Add(usageR, MemUsageOf_DeviceBuffer(d_zRelPosR_));
+		Add(usageR, MemUsageOf_DeviceBuffer(d_xPosRelR_));
+		Add(usageR, MemUsageOf_DeviceBuffer(d_yPosRelR_));
+		Add(usageR, MemUsageOf_DeviceBuffer(d_zPosRelR_));
 		Add(usageR, MemUsageOf_DeviceBuffer(d_xVelR_));
 		Add(usageR, MemUsageOf_DeviceBuffer(d_yVelR_));
 		Add(usageR, MemUsageOf_DeviceBuffer(d_zVelR_));
@@ -1236,7 +1236,7 @@ void SimBackend_GPU::FillStatisticsRecord(
 void SimBackend_GPU::UpdateRigidParticles()
 {
 	GPU::Launch_UpdateRigidParticles(
-		d_bodyIdR_.Data(), d_xRelPosR_.Data(), d_yRelPosR_.Data(), d_zRelPosR_.Data(),
+		d_bodyIdR_.Data(), d_xPosRelR_.Data(), d_yPosRelR_.Data(), d_zPosRelR_.Data(),
 		d_xCMRB_.Data(), d_yCMRB_.Data(), d_zCMRB_.Data(),
 		d_xVelRB_.Data(), d_yVelRB_.Data(), d_zVelRB_.Data(),
 		d_xOmegaRB_.Data(), d_yOmegaRB_.Data(), d_zOmegaRB_.Data(),
@@ -1526,9 +1526,9 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 			GPU::Launch_ReduceRigidParticleForces(
 				d_particleOffsetsR_ByBody_.Data(),
 				d_particleLocalIdxsR_ByBody_.Data(),
-				d_xRelPosR_.Data(),
-				d_yRelPosR_.Data(),
-				d_zRelPosR_.Data(),
+				d_xPosRelR_.Data(),
+				d_yPosRelR_.Data(),
+				d_zPosRelR_.Data(),
 				d_xForceR_.Data(),
 				d_yForceR_.Data(),
 				d_zForceR_.Data(),

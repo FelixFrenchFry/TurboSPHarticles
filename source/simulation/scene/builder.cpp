@@ -164,7 +164,7 @@ void ScenarioMgr::ComputeRigidCoefficients(
 	const uint32_t endR)
 {
 	ComputeParticleCoefficients(
-		particlesR.xRelPos, particlesR.yRelPos, particlesR.zRelPos,
+		particlesR.xPosRel, particlesR.yPosRel, particlesR.zPosRel,
 		particlesR.volR, particlesR.psiR, particlesR.N_,
 		params, beginR, endR);
 }
@@ -1025,9 +1025,9 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 		if (!IsInsideBuildRegion(pos)) { return; }
 		R.id[rigidParticleIdx] = Sim::CheckedParticleId(N_base, sampleIdx, "Hollow rigid ID");
 		R.bodyId[rigidParticleIdx] = bodyIdx;
-		R.xRelPos[rigidParticleIdx] = localPos.x;
-		R.yRelPos[rigidParticleIdx] = localPos.y;
-		R.zRelPos[rigidParticleIdx] = localPos.z;
+		R.xPosRel[rigidParticleIdx] = localPos.x;
+		R.yPosRel[rigidParticleIdx] = localPos.y;
+		R.zPosRel[rigidParticleIdx] = localPos.z;
 		rigidParticleIdx++;
 	});
 	assert(rigidParticleIdx == N_localEnd);
@@ -1142,9 +1142,9 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 
 		R.id[rigidParticleIdx] = Sim::CheckedParticleId(N_base, localIdx, "Rigid surface ID");
 		R.bodyId[rigidParticleIdx] = bodyIdx;
-		R.xRelPos[rigidParticleIdx] = localPos.x;
-		R.yRelPos[rigidParticleIdx] = localPos.y;
-		R.zRelPos[rigidParticleIdx] = localPos.z;
+		R.xPosRel[rigidParticleIdx] = localPos.x;
+		R.yPosRel[rigidParticleIdx] = localPos.y;
+		R.zPosRel[rigidParticleIdx] = localPos.z;
 		rigidParticleIdx++;
 	}
 	assert(rigidParticleIdx == N_localEnd);

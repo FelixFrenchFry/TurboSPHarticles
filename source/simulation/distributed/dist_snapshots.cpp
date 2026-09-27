@@ -379,9 +379,9 @@ bool Dist::PackOwnedExportSnapshot(
 				const uint32_t bodyIdx = R.bodyId[localIdx];
 				if (bodyIdx >= RB.N_) { throw std::runtime_error("Invalid rigid export body index."); }
 
-				const float lx = R.xRelPos[localIdx];
-				const float ly = R.yRelPos[localIdx];
-				const float lz = R.zRelPos[localIdx];
+				const float lx = R.xPosRel[localIdx];
+				const float ly = R.yPosRel[localIdx];
+				const float lz = R.zPosRel[localIdx];
 
 				exportSnap.bodyIdR[i] = bodyIdx;
 				exportSnap.volR[i] = R.volR[localIdx];

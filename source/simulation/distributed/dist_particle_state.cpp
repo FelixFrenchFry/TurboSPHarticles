@@ -149,9 +149,9 @@ namespace
 		const uint32_t arrayIdx)
 	{
 		const uint32_t bodyIdx = particlesR.bodyId[arrayIdx];
-		const float x = particlesR.xRelPos[arrayIdx];
-		const float y = particlesR.yRelPos[arrayIdx];
-		const float z = particlesR.zRelPos[arrayIdx];
+		const float x = particlesR.xPosRel[arrayIdx];
+		const float y = particlesR.yPosRel[arrayIdx];
+		const float z = particlesR.zPosRel[arrayIdx];
 		return
 		{
 			rigidBodies.xCM[bodyIdx] + std::fmaf(rigidBodies.a00[bodyIdx], x,
@@ -256,9 +256,9 @@ namespace
 	{
 		dst.id[dstIdx] = src.id[srcIdx];
 		dst.bodyId[dstIdx] = src.bodyId[srcIdx];
-		dst.xRelPos[dstIdx] = src.xRelPos[srcIdx];
-		dst.yRelPos[dstIdx] = src.yRelPos[srcIdx];
-		dst.zRelPos[dstIdx] = src.zRelPos[srcIdx];
+		dst.xPosRel[dstIdx] = src.xPosRel[srcIdx];
+		dst.yPosRel[dstIdx] = src.yPosRel[srcIdx];
+		dst.zPosRel[dstIdx] = src.zPosRel[srcIdx];
 		dst.volR[dstIdx] = src.volR[srcIdx];
 		dst.psiR[dstIdx] = src.psiR[srcIdx];
 	}
@@ -589,9 +589,9 @@ bool Dist::ValidateLocalRigidParticleAttachments(
 
 	if (particlesR.id.size() != particlesR.N_ ||
 		particlesR.bodyId.size() != particlesR.N_ ||
-		particlesR.xRelPos.size() != particlesR.N_ ||
-		particlesR.yRelPos.size() != particlesR.N_ ||
-		particlesR.zRelPos.size() != particlesR.N_ ||
+		particlesR.xPosRel.size() != particlesR.N_ ||
+		particlesR.yPosRel.size() != particlesR.N_ ||
+		particlesR.zPosRel.size() != particlesR.N_ ||
 		particlesR.volR.size() != particlesR.N_ ||
 		particlesR.psiR.size() != particlesR.N_ ||
 		rigidBodies.rigidParticleCount.size() != rigidBodies.N_)
@@ -756,9 +756,9 @@ Mem::MemUsage Dist::GetParticleMemoryUsage(
 
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.id));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.bodyId));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.xRelPos));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.yRelPos));
-	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.zRelPos));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.xPosRel));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.yPosRel));
+	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.zPosRel));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.volR));
 	Mem::Add(usage, Mem::MemUsageOf_Vector(particles.psiR));
 

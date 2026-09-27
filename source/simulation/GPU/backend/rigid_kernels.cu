@@ -181,7 +181,7 @@ namespace GPU
 	__global__
 	void K_UpdateRigidParticles(
 		const uint32_t* __restrict__ bodyIdR,
-		const float* __restrict__ xRelPosR, const float* __restrict__ yRelPosR, const float* __restrict__ zRelPosR,
+		const float* __restrict__ xPosRelR, const float* __restrict__ yPosRelR, const float* __restrict__ zPosRelR,
 		const float* __restrict__ xCMRB, const float* __restrict__ yCMRB, const float* __restrict__ zCMRB,
 		const float* __restrict__ xVelRB, const float* __restrict__ yVelRB, const float* __restrict__ zVelRB,
 		const float* __restrict__ xOmegaRB, const float* __restrict__ yOmegaRB, const float* __restrict__ zOmegaRB,
@@ -199,9 +199,9 @@ namespace GPU
 		const uint32_t bodyIdx = bodyIdR[i];
 		if (bodyIdx >= N_RB) { return; }
 
-		const float lx = xRelPosR[i];
-		const float ly = yRelPosR[i];
-		const float lz = zRelPosR[i];
+		const float lx = xPosRelR[i];
+		const float ly = yPosRelR[i];
+		const float lz = zPosRelR[i];
 		const float rx = fmaf(a00RB[bodyIdx], lx, fmaf(a01RB[bodyIdx], ly, a02RB[bodyIdx] * lz));
 		const float ry = fmaf(a10RB[bodyIdx], lx, fmaf(a11RB[bodyIdx], ly, a12RB[bodyIdx] * lz));
 		const float rz = fmaf(a20RB[bodyIdx], lx, fmaf(a21RB[bodyIdx], ly, a22RB[bodyIdx] * lz));
@@ -362,9 +362,9 @@ namespace GPU
 	void K_ReduceRigidParticleForces(
 		const uint32_t* __restrict__ rigidParticleOffsets_ByBody,
 		const uint32_t* __restrict__ rigidParticleLocalIdxs_ByBody,
-		const float* __restrict__ xRelPosR,
-		const float* __restrict__ yRelPosR,
-		const float* __restrict__ zRelPosR,
+		const float* __restrict__ xPosRelR,
+		const float* __restrict__ yPosRelR,
+		const float* __restrict__ zPosRelR,
 		const float* __restrict__ xForceR,
 		const float* __restrict__ yForceR,
 		const float* __restrict__ zForceR,
@@ -399,9 +399,9 @@ namespace GPU
 			 workIdx += blockDim.x)
 		{
 			const uint32_t i = rigidParticleLocalIdxs_ByBody[workIdx];
-			const float lx = xRelPosR[i];
-			const float ly = yRelPosR[i];
-			const float lz = zRelPosR[i];
+			const float lx = xPosRelR[i];
+			const float ly = yPosRelR[i];
+			const float lz = zPosRelR[i];
 
 			const float xForce = xForceR[i];
 			const float yForce = yForceR[i];
@@ -553,7 +553,7 @@ namespace GPU
 {
 	void Launch_UpdateRigidParticles(
 		const uint32_t* bodyIdR,
-		const float* xRelPosR, const float* yRelPosR, const float* zRelPosR,
+		const float* xPosRelR, const float* yPosRelR, const float* zPosRelR,
 		const float* xCMRB, const float* yCMRB, const float* zCMRB,
 		const float* xVelRB, const float* yVelRB, const float* zVelRB,
 		const float* xOmegaRB, const float* yOmegaRB, const float* zOmegaRB,
@@ -570,7 +570,7 @@ namespace GPU
 		const uint32_t N_BLOCK_SIZE = 256;
 		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 		K_UpdateRigidParticles<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			bodyIdR, xRelPosR, yRelPosR, zRelPosR,
+			bodyIdR, xPosRelR, yPosRelR, zPosRelR,
 			xCMRB, yCMRB, zCMRB, xVelRB, yVelRB, zVelRB, xOmegaRB, yOmegaRB, zOmegaRB,
 			a00RB, a01RB, a02RB, a10RB, a11RB, a12RB, a20RB, a21RB, a22RB,
 			N_R, N_RB,
@@ -669,9 +669,9 @@ namespace GPU
 	void Launch_ReduceRigidParticleForces(
 		const uint32_t* rigidParticleOffsets_ByBody,
 		const uint32_t* rigidParticleLocalIdxs_ByBody,
-		const float* xRelPosR,
-		const float* yRelPosR,
-		const float* zRelPosR,
+		const float* xPosRelR,
+		const float* yPosRelR,
+		const float* zPosRelR,
 		const float* xForceR,
 		const float* yForceR,
 		const float* zForceR,
@@ -694,9 +694,9 @@ namespace GPU
 		K_ReduceRigidParticleForces<<<N_GRID_SIZE, N_BLOCK_SIZE, N_sharedBytes, stream>>>(
 			rigidParticleOffsets_ByBody,
 			rigidParticleLocalIdxs_ByBody,
-			xRelPosR,
-			yRelPosR,
-			zRelPosR,
+			xPosRelR,
+			yPosRelR,
+			zPosRelR,
 			xForceR,
 			yForceR,
 			zForceR,

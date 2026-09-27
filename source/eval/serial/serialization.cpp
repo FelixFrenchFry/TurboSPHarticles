@@ -802,7 +802,7 @@ namespace Export
 		[[maybe_unused]] const auto N = static_cast<size_t>(R.N_);
 
 		assert(R.id.size() == N && R.bodyId.size() == N);
-		assert(R.xRelPos.size() == N && R.yRelPos.size() == N && R.zRelPos.size() == N);
+		assert(R.xPosRel.size() == N && R.yPosRel.size() == N && R.zPosRel.size() == N);
 		assert(R.volR.size() == N && R.psiR.size() == N);
 	}
 
@@ -1167,7 +1167,7 @@ namespace Export
 			for (uint32_t i = 0; i < chunk.N_; i++)
 			{
 				const glm::vec3 position = RigidWorldPosition(bodies, chunk.bodyId[i],
-					chunk.xRelPos[i], chunk.yRelPos[i], chunk.zRelPos[i]);
+					chunk.xPosRel[i], chunk.yPosRel[i], chunk.zPosRel[i]);
 				bodyParticleCounts[chunk.bodyId[i]]++;
 				if (select(position)) { selectedLocalIdxs.push_back(i); }
 			}

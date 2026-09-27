@@ -207,7 +207,7 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_idR_;
 		DeviceBuffer<uint32_t> d_bodyIdR_;
 		DeviceBuffer<float> d_xPosR_, d_yPosR_, d_zPosR_;
-		DeviceBuffer<float> d_xRelPosR_, d_yRelPosR_, d_zRelPosR_;
+		DeviceBuffer<float> d_xPosRelR_, d_yPosRelR_, d_zPosRelR_;
 		DeviceBuffer<float> d_xVelR_, d_yVelR_, d_zVelR_;
 		DeviceBuffer<float> d_xForceR_, d_yForceR_, d_zForceR_;
 		DeviceBuffer<float> d_volR_;
@@ -428,7 +428,7 @@ namespace Sim
 				d_idR_.Size() != N_newR || d_bodyIdR_.Size() != N_newR ||
 				d_particleLocalIdxsR_ByBody_.Size() != N_newR ||
 				d_xPosR_.Size() != N_newR || d_yPosR_.Size() != N_newR || d_zPosR_.Size() != N_newR ||
-				d_xRelPosR_.Size() != N_newR || d_yRelPosR_.Size() != N_newR || d_zRelPosR_.Size() != N_newR ||
+				d_xPosRelR_.Size() != N_newR || d_yPosRelR_.Size() != N_newR || d_zPosRelR_.Size() != N_newR ||
 				d_xVelR_.Size() != N_newR || d_yVelR_.Size() != N_newR || d_zVelR_.Size() != N_newR ||
 				d_xForceR_.Size() != N_newR || d_yForceR_.Size() != N_newR || d_zForceR_.Size() != N_newR ||
 				d_volR_.Size() != N_newR || d_psiR_.Size() != N_newR ||
@@ -443,7 +443,7 @@ namespace Sim
 			N_R_ = N_newR;
 			d_idR_.Resize(N_R_); d_bodyIdR_.Resize(N_R_);
 			d_xPosR_.Resize(N_R_); d_yPosR_.Resize(N_R_); d_zPosR_.Resize(N_R_);
-			d_xRelPosR_.Resize(N_R_); d_yRelPosR_.Resize(N_R_); d_zRelPosR_.Resize(N_R_);
+			d_xPosRelR_.Resize(N_R_); d_yPosRelR_.Resize(N_R_); d_zPosRelR_.Resize(N_R_);
 			d_xVelR_.Resize(N_R_); d_yVelR_.Resize(N_R_); d_zVelR_.Resize(N_R_);
 			d_xForceR_.Resize(N_R_); d_yForceR_.Resize(N_R_); d_zForceR_.Resize(N_R_);
 			d_volR_.Resize(N_R_); d_psiR_.Resize(N_R_);

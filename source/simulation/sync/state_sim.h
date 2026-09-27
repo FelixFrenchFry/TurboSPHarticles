@@ -68,7 +68,7 @@ namespace Sync
 		// fields
 		std::span<const uint64_t> id;
 		std::span<const uint32_t> bodyId;
-		std::span<const float> xRelPos, yRelPos, zRelPos;
+		std::span<const float> xPosRel, yPosRel, zPosRel;
 		std::span<const float> volR;
 		std::span<const float> psiR;
 	};
@@ -364,9 +364,9 @@ namespace Sync
 		std::vector<uint32_t> bodyId;
 
 		// positions relative to the rigid body center of mass
-		std::vector<float> xRelPos;
-		std::vector<float> yRelPos;
-		std::vector<float> zRelPos;
+		std::vector<float> xPosRel;
+		std::vector<float> yPosRel;
+		std::vector<float> zPosRel;
 
 		// boundary contribution coefficients
 		std::vector<float> volR;
@@ -379,9 +379,9 @@ namespace Sync
 			id.reserve(N);
 			bodyId.reserve(N);
 
-			xRelPos.reserve(N);
-			yRelPos.reserve(N);
-			zRelPos.reserve(N);
+			xPosRel.reserve(N);
+			yPosRel.reserve(N);
+			zPosRel.reserve(N);
 
 			volR.reserve(N);
 			psiR.reserve(N);
@@ -396,9 +396,9 @@ namespace Sync
 			id.resize(N_);
 			bodyId.resize(N_, InvalidRigidBodyId);
 
-			xRelPos.resize(N_);
-			yRelPos.resize(N_);
-			zRelPos.resize(N_);
+			xPosRel.resize(N_);
+			yPosRel.resize(N_);
+			zPosRel.resize(N_);
 
 			volR.resize(N_);
 			psiR.resize(N_);
@@ -411,9 +411,9 @@ namespace Sync
 			id.shrink_to_fit();
 			bodyId.shrink_to_fit();
 
-			xRelPos.shrink_to_fit();
-			yRelPos.shrink_to_fit();
-			zRelPos.shrink_to_fit();
+			xPosRel.shrink_to_fit();
+			yPosRel.shrink_to_fit();
+			zPosRel.shrink_to_fit();
 
 			volR.shrink_to_fit();
 			psiR.shrink_to_fit();
@@ -460,9 +460,9 @@ namespace Sync
 
 				.id = std::span<const uint64_t>(id),
 				.bodyId = std::span<const uint32_t>(bodyId),
-				.xRelPos = std::span<const float>(xRelPos),
-				.yRelPos = std::span<const float>(yRelPos),
-				.zRelPos = std::span<const float>(zRelPos),
+				.xPosRel = std::span<const float>(xPosRel),
+				.yPosRel = std::span<const float>(yPosRel),
+				.zPosRel = std::span<const float>(zPosRel),
 				.volR = std::span<const float>(volR),
 				.psiR = std::span<const float>(psiR),
 			};
@@ -660,9 +660,9 @@ namespace Sync
 
 			if (R.id.size() != static_cast<size_t>(R.N_) ||
 				R.bodyId.size() != static_cast<size_t>(R.N_) ||
-				R.xRelPos.size() != static_cast<size_t>(R.N_) ||
-				R.yRelPos.size() != static_cast<size_t>(R.N_) ||
-				R.zRelPos.size() != static_cast<size_t>(R.N_) ||
+				R.xPosRel.size() != static_cast<size_t>(R.N_) ||
+				R.yPosRel.size() != static_cast<size_t>(R.N_) ||
+				R.zPosRel.size() != static_cast<size_t>(R.N_) ||
 				R.volR.size() != static_cast<size_t>(R.N_) ||
 				R.psiR.size() != static_cast<size_t>(R.N_))
 			{
