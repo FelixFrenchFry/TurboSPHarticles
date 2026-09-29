@@ -1328,8 +1328,9 @@ namespace Dist
 		std::printf("%-30s = %s\n", "neighbor search method", Base::ToCString(params.neighborSearchMethod));
 		std::printf("%-30s = %s\n", "neighbor list storage",
 			Base::ToEffectiveNeighborListStorageCString(params.backendType, params.neighborListMethod));
-		std::printf("%-30s = %s\n", "rigid coupling mode", Base::ToCString(params.rigidCouplingMode));
-		std::printf("%-30s = %s\n", "rigid contact diagonal", Base::ToCString(params.rigidContactDiagonal));
+		// TODO: re-enable this output later (temporarily disabled)
+		// std::printf("%-30s = %s\n", "rigid coupling mode", Base::ToCString(params.rigidCouplingMode));
+		// std::printf("%-30s = %s\n", "rigid contact diagonal", Base::ToCString(params.rigidContactDiagonal));
 
 		std::printf("%-30s = %s\n", "domain decomp method", Base::ToCString(params.domainDecompMethod));
 		std::printf("%-30s = %s\n", "distributed halo mode", Base::ToCString(params.distHaloMode));
