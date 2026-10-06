@@ -1,0 +1,246 @@
++ module load compiler/intel/2025.0
+++ /opt/bwhpc/common/admin/modules/module-wrapper/modulecmd bash load compiler/intel/2025.0
++ eval 'CC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icx;' export 'CC;' 'CFLAGS=-O2\' '-xCORE-AVX2;' export 'CFLAGS;' '__LMOD_REF_COUNT_CPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include:1;' export '__LMOD_REF_COUNT_CPATH;' 'CPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include;' export 'CPATH;' 'CXX=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icpx;' export 'CXX;' 'CXXFLAGS=-O2\' '-xCORE-AVX2;' export 'CXXFLAGS;' 'F77=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx;' export 'F77;' 'FC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx;' export 'FC;' 'FCFLAGS=-O2\' '-xCORE-AVX2;' export 'FCFLAGS;' 'FFLAGS=-O2\' '-xCORE-AVX2;' export 'FFLAGS;' 'GDB_BIN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/bin;' export 'GDB_BIN_DIR;' 'GDB_HOME=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0;' export 'GDB_HOME;' 'GDB_INC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/include;' export 'GDB_INC_DIR;' 'GDB_INF_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/share/info;' export 'GDB_INF_DIR;' 'GDB_LIB_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/lib;' export 'GDB_LIB_DIR;' 'GDB_MAN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/share/man;' export 'GDB_MAN_DIR;' 'GDB_VERSION=2025.0;' export 'GDB_VERSION;' 'GDD_INCLUDE_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/include;' export 'GDD_INCLUDE_DIR;' 'INTEL_BIN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin;' export 'INTEL_BIN_DIR;' 'INTEL_DOC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man;' export 'INTEL_DOC_DIR;' 'INTEL_HOME=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0;' export 'INTEL_HOME;' 'INTEL_INCLUDE_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include;' export 'INTEL_INCLUDE_DIR;' 'INTEL_INC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include;' export 'INTEL_INC_DIR;' 'INTEL_LIB_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib;' export 'INTEL_LIB_DIR;' 'INTEL_LICENSE_FILE=28518@scclic1.scc.kit.edu;' export 'INTEL_LICENSE_FILE;' 'INTEL_MAN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man;' export 'INTEL_MAN_DIR;' 'INTEL_VERSION=2025.0;' export 'INTEL_VERSION;' 'KIT_FAMILY_COMPILER=compiler/intel;' export 'KIT_FAMILY_COMPILER;' 'KIT_FAMILY_COMPILER_VERSION=2025.0;' export 'KIT_FAMILY_COMPILER_VERSION;' '__LMOD_REF_COUNT_LD_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1;' export '__LMOD_REF_COUNT_LD_LIBRARY_PATH;' 'LD_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib;' export 'LD_LIBRARY_PATH;' '__LMOD_REF_COUNT_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1;' export '__LMOD_REF_COUNT_LIBRARY_PATH;' 'LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib;' export 'LIBRARY_PATH;' 'LMOD_FAMILY_COMPILER=compiler/intel;' export 'LMOD_FAMILY_COMPILER;' 'LMOD_FAMILY_COMPILER_VERSION=2025.0;' export 'LMOD_FAMILY_COMPILER_VERSION;' 'LOADEDMODULES=mpi/impi/2021.14-intel-2025.0:compiler/intel/2025.0;' export 'LOADEDMODULES;' '__LMOD_REF_COUNT_MANPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:1\;/usr/share/lmod/lmod/share/man:1\;/usr/share/man:1\;:1;' export '__LMOD_REF_COUNT_MANPATH;' 'MANPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:/usr/share/lmod/lmod/share/man:/usr/share/man::;' export 'MANPATH;' 'MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles;' export 'MODULEPATH;' '__LMOD_REF_COUNT_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:1\;/software/all/bin:2\;/home/fr/fr_fr/fr_fl184/.local/bin:1\;/home/fr/fr_fr/fr_fl184/bin:1\;/usr/share/Modules/bin:1\;/usr/local/bin:1\;/usr/bin:1\;/usr/local/sbin:1\;/usr/sbin:1;' export '__LMOD_REF_COUNT_PATH;' 'PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:/software/all/bin:/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin;' export 'PATH;' '_LMFILES_=/opt/bwhpc/common/modulefiles/mpi/impi/2021.14-intel-2025.0.lua:/opt/bwhpc/common/modulefiles/compiler/intel/2025.0.lua;' export '_LMFILES_;' '_ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0gewpjb21waWxlciA9ICJjb21waWxlci9pbnRlbCIsCm1waSA9ICJtcGkvaW1waSIsCn0sCm1UID0gewpbImNvbXBpbGVyL2ludGVsIl0gPSB7CmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL2NvbXBpbGVyL2ludGVsLzIwMjUuMC5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9pbnRlbC8yMDI1LjAiLApsb2FkT3JkZXIgPSAyLApwcm9wVCA9IHt9LApzdGFja0RlcHRoID0gMCwKc3RhdHVzID0gImFjdGl2ZSIsCnVzZXJOYW1lID0gImNvbXBpbGVyL2ludGVsLzIwMjUuMCIsCndWID0g;' export '_ModuleTable001_;' '_ModuleTable002_=IjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKWyJtcGkvaW1waSJdID0gewpkZXBUID0gewpkZXBBID0gewp7CnNuID0gImNvbXBpbGVyL2ludGVsIiwKdmVyc2lvbiA9IHsKa2luZCA9ICJmaXhlZCIsCnZhbHVlID0gIjIwMjUuMCIsCn0sCn0sCn0sCn0sCmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL21waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wLmx1YSIsCmZ1bGxOYW1lID0gIm1waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wIiwKbG9hZE9yZGVyID0gMSwKcHJvcFQgPSB7fSwKc3RhY2tEZXB0aCA9IDAsCnN0YXR1cyA9ICJhY3RpdmUiLAp1c2VyTmFtZSA9ICJtcGkvaW1waS8yMDIxLjE0LWludGVsLTIwMjUuMCIsCndWID0gIjAwMDAwMjAyMS4wMDAw;' export '_ModuleTable002_;' '_ModuleTable003_=MDAwMTQuKmludGVsLip6ZmluYWwtLjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKfSwKbXBhdGhBID0gewoiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlcyIsICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0sCnN5c3RlbUJhc2VNUEFUSCA9ICIvb3B0L2J3aHBjL2ZyL21vZHVsZWZpbGVzOi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfQo=;' export '_ModuleTable003_;' '_ModuleTable_Sz_=3;' export '_ModuleTable_Sz_;'
+++ CC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icx
+++ export CC
+++ CFLAGS='-O2 -xCORE-AVX2'
+++ export CFLAGS
+++ __LMOD_REF_COUNT_CPATH='/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include:1'
+++ export __LMOD_REF_COUNT_CPATH
+++ CPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include
+++ export CPATH
+++ CXX=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icpx
+++ export CXX
+++ CXXFLAGS='-O2 -xCORE-AVX2'
+++ export CXXFLAGS
+++ F77=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx
+++ export F77
+++ FC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx
+++ export FC
+++ FCFLAGS='-O2 -xCORE-AVX2'
+++ export FCFLAGS
+++ FFLAGS='-O2 -xCORE-AVX2'
+++ export FFLAGS
+++ GDB_BIN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/bin
+++ export GDB_BIN_DIR
+++ GDB_HOME=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0
+++ export GDB_HOME
+++ GDB_INC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/include
+++ export GDB_INC_DIR
+++ GDB_INF_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/share/info
+++ export GDB_INF_DIR
+++ GDB_LIB_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/lib
+++ export GDB_LIB_DIR
+++ GDB_MAN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/share/man
+++ export GDB_MAN_DIR
+++ GDB_VERSION=2025.0
+++ export GDB_VERSION
+++ GDD_INCLUDE_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/debugger/2025.0/opt/debugger/include
+++ export GDD_INCLUDE_DIR
+++ INTEL_BIN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin
+++ export INTEL_BIN_DIR
+++ INTEL_DOC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man
+++ export INTEL_DOC_DIR
+++ INTEL_HOME=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0
+++ export INTEL_HOME
+++ INTEL_INCLUDE_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include
+++ export INTEL_INCLUDE_DIR
+++ INTEL_INC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include
+++ export INTEL_INC_DIR
+++ INTEL_LIB_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib
+++ export INTEL_LIB_DIR
+++ INTEL_LICENSE_FILE=28518@scclic1.scc.kit.edu
+++ export INTEL_LICENSE_FILE
+++ INTEL_MAN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man
+++ export INTEL_MAN_DIR
+++ INTEL_VERSION=2025.0
+++ export INTEL_VERSION
+++ KIT_FAMILY_COMPILER=compiler/intel
+++ export KIT_FAMILY_COMPILER
+++ KIT_FAMILY_COMPILER_VERSION=2025.0
+++ export KIT_FAMILY_COMPILER_VERSION
+++ __LMOD_REF_COUNT_LD_LIBRARY_PATH='/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1'
+++ export __LMOD_REF_COUNT_LD_LIBRARY_PATH
+++ LD_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib
+++ export LD_LIBRARY_PATH
+++ __LMOD_REF_COUNT_LIBRARY_PATH='/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1'
+++ export __LMOD_REF_COUNT_LIBRARY_PATH
+++ LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib
+++ export LIBRARY_PATH
+++ LMOD_FAMILY_COMPILER=compiler/intel
+++ export LMOD_FAMILY_COMPILER
+++ LMOD_FAMILY_COMPILER_VERSION=2025.0
+++ export LMOD_FAMILY_COMPILER_VERSION
+++ LOADEDMODULES=mpi/impi/2021.14-intel-2025.0:compiler/intel/2025.0
+++ export LOADEDMODULES
+++ __LMOD_REF_COUNT_MANPATH='/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:1;/usr/share/lmod/lmod/share/man:1;/usr/share/man:1;:1'
+++ export __LMOD_REF_COUNT_MANPATH
+++ MANPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:/usr/share/lmod/lmod/share/man:/usr/share/man::
+++ export MANPATH
+++ MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles
+++ export MODULEPATH
+++ __LMOD_REF_COUNT_PATH='/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:1;/software/all/bin:2;/home/fr/fr_fr/fr_fl184/.local/bin:1;/home/fr/fr_fr/fr_fl184/bin:1;/usr/share/Modules/bin:1;/usr/local/bin:1;/usr/bin:1;/usr/local/sbin:1;/usr/sbin:1'
+++ export __LMOD_REF_COUNT_PATH
+++ PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:/software/all/bin:/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+++ export PATH
+++ _LMFILES_=/opt/bwhpc/common/modulefiles/mpi/impi/2021.14-intel-2025.0.lua:/opt/bwhpc/common/modulefiles/compiler/intel/2025.0.lua
+++ export _LMFILES_
+++ _ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0gewpjb21waWxlciA9ICJjb21waWxlci9pbnRlbCIsCm1waSA9ICJtcGkvaW1waSIsCn0sCm1UID0gewpbImNvbXBpbGVyL2ludGVsIl0gPSB7CmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL2NvbXBpbGVyL2ludGVsLzIwMjUuMC5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9pbnRlbC8yMDI1LjAiLApsb2FkT3JkZXIgPSAyLApwcm9wVCA9IHt9LApzdGFja0RlcHRoID0gMCwKc3RhdHVzID0gImFjdGl2ZSIsCnVzZXJOYW1lID0gImNvbXBpbGVyL2ludGVsLzIwMjUuMCIsCndWID0g
+++ export _ModuleTable001_
+++ _ModuleTable002_=IjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKWyJtcGkvaW1waSJdID0gewpkZXBUID0gewpkZXBBID0gewp7CnNuID0gImNvbXBpbGVyL2ludGVsIiwKdmVyc2lvbiA9IHsKa2luZCA9ICJmaXhlZCIsCnZhbHVlID0gIjIwMjUuMCIsCn0sCn0sCn0sCn0sCmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL21waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wLmx1YSIsCmZ1bGxOYW1lID0gIm1waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wIiwKbG9hZE9yZGVyID0gMSwKcHJvcFQgPSB7fSwKc3RhY2tEZXB0aCA9IDAsCnN0YXR1cyA9ICJhY3RpdmUiLAp1c2VyTmFtZSA9ICJtcGkvaW1waS8yMDIxLjE0LWludGVsLTIwMjUuMCIsCndWID0gIjAwMDAwMjAyMS4wMDAw
+++ export _ModuleTable002_
+++ _ModuleTable003_=MDAwMTQuKmludGVsLip6ZmluYWwtLjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKfSwKbXBhdGhBID0gewoiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlcyIsICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0sCnN5c3RlbUJhc2VNUEFUSCA9ICIvb3B0L2J3aHBjL2ZyL21vZHVsZWZpbGVzOi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfQo=
+++ export _ModuleTable003_
+++ _ModuleTable_Sz_=3
+++ export _ModuleTable_Sz_
++ module load mpi/impi/2021.14-intel-2025.0
+++ /opt/bwhpc/common/admin/modules/module-wrapper/modulecmd bash load mpi/impi/2021.14-intel-2025.0
++ eval '__LMOD_REF_COUNT_CPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include:1;' export '__LMOD_REF_COUNT_CPATH;' 'CPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include;' export 'CPATH;' 'FI_PROVIDER_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib/prov:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib;' export 'FI_PROVIDER_PATH;' 'I_MPI_CC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icx;' export 'I_MPI_CC;' 'I_MPI_CXX=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icpx;' export 'I_MPI_CXX;' 'I_MPI_F77=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx;' export 'I_MPI_F77;' 'I_MPI_F90=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx;' export 'I_MPI_F90;' 'I_MPI_FC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx;' export 'I_MPI_FC;' 'I_MPI_HYDRA_BOOTSTRAP=slurm;' export 'I_MPI_HYDRA_BOOTSTRAP;' 'I_MPI_HYDRA_BRANCH_COUNT=-1;' export 'I_MPI_HYDRA_BRANCH_COUNT;' 'I_MPI_HYDRA_RMK=slurm;' export 'I_MPI_HYDRA_RMK;' 'I_MPI_ROOT=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14;' export 'I_MPI_ROOT;' 'KIT_FAMILY_MPI=mpi/impi;' export 'KIT_FAMILY_MPI;' 'KIT_FAMILY_MPI_VERSION=2021.14-intel-2025.0;' export 'KIT_FAMILY_MPI_VERSION;' '__LMOD_REF_COUNT_LD_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1;' export '__LMOD_REF_COUNT_LD_LIBRARY_PATH;' 'LD_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib;' export 'LD_LIBRARY_PATH;' '__LMOD_REF_COUNT_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1;' export '__LMOD_REF_COUNT_LIBRARY_PATH;' 'LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib;' export 'LIBRARY_PATH;' 'LMOD_FAMILY_MPI=mpi/impi;' export 'LMOD_FAMILY_MPI;' 'LMOD_FAMILY_MPI_VERSION=2021.14-intel-2025.0;' export 'LMOD_FAMILY_MPI_VERSION;' 'LOADEDMODULES=compiler/intel/2025.0:mpi/impi/2021.14-intel-2025.0;' export 'LOADEDMODULES;' '__LMOD_REF_COUNT_MANPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:1\;/usr/share/lmod/lmod/share/man:1\;/usr/share/man:1\;:1;' export '__LMOD_REF_COUNT_MANPATH;' 'MANPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:/usr/share/lmod/lmod/share/man:/usr/share/man::;' export 'MANPATH;' 'MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles;' export 'MODULEPATH;' 'MPICC=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpicc;' export 'MPICC;' 'MPICXX=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpicxx;' export 'MPICXX;' 'MPIFC=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpifc;' export 'MPIFC;' 'MPIRUN=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpirun;' export 'MPIRUN;' 'MPI_BIN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin;' export 'MPI_BIN_DIR;' 'MPI_HOME=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14;' export 'MPI_HOME;' 'MPI_INCLUDE_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include;' export 'MPI_INCLUDE_DIR;' 'MPI_INC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include;' export 'MPI_INC_DIR;' 'MPI_LIB_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib;' export 'MPI_LIB_DIR;' 'MPI_MAN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man;' export 'MPI_MAN_DIR;' 'MPI_ROOT=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14;' export 'MPI_ROOT;' 'MPI_VERSION=2021.14;' export 'MPI_VERSION;' '__LMOD_REF_COUNT_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:1\;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:1\;/software/all/bin:2\;/home/fr/fr_fr/fr_fl184/.local/bin:1\;/home/fr/fr_fr/fr_fl184/bin:1\;/usr/share/Modules/bin:1\;/usr/local/bin:1\;/usr/bin:1\;/usr/local/sbin:1\;/usr/sbin:1;' export '__LMOD_REF_COUNT_PATH;' 'PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:/software/all/bin:/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin;' export 'PATH;' '_LMFILES_=/opt/bwhpc/common/modulefiles/compiler/intel/2025.0.lua:/opt/bwhpc/common/modulefiles/mpi/impi/2021.14-intel-2025.0.lua;' export '_LMFILES_;' '_ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0gewpjb21waWxlciA9ICJjb21waWxlci9pbnRlbCIsCm1waSA9ICJtcGkvaW1waSIsCn0sCm1UID0gewpbImNvbXBpbGVyL2ludGVsIl0gPSB7CmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL2NvbXBpbGVyL2ludGVsLzIwMjUuMC5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9pbnRlbC8yMDI1LjAiLApsb2FkT3JkZXIgPSAxLApwcm9wVCA9IHt9LApzdGFja0RlcHRoID0gMCwKc3RhdHVzID0gImFjdGl2ZSIsCnVzZXJOYW1lID0gImNvbXBpbGVyL2ludGVsLzIwMjUuMCIsCndWID0g;' export '_ModuleTable001_;' '_ModuleTable002_=IjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKWyJtcGkvaW1waSJdID0gewpkZXBUID0gewpkZXBBID0gewp7CnNuID0gImNvbXBpbGVyL2ludGVsIiwKdmVyc2lvbiA9IHsKa2luZCA9ICJmaXhlZCIsCnZhbHVlID0gIjIwMjUuMCIsCn0sCn0sCn0sCn0sCmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL21waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wLmx1YSIsCmZ1bGxOYW1lID0gIm1waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wIiwKbG9hZE9yZGVyID0gMiwKcHJvcFQgPSB7fSwKc3RhY2tEZXB0aCA9IDAsCnN0YXR1cyA9ICJhY3RpdmUiLAp1c2VyTmFtZSA9ICJtcGkvaW1waS8yMDIxLjE0LWludGVsLTIwMjUuMCIsCndWID0gIjAwMDAwMjAyMS4wMDAw;' export '_ModuleTable002_;' '_ModuleTable003_=MDAwMTQuKmludGVsLip6ZmluYWwtLjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKfSwKbXBhdGhBID0gewoiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlcyIsICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0sCnN5c3RlbUJhc2VNUEFUSCA9ICIvb3B0L2J3aHBjL2ZyL21vZHVsZWZpbGVzOi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfQo=;' export '_ModuleTable003_;' '_ModuleTable_Sz_=3;' export '_ModuleTable_Sz_;'
+++ __LMOD_REF_COUNT_CPATH='/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include:1;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include:1'
+++ export __LMOD_REF_COUNT_CPATH
+++ CPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/include
+++ export CPATH
+++ FI_PROVIDER_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib/prov:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib
+++ export FI_PROVIDER_PATH
+++ I_MPI_CC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icx
+++ export I_MPI_CC
+++ I_MPI_CXX=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/icpx
+++ export I_MPI_CXX
+++ I_MPI_F77=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx
+++ export I_MPI_F77
+++ I_MPI_F90=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx
+++ export I_MPI_F90
+++ I_MPI_FC=/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin/ifx
+++ export I_MPI_FC
+++ I_MPI_HYDRA_BOOTSTRAP=slurm
+++ export I_MPI_HYDRA_BOOTSTRAP
+++ I_MPI_HYDRA_BRANCH_COUNT=-1
+++ export I_MPI_HYDRA_BRANCH_COUNT
+++ I_MPI_HYDRA_RMK=slurm
+++ export I_MPI_HYDRA_RMK
+++ I_MPI_ROOT=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14
+++ export I_MPI_ROOT
+++ KIT_FAMILY_MPI=mpi/impi
+++ export KIT_FAMILY_MPI
+++ KIT_FAMILY_MPI_VERSION=2021.14-intel-2025.0
+++ export KIT_FAMILY_MPI_VERSION
+++ __LMOD_REF_COUNT_LD_LIBRARY_PATH='/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1'
+++ export __LMOD_REF_COUNT_LD_LIBRARY_PATH
+++ LD_LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib
+++ export LD_LIBRARY_PATH
+++ __LMOD_REF_COUNT_LIBRARY_PATH='/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:1;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib:1'
+++ export __LMOD_REF_COUNT_LIBRARY_PATH
+++ LIBRARY_PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/lib
+++ export LIBRARY_PATH
+++ LMOD_FAMILY_MPI=mpi/impi
+++ export LMOD_FAMILY_MPI
+++ LMOD_FAMILY_MPI_VERSION=2021.14-intel-2025.0
+++ export LMOD_FAMILY_MPI_VERSION
+++ LOADEDMODULES=compiler/intel/2025.0:mpi/impi/2021.14-intel-2025.0
+++ export LOADEDMODULES
+++ __LMOD_REF_COUNT_MANPATH='/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:1;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:1;/usr/share/lmod/lmod/share/man:1;/usr/share/man:1;:1'
+++ export __LMOD_REF_COUNT_MANPATH
+++ MANPATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/share/man:/usr/share/lmod/lmod/share/man:/usr/share/man::
+++ export MANPATH
+++ MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles
+++ export MODULEPATH
+++ MPICC=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpicc
+++ export MPICC
+++ MPICXX=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpicxx
+++ export MPICXX
+++ MPIFC=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpifc
+++ export MPIFC
+++ MPIRUN=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin/mpirun
+++ export MPIRUN
+++ MPI_BIN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin
+++ export MPI_BIN_DIR
+++ MPI_HOME=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14
+++ export MPI_HOME
+++ MPI_INCLUDE_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include
+++ export MPI_INCLUDE_DIR
+++ MPI_INC_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/include
+++ export MPI_INC_DIR
+++ MPI_LIB_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib/release:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/lib
+++ export MPI_LIB_DIR
+++ MPI_MAN_DIR=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/share/man
+++ export MPI_MAN_DIR
+++ MPI_ROOT=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14
+++ export MPI_ROOT
+++ MPI_VERSION=2021.14
+++ export MPI_VERSION
+++ __LMOD_REF_COUNT_PATH='/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:1;/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:1;/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:1;/software/all/bin:2;/home/fr/fr_fr/fr_fl184/.local/bin:1;/home/fr/fr_fr/fr_fl184/bin:1;/usr/share/Modules/bin:1;/usr/local/bin:1;/usr/bin:1;/usr/local/sbin:1;/usr/sbin:1'
+++ export __LMOD_REF_COUNT_PATH
+++ PATH=/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/libfabric/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/bin:/software/bwhpc/common/toolkit/Intel_OneAPI/compiler/2025.0/bin:/software/all/bin:/home/fr/fr_fr/fr_fl184/.local/bin:/home/fr/fr_fr/fr_fl184/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+++ export PATH
+++ _LMFILES_=/opt/bwhpc/common/modulefiles/compiler/intel/2025.0.lua:/opt/bwhpc/common/modulefiles/mpi/impi/2021.14-intel-2025.0.lua
+++ export _LMFILES_
+++ _ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0gewpjb21waWxlciA9ICJjb21waWxlci9pbnRlbCIsCm1waSA9ICJtcGkvaW1waSIsCn0sCm1UID0gewpbImNvbXBpbGVyL2ludGVsIl0gPSB7CmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL2NvbXBpbGVyL2ludGVsLzIwMjUuMC5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9pbnRlbC8yMDI1LjAiLApsb2FkT3JkZXIgPSAxLApwcm9wVCA9IHt9LApzdGFja0RlcHRoID0gMCwKc3RhdHVzID0gImFjdGl2ZSIsCnVzZXJOYW1lID0gImNvbXBpbGVyL2ludGVsLzIwMjUuMCIsCndWID0g
+++ export _ModuleTable001_
+++ _ModuleTable002_=IjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKWyJtcGkvaW1waSJdID0gewpkZXBUID0gewpkZXBBID0gewp7CnNuID0gImNvbXBpbGVyL2ludGVsIiwKdmVyc2lvbiA9IHsKa2luZCA9ICJmaXhlZCIsCnZhbHVlID0gIjIwMjUuMCIsCn0sCn0sCn0sCn0sCmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL21waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wLmx1YSIsCmZ1bGxOYW1lID0gIm1waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wIiwKbG9hZE9yZGVyID0gMiwKcHJvcFQgPSB7fSwKc3RhY2tEZXB0aCA9IDAsCnN0YXR1cyA9ICJhY3RpdmUiLAp1c2VyTmFtZSA9ICJtcGkvaW1waS8yMDIxLjE0LWludGVsLTIwMjUuMCIsCndWID0gIjAwMDAwMjAyMS4wMDAw
+++ export _ModuleTable002_
+++ _ModuleTable003_=MDAwMTQuKmludGVsLip6ZmluYWwtLjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKfSwKbXBhdGhBID0gewoiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlcyIsICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0sCnN5c3RlbUJhc2VNUEFUSCA9ICIvb3B0L2J3aHBjL2ZyL21vZHVsZWZpbGVzOi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfQo=
+++ export _ModuleTable003_
+++ _ModuleTable_Sz_=3
+++ export _ModuleTable_Sz_
++ unset CFLAGS CXXFLAGS CPPFLAGS FFLAGS FCFLAGS LDFLAGS
++ export CC=gcc
++ CC=gcc
++ export CXX=g++
++ CXX=g++
++ export I_MPI_PIN=1
++ I_MPI_PIN=1
++ export I_MPI_PIN_RESPECT_CPUSET=disable
++ I_MPI_PIN_RESPECT_CPUSET=disable
++ export I_MPI_PIN_CELL=core
++ I_MPI_PIN_CELL=core
++ export I_MPI_PIN_DOMAIN=32
++ I_MPI_PIN_DOMAIN=32
++ export I_MPI_PIN_ORDER=compact
++ I_MPI_PIN_ORDER=compact
++ export I_MPI_DEBUG=+4,time
++ I_MPI_DEBUG=+4,time
++ cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
++ echo '--- [ slurm job information ] --------------------------------------------------'
++ echo 'job id               = 6947717 (Run_H2)'
++ echo 'partition            = cpu_il'
++ echo 'allocated nodes      = uc2n[620-621,625,633-635,674,678,682,684,697-698,702-706,735,739,751,755-756,765,831] (24 nodes)'
++ echo 'tasks / cpus         = 48 total tasks, 32 cpus/task'
+++ date '+%Y-%m-%d %H:%M:%S'
++ echo 'start time           = 2026-09-24 08:07:37'
+++ pwd
++ echo 'working directory    = /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles'
++ echo ''
++ echo '--- [ loaded modules ] ---------------------------------------------------------'
++ module list
+++ /opt/bwhpc/common/admin/modules/module-wrapper/modulecmd bash list
+
+Currently Loaded Modules:
+  1) compiler/intel/2025.0   2) mpi/impi/2021.14-intel-2025.0
+
+ 
+
++ eval 'MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles;' export 'MODULEPATH;' '_ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0gewpjb21waWxlciA9ICJjb21waWxlci9pbnRlbCIsCm1waSA9ICJtcGkvaW1waSIsCn0sCm1UID0gewpbImNvbXBpbGVyL2ludGVsIl0gPSB7CmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL2NvbXBpbGVyL2ludGVsLzIwMjUuMC5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9pbnRlbC8yMDI1LjAiLApsb2FkT3JkZXIgPSAxLApwcm9wVCA9IHt9LApzdGFja0RlcHRoID0gMCwKc3RhdHVzID0gImFjdGl2ZSIsCnVzZXJOYW1lID0gImNvbXBpbGVyL2ludGVsLzIwMjUuMCIsCndWID0g;' export '_ModuleTable001_;' '_ModuleTable002_=IjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKWyJtcGkvaW1waSJdID0gewpkZXBUID0gewpkZXBBID0gewp7CnNuID0gImNvbXBpbGVyL2ludGVsIiwKdmVyc2lvbiA9IHsKa2luZCA9ICJmaXhlZCIsCnZhbHVlID0gIjIwMjUuMCIsCn0sCn0sCn0sCn0sCmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL21waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wLmx1YSIsCmZ1bGxOYW1lID0gIm1waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wIiwKbG9hZE9yZGVyID0gMiwKcHJvcFQgPSB7fSwKc3RhY2tEZXB0aCA9IDAsCnN0YXR1cyA9ICJhY3RpdmUiLAp1c2VyTmFtZSA9ICJtcGkvaW1waS8yMDIxLjE0LWludGVsLTIwMjUuMCIsCndWID0gIjAwMDAwMjAyMS4wMDAw;' export '_ModuleTable002_;' '_ModuleTable003_=MDAwMTQuKmludGVsLip6ZmluYWwtLjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKfSwKbXBhdGhBID0gewoiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlcyIsICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0sCnN5c3RlbUJhc2VNUEFUSCA9ICIvb3B0L2J3aHBjL2ZyL21vZHVsZWZpbGVzOi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfQo=;' export '_ModuleTable003_;' '_ModuleTable_Sz_=3;' export '_ModuleTable_Sz_;'
+++ MODULEPATH=/opt/bwhpc/fr/modulefiles:/opt/bwhpc/common/modulefiles
+++ export MODULEPATH
+++ _ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxkVGltZSA9IGZhbHNlLApjX3Nob3J0VGltZSA9IGZhbHNlLApkZXB0aFQgPSB7fSwKZmFtaWx5ID0gewpjb21waWxlciA9ICJjb21waWxlci9pbnRlbCIsCm1waSA9ICJtcGkvaW1waSIsCn0sCm1UID0gewpbImNvbXBpbGVyL2ludGVsIl0gPSB7CmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL2NvbXBpbGVyL2ludGVsLzIwMjUuMC5sdWEiLApmdWxsTmFtZSA9ICJjb21waWxlci9pbnRlbC8yMDI1LjAiLApsb2FkT3JkZXIgPSAxLApwcm9wVCA9IHt9LApzdGFja0RlcHRoID0gMCwKc3RhdHVzID0gImFjdGl2ZSIsCnVzZXJOYW1lID0gImNvbXBpbGVyL2ludGVsLzIwMjUuMCIsCndWID0g
+++ export _ModuleTable001_
+++ _ModuleTable002_=IjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKWyJtcGkvaW1waSJdID0gewpkZXBUID0gewpkZXBBID0gewp7CnNuID0gImNvbXBpbGVyL2ludGVsIiwKdmVyc2lvbiA9IHsKa2luZCA9ICJmaXhlZCIsCnZhbHVlID0gIjIwMjUuMCIsCn0sCn0sCn0sCn0sCmZuID0gIi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzL21waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wLmx1YSIsCmZ1bGxOYW1lID0gIm1waS9pbXBpLzIwMjEuMTQtaW50ZWwtMjAyNS4wIiwKbG9hZE9yZGVyID0gMiwKcHJvcFQgPSB7fSwKc3RhY2tEZXB0aCA9IDAsCnN0YXR1cyA9ICJhY3RpdmUiLAp1c2VyTmFtZSA9ICJtcGkvaW1waS8yMDIxLjE0LWludGVsLTIwMjUuMCIsCndWID0gIjAwMDAwMjAyMS4wMDAw
+++ export _ModuleTable002_
+++ _ModuleTable003_=MDAwMTQuKmludGVsLip6ZmluYWwtLjAwMDAwMjAyNS4qemZpbmFsIiwKfSwKfSwKbXBhdGhBID0gewoiL29wdC9id2hwYy9mci9tb2R1bGVmaWxlcyIsICIvb3B0L2J3aHBjL2NvbW1vbi9tb2R1bGVmaWxlcyIsCn0sCnN5c3RlbUJhc2VNUEFUSCA9ICIvb3B0L2J3aHBjL2ZyL21vZHVsZWZpbGVzOi9vcHQvYndocGMvY29tbW9uL21vZHVsZWZpbGVzIiwKfQo=
+++ export _ModuleTable003_
+++ _ModuleTable_Sz_=3
+++ export _ModuleTable_Sz_
++ echo ''
++ echo '--- [ node hardware snapshot ] -------------------------------------------------'
++ lscpu
++ grep -E 'Model name|Socket\(s\)|Core\(s\) per socket|Thread\(s\) per core|NUMA node\(s\)'
++ free -h
++ echo ''
++ mpiexec.hydra -bootstrap slurm -n 48 ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim=32 --sim checkpointTime=258600 -p H2
++ rc=0
++ echo ''
++ echo '--- [ job completion ] ---------------------------------------------------------'
+++ date '+%Y-%m-%d %H:%M:%S'
++ echo 'finish time          = 2026-09-27 07:58:56'
++ echo 'exit code            = 0'
++ exit 0

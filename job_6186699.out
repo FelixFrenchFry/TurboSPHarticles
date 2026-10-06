@@ -1,0 +1,261 @@
+(Running on Linux)
+[2026-08-11 22:09:26.730] [info] Launching TSP (distributed application)...
+[2026-08-11 22:09:26.738] [info] Using config profile 'D'
+[2026-08-11 22:09:26.738] [info] Applied 1 simulation override(s) from CLI args
+
+--- [ build configuration ] ----------------------------------------------------
+--------------------------------------------------------------------------------
+git revision                   = 82b72e6edb7d
+build type                     = Release
+compiler                       = GNU 11.5.0
+cpu simd arch                  = AVX256 (8 lanes)
+cpu isa compiler flags         = -mavx2 -mfma
+
+--- [ distributed hardware specifications ] ------------------------------------
+--------------------------------------------------------------------------------
+r  | host name                      | total threads | sim budget | vis budget
+--------------------------------------------------------------------------------
+0  | uc2n861.localdomain            |           128 |          4 |          0
+1  | uc2n867.localdomain            |           128 |          4 |          0
+2  | uc2n861.localdomain            |           128 |          4 |          0
+3  | uc2n867.localdomain            |           128 |          4 |          0
+4  | uc2n861.localdomain            |           128 |          4 |          0
+5  | uc2n867.localdomain            |           128 |          4 |          0
+6  | uc2n861.localdomain            |           128 |          4 |          0
+7  | uc2n867.localdomain            |           128 |          4 |          0
+8  | uc2n861.localdomain            |           128 |          4 |          0
+9  | uc2n867.localdomain            |           128 |          4 |          0
+10 | uc2n861.localdomain            |           128 |          4 |          0
+11 | uc2n867.localdomain            |           128 |          4 |          0
+12 | uc2n861.localdomain            |           128 |          4 |          0
+13 | uc2n867.localdomain            |           128 |          4 |          0
+14 | uc2n861.localdomain            |           128 |          4 |          0
+15 | uc2n867.localdomain            |           128 |          4 |          0
+16 | uc2n861.localdomain            |           128 |          4 |          0
+17 | uc2n867.localdomain            |           128 |          4 |          0
+18 | uc2n861.localdomain            |           128 |          4 |          0
+19 | uc2n867.localdomain            |           128 |          4 |          0
+20 | uc2n861.localdomain            |           128 |          4 |          0
+21 | uc2n867.localdomain            |           128 |          4 |          0
+22 | uc2n861.localdomain            |           128 |          4 |          0
+23 | uc2n867.localdomain            |           128 |          4 |          0
+24 | uc2n861.localdomain            |           128 |          4 |          0
+25 | uc2n867.localdomain            |           128 |          4 |          0
+26 | uc2n861.localdomain            |           128 |          4 |          0
+27 | uc2n867.localdomain            |           128 |          4 |          0
+28 | uc2n861.localdomain            |           128 |          4 |          0
+29 | uc2n867.localdomain            |           128 |          4 |          0
+30 | uc2n861.localdomain            |           128 |          4 |          0
+31 | uc2n867.localdomain            |           128 |          4 |          0
+
+[2026-08-11 22:09:26.796] [info] Init distributed simulation backend...
+[2026-08-11 22:09:26.797] [info] Init distributed simulation state...
+[2026-08-11 22:09:26.803] [info] Init distributed domain decomp...
+[2026-08-11 22:09:26.804] [info] Init rank-local particle states...
+[2026-08-11 22:10:02.366] [info] Init rank-local backend data structures...
+
+--- [ simulation parameters ] --------------------------------------------------
+--------------------------------------------------------------------------------
+timeStep                               = 0.000500
+particleSize [F / B]                   = [ 0.010000 / 0.010000 ]
+particleSizeInv [F / B]                = [ 100.000000 / 100.000000 ]
+kernelSuppRatio                        = 2.000000
+kernelRadius                           = 0.020000
+kernelRadiusSqu                        = 0.000400
+expctdNbrCountSoftMax [FF / FB]        = [ 41 / 21 ]
+expctdNbrCountHardMax [FF / FB]        = [ 61 / 46 ]
+expctdAvgNbrCountHardMax [FF / FB]     = [ 36 / 4 ]
+restDensity                            = 1000.000000
+mass [F / B]                           = [ 0.001000 / 0.001000 ]
+viscosity [F / B]                      = [ 0.000120 / 0.000120 ]
+gravity                                = (0.000, -9.810, 0.000)
+pressGamma                             = 0.500000
+jacobiOmega                            = 0.500000
+densityDevTarget                       = 0.010000
+fixedIters                             = 5
+minSolverIters                         = 3
+maxSolverIters                         = 50
+solverTerminationCond                  = FixedIters
+gridCellSizeRatio                      = 1.000000
+jitterFrac [F / B]                     = [ 0.000000 / 0.000000 ]
+jitterSeed [F / B]                     = [ 67 / 67 ]
+boundaryLayers                         = 2
+loadBalanceThreshold                   = 0.010000
+loadBalanceSustainSteps                = 3
+loadBalanceCooldownSteps               = 20
+loadBalanceIntervalSteps               = 50
+sampling ratio [min/max/probe]         = [ 0.500 / 1.000 / 0.200 ]
+sampling dist [min/max/probe]          = [ 0.005000 / 0.010000 / 0.002000 ]
+sampling candidates / trials           = [ 20 / 10 ]
+sampling seed                          = 67
+surface nbr [ratio/count]              = [ 0.750 / 27 ]
+exportEnabled                          = true
+exportDir                              = /D
+exportInterval                         = 50
+
+--- [ distributed simulation setup ] -------------------------------------------
+--------------------------------------------------------------------------------
+sim backend                    = CPU01
+sim scenario                   = BreakingDam
+neighbor search method         = CellLinkedList_Compact
+neighbor list storage          = ChunkedSELL8_AdaptCompress
+domain decomp method           = AABB_Dynamic
+distributed halo mode          = SingleHalo
+load balance metric            = RankOwnedParticleCount
+load balance trigger           = Periodic
+load balance weight model      = OwnedParticleCount
+mpi thread support             = MPI_THREAD_FUNNELED
+global particles [F / B / R]   = [ 1331000000 / 58212084 / 0 ]
+global rigid bodies            = 0
+
+r  | neighbor ranks        | initial owned F | initial owned B | initial owned R
+--------------------------------------------------------------------------------
+0  | [1]                   |        81070000 |        10913392 |               0
+1  | [0, 2]                |        83490000 |         1215780 |               0
+2  | [1, 3]                |        83490000 |         1215780 |               0
+3  | [2, 4]                |        83490000 |         1198160 |               0
+4  | [3, 5]                |        83490000 |         1215780 |               0
+5  | [4, 6]                |        83490000 |         1215780 |               0
+6  | [5, 7]                |        82280000 |         1215780 |               0
+7  | [6, 8]                |        83490000 |         1215780 |               0
+8  | [7, 9]                |        83490000 |         1215780 |               0
+9  | [8, 10]               |        83490000 |         1198160 |               0
+10 | [9, 11]               |        83490000 |         1215780 |               0
+11 | [10, 12]              |        83490000 |         1215780 |               0
+12 | [11, 13]              |        82280000 |         1215780 |               0
+13 | [12, 14]              |        83490000 |         1215780 |               0
+14 | [13, 15]              |        83490000 |         1215780 |               0
+15 | [14, 16]              |        83490000 |         1198160 |               0
+16 | [15, 17]              |               0 |         1215780 |               0
+17 | [16, 18]              |               0 |         1215780 |               0
+18 | [17, 19]              |               0 |         1215780 |               0
+19 | [18, 20]              |               0 |         1215780 |               0
+20 | [19, 21]              |               0 |         1215780 |               0
+21 | [20, 22]              |               0 |         1215780 |               0
+22 | [21, 23]              |               0 |         1198160 |               0
+23 | [22, 24]              |               0 |         1215780 |               0
+24 | [23, 25]              |               0 |         1215780 |               0
+25 | [24, 26]              |               0 |         1215780 |               0
+26 | [25, 27]              |               0 |         1215780 |               0
+27 | [26, 28]              |               0 |         1215780 |               0
+28 | [27, 29]              |               0 |         1198160 |               0
+29 | [28, 30]              |               0 |         1215780 |               0
+30 | [29, 31]              |               0 |         1215780 |               0
+31 | [30]                  |               0 |        10913392 |               0
+
+
+[2026-08-11 22:10:24.644] [info] Distributed simulation started running...
+[2026-08-11 22:10:24.694] [info] Writing run logs to '.../rank_000/25'
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 1 PID 3459783 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 3 PID 3459784 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 5 PID 3459785 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 7 PID 3459786 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 9 PID 3459787 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 11 PID 3459788 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 13 PID 3459789 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 15 PID 3459790 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 17 PID 3459791 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 19 PID 3459792 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 21 PID 3459793 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 23 PID 3459794 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 25 PID 3459795 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 27 PID 3459796 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 29 PID 3459797 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+
+===================================================================================
+=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+=   RANK 31 PID 3459798 RUNNING AT uc2n867
+=   KILLED BY SIGNAL: 9 (Killed)
+===================================================================================
+I_MPI_JOB_TIMEOUT = -1 second(s): job ending due to startup timeout
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n[861,867]
+Job ID: 6186699
+Cluster: uc3
+User/Group: fr_fl184/fr_fr
+State: FAILED (exit code 255)
+Nodes: 2
+Cores per node: 64
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 03:16:16 core-walltime
+Job Wall-clock time: 00:01:32
+Memory Utilized: 481.34 GB
+Memory Efficiency: 98.74% of 487.50 GB (243.75 GB/node)
+The task which had the largest memory consumption differs by 100.14% from the average task max memory consumption
