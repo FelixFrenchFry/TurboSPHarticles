@@ -36,7 +36,7 @@ namespace Base
 	{
 		Auto,                // overwrite only when stdout is a terminal
 		Overwrite,           // always overwrite the previous report
-		Append                // print each report on new lines
+		Append               // print each report on new lines
 	};
 	constexpr const char* ToCString(const ProgressReportMode v) noexcept
 	{
@@ -58,9 +58,9 @@ namespace Base
 		ConvergingDam,          // 1
 		BigDroplet,             // 2
 		RigidCube,              // 3
-		RigidMesh,              // 4
-		BoundaryMesh,           // 5
-		RigidMeshGroup,         // 6
+		BoundaryMeshes,         // 4
+		RigidMeshes,            // 5
+		BoundaryRigidMeshes,    // 6
 	};
 	constexpr const char* ToCString(ScenarioType v) noexcept
 	{
@@ -74,12 +74,12 @@ namespace Base
 			return "BigDroplet";
 		case ScenarioType::RigidCube:
 			return "RigidCube";
-		case ScenarioType::RigidMesh:
-			return "RigidMesh";
-		case ScenarioType::BoundaryMesh:
-			return "BoundaryMesh";
-		case ScenarioType::RigidMeshGroup:
-			return "RigidMeshGroup";
+		case ScenarioType::BoundaryMeshes:
+			return "BoundaryMeshes";
+		case ScenarioType::RigidMeshes:
+			return "RigidMeshes";
+		case ScenarioType::BoundaryRigidMeshes:
+			return "BoundaryRigidMeshes";
 		}
 		return "ScenarioType::<unknown>";
 	}

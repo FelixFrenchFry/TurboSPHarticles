@@ -12,9 +12,9 @@
 #include "source/base/helpers.h"
 #include "source/simulation/core/parameters_sim.h"
 #include "source/simulation/sync/state_sim.h"
-#include "builder.h"
-#include "scenario_sim.h"
-#include "scenario_json.h"
+#include "source/simulation/scene/builder.h"
+#include "source/simulation/scene/scenario_sim.h"
+#include "source/simulation/scene/scenario_json.h"
 
 
 

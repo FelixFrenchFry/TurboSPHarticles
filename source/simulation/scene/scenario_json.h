@@ -40,6 +40,27 @@ namespace Scene
 		return value;
 	}
 
+	inline const nlohmann::json& ReadScenarioNonEmptyArray(
+		const nlohmann::json& j, const char* field, const std::string& context)
+	{
+		const auto& value = ReadScenarioField(j, field, context);
+		if (!value.is_array() || value.empty())
+		{
+			throw std::runtime_error(context + "." + field + " must be a non-empty array.");
+		}
+		return value;
+	}
+
+	inline void ValidateEmptyScenarioArray(
+		const nlohmann::json& j, const char* field, const std::string& context)
+	{
+		const auto it = j.find(field);
+		if (it != j.end() && (!it->is_array() || !it->empty()))
+		{
+			throw std::runtime_error(context + "." + field + " must be absent or an empty array.");
+		}
+	}
+
 	inline float ParseScenarioFloat(const nlohmann::json& value, const std::string& field)
 	{
 		if (!value.is_number())

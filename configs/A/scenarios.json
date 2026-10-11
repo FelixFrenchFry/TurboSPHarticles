@@ -1,9 +1,7 @@
 {
   "scenarios": {
-    "RigidMesh": {
-      "type": "RigidMesh",
-      "model": "HouseBoat",
-      "modelTargetExtent": 5.0,
+    "RigidMeshes": {
+      "type": "RigidMeshes",
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
@@ -22,15 +20,21 @@
         "vLen": 2.0,
         "wLen": 7.5
       },
-      "rigidBody": {
-        "centerOfPosition": [ 5.0, 4.0, 3.75 ],
-        "yawDeg": 0.0,
-        "pitchDeg": -15.0,
-        "rollDeg": 45.0
-      },
-      "rigidDensity": 400.0,
-      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
-      "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+      "rigidBodies": [
+        {
+          "model": "HouseBoat",
+          "modelTargetExtent": 5.0,
+          "rigidBody": {
+            "centerOfPosition": [ 5.0, 4.0, 3.75 ],
+            "yawDeg": 0.0,
+            "pitchDeg": -15.0,
+            "rollDeg": 45.0
+          },
+          "rigidDensity": 400.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        }
+      ]
     }
   }
 }

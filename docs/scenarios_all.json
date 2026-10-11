@@ -85,42 +85,8 @@
       "rigidInitVel": [ 0.0, 0.0, 0.0 ],
       "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
     },
-    "RigidMesh": {
-      "type": "RigidMesh",
-      "model": "UnitCube",
-      "modelTargetExtent": 0.16,
-      "container": {
-        "origin": [ 0.0, 0.0, 0.0 ],
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 1.0, 0.0 ],
-        "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 1.0,
-        "vLen": 1.0,
-        "wLen": 1.0
-      },
-      "fluid": {
-        "origin": [ 0.0, 0.0, 0.0 ],
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 1.0, 0.0 ],
-        "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 0.8,
-        "vLen": 0.2,
-        "wLen": 0.8
-      },
-      "rigidBody": {
-        "centerOfPosition": [ 0.5, 0.25, 0.5 ],
-        "yawDeg": 0.0,
-        "pitchDeg": 0.0,
-        "rollDeg": 0.0
-      },
-      "rigidDensity": 200.0,
-      "rigidInitVel": [ 0.0, 0.0, 0.0 ],
-      "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
-    },
-    "BoundaryMesh": {
-      "type": "BoundaryMesh",
-      "model": "RockyCoastlineV3",
-      "modelTargetExtent": 2.0,
+    "BoundaryMeshes": {
+      "type": "BoundaryMeshes",
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
@@ -139,15 +105,21 @@
         "vLen": 0.5,
         "wLen": 1.4073
       },
-      "boundaryMesh": {
-        "centerOfPosition": [ 1.0, 0.2812, 2.2062 ],
-        "yawDeg": 180.0,
-        "pitchDeg": 0.0,
-        "rollDeg": 0.0
-      }
+      "boundaryBodies": [
+        {
+          "model": "RockyCoastlineV3",
+          "modelTargetExtent": 2.0,
+          "boundaryMesh": {
+            "centerOfPosition": [ 1.0, 0.2812, 2.2062 ],
+            "yawDeg": 180.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          }
+        }
+      ]
     },
-    "RigidMeshGroup": {
-      "type": "RigidMeshGroup",
+    "RigidMeshes": {
+      "type": "RigidMeshes",
       "container": {
         "origin": [ 0.0, 0.0, 0.0 ],
         "uDir": [ 1.0, 0.0, 0.0 ],
@@ -211,6 +183,67 @@
           "modelTargetExtent": 0.45,
           "rigidBody": {
             "centerOfPosition": [ 1.125, 0.6, 0.75 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 400.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        }
+      ]
+    },
+    "BoundaryRigidMeshes": {
+      "type": "BoundaryRigidMeshes",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 2.0,
+        "vLen": 1.0,
+        "wLen": 3.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 2.0,
+        "vLen": 0.5,
+        "wLen": 1.4073
+      },
+      "boundaryBodies": [
+        {
+          "model": "RockyCoastlineV3",
+          "modelTargetExtent": 2.0,
+          "boundaryMesh": {
+            "centerOfPosition": [ 1.0, 0.2812, 2.2062 ],
+            "yawDeg": 180.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          }
+        }
+      ],
+      "rigidBodies": [
+        {
+          "model": "CorvetteShip",
+          "modelTargetExtent": 0.45,
+          "rigidBody": {
+            "centerOfPosition": [ 0.5, 0.6, 0.70365 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 400.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "CruiserShip",
+          "modelTargetExtent": 0.45,
+          "rigidBody": {
+            "centerOfPosition": [ 1.5, 0.6, 0.70365 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0

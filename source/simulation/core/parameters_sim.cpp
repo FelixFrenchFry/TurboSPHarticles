@@ -112,13 +112,14 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 				if (s == "ConvergingDam") { out = Base::ScenarioType::ConvergingDam; return true; }
 				if (s == "BigDroplet") { out = Base::ScenarioType::BigDroplet; return true; }
 				if (s == "RigidCube") { out = Base::ScenarioType::RigidCube; return true; }
-				if (s == "RigidMesh") { out = Base::ScenarioType::RigidMesh; return true; }
-				if (s == "BoundaryMesh") { out = Base::ScenarioType::BoundaryMesh; return true; }
-				if (s == "RigidMeshGroup") { out = Base::ScenarioType::RigidMeshGroup; return true; }
+				if (s == "BoundaryMeshes") { out = Base::ScenarioType::BoundaryMeshes; return true; }
+				if (s == "RigidMeshes") { out = Base::ScenarioType::RigidMeshes; return true; }
+				if (s == "BoundaryRigidMeshes") { out = Base::ScenarioType::BoundaryRigidMeshes; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
 			{
+				if (v < 0 || v > 6) { return false; }
 				out = static_cast<Base::ScenarioType>(v.get<int>());
 				return true;
 			}

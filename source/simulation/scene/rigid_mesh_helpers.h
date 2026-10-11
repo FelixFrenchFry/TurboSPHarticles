@@ -1,8 +1,7 @@
-// rigid_mesh.h
+// rigid_mesh_helpers.h
 #pragma once
 
 // external
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <exception>
@@ -12,22 +11,18 @@
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
-#include <optional>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
 
 // internal
-#include "source/base/helpers.h"
 #include "source/simulation/core/parameters_sim.h"
 #include "source/simulation/sync/state_sim.h"
 #include "geometry/obj_loading.h"
 #include "geometry/rigid_body_properties.h"
 #include "geometry/surface_sampling.h"
 #include "builder.h"
-#include "scenario_sim.h"
 #include "scenario_json.h"
 
 
@@ -53,18 +48,6 @@ namespace Scene
 		float rigidDensity;
 		glm::vec3 rigidInitVel;
 		glm::vec3 rigidInitOmega;
-	};
-
-	struct RigidMeshConfig
-	{
-		// outer boundary container
-		OBB container;
-
-		// fluid block placed inside
-		OBB fluid;
-
-		// independently simulated sampled mesh body
-		RigidMeshEntryConfig rigidMesh;
 	};
 
 	// sets the initial linear and angular motion of a built rigid body
@@ -320,126 +303,36 @@ namespace Scene
 		return true;
 	}
 
-	class RigidMeshScene final : public ISimScenario
+	// reads independently placed mesh entries from a non-empty body array
+	inline std::vector<RigidMeshEntryConfig> LoadRigidMeshEntriesFromJson(
+		const nlohmann::json& j, const std::string& scenarioName)
 	{
-	public:
-
-		RigidMeshScene(ScenarioMgr& scenarioMgr, RigidMeshConfig cfg)
-			: scenarioMgr_(scenarioMgr), cfg_(std::move(cfg)) {}
-
-		const char* Name() const override { return "Rigid Mesh"; }
-
-		void Build(Sync::UniversalSimState& dst, const Sim::SimParams& params) const override
+		const auto& rigidBodies = ReadScenarioNonEmptyArray(j, "rigidBodies", scenarioName);
+		std::vector<RigidMeshEntryConfig> entries;
+		entries.reserve(rigidBodies.size());
+		for (size_t i = 0; i < rigidBodies.size(); i++)
 		{
-			scenarioMgr_.BuildBoundaryContainer_OBB(cfg_.container, dst, params);
-
-			scenarioMgr_.BuildFluidBlock_OBB(cfg_.fluid, dst, params);
-
-			BuildRigidMesh(scenarioMgr_, cfg_.rigidMesh, dst, params);
+			entries.push_back(LoadRigidMeshEntryConfigFromJson(rigidBodies[i],
+				scenarioName + ".rigidBodies[" + std::to_string(i) + "]"));
 		}
-
-		std::vector<OBB> GetBoundaryBoxes() const override
-		{
-			return { cfg_.container };
-		}
-
-	private:
-
-		ScenarioMgr& scenarioMgr_;
-		RigidMeshConfig cfg_;
-	};
-
-	inline RigidMeshConfig LoadRigidMeshConfigFromJson(
-		const nlohmann::json& j, ScenarioMgr& scenarioMgr)
-	{
-		ValidateScenarioType(j, "RigidMesh");
-		RigidMeshConfig cfg{};
-
-		cfg.container = ScenarioMgr::ParseOBBFromJson(
-			ReadScenarioObject(j, "container", "RigidMesh"), scenarioMgr, "RigidMesh.container");
-		cfg.fluid = ScenarioMgr::ParseOBBFromJson(
-			ReadScenarioObject(j, "fluid", "RigidMesh"), scenarioMgr, "RigidMesh.fluid");
-		cfg.rigidMesh = LoadRigidMeshEntryConfigFromJson(j, "RigidMesh");
-
-		// sanitize fluid lengths
-		cfg.fluid.uLen = std::min(std::max(0.0f, cfg.fluid.uLen), cfg.container.uLen);
-		cfg.fluid.vLen = std::min(std::max(0.0f, cfg.fluid.vLen), cfg.container.vLen);
-		cfg.fluid.wLen = std::min(std::max(0.0f, cfg.fluid.wLen), cfg.container.wLen);
-
-		return cfg;
+		return entries;
 	}
 
-	inline RigidMeshConfig LoadRigidMeshConfigFromProfile(
-		const std::string& profile, ScenarioMgr& scenarioMgr)
+	// resolves mesh model nicknames using the existing asset catalog
+	inline void ResolveRigidMeshModels(
+		std::vector<RigidMeshEntryConfig>& rigidBodies, const std::string& scenarioName)
 	{
-		// try to load a RigidMesh scenario from the config file of a given profile
-		auto TryLoadFromScenarioFile = [&](const std::string& scenariosFile)
-			-> std::optional<RigidMeshConfig>
-			{
-				nlohmann::json root;
-				if (!Base::LoadJsonObjectFromFile(scenariosFile, root))
-				{
-					return std::nullopt;
-				}
-
-				// expect root["scenarios"] object
-				if (!root.contains("scenarios") || !root["scenarios"].is_object())
-				{
-					return std::nullopt;
-				}
-
-				const auto& scenarios = root["scenarios"];
-
-				// expect scenarios["RigidMesh"] object
-				if (!scenarios.contains("RigidMesh"))
-				{
-					return std::nullopt;
-				}
-
-				return LoadRigidMeshConfigFromJson(scenarios["RigidMesh"], scenarioMgr);
-			};
-
-		// load rigid model catalog from assets and resolve models below /assets/models
-		const std::filesystem::path assetDirectory =
-			std::filesystem::path(TSP_CONFIG_DIR).parent_path() / "assets";
 		const std::filesystem::path modelCatalogPath =
-			assetDirectory / "models" / "rigid_models.json";
-
-		auto LoadProfile = [&](const std::string& profileName)
-			-> std::optional<RigidMeshConfig>
-			{
-				const auto cfg = TryLoadFromScenarioFile(Base::ScenariosPathForProfile(profileName));
-				if (!cfg) { return std::nullopt; }
-
-				RigidMeshConfig resolved = *cfg;
-				if (TryResolveRigidMeshModel(modelCatalogPath, resolved.rigidMesh, "RigidMesh"))
-				{
-					return resolved;
-				}
-
-				throw std::runtime_error(
-					"RigidMesh model '" + resolved.rigidMesh.modelName +
-					"' is not defined in the rigid model catalog '" +
-					modelCatalogPath.string() + "'.");
-			};
-
-		// try chosen profile
-		if (auto cfg = LoadProfile(profile)) { return *cfg; }
-		SPDLOG_WARN(
-			"Could not load RigidMesh from '/{}'.",
-			Base::ScenariosPathForProfile(profile));
-
-		// fallback to default profile
-		if (profile != "default")
+			std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
+			"assets" / "models" / "rigid_models.json";
+		for (RigidMeshEntryConfig& rigidMesh : rigidBodies)
 		{
-			if (auto cfg = LoadProfile("default")) { return *cfg; }
-			SPDLOG_WARN(
-				"Could not load RigidMesh from '/{}'.",
-				Base::ScenariosPathForProfile("default"));
-		}
+			if (TryResolveRigidMeshModel(modelCatalogPath, rigidMesh, scenarioName)) { continue; }
 
-		throw std::runtime_error(
-			"RigidMesh is not defined in profile '" + profile + "' or the default profile.");
+			throw std::runtime_error(
+				scenarioName + " rigid model '" + rigidMesh.modelName +
+				"' is not defined in the rigid model catalog '" + modelCatalogPath.string() + "'.");
+		}
 	}
 
 } // namespace Scene

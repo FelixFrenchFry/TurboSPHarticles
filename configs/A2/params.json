@@ -1,6 +1,6 @@
 {
   "backendType": "CPU",
-  "scenarioType": "RigidMesh",
+  "scenarioType": "RigidMeshes",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "domainDecompMethod": 0,

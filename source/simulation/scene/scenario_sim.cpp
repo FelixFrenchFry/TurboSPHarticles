@@ -8,13 +8,13 @@
 // internal
 #include "builder.h"
 #include "scenario_sim.h"
-#include "breaking_dam.h"
-#include "converging_dam.h"
-#include "big_droplet.h"
-#include "rigid_cube.h"
-#include "rigid_mesh.h"
-#include "boundary_mesh.h"
-#include "rigid_mesh_group.h"
+#include "scenarios/breaking_dam.h"
+#include "scenarios/converging_dam.h"
+#include "scenarios/big_droplet.h"
+#include "scenarios/rigid_cube.h"
+#include "scenarios/boundary_meshes.h"
+#include "scenarios/rigid_meshes.h"
+#include "scenarios/boundary_rigid_meshes.h"
 
 
 
@@ -94,26 +94,26 @@ namespace Scene
 
 			return std::make_unique<RigidCubeScene>(scenarioMgr, cfg);
 		}
-		case Base::ScenarioType::RigidMesh:
+		case Base::ScenarioType::BoundaryMeshes:
 		{
-			RigidMeshConfig cfg;
-			cfg = LoadRigidMeshConfigFromProfile(profile, scenarioMgr);
+			BoundaryMeshesConfig cfg;
+			cfg = LoadBoundaryMeshesConfigFromProfile(profile, scenarioMgr);
 
-			return std::make_unique<RigidMeshScene>(scenarioMgr, cfg);
+			return std::make_unique<BoundaryMeshesScene>(scenarioMgr, cfg);
 		}
-		case Base::ScenarioType::BoundaryMesh:
+		case Base::ScenarioType::RigidMeshes:
 		{
-			BoundaryMeshConfig cfg;
-			cfg = LoadBoundaryMeshConfigFromProfile(profile, scenarioMgr);
+			RigidMeshesConfig cfg;
+			cfg = LoadRigidMeshesConfigFromProfile(profile, scenarioMgr);
 
-			return std::make_unique<BoundaryMeshScene>(scenarioMgr, cfg);
+			return std::make_unique<RigidMeshesScene>(scenarioMgr, cfg);
 		}
-		case Base::ScenarioType::RigidMeshGroup:
+		case Base::ScenarioType::BoundaryRigidMeshes:
 		{
-			RigidMeshGroupConfig cfg;
-			cfg = LoadRigidMeshGroupConfigFromProfile(profile, scenarioMgr);
+			BoundaryRigidMeshesConfig cfg;
+			cfg = LoadBoundaryRigidMeshesConfigFromProfile(profile, scenarioMgr);
 
-			return std::make_unique<RigidMeshGroupScene>(scenarioMgr, cfg);
+			return std::make_unique<BoundaryRigidMeshesScene>(scenarioMgr, cfg);
 		}
 		default:
 			throw std::runtime_error("Unsupported simulation scenario type requested.");
