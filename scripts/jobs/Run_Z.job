@@ -1,0 +1,57 @@
+#!/bin/bash -x
+#SBATCH --job-name=Run_Z
+#SBATCH --partition=cpu_il
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=2
+#SBATCH --cpus-per-task=32
+#SBATCH --threads-per-core=1
+#SBATCH --time=72:00:00
+#SBATCH --mem=249600mb
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
+
+# module
+module load compiler/intel/2025.0
+module load mpi/impi/2021.14-intel-2025.0
+
+# toolchain vars
+unset CFLAGS CXXFLAGS CPPFLAGS FFLAGS FCFLAGS LDFLAGS
+export CC=gcc
+export CXX=g++
+
+# process pinning
+export I_MPI_PIN=1
+export I_MPI_PIN_RESPECT_CPUSET=disable
+export I_MPI_PIN_CELL=core
+export I_MPI_PIN_DOMAIN="$SLURM_CPUS_PER_TASK"
+export I_MPI_PIN_ORDER=compact
+export I_MPI_DEBUG=+4,time
+
+# build location
+cd /pfs/work9/workspace/scratch/fr_fl184-TSP_Runs/TurboSPHarticles
+
+# diagnostics
+echo "--- [ slurm job information ] --------------------------------------------------"
+echo "job id               = $SLURM_JOB_ID ($SLURM_JOB_NAME)"
+echo "partition            = $SLURM_JOB_PARTITION"
+echo "allocated nodes      = $SLURM_JOB_NODELIST ($SLURM_NNODES nodes)"
+echo "tasks / cpus         = $SLURM_NTASKS total tasks, $SLURM_CPUS_PER_TASK cpus/task"
+echo "start time           = $(date '+%Y-%m-%d %H:%M:%S')"
+echo "working directory    = $(pwd)"
+echo ""
+echo "--- [ loaded modules ] ---------------------------------------------------------"
+module list
+echo ""
+echo "--- [ node hardware snapshot ] -------------------------------------------------"
+lscpu | grep -E "Model name|Socket\(s\)|Core\(s\) per socket|Thread\(s\) per core|NUMA node\(s\)"
+free -h
+echo ""
+
+# run
+mpiexec.hydra -bootstrap slurm -n "$SLURM_NTASKS" ./out/build/Linux-Release-MPI/bin/TSP_Distributed --sim maxThreadsSim="$SLURM_CPUS_PER_TASK" -p Z "$@"
+rc=$?
+echo ""
+echo "--- [ job completion ] ---------------------------------------------------------"
+echo "finish time          = $(date '+%Y-%m-%d %H:%M:%S')"
+echo "exit code            = $rc"
+exit $rc
