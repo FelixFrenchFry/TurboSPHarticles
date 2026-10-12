@@ -58,27 +58,33 @@ namespace Scene
 		const glm::mat3 boundaryMeshOrientation =
 			scenarioOrientation * cfg.modelSourceToCanonical;
 
-		const std::filesystem::path modelDirectory =
-			std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
-			"assets" / "models" / "boundary_meshes";
-		const ObjMeshLoader loader(modelDirectory);
-		TriangleSurfaceMesh mesh = loader.Load(cfg.modelFile);
+		SurfaceSamplingResult sampling;
 
-		// scale the model before centering it
-		const glm::vec3 boundsCenter = ScaleToTargetExtent(mesh, cfg.modelTargetExtent);
-
-		// shift the sampled model into its bounding box center frame
-		for (glm::vec3& vertex : mesh.vertices)
+		// keep mesh storage scoped to sampling
 		{
-			vertex -= boundsCenter;
+			const std::filesystem::path modelDirectory =
+				std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
+				"assets" / "models" / "boundary_meshes";
+			const ObjMeshLoader loader(modelDirectory);
+			TriangleSurfaceMesh mesh = loader.Load(cfg.modelFile);
+
+			// scale the model before centering it
+			const glm::vec3 boundsCenter = ScaleToTargetExtent(mesh, cfg.modelTargetExtent);
+
+			// shift the sampled model into its bounding box center frame
+			for (glm::vec3& vertex : mesh.vertices)
+			{
+				vertex -= boundsCenter;
+			}
+
+			SPDLOG_INFO("Sampling boundary model '{}' surfaces...", cfg.modelName);
+			SurfaceSampler sampler(mesh, params,
+				params.surfaceSamplingMinDistanceB,
+				params.surfaceSamplingMaxDistanceB,
+				params.surfaceSamplingCoverageProbeSpacingB);
+			sampling = sampler.Sample();
 		}
 
-		SPDLOG_INFO("Sampling boundary model '{}' surfaces...", cfg.modelName);
-		SurfaceSampler sampler(mesh, params,
-			params.surfaceSamplingMinDistanceB,
-			params.surfaceSamplingMaxDistanceB,
-			params.surfaceSamplingCoverageProbeSpacingB);
-		SurfaceSamplingResult sampling = sampler.Sample();
 		scenarioMgr.BuildBoundary_FromSurfaceSamples(
 			std::move(sampling.acceptedSamples),
 			cfg.boundaryMeshCenterOfPosition,

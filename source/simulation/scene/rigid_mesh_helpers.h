@@ -108,39 +108,46 @@ namespace Scene
 		const glm::mat3 rigidBodyOrientation =
 			scenarioOrientation * cfg.modelSourceToCanonical;
 
-		const std::filesystem::path modelDirectory =
-			std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
-			"assets" / "models" / "rigid_meshes";
-		const ObjMeshLoader loader(modelDirectory);
-		TriangleSurfaceMesh mesh = loader.Load(cfg.modelFile);
-
-		// scale the model before computing mass and inertia
-		ScaleToTargetExtent(mesh, cfg.modelTargetExtent);
-
-		RigidBodyPropertyComputer propertyComputer;
-		const RigidBodyPhysicalProperties properties =
-			propertyComputer.Compute(mesh, cfg.rigidDensity);
-
-		// keep the mesh-derived centroidal inertia as the effective body inertia
-		const glm::vec3 centerOfMassOffset =
-			glm::transpose(cfg.modelSourceToCanonical) *
-			(cfg.modelCenterOfMassOffset * cfg.modelTargetExtent);
-		const glm::vec3 centerOfMass = properties.centerOfMass + centerOfMassOffset;
 		const glm::vec3 rigidBodyCenterOfMass = cfg.rigidBodyCenterOfPosition +
 			scenarioOrientation * (cfg.modelCenterOfMassOffset * cfg.modelTargetExtent);
 
-		// shift the sampled model into its effective center-of-mass frame
-		for (glm::vec3& vertex : mesh.vertices)
+		RigidBodyPhysicalProperties properties;
+		SurfaceSamplingResult sampling;
+
+		// keep mesh storage scoped to sampling
 		{
-			vertex -= centerOfMass;
+			const std::filesystem::path modelDirectory =
+				std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
+				"assets" / "models" / "rigid_meshes";
+			const ObjMeshLoader loader(modelDirectory);
+			TriangleSurfaceMesh mesh = loader.Load(cfg.modelFile);
+
+			// scale the model before computing mass and inertia
+			ScaleToTargetExtent(mesh, cfg.modelTargetExtent);
+
+			RigidBodyPropertyComputer propertyComputer;
+			properties = propertyComputer.Compute(mesh, cfg.rigidDensity);
+
+			// keep the mesh-derived centroidal inertia as the effective body inertia
+			const glm::vec3 centerOfMassOffset =
+				glm::transpose(cfg.modelSourceToCanonical) *
+				(cfg.modelCenterOfMassOffset * cfg.modelTargetExtent);
+			const glm::vec3 centerOfMass = properties.centerOfMass + centerOfMassOffset;
+
+			// shift the sampled model into its effective center-of-mass frame
+			for (glm::vec3& vertex : mesh.vertices)
+			{
+				vertex -= centerOfMass;
+			}
+
+			SPDLOG_INFO("Sampling rigid model '{}' surfaces...", cfg.modelName);
+			SurfaceSampler sampler(mesh, params,
+				params.surfaceSamplingMinDistanceR,
+				params.surfaceSamplingMaxDistanceR,
+				params.surfaceSamplingCoverageProbeSpacingR);
+			sampling = sampler.Sample();
 		}
 
-		SPDLOG_INFO("Sampling rigid model '{}' surfaces...", cfg.modelName);
-		SurfaceSampler sampler(mesh, params,
-			params.surfaceSamplingMinDistanceR,
-			params.surfaceSamplingMaxDistanceR,
-			params.surfaceSamplingCoverageProbeSpacingR);
-		SurfaceSamplingResult sampling = sampler.Sample();
 		const uint32_t bodyIdx = scenarioMgr.BuildRigidBody_FromSurfaceSamples(
 			std::move(sampling.acceptedSamples),
 			rigidBodyCenterOfMass,
