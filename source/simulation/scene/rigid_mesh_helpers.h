@@ -14,6 +14,7 @@
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 // internal
@@ -139,9 +140,9 @@ namespace Scene
 			params.surfaceSamplingMinDistanceR,
 			params.surfaceSamplingMaxDistanceR,
 			params.surfaceSamplingCoverageProbeSpacingR);
-		const SurfaceSamplingResult sampling = sampler.Sample();
+		SurfaceSamplingResult sampling = sampler.Sample();
 		const uint32_t bodyIdx = scenarioMgr.BuildRigidBody_FromSurfaceSamples(
-			sampling.samples,
+			std::move(sampling.acceptedSamples),
 			rigidBodyCenterOfMass,
 			rigidBodyOrientation,
 			properties.mass,

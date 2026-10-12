@@ -13,6 +13,7 @@
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 // internal
@@ -77,9 +78,9 @@ namespace Scene
 			params.surfaceSamplingMinDistanceB,
 			params.surfaceSamplingMaxDistanceB,
 			params.surfaceSamplingCoverageProbeSpacingB);
-		const SurfaceSamplingResult sampling = sampler.Sample();
+		SurfaceSamplingResult sampling = sampler.Sample();
 		scenarioMgr.BuildBoundary_FromSurfaceSamples(
-			sampling.samples,
+			std::move(sampling.acceptedSamples),
 			cfg.boundaryMeshCenterOfPosition,
 			boundaryMeshOrientation,
 			dst,

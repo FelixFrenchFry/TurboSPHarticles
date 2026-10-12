@@ -1038,7 +1038,7 @@ uint32_t ScenarioMgr::BuildRigidBody_OBB_Hollow(
 }
 
 uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
-	const std::vector<SurfaceSample>& bodyLocalSamples,
+	std::vector<glm::vec3> bodyLocalSamples,
 	const glm::vec3& centerOfMass,
 	const glm::mat3& orientation,
 	const float mass,
@@ -1059,9 +1059,9 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 		throw std::runtime_error("Rigid surface body properties are invalid.");
 	}
 
-	for (const SurfaceSample& sample : bodyLocalSamples)
+	for (const glm::vec3& sample : bodyLocalSamples)
 	{
-		if (!IsFinite(sample.pos))
+		if (!IsFinite(sample))
 		{
 			throw std::runtime_error("Rigid surface contains a non-finite sample position.");
 		}
@@ -1089,9 +1089,9 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	if (hasBuildRegion_)
 	{
 		N_localAdd = 0;
-		for (const SurfaceSample& sample : bodyLocalSamples)
+		for (const glm::vec3& sample : bodyLocalSamples)
 		{
-			if (IsInsideBuildRegion(ParticlePosition(sample.pos))) { N_localAdd++; }
+			if (IsInsideBuildRegion(ParticlePosition(sample))) { N_localAdd++; }
 		}
 	}
 	const uint32_t N_localEnd = Sim::CheckedLocalParticleCount(
@@ -1137,7 +1137,7 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	uint32_t rigidParticleIdx = N_localBase;
 	for (uint32_t localIdx = 0; localIdx < N_add; localIdx++)
 	{
-		const glm::vec3 localPos = bodyLocalSamples[localIdx].pos;
+		const glm::vec3 localPos = bodyLocalSamples[localIdx];
 		if (!IsInsideBuildRegion(ParticlePosition(localPos))) { continue; }
 
 		R.id[rigidParticleIdx] = Sim::CheckedParticleId(N_base, localIdx, "Rigid surface ID");
@@ -1149,13 +1149,16 @@ uint32_t ScenarioMgr::BuildRigidBody_FromSurfaceSamples(
 	}
 	assert(rigidParticleIdx == N_localEnd);
 
+	// free samples before computing coefficients
+	std::vector<glm::vec3>{}.swap(bodyLocalSamples);
+
 	// derive per-particle volume and pseudo-mass for the rigid particles in the sampled surface
 	ComputeRigidCoefficients(R, params, N_localBase, N_localEnd);
 	return bodyIdx;
 }
 
 void ScenarioMgr::BuildBoundary_FromSurfaceSamples(
-	const std::vector<SurfaceSample>& meshLocalSamples,
+	std::vector<glm::vec3> meshLocalSamples,
 	const glm::vec3& centerOfPosition,
 	const glm::mat3& orientation,
 	Sync::UniversalSimState& dst,
@@ -1172,9 +1175,9 @@ void ScenarioMgr::BuildBoundary_FromSurfaceSamples(
 		throw std::runtime_error("Boundary surface pose is invalid.");
 	}
 
-	for (const SurfaceSample& sample : meshLocalSamples)
+	for (const glm::vec3& sample : meshLocalSamples)
 	{
-		if (!IsFinite(sample.pos))
+		if (!IsFinite(sample))
 		{
 			throw std::runtime_error("Boundary surface contains a non-finite sample position.");
 		}
@@ -1202,7 +1205,7 @@ void ScenarioMgr::BuildBoundary_FromSurfaceSamples(
 
 	for (uint32_t sampleIdx = 0; sampleIdx < N_add; sampleIdx++)
 	{
-		const glm::vec3 pos = centerOfPosition + orientation * meshLocalSamples[sampleIdx].pos;
+		const glm::vec3 pos = centerOfPosition + orientation * meshLocalSamples[sampleIdx];
 		const uint64_t particleId = Sim::CheckedParticleId(
 			N_base, sampleIdx, "Boundary surface ID");
 
@@ -1224,6 +1227,9 @@ void ScenarioMgr::BuildBoundary_FromSurfaceSamples(
 
 	// update boundary particle count
 	B.N_ = Sim::CheckedLocalParticleCount(B.xPos.size(), "Boundary particle count");
+
+	// free samples before computing coefficients
+	std::vector<glm::vec3>{}.swap(meshLocalSamples);
 
 	// derive per-particle volume and pseudo-mass for all boundary particles
 	// (including existing ones, so they are aware of the new neighbors)

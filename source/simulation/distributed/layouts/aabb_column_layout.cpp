@@ -134,7 +134,7 @@ AABBColumnCounts Dist::MakeBalancedColumnCounts(const AABB& globalBounds, const 
 	AABBColumnCounts bestColumnCounts{ .N_sectionsX = N_ranks, .N_sectionsZ = 1 };
 	double bestInterfaceArea = std::numeric_limits<double>::max();
 
-	// counted down, so equal areas keep splitting the X axis first like the slab decomps
+	// counted down, so equal areas keep splitting the X axis first
 	for (int N_sectionsX = N_ranks; N_sectionsX >= 1; N_sectionsX--)
 	{
 		if (N_ranks % N_sectionsX != 0) { continue; }

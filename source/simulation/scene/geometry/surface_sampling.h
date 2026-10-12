@@ -15,15 +15,6 @@
 
 namespace Scene
 {
-	// accepted surface position with temp metadata about source-triangle
-	struct SurfaceSample
-	{
-		glm::vec3 pos{ 0.0f };
-		glm::vec3 normal{ 0.0f };
-		glm::vec3 barycentric{ 0.0f };
-		uint32_t triangleIdx = 0;
-	};
-
 	// generated input and output counts
 	struct SurfaceSamplingStats
 	{
@@ -36,7 +27,7 @@ namespace Scene
 
 	struct SurfaceSamplingResult
 	{
-		std::vector<SurfaceSample> samples;
+		std::vector<glm::vec3> acceptedSamples;
 		SurfaceSamplingStats stats;
 	};
 

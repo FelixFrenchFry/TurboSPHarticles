@@ -14,7 +14,6 @@
 
 // internal
 #include "source/simulation/core/parameters_sim.h"
-#include "source/simulation/scene/geometry/surface_sampling.h"
 #include "source/simulation/sync/state_sim.h"
 
 
@@ -104,9 +103,9 @@ namespace Scene
 										   const Sim::SimParams& params,
 										   float rigidDensity);
 
-		// appends body-local surface samples to the existing rigid particle state
+		// consumes body-local surface samples into the existing rigid particle state
 		uint32_t BuildRigidBody_FromSurfaceSamples(
-			const std::vector<SurfaceSample>& bodyLocalSamples,
+			std::vector<glm::vec3> bodyLocalSamples,
 			const glm::vec3& centerOfMass,
 			const glm::mat3& orientation,
 			float mass,
@@ -114,10 +113,10 @@ namespace Scene
 			Sync::UniversalSimState& dst,
 			const Sim::SimParams& params);
 
-		// appends mesh-local surface samples as a single layer to the existing boundary particle state
+		// consumes mesh-local surface samples as a single layer into the existing boundary particle state
 		// (recomputes the coefficients of all boundary particles)
 		void BuildBoundary_FromSurfaceSamples(
-			const std::vector<SurfaceSample>& meshLocalSamples,
+			std::vector<glm::vec3> meshLocalSamples,
 			const glm::vec3& centerOfPosition,
 			const glm::mat3& orientation,
 			Sync::UniversalSimState& dst,

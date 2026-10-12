@@ -27,7 +27,6 @@ namespace
 		glm::vec3 v0{ 0.0f };
 		glm::vec3 v1{ 0.0f };
 		glm::vec3 v2{ 0.0f };
-		glm::vec3 normal{ 0.0f };
 		float area = 0.0f; // triangle area before cumulative prefix
 		double cumulativeArea = 0.0;
 		float longestEdge = 0.0f;
@@ -100,26 +99,19 @@ namespace
 	}
 
 	float SurfaceDistance(
-		const Scene::SurfaceSample& sampleA,
-		const Scene::SurfaceSample& sampleB)
+		const glm::vec3& sampleA,
+		const glm::vec3& sampleB)
 	{
-		return glm::distance(sampleA.pos, sampleB.pos);
+		return glm::distance(sampleA, sampleB);
 	}
 
-	Scene::SurfaceSample MakeSurfacePoint(
+	glm::vec3 MakeSurfacePoint(
 		const TriangleData& triangle,
-		const uint32_t triangleIdx,
 		const glm::vec3& barycentric)
 	{
-		return Scene::SurfaceSample
-		{
-			.pos = triangle.v0 * barycentric.x
-				+ triangle.v1 * barycentric.y
-				+ triangle.v2 * barycentric.z,
-			.normal = triangle.normal,
-			.barycentric = barycentric,
-			.triangleIdx = triangleIdx,
-		};
+		return triangle.v0 * barycentric.x
+			+ triangle.v1 * barycentric.y
+			+ triangle.v2 * barycentric.z;
 	}
 
 	// temporary spatial index for nearby accepted sample queries
@@ -128,11 +120,11 @@ namespace
 	public:
 		SampleSpatialHash(
 			const float cellSize,
-			const std::vector<Scene::SurfaceSample>& samples)
+			const std::vector<glm::vec3>& acceptedSamples)
 			:
 			cellSize_(cellSize),
 			cellSizeInv_(1.0f / cellSize),
-			samples_(samples)
+			acceptedSamples_(acceptedSamples)
 		{}
 
 		void Reserve(const uint32_t N)
@@ -142,7 +134,7 @@ namespace
 
 		void Insert(const uint32_t sampleIdx)
 		{
-			cellBuckets_[MakeCellCoord(samples_[sampleIdx].pos, cellSizeInv_)].push_back(sampleIdx);
+			cellBuckets_[MakeCellCoord(acceptedSamples_[sampleIdx], cellSizeInv_)].push_back(sampleIdx);
 		}
 		template<typename Func>
 		bool AnyNearby(const glm::vec3& pos, const float queryRadius, Func&& func) const
@@ -188,7 +180,7 @@ namespace
 	private:
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
-		const std::vector<Scene::SurfaceSample>& samples_;
+		const std::vector<glm::vec3>& acceptedSamples_;
 		std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets_;
 	};
 
@@ -202,7 +194,7 @@ namespace Scene
 	{
 		double surfaceArea = 0.0;
 		std::vector<TriangleData> triangles;
-		std::vector<SurfaceSample> samples;
+		std::vector<glm::vec3> acceptedSamples;
 		SurfaceSamplingStats stats;
 	};
 
@@ -302,16 +294,12 @@ namespace Scene
 					const glm::vec3 cross = glm::cross(v1 - v0, v2 - v0);
 					const float crossLength = glm::length(cross);
 					const float area = 0.5f * crossLength;
-					const glm::vec3 normal = std::isfinite(area) && area > 0.0f
-						? cross / crossLength
-						: glm::vec3{ 0.0f };
 
 					triangles[triangleIdx] = TriangleData
 					{
 						.v0 = v0,
 						.v1 = v1,
 						.v2 = v2,
-						.normal = normal,
 						.area = area,
 						.cumulativeArea = 0.0,
 						.longestEdge = std::max(
@@ -351,7 +339,7 @@ namespace Scene
 		const auto& triangles = storage_->triangles;
 		const double surfaceArea = storage_->surfaceArea;
 		const Sim::SimParams& params = params_;
-		auto& samples = storage_->samples;
+		auto& acceptedSamples = storage_->acceptedSamples;
 		uint32_t& N_candidates = storage_->stats.N_candidates;
 
 		// derive candidate and estimated sample counts from surface area
@@ -372,8 +360,8 @@ namespace Scene
 			static_cast<uint32_t>(N_estimatedSamplesD));
 
 		// reserve persistent selection state from estimated sample count
-		samples.reserve(N_estimatedSamples);
-		SampleSpatialHash spatialHash(minDistance_, samples);
+		acceptedSamples.reserve(N_estimatedSamples);
+		SampleSpatialHash spatialHash(minDistance_, acceptedSamples);
 		spatialHash.Reserve(N_estimatedSamples);
 		std::unordered_map<CellCoord, uint32_t, CellCoordHash> trialsPerCell;
 		trialsPerCell.reserve(N_estimatedSamples);
@@ -381,7 +369,7 @@ namespace Scene
 
 		// generate and select candidate batches in stable global order
 		const uint32_t N_candidateBatch = std::min(N_samplingBatch, N_candidates);
-		std::vector<SurfaceSample> candidates(N_candidateBatch);
+		std::vector<glm::vec3> candidates(N_candidateBatch);
 		std::vector<double> areaTargets(N_candidateBatch);
 		std::vector<float> barycentricScales(N_candidateBatch);
 		std::vector<float> barycentricOffsets(N_candidateBatch);
@@ -433,7 +421,6 @@ namespace Scene
 						};
 						candidates[batchIdx] = MakeSurfacePoint(
 							triangles[triangleIdx],
-							triangleIdx,
 							barycentric);
 					}
 				},
@@ -443,32 +430,32 @@ namespace Scene
 			// select candidates with a minimum surface distance
 			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
 			{
-				const SurfaceSample& candidate = candidates[batchIdx];
-				const CellCoord cell = MakeCellCoord(candidate.pos, cellSizeInv);
+				const glm::vec3& candidate = candidates[batchIdx];
+				const CellCoord cell = MakeCellCoord(candidate, cellSizeInv);
 				uint32_t& N_trials = trialsPerCell[cell];
 				if (N_trials >= params.surfaceSamplingMaxTrialsPerCell) { continue; }
 				N_trials++;
 
 				const bool hasDistanceConflict = spatialHash.AnyNearby(
-					candidate.pos,
+					candidate,
 					minDistance_,
 					[&](const uint32_t sampleIdx)
 					{
 						return SurfaceDistance(
 							candidate,
-							samples[sampleIdx]) < minDistance_;
+							acceptedSamples[sampleIdx]) < minDistance_;
 					});
 				if (hasDistanceConflict) { continue; }
 
-				const uint32_t sampleIdx = static_cast<uint32_t>(samples.size());
-				samples.push_back(candidate);
+				const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
+				acceptedSamples.push_back(candidate);
 				spatialHash.Insert(sampleIdx);
 			}
 
 			candidateBegin += N_batch;
 		}
 
-		storage_->stats.N_initialSamples = static_cast<uint32_t>(samples.size());
+		storage_->stats.N_initialSamples = static_cast<uint32_t>(acceptedSamples.size());
 	}
 
 	SurfaceSampler::SurfaceSampler(
@@ -492,7 +479,7 @@ namespace Scene
 	void SurfaceSampler::RepairCoverage()
 	{
 		const auto& triangles = storage_->triangles;
-		auto& samples = storage_->samples;
+		auto& acceptedSamples = storage_->acceptedSamples;
 
 		// count barycentric coverage probes and validate allocation limits
 		uint64_t N_probes = 0;
@@ -526,16 +513,16 @@ namespace Scene
 		}
 		storage_->stats.N_coverageProbes = static_cast<uint32_t>(N_probes);
 
-		const uint64_t N_maxSamples = static_cast<uint64_t>(samples.size()) + N_probes;
+		const uint64_t N_maxSamples = static_cast<uint64_t>(acceptedSamples.size()) + N_probes;
 		if (N_maxSamples > std::numeric_limits<uint32_t>::max())
 		{
 			throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
 		}
 
 		// rebuild the spatial hash from the initially accepted samples
-		SampleSpatialHash spatialHash(minDistance_, samples);
-		spatialHash.Reserve(static_cast<uint32_t>(samples.size()));
-		for (uint32_t sampleIdx = 0; sampleIdx < static_cast<uint32_t>(samples.size()); sampleIdx++)
+		SampleSpatialHash spatialHash(minDistance_, acceptedSamples);
+		spatialHash.Reserve(static_cast<uint32_t>(acceptedSamples.size()));
+		for (uint32_t sampleIdx = 0; sampleIdx < static_cast<uint32_t>(acceptedSamples.size()); sampleIdx++)
 		{
 			spatialHash.Insert(sampleIdx);
 		}
@@ -551,7 +538,7 @@ namespace Scene
 		const uint32_t N_probeBatch = std::min(
 			N_samplingBatch,
 			static_cast<uint32_t>(N_probes));
-		std::vector<SurfaceSample> probes;
+		std::vector<glm::vec3> probes;
 		probes.reserve(N_probeBatch);
 		std::vector<uint8_t> needsRepair(N_probeBatch, 0u);
 
@@ -567,15 +554,15 @@ namespace Scene
 					{
 						for (uint32_t batchIdx = r.begin(); batchIdx != r.end(); batchIdx++)
 						{
-							const SurfaceSample& probe = probes[batchIdx];
+							const glm::vec3& probe = probes[batchIdx];
 							const bool isCovered = spatialHash.AnyNearby(
-								probe.pos,
+								probe,
 								probeTargetDistance,
 								[&](const uint32_t sampleIdx)
 								{
 									return SurfaceDistance(
 										probe,
-										samples[sampleIdx]) <= probeTargetDistance;
+										acceptedSamples[sampleIdx]) <= probeTargetDistance;
 								});
 							needsRepair[batchIdx] = static_cast<uint8_t>(!isCovered);
 						}
@@ -588,24 +575,24 @@ namespace Scene
 				{
 					if (needsRepair[batchIdx] == 0u) { continue; }
 
-					const SurfaceSample& probe = probes[batchIdx];
+					const glm::vec3& probe = probes[batchIdx];
 					const bool isCovered = spatialHash.AnyNearby(
-						probe.pos,
+						probe,
 						probeTargetDistance,
 						[&](const uint32_t sampleIdx)
 						{
 							return SurfaceDistance(
 								probe,
-								samples[sampleIdx]) <= probeTargetDistance;
+								acceptedSamples[sampleIdx]) <= probeTargetDistance;
 						});
 					if (isCovered) { continue; }
-					if (samples.size() >= std::numeric_limits<uint32_t>::max())
+					if (acceptedSamples.size() >= std::numeric_limits<uint32_t>::max())
 					{
 						throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
 					}
 
-					const uint32_t sampleIdx = static_cast<uint32_t>(samples.size());
-					samples.push_back(probe);
+					const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
+					acceptedSamples.push_back(probe);
 					spatialHash.Insert(sampleIdx);
 					N_repairs++;
 				}
@@ -638,7 +625,6 @@ namespace Scene
 					};
 					probes.push_back(MakeSurfacePoint(
 						triangle,
-						triangleIdx,
 						barycentric));
 
 					if (probes.size() == N_probeBatch)
@@ -654,37 +640,24 @@ namespace Scene
 
 	void SurfaceSampler::ValidateSamples()
 	{
-		const auto& triangles = storage_->triangles;
-		const auto& samples = storage_->samples;
+		const auto& acceptedSamples = storage_->acceptedSamples;
 
 		// validate the final sample count and generated sample data
-		if (samples.empty())
+		if (acceptedSamples.empty())
 		{
 			throw std::runtime_error("Surface sampling produced no samples.");
 		}
-		if (samples.size() > std::numeric_limits<uint32_t>::max())
+		if (acceptedSamples.size() > std::numeric_limits<uint32_t>::max())
 		{
 			throw std::runtime_error("Surface sample count exceeds uint32 limits.");
 		}
 
-		// validate generated sample references and coordinates
-		for (const SurfaceSample& sample : samples)
+		// validate generated sample positions
+		for (const glm::vec3& sample : acceptedSamples)
 		{
-			if (sample.triangleIdx >= triangles.size())
-			{
-				throw std::runtime_error("Surface sample references an invalid triangle.");
-			}
-			if (!IsFinite(sample.pos))
+			if (!IsFinite(sample))
 			{
 				throw std::runtime_error("Surface sampling produced a non-finite sample position.");
-			}
-			if (!IsFinite(sample.normal))
-			{
-				throw std::runtime_error("Surface sampling produced a non-finite sample normal.");
-			}
-			if (!IsFinite(sample.barycentric))
-			{
-				throw std::runtime_error("Surface sampling produced non-finite barycentric coordinates.");
 			}
 		}
 	}
@@ -693,7 +666,7 @@ namespace Scene
 	{
 		storage_->stats = {};
 		storage_->stats.surfaceArea = static_cast<float>(storage_->surfaceArea);
-		storage_->samples.clear();
+		storage_->acceptedSamples.clear();
 		// generate and select the initial Poisson sample set
 		SelectPoissonSamples();
 
@@ -703,7 +676,7 @@ namespace Scene
 
 		SurfaceSamplingResult result;
 		result.stats = storage_->stats;
-		result.samples = std::move(storage_->samples);
+		result.acceptedSamples = std::move(storage_->acceptedSamples);
 		return result;
 	}
 
