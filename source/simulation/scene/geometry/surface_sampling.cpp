@@ -3,6 +3,7 @@
 // external
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <glm/geometric.hpp>
 #include <limits>
@@ -10,7 +11,6 @@
 #include <stdexcept>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -42,17 +42,114 @@ namespace
 		bool operator==(const CellCoord&) const = default;
 	};
 
+	// per-coordinate mixed hash for the linear-probing cell table
 	struct CellCoordHash
 	{
+		// splitmix64 finalizer
+		static uint64_t Mix(uint64_t h)
+		{
+			h = (h ^ (h >> 30)) * 0xbf58476d1ce4e5b9ull;
+			h = (h ^ (h >> 27)) * 0x94d049bb133111ebull;
+			return h ^ (h >> 31);
+		}
+
 		uint64_t operator()(const CellCoord& cell) const noexcept
 		{
-			uint64_t h = static_cast<uint64_t>(cell.x);
-			h ^= static_cast<uint64_t>(cell.y)
-				+ 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
-			h ^= static_cast<uint64_t>(cell.z)
-				+ 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
-			return h;
+			uint64_t h = Mix(static_cast<uint64_t>(cell.x));
+			h = Mix(h ^ static_cast<uint64_t>(cell.y));
+			return Mix(h ^ static_cast<uint64_t>(cell.z));
 		}
+	};
+
+	// stores cell values in contiguous entries with an index-only hash table
+	template<typename Value>
+	class SampleCellTable
+	{
+	public:
+
+		void Reserve(const uint32_t N)
+		{
+			const uint64_t N_slots = std::max<uint64_t>(16ull, static_cast<uint64_t>(N) + N / 2ull + 1ull);
+			if (N_slots > slots_.max_size())
+			{
+				throw std::runtime_error("Surface sample cell table exceeds allocation limits.");
+			}
+
+			entries_.reserve(N);
+			if (N_slots <= slots_.size()) { return; }
+
+			// rehash entry indices without copying cell values
+			std::vector<uint32_t> slots(static_cast<size_t>(N_slots), InvalidEntryIdx);
+			for (uint32_t entryIdx = 0; entryIdx < entries_.size(); entryIdx++)
+			{
+				size_t slotIdx = CellCoordHash{}(entries_[entryIdx].cell) % slots.size();
+				while (slots[slotIdx] != InvalidEntryIdx)
+				{
+					if (++slotIdx == slots.size()) { slotIdx = 0; }
+				}
+				slots[slotIdx] = entryIdx;
+			}
+			slots_.swap(slots);
+		}
+
+		const Value* Find(const CellCoord& cell) const
+		{
+			if (slots_.empty()) { return nullptr; }
+			const uint32_t entryIdx = slots_[FindSlot(cell)];
+			return entryIdx == InvalidEntryIdx ? nullptr : &entries_[entryIdx].value;
+		}
+
+		Value& GetOrInsert(const CellCoord& cell)
+		{
+			if (slots_.empty()) { Reserve(1); }
+			size_t slotIdx = FindSlot(cell);
+			if (slots_[slotIdx] != InvalidEntryIdx) { return entries_[slots_[slotIdx]].value; }
+
+			const uint64_t N_entries = entries_.size() + 1ull;
+			if (N_entries > std::numeric_limits<uint32_t>::max())
+			{
+				throw std::runtime_error("Surface sample cell count exceeds uint32 limits.");
+			}
+
+			// grow before insertion to keep the hash load near two thirds
+			if (N_entries > entries_.capacity() ||
+				N_entries > slots_.size() - slots_.size() / 3)
+			{
+				const uint32_t N_reserve = static_cast<uint32_t>(std::min<uint64_t>(
+					std::numeric_limits<uint32_t>::max(),
+					std::max<uint64_t>(16ull, N_entries + N_entries / 2ull)));
+				Reserve(N_reserve);
+				slotIdx = FindSlot(cell);
+			}
+
+			const uint32_t entryIdx = static_cast<uint32_t>(entries_.size());
+			entries_.push_back(Entry{ .cell = cell });
+			slots_[slotIdx] = entryIdx;
+			return entries_.back().value;
+		}
+
+	private:
+
+		static constexpr uint32_t InvalidEntryIdx = std::numeric_limits<uint32_t>::max();
+
+		struct Entry
+		{
+			CellCoord cell;
+			Value value{};
+		};
+
+		size_t FindSlot(const CellCoord& cell) const
+		{
+			size_t slotIdx = CellCoordHash{}(cell) % slots_.size();
+			while (slots_[slotIdx] != InvalidEntryIdx && entries_[slots_[slotIdx]].cell != cell)
+			{
+				if (++slotIdx == slots_.size()) { slotIdx = 0; }
+			}
+			return slotIdx;
+		}
+
+		std::vector<Entry> entries_;
+		std::vector<uint32_t> slots_;
 	};
 
 	bool IsFinite(const glm::vec3& value)
@@ -118,6 +215,7 @@ namespace
 	class SampleSpatialHash
 	{
 	public:
+
 		SampleSpatialHash(
 			const float cellSize,
 			const std::vector<glm::vec3>& acceptedSamples)
@@ -129,13 +227,21 @@ namespace
 
 		void Reserve(const uint32_t N)
 		{
-			cellBuckets_.reserve(N);
+			cellBuckets_.Reserve(N);
+			nextSampleIdx_.reserve(N);
 		}
 
 		void Insert(const uint32_t sampleIdx)
 		{
-			cellBuckets_[MakeCellCoord(acceptedSamples_[sampleIdx], cellSizeInv_)].push_back(sampleIdx);
+			CellBucket& bucket = cellBuckets_.GetOrInsert(MakeCellCoord(acceptedSamples_[sampleIdx], cellSizeInv_));
+			nextSampleIdx_.push_back(InvalidSampleIdx);
+
+			// append samples in their original per-cell order
+			if (bucket.lastSampleIdx != InvalidSampleIdx) { nextSampleIdx_[bucket.lastSampleIdx] = sampleIdx; }
+			else { bucket.firstSampleIdx = sampleIdx; }
+			bucket.lastSampleIdx = sampleIdx;
 		}
+
 		template<typename Func>
 		bool AnyNearby(const glm::vec3& pos, const float queryRadius, Func&& func) const
 		{
@@ -163,10 +269,12 @@ namespace
 							.y = baseCell.y + dy,
 							.z = baseCell.z + dz,
 						};
-						const auto it = cellBuckets_.find(cell);
-						if (it == cellBuckets_.end()) { continue; }
+						const CellBucket* bucket = cellBuckets_.Find(cell);
+						if (!bucket) { continue; }
 
-						for (const uint32_t sampleIdx : it->second)
+						for (uint32_t sampleIdx = bucket->firstSampleIdx;
+							sampleIdx != InvalidSampleIdx;
+							sampleIdx = nextSampleIdx_[sampleIdx])
 						{
 							if (func(sampleIdx)) { return true; }
 						}
@@ -178,10 +286,20 @@ namespace
 		}
 
 	private:
+
+		static constexpr uint32_t InvalidSampleIdx = std::numeric_limits<uint32_t>::max();
+
+		struct CellBucket
+		{
+			uint32_t firstSampleIdx = InvalidSampleIdx;
+			uint32_t lastSampleIdx = InvalidSampleIdx;
+		};
+
 		float cellSize_ = 0.0f;
 		float cellSizeInv_ = 0.0f;
 		const std::vector<glm::vec3>& acceptedSamples_;
-		std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets_;
+		SampleCellTable<CellBucket> cellBuckets_;
+		std::vector<uint32_t> nextSampleIdx_;
 	};
 
 } // namespace anonymous
@@ -363,8 +481,8 @@ namespace Scene
 		acceptedSamples.reserve(N_estimatedSamples);
 		SampleSpatialHash spatialHash(minDistance_, acceptedSamples);
 		spatialHash.Reserve(N_estimatedSamples);
-		std::unordered_map<CellCoord, uint32_t, CellCoordHash> trialsPerCell;
-		trialsPerCell.reserve(N_estimatedSamples);
+		SampleCellTable<uint32_t> trialsPerCell;
+		trialsPerCell.Reserve(N_estimatedSamples);
 		const float cellSizeInv = 1.0f / minDistance_;
 
 		// generate and select candidate batches in stable global order
@@ -432,7 +550,7 @@ namespace Scene
 			{
 				const glm::vec3& candidate = candidates[batchIdx];
 				const CellCoord cell = MakeCellCoord(candidate, cellSizeInv);
-				uint32_t& N_trials = trialsPerCell[cell];
+				uint32_t& N_trials = trialsPerCell.GetOrInsert(cell);
 				if (N_trials >= params.surfaceSamplingMaxTrialsPerCell) { continue; }
 				N_trials++;
 
