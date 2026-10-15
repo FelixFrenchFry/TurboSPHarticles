@@ -15,6 +15,7 @@
 #include <vector>
 
 // internal
+#include "source/simulation/core/particle_types.h"
 #include "surface_sampling.h"
 
 
@@ -35,9 +36,9 @@ namespace
 	// integer coordinate used by the temporary sample spatial hash
 	struct CellCoord
 	{
-		int64_t x = 0;
-		int64_t y = 0;
-		int64_t z = 0;
+		int32_t x = 0;
+		int32_t y = 0;
+		int32_t z = 0;
 
 		bool operator==(const CellCoord&) const = default;
 	};
@@ -46,7 +47,7 @@ namespace
 	struct CellCoordHash
 	{
 		// splitmix64 finalizer
-		static uint64_t Mix(uint64_t h)
+		static uint64_t Mix(uint64_t h) noexcept
 		{
 			h = (h ^ (h >> 30)) * 0xbf58476d1ce4e5b9ull;
 			h = (h ^ (h >> 27)) * 0x94d049bb133111ebull;
@@ -173,18 +174,17 @@ namespace
 
 	CellCoord MakeCellCoord(const glm::vec3& pos, const float cellSizeInv)
 	{
-		const auto makeAxis = [cellSizeInv](const float value) -> int64_t
+		const auto makeAxis = [cellSizeInv](const float value) -> int32_t
 			{
 				const long double scaled = std::floor(
 					static_cast<long double>(value) * static_cast<long double>(cellSizeInv));
-				constexpr int64_t cellLimit = std::numeric_limits<int64_t>::max() / 2;
 				if (!std::isfinite(scaled) ||
-					scaled < static_cast<long double>(-cellLimit) ||
-					scaled > static_cast<long double>(cellLimit))
+					scaled < std::numeric_limits<int32_t>::min() ||
+					scaled > std::numeric_limits<int32_t>::max())
 				{
-					throw std::runtime_error("Surface sample grid coordinate exceeds int64 limits.");
+					throw std::runtime_error("Surface sample grid coordinate exceeds int32 limits.");
 				}
-				return static_cast<int64_t>(scaled);
+				return static_cast<int32_t>(scaled);
 			};
 
 		return CellCoord
@@ -223,7 +223,12 @@ namespace
 			cellSize_(cellSize),
 			cellSizeInv_(1.0f / cellSize),
 			acceptedSamples_(acceptedSamples)
-		{}
+		{
+			if (!std::isfinite(cellSizeInv_) || cellSizeInv_ <= 0.0f)
+			{
+				throw std::runtime_error("Surface sample grid inverse cell size must be finite and positive.");
+			}
+		}
 
 		void Reserve(const uint32_t N)
 		{
@@ -233,7 +238,8 @@ namespace
 
 		void Insert(const uint32_t sampleIdx)
 		{
-			CellBucket& bucket = cellBuckets_.GetOrInsert(MakeCellCoord(acceptedSamples_[sampleIdx], cellSizeInv_));
+			const CellCoord cell = MakeCellCoord(acceptedSamples_[sampleIdx], cellSizeInv_);
+			CellBucket& bucket = cellBuckets_.GetOrInsert(cell);
 			nextSampleIdx_.push_back(InvalidSampleIdx);
 
 			// append samples in their original per-cell order
@@ -245,29 +251,59 @@ namespace
 		template<typename Func>
 		bool AnyNearby(const glm::vec3& pos, const float queryRadius, Func&& func) const
 		{
-			const CellCoord baseCell = MakeCellCoord(pos, cellSizeInv_);
 			const double cellQueryReachD = std::ceil(
 				static_cast<double>(queryRadius) / static_cast<double>(cellSize_));
-			if (!std::isfinite(cellQueryReachD) ||
+			if (!std::isfinite(cellQueryReachD) || cellQueryReachD < 0.0 ||
 				cellQueryReachD >= std::numeric_limits<int32_t>::max())
 			{
 				throw std::runtime_error("Surface sample grid query exceeds int32 limits.");
 			}
-			const int32_t cellQueryReach = std::max<int32_t>(
+			const int64_t cellQueryReach = std::max<int64_t>(
 				1,
-				static_cast<int32_t>(cellQueryReachD));
+				static_cast<int64_t>(cellQueryReachD));
 
-			for (int32_t dz = -cellQueryReach; dz <= cellQueryReach; dz++)
-			{
-				for (int32_t dy = -cellQueryReach; dy <= cellQueryReach; dy++)
+			const auto makeRange = [&](const float value, int64_t& begin, int64_t& end) -> bool
 				{
-					for (int32_t dx = -cellQueryReach; dx <= cellQueryReach; dx++)
+					const long double scaled = std::floor(
+						static_cast<long double>(value) * static_cast<long double>(cellSizeInv_));
+					if (!std::isfinite(scaled))
+					{
+						throw std::runtime_error("Surface sample grid query coordinate must be finite.");
+					}
+					constexpr int64_t cellMin = std::numeric_limits<int32_t>::min();
+					constexpr int64_t cellMax = std::numeric_limits<int32_t>::max();
+					if (scaled < cellMin - cellQueryReach || scaled > cellMax + cellQueryReach)
+					{
+						return false;
+					}
+					const int64_t baseCell = static_cast<int64_t>(scaled);
+					begin = std::max(cellMin, baseCell - cellQueryReach);
+					end = std::min(cellMax, baseCell + cellQueryReach);
+					return true;
+				};
+			int64_t cxBegin = 0;
+			int64_t cxEnd = 0;
+			int64_t cyBegin = 0;
+			int64_t cyEnd = 0;
+			int64_t czBegin = 0;
+			int64_t czEnd = 0;
+			if (!makeRange(pos.x, cxBegin, cxEnd) || !makeRange(pos.y, cyBegin, cyEnd) ||
+				!makeRange(pos.z, czBegin, czEnd))
+			{
+				return false;
+			}
+
+			for (int64_t cz = czBegin; cz <= czEnd; cz++)
+			{
+				for (int64_t cy = cyBegin; cy <= cyEnd; cy++)
+				{
+					for (int64_t cx = cxBegin; cx <= cxEnd; cx++)
 					{
 						const CellCoord cell
 						{
-							.x = baseCell.x + dx,
-							.y = baseCell.y + dy,
-							.z = baseCell.z + dz,
+							.x = static_cast<int32_t>(cx),
+							.y = static_cast<int32_t>(cy),
+							.z = static_cast<int32_t>(cz),
 						};
 						const CellBucket* bucket = cellBuckets_.Find(cell);
 						if (!bucket) { continue; }
@@ -301,6 +337,56 @@ namespace
 		SampleCellTable<CellBucket> cellBuckets_;
 		std::vector<uint32_t> nextSampleIdx_;
 	};
+
+	uint64_t SurfaceCandidateCount(
+		const double N_estimatedSamplesD,
+		const uint32_t candidateMultiplier)
+	{
+		// the reserve estimate stays uint32, while the product requires uint64
+		if (!std::isfinite(N_estimatedSamplesD) || N_estimatedSamplesD < 0.0 ||
+			N_estimatedSamplesD > std::numeric_limits<uint32_t>::max())
+		{
+			throw std::runtime_error("Surface estimated sample count exceeds uint32 limits.");
+		}
+
+		return std::max<uint64_t>(1,
+			static_cast<uint64_t>(N_estimatedSamplesD) * candidateMultiplier);
+	}
+
+	uint32_t SurfaceSamplingBatchSize(const uint64_t N_remaining, const uint32_t N_maxBatch)
+	{
+		return static_cast<uint32_t>(std::min<uint64_t>(N_maxBatch, N_remaining));
+	}
+
+	uint32_t SurfaceCoverageSubdivisions(const float longestEdge, const float probeSpacing)
+	{
+		// keep the float division used by probe generation for both passes
+		const double N_subdivisionsD = std::ceil(longestEdge / probeSpacing);
+		if (!std::isfinite(N_subdivisionsD) ||
+			N_subdivisionsD >= std::numeric_limits<uint32_t>::max())
+		{
+			throw std::runtime_error("Surface probe subdivision count exceeds uint32 loop limits.");
+		}
+
+		return std::max<uint32_t>(1, static_cast<uint32_t>(N_subdivisionsD));
+	}
+
+	uint64_t AddSurfaceCoverageProbes(const uint64_t N_probes, const uint32_t N_subdivisions)
+	{
+		const uint64_t factorA = static_cast<uint64_t>(N_subdivisions) + 1ull;
+		const uint64_t factorB = static_cast<uint64_t>(N_subdivisions) + 2ull;
+		if (factorA > std::numeric_limits<uint64_t>::max() / factorB)
+		{
+			throw std::runtime_error("Surface coverage probe count exceeds uint64 limits.");
+		}
+
+		const uint64_t N_triangleProbes = factorA * factorB / 2ull;
+		if (N_triangleProbes > std::numeric_limits<uint64_t>::max() - N_probes)
+		{
+			throw std::runtime_error("Surface coverage probe count exceeds uint64 limits.");
+		}
+		return N_probes + N_triangleProbes;
+	}
 
 } // namespace anonymous
 
@@ -449,7 +535,6 @@ namespace Scene
 
 			triangles[triangleIdx].cumulativeArea = surfaceArea;
 		}
-
 	}
 
 	void SurfaceSampler::SelectPoissonSamples()
@@ -458,21 +543,14 @@ namespace Scene
 		const double surfaceArea = storage_->surfaceArea;
 		const Sim::SimParams& params = params_;
 		auto& acceptedSamples = storage_->acceptedSamples;
-		uint32_t& N_candidates = storage_->stats.N_candidates;
+		uint64_t& N_candidates = storage_->stats.N_candidates;
 
 		// derive candidate and estimated sample counts from surface area
 		const double N_estimatedSamplesD = std::ceil(
 			surfaceArea /
 			(static_cast<double>(minDistance_) * static_cast<double>(minDistance_)));
-		const double N_candidatesD =
-			N_estimatedSamplesD * params.surfaceSamplingCandidateMultiplier;
-		if (!std::isfinite(N_candidatesD) ||
-			N_candidatesD > std::numeric_limits<uint32_t>::max())
-		{
-			throw std::runtime_error("Surface candidate count exceeds uint32 limits.");
-		}
-
-		N_candidates = std::max<uint32_t>(1, static_cast<uint32_t>(N_candidatesD));
+		N_candidates = SurfaceCandidateCount(
+			N_estimatedSamplesD, params.surfaceSamplingCandidateMultiplier);
 		const uint32_t N_estimatedSamples = std::max<uint32_t>(
 			1,
 			static_cast<uint32_t>(N_estimatedSamplesD));
@@ -486,18 +564,17 @@ namespace Scene
 		const float cellSizeInv = 1.0f / minDistance_;
 
 		// generate and select candidate batches in stable global order
-		const uint32_t N_candidateBatch = std::min(N_samplingBatch, N_candidates);
+		const uint32_t N_candidateBatch = SurfaceSamplingBatchSize(N_candidates, N_samplingBatch);
 		std::vector<glm::vec3> candidates(N_candidateBatch);
 		std::vector<double> areaTargets(N_candidateBatch);
 		std::vector<float> barycentricScales(N_candidateBatch);
 		std::vector<float> barycentricOffsets(N_candidateBatch);
 		std::mt19937_64 rng(params.surfaceSamplingSeed);
 
-		for (uint32_t candidateBegin = 0; candidateBegin < N_candidates;)
+		for (uint64_t candidateBegin = 0; candidateBegin < N_candidates;)
 		{
-			const uint32_t N_batch = std::min(
-				N_candidateBatch,
-				N_candidates - candidateBegin);
+			const uint32_t N_batch = SurfaceSamplingBatchSize(
+				N_candidates - candidateBegin, N_candidateBatch);
 
 			// generate random inputs serially to preserve the seeded candidate stream
 			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
@@ -564,6 +641,10 @@ namespace Scene
 							acceptedSamples[sampleIdx]) < minDistance_;
 					});
 				if (hasDistanceConflict) { continue; }
+				if (acceptedSamples.size() >= Sim::MaxLocalParticleCount)
+				{
+					throw std::runtime_error("Surface sample count exceeds the local particle limit.");
+				}
 
 				const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
 				acceptedSamples.push_back(candidate);
@@ -599,43 +680,15 @@ namespace Scene
 		const auto& triangles = storage_->triangles;
 		auto& acceptedSamples = storage_->acceptedSamples;
 
-		// count barycentric coverage probes and validate allocation limits
+		// count barycentric coverage probes with checked uint64 totals
 		uint64_t N_probes = 0;
 		for (const TriangleData& triangle : triangles)
 		{
-			const double N_subdivisionsD = std::ceil(
-				static_cast<double>(triangle.longestEdge) /
-				static_cast<double>(coverageProbeSpacing_));
-			if (!std::isfinite(N_subdivisionsD) ||
-				N_subdivisionsD > std::numeric_limits<uint32_t>::max())
-			{
-				throw std::runtime_error("Surface probe subdivision count exceeds uint32 limits.");
-			}
-
-			const uint64_t N_subdivisions = std::max<uint64_t>(
-				1,
-				static_cast<uint64_t>(N_subdivisionsD));
-			const uint64_t factorA = N_subdivisions + 1ull;
-			const uint64_t factorB = N_subdivisions + 2ull;
-			if (factorA > std::numeric_limits<uint64_t>::max() / factorB)
-			{
-				throw std::runtime_error("Surface coverage probe count exceeds uint64 limits.");
-			}
-
-			const uint64_t N_triangleProbes = factorA * factorB / 2ull;
-			if (N_triangleProbes > std::numeric_limits<uint32_t>::max() - N_probes)
-			{
-				throw std::runtime_error("Surface coverage probe count exceeds uint32 limits.");
-			}
-			N_probes += N_triangleProbes;
+			const uint32_t N_subdivisions = SurfaceCoverageSubdivisions(
+				triangle.longestEdge, coverageProbeSpacing_);
+			N_probes = AddSurfaceCoverageProbes(N_probes, N_subdivisions);
 		}
-		storage_->stats.N_coverageProbes = static_cast<uint32_t>(N_probes);
-
-		const uint64_t N_maxSamples = static_cast<uint64_t>(acceptedSamples.size()) + N_probes;
-		if (N_maxSamples > std::numeric_limits<uint32_t>::max())
-		{
-			throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
-		}
+		storage_->stats.N_coverageProbes = N_probes;
 
 		// rebuild the spatial hash from the initially accepted samples
 		SampleSpatialHash spatialHash(minDistance_, acceptedSamples);
@@ -653,9 +706,7 @@ namespace Scene
 		N_repairs = 0;
 
 		// generate and repair coverage probes in bounded batches
-		const uint32_t N_probeBatch = std::min(
-			N_samplingBatch,
-			static_cast<uint32_t>(N_probes));
+		const uint32_t N_probeBatch = SurfaceSamplingBatchSize(N_probes, N_samplingBatch);
 		std::vector<glm::vec3> probes;
 		probes.reserve(N_probeBatch);
 		std::vector<uint8_t> needsRepair(N_probeBatch, 0u);
@@ -704,9 +755,9 @@ namespace Scene
 								acceptedSamples[sampleIdx]) <= probeTargetDistance;
 						});
 					if (isCovered) { continue; }
-					if (acceptedSamples.size() >= std::numeric_limits<uint32_t>::max())
+					if (acceptedSamples.size() >= Sim::MaxLocalParticleCount)
 					{
-						throw std::runtime_error("Repaired surface sample count exceeds uint32 limits.");
+						throw std::runtime_error("Repaired surface sample count exceeds the local particle limit.");
 					}
 
 					const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
@@ -724,10 +775,8 @@ namespace Scene
 			triangleIdx++)
 		{
 			const TriangleData& triangle = triangles[triangleIdx];
-			const uint32_t N_subdivisions = std::max<uint32_t>(
-				1,
-				static_cast<uint32_t>(std::ceil(
-					triangle.longestEdge / coverageProbeSpacing_)));
+			const uint32_t N_subdivisions = SurfaceCoverageSubdivisions(
+				triangle.longestEdge, coverageProbeSpacing_);
 			const float N_subdivisionsInv = 1.0f / static_cast<float>(N_subdivisions);
 
 			for (uint32_t i = 0; i <= N_subdivisions; i++)
@@ -765,9 +814,9 @@ namespace Scene
 		{
 			throw std::runtime_error("Surface sampling produced no samples.");
 		}
-		if (acceptedSamples.size() > std::numeric_limits<uint32_t>::max())
+		if (acceptedSamples.size() > Sim::MaxLocalParticleCount)
 		{
-			throw std::runtime_error("Surface sample count exceeds uint32 limits.");
+			throw std::runtime_error("Surface sample count exceeds the local particle limit.");
 		}
 
 		// validate generated sample positions
