@@ -68,6 +68,7 @@ jobs:
       - name: Check out source and pinned vcpkg
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
 
@@ -130,19 +131,20 @@ jobs:
 
   # build CUDA without GPU execution
   cuda_compile:
-    name: CUDA 12.8 / GCC 13 / Release / sm_80 / COMPILE ONLY
+    name: CUDA 13.2 / GCC 13 / Release / sm_80 / COMPILE ONLY
     runs-on: ubuntu-24.04
-    container: nvidia/cuda:12.8.1-devel-ubuntu24.04
+    container: nvidia/cuda:13.2.1-devel-ubuntu24.04
     timeout-minutes: 45
     steps:
       - name: Install build dependencies
         run: |
           apt-get update
-          apt-get install --no-install-recommends -y ca-certificates git curl zip unzip tar cmake ninja-build build-essential pkg-config
+          apt-get install --no-install-recommends -y ca-certificates git curl zip unzip tar cmake ninja-build build-essential pkg-config g++-13
 
       - name: Check out source and pinned vcpkg
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
 
