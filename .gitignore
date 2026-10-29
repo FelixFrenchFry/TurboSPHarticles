@@ -116,8 +116,12 @@ Folder.DotSettings.user
 # Executables -------------------------------------------------------------------------------------
 *.exe
 *.out
+!/job_*.out
 *.app
 exports/*
 !exports/.gitkeep
 logs/*
 !logs/.gitkeep
+!logs/slurm/
+!logs/slurm/*/
+!logs/slurm/*/*
