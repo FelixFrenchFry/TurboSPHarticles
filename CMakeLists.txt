@@ -1,6 +1,18 @@
 # CMakeLists.txt for TurboSPHarticles
 cmake_minimum_required(VERSION 3.24)
+
+# select optional dependencies before the vcpkg toolchain runs in project()
+option(BUILD_TESTING "Build maintained GoogleTest tests" OFF)
+option(ENABLE_VIS "Build window with visual interface and particle rendering" ON)
+if(BUILD_TESTING)
+    list(APPEND VCPKG_MANIFEST_FEATURES tests)
+endif()
+if(ENABLE_VIS)
+    list(APPEND VCPKG_MANIFEST_FEATURES visualization)
+endif()
+
 project(TurboSPHarticles LANGUAGES CXX)
+include(CTest)
 
 # --- [ language standards / build options ] ---
 # ----------------------------------------------
@@ -10,7 +22,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(ENABLE_CUDA "Build GPU backend with CUDA" OFF)
-option(ENABLE_VIS "Build window with visual interface and particle rendering" ON)
 option(ENABLE_MPI "Build distributed headless application with MPI" OFF)
 
 set(TSP_CUDA_ARCHITECTURE "native" CACHE STRING "CUDA architecture")
@@ -434,4 +445,11 @@ if(ENABLE_CUDA)
         set_target_properties(TSP_Distributed PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
         set_property(TARGET TSP_Distributed PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
     endif()
+endif()
+
+# --- [ maintained tests (optional) ] ---
+# --------------------------------------
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()

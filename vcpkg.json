@@ -9,13 +9,24 @@
     "cli11",
     "boost-container",
     "glm",
-    "xsimd",
-    "glfw3",
-    "glad",
-    {
-      "name": "imgui",
-      "features": [ "glfw-binding", "opengl3-binding", "docking-experimental" ]
+    "xsimd"
+  ],
+  "features": {
+    "tests": {
+      "description": "Maintained GoogleTest tests",
+      "dependencies": [ "gtest" ]
     },
-    "opengl"
-  ]
+    "visualization": {
+      "description": "Visual interface and particle rendering",
+      "dependencies": [
+        "glfw3",
+        "glad",
+        {
+          "name": "imgui",
+          "features": [ "glfw-binding", "opengl3-binding", "docking-experimental" ]
+        },
+        "opengl"
+      ]
+    }
+  }
 }

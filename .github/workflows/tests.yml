@@ -1,0 +1,176 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/out/vcpkg_cache
+  VCPKG_DISABLE_METRICS: '1'
+
+jobs:
+  # run CPU tests across compilers and build types, with MPI and AVX512 compile checks
+  toolchains:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # total of 7 configurations (5 test runs and 2 compile-only builds)
+      matrix:
+        include:
+          # GCC 13 on Ubuntu 24.04 (Debug and Release)
+          - name: GCC 13 / Debug / AVX256
+            os: ubuntu-24.04
+            preset: CI-Linux-GCC-Debug
+            run_tests: true
+          - name: GCC 13 / Release / AVX256
+            os: ubuntu-24.04
+            preset: CI-Linux-GCC-Release
+            run_tests: true
+          # MSVC (VS 2022) on Windows Server 2022 (Debug and Release)
+          - name: MSVC / Debug / AVX256
+            os: windows-2022
+            preset: CI-Windows-MSVC-Debug
+            run_tests: true
+          - name: MSVC / Release / AVX256
+            os: windows-2022
+            preset: CI-Windows-MSVC-Release
+            run_tests: true
+          # run with memory (ASan) and undefined-behavior (UBSan) checks
+          - name: Clang 18 / Debug / AVX256 / ASan + UBSan
+            os: ubuntu-24.04
+            preset: CI-Linux-Clang-Sanitizers
+            run_tests: true
+          # build the distributed application, but do not run MPI tests
+          - name: GCC 13 / Release / MPI / COMPILE ONLY
+            os: ubuntu-24.04
+            preset: CI-Linux-MPI
+            run_tests: false
+          # build with AVX512, but do not run the tests
+          - name: GCC 13 / Release / AVX512 / COMPILE ONLY
+            os: ubuntu-24.04
+            preset: CI-Linux-AVX512
+            run_tests: false
+    # stop on sanitizer errors
+    env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - name: Check out source and pinned vcpkg
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ninja-build pkg-config g++-13
+
+      - name: Install Clang and sanitizer dependencies
+        if: matrix.preset == 'CI-Linux-Clang-Sanitizers'
+        run: sudo apt-get install --no-install-recommends -y clang-18 libomp-18-dev libclang-rt-18-dev llvm-18
+
+      - name: Install MPI
+        if: matrix.preset == 'CI-Linux-MPI'
+        run: sudo apt-get install --no-install-recommends -y libopenmpi-dev openmpi-bin
+
+      - name: Create binary cache directory
+        run: cmake -E make_directory out/vcpkg_cache
+
+      # cache dependencies by preset
+      - name: Cache vcpkg packages
+        uses: actions/cache@v6
+        with:
+          path: out/vcpkg_cache
+          key: vcpkg-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: vcpkg-${{ matrix.preset }}-
+
+      # configure headless builds with tests
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build applications and maintained tests
+        run: cmake --build out/build/${{ matrix.preset }} --parallel 2
+
+      # skip MPI and AVX512 execution
+      - name: Run maintained tests
+        if: matrix.run_tests
+        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure --no-tests=error --output-junit "${{ github.workspace }}/out/build/${{ matrix.preset }}/test-results.xml"
+
+      # always save diagnostics
+      - name: Upload test and configuration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-${{ matrix.preset }}
+          path: |
+            out/build/${{ matrix.preset }}/test-results.xml
+            out/build/${{ matrix.preset }}/Testing/Temporary/*.log
+            out/build/${{ matrix.preset }}/CMakeFiles/CMakeConfigureLog.yaml
+            out/build/${{ matrix.preset }}/vcpkg-manifest-install.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # build CUDA without GPU execution
+  cuda_compile:
+    name: CUDA 12.8 / GCC 13 / Release / sm_80 / COMPILE ONLY
+    runs-on: ubuntu-24.04
+    container: nvidia/cuda:12.8.1-devel-ubuntu24.04
+    timeout-minutes: 45
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates git curl zip unzip tar cmake ninja-build build-essential pkg-config
+
+      - name: Check out source and pinned vcpkg
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Create binary cache directory
+        run: cmake -E make_directory out/vcpkg_cache
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v6
+        with:
+          path: out/vcpkg_cache
+          key: vcpkg-CI-Linux-CUDA-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: vcpkg-CI-Linux-CUDA-
+
+      # use sm_80 without GPU detection
+      - name: Configure
+        run: cmake --preset CI-Linux-CUDA
+
+      - name: Compile and link applications and maintained tests
+        run: cmake --build out/build/CI-Linux-CUDA --parallel 2
+
+      # always save configuration diagnostics
+      - name: Upload configuration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-CI-Linux-CUDA
+          path: |
+            out/build/CI-Linux-CUDA/CMakeFiles/CMakeConfigureLog.yaml
+            out/build/CI-Linux-CUDA/vcpkg-manifest-install.log
+          if-no-files-found: ignore
+          retention-days: 7
