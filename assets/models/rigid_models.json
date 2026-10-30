@@ -103,24 +103,6 @@
         "watertight": true
       }
     },
-    "TitanicShip": {
-      "file": "titanic_ship.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.025, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, -1.0 ],
-        "vDir": [ -1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 25948,
-        "triangleCount": 51900,
-        "sourceExtent": [ 1.776078, 16.510339000000002, 3.150246 ],
-        "enclosedVolume": 41.102559251359146,
-        "watertight": true
-      }
-    },
     "CoracleBoat": {
       "file": "coracle_boat.obj",
       "massProperties": {
@@ -172,24 +154,6 @@
         "triangleCount": 480936,
         "sourceExtent": [ 777.9371, 407.5346, 388.66450000000003 ],
         "enclosedVolume": 36428054.801066786,
-        "watertight": true
-      }
-    },
-    "HydroPlane": {
-      "file": "hydro_plane.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, 1.0 ],
-        "vDir": [ 1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 16768,
-        "triangleCount": 33468,
-        "sourceExtent": [ 91.3743, 170.9075, 43.0705 ],
-        "enclosedVolume": 124938.31246360349,
         "watertight": true
       }
     },
@@ -283,19 +247,6 @@
         "watertight": true
       }
     },
-    "WoodenBarrel": {
-      "file": "wooden_barrel.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 11030,
-        "triangleCount": 21952,
-        "sourceExtent": [ 2.41771, 2.366328, 2.41771 ],
-        "enclosedVolume": 3.92204049382342,
-        "watertight": true
-      }
-    },
     "BaskingShark": {
       "file": "basking_shark.obj",
       "massProperties": {
@@ -329,24 +280,6 @@
         "triangleCount": 42880,
         "sourceExtent": [ 272.6708, 100.4942, 83.1724 ],
         "enclosedVolume": 201524.07176192137,
-        "watertight": true
-      }
-    },
-    "HumpbackWhale": {
-      "file": "humpback_whale.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ -1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, 1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 9282,
-        "triangleCount": 18560,
-        "sourceExtent": [ 758.6711, 371.9308, 252.5217 ],
-        "enclosedVolume": 7380336.644985558,
         "watertight": true
       }
     },
