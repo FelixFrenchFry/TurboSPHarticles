@@ -16,362 +16,146 @@
     "CorvetteShip": {
       "file": "corvette_ship.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.05, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ -1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, 1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, -0.05, 0.0]
       },
       "metadata": {
-        "vertexCount": 81942,
-        "triangleCount": 163644,
-        "sourceExtent": [ 16.3797, 1.7440999999999995, 4.5003 ],
-        "enclosedVolume": 31.003232991445156,
+        "vertexCount": 6477,
+        "triangleCount": 13014,
+        "sourceExtent": [96.002426148, 26.397895813, 10.112034321],
+        "enclosedVolume": 6132.306967490753,
         "watertight": true
       }
     },
     "CruiserShip": {
       "file": "cruiser_ship.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.04, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ -1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, 1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, -0.04, 0.0]
       },
       "metadata": {
-        "vertexCount": 60210,
-        "triangleCount": 120212,
-        "sourceExtent": [ 16.671200000000002, 2.0360999999999976, 3.8802000000000003 ],
-        "enclosedVolume": 38.94431465145823,
+        "vertexCount": 6804,
+        "triangleCount": 13612,
+        "sourceExtent": [96.0037117, 22.188400269000002, 11.799424648],
+        "enclosedVolume": 7262.1283870016805,
         "watertight": true
       }
     },
     "DestroyerShip": {
       "file": "destroyer_ship.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.045, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, -1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, -0.045, 0.0]
       },
       "metadata": {
-        "vertexCount": 86660,
-        "triangleCount": 172952,
-        "sourceExtent": [ 16.3024, 1.9178000000000002, 4.2702 ],
-        "enclosedVolume": 40.72375025279048,
+        "vertexCount": 7044,
+        "triangleCount": 14116,
+        "sourceExtent": [96.000839233, 25.089222431000003, 11.19762659],
+        "enclosedVolume": 7753.252114661014,
         "watertight": true
       }
     },
     "FrigateShip": {
       "file": "frigate_ship.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.03, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, -1.0 ],
-        "vDir": [ -1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, -0.03, 0.0]
       },
       "metadata": {
-        "vertexCount": 63184,
-        "triangleCount": 126256,
-        "sourceExtent": [ 9.769200000000001, 70.0212, 24.8625 ],
-        "enclosedVolume": 2930.3293168615664,
+        "vertexCount": 7253,
+        "triangleCount": 14510,
+        "sourceExtent": [95.996669769, 33.999153614, 13.394978047],
+        "enclosedVolume": 7480.9109213992215,
         "watertight": true
       }
     },
     "PassengerShip": {
       "file": "passenger_ship.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.03, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, -1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, -0.03, 0.0]
       },
       "metadata": {
-        "vertexCount": 53130,
-        "triangleCount": 103928,
-        "sourceExtent": [ 9399.9996, 1846.5917, 2891.0256 ],
-        "enclosedVolume": 19147865555.75886,
-        "watertight": true
-      }
-    },
-    "CoracleBoat": {
-      "file": "coracle_boat.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.01, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, -1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 49886,
-        "triangleCount": 99724,
-        "sourceExtent": [ 328.4342, 256.10429999999997, 112.2786 ],
-        "enclosedVolume": 1271975.9856760215,
-        "watertight": true
-      }
-    },
-    "DinghyBoat": {
-      "file": "dinghy_boat.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.01, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, 1.0 ],
-        "vDir": [ 1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 32558,
-        "triangleCount": 65100,
-        "sourceExtent": [ 95.33519999999999, 186.86579999999998, 43.3697 ],
-        "enclosedVolume": 271092.45490653213,
+        "vertexCount": 18124,
+        "triangleCount": 38140,
+        "sourceExtent": [96.418212891, 29.862742424, 18.888368606],
+        "enclosedVolume": 20638.124509794212,
         "watertight": true
       }
     },
     "HouseBoat": {
       "file": "house_boat.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, -1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, 0.0, 0.0]
       },
       "metadata": {
-        "vertexCount": 240376,
-        "triangleCount": 480936,
-        "sourceExtent": [ 777.9371, 407.5346, 388.66450000000003 ],
-        "enclosedVolume": 36428054.801066786,
-        "watertight": true
-      }
-    },
-    "ScrapBoat": {
-      "file": "scrap_boat.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.045, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, -1.0 ],
-        "vDir": [ -1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 33494,
-        "triangleCount": 66936,
-        "sourceExtent": [ 250.9456, 481.91769999999997, 180.6176 ],
-        "enclosedVolume": 12106424.7912155,
+        "vertexCount": 30326,
+        "triangleCount": 61064,
+        "sourceExtent": [96.35507965100001, 48.038166046, 50.28658104],
+        "enclosedVolume": 70167.10788241566,
         "watertight": true
       }
     },
     "TugBoat": {
       "file": "tug_boat.obj",
       "massProperties": {
-        "centerOfMassOffset": [ -0.055, -0.035, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ -1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, 1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [-0.055, -0.035, 0.0]
       },
       "metadata": {
-        "vertexCount": 97281,
-        "triangleCount": 192382,
-        "sourceExtent": [ 6321.0769, 1563.6504, 2683.4403 ],
-        "enclosedVolume": 8801784680.957703,
+        "vertexCount": 31111,
+        "triangleCount": 63630,
+        "sourceExtent": [96.213977814, 40.653997898, 23.151031494],
+        "enclosedVolume": 29861.741294060077,
         "watertight": true
       }
     },
     "LongTorpedo": {
       "file": "long_torpedo.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ -1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 1.0, 0.0 ],
-        "wDir": [ 0.0, 0.0, -1.0 ]
+        "centerOfMassOffset": [0.0, 0.0, 0.0]
       },
       "metadata": {
-        "vertexCount": 65514,
-        "triangleCount": 131008,
-        "sourceExtent": [ 763.9444, 70.6312, 70.6312 ],
-        "enclosedVolume": 1989315.8742493144,
+        "vertexCount": 4265,
+        "triangleCount": 8542,
+        "sourceExtent": [95.998542786, 8.899874944, 8.899881839999999],
+        "enclosedVolume": 3952.3742932651558,
         "watertight": true
       }
     },
     "ShortSubmarine": {
       "file": "short_submarine.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, -0.005, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, 1.0 ],
-        "vDir": [ 1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
+        "centerOfMassOffset": [0.0, -0.005, 0.0]
       },
       "metadata": {
-        "vertexCount": 49426,
-        "triangleCount": 98880,
-        "sourceExtent": [ 3080.1764999999996, 9275.9463, 3206.4864 ],
-        "enclosedVolume": 15792035211.920446,
-        "watertight": true
-      }
-    },
-    "ToyJetski": {
-      "file": "toy_jetski.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ -1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, 1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 31448,
-        "triangleCount": 62880,
-        "sourceExtent": [ 118.702, 46.4026, 40.1111 ],
-        "enclosedVolume": 71273.41031966693,
-        "watertight": true
-      }
-    },
-    "BaskingShark": {
-      "file": "basking_shark.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, 1.0 ],
-        "vDir": [ 1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 29714,
-        "triangleCount": 59424,
-        "sourceExtent": [ 465.73490000000004, 999.8892, 271.7022 ],
-        "enclosedVolume": 10008692.199318575,
-        "watertight": true
-      }
-    },
-    "HammerShark": {
-      "file": "hammer_shark.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 0.0, -1.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 21442,
-        "triangleCount": 42880,
-        "sourceExtent": [ 272.6708, 100.4942, 83.1724 ],
-        "enclosedVolume": 201524.07176192137,
-        "watertight": true
-      }
-    },
-    "SawFish": {
-      "file": "saw_fish.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, -1.0 ],
-        "vDir": [ -1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 49810,
-        "triangleCount": 99616,
-        "sourceExtent": [ 4.3248, 9.9407, 2.6071999999999997 ],
-        "enclosedVolume": 5.996701831304371,
-        "watertight": true
-      }
-    },
-    "SmallDolphin": {
-      "file": "small_dolphin.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, -1.0 ],
-        "vDir": [ -1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 7338,
-        "triangleCount": 14672,
-        "sourceExtent": [ 82.2459, 177.5041, 152.1661 ],
-        "enclosedVolume": 210674.30120600958,
-        "watertight": true
-      }
-    },
-    "SquidFish": {
-      "file": "squid_fish.obj",
-      "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 0.0, 0.0, 1.0 ],
-        "vDir": [ 1.0, 0.0, 0.0 ],
-        "wDir": [ 0.0, 1.0, 0.0 ]
-      },
-      "metadata": {
-        "vertexCount": 49730,
-        "triangleCount": 99456,
-        "sourceExtent": [ 22.6005, 60.3329, 17.2761 ],
-        "enclosedVolume": 1260.2863022653426,
+        "vertexCount": 10504,
+        "triangleCount": 21032,
+        "sourceExtent": [95.998474122, 33.180028439, 31.699694633],
+        "enclosedVolume": 17328.295708527345,
         "watertight": true
       }
     },
     "AsteroidVesta": {
       "file": "asteroid_vesta.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 1.0, 0.0 ],
-        "wDir": [ 0.0, 0.0, 1.0 ]
+        "centerOfMassOffset": [0.0, 0.0, 0.0]
       },
       "metadata": {
-        "vertexCount": 90002,
-        "triangleCount": 180000,
-        "sourceExtent": [ 354.985808, 356.327195, 322.534581 ],
-        "enclosedVolume": 20843531.95293528,
+        "vertexCount": 3074,
+        "triangleCount": 6144,
+        "sourceExtent": [96.004047394, 96.37793350199999, 87.225837708],
+        "enclosedVolume": 416191.0262187542,
         "watertight": true
       }
     },
     "AsteroidBennu": {
       "file": "asteroid_bennu.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
-      },
-      "sourceToCanonical": {
-        "uDir": [ 1.0, 0.0, 0.0 ],
-        "vDir": [ 0.0, 1.0, 0.0 ],
-        "wDir": [ 0.0, 0.0, 1.0 ]
+        "centerOfMassOffset": [0.0, 0.0, 0.0]
       },
       "metadata": {
-        "vertexCount": 9122,
-        "triangleCount": 18240,
-        "sourceExtent": [ 1350.706055, 1301.637573, 1309.633911 ],
-        "enclosedVolume": 1157631118.9165447,
+        "vertexCount": 1538,
+        "triangleCount": 3072,
+        "sourceExtent": [96.050308227, 92.50656127900001, 93.07129287699999],
+        "enclosedVolume": 406386.4431848413,
         "watertight": true
       }
     }
+
   }
 }
