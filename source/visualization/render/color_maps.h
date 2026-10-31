@@ -1,6 +1,8 @@
 // color_maps.h
 //
 // 256-entry sRGB color map lookup tables
+// Third-party copyrights, sources, modifications, and full license texts:
+// THIRD_PARTY_NOTICES.md (each table retains its upstream license)
 #pragma once
 
 // external
@@ -24,6 +26,8 @@ namespace Render
 	namespace Color
 	{
 		// Google's "Turbo" color lookup table
+		// Copyright 2019 Google LLC. Author: Anton Mikhailov.
+		// Apache-2.0. See THIRD_PARTY_NOTICES.md#google-turbo.
 		inline constexpr ColorMapData Turbo
 		{
 			ColorMapColor{ 48, 18, 59 },
@@ -285,6 +289,7 @@ namespace Render
 		};
 
 		// Matplotlib's "Viridis" color lookup table
+		// CC0-1.0. See THIRD_PARTY_NOTICES.md#viridis-and-inferno.
 		inline constexpr ColorMapData Viridis
 		{
 			ColorMapColor{ 68, 1, 84 },
@@ -546,6 +551,7 @@ namespace Render
 		};
 
 		// Matplotlib's "Inferno" color lookup table
+		// CC0-1.0. See THIRD_PARTY_NOTICES.md#viridis-and-inferno.
 		inline constexpr ColorMapData Inferno
 		{
 			ColorMapColor{ 0, 0, 3 },
@@ -807,6 +813,7 @@ namespace Render
 		};
 
 		// ParaView's "Fast" color lookup table
+		// ParaView BSD license. See THIRD_PARTY_NOTICES.md#paraview-colormaps.
 		inline constexpr ColorMapData Fast
 		{
 			ColorMapColor{ 14, 14, 120 },
@@ -1068,6 +1075,7 @@ namespace Render
 		};
 
 		// Matplotlib's "Coolwarm" color lookup table
+		// Matplotlib and ParaView notices: THIRD_PARTY_NOTICES.md#matplotlib-colormaps.
 		inline constexpr ColorMapData Coolwarm
 		{
 			ColorMapColor{ 58, 76, 192 },
@@ -1329,6 +1337,7 @@ namespace Render
 		};
 
 		// Matplotlib's "Blues" color lookup table
+		// ColorBrewer Apache-2.0 and Matplotlib notices: THIRD_PARTY_NOTICES.md#matplotlib-colormaps.
 		inline constexpr ColorMapData Blues
 		{
 			ColorMapColor{ 8, 48, 107 },
@@ -1589,7 +1598,8 @@ namespace Render
 			ColorMapColor{ 247, 251, 255 }
 		};
 
-		// ParaView's "Aurora" color lookup table
+		// ParaView's "Blue - Green - Orange" color lookup table, named Aurora here
+		// ParaView BSD license. See THIRD_PARTY_NOTICES.md#paraview-colormaps.
 		inline constexpr ColorMapData Aurora
 		{
 			ColorMapColor{ 212, 232, 250 },
@@ -1851,6 +1861,7 @@ namespace Render
 		};
 
 		// Matplotlib's "Earth" color lookup table
+		// Matplotlib and Yorick notices: THIRD_PARTY_NOTICES.md#matplotlib-colormaps.
 		inline constexpr ColorMapData Earth
 		{
 			ColorMapColor{ 0, 0, 0 },

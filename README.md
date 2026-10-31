@@ -10,4 +10,16 @@ HPC-oriented 3D SPH fluid solver with an interactive GUI mode for local runs and
 - [`exports/`](exports/) contains output exported from the simulation
 - `out/` contains local build output
 
-TODO: add proper documentation/examples/benchmarks
+TODO: add build instructions
+
+TODO: add example images/videos
+
+TODO: add benchmarks
+
+TODO: add documentation
+
+## License
+
+Original contributions: [MIT](LICENSE)
+
+Other licenses and credits: [Third-party notices](THIRD_PARTY_NOTICES.md)

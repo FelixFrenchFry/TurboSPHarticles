@@ -1,3 +1,6 @@
+// Iosevka Medium 29.0.4, licensed under the SIL Open Font License 1.1.
+// Copyright (c) 2015-2024, Renzhi Li (aka. Belleve Invis, belleve@typeof.net).
+// Full copyright and license text: THIRD_PARTY_NOTICES.md#iosevka-font.
 // File: 'source\visualization\fonts\iosevka.ttf' (9906016 bytes)
 // Exported using binary_to_compressed_c.exe -u8 "source\visualization\fonts\iosevka.ttf" iosevka
 static const unsigned int iosevka_compressed_size = 3391528;

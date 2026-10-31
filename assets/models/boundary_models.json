@@ -3,30 +3,30 @@
     "RockyCoastlineV1": {
       "file": "rocky_coastline_v1.obj",
       "metadata": {
-        "vertexCount": 196533,
-        "triangleCount": 393066,
-        "sourceExtent": [59.200002, 10.852571, 47.130540999999994],
-        "enclosedVolume": 9044.425740748591,
+        "vertexCount": 39306,
+        "triangleCount": 78612,
+        "sourceExtent": [59.20000267, 10.852971077, 47.130540848],
+        "enclosedVolume": 9044.568629672149,
         "watertight": true
       }
     },
     "RockyCoastlineV2": {
       "file": "rocky_coastline_v2.obj",
       "metadata": {
-        "vertexCount": 277786,
-        "triangleCount": 555608,
-        "sourceExtent": [59.900002, 19.02549, 47.685757],
-        "enclosedVolume": 14712.782849198991,
+        "vertexCount": 97213,
+        "triangleCount": 194462,
+        "sourceExtent": [59.900001526, 19.027208328, 47.686113356999996],
+        "enclosedVolume": 14712.491015761207,
         "watertight": true
       }
     },
     "RockyCoastlineV3": {
       "file": "rocky_coastline_v3.obj",
       "metadata": {
-        "vertexCount": 52057,
-        "triangleCount": 104110,
-        "sourceExtent": [60.0, 16.874086, 47.629393],
-        "enclosedVolume": 14305.28734011497,
+        "vertexCount": 13015,
+        "triangleCount": 26026,
+        "sourceExtent": [60.0, 16.87424469, 47.629392624000005],
+        "enclosedVolume": 14305.158787038723,
         "watertight": true
       }
     }
