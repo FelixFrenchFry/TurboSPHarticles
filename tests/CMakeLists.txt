@@ -4,6 +4,7 @@ find_package(GTest CONFIG REQUIRED)
 add_executable(TSP_Tests
     "unit/cell_frame.cpp"
     "unit/neighbor_lists.cpp"
+    "unit/neighbor_search.cpp"
     "unit/scratch_storage.cpp"
     "unit/snapshot_format.cpp"
     "unit/sph_kernels.cpp"

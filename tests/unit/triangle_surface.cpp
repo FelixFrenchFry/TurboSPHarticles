@@ -21,7 +21,7 @@ namespace
 
 		const glm::vec3 center = Scene::ScaleToTargetExtent(mesh, 4.0f);
 
-		// the original largest extent is 8, so every coordinate scales by 0.5
+		// the original largest extent is 8, so every coordinate is halved
 		ASSERT_EQ(mesh.vertices.size(), 3u);
 		EXPECT_FLOAT_EQ(mesh.vertices[0].x, -1.0f);
 		EXPECT_FLOAT_EQ(mesh.vertices[0].y, 0.5f);

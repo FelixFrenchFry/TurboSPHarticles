@@ -172,6 +172,7 @@ namespace Sim
 		std::unique_ptr<I_NeighborListSELL> neighborList_;
 		friend class NS_BruteForce_CPU;
 		friend class NS_CellLinkedList_Compact_CPU;
+		friend class NeighborSearchTestAccess;
 
 		// metadata
 		uint64_t simStep_ = 0;
