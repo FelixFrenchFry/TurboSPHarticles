@@ -1,10 +1,11 @@
 find_package(GTest CONFIG REQUIRED)
 
-# keep the maintained suite explicit; other tests in this directory are opt-in
+# keep the maintained suite explicit
 add_executable(TSP_Tests
     "unit/cell_frame.cpp"
     "unit/neighbor_lists.cpp"
     "unit/neighbor_search.cpp"
+    "unit/rigid_body_properties.cpp"
     "unit/scratch_storage.cpp"
     "unit/snapshot_format.cpp"
     "unit/sph_kernels.cpp"
