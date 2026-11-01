@@ -5,6 +5,7 @@ add_executable(TSP_Tests
     "unit/cell_frame.cpp"
     "unit/scratch_storage.cpp"
     "unit/snapshot_format.cpp"
+    "unit/sph_kernels.cpp"
     "unit/triangle_surface.cpp"
 )
 target_link_libraries(TSP_Tests PRIVATE TSP_H GTest::gtest_main)
