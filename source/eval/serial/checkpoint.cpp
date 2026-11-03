@@ -98,6 +98,7 @@ namespace Export
 		glm::vec3 result{};
 		for (int axis = 0; axis < 3; axis++)
 		{
+			if (!value[axis].is_number()) { throw std::runtime_error("Invalid checkpoint vector component."); }
 			result[axis] = value[axis].get<float>();
 			if (!std::isfinite(result[axis])) { throw std::runtime_error("Non-finite checkpoint vector."); }
 		}

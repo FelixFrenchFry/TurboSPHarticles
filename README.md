@@ -8,7 +8,6 @@ HPC-oriented 3D SPH fluid solver with an interactive GUI mode for local runs and
 - [`scripts/`](scripts/), [`tests/`](tests/), [`docs/`](docs/) contain tools, tests, and documentation
 - [`logs/`](logs/) contains run metrics and Slurm logs (.out/.err)
 - [`exports/`](exports/) contains output exported from the simulation
-- `out/` contains local build output
 
 TODO: add build instructions
 
