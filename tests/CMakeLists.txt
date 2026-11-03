@@ -10,6 +10,7 @@ add_executable(TSP_Tests
     "unit/scratch_storage.cpp"
     "unit/snapshot_format.cpp"
     "unit/sph_density.cpp"
+    "unit/sph_integration.cpp"
     "unit/sph_kernels.cpp"
     "unit/state_serialization.cpp"
     "unit/triangle_surface.cpp"
