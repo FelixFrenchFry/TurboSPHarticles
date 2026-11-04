@@ -12,6 +12,7 @@ add_executable(TSP_Tests
     "unit/sph_density.cpp"
     "unit/sph_integration.cpp"
     "unit/sph_kernels.cpp"
+    "unit/sph_non_pressure.cpp"
     "unit/state_serialization.cpp"
     "unit/triangle_surface.cpp"
 )
