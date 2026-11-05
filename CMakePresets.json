@@ -207,56 +207,41 @@
     {
       "name": "ci-linux",
       "hidden": true,
-      "inherits": [ "ci", "base-linux" ],
-      "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "g++-13"
-      }
+      "inherits": [ "ci", "base-linux" ]
     },
     {
-      "name": "CI-Linux-GCC-Debug",
-      "inherits": "ci-linux",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+      "name": "CI-Linux-Tests",
+      "inherits": "ci-linux"
     },
     {
-      "name": "CI-Linux-GCC-Release",
-      "inherits": "ci-linux",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
-    },
-    {
-      "name": "CI-Windows-MSVC-Debug",
-      "inherits": [ "ci", "base-win" ],
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
-    },
-    {
-      "name": "CI-Windows-MSVC-Release",
-      "inherits": [ "ci", "base-win" ],
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "name": "CI-Windows-Tests",
+      "inherits": [ "ci", "base-win" ]
     },
     {
       "name": "CI-Linux-Clang-Sanitizers",
-      "inherits": "ci-linux",
+      "inherits": "CI-Linux-Tests",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_COMPILER": "clang++-18",
-        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
       }
     },
     {
       "name": "CI-Linux-MPI",
-      "inherits": "ci-linux",
+      "inherits": "CI-Linux-Tests",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_MPI": "ON"
       }
     },
     {
       "name": "CI-Linux-AVX512",
-      "inherits": "ci-linux",
+      "inherits": "CI-Linux-Tests",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "TSP_CPU_SIMD_ARCH": "AVX512"
       }
+    },
+    {
+      "name": "CI-Windows-AVX512",
+      "inherits": "CI-Windows-Tests",
+      "cacheVariables": { "TSP_CPU_SIMD_ARCH": "AVX512" }
     },
     {
       "name": "CI-Linux-CUDA",

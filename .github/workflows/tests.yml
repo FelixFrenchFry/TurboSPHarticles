@@ -24,41 +24,158 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # total of 7 configurations (5 test runs and 2 compile-only builds)
+      # 17 configurations (12 toolchain test runs, 1 sanitizer run, 4 compile checks)
       matrix:
         include:
           # GCC 13 on Ubuntu 24.04 (Debug and Release)
           - name: GCC 13 / Debug / AVX256
+            id: gcc13-debug
             os: ubuntu-24.04
-            preset: CI-Linux-GCC-Debug
+            preset: CI-Linux-Tests
+            compiler: g++-13
+            build_type: Debug
+            linux_packages: g++-13
             run_tests: true
           - name: GCC 13 / Release / AVX256
+            id: gcc13-release
             os: ubuntu-24.04
-            preset: CI-Linux-GCC-Release
+            preset: CI-Linux-Tests
+            compiler: g++-13
+            build_type: Release
+            linux_packages: g++-13
             run_tests: true
-          # MSVC (VS 2022) on Windows Server 2022 (Debug and Release)
-          - name: MSVC / Debug / AVX256
-            os: windows-2022
-            preset: CI-Windows-MSVC-Debug
+          # GCC 15 on Ubuntu 26.04 (Debug and Release)
+          - name: GCC 15 / Debug / AVX256
+            id: gcc15-debug
+            os: ubuntu-26.04
+            preset: CI-Linux-Tests
+            compiler: g++-15
+            build_type: Debug
+            linux_packages: g++-15
             run_tests: true
-          - name: MSVC / Release / AVX256
+          - name: GCC 15 / Release / AVX256
+            id: gcc15-release
+            os: ubuntu-26.04
+            preset: CI-Linux-Tests
+            compiler: g++-15
+            build_type: Release
+            linux_packages: g++-15
+            run_tests: true
+          # Clang 18 on Ubuntu 24.04 (Debug and Release)
+          - name: Clang 18 / Debug / AVX256
+            id: clang18-debug
+            os: ubuntu-24.04
+            preset: CI-Linux-Tests
+            compiler: clang++-18
+            build_type: Debug
+            linker_flags: -fuse-ld=/usr/bin/ld.lld-18
+            linux_packages: clang-18 libomp-18-dev lld-18 llvm-18
+            run_tests: true
+          - name: Clang 18 / Release / AVX256
+            id: clang18-release
+            os: ubuntu-24.04
+            preset: CI-Linux-Tests
+            compiler: clang++-18
+            build_type: Release
+            linker_flags: -fuse-ld=/usr/bin/ld.lld-18
+            linux_packages: clang-18 libomp-18-dev lld-18 llvm-18
+            run_tests: true
+          # Clang 21 on Ubuntu 26.04 (Debug and Release)
+          - name: Clang 21 / Debug / AVX256
+            id: clang21-debug
+            os: ubuntu-26.04
+            preset: CI-Linux-Tests
+            compiler: clang++-21
+            build_type: Debug
+            linker_flags: -fuse-ld=/usr/bin/ld.lld-21
+            linux_packages: clang-21 libomp-21-dev lld-21 llvm-21
+            run_tests: true
+          - name: Clang 21 / Release / AVX256
+            id: clang21-release
+            os: ubuntu-26.04
+            preset: CI-Linux-Tests
+            compiler: clang++-21
+            build_type: Release
+            linker_flags: -fuse-ld=/usr/bin/ld.lld-21
+            linux_packages: clang-21 libomp-21-dev lld-21 llvm-21
+            run_tests: true
+          # MSVC 19.44 (VS 2022) on Windows Server 2022 (Debug and Release)
+          - name: MSVC 19.44 (VS 2022) / Debug / AVX256
+            id: msvc2022-debug
             os: windows-2022
-            preset: CI-Windows-MSVC-Release
+            preset: CI-Windows-Tests
+            compiler: cl
+            build_type: Debug
+            vs_version: '17.0'
+            vs_toolset: '14.44'
+            run_tests: true
+          - name: MSVC 19.44 (VS 2022) / Release / AVX256
+            id: msvc2022-release
+            os: windows-2022
+            preset: CI-Windows-Tests
+            compiler: cl
+            build_type: Release
+            vs_version: '17.0'
+            vs_toolset: '14.44'
+            run_tests: true
+          # MSVC 19.5x (VS 2026) on Windows Server 2025 (Debug and Release)
+          - name: MSVC 19.5x (VS 2026) / Debug / AVX256
+            id: msvc2026-debug
+            os: windows-2025-vs2026
+            preset: CI-Windows-Tests
+            compiler: cl
+            build_type: Debug
+            run_tests: true
+          - name: MSVC 19.5x (VS 2026) / Release / AVX256
+            id: msvc2026-release
+            os: windows-2025-vs2026
+            preset: CI-Windows-Tests
+            compiler: cl
+            build_type: Release
             run_tests: true
           # run with memory (ASan) and undefined-behavior (UBSan) checks
           - name: Clang 18 / Debug / AVX256 / ASan + UBSan
+            id: clang18-sanitizers
             os: ubuntu-24.04
             preset: CI-Linux-Clang-Sanitizers
+            compiler: clang++-18
+            build_type: Debug
+            linker_flags: -fsanitize=address,undefined
+            linux_packages: clang-18 libomp-18-dev libclang-rt-18-dev llvm-18
             run_tests: true
           # build the distributed application, but do not run MPI tests
           - name: GCC 13 / Release / MPI / COMPILE ONLY
+            id: gcc13-mpi
             os: ubuntu-24.04
             preset: CI-Linux-MPI
+            compiler: g++-13
+            build_type: Release
+            linux_packages: g++-13 libopenmpi-dev openmpi-bin
             run_tests: false
           # build with AVX512, but do not run the tests
-          - name: GCC 13 / Release / AVX512 / COMPILE ONLY
-            os: ubuntu-24.04
+          - name: GCC 15 / Release / AVX512 / COMPILE ONLY
+            id: gcc15-avx512
+            os: ubuntu-26.04
             preset: CI-Linux-AVX512
+            compiler: g++-15
+            build_type: Release
+            linux_packages: g++-15
+            run_tests: false
+          - name: Clang 21 / Release / AVX512 / COMPILE ONLY
+            id: clang21-avx512
+            os: ubuntu-26.04
+            preset: CI-Linux-AVX512
+            compiler: clang++-21
+            build_type: Release
+            linker_flags: -fuse-ld=/usr/bin/ld.lld-21
+            linux_packages: clang-21 libomp-21-dev lld-21 llvm-21
+            run_tests: false
+          - name: MSVC 19.5x (VS 2026) / Release / AVX512 / COMPILE ONLY
+            id: msvc2026-avx512
+            os: windows-2025-vs2026
+            preset: CI-Windows-AVX512
+            compiler: cl
+            build_type: Release
             run_tests: false
     # stop on sanitizer errors
     env:
@@ -77,35 +194,33 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+          vsversion: ${{ matrix.vs_version }}
+          toolset: ${{ matrix.vs_toolset }}
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ninja-build pkg-config g++-13
-
-      - name: Install Clang and sanitizer dependencies
-        if: matrix.preset == 'CI-Linux-Clang-Sanitizers'
-        run: sudo apt-get install --no-install-recommends -y clang-18 libomp-18-dev libclang-rt-18-dev llvm-18
-
-      - name: Install MPI
-        if: matrix.preset == 'CI-Linux-MPI'
-        run: sudo apt-get install --no-install-recommends -y libopenmpi-dev openmpi-bin
+          sudo apt-get install --no-install-recommends -y ninja-build pkg-config ${{ matrix.linux_packages }}
 
       - name: Create binary cache directory
         run: cmake -E make_directory out/vcpkg_cache
 
-      # cache dependencies by preset
+      # cache dependencies by toolchain configuration
       - name: Cache vcpkg packages
         uses: actions/cache@v6
         with:
           path: out/vcpkg_cache
-          key: vcpkg-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: vcpkg-${{ matrix.preset }}-
+          key: vcpkg-${{ matrix.id }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: vcpkg-${{ matrix.id }}-
 
       # configure headless builds with tests
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: >-
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.linker_flags }}"
 
       - name: Build applications and maintained tests
         run: cmake --build out/build/${{ matrix.preset }} --parallel 2
@@ -120,7 +235,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: diagnostics-${{ matrix.preset }}
+          name: diagnostics-${{ matrix.id }}
           path: |
             out/build/${{ matrix.preset }}/test-results.xml
             out/build/${{ matrix.preset }}/Testing/Temporary/*.log
@@ -160,7 +275,9 @@ jobs:
 
       # use sm_80 without GPU detection
       - name: Configure
-        run: cmake --preset CI-Linux-CUDA
+        run: >-
+          cmake --preset CI-Linux-CUDA
+          -DCMAKE_CXX_COMPILER=g++-13
 
       - name: Compile and link applications and maintained tests
         run: cmake --build out/build/CI-Linux-CUDA --parallel 2
