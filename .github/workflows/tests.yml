@@ -14,6 +14,7 @@ concurrency:
 
 env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/out/vcpkg_cache
+  VCPKG_DOWNLOADS: ${{ github.workspace }}/out/vcpkg_downloads
   VCPKG_DISABLE_METRICS: '1'
 
 jobs:
@@ -203,8 +204,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ninja-build pkg-config ${{ matrix.linux_packages }}
 
-      - name: Create binary cache directory
-        run: cmake -E make_directory out/vcpkg_cache
+      - name: Prepare vcpkg caches
+        id: vcpkg
+        shell: bash
+        run: |
+          cmake -E make_directory "$VCPKG_DEFAULT_BINARY_CACHE" "$VCPKG_DOWNLOADS"
+          revision=$(git -C external/vcpkg rev-parse HEAD)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      # share downloads within each runner image; older images need additional tools
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v6
+        with:
+          path: out/vcpkg_downloads
+          key: vcpkg-downloads-${{ matrix.os }}-${{ runner.arch }}-${{ steps.vcpkg.outputs.revision }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: vcpkg-downloads-${{ matrix.os }}-${{ runner.arch }}-${{ steps.vcpkg.outputs.revision }}-
 
       # cache dependencies by toolchain configuration
       - name: Cache vcpkg packages
@@ -263,8 +277,20 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Create binary cache directory
-        run: cmake -E make_directory out/vcpkg_cache
+      - name: Prepare vcpkg caches
+        id: vcpkg
+        shell: bash
+        run: |
+          cmake -E make_directory "$VCPKG_DEFAULT_BINARY_CACHE" "$VCPKG_DOWNLOADS"
+          revision=$(git -C external/vcpkg rev-parse HEAD)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v6
+        with:
+          path: out/vcpkg_downloads
+          key: vcpkg-downloads-ubuntu-24.04-${{ runner.arch }}-${{ steps.vcpkg.outputs.revision }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: vcpkg-downloads-ubuntu-24.04-${{ runner.arch }}-${{ steps.vcpkg.outputs.revision }}-
 
       - name: Cache vcpkg packages
         uses: actions/cache@v6
