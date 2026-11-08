@@ -126,3 +126,4 @@ logs/*
 !logs/slurm/
 !logs/slurm/*/
 !logs/slurm/*/*
+logs/slurm/Run_Z/7628047.out
