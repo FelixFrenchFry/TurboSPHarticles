@@ -1,0 +1,386 @@
+--- [ slurm job information ] --------------------------------------------------
+job id               = 7628048 (Run_Z3)
+partition            = cpu_il
+allocated nodes      = uc2n[622-623,627,673-674,727,736-738,744,757,781,783-786,790-795,802,817,823,829,831-832,857,859] (30 nodes)
+tasks / cpus         = 60 total tasks, 32 cpus/task
+start time           = 2026-10-15 04:19:12
+working directory    = /pfs/work9/workspace/scratch/fr_fl184-TurboSPHarticles/TurboSPHarticles
+
+--- [ loaded modules ] ---------------------------------------------------------
+
+--- [ node hardware snapshot ] -------------------------------------------------
+Model name:                              Intel(R) Xeon(R) Platinum 8358 CPU @ 2.60GHz
+Thread(s) per core:                      2
+Core(s) per socket:                      32
+Socket(s):                               2
+NUMA node(s):                            4
+               total        used        free      shared  buff/cache   available
+Mem:           251Gi       9.8Gi       244Gi       3.0Mi       1.3Gi       241Gi
+Swap:          7.5Gi       510Mi       7.0Gi
+
+[0#388095:388095@uc2n622.localdomain] MPI startup(): Intel(R) MPI Library, Version 2021.14  Build 20241121 (id: e7829d6)
+[0#388095:388095@uc2n622.localdomain] MPI startup(): Copyright (C) 2003-2024 Intel Corporation.  All rights reserved.
+[0#388095:388095@uc2n622.localdomain] MPI startup(): library kind: release
+[0#388095:388095@uc2n622.localdomain] MPI startup(): libfabric version: 1.21.0-impi
+[0#388095:388095@uc2n622.localdomain] MPI startup(): libfabric provider: mlx
+[0#388095:388095@uc2n622.localdomain] MPI startup(): File "/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/opt/mpi/etc/tuning_icx_shm-ofi_mlx_2_x1.dat" not found
+[0#388095:388095@uc2n622.localdomain] MPI startup(): File "/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/opt/mpi/etc/tuning_icx_shm-ofi_mlx_2.dat" not found
+[0#388095:388095@uc2n622.localdomain] MPI startup(): Load tuning file: "/software/bwhpc/common/toolkit/Intel_OneAPI/mpi/2021.14/opt/mpi/etc/tuning_icx_shm-ofi_mlx.dat"
+[0] MPI startup(): Number of NICs:  1 
+[0] MPI startup(): ===== NIC pinning on uc2n622.localdomain =====
+[0] MPI startup(): Rank    Thread id  Pin nic
+[0] MPI startup(): 0       0          mlx
+[0] MPI startup(): 1       0          mlx
+[0#388095:388095@uc2n622.localdomain] MPI startup(): ===== CPU pinning =====
+[0#388095:388095@uc2n622.localdomain] MPI startup(): Rank    Pid      Node name            Pin cpu
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 0       388095   uc2n622.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 1       388096   uc2n622.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 2       580392   uc2n623.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 3       580393   uc2n623.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 4       632021   uc2n627.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 5       632022   uc2n627.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 6       3416653  uc2n673.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 7       3416654  uc2n673.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 8       2390386  uc2n674.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 9       2390387  uc2n674.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 10      2803941  uc2n727.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 11      2803942  uc2n727.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 12      395883   uc2n736.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 13      395884   uc2n736.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 14      2431968  uc2n737.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 15      2431969  uc2n737.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 16      1550882  uc2n738.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 17      1550883  uc2n738.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 18      3474452  uc2n744.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 19      3474453  uc2n744.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 20      2808779  uc2n757.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 21      2808780  uc2n757.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 22      185488   uc2n781.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 23      185489   uc2n781.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 24      2736948  uc2n783.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 25      2736949  uc2n783.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 26      3915692  uc2n784.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 27      3915693  uc2n784.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 28      2804448  uc2n785.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 29      2804449  uc2n785.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 30      2760704  uc2n786.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 31      2760705  uc2n786.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 32      2110519  uc2n790.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 33      2110520  uc2n790.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 34      3823337  uc2n791.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 35      3823338  uc2n791.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 36      3072121  uc2n792.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 37      3072122  uc2n792.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 38      3643839  uc2n793.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 39      3643840  uc2n793.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 40      1662221  uc2n794.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 41      1662222  uc2n794.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 42      3108048  uc2n795.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 43      3108049  uc2n795.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 44      3685258  uc2n802.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 45      3685259  uc2n802.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 46      1740431  uc2n817.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 47      1740432  uc2n817.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 48      166779   uc2n823.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 49      166780   uc2n823.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 50      2730195  uc2n829.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 51      2730196  uc2n829.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 52      112610   uc2n831.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 53      112611   uc2n831.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 54      514379   uc2n832.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 55      514380   uc2n832.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 56      2274485  uc2n857.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 57      2274486  uc2n857.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 58      1243943  uc2n859.localdomain  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
+                                           30,31}
+[0#388095:388095@uc2n622.localdomain] MPI startup(): 59      1243944  uc2n859.localdomain  {32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58
+                                           ,59,60,61,62,63}
+(Running on Linux)
+[2026-10-15 04:19:17.064] [info] Launching TSP (distributed application)...
+[2026-10-15 04:19:17.065] [info] Using config profile 'Z3'
+[2026-10-15 04:19:17.065] [info] Applied 1 simulation override(s) from CLI args
+
+--- [ build configuration ] --------------------------------------------------------------
+------------------------------------------------------------------------------------------
+git revision                   = b7e5930c3ef3
+build type                     = Release
+compiler                       = GNU 11.5.0
+cpu simd arch                  = AVX512 (16 lanes)
+cpu isa compiler flags         = -mavx512f -mavx512cd -mavx512dq -mavx512bw -mfma
+
+--- [ distributed hardware specifications ] ----------------------------------------------
+------------------------------------------------------------------------------------------
+n   | host name                | r   |   avail threads |      sim budget |      vis budget
+------------------------------------------------------------------------------------------
+0   | uc2n622.localdomain      | 0   |              32 |              32 |               0
+    |                          | 1   |              32 |              32 |               0
+1   | uc2n623.localdomain      | 2   |              32 |              32 |               0
+    |                          | 3   |              32 |              32 |               0
+2   | uc2n627.localdomain      | 4   |              32 |              32 |               0
+    |                          | 5   |              32 |              32 |               0
+3   | uc2n673.localdomain      | 6   |              32 |              32 |               0
+    |                          | 7   |              32 |              32 |               0
+4   | uc2n674.localdomain      | 8   |              32 |              32 |               0
+    |                          | 9   |              32 |              32 |               0
+5   | uc2n727.localdomain      | 10  |              32 |              32 |               0
+    |                          | 11  |              32 |              32 |               0
+6   | uc2n736.localdomain      | 12  |              32 |              32 |               0
+    |                          | 13  |              32 |              32 |               0
+7   | uc2n737.localdomain      | 14  |              32 |              32 |               0
+    |                          | 15  |              32 |              32 |               0
+8   | uc2n738.localdomain      | 16  |              32 |              32 |               0
+    |                          | 17  |              32 |              32 |               0
+9   | uc2n744.localdomain      | 18  |              32 |              32 |               0
+    |                          | 19  |              32 |              32 |               0
+10  | uc2n757.localdomain      | 20  |              32 |              32 |               0
+    |                          | 21  |              32 |              32 |               0
+11  | uc2n781.localdomain      | 22  |              32 |              32 |               0
+    |                          | 23  |              32 |              32 |               0
+12  | uc2n783.localdomain      | 24  |              32 |              32 |               0
+    |                          | 25  |              32 |              32 |               0
+13  | uc2n784.localdomain      | 26  |              32 |              32 |               0
+    |                          | 27  |              32 |              32 |               0
+14  | uc2n785.localdomain      | 28  |              32 |              32 |               0
+    |                          | 29  |              32 |              32 |               0
+15  | uc2n786.localdomain      | 30  |              32 |              32 |               0
+    |                          | 31  |              32 |              32 |               0
+16  | uc2n790.localdomain      | 32  |              32 |              32 |               0
+    |                          | 33  |              32 |              32 |               0
+17  | uc2n791.localdomain      | 34  |              32 |              32 |               0
+    |                          | 35  |              32 |              32 |               0
+18  | uc2n792.localdomain      | 36  |              32 |              32 |               0
+    |                          | 37  |              32 |              32 |               0
+19  | uc2n793.localdomain      | 38  |              32 |              32 |               0
+    |                          | 39  |              32 |              32 |               0
+20  | uc2n794.localdomain      | 40  |              32 |              32 |               0
+    |                          | 41  |              32 |              32 |               0
+21  | uc2n795.localdomain      | 42  |              32 |              32 |               0
+    |                          | 43  |              32 |              32 |               0
+22  | uc2n802.localdomain      | 44  |              32 |              32 |               0
+    |                          | 45  |              32 |              32 |               0
+23  | uc2n817.localdomain      | 46  |              32 |              32 |               0
+    |                          | 47  |              32 |              32 |               0
+24  | uc2n823.localdomain      | 48  |              32 |              32 |               0
+    |                          | 49  |              32 |              32 |               0
+25  | uc2n829.localdomain      | 50  |              32 |              32 |               0
+    |                          | 51  |              32 |              32 |               0
+26  | uc2n831.localdomain      | 52  |              32 |              32 |               0
+    |                          | 53  |              32 |              32 |               0
+27  | uc2n832.localdomain      | 54  |              32 |              32 |               0
+    |                          | 55  |              32 |              32 |               0
+28  | uc2n857.localdomain      | 56  |              32 |              32 |               0
+    |                          | 57  |              32 |              32 |               0
+29  | uc2n859.localdomain      | 58  |              32 |              32 |               0
+    |                          | 59  |              32 |              32 |               0
+
+[2026-10-15 04:19:17.139] [info] Create distributed simulation backend...
+[2026-10-15 04:19:17.139] [info] Init distributed domain decomp...
+[2026-10-15 04:19:17.139] [info] Init simulation state...
+[2026-10-15 04:19:17.173] [info] Init initial domain decomp profile...
+[2026-10-15 04:19:18.506] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:20:18.671] [info] Sampling rigid model 'CorvetteShip' surfaces...
+[2026-10-15 04:20:19.051] [info] Sampling rigid model 'CruiserShip' surfaces...
+[2026-10-15 04:20:19.518] [info] Sampling rigid model 'DestroyerShip' surfaces...
+[2026-10-15 04:20:19.943] [info] Sampling rigid model 'FrigateShip' surfaces...
+[2026-10-15 04:20:20.277] [info] Sampling rigid model 'PassengerShip' surfaces...
+[2026-10-15 04:20:20.891] [info] Sampling rigid model 'TugBoat' surfaces...
+[2026-10-15 04:20:21.533] [info] Sampling rigid model 'ShortSubmarine' surfaces...
+[2026-10-15 04:20:21.785] [info] Init rank-local particle states...
+[2026-10-15 04:22:44.894] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:44.906] [error] [rank 57/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:44.987] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:44.993] [error] [rank 56/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.151] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.163] [error] [rank 54/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.278] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.296] [error] [rank 53/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.374] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.386] [error] [rank 51/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.501] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.511] [error] [rank 50/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.600] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.612] [error] [rank 58/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.619] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.631] [error] [rank 49/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.794] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.802] [error] [rank 47/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:45.890] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:45.895] [error] [rank 46/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.030] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.043] [error] [rank 44/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.051] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.058] [error] [rank 42/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.104] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.109] [error] [rank 43/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.187] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.192] [error] [rank 55/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.406] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.416] [error] [rank 39/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.418] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.424] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.426] [error] [rank 52/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.437] [error] [rank 40/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.512] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.515] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.518] [error] [rank 48/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.535] [error] [rank 37/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.739] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.748] [error] [rank 45/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:46.808] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:46.819] [error] [rank 36/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.003] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.008] [error] [rank 59/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.024] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.032] [error] [rank 34/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.053] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.054] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.065] [error] [rank 32/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.065] [error] [rank 33/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.229] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.235] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.241] [error] [rank 41/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.240] [error] [rank 30/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.355] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.366] [error] [rank 29/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.368] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.373] [error] [rank 35/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.564] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.564] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.577] [error] [rank 26/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.577] [error] [rank 27/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.584] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.589] [error] [rank 38/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.619] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.631] [error] [rank 25/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.856] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.868] [error] [rank 22/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.897] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:47.906] [error] [rank 23/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:47.998] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.011] [error] [rank 31/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.037] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.050] [error] [rank 19/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.154] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.171] [error] [rank 17/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.185] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.195] [error] [rank 28/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.226] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.246] [error] [rank 20/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.383] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.389] [error] [rank 24/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.429] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.439] [error] [rank 16/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.499] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.510] [error] [rank 15/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.705] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.717] [error] [rank 13/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.842] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.851] [error] [rank 12/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.929] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.948] [error] [rank 10/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:48.955] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:48.965] [error] [rank 21/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.003] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.011] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.016] [error] [rank 8/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.021] [error] [rank 9/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.161] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.173] [error] [rank 5/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.228] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.246] [error] [rank 6/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.299] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.304] [error] [rank 14/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.337] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.345] [error] [rank 18/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.418] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.437] [error] [rank 2/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.555] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.566] [error] [rank 3/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:49.579] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:49.588] [error] [rank 11/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:50.216] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:50.226] [error] [rank 7/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:50.262] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:50.271] [error] [rank 1/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:50.454] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:50.459] [error] [rank 4/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+[2026-10-15 04:22:52.030] [info] Sampling boundary model 'RockyCoastlineV1' surfaces...
+[2026-10-15 04:22:52.035] [error] [rank 0/60] Failed to re-build initial sim state: Surface candidate count exceeds uint32 limits.
+
+--- [ job completion ] ---------------------------------------------------------
+finish time          = 2026-10-15 04:22:52
+exit code            = 255
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n[622-623,627,673-674,727,736-738,744,757,781,783-786,790-795,802,817,823,829,831-832,857,859]
+Job ID: 7628048
+Cluster: uc3
+User/Group: fr_fl184/fr_fr
+State: FAILED (exit code 255)
+Nodes: 30
+Cores per node: 128
+CPU Utilized: 03:40:50
+CPU Efficiency: 1.38% of 11-02:40:00 core-walltime
+Job Wall-clock time: 00:04:10
+Memory Utilized: 480.82 GB
+Memory Efficiency: 6.58% of 7.14 TB (243.75 GB/node)
+The task which had the largest memory consumption differs by 102.25% from the average task max memory consumption
