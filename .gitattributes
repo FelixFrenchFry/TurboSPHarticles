@@ -5,3 +5,6 @@ source/visualization/fonts/iosevka_compressed.h linguist-generated
 * text=auto eol=lf
 
 *.ttf binary
+
+# keeps Slurm logs over GitHub's 100 MB file limit in Git LFS
+logs/slurm/Run_Z/7628047.out filter=lfs diff=lfs merge=lfs -text
