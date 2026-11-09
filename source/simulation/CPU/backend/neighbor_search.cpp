@@ -1007,20 +1007,27 @@ void NS_CellLinkedList_Compact_CPU::Init()
 	cellIdF_.clear();
 	particleOrderF_.clear();
 	uniqueCellIdF_.clear();
+	cellPrefixStartIdxF_ = {};
 	cellStartIdxHaloF_.clear();
 	uniqueCellIdHaloF_.clear();
+	cellPrefixStartIdxHaloF_ = {};
 
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
 	particleOrderB_.clear();
 	uniqueCellIdB_.clear();
+	cellPrefixStartIdxB_ = {};
 	cellStartIdxHaloB_.clear();
 	uniqueCellIdHaloB_.clear();
+	cellPrefixStartIdxHaloB_ = {};
 
 	cellStartIdxR_.clear();
 	cellIdR_.clear();
 	particleOrderR_.clear();
 	uniqueCellIdR_.clear();
+	cellPrefixStartIdxR_ = {};
+
+	cellPrefixShift_ = 0;
 
 	compactCellBuildScratch_.cellIds.clear();
 	compactCellBuildScratch_.particleOrder.clear();
@@ -1047,20 +1054,27 @@ void NS_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
 		cellIdF_.clear();
 		particleOrderF_.clear();
 		uniqueCellIdF_.clear();
+		cellPrefixStartIdxF_ = {};
 		cellStartIdxHaloF_.clear();
 		uniqueCellIdHaloF_.clear();
+		cellPrefixStartIdxHaloF_ = {};
 
 		cellStartIdxB_.clear();
 		cellIdB_.clear();
 		particleOrderB_.clear();
 		uniqueCellIdB_.clear();
+		cellPrefixStartIdxB_ = {};
 		cellStartIdxHaloB_.clear();
 		uniqueCellIdHaloB_.clear();
+		cellPrefixStartIdxHaloB_ = {};
 
 		cellStartIdxR_.clear();
 		cellIdR_.clear();
 		particleOrderR_.clear();
 		uniqueCellIdR_.clear();
+		cellPrefixStartIdxR_ = {};
+
+		cellPrefixShift_ = 0;
 
 		compactCellBuildScratch_.cellIds.clear();
 		compactCellBuildScratch_.particleOrder.clear();
@@ -1206,6 +1220,20 @@ void NS_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
 	// rigid
 	BuildCompactCellTable(
 		cellIdR_, 0, uniqueCellIdR_, cellStartIdxR_, compactCellBuildScratch_.chunkData);
+
+	// the frame's far corner has the largest in-frame cell ID
+	const uint64_t maxCellId =
+		SpreadBitsWithGaps_21to63(std::max(cellFrame_.N_dimX, 1u) - 1u)
+		| (SpreadBitsWithGaps_21to63(std::max(cellFrame_.N_dimY, 1u) - 1u) << 1)
+		| (SpreadBitsWithGaps_21to63(std::max(cellFrame_.N_dimZ, 1u) - 1u) << 2);
+	const uint32_t N_cellIdBits = static_cast<uint32_t>(std::bit_width(maxCellId));
+	cellPrefixShift_ = N_cellIdBits > N_CELL_PREFIX_BITS ? N_cellIdBits - N_CELL_PREFIX_BITS : 0u;
+
+	BuildCellPrefixStartIdx(uniqueCellIdF_, cellPrefixShift_, cellPrefixStartIdxF_);
+	BuildCellPrefixStartIdx(uniqueCellIdHaloF_, cellPrefixShift_, cellPrefixStartIdxHaloF_);
+	BuildCellPrefixStartIdx(uniqueCellIdB_, cellPrefixShift_, cellPrefixStartIdxB_);
+	BuildCellPrefixStartIdx(uniqueCellIdHaloB_, cellPrefixShift_, cellPrefixStartIdxHaloB_);
+	BuildCellPrefixStartIdx(uniqueCellIdR_, cellPrefixShift_, cellPrefixStartIdxR_);
 }
 
 const NS_CellLinkedList_Compact_CPU::CellRangeCache::Entry&
@@ -1218,22 +1246,24 @@ NS_CellLinkedList_Compact_CPU::ResolveCellQueryRanges(
 	}
 
 	CellRangeCache::Entry& entry = cellRangeCache.Insert(cellId, cellDirectoryGeneration_);
-	const auto FindCellRange = [cellId](
+	const auto FindCellRange = [cellId, cellPrefixShift = cellPrefixShift_](
 		const std::vector<uint64_t>& uniqueCellIds,
-		const std::vector<uint32_t>& cellStartIdx) noexcept
+		const std::vector<uint32_t>& cellStartIdx,
+		const CellPrefixStartIdx& cellPrefixStartIdx) noexcept
 	{
-		const uint32_t compactCellIdx = FindCompactCellIdx(uniqueCellIds, cellId);
+		const uint32_t compactCellIdx = FindCompactCellIdx(
+			uniqueCellIds, cellId, cellPrefixStartIdx, cellPrefixShift);
 		if (compactCellIdx == EMPTY_32) { return ActiveCellRange{}; }
 
 		return ActiveCellRange{
 			cellStartIdx[compactCellIdx], cellStartIdx[compactCellIdx + 1]};
 	};
 
-	entry.fluid = FindCellRange(uniqueCellIdF_, cellStartIdxF_);
-	entry.haloFluid = FindCellRange(uniqueCellIdHaloF_, cellStartIdxHaloF_);
-	entry.boundary = FindCellRange(uniqueCellIdB_, cellStartIdxB_);
-	entry.haloBoundary = FindCellRange(uniqueCellIdHaloB_, cellStartIdxHaloB_);
-	entry.rigid = FindCellRange(uniqueCellIdR_, cellStartIdxR_);
+	entry.fluid = FindCellRange(uniqueCellIdF_, cellStartIdxF_, cellPrefixStartIdxF_);
+	entry.haloFluid = FindCellRange(uniqueCellIdHaloF_, cellStartIdxHaloF_, cellPrefixStartIdxHaloF_);
+	entry.boundary = FindCellRange(uniqueCellIdB_, cellStartIdxB_, cellPrefixStartIdxB_);
+	entry.haloBoundary = FindCellRange(uniqueCellIdHaloB_, cellStartIdxHaloB_, cellPrefixStartIdxHaloB_);
+	entry.rigid = FindCellRange(uniqueCellIdR_, cellStartIdxR_, cellPrefixStartIdxR_);
 
 	return entry;
 }
@@ -2145,8 +2175,10 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU::GetMemUsage() const
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellIdF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(particleOrderF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdF_));
+	Mem::Add(usageF, Mem::MemUsage{ sizeof(cellPrefixStartIdxF_), sizeof(cellPrefixStartIdxF_) });
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(cellStartIdxHaloF_));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(uniqueCellIdHaloF_));
+	Mem::Add(usageF, Mem::MemUsage{ sizeof(cellPrefixStartIdxHaloF_), sizeof(cellPrefixStartIdxHaloF_) });
 	// (shared compact-cell build scratch is booked for F to avoid double-counting it)
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(compactCellBuildScratch_.cellIds));
 	Mem::Add(usageF, Mem::MemUsageOf_Vector(compactCellBuildScratch_.particleOrder));
@@ -2157,14 +2189,17 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU::GetMemUsage() const
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellIdB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(particleOrderB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdB_));
+	Mem::Add(usageB, Mem::MemUsage{ sizeof(cellPrefixStartIdxB_), sizeof(cellPrefixStartIdxB_) });
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(cellStartIdxHaloB_));
 	Mem::Add(usageB, Mem::MemUsageOf_Vector(uniqueCellIdHaloB_));
+	Mem::Add(usageB, Mem::MemUsage{ sizeof(cellPrefixStartIdxHaloB_), sizeof(cellPrefixStartIdxHaloB_) });
 
 	// R
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellStartIdxR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(cellIdR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(particleOrderR_));
 	Mem::Add(usageR, Mem::MemUsageOf_Vector(uniqueCellIdR_));
+	Mem::Add(usageR, Mem::MemUsage{ sizeof(cellPrefixStartIdxR_), sizeof(cellPrefixStartIdxR_) });
 
 	return { usageF, usageB, usageR };
 }
@@ -2339,38 +2374,45 @@ inline uint64_t NS_CellLinkedList_Compact_CPU::SpreadBitsWithGaps_21to63(uint32_
 	return x;
 }
 
+void NS_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
+	const std::span<const uint64_t> uniqueCellIds,
+	const uint32_t cellPrefixShift,
+	CellPrefixStartIdx& cellPrefixStartIdx) noexcept
+{
+	// the trailing out-of-frame cell (EMPTY_64) lies past the last bucket
+	auto first = uniqueCellIds.begin();
+	for (uint32_t p = 0; p <= N_CELL_PREFIX_BUCKETS; p++)
+	{
+		first = std::lower_bound(first, uniqueCellIds.end(), static_cast<uint64_t>(p) << cellPrefixShift);
+		cellPrefixStartIdx[p] = static_cast<uint32_t>(first - uniqueCellIds.begin());
+	}
+}
+
 uint32_t NS_CellLinkedList_Compact_CPU::FindCompactCellIdx(
 	const std::vector<uint64_t>& uniqueCellIds,
-	const uint64_t cellId) noexcept
+	const uint64_t cellId,
+	const CellPrefixStartIdx& cellPrefixStartIdx,
+	const uint32_t cellPrefixShift) noexcept
 {
-	uint64_t lo = 0;
-	uint64_t hi = uniqueCellIds.size();
+	const uint64_t p = cellId >> cellPrefixShift;
+	assert(p < N_CELL_PREFIX_BUCKETS);
 
-	// ternary step narrows by a third per dependent probe round
-	while (hi - lo > N_CELL_SEARCH_LINEAR_TAIL)
+	uint64_t first = cellPrefixStartIdx[p];
+	const uint64_t end = cellPrefixStartIdx[p + 1];
+	if (first == end) { return EMPTY_32; }
+
+	// branch-free lower bound
+	uint64_t count = end - first;
+	while (count > 1)
 	{
-		const uint64_t third = (hi - lo) / 3;
-		const uint64_t mid1 = lo + third;
-		const uint64_t mid2 = mid1 + third;
-		const uint64_t key1 = uniqueCellIds[mid1];
-		const uint64_t key2 = uniqueCellIds[mid2];
-
-		if (cellId < key1) { hi = mid1; }
-		else if (cellId == key1) { return static_cast<uint32_t>(mid1); }
-		else if (cellId < key2) { lo = mid1 + 1; hi = mid2; }
-		else if (cellId == key2) { return static_cast<uint32_t>(mid2); }
-		else { lo = mid2 + 1; }
+		const uint64_t half = count / 2;
+		const uint64_t mid = first + half;
+		first = uniqueCellIds[mid] < cellId ? mid : first;
+		count -= half;
 	}
 
-	// linear scan of the tail instead of further narrowing
-	uint32_t compactCellIdx = EMPTY_32;
-	for (uint64_t i = lo; i < hi; i++)
-	{
-		if (uniqueCellIds[i] == cellId)
-		{
-			compactCellIdx = static_cast<uint32_t>(i);
-		}
-	}
+	const uint64_t compactCellIdx = first + static_cast<uint64_t>(uniqueCellIds[first] < cellId);
+	if (compactCellIdx == end || uniqueCellIds[compactCellIdx] != cellId) { return EMPTY_32; }
 
-	return compactCellIdx;
+	return static_cast<uint32_t>(compactCellIdx);
 }

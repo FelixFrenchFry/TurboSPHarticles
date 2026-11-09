@@ -93,7 +93,8 @@ namespace Sim
 		float cellSizeInv_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CELL_FRAME_REBUILD_MARGIN = 8; // hysteresis buffer
-		static constexpr uint64_t N_CELL_SEARCH_LINEAR_TAIL = 32; // max elemnt count for linear search
+		static constexpr uint32_t N_CELL_PREFIX_BITS = 12;
+		static constexpr uint32_t N_CELL_PREFIX_BUCKETS = 1u << N_CELL_PREFIX_BITS;
 		static constexpr uint32_t N_QUERY_CELL_INLINE = 96;
 		static constexpr uint32_t N_QUERY_LOOKUP_CACHE = 256;
 		static_assert(std::has_single_bit(N_QUERY_LOOKUP_CACHE),
@@ -177,25 +178,35 @@ namespace Sim
 			std::vector<uint32_t> chunkData;
 		};
 
+		// per-bucket start index into one sorted occupied-cell table, bucketed by the top cell ID bits
+		using CellPrefixStartIdx = std::array<uint32_t, N_CELL_PREFIX_BUCKETS + 1>;
+
 		// data structures
 		std::vector<uint64_t> cellIdF_; // per-particle cell ID
 		std::vector<uint32_t> cellStartIdxF_; // per-cell start index into the re-ordered particle SoAs
 		std::vector<uint32_t> particleOrderF_; // re-order scratch permutation for fluid particles
 		std::vector<uint64_t> uniqueCellIdF_; // per-cell IDs of sorted non-empty cells
+		CellPrefixStartIdx cellPrefixStartIdxF_{};
 		std::vector<uint32_t> cellStartIdxHaloF_;
 		std::vector<uint64_t> uniqueCellIdHaloF_;
+		CellPrefixStartIdx cellPrefixStartIdxHaloF_{};
 
 		std::vector<uint64_t> cellIdB_;
 		std::vector<uint32_t> cellStartIdxB_;
 		std::vector<uint32_t> particleOrderB_;
 		std::vector<uint64_t> uniqueCellIdB_;
+		CellPrefixStartIdx cellPrefixStartIdxB_{};
 		std::vector<uint32_t> cellStartIdxHaloB_;
 		std::vector<uint64_t> uniqueCellIdHaloB_;
+		CellPrefixStartIdx cellPrefixStartIdxHaloB_{};
 
 		std::vector<uint64_t> cellIdR_;
 		std::vector<uint32_t> cellStartIdxR_;
 		std::vector<uint32_t> particleOrderR_;
 		std::vector<uint64_t> uniqueCellIdR_;
+		CellPrefixStartIdx cellPrefixStartIdxR_{};
+
+		uint32_t cellPrefixShift_ = 0; // cell ID right shift to the prefix bucket
 
 		CompactCellBuildScratch compactCellBuildScratch_;
 
@@ -223,10 +234,13 @@ namespace Sim
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& boundaryRanges,
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const;
 
-		// finds the compact cell index of a cell ID among the sorted occupied-cell IDs,
-		// narrowing with independent probe pairs and scanning the remaining tail branch-free
+		static void BuildCellPrefixStartIdx(
+			std::span<const uint64_t> uniqueCellIds, uint32_t cellPrefixShift,
+			CellPrefixStartIdx& cellPrefixStartIdx) noexcept;
+		// finds the compact cell index of an in-frame cell ID within its prefix bucket
 		static uint32_t FindCompactCellIdx(
-			const std::vector<uint64_t>& uniqueCellIds, uint64_t cellId) noexcept;
+			const std::vector<uint64_t>& uniqueCellIds, uint64_t cellId,
+			const CellPrefixStartIdx& cellPrefixStartIdx, uint32_t cellPrefixShift) noexcept;
 
 		inline bool IsInsideSimDomain(float x, float y, float z) const noexcept;
 		inline bool IsInsideCellFrame(int cx, int cy, int cz) const noexcept;
