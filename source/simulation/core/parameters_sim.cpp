@@ -192,15 +192,13 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 				const std::string s = v.get<std::string>();
 				if (s == "Sequential" || s == "sequential")
 					{ out = Base::RigidCouplingMode::Sequential; return true; }
-				if (s == "Interleaved" || s == "interleaved")
-					{ out = Base::RigidCouplingMode::Interleaved; return true; }
 				if (s == "Interlinked" || s == "interlinked")
 					{ out = Base::RigidCouplingMode::Interlinked; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
 			{
-				if (v < 0 || v > 2) { return false; }
+				if (v < 0 || v > 1) { return false; }
 				const int i = v.get<int>();
 				switch (i)
 				{
@@ -208,9 +206,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 					out = Base::RigidCouplingMode::Sequential;
 					return true;
 				case 1:
-					out = Base::RigidCouplingMode::Interleaved;
-					return true;
-				case 2:
 					out = Base::RigidCouplingMode::Interlinked;
 					return true;
 				}
@@ -488,7 +483,7 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			}
 			if (diagonal != Base::RigidContactDiagonal::Full)
 			{
-				SPDLOG_ERROR("rigidContactDiagonal={} is not implemented; Full is reserved for the future rigid contact solver.",
+				SPDLOG_ERROR("rigidContactDiagonal={} is not implemented; only Full is currently available.",
 					Base::ToCString(diagonal));
 				return false;
 			}
@@ -705,6 +700,26 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 				SPDLOG_WARN("Invalid 'solverTerminationCond' value in JSON.");
 			}
 		}
+	}
+
+	if (auto it = j.find("rigidContactDensityDevTarget"); it != j.end())
+	{
+		const float target = it->get<float>();
+		if (!std::isfinite(target) || target <= 0.0f)
+		{
+			SPDLOG_ERROR("'rigidContactDensityDevTarget' must be finite and > 0.");
+			return false;
+		}
+		params_.rigidContactDensityDevTarget = target;
+	}
+	if (auto it = j.find("rigidContactMaxSolverIters"); it != j.end())
+	{
+		if (!it->is_number_integer() || *it <= 0 || *it > std::numeric_limits<uint32_t>::max())
+		{
+			SPDLOG_ERROR("'rigidContactMaxSolverIters' must be an integer in [1, UINT32_MAX].");
+			return false;
+		}
+		params_.rigidContactMaxSolverIters = it->get<uint32_t>();
 	}
 
 	// --- [ data structuring ] ----------------------------------------------------------------------
@@ -1245,6 +1260,8 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 	j["minSolverIters"] = par.minSolverIters;
 	j["maxSolverIters"] = par.maxSolverIters;
 	j["solverTerminationCond"] = Base::ToCString(par.solverTerminationCond);
+	j["rigidContactDensityDevTarget"] = par.rigidContactDensityDevTarget;
+	j["rigidContactMaxSolverIters"] = par.rigidContactMaxSolverIters;
 
 	// --- [ data structuring ] ----------------------------------------------------------------------
 

@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stdexcept>
+#include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/partitioner.h>
@@ -29,48 +31,6 @@
 
 using namespace Sim;
 
-namespace
-{
-	void KernelGradient_CubicSpline_Scalar(
-		const float dx, const float dy, const float dz,
-		const float particleSizeInv,
-		const float kernelRadiusSqu,
-		const float cubicSplineAlpha,
-		float& xkg, float& ykg, float& zkg)
-	{
-		const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-		if (distSqu >= kernelRadiusSqu || !(distSqu > CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F))
-		{
-			xkg = 0.0f;
-			ykg = 0.0f;
-			zkg = 0.0f;
-			return;
-		}
-
-		const float dist = std::sqrt(distSqu);
-		const float distNorm = dist * particleSizeInv;
-		float commonFac = 0.0f;
-		if (distNorm < 1.0f)
-		{
-			// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
-			commonFac = cubicSplineAlpha * particleSizeInv * particleSizeInv
-				* std::fmaf(9.0f, distNorm, -12.0f);
-		}
-		else
-		{
-			const float t2 = std::max(2.0f - distNorm, 0.0f);
-			commonFac = cubicSplineAlpha
-				* (-3.0f * t2 * t2)
-				* (particleSizeInv / dist);
-		}
-
-		xkg = commonFac * dx;
-		ykg = commonFac * dy;
-		zkg = commonFac * dz;
-	}
-
-} // namespace anonymous
-
 void SimBackend_CPU::Step_IISPH(const SimParams& params)
 {
 	// distributed execution path
@@ -78,6 +38,13 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	{
 		Step_IISPH_Distributed(params);
 		return;
+	}
+	if (params.rigidCouplingMode != Base::RigidCouplingMode::Sequential ||
+		params.rigidContactDiagonal != Base::RigidContactDiagonal::Full)
+	{
+		// TODO: update this when the other modes are implemented
+		throw std::runtime_error(
+			"CPU rigid solving currently requires 'Sequential' coupling and the 'Full' contact diagonal.");
 	}
 
 	// --- [ temporary pre-computed constants ] ------------------------------------------------------
@@ -206,6 +173,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 
 	if (N_RB_ > 0)
 	{
+		// accumulate rigid particle forces and torques
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		CPU::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 			xPosF, yPosF, zPosF,
@@ -217,6 +185,11 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			sizeInvF, sizeSquF, kernelRadiusSqu,
 			cubicSplineAlpha, massF, params.viscosityB, N_R_,
 			xForceR, yForceR, zForceR);
+
+		// reduce rigid particle forces into body force and torque, and predict rigid body states
+		ReduceRigidParticleForcesToBody(RigidForceSource::Fluid);
+		PredictRigidBodies(timeStep);
+		PredictRigidParticleVelocities();
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
@@ -228,7 +201,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		xPosB, yPosB, zPosB,
 		xPosR, yPosR, zPosR,
 		xVelPredF, yVelPredF, zVelPredF,
-		xVelR, yVelR, zVelR,
+		xVelPredR_.data(), yVelPredR_.data(), zVelPredR_.data(),
 		densityF,
 		psiB, psiR,
 		neighborList,
@@ -243,12 +216,12 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 	// reset solver-related variables
-	N_solverIters_ = 1;
+	N_solverIters_ = N_F_ > 0 ? 1 : 0;
 	avgRelDensityErrorF_raw_ = 0.0f;
 	avgRelDensityErrorF_pos_ = 0.0f;
 	avgRelDensityErrorF_abs_ = 0.0f;
 
-	do // Jacobi iteration loop
+	while (N_F_ > 0) // Jacobi iteration loop
 	{
 		PressureSolveErrorSums errorSums{};
 
@@ -288,7 +261,8 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		}
 
 		N_solverIters_++;
-	} while (!TerminationConditionSatisfied(params));
+		if (TerminationConditionSatisfied(params)) { break; }
+	}
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 
@@ -321,7 +295,8 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			xForceR, yForceR, zForceR);
 
 		// reduce rigid particle forces into body force and torque
-		ReduceRigidParticleForces();
+		ClearRigidForcesAndAddGravity(params);
+		ReduceRigidParticleForcesToBody(RigidForceSource::Fluid);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 
@@ -339,6 +314,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	if (N_RB_ > 0 && integrateRigidBodies_)
 	{
 		benchmarksTracker_.StartBench(Bench::BenchOp::Rigid_StateUpdate);
+		SolveRigidContacts(params);
 		PredictRigidBodies(timeStep);
 		IntegrateRigidBodies(timeStep);
 		UpdateRigidParticles();
@@ -695,7 +671,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			xForceR, yForceR, zForceR);
 
 		// reduce rigid particle forces into body force and torque
-		ReduceRigidParticleForces();
+		ReduceRigidParticleForcesToBody(RigidForceSource::Fluid);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 	}
 

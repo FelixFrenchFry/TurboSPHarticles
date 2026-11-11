@@ -12,6 +12,7 @@
 #include "source/simulation/core/backend_sim.h"
 #include "source/simulation/core/parameters_sim.h"
 #include "neighbor_lists.h"
+#include "rigid_solver.h"
 
 
 
@@ -129,10 +130,9 @@ namespace Sim
 		uint32_t GetNumFluidParticles() const override { return N_F_; }
 		uint32_t GetNumBoundaryParticles() const override { return N_B_; }
 		uint32_t GetNumRigidParticles() const override { return N_R_; }
+		const CPU::RigidContactReport& GetRigidContactReport() const { return rigidContactReport_; }
 
 	private:
-
-		friend struct RigidMotionPredictionTest;
 
 		// IISPH fluid solver step
 		void Step_IISPH(const SimParams& params);
@@ -157,12 +157,19 @@ namespace Sim
 
 		void ClassifyExportSurfaceParticles(const std::vector<uint8_t>& nearSurfaceFlags) const;
 
+		enum class RigidForceSource : uint8_t
+		{
+			Fluid,
+			Contact
+		};
+
 		void UpdateRigidParticles(bool predicted = false);
 		void PredictRigidBodies(float timeStep);
 		void PredictRigidParticleVelocities();
 		void ClearRigidForcesAndAddGravity(const SimParams& params);
-		void ReduceRigidParticleForces();
+		void ReduceRigidParticleForcesToBody(RigidForceSource source);
 		void IntegrateRigidBodies(float timeStep);
+		void SolveRigidContacts(const SimParams& params);
 
 		// benchmarks
 		Bench::BenchmarksTracker& benchmarksTracker_;
@@ -231,6 +238,29 @@ namespace Sim
 		std::vector<float> xForceR_, yForceR_, zForceR_; // force accumulated before body reduction
 		std::vector<float> volR_; // non-uniform volumes for non-uniform rigid particle spacing
 		std::vector<float> psiR_; // non-uniform pseudo-masses for non-uniform rigid particle spacing
+		// rigid contact work (not exported)
+		std::vector<float> xPosRelWorldR_, yPosRelWorldR_, zPosRelWorldR_;
+		std::vector<float> xVelContactR_, yVelContactR_, zVelContactR_;
+		std::vector<float> xForceContactR_, yForceContactR_, zForceContactR_;
+		std::vector<float> densityContactR_;
+		std::vector<float> diagElemContactR_;
+		std::vector<float> pressureContactR_;
+		std::vector<float> sourceTermContactR_;
+		std::vector<float> densityErrorContactR_;
+		std::vector<float> jacobiOmegaContactR_;
+		std::vector<float> densityContactB_;
+		std::vector<float> diagElemContactB_;
+		std::vector<float> pressureContactB_;
+		std::vector<float> sourceTermContactB_;
+		std::vector<float> densityErrorContactB_;
+		std::vector<float> jacobiOmegaContactB_;
+		std::vector<float> iWorldInv00RB_, iWorldInv01RB_, iWorldInv02RB_;
+		std::vector<float> iWorldInv10RB_, iWorldInv11RB_, iWorldInv12RB_;
+		std::vector<float> iWorldInv20RB_, iWorldInv21RB_, iWorldInv22RB_;
+		std::vector<float> xForceContactRB_, yForceContactRB_, zForceContactRB_;
+		std::vector<float> xTorqueContactRB_, yTorqueContactRB_, zTorqueContactRB_;
+		CPU::RigidBoundaryContactNeighbors rigidBoundaryContactNeighbors_;
+		CPU::RigidContactReport rigidContactReport_;
 
 		// rigid bodies (using RB suffix to mark rigid body data structures)
 		std::vector<uint32_t> idRB_;

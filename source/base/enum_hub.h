@@ -145,9 +145,8 @@ namespace Base
 
 	enum class RigidCouplingMode : uint8_t
 	{
-		Sequential,  // 0 Algorithm 1 ordering; rigid contact response is not implemented yet
-		Interleaved, // 1 Algorithm 2
-		Interlinked  // 2 Algorithm 3
+		Sequential,  // 0 TODO: reference paper
+		Interlinked  // 1 TODO: reference paper
 	};
 	constexpr const char* ToCString(const RigidCouplingMode v) noexcept
 	{
@@ -155,8 +154,6 @@ namespace Base
 		{
 		case RigidCouplingMode::Sequential:
 			return "Sequential";
-		case RigidCouplingMode::Interleaved:
-			return "Interleaved";
 		case RigidCouplingMode::Interlinked:
 			return "Interlinked";
 		}
@@ -165,7 +162,7 @@ namespace Base
 
 	enum class RigidContactDiagonal : uint8_t
 	{
-		Full,  // 0 reserved default until the rigid contact solver is implemented
+		Full,  // 0
 		Approx // 1
 	};
 	constexpr const char* ToCString(const RigidContactDiagonal v) noexcept

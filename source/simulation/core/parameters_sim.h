@@ -99,6 +99,10 @@ namespace Sim
 		Base::SolverTerminationCond solverTerminationCond =
 			Base::SolverTerminationCond::FixedIters;
 
+		// rigid contact solving
+		float rigidContactDensityDevTarget = 0.001f;
+		uint32_t rigidContactMaxSolverIters = 100;
+
 		// data structuring
 		float gridCellSizeRatio = 1.0f;
 

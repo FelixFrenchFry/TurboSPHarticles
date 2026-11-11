@@ -189,6 +189,44 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	outerFluidChunkIdxs_.clear();
 	particleOffsetsR_ByBody_.clear();
 	particleLocalIdxsR_ByBody_.clear();
+	rigidContactReport_ = {};
+	xPosRelWorldR_.clear();
+	yPosRelWorldR_.clear();
+	zPosRelWorldR_.clear();
+	xVelContactR_.clear();
+	yVelContactR_.clear();
+	zVelContactR_.clear();
+	xForceContactR_.clear();
+	yForceContactR_.clear();
+	zForceContactR_.clear();
+	densityContactR_.clear();
+	diagElemContactR_.clear();
+	pressureContactR_.clear();
+	sourceTermContactR_.clear();
+	densityErrorContactR_.clear();
+	jacobiOmegaContactR_.clear();
+	densityContactB_.clear();
+	diagElemContactB_.clear();
+	pressureContactB_.clear();
+	sourceTermContactB_.clear();
+	densityErrorContactB_.clear();
+	jacobiOmegaContactB_.clear();
+	iWorldInv00RB_.clear();
+	iWorldInv01RB_.clear();
+	iWorldInv02RB_.clear();
+	iWorldInv10RB_.clear();
+	iWorldInv11RB_.clear();
+	iWorldInv12RB_.clear();
+	iWorldInv20RB_.clear();
+	iWorldInv21RB_.clear();
+	iWorldInv22RB_.clear();
+	xForceContactRB_.clear();
+	yForceContactRB_.clear();
+	zForceContactRB_.clear();
+	xTorqueContactRB_.clear();
+	yTorqueContactRB_.clear();
+	zTorqueContactRB_.clear();
+	rigidBoundaryContactNeighbors_.Clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
 	useDistributedStepWork_ = false;
@@ -1338,6 +1376,47 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(particleLocalIdxsR_ByBody_));
 		Add(usage, MemUsageOf_Vector(newFluidLocalIdx_FromOldLocalIdx_));
 		Add(usage, MemUsageOf_Vector(chunkFlagsScratch_));
+		Add(usage, MemUsageOf_Vector(xPosRelWorldR_));
+		Add(usage, MemUsageOf_Vector(yPosRelWorldR_));
+		Add(usage, MemUsageOf_Vector(zPosRelWorldR_));
+		Add(usage, MemUsageOf_Vector(xVelContactR_));
+		Add(usage, MemUsageOf_Vector(yVelContactR_));
+		Add(usage, MemUsageOf_Vector(zVelContactR_));
+		Add(usage, MemUsageOf_Vector(xForceContactR_));
+		Add(usage, MemUsageOf_Vector(yForceContactR_));
+		Add(usage, MemUsageOf_Vector(zForceContactR_));
+		Add(usage, MemUsageOf_Vector(densityContactR_));
+		Add(usage, MemUsageOf_Vector(diagElemContactR_));
+		Add(usage, MemUsageOf_Vector(pressureContactR_));
+		Add(usage, MemUsageOf_Vector(sourceTermContactR_));
+		Add(usage, MemUsageOf_Vector(densityErrorContactR_));
+		Add(usage, MemUsageOf_Vector(jacobiOmegaContactR_));
+		Add(usage, MemUsageOf_Vector(densityContactB_));
+		Add(usage, MemUsageOf_Vector(diagElemContactB_));
+		Add(usage, MemUsageOf_Vector(pressureContactB_));
+		Add(usage, MemUsageOf_Vector(sourceTermContactB_));
+		Add(usage, MemUsageOf_Vector(densityErrorContactB_));
+		Add(usage, MemUsageOf_Vector(jacobiOmegaContactB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv00RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv01RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv02RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv10RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv11RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv12RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv20RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv21RB_));
+		Add(usage, MemUsageOf_Vector(iWorldInv22RB_));
+		Add(usage, MemUsageOf_Vector(xForceContactRB_));
+		Add(usage, MemUsageOf_Vector(yForceContactRB_));
+		Add(usage, MemUsageOf_Vector(zForceContactRB_));
+		Add(usage, MemUsageOf_Vector(xTorqueContactRB_));
+		Add(usage, MemUsageOf_Vector(yTorqueContactRB_));
+		Add(usage, MemUsageOf_Vector(zTorqueContactRB_));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryContactNeighbors_.localIdxsB));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryContactNeighbors_.offsetsRB));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryContactNeighbors_.indicesRB));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryContactNeighbors_.offsetsBR));
+		Add(usage, MemUsageOf_Vector(rigidBoundaryContactNeighbors_.indicesBR));
 		Add(usage, MemUsageOf_Vector(idRB_));
 		Add(usage, MemUsageOf_Vector(rigidParticleCountRB_));
 		Add(usage, MemUsageOf_Vector(xCMRB_));
@@ -2061,8 +2140,19 @@ void SimBackend_CPU::ClearRigidForcesAndAddGravity(const SimParams& params)
 	}
 }
 
-void SimBackend_CPU::ReduceRigidParticleForces()
+void SimBackend_CPU::ReduceRigidParticleForcesToBody(const RigidForceSource source)
 {
+	const bool contact = source == RigidForceSource::Contact;
+	const float* xForceR = contact ? xForceContactR_.data() : xForceR_.data();
+	const float* yForceR = contact ? yForceContactR_.data() : yForceR_.data();
+	const float* zForceR = contact ? zForceContactR_.data() : zForceR_.data();
+	float* xForceRB = contact ? xForceContactRB_.data() : xForceRB_.data();
+	float* yForceRB = contact ? yForceContactRB_.data() : yForceRB_.data();
+	float* zForceRB = contact ? zForceContactRB_.data() : zForceRB_.data();
+	float* xTorqueRB = contact ? xTorqueContactRB_.data() : xTorqueRB_.data();
+	float* yTorqueRB = contact ? yTorqueContactRB_.data() : yTorqueRB_.data();
+	float* zTorqueRB = contact ? zTorqueContactRB_.data() : zTorqueRB_.data();
+
 	// rebuild after import, redistribution, or an owned-prefix change
 	const uint32_t N_work = useDistributedStepWork_ ? N_ownedR_ : N_R_;
 	if (particleOffsetsR_ByBody_.empty() || particleLocalIdxsR_ByBody_.size() != N_work)
@@ -2101,9 +2191,9 @@ void SimBackend_CPU::ReduceRigidParticleForces()
 					const float ly = yPosRelR_[rigidParticleIdx];
 					const float lz = zPosRelR_[rigidParticleIdx];
 
-					const float xForce = xForceR_[rigidParticleIdx];
-					const float yForce = yForceR_[rigidParticleIdx];
-					const float zForce = zForceR_[rigidParticleIdx];
+					const float xForce = xForceR[rigidParticleIdx];
+					const float yForce = yForceR[rigidParticleIdx];
+					const float zForce = zForceR[rigidParticleIdx];
 
 					const float rx = std::fmaf(a00, lx, std::fmaf(a01, ly, a02 * lz));
 					const float ry = std::fmaf(a10, lx, std::fmaf(a11, ly, a12 * lz));
@@ -2126,12 +2216,12 @@ void SimBackend_CPU::ReduceRigidParticleForces()
 			}
 		);
 
-		xForceRB_[bodyIdx] += acc.xForce;
-		yForceRB_[bodyIdx] += acc.yForce;
-		zForceRB_[bodyIdx] += acc.zForce;
-		xTorqueRB_[bodyIdx] += acc.xTorque;
-		yTorqueRB_[bodyIdx] += acc.yTorque;
-		zTorqueRB_[bodyIdx] += acc.zTorque;
+		xForceRB[bodyIdx] += acc.xForce;
+		yForceRB[bodyIdx] += acc.yForce;
+		zForceRB[bodyIdx] += acc.zForce;
+		xTorqueRB[bodyIdx] += acc.xTorque;
+		yTorqueRB[bodyIdx] += acc.yTorque;
+		zTorqueRB[bodyIdx] += acc.zTorque;
 	}
 }
 
@@ -2270,7 +2360,7 @@ void SimBackend_CPU::ExecuteFullSimStep(
 	const SimParams& params,
 	const uint32_t N_steps)
 {
-	if (N_F_ == 0 && !distributedFluidSolverSync_) // empty serial sim
+	if (N_F_ == 0 && N_RB_ == 0 && !distributedFluidSolverSync_) // empty serial sim
 	{
 		simStep_ += N_steps;
 		simTime_ += static_cast<double>(N_steps) * params.timeStep;

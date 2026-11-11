@@ -61,6 +61,10 @@ void SimulationMgr::Init(const std::string& restartCheckpoint)
 	}
 	SPDLOG_INFO("Init backend data structures...");
 	CreateAndInitializeSimBackend(simParams_.backendType);
+	if (simParams_.backendType == Base::BackendType::GPU && universalSimState_.rigidBodies.N_ > 0)
+	{
+		SPDLOG_WARN("Rigid-rigid contact solving not implemented here");
+	}
 
 	// updated snapshot
 	initialized_.store(true, std::memory_order_release);

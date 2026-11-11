@@ -260,6 +260,10 @@ namespace Sim
         printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "maxSolverIters", params.maxSolverIters);
         printf("%-*s = %s\n", N_CLI_SIM_PARAM_LABEL_CHARS, "solverTerminationCond",
             Base::ToCString(params.solverTerminationCond));
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "rigidContactDensityDevTarget",
+            params.rigidContactDensityDevTarget);
+        printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "rigidContactMaxSolverIters",
+            params.rigidContactMaxSolverIters);
         printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "gridCellSizeRatio", params.gridCellSizeRatio);
         printf("%-*s = [ %.6f / %.6f ]\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jitterFrac [F / B]",
 			params.jitterFracF, params.jitterFracB);

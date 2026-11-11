@@ -200,7 +200,7 @@
             "pitchDeg": 0.0,
             "rollDeg": -60.0
           },
-          "rigidDensity": 400.0,
+          "rigidDensity": 350.0,
           "rigidInitVel": [ 0.0, 0.0, 0.0 ],
           "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
         },

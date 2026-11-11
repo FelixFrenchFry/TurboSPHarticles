@@ -371,6 +371,11 @@ bool DistSimulationMgr::Init(
 	// build the fluid solver synchronization plan required by the initial export
 	if (!RebuildFluidSolverSyncPlan()) { return false; }
 
+	if (localSimState_.rigidBodies.N_ > 0)
+	{
+		SPDLOG_WARN_MPI("Rigid-rigid contact solving not implemented here", mpiContext_);
+	}
+
 	return true;
 }
 

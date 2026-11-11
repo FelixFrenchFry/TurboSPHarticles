@@ -3,6 +3,7 @@
 
 // external
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <xsimd/xsimd.hpp>
 
@@ -301,6 +302,44 @@ namespace CPU
 		const Float32xSIMD kw = alpha * (t2_3 - four * t1_3);
 
 		return ZeroMaskedFloat32xSIMD(kw, inside);
+	}
+
+	inline void KernelGradient_CubicSpline_Scalar(
+		const float dx, const float dy, const float dz,
+		const float particleSizeInv,
+		const float kernelRadiusSqu,
+		const float cubicSplineAlpha,
+		float& xkg, float& ykg, float& zkg)
+	{
+		const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+		if (distSqu >= kernelRadiusSqu || !(distSqu > CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F))
+		{
+			xkg = 0.0f;
+			ykg = 0.0f;
+			zkg = 0.0f;
+			return;
+		}
+
+		const float dist = std::sqrt(distSqu);
+		const float distNorm = dist * particleSizeInv;
+		float commonFac = 0.0f;
+		if (distNorm < 1.0f)
+		{
+			// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
+			commonFac = cubicSplineAlpha * particleSizeInv * particleSizeInv
+				* std::fmaf(9.0f, distNorm, -12.0f);
+		}
+		else
+		{
+			const float t2 = std::max(2.0f - distNorm, 0.0f);
+			commonFac = cubicSplineAlpha
+				* (-3.0f * t2 * t2)
+				* (particleSizeInv / dist);
+		}
+
+		xkg = commonFac * dx;
+		ykg = commonFac * dy;
+		zkg = commonFac * dz;
 	}
 
 	// compute cubic-spline kernel gradients for SIMD particle-pair offsets
