@@ -27,6 +27,8 @@
   "minSolverIters": 3,
   "maxSolverIters": 50,
   "solverTerminationCond": 0,
+  "rigidContactDensityDevTarget": 0.01,
+  "rigidContactMaxSolverIters": 10,
 
   "gridCellSizeRatio": 1.0,
   "jitterFracF": 0.0,

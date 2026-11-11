@@ -296,9 +296,9 @@ void CPU::RigidContactDensityAndDiagonal(
 								zPos[localIdx] - (neighborBoundary ? zPosB[nbrLocalIdx] : zPosR[j]),
 								particleSizeInvF, kernelRadiusSqu, cubicSplineAlpha, xkg, ykg, zkg);
 							if (!(weight > 0.0f)) { return; }
-							rho += volRest * weight;
 							hasContact = true;
 							const float neighborVolume = RIGID_CONTACT_VOLUME_FACTOR * (neighborBoundary ? volB[nbrLocalIdx] : volR[j]);
+							rho += neighborVolume * weight;
 							xkg *= neighborVolume; ykg *= neighborVolume; zkg *= neighborVolume;
 							if (!boundary)
 							{
