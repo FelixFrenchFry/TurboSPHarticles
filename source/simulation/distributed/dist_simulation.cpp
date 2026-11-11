@@ -509,7 +509,7 @@ void DistSimulationMgr::SelectDomainDecomp(const Base::DomainDecompMethod method
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to create distributed domain decomp ({}): {} "
-			"AABB_Slabs and AABB_Columns are the domain decomps.",
+			"AABB_Slabs, AABB_Columns and AABB_Orb are the domain decomps.",
 			mpiContext_.Rank(), mpiContext_.Size(),
 			static_cast<int>(method), ex.what());
 		return;
@@ -518,7 +518,7 @@ void DistSimulationMgr::SelectDomainDecomp(const Base::DomainDecompMethod method
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to create distributed domain decomp ({}). "
-			"AABB_Slabs and AABB_Columns are the domain decomps.",
+			"AABB_Slabs, AABB_Columns and AABB_Orb are the domain decomps.",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(method));
 		return;
 	}

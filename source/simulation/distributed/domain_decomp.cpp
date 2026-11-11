@@ -7,6 +7,7 @@
 // internal
 #include "domain_decomp.h"
 #include "layouts/decomp_aabb_columns.h"
+#include "layouts/decomp_aabb_orb.h"
 #include "layouts/decomp_aabb_slabs.h"
 
 
@@ -24,6 +25,10 @@ namespace Dist
 		case Base::DomainDecompMethod::AABB_Columns:
 		{
 			return std::make_unique<Decomp_AABB_Columns>();
+		}
+		case Base::DomainDecompMethod::AABB_Orb:
+		{
+			return std::make_unique<Decomp_AABB_Orb>();
 		}
 		}
 

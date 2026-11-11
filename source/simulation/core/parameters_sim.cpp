@@ -255,6 +255,8 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 					{ out = Base::DomainDecompMethod::AABB_Slabs; return true; }
 				if (s == "AABB_Columns")
 					{ out = Base::DomainDecompMethod::AABB_Columns; return true; }
+				if (s == "AABB_Orb")
+					{ out = Base::DomainDecompMethod::AABB_Orb; return true; }
 				return false;
 			}
 			else if (v.is_number_integer())
@@ -267,6 +269,9 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 					return true;
 				case 1:
 					out = Base::DomainDecompMethod::AABB_Columns;
+					return true;
+				case 2:
+					out = Base::DomainDecompMethod::AABB_Orb;
 					return true;
 				default:
 					return false;

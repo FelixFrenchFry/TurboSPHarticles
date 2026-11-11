@@ -183,7 +183,8 @@ namespace Base
 	enum class DomainDecompMethod : uint8_t
 	{
 		AABB_Slabs,   // 0 dynamically sized AABB slabs, split along the selected axis
-		AABB_Columns  // 1 dynamically sized AABB columns, split along the global X and Z axes
+		AABB_Columns, // 1 dynamically sized AABB columns, split along the global X and Z axes
+		AABB_Orb      // 2 dynamically sized AABB boxes, split by orthogonal recursive bisection
 	};
 	constexpr const char* ToCString(const DomainDecompMethod v) noexcept
 	{
@@ -193,6 +194,8 @@ namespace Base
 			return "AABB_Slabs";
 		case DomainDecompMethod::AABB_Columns:
 			return "AABB_Columns";
+		case DomainDecompMethod::AABB_Orb:
+			return "AABB_Orb";
 		}
 		return "DomainDecompMethod::<unknown>";
 	}
