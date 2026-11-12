@@ -5,6 +5,7 @@
 #include <array>
 #include <bit>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -639,7 +640,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						const float dx = xi - xPosF[j];
 						const float dy = yi - yPosF[j];
 						const float dz = zi - zPosF[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
+						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
@@ -658,7 +659,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						const float dx = xi - xPosB[j];
 						const float dy = yi - yPosB[j];
 						const float dz = zi - zPosB[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
+						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
@@ -677,7 +678,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						const float dx = xi - xPosR[j];
 						const float dy = yi - yPosR[j];
 						const float dz = zi - zPosR[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
+						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
@@ -727,7 +728,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					const float dx = xPosR[i] - xPosF[j];
 					const float dy = yPosR[i] - yPosF[j];
 					const float dz = zPosR[i] - zPosF[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
@@ -741,7 +742,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					const float dx = xPosR[i] - xPosB[j];
 					const float dy = yPosR[i] - yPosB[j];
 					const float dz = zPosR[i] - zPosB[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
@@ -758,7 +759,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					const float dx = xPosR[i] - xPosR[j];
 					const float dy = yPosR[i] - yPosR[j];
 					const float dz = zPosR[i] - zPosR[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
@@ -830,7 +831,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 						const float dx = xi - xPosF[j];
 						const float dy = yi - yPosF[j];
 						const float dz = zi - zPosF[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
+						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
@@ -854,7 +855,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 						const float dx = xi - xPosB[j];
 						const float dy = yi - yPosB[j];
 						const float dz = zi - zPosB[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
+						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
@@ -878,7 +879,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 						const float dx = xi - xPosR[j];
 						const float dy = yi - yPosR[j];
 						const float dz = zi - zPosR[j];
-						const float distSqu = dx * dx + dy * dy + dz * dz;
+						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
@@ -925,7 +926,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 					const float dx = xPosR[i] - xPosF[j];
 					const float dy = yPosR[i] - yPosF[j];
 					const float dz = zPosR[i] - zPosF[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
@@ -942,7 +943,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 					const float dx = xPosR[i] - xPosB[j];
 					const float dy = yPosR[i] - yPosB[j];
 					const float dz = zPosR[i] - zPosB[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
@@ -962,7 +963,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 					const float dx = xPosR[i] - xPosR[j];
 					const float dy = yPosR[i] - yPosR[j];
 					const float dz = zPosR[i] - zPosR[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= kernelRadiusSqu) [[unlikely]]
 					{
@@ -1652,7 +1653,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							const float dx = xPosR[i] - xPosF[j];
 							const float dy = yPosR[i] - yPosF[j];
 							const float dz = zPosR[i] - zPosF[j];
-							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { countRF++; }
+							const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+							if (distSqu <= kernelRadiusSqu) { countRF++; }
 						}
 					}
 
@@ -1663,7 +1665,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							const float dx = xPosR[i] - xPosB[j];
 							const float dy = yPosR[i] - yPosB[j];
 							const float dz = zPosR[i] - zPosB[j];
-							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { countRB++; }
+							const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+							if (distSqu <= kernelRadiusSqu) { countRB++; }
 						}
 					}
 
@@ -1676,7 +1679,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							const float dx = xPosR[i] - xPosR[j];
 							const float dy = yPosR[i] - yPosR[j];
 							const float dz = zPosR[i] - zPosR[j];
-							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { countRR++; }
+							const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+							if (distSqu <= kernelRadiusSqu) { countRR++; }
 						}
 					}
 
@@ -1901,7 +1905,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 							const float dx = xPosR[i] - xPosF[j];
 							const float dy = yPosR[i] - yPosF[j];
 							const float dz = zPosR[i] - zPosF[j];
-							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { neighbors.push_back(j); }
+							const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+							if (distSqu <= kernelRadiusSqu) { neighbors.push_back(j); }
 						}
 					}
 					be_.neighborList_->SetNbrListRF(
@@ -1915,7 +1920,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 							const float dx = xPosR[i] - xPosB[j];
 							const float dy = yPosR[i] - yPosB[j];
 							const float dz = zPosR[i] - zPosB[j];
-							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { neighbors.push_back(j); }
+							const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+							if (distSqu <= kernelRadiusSqu) { neighbors.push_back(j); }
 						}
 					}
 					be_.neighborList_->SetNbrListRB(
@@ -1931,7 +1937,8 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 							const float dx = xPosR[i] - xPosR[j];
 							const float dy = yPosR[i] - yPosR[j];
 							const float dz = zPosR[i] - zPosR[j];
-							if (dx * dx + dy * dy + dz * dz <= kernelRadiusSqu) { neighbors.push_back(j); }
+							const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
+							if (distSqu <= kernelRadiusSqu) { neighbors.push_back(j); }
 						}
 					}
 					be_.neighborList_->SetNbrListRR(

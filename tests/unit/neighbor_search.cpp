@@ -245,6 +245,13 @@ namespace
 		LoadAndSearch(particles);
 	}
 
+	// this offset rounds to the cutoff with separate multiply-adds, but is outside with nested FMA
+	TEST_P(NeighborSearchTests, ExcludesOffAxisPairsJustOutsideCutoff)
+	{
+		const std::vector<glm::vec3> positions{ { 0.0f, 0.0f, 0.0f }, { 0.1f, 0.3f, 0.94868332f } };
+		LoadAndSearch(MakeParticles(positions, positions, positions));
+	}
+
 	// binary-fraction coordinates cross positive and negative cell faces, edges, and corners
 	TEST_P(NeighborSearchTests, FindsNeighborsAcrossCellBoundaries)
 	{

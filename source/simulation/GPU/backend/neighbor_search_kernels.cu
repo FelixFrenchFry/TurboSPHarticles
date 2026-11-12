@@ -2,6 +2,7 @@
 
 // external
 #include <cuda_runtime.h>
+#include <cmath>
 
 // internal
 #include "source/simulation/GPU/gpu_utils.h"
@@ -253,7 +254,7 @@ namespace GPU
 				const float dx = xi - xPosF[j];
 				const float dy = yi - yPosF[j];
 				const float dz = zi - zPosF[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
 				{
@@ -269,7 +270,7 @@ namespace GPU
 				const float dx = xi - xPosB[j];
 				const float dy = yi - yPosB[j];
 				const float dz = zi - zPosB[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
 				{
@@ -285,7 +286,7 @@ namespace GPU
 				const float dx = xi - xPosR[j];
 				const float dy = yi - yPosR[j];
 				const float dz = zi - zPosR[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 				if (distSqu <= c_ns_kernelRadiusSqu) [[unlikely]] // neighbor found
 				{
@@ -380,7 +381,7 @@ namespace GPU
 			const float dx = xi - xPosF[j];
 			const float dy = yi - yPosF[j];
 			const float dz = zi - zPosF[j];
-			const float distSqu = dx * dx + dy * dy + dz * dz;
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 			{
@@ -399,7 +400,7 @@ namespace GPU
 			const float dx = xi - xPosB[j];
 			const float dy = yi - yPosB[j];
 			const float dz = zi - zPosB[j];
-			const float distSqu = dx * dx + dy * dy + dz * dz;
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 			{
@@ -418,7 +419,7 @@ namespace GPU
 			const float dx = xi - xPosR[j];
 			const float dy = yi - yPosR[j];
 			const float dz = zi - zPosR[j];
-			const float distSqu = dx * dx + dy * dy + dz * dz;
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 			if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 			{
@@ -940,7 +941,7 @@ namespace GPU
 					const float dx = x - xPosF[j];
 					const float dy = y - yPosF[j];
 					const float dz = z - zPosF[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
@@ -956,7 +957,7 @@ namespace GPU
 					const float dx = x - xPosB[j];
 					const float dy = y - yPosB[j];
 					const float dz = z - zPosB[j];
-					const float distSqu = dx * dx + dy * dy + dz * dz;
+					const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 					if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 					{
@@ -1000,7 +1001,7 @@ namespace GPU
 								const float dx = x - xPosR[j];
 								const float dy = y - yPosR[j];
 								const float dz = z - zPosR[j];
-								const float distSqu = dx * dx + dy * dy + dz * dz;
+								const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 								if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 								{
@@ -1120,7 +1121,7 @@ namespace GPU
 				const float dx = x - xPosF[j];
 				const float dy = y - yPosF[j];
 				const float dz = z - zPosF[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 				if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 				{
@@ -1139,7 +1140,7 @@ namespace GPU
 				const float dx = x - xPosB[j];
 				const float dy = y - yPosB[j];
 				const float dz = z - zPosB[j];
-				const float distSqu = dx * dx + dy * dy + dz * dz;
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 				if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 				{
@@ -1186,7 +1187,7 @@ namespace GPU
 							const float dx = x - xPosR[j];
 							const float dy = y - yPosR[j];
 							const float dz = z - zPosR[j];
-							const float distSqu = dx * dx + dy * dy + dz * dz;
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
 
 							if (distSqu <= c_ns_kernelRadiusSqu) // neighbor found
 							{
@@ -1238,7 +1239,8 @@ namespace GPU
 			const float dx = xPosR[i] - xPosF[j];
 			const float dy = yPosR[i] - yPosF[j];
 			const float dz = zPosR[i] - zPosF[j];
-			if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+			if (distSqu <= c_ns_kernelRadiusSqu)
 			{
 				cntRF++;
 			}
@@ -1250,7 +1252,8 @@ namespace GPU
 			const float dx = xPosR[i] - xPosB[j];
 			const float dy = yPosR[i] - yPosB[j];
 			const float dz = zPosR[i] - zPosB[j];
-			if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+			if (distSqu <= c_ns_kernelRadiusSqu)
 			{
 				cntRB++;
 			}
@@ -1263,7 +1266,8 @@ namespace GPU
 			const float dx = xPosR[i] - xPosR[j];
 			const float dy = yPosR[i] - yPosR[j];
 			const float dz = zPosR[i] - zPosR[j];
-			if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+			if (distSqu <= c_ns_kernelRadiusSqu)
 			{
 				cntRR++;
 			}
@@ -1306,7 +1310,8 @@ namespace GPU
 			const float dx = xPosR[i] - xPosF[j];
 			const float dy = yPosR[i] - yPosF[j];
 			const float dz = zPosR[i] - zPosF[j];
-			if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+			if (distSqu <= c_ns_kernelRadiusSqu)
 			{
 				nbrListRF[wrRF++] = j;
 			}
@@ -1318,7 +1323,8 @@ namespace GPU
 			const float dx = xPosR[i] - xPosB[j];
 			const float dy = yPosR[i] - yPosB[j];
 			const float dz = zPosR[i] - zPosB[j];
-			if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+			if (distSqu <= c_ns_kernelRadiusSqu)
 			{
 				nbrListRB[wrRB++] = j;
 			}
@@ -1331,7 +1337,8 @@ namespace GPU
 			const float dx = xPosR[i] - xPosR[j];
 			const float dy = yPosR[i] - yPosR[j];
 			const float dz = zPosR[i] - zPosR[j];
-			if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+			const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+			if (distSqu <= c_ns_kernelRadiusSqu)
 			{
 				nbrListRR[wrRR++] = j;
 			}
@@ -1402,7 +1409,8 @@ namespace GPU
 							const float dx = x - xPosF[j];
 							const float dy = y - yPosF[j];
 							const float dz = z - zPosF[j];
-							if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+							if (distSqu <= c_ns_kernelRadiusSqu)
 							{
 								cntRF++;
 							}
@@ -1421,7 +1429,8 @@ namespace GPU
 							const float dx = x - xPosB[j];
 							const float dy = y - yPosB[j];
 							const float dz = z - zPosB[j];
-							if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+							if (distSqu <= c_ns_kernelRadiusSqu)
 							{
 								cntRB++;
 							}
@@ -1442,7 +1451,8 @@ namespace GPU
 							const float dx = x - xPosR[j];
 							const float dy = y - yPosR[j];
 							const float dz = z - zPosR[j];
-							if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+							if (distSqu <= c_ns_kernelRadiusSqu)
 							{
 								cntRR++;
 							}
@@ -1523,7 +1533,8 @@ namespace GPU
 							const float dx = x - xPosF[j];
 							const float dy = y - yPosF[j];
 							const float dz = z - zPosF[j];
-							if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+							if (distSqu <= c_ns_kernelRadiusSqu)
 							{
 								nbrListRF[wrRF++] = j;
 							}
@@ -1542,7 +1553,8 @@ namespace GPU
 							const float dx = x - xPosB[j];
 							const float dy = y - yPosB[j];
 							const float dz = z - zPosB[j];
-							if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+							if (distSqu <= c_ns_kernelRadiusSqu)
 							{
 								nbrListRB[wrRB++] = j;
 							}
@@ -1563,7 +1575,8 @@ namespace GPU
 							const float dx = x - xPosR[j];
 							const float dy = y - yPosR[j];
 							const float dz = z - zPosR[j];
-							if (dx * dx + dy * dy + dz * dz <= c_ns_kernelRadiusSqu)
+							const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+							if (distSqu <= c_ns_kernelRadiusSqu)
 							{
 								nbrListRR[wrRR++] = j;
 							}

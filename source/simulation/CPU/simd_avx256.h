@@ -14,7 +14,7 @@ namespace CPU
 	constexpr uint32_t N_SIMD_ALIGNMENT = 32u;
 
 	// 8-wide CPU SIMD types used by SELL-style kernels
-	using SimdArch = xsimd::avx2;
+	using SimdArch = xsimd::fma3<xsimd::avx2>;
 	using Float32xSIMD = xsimd::batch<float, SimdArch>;
 	using Int32xSIMD = xsimd::batch<int32_t, SimdArch>;
 	using UInt32xSIMD = xsimd::batch<uint32_t, SimdArch>;
