@@ -28,13 +28,18 @@ namespace
 	{
 		if (boundary)
 		{
+			// BR contact neighbors
 			const uint64_t begin = contactNeighbors.offsetsBR[i];
 			const uint64_t end = contactNeighbors.offsetsBR[i + 1];
 			for (uint64_t k = begin; k < end; k++) { function(contactNeighbors.indicesBR[k], false); }
 			return;
 		}
+
+		// RR contact neighbors
 		const Sim::NeighborSpan nbrRR = neighborList.RR(i);
 		for (uint32_t k = 0; k < nbrRR.N; k++) { function(nbrRR.data[k], false); }
+
+		// RB contact neighbors
 		if (!contactNeighbors.offsetsRB.empty())
 		{
 			const uint64_t begin = contactNeighbors.offsetsRB[i];
@@ -94,7 +99,7 @@ bool CPU::BuildRigidBoundaryNeighbors(
 	auto& offsetsBR = contactNeighbors.offsetsBR;
 	auto& indicesBR = contactNeighbors.indicesBR;
 
-	// assign contact indices only to boundary particles referenced by rigid neighbors
+	// RB assign contact indices to boundary particles referenced by rigid neighbors
 	std::unordered_map<uint32_t, uint32_t> contactIdx_FromLocalIdxB;
 	bool hasRigidContact = false;
 	for (uint32_t i = 0; i < N_R; i++)
@@ -128,7 +133,7 @@ bool CPU::BuildRigidBoundaryNeighbors(
 	}
 	if (offsetsRB.empty()) { return hasRigidContact; }
 
-	// invert the compact rigid-to-boundary neighbor list
+	// BR build the reverse rigid-to-boundary neighbor list
 	const uint32_t N_contactB = static_cast<uint32_t>(localIdxsB.size());
 	for (uint32_t i = 0; i < N_contactB; i++) { offsetsBR[i + 1] += offsetsBR[i]; }
 	indicesBR.resize(offsetsBR.back());
@@ -373,6 +378,8 @@ uint64_t CPU::RigidContactRelaxation(
 		if (jacobiOmegaContactB[i] <= 0.0f) { continue; }
 		N_contacts++;
 		if (diagElemContactB[i] <= 0.0f) { continue; }
+
+		// BR count contacts per movable body
 		for (uint64_t k = offsetsBR[i]; k < offsetsBR[i + 1]; k++)
 		{
 			const uint32_t bodyIdx = bodyIdR[indicesBR[k]];
@@ -387,6 +394,8 @@ uint64_t CPU::RigidContactRelaxation(
 	{
 		if (jacobiOmegaContactB[i] <= 0.0f || diagElemContactB[i] <= 0.0f) { continue; }
 		uint32_t N_maxContactsB = 0;
+
+		// BR find the largest contact count
 		for (uint64_t k = offsetsBR[i]; k < offsetsBR[i + 1]; k++)
 		{
 			const uint32_t bodyIdx = bodyIdR[indicesBR[k]];

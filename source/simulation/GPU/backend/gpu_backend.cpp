@@ -847,7 +847,7 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		MemUsage usageB{};
 		MemUsage usageR{};
 
-		// fluid
+		// FF export neighbor list memory usage
 		Add(usageF, MemUsageOf_Vector(h_expNbrCountFF_));
 		Add(usageF, MemUsageOf_Vector(h_expNbrChunkOffsetsFF_));
 		Add(usageF, MemUsageOf_Vector(h_expNbrChunkBaseIdxFF_));
@@ -856,10 +856,10 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usageF, MemUsageOf_Vector(h_expNbrListDelta16FF_));
 		Add(usageF, MemUsageOf_Vector(h_expNbrListAbs32FF_));
 
-		// boundary
+		// FB export neighbor list memory usage
 		Add(usageB, MemUsageOf_Vector(h_expNbrCountFB_));
 
-		// rigid
+		// FR export neighbor list memory usage
 		Add(usageR, MemUsageOf_Vector(h_expNbrCountFR_));
 
 		// finalize
@@ -979,6 +979,7 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usageR, MemUsageOf_DeviceBuffer(d_nbrOffsetsRR_));
 
 		// compressed SELL32 storage used for FF, FB, and FR neighbors
+		// FF neighbor list memory usage
 		MemUsage listFF{};
 		listFF.N_usedBytes = static_cast<uint64_t>(N_packedFF_);
 		listFF.N_allocBytes =
@@ -987,6 +988,7 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 			+ static_cast<uint64_t>(d_nbrListAbs32FF_.Size()) * sizeof(uint32_t);
 		Add(usageF, listFF);
 
+		// FB neighbor list memory usage
 		MemUsage listFB{};
 		listFB.N_usedBytes = static_cast<uint64_t>(N_packedFB_);
 		listFB.N_allocBytes =
@@ -995,6 +997,7 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 			+ static_cast<uint64_t>(d_nbrListAbs32FB_.Size()) * sizeof(uint32_t);
 		Add(usageB, listFB);
 
+		// FR neighbor list memory usage
 		MemUsage listFR{};
 		listFR.N_usedBytes = static_cast<uint64_t>(N_packedFR_);
 		listFR.N_allocBytes =
@@ -1003,16 +1006,19 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 			+ static_cast<uint64_t>(d_nbrListAbs32FR_.Size()) * sizeof(uint32_t);
 		Add(usageR, listFR);
 
+		// RF neighbor list memory usage
 		MemUsage listRF{};
 		listRF.N_usedBytes = N_totalRF_ * sizeof(uint32_t);
 		listRF.N_allocBytes = static_cast<uint64_t>(d_nbrListRF_.Size()) * sizeof(uint32_t);
 		Add(usageR, listRF);
 
+		// RB neighbor list memory usage
 		MemUsage listRB{};
 		listRB.N_usedBytes = N_totalRB_ * sizeof(uint32_t);
 		listRB.N_allocBytes = static_cast<uint64_t>(d_nbrListRB_.Size()) * sizeof(uint32_t);
 		Add(usageR, listRB);
 
+		// RR neighbor list memory usage
 		MemUsage listRR{};
 		listRR.N_usedBytes = N_totalRR_ * sizeof(uint32_t);
 		listRR.N_allocBytes = static_cast<uint64_t>(d_nbrListRR_.Size()) * sizeof(uint32_t);

@@ -634,7 +634,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					const float yi = yPosF[i];
 					const float zi = zPosF[i];
 
-					// check all fluid particles j
+					// FF count neighbors
 					for (uint32_t j = 0; j < N_F; j++)
 					{
 						const float dx = xi - xPosF[j];
@@ -653,7 +653,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						}
 					}
 
-					// check all boundary particles j
+					// FB count neighbors
 					for (uint32_t j = 0; j < N_B; j++)
 					{
 						const float dx = xi - xPosB[j];
@@ -672,7 +672,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						}
 					}
 
-					// check all rigid particles j
+					// FR count neighbors
 					for (uint32_t j = 0; j < N_R; j++)
 					{
 						const float dx = xi - xPosR[j];
@@ -722,7 +722,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 				uint32_t countRB = 0;
 				uint32_t countRR = 0;
 
-				// check all fluid particles j
+				// RF count neighbors
 				for (uint32_t j = 0; j < N_F; j++)
 				{
 					const float dx = xPosR[i] - xPosF[j];
@@ -736,7 +736,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					}
 				}
 
-				// check all boundary particles j
+				// RB count neighbors
 				for (uint32_t j = 0; j < N_B; j++)
 				{
 					const float dx = xPosR[i] - xPosB[j];
@@ -750,7 +750,7 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 					}
 				}
 
-				// check all rigid particles j
+				// RR count neighbors from other bodies
 				for (uint32_t j = 0; j < N_R; j++)
 				{
 					// skip particles of the same rigid body
@@ -825,7 +825,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 					const float yi = yPosF[i];
 					const float zi = zPosF[i];
 
-					// check all fluid particles j
+					// FF fill neighbor list
 					for (uint32_t j = 0; j < N_F; j++)
 					{
 						const float dx = xi - xPosF[j];
@@ -849,7 +849,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 						}
 					}
 
-					// check all boundary particles j
+					// FB fill neighbor list
 					for (uint32_t j = 0; j < N_B; j++)
 					{
 						const float dx = xi - xPosB[j];
@@ -873,7 +873,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 						}
 					}
 
-					// check all rigid particles j
+					// FR fill neighbor list
 					for (uint32_t j = 0; j < N_R; j++)
 					{
 						const float dx = xi - xPosR[j];
@@ -919,7 +919,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 					continue;
 				}
 
-				// check all fluid particles j
+				// RF fill neighbor list
 				neighbors.clear();
 				for (uint32_t j = 0; j < N_F; j++)
 				{
@@ -936,7 +936,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 				be_.neighborList_->SetNbrListRF(
 					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 
-				// check all boundary particles j
+				// RB fill neighbor list
 				neighbors.clear();
 				for (uint32_t j = 0; j < N_B; j++)
 				{
@@ -953,7 +953,7 @@ void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
 				be_.neighborList_->SetNbrListRB(
 					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 
-				// check all rigid particles j
+				// RR fill neighbor list from other bodies
 				neighbors.clear();
 				for (uint32_t j = 0; j < N_R; j++)
 				{
@@ -1518,7 +1518,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
-					// fluid neighbors
+					// FF count neighbors
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
@@ -1544,7 +1544,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 						}
 					}
 
-					// boundary neighbors
+					// FB count neighbors
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
@@ -1570,7 +1570,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 						}
 					}
 
-					// rigid neighbors
+					// FR count neighbors
 					for (const ActiveCellRange& cellRange : rigidRanges)
 					{
 						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
@@ -1646,6 +1646,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 					uint32_t countRB = 0;
 					uint32_t countRR = 0;
 
+					// RF count neighbors
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
 						for (uint32_t j = cellRange.begin; j < cellRange.end; j++)
@@ -1658,6 +1659,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 						}
 					}
 
+					// RB count neighbors
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
 						for (uint32_t j = cellRange.begin; j < cellRange.end; j++)
@@ -1670,6 +1672,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 						}
 					}
 
+					// RR count neighbors from other bodies
 					for (const ActiveCellRange& cellRange : rigidRanges)
 					{
 						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
@@ -1766,7 +1769,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
-					// fluid neighbors
+					// FF fill neighbor list
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
@@ -1798,7 +1801,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 						}
 					}
 
-					// boundary neighbors
+					// FB fill neighbor list
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
@@ -1830,7 +1833,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 						}
 					}
 
-					// rigid neighbors
+					// FR fill neighbor list
 					for (const ActiveCellRange& cellRange : rigidRanges)
 					{
 						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
@@ -1897,6 +1900,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 						GatherCellQueryRanges(cx, cy, cz, fluidRanges, boundaryRanges, rigidRanges);
 					}
 
+					// RF fill neighbor list
 					neighbors.clear();
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
@@ -1912,6 +1916,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 					be_.neighborList_->SetNbrListRF(
 						i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 
+					// RB fill neighbor list
 					neighbors.clear();
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
@@ -1927,6 +1932,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 					be_.neighborList_->SetNbrListRB(
 						i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 
+					// RR fill neighbor list from other bodies
 					neighbors.clear();
 					for (const ActiveCellRange& cellRange : rigidRanges)
 					{

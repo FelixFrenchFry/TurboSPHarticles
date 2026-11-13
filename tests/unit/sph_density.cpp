@@ -314,6 +314,20 @@ namespace
 		}
 	}
 
+	// each spline weight fits in FP32, but adding them before applying mass would overflow
+	TEST_P(SphDensityTests, KeepsFluidDensityFiniteWhenUnweightedSumWouldOverflow)
+	{
+		constexpr float particleSizeF = 1e-13f;
+		constexpr float massF = 1000.0f * particleSizeF * particleSizeF * particleSizeF;
+		DensityScene scene;
+		scene[0] = MakeParticles({ { 0.0f, 0.0f, 0.0f }, { 0.25f * particleSizeF, 0.0f, 0.0f } });
+		auto neighbors = MakeNeighbors(2);
+		neighbors[0] = { { 0, 1 }, { 0, 1 } };
+
+		ExpectDensityNear(EvaluateDensity(scene, neighbors, particleSizeF, massF),
+			ReferenceDensity(scene, neighbors, particleSizeF, massF));
+	}
+
 	// particles without listed neighbors overwrite old density with zero
 	TEST_P(SphDensityTests, ClearsDensityForEmptyNeighborLists)
 	{

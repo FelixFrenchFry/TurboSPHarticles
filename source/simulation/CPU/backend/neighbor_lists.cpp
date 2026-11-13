@@ -587,35 +587,35 @@ NeighborLists_ChunkedSELL_Explicit_CPU::GetMemUsage() const
 	Mem::MemUsage usageFB{};
 	Mem::MemUsage usageFR{};
 
-	// FF
+	// FF neighbor list memory usage
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkMaxCountFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkOffsetsFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListFF_));
 
-	// FB
+	// FB neighbor list memory usage
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkMaxCountFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkOffsetsFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListFB_));
 
-	// FR
+	// FR neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkMaxCountFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkOffsetsFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListFR_));
 
-	// RF
+	// RF neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRF_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrOffsetsRF_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListRF_));
 
-	// RB
+	// RB neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRB_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrOffsetsRB_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListRB_));
 
-	// RR
+	// RR neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrOffsetsRR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListRR_));
@@ -1391,7 +1391,7 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::MemUsage usageFB{};
 	Mem::MemUsage usageFR{};
 
-	// FF
+	// FF neighbor list memory usage
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrCountFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkMaxCountFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFF_));
@@ -1401,7 +1401,7 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListDelta16FF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListAbs32FF_));
 
-	// FB
+	// FB neighbor list memory usage
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkMaxCountFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFB_));
@@ -1411,7 +1411,7 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListDelta16FB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListAbs32FB_));
 
-	// FR
+	// FR neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkMaxCountFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFR_));
@@ -1421,17 +1421,17 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListDelta16FR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListAbs32FR_));
 
-	// RF
+	// RF neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRF_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrOffsetsRF_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListRF_));
 
-	// RB
+	// RB neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRB_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrOffsetsRB_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListRB_));
 
-	// RR
+	// RR neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrOffsetsRR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListRR_));

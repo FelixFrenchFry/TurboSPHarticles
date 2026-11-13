@@ -788,7 +788,7 @@ void CPU::Density_ChunkedSELL(
 				CPU::Float32xSIMD tmp_densityB = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_densityR = CPU::ZeroFloat32xSIMD();
 
-				// contributions from fluid neighbors
+				// FF density contribution
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -807,11 +807,11 @@ void CPU::Density_ChunkedSELL(
 								dx, dy, dz, particleSizeInvF,
 								kernelRadiusSqu, cubicSplineAlpha), mask);
 						// padded lanes gathered valid indices but contribute zero
-						tmp_densityF = tmp_densityF + kw;
+						tmp_densityF = xsimd::fma(massFV, kw, tmp_densityF);
 					}
 				}
 
-				// contributions from boundary neighbors
+				// FB density contribution
 				{
 					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
@@ -835,7 +835,7 @@ void CPU::Density_ChunkedSELL(
 					}
 				}
 
-				// contributions from rigid neighbors
+				// FR density contribution
 				{
 					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
 
@@ -859,7 +859,7 @@ void CPU::Density_ChunkedSELL(
 					}
 				}
 
-				const CPU::Float32xSIMD density = massFV * tmp_densityF + tmp_densityB + tmp_densityR;
+				const CPU::Float32xSIMD density = tmp_densityF + tmp_densityB + tmp_densityR;
 				// final chunk, maybe containing fewer than CPU::N_SIMD_WIDTH particles
 				CPU::StoreFloat32xSIMDPartial(densityF, begin, end, density);
 			}
@@ -947,7 +947,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_yAccViscR = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_zAccViscR = CPU::ZeroFloat32xSIMD();
 
-				// contributions from fluid neighbors
+				// FF viscosity acceleration
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -989,7 +989,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 					}
 				}
 
-				// contributions from boundary neighbors
+				// FB viscosity acceleration
 				{
 					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
@@ -1028,7 +1028,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 					}
 				}
 
-				// contributions from rigid neighbors
+				// FR viscosity acceleration
 				{
 					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
 
@@ -1124,6 +1124,8 @@ void CPU::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 				float xForce = 0.0f;
 				float yForce = 0.0f;
 				float zForce = 0.0f;
+
+				// RF viscosity reaction force
 				const NeighborSpan nbrRF = neighborList.RF(i);
 				for (uint32_t k = 0; k < nbrRF.N; k++)
 				{
@@ -1146,9 +1148,9 @@ void CPU::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 					const float accCoeff = (volR[i] * dot) / (distSqu + particleSizeSquEps);
 					const float forceCoeff = -massF * viscosityFacB * accCoeff;
 
-					xForce += forceCoeff * xkg;
-					yForce += forceCoeff * ykg;
-					zForce += forceCoeff * zkg;
+					xForce = std::fmaf(forceCoeff, xkg, xForce);
+					yForce = std::fmaf(forceCoeff, ykg, yForce);
+					zForce = std::fmaf(forceCoeff, zkg, zForce);
 				}
 				xForceR[i] = xForce;
 				yForceR[i] = yForce;
@@ -1242,7 +1244,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				CPU::Float32xSIMD yCTermR = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD zCTermR = CPU::ZeroFloat32xSIMD();
 
-				// contributions from fluid neighbors
+				// FF pressure source term and diagonal
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -1281,7 +1283,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 					}
 				}
 
-				// contributions from boundary neighbors
+				// FB pressure source term and diagonal
 				{
 					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
@@ -1318,7 +1320,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 					}
 				}
 
-				// contributions from rigid neighbors
+				// FR pressure source term and diagonal
 				{
 					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
 
@@ -1457,7 +1459,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_yAccPressF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_zAccPressF = CPU::ZeroFloat32xSIMD();
 
-				// contributions from fluid neighbors
+				// FF pressure acceleration
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -1490,7 +1492,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 					}
 				}
 
-				// contributions from boundary neighbors
+				// FB pressure acceleration
 				{
 					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
@@ -1522,7 +1524,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 					}
 				}
 
-				// contributions from rigid neighbors
+				// FR pressure acceleration
 				{
 					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
 
@@ -1599,6 +1601,8 @@ void CPU::AccumulateRigidParticlePressureForces_ChunkedSELL(
 				float xForce = 0.0f;
 				float yForce = 0.0f;
 				float zForce = 0.0f;
+
+				// RF pressure reaction force
 				const NeighborSpan nbrRF = neighborList.RF(i);
 				for (uint32_t k = 0; k < nbrRF.N; k++)
 				{
@@ -1615,9 +1619,9 @@ void CPU::AccumulateRigidParticlePressureForces_ChunkedSELL(
 
 					const float forceCoeff = massF * accCoeffB_outer * psiR[i] * pressureF[j];
 
-					xForce += forceCoeff * xkg;
-					yForce += forceCoeff * ykg;
-					zForce += forceCoeff * zkg;
+					xForce = std::fmaf(forceCoeff, xkg, xForce);
+					yForce = std::fmaf(forceCoeff, ykg, yForce);
+					zForce = std::fmaf(forceCoeff, zkg, zForce);
 				}
 				xForceR[i] += xForce;
 				yForceR[i] += yForce;
@@ -1714,7 +1718,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 				CPU::Float32xSIMD tmp_SysVecElemF = CPU::ZeroFloat32xSIMD();
 				CPU::Float32xSIMD tmp_SysVecElemB = CPU::ZeroFloat32xSIMD();
 
-				// contributions from fluid neighbors
+				// FF pressure system vector element
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -1748,7 +1752,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 				}
 				tmp_SysVecElemF *= massFV;
 
-				// contributions from boundary neighbors
+				// FB pressure system vector element
 				{
 					const CPU::UInt32xSIMD countFB = CPU::LoadUInt16AsUInt32xSIMD(nbrFB.counts + begin);
 
@@ -1780,7 +1784,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 					}
 				}
 
-				// contributions from rigid neighbors
+				// FR pressure system vector element
 				{
 					const CPU::UInt32xSIMD countFR = CPU::LoadUInt16AsUInt32xSIMD(nbrFR.counts + begin);
 

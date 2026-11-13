@@ -248,7 +248,7 @@ namespace GPU
 			const float yi = yPosF[i];
 			const float zi = zPosF[i];
 
-			// check fluid candidates (all particles)
+			// FF count neighbors
 			for (uint32_t j = 0; j < c_ns_N_F; j++)
 			{
 				const float dx = xi - xPosF[j];
@@ -264,7 +264,7 @@ namespace GPU
 				}
 			}
 
-			// check boundary candidates (all particles)
+			// FB count neighbors
 			for (uint32_t j = 0; j < c_ns_N_B; j++)
 			{
 				const float dx = xi - xPosB[j];
@@ -280,7 +280,7 @@ namespace GPU
 				}
 			}
 
-			// check rigid candidates (all particles)
+			// FR count neighbors
 			for (uint32_t j = 0; j < c_ns_N_R; j++)
 			{
 				const float dx = xi - xPosR[j];
@@ -375,7 +375,7 @@ namespace GPU
 		uint32_t wrFB = 0;
 		uint32_t wrFR = 0;
 
-		// check fluid candidates (all particles)
+		// FF fill neighbor list
 		for (uint32_t j = 0; j < c_ns_N_F; j++)
 		{
 			const float dx = xi - xPosF[j];
@@ -394,7 +394,7 @@ namespace GPU
 			}
 		}
 
-		// check boundary candidates (all particles)
+		// FB fill neighbor list
 		for (uint32_t j = 0; j < c_ns_N_B; j++)
 		{
 			const float dx = xi - xPosB[j];
@@ -413,7 +413,7 @@ namespace GPU
 			}
 		}
 
-		// check rigid candidates (all particles)
+		// FR fill neighbor list
 		for (uint32_t j = 0; j < c_ns_N_R; j++)
 		{
 			const float dx = xi - xPosR[j];
@@ -935,7 +935,7 @@ namespace GPU
 				// particle ranges of the neighbor cell, an absent species has an empty range
 				const CellRangeByAny cellRange = cellRangeByAny[cellAny];
 
-				// fluid neighbors
+				// FF count neighbors
 				for (uint32_t j = cellRange.beginF; j < cellRange.endF; j++)
 				{
 					const float dx = x - xPosF[j];
@@ -951,7 +951,7 @@ namespace GPU
 					}
 				}
 
-				// boundary neighbors
+				// FB count neighbors
 				for (uint32_t j = cellRange.beginB; j < cellRange.endB; j++)
 				{
 					const float dx = x - xPosB[j];
@@ -968,7 +968,7 @@ namespace GPU
 				}
 			}
 
-			// check all rigid particles in the neighboring grid cells
+			// FR count neighbors
 			if (c_ns_N_R > 0u)
 			{
 				const int cx = FloorToInt(x * c_ns_cellSizeInv);
@@ -1115,7 +1115,7 @@ namespace GPU
 			// particle ranges of the neighbor cell, an absent species has an empty range
 			const CellRangeByAny cellRange = cellRangeByAny[cellAny];
 
-			// fluid neighbors
+			// FF fill neighbor list
 			for (uint32_t j = cellRange.beginF; j < cellRange.endF; j++)
 			{
 				const float dx = x - xPosF[j];
@@ -1134,7 +1134,7 @@ namespace GPU
 				}
 			}
 
-			// boundary neighbors
+			// FB fill neighbor list
 			for (uint32_t j = cellRange.beginB; j < cellRange.endB; j++)
 			{
 				const float dx = x - xPosB[j];
@@ -1154,7 +1154,7 @@ namespace GPU
 			}
 		}
 
-		// store all rigid neighbors in the neighboring grid cells
+		// FR fill neighbor list
 		if (c_ns_N_R > 0u)
 		{
 			const int cx = FloorToInt(x * c_ns_cellSizeInv);
@@ -1233,7 +1233,7 @@ namespace GPU
 		uint32_t cntRB = 0;
 		uint32_t cntRR = 0;
 
-		// count fluid neighbors
+		// RF count neighbors
 		for (uint32_t j = 0; j < c_ns_N_F; j++)
 		{
 			const float dx = xPosR[i] - xPosF[j];
@@ -1246,7 +1246,7 @@ namespace GPU
 			}
 		}
 
-		// count static boundary neighbors
+		// RB count neighbors
 		for (uint32_t j = 0; j < c_ns_N_B; j++)
 		{
 			const float dx = xPosR[i] - xPosB[j];
@@ -1259,7 +1259,7 @@ namespace GPU
 			}
 		}
 
-		// count rigid neighbors attached to other bodies
+		// RR count neighbors from other bodies
 		for (uint32_t j = 0; j < c_ns_N_R; j++)
 		{
 			if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
@@ -1304,7 +1304,7 @@ namespace GPU
 		uint64_t wrRB = nbrOffsetsRB[i];
 		uint64_t wrRR = nbrOffsetsRR[i];
 
-		// store fluid neighbors
+		// RF fill neighbor list
 		for (uint32_t j = 0; j < c_ns_N_F; j++)
 		{
 			const float dx = xPosR[i] - xPosF[j];
@@ -1317,7 +1317,7 @@ namespace GPU
 			}
 		}
 
-		// store static boundary neighbors
+		// RB fill neighbor list
 		for (uint32_t j = 0; j < c_ns_N_B; j++)
 		{
 			const float dx = xPosR[i] - xPosB[j];
@@ -1330,7 +1330,7 @@ namespace GPU
 			}
 		}
 
-		// store rigid neighbors attached to other bodies
+		// RR fill neighbor list from other bodies
 		for (uint32_t j = 0; j < c_ns_N_R; j++)
 		{
 			if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
@@ -1397,7 +1397,7 @@ namespace GPU
 					// stencil cells outside the frame hold no particles
 					if (cellId == Sim::EMPTY_64) { continue; }
 
-					// count fluid neighbors in this cell
+					// RF count neighbors
 					const int cellF = BinarySearchUniqueCellId(
 						uniqueCellIdF, N_nonEmptyCellsF, cellId);
 					if (cellF >= 0)
@@ -1417,7 +1417,7 @@ namespace GPU
 						}
 					}
 
-					// count static boundary neighbors in this cell
+					// RB count neighbors
 					const int cellB = BinarySearchUniqueCellId(
 						uniqueCellIdB, N_nonEmptyCellsB, cellId);
 					if (cellB >= 0)
@@ -1437,7 +1437,7 @@ namespace GPU
 						}
 					}
 
-					// count rigid neighbors attached to other bodies in this cell
+					// RR count neighbors from other bodies
 					const int cellR = BinarySearchUniqueCellId(
 						uniqueCellIdR, N_nonEmptyCellsR, cellId);
 					if (cellR >= 0)
@@ -1521,7 +1521,7 @@ namespace GPU
 					// stencil cells outside the frame hold no particles
 					if (cellId == Sim::EMPTY_64) { continue; }
 
-					// store fluid neighbors in this cell
+					// RF fill neighbor list
 					const int cellF = BinarySearchUniqueCellId(
 						uniqueCellIdF, N_nonEmptyCellsF, cellId);
 					if (cellF >= 0)
@@ -1541,7 +1541,7 @@ namespace GPU
 						}
 					}
 
-					// store static boundary neighbors in this cell
+					// RB fill neighbor list
 					const int cellB = BinarySearchUniqueCellId(
 						uniqueCellIdB, N_nonEmptyCellsB, cellId);
 					if (cellB >= 0)
@@ -1561,7 +1561,7 @@ namespace GPU
 						}
 					}
 
-					// store rigid neighbors attached to other bodies in this cell
+					// RR fill neighbor list from other bodies
 					const int cellR = BinarySearchUniqueCellId(
 						uniqueCellIdR, N_nonEmptyCellsR, cellId);
 					if (cellR >= 0)

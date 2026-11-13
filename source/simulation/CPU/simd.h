@@ -299,7 +299,7 @@ namespace CPU
 		const Float32xSIMD t2_2 = t2 * t2;
 		const Float32xSIMD t1_3 = t1_2 * t1;
 		const Float32xSIMD t2_3 = t2_2 * t2;
-		const Float32xSIMD kw = alpha * (t2_3 - four * t1_3);
+		const Float32xSIMD kw = alpha * xsimd::fma(-four, t1_3, t2_3);
 
 		return ZeroMaskedFloat32xSIMD(kw, inside);
 	}

@@ -272,6 +272,8 @@ namespace GPU
 		float xForce = 0.0f;
 		float yForce = 0.0f;
 		float zForce = 0.0f;
+
+		// RF viscosity reaction force
 		const uint64_t begin = nbrOffsetsRF[i];
 		const uint32_t N_nbrs = nbrCountRF[i];
 		for (uint32_t k = 0; k < N_nbrs; k++)
@@ -331,6 +333,8 @@ namespace GPU
 		float yForce = 0.0f;
 		float zForce = 0.0f;
 		const float densityInvSqu = 1.0f / (restDensity * restDensity);
+
+		// RF pressure reaction force
 		const uint64_t begin = nbrOffsetsRF[i];
 		const uint32_t N_nbrs = nbrCountRF[i];
 		for (uint32_t k = 0; k < N_nbrs; k++)
