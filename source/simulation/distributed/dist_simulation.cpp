@@ -1449,18 +1449,11 @@ bool DistSimulationMgr::RunRankLocalBackendStartupCheck()
 			particleStateR_, distParticleBackend_->GetRigidParticleView(), localSimState_.rigidBodies,
 			*domainDecomp_, mpiContext_.Rank(), simParams_.distHaloRadius);
 
-		Sync::UniversalSimState backendSimState{};
-		simBackend_->PushToUniversalSimState(backendSimState, false);
-		localSimState_ = std::move(backendSimState);
+		localSimState_.rigidBodies.ensureRigidBodyIdsPresent();
 		localSimState_.step = simStep_;
 		localSimState_.time = simTime_;
 
-		if (!ValidateRankLocalBackendParticleState()) { localOk = false; }
-
-		// particle payloads remain backend-resident after startup
-		localSimState_.particlesF = {};
-		localSimState_.particlesB = {};
-		localSimState_.particlesR = {};
+		if (!ValidateRankLocalParticleMetadata()) { localOk = false; }
 	}
 	catch (const std::exception& ex)
 	{
@@ -2411,50 +2404,6 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 
 	// every earlier exit is already reduced, so reaching this point means all ranks succeeded
 	return mpiContext_.AllTrue(localOk);
-}
-
-bool DistSimulationMgr::ValidateRankLocalBackendParticleState() const
-{
-	std::string fluidFailMsg{};
-	const bool fluidStateValid =
-		particleStateF_.IsValidLocalParticleState(
-			localSimState_.particlesF.id,
-			N_expectedGlobalF_,
-			&fluidFailMsg);
-	std::string boundaryFailMsg{};
-	const bool boundaryStateValid =
-		particleStateB_.IsValidLocalParticleState(
-			localSimState_.particlesB.id,
-			N_expectedGlobalB_,
-			&boundaryFailMsg);
-	std::string rigidFailMsg{};
-	const bool rigidStateValid =
-		particleStateR_.IsValidLocalParticleState(
-			localSimState_.particlesR.id,
-			N_expectedGlobalR_,
-			&rigidFailMsg);
-
-	if (!fluidStateValid || !boundaryStateValid || !rigidStateValid)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Rank-local backend particle identity/layout validation failed "
-			"(fluid={}, boundary={}, rigid={}).",
-			mpiContext_.Rank(), mpiContext_.Size(),
-			fluidStateValid ? "valid" : fluidFailMsg,
-			boundaryStateValid ? "valid" : boundaryFailMsg,
-			rigidStateValid ? "valid" : rigidFailMsg);
-		return false;
-	}
-
-	if (!ValidateLocalRigidParticleAttachments(
-		localSimState_.particlesR.constView(), localSimState_.rigidBodies, &rigidFailMsg))
-	{
-		SPDLOG_ERROR("[rank {}/{}] Invalid rank-local rigid attachments: {}",
-			mpiContext_.Rank(), mpiContext_.Size(), rigidFailMsg);
-		return false;
-	}
-
-	return true;
 }
 
 bool DistSimulationMgr::ValidateRankLocalParticleMetadata() const

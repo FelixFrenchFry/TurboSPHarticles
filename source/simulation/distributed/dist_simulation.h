@@ -179,9 +179,6 @@ namespace Dist
 		// [ rank-reduced ] reduces rigid loads, integrates on root, and broadcasts body dynamics
 		bool FinishRankLocalBackendStep(const Sim::SimParams& params);
 
-		// validates particle identity metadata and rigid attachments of the materialized backend state
-		bool ValidateRankLocalBackendParticleState() const;
-
 		// validates particle identity metadata without comparing changed solver payload
 		bool ValidateRankLocalParticleMetadata() const;
 
