@@ -263,7 +263,7 @@ namespace
 				velocities[0][0].data(), velocities[0][1].data(), velocities[0][2].data(),
 				velocities[2][0].data(), velocities[2][1].data(), velocities[2][2].data(),
 				density.data(), volumes[1].data(), volumes[2].data(), *lists_,
-				params.timeStep, constants.sizeInvF, constants.sizeSquF, params.kernelRadiusSqu,
+				params.timeStep, constants.sizeInvF, constants.sizeSquF,
 				constants.cubicSplineAlpha, params.massF, params.viscosityF, params.viscosityB,
 				params.gravity.x, params.gravity.y, params.gravity.z, particleLimit.value_or(N_F),
 				predicted[0].data() + 1, predicted[1].data() + 1, predicted[2].data() + 1,

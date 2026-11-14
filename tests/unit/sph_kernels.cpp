@@ -45,7 +45,7 @@ namespace
 			constants.sizeInvF, kernelRadiusSqu, constants.cubicSplineAlpha);
 		CPU::Float32xSIMD xkg, ykg, zkg;
 		CPU::KernelGradient_CubicSpline_SIMD(x, y, z,
-			constants.sizeInvF, kernelRadiusSqu, constants.cubicSplineAlpha, xkg, ykg, zkg);
+			constants.sizeInvF, constants.cubicSplineAlpha, xkg, ykg, zkg);
 
 		std::array<float, CPU::N_SIMD_WIDTH> weights{}, xGradient{}, yGradient{}, zGradient{};
 		weight.store_unaligned(weights.data());

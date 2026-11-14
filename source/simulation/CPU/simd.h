@@ -343,12 +343,11 @@ namespace CPU
 	}
 
 	// compute cubic-spline kernel gradients for SIMD particle-pair offsets
-	inline void KernelGradient_CubicSpline_SIMD(
+	XSIMD_INLINE void KernelGradient_CubicSpline_SIMD(
 		const Float32xSIMD dx,
 		const Float32xSIMD dy,
 		const Float32xSIMD dz,
 		const float particleSizeInv,
-		const float kernelRadiusSqu,
 		const float cubicSplineAlpha,
 		// destinations
 		Float32xSIMD& xkg,
@@ -358,34 +357,29 @@ namespace CPU
 		const Float32xSIMD zero = xsimd::broadcast<float, SimdArch>(0.0f);
 		const Float32xSIMD one = xsimd::broadcast<float, SimdArch>(1.0f);
 		const Float32xSIMD two = xsimd::broadcast<float, SimdArch>(2.0f);
-		const Float32xSIMD three = xsimd::broadcast<float, SimdArch>(3.0f);
-		const Float32xSIMD nine = xsimd::broadcast<float, SimdArch>(9.0f);
-		const Float32xSIMD twelve = xsimd::broadcast<float, SimdArch>(12.0f);
 		const Float32xSIMD eps = xsimd::broadcast<float, SimdArch>(KERNEL_GRADIENT_MIN_DIST_SQU_F);
 		const Float32xSIMD sizeInv = xsimd::broadcast<float, SimdArch>(particleSizeInv);
-		const Float32xSIMD radiusSqu = xsimd::broadcast<float, SimdArch>(kernelRadiusSqu);
-		const Float32xSIMD alpha = xsimd::broadcast<float, SimdArch>(cubicSplineAlpha);
+		const Float32xSIMD innerSlope = xsimd::broadcast<float, SimdArch>(
+			9.0f * cubicSplineAlpha * particleSizeInv * particleSizeInv);
+		const Float32xSIMD innerOffset = xsimd::broadcast<float, SimdArch>(
+			-12.0f * cubicSplineAlpha * particleSizeInv * particleSizeInv);
+		const Float32xSIMD outerScale = xsimd::broadcast<float, SimdArch>(
+			-3.0f * cubicSplineAlpha * particleSizeInv);
 
 		const Float32xSIMD distSqu = xsimd::fma(dx, dx, xsimd::fma(dy, dy, dz * dz));
-		const Mask32xSIMD inside = distSqu < radiusSqu;
-		const Mask32xSIMD nonZero = distSqu > eps;
-		const Mask32xSIMD valid = inside && nonZero;
-		// keep the outer expression finite for zero-distance lanes before selecting
-		const Float32xSIMD dist = xsimd::sqrt(xsimd::max(distSqu, eps));
+		const Float32xSIMD dist = xsimd::sqrt(distSqu);
 		const Float32xSIMD distNorm = dist * sizeInv;
 
 		// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
-		const Float32xSIMD innerFac = alpha * sizeInv * sizeInv
-			* xsimd::fma(nine, distNorm, zero - twelve);
+		const Float32xSIMD innerFac = xsimd::fma(innerSlope, distNorm, innerOffset);
 		const Float32xSIMD t2 = xsimd::max(two - distNorm, zero);
-		const Float32xSIMD outerFac = alpha
-			* ((zero - three) * t2 * t2)
-			* (sizeInv / dist);
-		const Float32xSIMD commonFac = SelectFloat32xSIMD(distNorm < one, innerFac, outerFac);
+		const Float32xSIMD outerFac = (outerScale * t2) * t2 / dist;
+		const Float32xSIMD commonFac = ZeroMaskedFloat32xSIMD(
+			SelectFloat32xSIMD(distNorm < one, innerFac, outerFac), distSqu > eps);
 
-		xkg = ZeroMaskedFloat32xSIMD(commonFac * dx, valid);
-		ykg = ZeroMaskedFloat32xSIMD(commonFac * dy, valid);
-		zkg = ZeroMaskedFloat32xSIMD(commonFac * dz, valid);
+		xkg = commonFac * dx;
+		ykg = commonFac * dy;
+		zkg = commonFac * dz;
 	}
 
 } // namespace CPU

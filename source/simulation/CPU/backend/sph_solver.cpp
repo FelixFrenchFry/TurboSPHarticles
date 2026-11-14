@@ -164,7 +164,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		densityF,
 		volB, volR,
 		neighborList,
-		timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
+		timeStep, sizeInvF, sizeSquF,
 		cubicSplineAlpha, massF,
 		params.viscosityF, params.viscosityB,
 		params.gravity.x, params.gravity.y, params.gravity.z, N_F_,
@@ -205,7 +205,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		densityF,
 		psiB, psiR,
 		neighborList,
-		timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+		timeStep, sizeInvF, cubicSplineAlpha,
 		params.restDensity, restDensitySquInv,
 		massF, params.pressGamma, params.jacobiOmega, N_F_,
 		sourceTermF, diagElemF, pressureF);
@@ -233,7 +233,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			pressureF,
 			psiB, psiR,
 			neighborList,
-			sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
+			sizeInvF, cubicSplineAlpha, params.restDensity,
 			massF, params.pressGamma, N_F_, affinityParts_->full,
 			xAccPressF, yAccPressF, zAccPressF);
 
@@ -246,7 +246,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			sourceTermF, diagElemF,
 			psiB, psiR,
 			neighborList,
-			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+			timeStep, sizeInvF, cubicSplineAlpha,
 			params.restDensity, massF, params.jacobiOmega,
 			N_F_, affinityParts_->full, pressureF, nullptr, errorSums);
 
@@ -276,7 +276,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		pressureF,
 		psiB, psiR,
 		neighborList,
-		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
+		sizeInvF, cubicSplineAlpha, params.restDensity,
 		massF, params.pressGamma, N_F_, affinityParts_->full,
 		xAccPressF, yAccPressF, zAccPressF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
@@ -463,7 +463,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			densityF,
 			volB, volR,
 			neighborList,
-			timeStep, sizeInvF, sizeSquF, kernelRadiusSqu,
+			timeStep, sizeInvF, sizeSquF,
 			cubicSplineAlpha, massF,
 			params.viscosityF, params.viscosityB,
 			params.gravity.x, params.gravity.y, params.gravity.z, N_ownedF_,
@@ -512,7 +512,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			densityF,
 			psiB, psiR,
 			neighborList,
-			timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+			timeStep, sizeInvF, cubicSplineAlpha,
 			params.restDensity, restDensitySquInv,
 			massF, params.pressGamma, params.jacobiOmega, N_ownedF_,
 			sourceTermF, diagElemF, pressureF, chunkIdxs, true);
@@ -552,7 +552,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				pressureF,
 				psiB, psiR,
 				neighborList,
-				sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
+				sizeInvF, cubicSplineAlpha, params.restDensity,
 				massF, params.pressGamma, N_fluidCenters, affPart,
 				xAccPressF, yAccPressF, zAccPressF,
 				chunkIdxs, true, particleFlags);
@@ -595,7 +595,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				sourceTermF, diagElemF,
 				psiB, psiR,
 				neighborList,
-				timeStep, sizeInvF, kernelRadiusSqu, cubicSplineAlpha,
+				timeStep, sizeInvF, cubicSplineAlpha,
 				params.restDensity, massF, params.jacobiOmega,
 				N_ownedF_, affPart, pressureF,
 				nullptr, errorSums,
@@ -652,7 +652,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		pressureF,
 		psiB, psiR,
 		neighborList,
-		sizeInvF, kernelRadiusSqu, cubicSplineAlpha, params.restDensity,
+		sizeInvF, cubicSplineAlpha, params.restDensity,
 		massF, params.pressGamma, N_ownedF_, affinityParts_->full,
 		xAccPressF, yAccPressF, zAccPressF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_Acceleration);
@@ -889,7 +889,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 	const float* RESTRICT volR,
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
-	const float particleSizeSquF, const float kernelRadiusSqu,
+	const float particleSizeSquF,
 	const float cubicSplineAlpha,
 	const float massF, const float viscosityF, const float viscosityB,
 	const float xGravity, const float yGravity, const float zGravity,
@@ -968,7 +968,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
@@ -1006,7 +1006,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvx = vxi - CPU::ZeroFloat32xSIMD();
@@ -1045,7 +1045,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvx = vxi - CPU::GatherFloat32xSIMD(xVelR, idxJ);
@@ -1182,7 +1182,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
-	const float kernelRadiusSqu, const float cubicSplineAlpha,
+	const float cubicSplineAlpha,
 	const float restDensity, const float restDensitySquInv,
 	const float massF, const float pressGamma, const float jacobiOmega,
 	const uint32_t N_F,
@@ -1265,7 +1265,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD sourceTerm =
@@ -1301,7 +1301,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvpx = vpxi - CPU::ZeroFloat32xSIMD();
@@ -1338,7 +1338,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvpx = vpxi - CPU::GatherFloat32xSIMD(xVelR, idxJ);
@@ -1410,7 +1410,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 	const float* RESTRICT psiB,
 	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
-	const float particleSizeInvF, const float kernelRadiusSqu,
+	const float particleSizeInvF,
 	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float pressGamma,
 	const uint32_t N_F,
@@ -1477,7 +1477,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD presj = CPU::GatherFloat32xSIMD(pressureF, idxJ);
@@ -1510,7 +1510,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD psiBj = CPU::GatherFloat32xSIMD(psiB, idxJ);
@@ -1542,7 +1542,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD psiRj = CPU::GatherFloat32xSIMD(psiR, idxJ);
@@ -1652,7 +1652,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT psiR,
 	const I_NeighborListSELL& neighborList,
 	const float timeStep, const float particleSizeInvF,
-	const float kernelRadiusSqu, const float cubicSplineAlpha,
+	const float cubicSplineAlpha,
 	const float restDensity, const float massF,
 	const float jacobiOmega,
 	const uint32_t N_F,
@@ -1736,7 +1736,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dapx = axi - CPU::GatherFloat32xSIMD(xAccPressF, idxJ);
@@ -1770,7 +1770,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
@@ -1802,7 +1802,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF, kernelRadiusSqu,
+							dx, dy, dz, particleSizeInvF,
 							cubicSplineAlpha, xkg, ykg, zkg);
 
 						// TODO: subtract actual rigid pressure acc when adding non-static boundaries?
