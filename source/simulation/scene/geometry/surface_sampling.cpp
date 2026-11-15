@@ -690,20 +690,20 @@ namespace Scene
 		}
 		storage_->stats.N_coverageProbes = N_probes;
 
-		// rebuild the spatial hash from the initially accepted samples
-		SampleSpatialHash spatialHash(minDistance_, acceptedSamples);
-		spatialHash.Reserve(static_cast<uint32_t>(acceptedSamples.size()));
-		for (uint32_t sampleIdx = 0; sampleIdx < static_cast<uint32_t>(acceptedSamples.size()); sampleIdx++)
-		{
-			spatialHash.Insert(sampleIdx);
-		}
-
 		// reserve probe spacing as the continuous coverage error budget
 		const float probeTargetDistance = std::max(
 			minDistance_,
 			maxDistance_ - coverageProbeSpacing_);
 		uint32_t& N_repairs = storage_->stats.N_coverageRepairs;
 		N_repairs = 0;
+
+		// rebuild the spatial hash using the probe target distance as cell size
+		SampleSpatialHash spatialHash(probeTargetDistance, acceptedSamples);
+		spatialHash.Reserve(static_cast<uint32_t>(acceptedSamples.size()));
+		for (uint32_t sampleIdx = 0; sampleIdx < static_cast<uint32_t>(acceptedSamples.size()); sampleIdx++)
+		{
+			spatialHash.Insert(sampleIdx);
+		}
 
 		// generate and repair coverage probes in bounded batches
 		const uint32_t N_probeBatch = SurfaceSamplingBatchSize(N_probes, N_samplingBatch);

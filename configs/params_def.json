@@ -1,6 +1,6 @@
 {
   "backendType": "CPU",
-  "scenarioType": "BreakingDam",
+  "scenarioType": "BoundaryRigidMeshes",
   "neighborSearchMethod": 1,
   "neighborListStorage": 1,
   "rigidCouplingMode": "Sequential",
@@ -48,8 +48,8 @@
   "surfaceSamplingMinDistanceRatioR": 0.5,
   "surfaceSamplingMaxDistanceRatioR": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatioR": 0.2,
-  "surfaceSamplingCandidateMultiplier": 20,
-  "surfaceSamplingMaxTrialsPerCell": 10,
+  "surfaceSamplingCandidateMultiplier": 10,
+  "surfaceSamplingMaxTrialsPerCell": 5,
   "surfaceSamplingSeed": 67,
 
   "maxThreadsSim": -1,
