@@ -39,6 +39,7 @@ using namespace Sim;
 
 namespace
 {
+	// gathers data in the order of sortedKeys into scratch, then swaps both vectors (or copies back)
 	// TODO: rework this?
 	template<typename TIdx, typename TData>
 	void ApplyPermutation(
@@ -2043,19 +2044,22 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 			compactCellBuildScratch_.cellIds, compactCellBuildScratch_.particleOrder,
 			compactCellBuildScratch_.chunkData, N_keyBits);
 
-		ApplyPermutation(particleOrderF_, be_.idF_, be_.workBufferIdF_);
-		ApplyPermutation_Vec3(particleOrderF_,
-			be_.xPosF_, be_.yPosF_, be_.zPosF_,
-			be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
-
-		ApplyPermutation_Vec3(particleOrderF_,
-			be_.xVelF_, be_.yVelF_, be_.zVelF_,
-			be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
+		// particle IDs swap with the cell ID scratch of the finished sort
+		ApplyPermutation(particleOrderF_, be_.idF_, compactCellBuildScratch_.cellIds);
 
 		// the remaining fluid particle fields only need to be permuted after backend-only neighbor searches,
 		// because a following full solver step re-initializes them (TODO: update if solver step behavior changes)
 		if (permuteSolverFields)
 		{
+			// all fields are live here and swap with the work buffers
+			ApplyPermutation_Vec3(particleOrderF_,
+				be_.xPosF_, be_.yPosF_, be_.zPosF_,
+				be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
+
+			ApplyPermutation_Vec3(particleOrderF_,
+				be_.xVelF_, be_.yVelF_, be_.zVelF_,
+				be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
+
 			ApplyPermutation_Vec3(particleOrderF_,
 				be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_,
 				be_.workBufferF_, be_.workBufferF2_, be_.workBufferF3_);
@@ -2066,9 +2070,26 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 
 			ApplyPermutation(particleOrderF_, be_.sourceTermF_, be_.workBufferF_);
 			ApplyPermutation(particleOrderF_, be_.diagElemF_, be_.workBufferF_);
-			// without a warm start, pressure is re-initialized by the source-term kernel
 			ApplyPermutation(particleOrderF_, be_.pressureF_, be_.workBufferF_);
 			ApplyPermutation(particleOrderF_, be_.densityF_, be_.workBufferF_);
+
+			// release the work buffers after their last use
+			// (12 bytes per F particle of transient memory during the init neighbor search)
+			std::vector<float>().swap(be_.workBufferF_);
+			std::vector<float>().swap(be_.workBufferF2_);
+			std::vector<float>().swap(be_.workBufferF3_);
+		}
+		else
+		{
+			// WARN: the velPred buffers are stale here and used as work buffers
+			ApplyPermutation_Vec3(particleOrderF_,
+				be_.xPosF_, be_.yPosF_, be_.zPosF_,
+				be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_);
+
+			// WARN: the velPred buffers are stale here and used as work buffers
+			ApplyPermutation_Vec3(particleOrderF_,
+				be_.xVelF_, be_.yVelF_, be_.zVelF_,
+				be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_);
 		}
 	}
 

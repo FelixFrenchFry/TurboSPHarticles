@@ -1357,7 +1357,6 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(workBufferB_));
 		Add(usage, MemUsageOf_Vector(workBufferB2_));
 		Add(usage, MemUsageOf_Vector(workBufferB3_));
-		Add(usage, MemUsageOf_Vector(workBufferIdF_));
 		Add(usage, MemUsageOf_Vector(workBufferIdB_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFF.histogram));
