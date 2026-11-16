@@ -105,7 +105,7 @@ namespace Dist
 		std::vector<uint32_t> routeTotals;
 
 		// destinations decided by the counting pass, indexed by position in the owned index list
-		std::vector<int> ownerRank_ByOwnedIdx;
+		std::vector<uint16_t> ownerRank_ByOwnedIdx;
 
 		// rank halo bounds re-read by the halo destination test of every routed particle
 		std::vector<AABB> haloExtentAABB_ByRank;

@@ -333,6 +333,12 @@ namespace
 		const char* const particleTypeName,
 		std::string* failMsg)
 	{
+		if (N_ranks - 1 > std::numeric_limits<uint16_t>::max())
+		{
+			if (failMsg) { *failMsg = std::string(particleTypeName) + " particle owner rank exceeds uint16_t."; }
+			return false;
+		}
+
 		const uint32_t N_ranks_U32 = static_cast<uint32_t>(N_ranks);
 		const uint32_t N_buckets = 2 * N_ranks_U32;
 		const uint32_t N_chunks = N_owned > 0
@@ -413,7 +419,7 @@ namespace
 						continue;
 					}
 
-					workBuffers.ownerRank_ByOwnedIdx[ownedIdx] = ownerRank;
+					workBuffers.ownerRank_ByOwnedIdx[ownedIdx] = static_cast<uint16_t>(ownerRank);
 					chunkCounts[static_cast<uint32_t>(ownerRank)]++;
 
 					// testing every neighbor halo directly, so inclusive halo boundaries stay
