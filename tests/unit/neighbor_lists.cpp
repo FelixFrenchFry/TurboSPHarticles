@@ -101,16 +101,36 @@ namespace
 		return result;
 	}
 
-	void CommitFluidCounts(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t chunk)
+	// distinct neighbors of a chunk in first-use order
+	std::vector<uint32_t> DistinctChunkNeighbors(const NeighborData& data, const uint32_t category, const uint32_t chunk)
+	{
+		std::vector<uint32_t> distinct;
+		const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+		for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH && begin + lane < data[category].size(); lane++)
+		{
+			for (const uint32_t j : data[category][begin + lane])
+			{
+				if (std::find(distinct.begin(), distinct.end(), j) == distinct.end()) { distinct.push_back(j); }
+			}
+		}
+		return distinct;
+	}
+
+	// tracking the distinct FF neighbors lets the compressed lists store FF chunks as dict chunks
+	void CommitFluidCounts(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t chunk,
+		const bool trackDistinctFF = false)
 	{
 		const auto counts = CountFluidChunk(data, chunk);
+		const uint32_t N_distinctFF = trackDistinctFF
+			? static_cast<uint32_t>(DistinctChunkNeighbors(data, 0, chunk).size()) : 0u;
 		lists.CommitFluidChunkCounts(chunk,
-			{ counts.counts[0].data(), counts.minRef[0], counts.maxRef[0] },
+			{ counts.counts[0].data(), counts.minRef[0], counts.maxRef[0], N_distinctFF },
 			{ counts.counts[1].data(), counts.minRef[1], counts.maxRef[1] },
 			{ counts.counts[2].data(), counts.minRef[2], counts.maxRef[2] });
 	}
 
-	void PrepareStorage(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t N_B)
+	void PrepareStorage(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t N_B,
+		const bool trackDistinctFF = false)
 	{
 		Sim::SimParams params;
 		params.expctdAvgNbrCountHardMax_FF = 0;
@@ -119,7 +139,7 @@ namespace
 		lists.PrepareFluidCountWrite(true);
 		for (uint32_t chunk = 0; chunk < lists.ChunkNumTotal(); chunk++)
 		{
-			CommitFluidCounts(lists, data, chunk);
+			CommitFluidCounts(lists, data, chunk, trackDistinctFF);
 		}
 		for (uint32_t category = 3; category < data.size(); category++)
 		{
@@ -138,13 +158,18 @@ namespace
 			const auto counts = CountFluidChunk(data, chunk);
 			for (uint32_t category = 0; category < 3; category++)
 			{
-				const auto view = (lists.*writeChunks[category])(chunk);
+				auto view = (lists.*writeChunks[category])(chunk);
 				if (view.pitch == 0) { continue; }
 				// poison payloads so unwritten padding cannot pass through zero-initialized storage
 				const uint64_t N_entries = static_cast<uint64_t>(view.pitch) * CPU::N_SIMD_WIDTH;
 				if (view.data8) { std::fill_n(view.data8, N_entries, std::numeric_limits<uint8_t>::max()); }
 				if (view.data16) { std::fill_n(view.data16, N_entries, std::numeric_limits<uint16_t>::max()); }
 				if (view.data32) { std::fill_n(view.data32, N_entries, std::numeric_limits<uint32_t>::max()); }
+				// direct writes register each distinct neighbor once, like the compact cell list fill
+				// (dict chunks store the dict position, normal chunks the neighbor itself)
+				const auto distinct = direct ? DistinctChunkNeighbors(data, category, chunk) : std::vector<uint32_t>{};
+				std::vector<uint32_t> storedIdxs;
+				for (const uint32_t j : distinct) { storedIdxs.push_back(view.RegisterNeighbor(j)); }
 				for (uint32_t i = view.begin; i < view.end; i++)
 				{
 					const auto& neighbors = data[category][i];
@@ -152,7 +177,8 @@ namespace
 					{
 						for (uint32_t k = 0; k < neighbors.size(); k++)
 						{
-							view.StoreNeighbor(i - view.begin, k, neighbors[k]);
+							const auto distinctIdx = std::find(distinct.begin(), distinct.end(), neighbors[k]) - distinct.begin();
+							view.StoreNeighbor(i - view.begin, k, storedIdxs[distinctIdx]);
 						}
 					}
 					else
@@ -470,6 +496,88 @@ namespace
 			EXPECT_THROW((lists_.get()->*setLists[category])(0, neighbors.data(), 2), std::runtime_error);
 		}
 		ExpectNeighbors(*lists_, data);
+	}
+
+	// dict chunks are readable through the per-particle, scalar, and SIMD interfaces, including padding and tail lanes
+	TEST_P(NeighborListStorageTests, PreservesDictChunkWritesAndSafePadding)
+	{
+		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 2);
+		PrepareStorage(*lists_, data, 8, true);
+		FillStorage(*lists_, data, true);
+
+		ExpectNeighbors(*lists_, data);
+		ExpectFluidChunks(*lists_, data, 8, true);
+		for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
+		{
+			SCOPED_TRACE(chunk);
+			EXPECT_EQ(lists_->FFChunk(chunk).dict != nullptr, GetParam());
+		}
+	}
+
+	// dict entries follow the chunk format, so wide index spans store absolute indices
+	TEST_P(NeighborListStorageTests, PreservesDictChunkIndicesAtCompressionBoundaries)
+	{
+		const std::array<uint32_t, 2> spans{ 65'535, 65'536 };
+		const std::array<Sim::SELLChunkFormat, 2> formats{
+			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32 };
+		const std::array<Sim::SELLDictChunkFormat, 2> dictFormats{
+			Sim::SELLDictChunkFormat::DictDelta16, Sim::SELLDictChunkFormat::DictAbs32 };
+		for (uint32_t i = 0; i < spans.size(); i++)
+		{
+			SCOPED_TRACE(spans[i]);
+			auto data = MakeNeighborData(70'000, 0);
+			data[0][0] = { 17 + spans[i], 17, 18 };
+			data[0][1] = { 18 };
+			PrepareStorage(*lists_, data, 8, true);
+			FillStorage(*lists_, data, true);
+
+			ExpectNeighbors(*lists_, data);
+			ExpectFluidChunks(*lists_, data, 8, true);
+			const auto view = lists_->FFChunk(0);
+			ASSERT_EQ(view.dict != nullptr, GetParam());
+			if (GetParam())
+			{
+				EXPECT_EQ(view.format, formats[i]);
+				EXPECT_EQ(view.dictFormat, dictFormats[i]);
+			}
+		}
+	}
+
+	// chunks with more distinct neighbors than uint8 dict positions can address stay normal chunks
+	TEST_P(NeighborListStorageTests, LimitsDictChunksToDictSize)
+	{
+		for (const uint32_t N_distinct : { Sim::N_SELL_DICT_SIZE_MAX, Sim::N_SELL_DICT_SIZE_MAX + 1 })
+		{
+			SCOPED_TRACE(N_distinct);
+			auto data = MakeNeighborData(N_distinct + 1, 0);
+			for (uint32_t j = 1; j <= N_distinct; j++) { data[0][0].push_back(j); }
+			// the second lane shares every neighbor, so it adds no dict entries
+			data[0][1].assign(data[0][0].rbegin(), data[0][0].rend());
+			PrepareStorage(*lists_, data, 8, true);
+			FillStorage(*lists_, data, true);
+
+			ExpectNeighbors(*lists_, data);
+			ExpectFluidChunks(*lists_, data, 8, true);
+			EXPECT_EQ(lists_->FFChunk(0).dict != nullptr, GetParam() && N_distinct <= Sim::N_SELL_DICT_SIZE_MAX);
+		}
+	}
+
+	// per-particle writes reject dict chunks, which only the direct chunk fill can register into
+	TEST_P(NeighborListStorageTests, RejectsPerParticleWritesIntoDictChunks)
+	{
+		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 1);
+		PrepareStorage(*lists_, data, 8, true);
+		const auto& neighbors = data[0][0];
+
+		if (GetParam())
+		{
+			EXPECT_THROW(lists_->SetNbrListFF(0, neighbors.data(), static_cast<uint32_t>(neighbors.size())),
+				std::runtime_error);
+		}
+		else
+		{
+			EXPECT_NO_THROW(lists_->SetNbrListFF(0, neighbors.data(), static_cast<uint32_t>(neighbors.size())));
+		}
 	}
 
 	#if defined(_DEBUG)
