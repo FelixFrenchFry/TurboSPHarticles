@@ -99,7 +99,8 @@ namespace
 		std::vector<SELLChunkFormat>& nbrChunkFormatFR,
 		std::vector<uint32_t>& nbrChunkBaseIdxFF,
 		std::vector<uint32_t>& nbrChunkBaseIdxFB,
-		std::vector<uint32_t>& nbrChunkBaseIdxFR)
+		std::vector<uint32_t>& nbrChunkBaseIdxFR,
+		std::vector<uint16_t>& nbrChunkDictSizeFF)
 	{
 		const uint32_t N_chunks = static_cast<uint32_t>(nbrChunkFormatFF.size());
 		tbb::parallel_for(
@@ -114,6 +115,7 @@ namespace
 					nbrChunkBaseIdxFF[chunk] = 0;
 					nbrChunkBaseIdxFB[chunk] = 0;
 					nbrChunkBaseIdxFR[chunk] = 0;
+					nbrChunkDictSizeFF[chunk] = 0;
 				}
 			},
 			tbb::auto_partitioner{}
@@ -158,9 +160,9 @@ namespace
 
 	struct ChunkStorageTotals
 	{
-		uint64_t N_delta8 = 0;
-		uint64_t N_delta16 = 0;
-		uint64_t N_abs32 = 0;
+		uint64_t N_entriesDict8 = 0;
+		uint64_t N_entries16 = 0;
+		uint64_t N_entries32 = 0;
 	};
 
 	void FinalizeCSRNeighborStorage(
@@ -645,7 +647,7 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_Explicit_CPU::FFChunk(
 		0,
 		chunk, begin, end,
 		nbrChunkMaxCountFF_[chunk],
-		SELLChunkFormat::Explicit32
+		SELLChunkFormat::Abs32
 	};
 }
 
@@ -666,7 +668,7 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_Explicit_CPU::FBChunk(
 		0,
 		chunk, begin, end,
 		nbrChunkMaxCountFB_[chunk],
-		SELLChunkFormat::Explicit32
+		SELLChunkFormat::Abs32
 	};
 }
 
@@ -687,7 +689,7 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_Explicit_CPU::FRChunk(
 		0,
 		chunk, begin, end,
 		nbrChunkMaxCountFR_[chunk],
-		SELLChunkFormat::Explicit32
+		SELLChunkFormat::Abs32
 	};
 }
 
@@ -708,7 +710,7 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_Explicit_CPU::FFChunkWri
 		0,
 		chunk, begin, end,
 		nbrChunkMaxCountFF_[chunk],
-		SELLChunkFormat::Explicit32
+		SELLChunkFormat::Abs32
 	};
 }
 
@@ -729,7 +731,7 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_Explicit_CPU::FBChunkWri
 		0,
 		chunk, begin, end,
 		nbrChunkMaxCountFB_[chunk],
-		SELLChunkFormat::Explicit32
+		SELLChunkFormat::Abs32
 	};
 }
 
@@ -750,7 +752,7 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_Explicit_CPU::FRChunkWri
 		0,
 		chunk, begin, end,
 		nbrChunkMaxCountFR_[chunk],
-		SELLChunkFormat::Explicit32
+		SELLChunkFormat::Abs32
 	};
 }
 
@@ -966,6 +968,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 	nbrChunkOffsetsFF_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 	nbrChunkOffsetsFB_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 	nbrChunkOffsetsFR_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkDictSizeFF_.resize(N_chunks);
+	nbrChunkDictFormatFF_.resize(N_chunks);
+	nbrChunkDictOffsetsFF_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
@@ -991,14 +996,28 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Finalize_Count()
 {
 	// chunk formats and pitches are fixed by the count-query
 	FinalizeChunkStorage(
-		nbrChunkMaxCountFF_, nbrChunkFormatFF_, nbrChunkOffsetsFF_,
-		nbrListDelta8FF_, nbrListDelta16FF_, nbrListAbs32FF_);
+		nbrChunkMaxCountFF_, nbrChunkFormatFF_, &nbrChunkDictSizeFF_, nbrChunkOffsetsFF_,
+		&nbrListDict8FF_, nbrList16FF_, nbrList32FF_);
+
+	// dictionary offsets are an exclusive prefix sum over the dictionary byte sizes (0 for normal chunks)
+	const uint64_t N_dictBytesFF = BuildExclusivePrefixSum_Parallel(
+		ChunkNumTotal(N_F_),
+		[&](const uint32_t chunk)
+		{
+			return static_cast<uint64_t>(
+				SELLDictBytes(nbrChunkDictFormatFF_[chunk], nbrChunkDictSizeFF_[chunk]));
+		},
+		nbrChunkDictOffsetsFF_);
+	// (one uint32 of padding, because a uint16 gather reads 2 bytes past the entry)
+	Base::ResizeScratchVector(
+		nbrChunkDictFF_, N_dictBytesFF + sizeof(uint32_t), extraAllocCapacityPct_);
+
 	FinalizeChunkStorage(
-		nbrChunkMaxCountFB_, nbrChunkFormatFB_, nbrChunkOffsetsFB_,
-		nbrListDelta8FB_, nbrListDelta16FB_, nbrListAbs32FB_);
+		nbrChunkMaxCountFB_, nbrChunkFormatFB_, nullptr, nbrChunkOffsetsFB_,
+		nullptr, nbrList16FB_, nbrList32FB_);
 	FinalizeChunkStorage(
-		nbrChunkMaxCountFR_, nbrChunkFormatFR_, nbrChunkOffsetsFR_,
-		nbrListDelta8FR_, nbrListDelta16FR_, nbrListAbs32FR_);
+		nbrChunkMaxCountFR_, nbrChunkFormatFR_, nullptr, nbrChunkOffsetsFR_,
+		nullptr, nbrList16FR_, nbrList32FR_);
 	FinalizeCSRNeighborStorage(nbrCountRF_, nbrOffsetsRF_, nbrListRF_, extraAllocCapacityPct_);
 	FinalizeCSRNeighborStorage(nbrCountRB_, nbrOffsetsRB_, nbrListRB_, extraAllocCapacityPct_);
 	FinalizeCSRNeighborStorage(nbrCountRR_, nbrOffsetsRR_, nbrListRR_, extraAllocCapacityPct_);
@@ -1062,7 +1081,8 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::PrepareFluidCountWrite(
 	// the count-query only writes the formats of the chunks it visits
 	ClearFluidChunkFormats_Parallel(
 		nbrChunkFormatFF_, nbrChunkFormatFB_, nbrChunkFormatFR_,
-		nbrChunkBaseIdxFF_, nbrChunkBaseIdxFB_, nbrChunkBaseIdxFR_);
+		nbrChunkBaseIdxFF_, nbrChunkBaseIdxFB_, nbrChunkBaseIdxFR_,
+		nbrChunkDictSizeFF_);
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
@@ -1083,6 +1103,8 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
 		"Compressed chunked SELL FR neighbor count exceeds uint16 count storage.");
 
 	// the chunk pitch and neighbor index range are complete here
+	// (FF chunks with few distinct neighbors store them once in a dictionary, encoded like a normal chunk)
+	const bool isDictFF = countsFF.N_distinct > 0u && countsFF.N_distinct <= N_SELL_DICT_SIZE_MAX;
 	const SELLChunkFormat formatFF = ChooseChunkFormat(
 		nbrChunkMaxCountFF_[chunk], countsFF.minRef, countsFF.maxRef);
 	const SELLChunkFormat formatFB = ChooseChunkFormat(
@@ -1095,6 +1117,10 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
 	nbrChunkBaseIdxFF_[chunk] = (formatFF == SELLChunkFormat::Abs32) ? 0u : countsFF.minRef;
 	nbrChunkBaseIdxFB_[chunk] = (formatFB == SELLChunkFormat::Abs32) ? 0u : countsFB.minRef;
 	nbrChunkBaseIdxFR_[chunk] = (formatFR == SELLChunkFormat::Abs32) ? 0u : countsFR.minRef;
+	nbrChunkDictSizeFF_[chunk] = isDictFF ? static_cast<uint16_t>(countsFF.N_distinct) : 0u;
+	nbrChunkDictFormatFF_[chunk] = (formatFF == SELLChunkFormat::Delta16)
+		? SELLDictChunkFormat::DictDelta16
+		: SELLDictChunkFormat::DictAbs32;
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFF(
@@ -1111,9 +1137,15 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFF(
 	const uint32_t chunk = ChunkOfParticle(i);
 	const uint32_t lane = LaneOfParticle(i);
 	ChunkedSELLNeighborSpan_Write chunkFF = FFChunkWrite(chunk);
+	if (chunkFF.dict) [[unlikely]]
+	{
+		throw std::runtime_error(
+			"Compressed chunked SELL FF per-particle fill does not support dict chunks.");
+	}
 	if (N_nbrs > chunkFF.pitch) [[unlikely]]
 	{
-		throw std::runtime_error("Compressed chunked SELL FF neighbor count exceeds chunk pitch.");
+		throw std::runtime_error(
+			"Compressed chunked SELL FF neighbor count exceeds chunk pitch.");
 	}
 
 	for (uint32_t k = 0; k < N_nbrs; k++)
@@ -1122,13 +1154,12 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFF(
 	}
 
 	// padding entries are valid indices so SIMD gathers never touch invalid memory
-	const uint32_t safeFluidIdx =
-		(chunkFF.format == SELLChunkFormat::Delta8 ||
-		 chunkFF.format == SELLChunkFormat::Delta16)
-		? chunkFF.baseIdx : i;
+	const uint32_t safePaddingFluidIdx = (chunkFF.format == SELLChunkFormat::Delta16)
+		? chunkFF.baseIdx
+		: i;
 	for (uint32_t k = N_nbrs; k < chunkFF.pitch; k++)
 	{
-		chunkFF.StoreNeighbor(lane, k, safeFluidIdx);
+		chunkFF.StoreNeighbor(lane, k, safePaddingFluidIdx);
 	}
 }
 
@@ -1149,7 +1180,8 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFB(
 	ChunkedSELLNeighborSpan_Write chunkFB = FBChunkWrite(chunk);
 	if (N_nbrs > chunkFB.pitch) [[unlikely]]
 	{
-		throw std::runtime_error("Compressed chunked SELL FB neighbor count exceeds chunk pitch.");
+		throw std::runtime_error(
+			"Compressed chunked SELL FB neighbor count exceeds chunk pitch.");
 	}
 
 	for (uint32_t k = 0; k < N_nbrs; k++)
@@ -1158,10 +1190,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFB(
 	}
 
 	// padding entries are valid indices so SIMD gathers never touch invalid memory
-	const uint32_t safePaddingBoundaryIdx =
-		(chunkFB.format == SELLChunkFormat::Delta8 ||
-		 chunkFB.format == SELLChunkFormat::Delta16)
-		? chunkFB.baseIdx : safeBoundaryIdx;
+	const uint32_t safePaddingBoundaryIdx = (chunkFB.format == SELLChunkFormat::Delta16)
+		? chunkFB.baseIdx
+		: safeBoundaryIdx;
 	for (uint32_t k = N_nbrs; k < chunkFB.pitch; k++)
 	{
 		chunkFB.StoreNeighbor(lane, k, safePaddingBoundaryIdx);
@@ -1185,7 +1216,8 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFR(
 	ChunkedSELLNeighborSpan_Write chunkFR = FRChunkWrite(chunk);
 	if (N_nbrs > chunkFR.pitch) [[unlikely]]
 	{
-		throw std::runtime_error("Compressed chunked SELL FR neighbor count exceeds chunk pitch.");
+		throw std::runtime_error(
+			"Compressed chunked SELL FR neighbor count exceeds chunk pitch.");
 	}
 
 	for (uint32_t k = 0; k < N_nbrs; k++)
@@ -1194,10 +1226,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFR(
 	}
 
 	// padding entries are valid indices so SIMD gathers never touch invalid memory
-	const uint32_t safePaddingRigidIdx =
-		(chunkFR.format == SELLChunkFormat::Delta8 ||
-		 chunkFR.format == SELLChunkFormat::Delta16)
-		? chunkFR.baseIdx : safeRigidIdx;
+	const uint32_t safePaddingRigidIdx = (chunkFR.format == SELLChunkFormat::Delta16)
+		? chunkFR.baseIdx
+		: safeRigidIdx;
 	for (uint32_t k = N_nbrs; k < chunkFR.pitch; k++)
 	{
 		chunkFR.StoreNeighbor(lane, k, safePaddingRigidIdx);
@@ -1397,9 +1428,13 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkFormatFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkOffsetsFF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListDelta8FF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListDelta16FF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListAbs32FF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictSizeFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictFormatFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictOffsetsFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrListDict8FF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrList16FF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrList32FF_));
 
 	// FB neighbor list memory usage
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrCountFB_));
@@ -1407,9 +1442,8 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkFormatFB_));
 	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrChunkOffsetsFB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListDelta8FB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListDelta16FB_));
-	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrListAbs32FB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrList16FB_));
+	Mem::Add(usageFB, Mem::MemUsageOf_Vector(nbrList32FB_));
 
 	// FR neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountFR_));
@@ -1417,9 +1451,8 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkBaseIdxFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkFormatFR_));
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrChunkOffsetsFR_));
-	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListDelta8FR_));
-	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListDelta16FR_));
-	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrListAbs32FR_));
+	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrList16FR_));
+	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrList32FR_));
 
 	// RF neighbor list memory usage
 	Mem::Add(usageFR, Mem::MemUsageOf_Vector(nbrCountRF_));
@@ -1502,21 +1535,22 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 		#endif
 
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
-		const uint32_t safeFluidIdx =
-			(chunkFF.format == SELLChunkFormat::Delta8 ||
-			 chunkFF.format == SELLChunkFormat::Delta16)
-			? chunkFF.baseIdx : i;
+		// (dict chunks pad with the first position of their dictionary)
+		const uint32_t safePaddingFluidIdx = chunkFF.dict
+			? 0u
+			: (chunkFF.format == SELLChunkFormat::Delta16)
+				? chunkFF.baseIdx
+				: i;
 		for (uint32_t k = N_written; k < chunkFF.pitch; k++)
 		{
-			chunkFF.StoreNeighbor(lane, k, safeFluidIdx);
+			chunkFF.StoreNeighbor(lane, k, safePaddingFluidIdx);
 		}
 	}
 
 	// tail lanes of the final partial chunk still get loaded by SIMD gathers
-	const uint32_t safeTailFluidIdx =
-		(chunkFF.format == SELLChunkFormat::Delta8 ||
-		 chunkFF.format == SELLChunkFormat::Delta16)
-		? chunkFF.baseIdx : 0;
+	const uint32_t safeTailFluidIdx = (!chunkFF.dict && chunkFF.format == SELLChunkFormat::Delta16)
+		? chunkFF.baseIdx
+		: 0;
 	for (uint32_t lane = end - begin; lane < chunkWidth; lane++)
 	{
 		for (uint32_t k = 0; k < chunkFF.pitch; k++)
@@ -1549,10 +1583,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFBChunkWrite(
 		#endif
 
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
-		const uint32_t safePaddingBoundaryIdx =
-			(chunkFB.format == SELLChunkFormat::Delta8 ||
-			 chunkFB.format == SELLChunkFormat::Delta16)
-			? chunkFB.baseIdx : safeBoundaryIdx;
+		const uint32_t safePaddingBoundaryIdx = (chunkFB.format == SELLChunkFormat::Delta16)
+			? chunkFB.baseIdx
+			: safeBoundaryIdx;
 		for (uint32_t k = N_written; k < chunkFB.pitch; k++)
 		{
 			chunkFB.StoreNeighbor(lane, k, safePaddingBoundaryIdx);
@@ -1560,10 +1593,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFBChunkWrite(
 	}
 
 	// tail lanes of the final partial chunk still get loaded by SIMD gathers
-	const uint32_t safeTailBoundaryIdx =
-		(chunkFB.format == SELLChunkFormat::Delta8 ||
-		 chunkFB.format == SELLChunkFormat::Delta16)
-		? chunkFB.baseIdx : safeBoundaryIdx;
+	const uint32_t safeTailBoundaryIdx = (chunkFB.format == SELLChunkFormat::Delta16)
+		? chunkFB.baseIdx
+		: safeBoundaryIdx;
 	for (uint32_t lane = end - begin; lane < chunkWidth; lane++)
 	{
 		for (uint32_t k = 0; k < chunkFB.pitch; k++)
@@ -1596,10 +1628,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFRChunkWrite(
 		#endif
 
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
-		const uint32_t safePaddingRigidIdx =
-			(chunkFR.format == SELLChunkFormat::Delta8 ||
-			 chunkFR.format == SELLChunkFormat::Delta16)
-			? chunkFR.baseIdx : safeRigidIdx;
+		const uint32_t safePaddingRigidIdx = (chunkFR.format == SELLChunkFormat::Delta16)
+			? chunkFR.baseIdx
+			: safeRigidIdx;
 		for (uint32_t k = N_written; k < chunkFR.pitch; k++)
 		{
 			chunkFR.StoreNeighbor(lane, k, safePaddingRigidIdx);
@@ -1607,10 +1638,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFRChunkWrite(
 	}
 
 	// tail lanes of the final partial chunk still get loaded by SIMD gathers
-	const uint32_t safeTailRigidIdx =
-		(chunkFR.format == SELLChunkFormat::Delta8 ||
-		 chunkFR.format == SELLChunkFormat::Delta16)
-		? chunkFR.baseIdx : safeRigidIdx;
+	const uint32_t safeTailRigidIdx = (chunkFR.format == SELLChunkFormat::Delta16)
+		? chunkFR.baseIdx
+		: safeRigidIdx;
 	for (uint32_t lane = end - begin; lane < chunkWidth; lane++)
 	{
 		for (uint32_t k = 0; k < chunkFR.pitch; k++)
@@ -1659,7 +1689,6 @@ SELLChunkFormat NeighborLists_ChunkedSELL_AdaptCompress_CPU::ChooseChunkFormat(
 	}
 
 	const uint32_t span = maxRef - minRef;
-	if (span <= 0xffu) { return SELLChunkFormat::Delta8; }
 	if (span <= 0xffffu) { return SELLChunkFormat::Delta16; }
 	return SELLChunkFormat::Abs32;
 }
@@ -1677,20 +1706,23 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeRe
 	const uint32_t end = ChunkEnd(chunk, N_F_);
 	const uint64_t offset = nbrChunkOffsetsFF_[chunk];
 	const SELLChunkFormat format = nbrChunkFormatFF_[chunk];
+	const bool isDict = nbrChunkDictSizeFF_[chunk] > 0u;
 
 	return ChunkedSELLNeighborSpan_Read
 	{
-		format == SELLChunkFormat::Abs32 && !nbrListAbs32FF_.empty()
-			? nbrListAbs32FF_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta16 && !nbrListDelta16FF_.empty()
-			? nbrListDelta16FF_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta8 && !nbrListDelta8FF_.empty()
-			? nbrListDelta8FF_.data() + offset : nullptr,
+		!isDict && format == SELLChunkFormat::Abs32 && !nbrList32FF_.empty()
+			? nbrList32FF_.data() + offset : nullptr,
+		!isDict && format == SELLChunkFormat::Delta16 && !nbrList16FF_.empty()
+			? nbrList16FF_.data() + offset : nullptr,
+		isDict && !nbrListDict8FF_.empty()
+			? nbrListDict8FF_.data() + offset : nullptr,
 		nbrCountFF_.empty() ? nullptr : nbrCountFF_.data(),
 		nbrChunkBaseIdxFF_[chunk],
 		chunk, begin, end,
 		nbrChunkMaxCountFF_[chunk],
-		format
+		format,
+		isDict ? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk] : nullptr,
+		nbrChunkDictFormatFF_[chunk]
 	};
 }
 
@@ -1704,12 +1736,11 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeRe
 
 	return ChunkedSELLNeighborSpan_Read
 	{
-		format == SELLChunkFormat::Abs32 && !nbrListAbs32FB_.empty()
-			? nbrListAbs32FB_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta16 && !nbrListDelta16FB_.empty()
-			? nbrListDelta16FB_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta8 && !nbrListDelta8FB_.empty()
-			? nbrListDelta8FB_.data() + offset : nullptr,
+		format == SELLChunkFormat::Abs32 && !nbrList32FB_.empty()
+			? nbrList32FB_.data() + offset : nullptr,
+		format == SELLChunkFormat::Delta16 && !nbrList16FB_.empty()
+			? nbrList16FB_.data() + offset : nullptr,
+		nullptr,
 		nbrCountFB_.empty() ? nullptr : nbrCountFB_.data(),
 		nbrChunkBaseIdxFB_[chunk],
 		chunk, begin, end,
@@ -1728,12 +1759,11 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeRe
 
 	return ChunkedSELLNeighborSpan_Read
 	{
-		format == SELLChunkFormat::Abs32 && !nbrListAbs32FR_.empty()
-			? nbrListAbs32FR_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta16 && !nbrListDelta16FR_.empty()
-			? nbrListDelta16FR_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta8 && !nbrListDelta8FR_.empty()
-			? nbrListDelta8FR_.data() + offset : nullptr,
+		format == SELLChunkFormat::Abs32 && !nbrList32FR_.empty()
+			? nbrList32FR_.data() + offset : nullptr,
+		format == SELLChunkFormat::Delta16 && !nbrList16FR_.empty()
+			? nbrList16FR_.data() + offset : nullptr,
+		nullptr,
 		nbrCountFR_.empty() ? nullptr : nbrCountFR_.data(),
 		nbrChunkBaseIdxFR_[chunk],
 		chunk, begin, end,
@@ -1749,20 +1779,24 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 	const uint32_t end = ChunkEnd(chunk, N_F_);
 	const uint64_t offset = nbrChunkOffsetsFF_[chunk];
 	const SELLChunkFormat format = nbrChunkFormatFF_[chunk];
+	const bool isDict = nbrChunkDictSizeFF_[chunk] > 0u;
 
 	return ChunkedSELLNeighborSpan_Write
 	{
-		format == SELLChunkFormat::Abs32 && !nbrListAbs32FF_.empty()
-			? nbrListAbs32FF_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta16 && !nbrListDelta16FF_.empty()
-			? nbrListDelta16FF_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta8 && !nbrListDelta8FF_.empty()
-			? nbrListDelta8FF_.data() + offset : nullptr,
+		!isDict && format == SELLChunkFormat::Abs32 && !nbrList32FF_.empty()
+			? nbrList32FF_.data() + offset : nullptr,
+		!isDict && format == SELLChunkFormat::Delta16 && !nbrList16FF_.empty()
+			? nbrList16FF_.data() + offset : nullptr,
+		isDict && !nbrListDict8FF_.empty()
+			? nbrListDict8FF_.data() + offset : nullptr,
 		nbrCountFF_.empty() ? nullptr : nbrCountFF_.data(),
 		nbrChunkBaseIdxFF_[chunk],
 		chunk, begin, end,
 		nbrChunkMaxCountFF_[chunk],
-		format
+		format,
+		isDict ? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk] : nullptr,
+		nbrChunkDictFormatFF_[chunk],
+		nbrChunkDictSizeFF_[chunk]
 	};
 }
 
@@ -1776,12 +1810,11 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 
 	return ChunkedSELLNeighborSpan_Write
 	{
-		format == SELLChunkFormat::Abs32 && !nbrListAbs32FB_.empty()
-			? nbrListAbs32FB_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta16 && !nbrListDelta16FB_.empty()
-			? nbrListDelta16FB_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta8 && !nbrListDelta8FB_.empty()
-			? nbrListDelta8FB_.data() + offset : nullptr,
+		format == SELLChunkFormat::Abs32 && !nbrList32FB_.empty()
+			? nbrList32FB_.data() + offset : nullptr,
+		format == SELLChunkFormat::Delta16 && !nbrList16FB_.empty()
+			? nbrList16FB_.data() + offset : nullptr,
+		nullptr,
 		nbrCountFB_.empty() ? nullptr : nbrCountFB_.data(),
 		nbrChunkBaseIdxFB_[chunk],
 		chunk, begin, end,
@@ -1800,12 +1833,11 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 
 	return ChunkedSELLNeighborSpan_Write
 	{
-		format == SELLChunkFormat::Abs32 && !nbrListAbs32FR_.empty()
-			? nbrListAbs32FR_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta16 && !nbrListDelta16FR_.empty()
-			? nbrListDelta16FR_.data() + offset : nullptr,
-		format == SELLChunkFormat::Delta8 && !nbrListDelta8FR_.empty()
-			? nbrListDelta8FR_.data() + offset : nullptr,
+		format == SELLChunkFormat::Abs32 && !nbrList32FR_.empty()
+			? nbrList32FR_.data() + offset : nullptr,
+		format == SELLChunkFormat::Delta16 && !nbrList16FR_.empty()
+			? nbrList16FR_.data() + offset : nullptr,
+		nullptr,
 		nbrCountFR_.empty() ? nullptr : nbrCountFR_.data(),
 		nbrChunkBaseIdxFR_[chunk],
 		chunk, begin, end,
@@ -1817,10 +1849,11 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(
 	const std::vector<SELLNeighborCount>& nbrChunkMaxCount,
 	const std::vector<SELLChunkFormat>& nbrChunkFormat,
+	const std::vector<uint16_t>* nbrChunkDictSize,
 	std::vector<uint64_t>& nbrChunkOffsets,
-	std::vector<uint8_t>& nbrListDelta8,
-	std::vector<uint16_t>& nbrListDelta16,
-	std::vector<uint32_t>& nbrListAbs32) const
+	std::vector<uint8_t>* nbrListDict8,
+	std::vector<uint16_t>& nbrList16,
+	std::vector<uint32_t>& nbrList32) const
 {
 	const uint32_t N_chunks = ChunkNumTotal(N_F_);
 	nbrChunkOffsets.resize(static_cast<uint64_t>(N_chunks) + 1ull);
@@ -1843,29 +1876,30 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(
 					const uint64_t chunkStorage = ChunkStorageSize(pitch);
 					const SELLChunkFormat format = nbrChunkFormat[chunk];
 
-					if (format == SELLChunkFormat::Delta8)
+					// (dict chunks store their uint8 dictionary positions in the 8-bit buffer)
+					if (nbrChunkDictSize && (*nbrChunkDictSize)[chunk] > 0u)
 					{
 						if (isFinalScan)
 						{
-							nbrChunkOffsets[chunk] = running.N_delta8;
+							nbrChunkOffsets[chunk] = running.N_entriesDict8;
 						}
-						running.N_delta8 += chunkStorage;
+						running.N_entriesDict8 += chunkStorage;
 					}
 					else if (format == SELLChunkFormat::Delta16)
 					{
 						if (isFinalScan)
 						{
-							nbrChunkOffsets[chunk] = running.N_delta16;
+							nbrChunkOffsets[chunk] = running.N_entries16;
 						}
-						running.N_delta16 += chunkStorage;
+						running.N_entries16 += chunkStorage;
 					}
 					else
 					{
 						if (isFinalScan)
 						{
-							nbrChunkOffsets[chunk] = running.N_abs32;
+							nbrChunkOffsets[chunk] = running.N_entries32;
 						}
-						running.N_abs32 += chunkStorage;
+						running.N_entries32 += chunkStorage;
 					}
 				}
 				return running;
@@ -1874,16 +1908,19 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(
 			{
 				return ChunkStorageTotals
 				{
-					lhs.N_delta8 + rhs.N_delta8,
-					lhs.N_delta16 + rhs.N_delta16,
-					lhs.N_abs32 + rhs.N_abs32
+					lhs.N_entriesDict8 + rhs.N_entriesDict8,
+					lhs.N_entries16 + rhs.N_entries16,
+					lhs.N_entries32 + rhs.N_entries32
 				};
 			},
 			tbb::auto_partitioner{}
 		);
 	}
 
-	Base::ResizeScratchVector(nbrListDelta8, totals.N_delta8, extraAllocCapacityPct_);
-	Base::ResizeScratchVector(nbrListDelta16, totals.N_delta16, extraAllocCapacityPct_);
-	Base::ResizeScratchVector(nbrListAbs32, totals.N_abs32, extraAllocCapacityPct_);
+	if (nbrListDict8)
+	{
+		Base::ResizeScratchVector(*nbrListDict8, totals.N_entriesDict8, extraAllocCapacityPct_);
+	}
+	Base::ResizeScratchVector(nbrList16, totals.N_entries16, extraAllocCapacityPct_);
+	Base::ResizeScratchVector(nbrList32, totals.N_entries32, extraAllocCapacityPct_);
 }

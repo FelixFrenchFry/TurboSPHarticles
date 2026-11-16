@@ -4,8 +4,10 @@
 // external
 #include <cassert>
 #include <cstdint>
-#include <boost/container/small_vector.hpp>
+#include <cstring>
+#include <stdexcept>
 #include <vector>
+#include <boost/container/small_vector.hpp>
 #include <tbb/enumerable_thread_specific.h>
 
 // internal
@@ -23,13 +25,30 @@ namespace Sim
 {
 	enum class SELLChunkFormat : uint8_t
 	{
-		Explicit32,
-		Delta8,
 		Delta16,
 		Abs32
 	};
 
+	enum class SELLDictChunkFormat : uint8_t
+	{
+		DictDelta16,
+		DictAbs32
+	};
+
+	// TODO: use uint8_t instead?
 	using SELLNeighborCount = uint16_t;
+
+	// max distinct neighbors of a dict chunk, addressable by its uint8 dictionary positions
+	static constexpr uint32_t N_SELL_DICT_SIZE_MAX = 256;
+
+	// byte size of a dict chunk's dictionary, rounded up to whole uint32 to keep the dictionaries aligned
+	inline uint32_t SELLDictBytes(SELLDictChunkFormat dictFormat, uint32_t N_entries) noexcept
+	{
+		const uint32_t N_entryBytes = (dictFormat == SELLDictChunkFormat::DictAbs32)
+			? static_cast<uint32_t>(sizeof(uint32_t))
+			: static_cast<uint32_t>(sizeof(uint16_t));
+		return (N_entries * N_entryBytes + 3u) & ~3u;
+	}
 
 	// read-view used in the neighbor retrieval (e.g. solver kernels)
 	struct ChunkedSELLNeighborSpan_Read
@@ -43,15 +62,32 @@ namespace Sim
 		uint32_t begin = 0;
 		uint32_t end = 0;
 		uint32_t pitch = 0;
-		SELLChunkFormat format = SELLChunkFormat::Explicit32;
+		SELLChunkFormat format = SELLChunkFormat::Abs32;
+		const uint8_t* dict = nullptr; // distinct neighbors of a dict chunk, nullptr for a normal chunk
+		SELLDictChunkFormat dictFormat = SELLDictChunkFormat::DictAbs32;
+
+		// neighbor at a position in the dictionary of a dict chunk
+		uint32_t ReadDictNeighborIdx(uint32_t dictIdx) const noexcept
+		{
+			if (dictFormat == SELLDictChunkFormat::DictDelta16)
+			{
+				uint16_t delta = 0;
+				std::memcpy(&delta, dict + sizeof(delta) * dictIdx, sizeof(delta));
+				return baseIdx + static_cast<uint32_t>(delta);
+			}
+
+			uint32_t idx = 0;
+			std::memcpy(&idx, dict + sizeof(idx) * dictIdx, sizeof(idx));
+			return idx;
+		}
 
 		uint32_t ReadNeighborIdx(uint32_t lane, uint32_t k) const noexcept
 		{
 			const uint64_t linearIdx = static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH + lane;
 
-			if (format == SELLChunkFormat::Delta8)
+			if (dict)
 			{
-				return baseIdx + static_cast<uint32_t>(data8[linearIdx]);
+				return ReadDictNeighborIdx(data8[linearIdx]);
 			}
 			if (format == SELLChunkFormat::Delta16)
 			{
@@ -65,10 +101,15 @@ namespace Sim
 		{
 			const uint64_t linearIdx = static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH;
 
-			if (format == SELLChunkFormat::Delta8)
+			if (dict)
 			{
-				return CPU::LoadUInt8AsUInt32xSIMD(data8 + linearIdx)
-					+ CPU::SetUInt32xSIMD(baseIdx);
+				const CPU::UInt32xSIMD dictIdx = CPU::LoadUInt8AsUInt32xSIMD(data8 + linearIdx);
+				if (dictFormat == SELLDictChunkFormat::DictDelta16)
+				{
+					return CPU::GatherUInt16AsUInt32xSIMD(dict, dictIdx)
+						+ CPU::SetUInt32xSIMD(baseIdx);
+				}
+				return CPU::GatherUInt32xSIMD(dict, dictIdx);
 			}
 			if (format == SELLChunkFormat::Delta16)
 			{
@@ -92,16 +133,46 @@ namespace Sim
 		uint32_t begin = 0;
 		uint32_t end = 0;
 		uint32_t pitch = 0;
-		SELLChunkFormat format = SELLChunkFormat::Explicit32;
+		SELLChunkFormat format = SELLChunkFormat::Abs32;
+		uint8_t* dict = nullptr; // distinct neighbors of a dict chunk, nullptr for a normal chunk
+		SELLDictChunkFormat dictFormat = SELLDictChunkFormat::DictAbs32;
+		uint32_t N_dictMax = 0; // dictionary size fixed by the count-query
+		uint32_t N_dict = 0; // dictionary entries written so far
+
+		// returns the value StoreNeighbor() takes for neighbor j, which is j itself
+		// or its position after adding it to the dictionary of a dict chunk
+		uint32_t RegisterNeighbor(uint32_t j)
+		{
+			if (!dict) { return j; }
+
+			if (N_dict >= N_dictMax) [[unlikely]]
+			{
+				throw std::runtime_error(
+					"ChunkedSELL dict fill exceeded the chunk neighbor dictionary.");
+			}
+
+			if (dictFormat == SELLDictChunkFormat::DictDelta16)
+			{
+				assert(j >= baseIdx && j - baseIdx <= 0xffffu);
+				const uint16_t delta = static_cast<uint16_t>(j - baseIdx);
+				std::memcpy(dict + sizeof(delta) * N_dict, &delta, sizeof(delta));
+			}
+			else
+			{
+				std::memcpy(dict + sizeof(j) * N_dict, &j, sizeof(j));
+			}
+
+			return N_dict++;
+		}
 
 		void StoreNeighbor(uint32_t lane, uint32_t k, uint32_t j) const noexcept
 		{
 			const uint64_t linearIdx = static_cast<uint64_t>(k) * CPU::N_SIMD_WIDTH + lane;
 
-			if (format == SELLChunkFormat::Delta8)
+			if (dict)
 			{
-				assert(j >= baseIdx && j - baseIdx <= 0xffu);
-				data8[linearIdx] = static_cast<uint8_t>(j - baseIdx);
+				assert(j <= 0xffu);
+				data8[linearIdx] = static_cast<uint8_t>(j);
 			}
 			else if (format == SELLChunkFormat::Delta16)
 			{
@@ -120,6 +191,7 @@ namespace Sim
 		const uint32_t* counts;
 		uint32_t minRef;
 		uint32_t maxRef;
+		uint32_t N_distinct = 0; // distinct neighbors of the chunk, 0 if the query does not track them
 	};
 
 	class I_NeighborListSELL : public I_NeighborList
@@ -374,15 +446,17 @@ namespace Sim
 		std::vector<uint64_t> nbrChunkOffsetsFF_; // per-chunk starting index into the selected format buffer
 		std::vector<uint64_t> nbrChunkOffsetsFB_;
 		std::vector<uint64_t> nbrChunkOffsetsFR_;
-		std::vector<uint8_t> nbrListDelta8FF_;
-		std::vector<uint8_t> nbrListDelta8FB_;
-		std::vector<uint8_t> nbrListDelta8FR_;
-		std::vector<uint16_t> nbrListDelta16FF_;
-		std::vector<uint16_t> nbrListDelta16FB_;
-		std::vector<uint16_t> nbrListDelta16FR_;
-		std::vector<uint32_t> nbrListAbs32FF_;
-		std::vector<uint32_t> nbrListAbs32FB_;
-		std::vector<uint32_t> nbrListAbs32FR_;
+		std::vector<uint16_t> nbrChunkDictSizeFF_; // per-chunk number of distinct neighbors of dict chunks, 0 for normal chunks
+		std::vector<SELLDictChunkFormat> nbrChunkDictFormatFF_; // per-chunk dictionary format of dict chunks
+		std::vector<uint64_t> nbrChunkDictOffsetsFF_; // per-chunk starting byte into nbrChunkDictFF_
+		std::vector<uint8_t> nbrChunkDictFF_; // dictionaries of the dict chunks, concatenated for all chunks
+		std::vector<uint8_t> nbrListDict8FF_; // uint8 dictionary positions of the dict chunks
+		std::vector<uint16_t> nbrList16FF_;
+		std::vector<uint16_t> nbrList16FB_;
+		std::vector<uint16_t> nbrList16FR_;
+		std::vector<uint32_t> nbrList32FF_;
+		std::vector<uint32_t> nbrList32FB_;
+		std::vector<uint32_t> nbrList32FR_;
 
 		// CSR neighbor storage for rigid source particles
 		std::vector<SELLNeighborCount> nbrCountRF_;
@@ -426,10 +500,11 @@ namespace Sim
 		void FinalizeChunkStorage(
 			const std::vector<SELLNeighborCount>& nbrChunkMaxCount,
 			const std::vector<SELLChunkFormat>& nbrChunkFormat,
+			const std::vector<uint16_t>* nbrChunkDictSize, // nullptr without dict chunks
 			std::vector<uint64_t>& nbrChunkOffsets,
-			std::vector<uint8_t>& nbrListDelta8,
-			std::vector<uint16_t>& nbrListDelta16,
-			std::vector<uint32_t>& nbrListAbs32) const;
+			std::vector<uint8_t>* nbrListDict8, // nullptr without dict chunks
+			std::vector<uint16_t>& nbrList16,
+			std::vector<uint32_t>& nbrList32) const;
 	};
 
 } // namespace Sim

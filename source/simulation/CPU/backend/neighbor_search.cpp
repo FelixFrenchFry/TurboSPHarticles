@@ -1516,6 +1516,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 					uint32_t maxRefFF = 0;
 					uint32_t maxRefFB = 0;
 					uint32_t maxRefFR = 0;
+					uint32_t N_distinctFF = 0;
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
@@ -1539,6 +1540,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							{
 								minRefFF = std::min(minRefFF, l);
 								maxRefFF = std::max(maxRefFF, l);
+								N_distinctFF++;
 							}
 
 							cntFF = CPU::AddMaskedOneUInt32xSIMD(cntFF, hit);
@@ -1606,7 +1608,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 
 					chunkedSELLNeighborList->CommitFluidChunkCounts(
 						chunk,
-						{ cntLanesFF, minRefFF, maxRefFF },
+						{ cntLanesFF, minRefFF, maxRefFF, N_distinctFF },
 						{ cntLanesFB, minRefFB, maxRefFB },
 						{ cntLanesFR, minRefFR, maxRefFR });
 				}
@@ -1785,6 +1787,10 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 								xsimd::fma(dy, dy, dz * dz));
 							const uint32_t mask =
 								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
+							if (mask == 0u) { continue; }
+
+							// dict chunks store the dictionary position of the candidate
+							const uint32_t storedIdx = chunkFF.RegisterNeighbor(l);
 
 							// padding lanes are already cleared, so only the matching lanes are visited
 							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
@@ -1796,7 +1802,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 										"CPU ChunkedSELL FF direct fill exceeded chunk pitch.");
 								}
 
-								chunkFF.StoreNeighbor(lane, writtenFF[lane], l);
+								chunkFF.StoreNeighbor(lane, writtenFF[lane], storedIdx);
 								writtenFF[lane]++;
 							}
 						}

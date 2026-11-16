@@ -589,7 +589,7 @@ namespace
 		auto neighbors = MakeNeighbors(static_cast<uint32_t>(scene[0].size()));
 		const std::array<uint32_t, 3> spans{ 255, 256, 65'536 };
 		const std::array<Sim::SELLChunkFormat, 3> formats{
-			Sim::SELLChunkFormat::Delta8, Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32 };
+			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32 };
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			const uint32_t source = chunk * CPU::N_SIMD_WIDTH;
@@ -615,7 +615,7 @@ namespace
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			const auto expected = GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Explicit32;
+			const auto expected = GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32;
 			EXPECT_EQ(lists_->FFChunk(chunk).format, expected);
 			EXPECT_EQ(lists_->FBChunk(chunk).format, expected);
 			EXPECT_EQ(lists_->FRChunk(chunk).format, expected);

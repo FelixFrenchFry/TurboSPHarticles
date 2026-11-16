@@ -37,4 +37,22 @@ namespace CPU
 		return UInt32xSIMD(_mm256_cvtepu16_epi32(lo));
 	}
 
+	// gather scattered uint16 values by index and widen them to uint32 lanes
+	// (every lane reads 2 bytes past its value)
+	inline UInt32xSIMD GatherUInt16AsUInt32xSIMD(
+		const uint8_t* p,
+		const UInt32xSIMD idx) noexcept
+	{
+		const __m256i v = _mm256_i32gather_epi32(reinterpret_cast<const int*>(p), idx, 2);
+		return UInt32xSIMD(_mm256_and_si256(v, _mm256_set1_epi32(0xffff)));
+	}
+
+	// gather scattered uint32 values by index from unaligned bytes
+	inline UInt32xSIMD GatherUInt32xSIMD(
+		const uint8_t* p,
+		const UInt32xSIMD idx) noexcept
+	{
+		return UInt32xSIMD(_mm256_i32gather_epi32(reinterpret_cast<const int*>(p), idx, 4));
+	}
+
 } // namespace CPU

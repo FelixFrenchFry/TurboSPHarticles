@@ -345,7 +345,7 @@ namespace
 	{
 		const std::array<uint32_t, 4> spans{ 255, 256, 65'535, 65'536 };
 		const std::array<Sim::SELLChunkFormat, 4> formats{
-			Sim::SELLChunkFormat::Delta8, Sim::SELLChunkFormat::Delta16,
+			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Delta16,
 			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32 };
 		for (uint32_t i = 0; i < spans.size(); i++)
 		{
@@ -359,7 +359,7 @@ namespace
 				PrepareStorage(*lists_, data, 140'000);
 				FillStorage(*lists_, data, direct);
 
-				EXPECT_EQ(lists_->FBChunk(0).format, GetParam() ? formats[i] : Sim::SELLChunkFormat::Explicit32);
+				EXPECT_EQ(lists_->FBChunk(0).format, GetParam() ? formats[i] : Sim::SELLChunkFormat::Abs32);
 				ExpectNeighbors(*lists_, data);
 				ExpectFluidChunks(*lists_, data, 140'000, direct);
 			}
@@ -372,8 +372,8 @@ namespace
 		auto data = MakeNeighborData(4 * CPU::N_SIMD_WIDTH + 1, 0);
 		const std::array<uint32_t, 5> spans{ 255, 256, 65'536, 255, 65'535 };
 		const std::array<Sim::SELLChunkFormat, 5> formats{
-			Sim::SELLChunkFormat::Delta8, Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32,
-			Sim::SELLChunkFormat::Delta8, Sim::SELLChunkFormat::Delta16 };
+			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32,
+			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Delta16 };
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			const uint32_t base = 17 + 11 * chunk;
@@ -387,7 +387,7 @@ namespace
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			EXPECT_EQ(lists_->FBChunk(chunk).format, GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Explicit32);
+			EXPECT_EQ(lists_->FBChunk(chunk).format, GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32);
 		}
 	}
 
@@ -438,7 +438,7 @@ namespace
 	{
 		const std::array<uint32_t, 4> spans{ 65'536, 255, 65'535, 0 };
 		const std::array<Sim::SELLChunkFormat, 4> formats{
-			Sim::SELLChunkFormat::Abs32, Sim::SELLChunkFormat::Delta8,
+			Sim::SELLChunkFormat::Abs32, Sim::SELLChunkFormat::Delta16,
 			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32 };
 		for (uint32_t i = 0; i < spans.size(); i++)
 		{
@@ -449,7 +449,7 @@ namespace
 			PrepareStorage(*lists_, data, 100'000);
 			FillStorage(*lists_, data, true);
 
-			EXPECT_EQ(lists_->FBChunk(0).format, GetParam() ? formats[i] : Sim::SELLChunkFormat::Explicit32);
+			EXPECT_EQ(lists_->FBChunk(0).format, GetParam() ? formats[i] : Sim::SELLChunkFormat::Abs32);
 			ExpectNeighbors(*lists_, data);
 			ExpectFluidChunks(*lists_, data, 100'000, true);
 		}
