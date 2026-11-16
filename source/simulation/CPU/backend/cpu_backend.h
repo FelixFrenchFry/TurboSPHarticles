@@ -325,10 +325,6 @@ namespace Sim
 		mutable std::vector<float> workBufferF_;
 		mutable std::vector<float> workBufferF2_;
 		mutable std::vector<float> workBufferF3_;
-		mutable std::vector<float> workBufferB_;
-		mutable std::vector<float> workBufferB2_;
-		mutable std::vector<float> workBufferB3_;
-		mutable std::vector<uint64_t> workBufferIdB_;
 		mutable std::vector<uint8_t> expSurfaceFlagsScratch_;
 		mutable std::vector<uint8_t> expNearSurfaceFlagsScratch_;
 		mutable Stats::StatisticsPartial statisticsPartialScratch_;

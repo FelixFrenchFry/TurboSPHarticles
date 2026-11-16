@@ -53,7 +53,9 @@ namespace
 		if (N == 0) { return; }
 
 		assert(data.size() == N && "Permutation and data vector size mismatch");
-		scratch.resize(N);
+		// (copying back only reads the first N elements, so the scratch never shrinks)
+		if (preserveDataCapacity) { Base::ResizeGrowScratchVector(scratch, N); }
+		else { scratch.resize(N); }
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N),
@@ -2146,12 +2148,14 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 		{
 			// keep the exact compact-CLL cell IDs in sync with the re-ordered particle arrays,
 			// so Construct() can reuse them instead of re-computing them right away
-			ApplyPermutation(particleOrderB_, be_.idB_, be_.workBufferIdB_);
-			ApplyPermutation_Vec3(particleOrderB_,
-				be_.xPosB_, be_.yPosB_, be_.zPosB_,
-				be_.workBufferB_, be_.workBufferB2_, be_.workBufferB3_);
-			ApplyPermutation(particleOrderB_, be_.volB_, be_.workBufferB_);
-			ApplyPermutation(particleOrderB_, be_.psiB_, be_.workBufferB_);
+			// (IDs reuse the sort's cell ID scratch, the other fields one local work buffer)
+			ApplyPermutation(particleOrderB_, be_.idB_, compactCellBuildScratch_.cellIds, true);
+			std::vector<float> workBufferB;
+			ApplyPermutation(particleOrderB_, be_.xPosB_, workBufferB, true);
+			ApplyPermutation(particleOrderB_, be_.yPosB_, workBufferB, true);
+			ApplyPermutation(particleOrderB_, be_.zPosB_, workBufferB, true);
+			ApplyPermutation(particleOrderB_, be_.volB_, workBufferB, true);
+			ApplyPermutation(particleOrderB_, be_.psiB_, workBufferB, true);
 		}
 	}
 
