@@ -1519,6 +1519,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 					uint32_t maxRefFB = 0;
 					uint32_t maxRefFR = 0;
 					uint32_t N_distinctFF = 0;
+					uint32_t distinctFF[N_SELL_DICT_SIZE_MAX];
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
@@ -1542,6 +1543,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							{
 								minRefFF = std::min(minRefFF, l);
 								maxRefFF = std::max(maxRefFF, l);
+								if (N_distinctFF < N_SELL_DICT_SIZE_MAX) { distinctFF[N_distinctFF] = l; }
 								N_distinctFF++;
 							}
 
@@ -1610,7 +1612,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 
 					chunkedSELLNeighborList->CommitFluidChunkCounts(
 						chunk,
-						{ cntLanesFF, minRefFF, maxRefFF, N_distinctFF },
+						{ cntLanesFF, minRefFF, maxRefFF, N_distinctFF, distinctFF },
 						{ cntLanesFB, minRefFB, maxRefFB },
 						{ cntLanesFR, minRefFR, maxRefFR });
 				}

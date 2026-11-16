@@ -121,10 +121,10 @@ namespace
 		const bool trackDistinctFF = false)
 	{
 		const auto counts = CountFluidChunk(data, chunk);
-		const uint32_t N_distinctFF = trackDistinctFF
-			? static_cast<uint32_t>(DistinctChunkNeighbors(data, 0, chunk).size()) : 0u;
+		const auto distinctFF = trackDistinctFF ? DistinctChunkNeighbors(data, 0, chunk) : std::vector<uint32_t>{};
 		lists.CommitFluidChunkCounts(chunk,
-			{ counts.counts[0].data(), counts.minRef[0], counts.maxRef[0], N_distinctFF },
+			{ counts.counts[0].data(), counts.minRef[0], counts.maxRef[0],
+				static_cast<uint32_t>(distinctFF.size()), distinctFF.data() },
 			{ counts.counts[1].data(), counts.minRef[1], counts.maxRef[1] },
 			{ counts.counts[2].data(), counts.minRef[2], counts.maxRef[2] });
 	}
@@ -514,19 +514,24 @@ namespace
 		}
 	}
 
-	// dict entries follow the chunk format, so wide index spans store absolute indices
+	// dict entries take a second base for neighbors beyond uint16 reach of the lowest one,
+	// so only spans that two uint16 windows cannot cover store absolute indices
 	TEST_P(NeighborListStorageTests, PreservesDictChunkIndicesAtCompressionBoundaries)
 	{
-		const std::array<uint32_t, 2> spans{ 65'535, 65'536 };
-		const std::array<Sim::SELLChunkFormat, 2> formats{
-			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32 };
-		const std::array<Sim::SELLDictChunkFormat, 2> dictFormats{
-			Sim::SELLDictChunkFormat::DictDelta16, Sim::SELLDictChunkFormat::DictAbs32 };
-		for (uint32_t i = 0; i < spans.size(); i++)
+		const std::array<std::vector<uint32_t>, 3> neighbors{ {
+			{ 17 + 65'535, 17, 18 },
+			{ 17 + 65'536, 17, 18, 17 + 65'536 + 65'535 },
+			{ 17 + 65'536, 17, 18, 17 + 65'536 + 65'536 } } };
+		const std::array<Sim::SELLChunkFormat, 3> formats{
+			Sim::SELLChunkFormat::Delta16, Sim::SELLChunkFormat::Abs32, Sim::SELLChunkFormat::Abs32 };
+		const std::array<Sim::SELLDictChunkFormat, 3> dictFormats{
+			Sim::SELLDictChunkFormat::DictDelta16x2, Sim::SELLDictChunkFormat::DictDelta16x2,
+			Sim::SELLDictChunkFormat::DictAbs32 };
+		for (uint32_t i = 0; i < neighbors.size(); i++)
 		{
-			SCOPED_TRACE(spans[i]);
-			auto data = MakeNeighborData(70'000, 0);
-			data[0][0] = { 17 + spans[i], 17, 18 };
+			SCOPED_TRACE(i);
+			auto data = MakeNeighborData(140'000, 0);
+			data[0][0] = neighbors[i];
 			data[0][1] = { 18 };
 			PrepareStorage(*lists_, data, 8, true);
 			FillStorage(*lists_, data, true);

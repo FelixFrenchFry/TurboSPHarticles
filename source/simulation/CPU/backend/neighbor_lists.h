@@ -31,7 +31,7 @@ namespace Sim
 
 	enum class SELLDictChunkFormat : uint8_t
 	{
-		DictDelta16,
+		DictDelta16x2, // uint16 offsets from the base index of a low or a high group
 		DictAbs32
 	};
 
@@ -57,7 +57,9 @@ namespace Sim
 		const uint16_t* data16 = nullptr;
 		const uint8_t* data8 = nullptr;
 		const SELLNeighborCount* counts = nullptr;
-		uint32_t baseIdx = 0;
+		uint32_t baseIdx = 0; // base index of the chunk, used for delta-encoded neighbors
+		uint32_t baseIdx2 = 0; // base index of the high group of a DictDelta16x2 dictionary
+		uint32_t N_dictLow = 0; // its low group fills the dictionary positions below this one
 		uint32_t chunk = 0;
 		uint32_t begin = 0;
 		uint32_t end = 0;
@@ -69,11 +71,11 @@ namespace Sim
 		// neighbor at a position in the dictionary of a dict chunk
 		uint32_t ReadDictNeighborIdx(uint32_t dictIdx) const noexcept
 		{
-			if (dictFormat == SELLDictChunkFormat::DictDelta16)
+			if (dictFormat == SELLDictChunkFormat::DictDelta16x2)
 			{
 				uint16_t delta = 0;
 				std::memcpy(&delta, dict + sizeof(delta) * dictIdx, sizeof(delta));
-				return baseIdx + static_cast<uint32_t>(delta);
+				return (dictIdx < N_dictLow ? baseIdx : baseIdx2) + static_cast<uint32_t>(delta);
 			}
 
 			uint32_t idx = 0;
@@ -104,10 +106,11 @@ namespace Sim
 			if (dict)
 			{
 				const CPU::UInt32xSIMD dictIdx = CPU::LoadUInt8AsUInt32xSIMD(data8 + linearIdx);
-				if (dictFormat == SELLDictChunkFormat::DictDelta16)
+				if (dictFormat == SELLDictChunkFormat::DictDelta16x2)
 				{
 					return CPU::GatherUInt16AsUInt32xSIMD(dict, dictIdx)
-						+ CPU::SetUInt32xSIMD(baseIdx);
+						+ xsimd::select(dictIdx < CPU::SetUInt32xSIMD(N_dictLow),
+							CPU::SetUInt32xSIMD(baseIdx), CPU::SetUInt32xSIMD(baseIdx2));
 				}
 				return CPU::GatherUInt32xSIMD(dict, dictIdx);
 			}
@@ -128,7 +131,9 @@ namespace Sim
 		uint16_t* data16 = nullptr;
 		uint8_t* data8 = nullptr;
 		const SELLNeighborCount* counts = nullptr;
-		uint32_t baseIdx = 0;
+		uint32_t baseIdx = 0; // base index of the chunk, used for delta-encoded neighbors
+		uint32_t baseIdx2 = 0; // base index of the high group of a DictDelta16x2 dictionary
+		uint32_t N_dictLow = 0; // those of the low group of a DictDelta16x2 dictionary
 		uint32_t chunk = 0;
 		uint32_t begin = 0;
 		uint32_t end = 0;
@@ -151,18 +156,23 @@ namespace Sim
 					"ChunkedSELL dict fill exceeded the chunk neighbor dictionary.");
 			}
 
-			if (dictFormat == SELLDictChunkFormat::DictDelta16)
+			uint32_t dictIdx = N_dict;
+			if (dictFormat == SELLDictChunkFormat::DictDelta16x2)
 			{
-				assert(j >= baseIdx && j - baseIdx <= 0xffffu);
-				const uint16_t delta = static_cast<uint16_t>(j - baseIdx);
-				std::memcpy(dict + sizeof(delta) * N_dict, &delta, sizeof(delta));
+				// low group fills the dictionary from the front, high group from the back
+				const bool isLow = (j - baseIdx <= 0xffffu);
+				assert(j >= baseIdx && (isLow || (j >= baseIdx2 && j - baseIdx2 <= 0xffffu)));
+				dictIdx = isLow ? N_dictLow++ : N_dictMax - 1u - (N_dict - N_dictLow);
+				const uint16_t delta = static_cast<uint16_t>(j - (isLow ? baseIdx : baseIdx2));
+				std::memcpy(dict + sizeof(delta) * dictIdx, &delta, sizeof(delta));
 			}
 			else
 			{
-				std::memcpy(dict + sizeof(j) * N_dict, &j, sizeof(j));
+				std::memcpy(dict + sizeof(j) * dictIdx, &j, sizeof(j));
 			}
 
-			return N_dict++;
+			N_dict++;
+			return dictIdx;
 		}
 
 		void StoreNeighbor(uint32_t lane, uint32_t k, uint32_t j) const noexcept
@@ -192,6 +202,7 @@ namespace Sim
 		uint32_t minRef;
 		uint32_t maxRef;
 		uint32_t N_distinct = 0; // distinct neighbors of the chunk, 0 if the query does not track them
+		const uint32_t* distinct = nullptr; // their indices, up to N_SELL_DICT_SIZE_MAX
 	};
 
 	class I_NeighborListSELL : public I_NeighborList
@@ -448,6 +459,8 @@ namespace Sim
 		std::vector<uint64_t> nbrChunkOffsetsFR_;
 		std::vector<uint16_t> nbrChunkDictSizeFF_; // per-chunk number of distinct neighbors of dict chunks, 0 for normal chunks
 		std::vector<SELLDictChunkFormat> nbrChunkDictFormatFF_; // per-chunk dictionary format of dict chunks
+		std::vector<uint16_t> nbrChunkDictLowFF_; // per-chunk low group size of DictDelta16x2 dictionaries
+		std::vector<uint32_t> nbrChunkBaseIdx2FF_; // per-chunk base index of their high group
 		std::vector<uint64_t> nbrChunkDictOffsetsFF_; // per-chunk starting byte into nbrChunkDictFF_
 		std::vector<uint8_t> nbrChunkDictFF_; // dictionaries of the dict chunks, concatenated for all chunks
 		std::vector<uint8_t> nbrListDict8FF_; // uint8 dictionary positions of the dict chunks
@@ -488,6 +501,8 @@ namespace Sim
 		static uint32_t ChunkEnd(uint32_t chunk, uint32_t N_F) noexcept;
 		static uint32_t ChunkNumTotal(uint32_t N_F) noexcept;
 		static SELLChunkFormat ChooseChunkFormat(uint32_t pitch, uint32_t minRef, uint32_t maxRef) noexcept;
+		static bool SplitDictDelta16x2(
+			const ChunkedSELLNeighborCountResult& counts, uint32_t& N_dictLow, uint32_t& baseIdx2) noexcept;
 		static uint64_t ChunkStorageSize(uint32_t pitch) noexcept;
 
 		ChunkedSELLNeighborSpan_Read MakeReadSpanFF(uint32_t chunk) const noexcept;
