@@ -849,7 +849,7 @@ void Dist::ClassifyOwnedRigidParticlesIntoInnerOuter(
 
 uint32_t Dist::CollectPreparedOuterFluidLocalIdxs(
 	const uint32_t N_owned,
-	const std::span<const uint32_t> retainedOldLocalIdxs,
+	const uint32_t N_retained,
 	const std::span<const uint8_t> isOuterOwned_ByLocalIdx,
 	const Sync::FluidConstView& appendedParticles,
 	const IDomainDecomp& domainDecomp,
@@ -859,15 +859,13 @@ uint32_t Dist::CollectPreparedOuterFluidLocalIdxs(
 	std::vector<uint32_t>& outerLocalIdxs,
 	const float extraAllocCapacityPct)
 {
-	const uint32_t N_retained = static_cast<uint32_t>(retainedOldLocalIdxs.size());
 	return CollectOuterLocalIdxs_Parallel(
 		N_owned,
 		[&](const uint32_t localIdx)
 		{
 			if (localIdx < N_retained)
 			{
-				return isOuterOwned_ByLocalIdx[
-					retainedOldLocalIdxs[localIdx]] != 0;
+				return isOuterOwned_ByLocalIdx[localIdx] != 0;
 			}
 
 			const uint32_t appendIdx = localIdx - N_retained;
@@ -886,22 +884,20 @@ uint32_t Dist::CollectPreparedOuterFluidLocalIdxs(
 
 uint32_t Dist::CountPreparedOuterBoundaryParticles(
 	const uint32_t N_owned,
-	const std::span<const uint32_t> retainedOldLocalIdxs,
+	const uint32_t N_retained,
 	const std::span<const uint8_t> isOuterOwned_ByLocalIdx,
 	const Sync::BoundaryConstView& appendedParticles,
 	const IDomainDecomp& domainDecomp,
 	const int rank,
 	const float haloRadius)
 {
-	const uint32_t N_retained = static_cast<uint32_t>(retainedOldLocalIdxs.size());
 	return CountOuterParticles_Parallel(
 		N_owned,
 		[&](const uint32_t localIdx)
 		{
 			if (localIdx < N_retained)
 			{
-				return isOuterOwned_ByLocalIdx[
-					retainedOldLocalIdxs[localIdx]] != 0;
+				return isOuterOwned_ByLocalIdx[localIdx] != 0;
 			}
 
 			const uint32_t appendIdx = localIdx - N_retained;
@@ -917,7 +913,8 @@ uint32_t Dist::CountPreparedOuterBoundaryParticles(
 
 uint32_t Dist::CountPreparedOuterRigidParticles(
 	const uint32_t N_owned,
-	const std::span<const uint32_t> retainedOldLocalIdxs,
+	const uint32_t N_retained,
+	const std::span<const Sync::ParticleCompactionMove> compactionMoves,
 	const Sync::RigidConstView& oldParticles,
 	const Sync::RigidConstView& appendedParticles,
 	const Sync::RigidBodies& rigidBodies,
@@ -925,7 +922,6 @@ uint32_t Dist::CountPreparedOuterRigidParticles(
 	const int rank,
 	const float haloRadius)
 {
-	const uint32_t N_retained = static_cast<uint32_t>(retainedOldLocalIdxs.size());
 	return CountOuterParticles_Parallel(
 		N_owned,
 		[&](const uint32_t localIdx)
@@ -933,7 +929,7 @@ uint32_t Dist::CountPreparedOuterRigidParticles(
 			const bool retained = localIdx < N_retained;
 			const auto& src = retained ? oldParticles : appendedParticles;
 			const uint32_t srcLocalIdx = retained
-				? retainedOldLocalIdxs[localIdx] : localIdx - N_retained;
+				? Sync::RetainedOldLocalIdx(compactionMoves, localIdx) : localIdx - N_retained;
 			return !domainDecomp.IsInnerOwnedParticle(
 				rank, RigidPositionAtArrayIdx(src, rigidBodies, srcLocalIdx), haloRadius);
 		});

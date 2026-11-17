@@ -105,10 +105,11 @@ namespace Dist
 		ParticleClassificationWorkBuffers* workBuffers = nullptr);
 
 	// classifies prepared owned particles before applying redistribution
-	// (retained indices map the new prefix to old storage, followed by appended owners)
+	// (the retained prefix precedes the appended owners, and the fluid and boundary
+	// outer flags are already compacted into the new local order of the retained prefix)
 	uint32_t CollectPreparedOuterFluidLocalIdxs(
 		uint32_t N_owned,
-		std::span<const uint32_t> retainedOldLocalIdxs,
+		uint32_t N_retained,
 		std::span<const uint8_t> isOuterOwned_ByLocalIdx,
 		const Sync::FluidConstView& appendedParticles,
 		const IDomainDecomp& domainDecomp,
@@ -119,7 +120,7 @@ namespace Dist
 		float extraAllocCapacityPct);
 	uint32_t CountPreparedOuterBoundaryParticles(
 		uint32_t N_owned,
-		std::span<const uint32_t> retainedOldLocalIdxs,
+		uint32_t N_retained,
 		std::span<const uint8_t> isOuterOwned_ByLocalIdx,
 		const Sync::BoundaryConstView& appendedParticles,
 		const IDomainDecomp& domainDecomp,
@@ -127,7 +128,8 @@ namespace Dist
 		float haloRadius);
 	uint32_t CountPreparedOuterRigidParticles(
 		uint32_t N_owned,
-		std::span<const uint32_t> retainedOldLocalIdxs,
+		uint32_t N_retained,
+		std::span<const Sync::ParticleCompactionMove> compactionMoves,
 		const Sync::RigidConstView& oldParticles,
 		const Sync::RigidConstView& appendedParticles,
 		const Sync::RigidBodies& rigidBodies,

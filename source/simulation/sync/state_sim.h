@@ -2,6 +2,7 @@
 #pragma once
 
 // external
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +25,28 @@ namespace Sync
 	{
 		std::span<const float> xPos, yPos, zPos;
 	};
+
+	// retained particle moved from above the retained prefix into a slot left by a departing particle
+	struct ParticleCompactionMove
+	{
+		uint32_t newLocalIdx = 0;
+		uint32_t oldLocalIdx = 0;
+	};
+
+	// old local index of a retained particle, given compaction moves sorted by new local index
+	inline uint32_t RetainedOldLocalIdx(
+		const std::span<const ParticleCompactionMove> compactionMoves,
+		const uint32_t newLocalIdx) noexcept
+	{
+		const auto it = std::lower_bound(
+			compactionMoves.begin(), compactionMoves.end(), newLocalIdx,
+			[](const ParticleCompactionMove& move, const uint32_t localIdx)
+			{
+				return move.newLocalIdx < localIdx;
+			});
+		return (it != compactionMoves.end() && it->newLocalIdx == newLocalIdx)
+			? it->oldLocalIdx : newLocalIdx;
+	}
 
 	// view into fluid particle data
 	// (non-owning, for read-only access)

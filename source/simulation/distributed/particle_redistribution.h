@@ -83,11 +83,12 @@ namespace Dist
 		std::vector<std::vector<uint32_t>> haloRigidLocalIdxs_ByDstRank;
 
 		// particles retained locally in the rebuilt backend state
-		std::vector<uint32_t> keptOwnedFluidLocalIdxs;
+		// (kept owned particles are every owned particle without an outgoing migration route)
+		uint32_t N_keptOwnedF = 0;
+		uint32_t N_keptOwnedB = 0;
+		uint32_t N_keptOwnedR = 0;
 		std::vector<uint32_t> localHaloFluidLocalIdxs;
-		std::vector<uint32_t> keptOwnedBoundaryLocalIdxs;
 		std::vector<uint32_t> localHaloBoundaryLocalIdxs;
-		std::vector<uint32_t> keptOwnedRigidLocalIdxs;
 		std::vector<uint32_t> localHaloRigidLocalIdxs;
 
 		// set when any neighbor needs the particle as halo data, so a zero marks an inner owned particle
@@ -393,11 +394,14 @@ namespace Dist
 			uint32_t srcLocalIdx,
 			uint32_t dstLocalIdx);
 
-		// dense compaction construction
-		static bool BuildDenseCompactionMap(
+		// sparse compaction construction, filling the slots of departing owned particles
+		// inside the retained prefix with the retained particles above it
+		bool BuildCompactionMoves(
+			uint32_t N_oldOwned,
 			uint32_t N_oldLocal,
-			const std::vector<uint32_t>& retainedOldLocalIdxs,
-			std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+			uint32_t N_retained,
+			const std::vector<std::vector<uint32_t>>& departingLocalIdxs_ByDstRank,
+			std::vector<Sync::ParticleCompactionMove>& compactionMoves,
 			std::string* failMsg);
 		static bool ValidateParticleViews(
 			const Sync::FluidConstView& particlesF,
@@ -457,6 +461,7 @@ namespace Dist
 			const MpiContext& mpiContext);
 		bool PrepareFluidParticleMutation(
 			const Sync::FluidConstView& oldParticles,
+			uint32_t N_oldOwned,
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,
@@ -464,6 +469,7 @@ namespace Dist
 			std::string* failMsg);
 		bool PrepareBoundaryParticleMutation(
 			const Sync::BoundaryConstView& oldParticles,
+			uint32_t N_oldOwned,
 			const IDomainDecomp& domainDecomp,
 			int rank,
 			float haloRadius,
@@ -471,6 +477,7 @@ namespace Dist
 			std::string* failMsg);
 		bool PrepareRigidParticleMutation(
 			const Sync::RigidConstView& oldParticles,
+			uint32_t N_oldOwned,
 			const Sync::RigidBodies& rigidBodies,
 			const IDomainDecomp& domainDecomp,
 			int rank,
@@ -486,10 +493,11 @@ namespace Dist
 		std::vector<int> sendCounts_;
 		std::vector<int> recvCounts_;
 
-		// dense compaction mappings and append-only particle storage
-		std::vector<uint32_t> retainedFluidOldLocalIdx_FromNewLocalIdx_;
-		std::vector<uint32_t> retainedBoundaryOldLocalIdx_FromNewLocalIdx_;
-		std::vector<uint32_t> retainedRigidOldLocalIdx_FromNewLocalIdx_;
+		// sparse compaction moves and append-only particle storage
+		std::vector<Sync::ParticleCompactionMove> compactionMovesF_;
+		std::vector<Sync::ParticleCompactionMove> compactionMovesB_;
+		std::vector<Sync::ParticleCompactionMove> compactionMovesR_;
+		std::vector<uint32_t> departingOldLocalIdxScratch_;
 		std::vector<uint64_t> migratedParticleIdScratch_;
 		Sync::FluidParticles appendedParticlesF_;
 		Sync::BoundaryParticles appendedParticlesB_;

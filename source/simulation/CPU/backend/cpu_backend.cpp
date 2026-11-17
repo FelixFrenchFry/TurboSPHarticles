@@ -77,20 +77,18 @@ namespace
 		}
 	};
 
-	// compacts a particle block, reading retained particles at scattered
-	// old local indices and writing them to their contiguous new local indices
+	// compacts a block of compaction moves, copying each moved particle from its
+	// old local index above the retained prefix to its new local index inside it
 	template <typename CopyParticleOldToNew>
 	void CompactParticles(
-		const std::vector<uint32_t>& oldLocalIdxs,
+		const std::span<const Sync::ParticleCompactionMove> compactionMoves,
 		const tbb::blocked_range<uint32_t>& blockRange,
 		const CopyParticleOldToNew& copyParticleOldToNew)
 	{
-		for (uint32_t newLocalIdx = blockRange.begin(); newLocalIdx < blockRange.end(); newLocalIdx++)
+		for (uint32_t moveIdx = blockRange.begin(); moveIdx < blockRange.end(); moveIdx++)
 		{
-			const uint32_t oldLocalIdx = oldLocalIdxs[newLocalIdx];
-			if (oldLocalIdx == newLocalIdx) { continue; }
-
-			copyParticleOldToNew(oldLocalIdx, newLocalIdx);
+			const Sync::ParticleCompactionMove& move = compactionMoves[moveIdx];
+			copyParticleOldToNew(move.oldLocalIdx, move.newLocalIdx);
 		}
 	}
 
@@ -504,9 +502,12 @@ Sync::ParticlePositionConstView SimBackend_CPU::GetRigidParticleWorldPositionVie
 }
 
 bool SimBackend_CPU::ApplyParticleRedistribution(
-	const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
-	const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
-	const std::vector<uint32_t>& retainedRigidOldLocalIdx_FromNewLocalIdx,
+	const uint32_t N_retainedF,
+	const uint32_t N_retainedB,
+	const uint32_t N_retainedR,
+	const std::span<const Sync::ParticleCompactionMove> compactionMovesF,
+	const std::span<const Sync::ParticleCompactionMove> compactionMovesB,
+	const std::span<const Sync::ParticleCompactionMove> compactionMovesR,
 	const Sync::FluidParticles& appendedParticlesF,
 	const Sync::BoundaryParticles& appendedParticlesB,
 	const Sync::RigidParticles& appendedParticlesR,
@@ -577,50 +578,46 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		if (bodyIdx >= N_RB_) { return false; }
 	}
 
-	const auto compactionMapValid = [](
-		const std::vector<uint32_t>& oldLocalIdx_FromNewLocalIdx,
+	const auto compactionMovesValid = [](
+		const std::span<const Sync::ParticleCompactionMove> compactionMoves,
+		const uint32_t N_retained,
 		const uint32_t N_old)
 	{
-		if (oldLocalIdx_FromNewLocalIdx.size() > N_old) { return false; }
+		if (N_retained > N_old || compactionMoves.size() > N_retained) { return false; }
 
 		#if defined(_DEBUG)
-		const uint32_t N_retained = static_cast<uint32_t>(oldLocalIdx_FromNewLocalIdx.size());
-
-		// exhaustively validate they do not source from the retained prefix and do not contain duplicates
+		// exhaustively validate that moves fill ascending prefix slots from above the retained prefix,
+		// without sourcing any particle twice
 		std::vector<uint8_t> oldLocalIdxUsed(N_old, 0);
-		for (uint32_t newLocalIdx = 0; newLocalIdx < N_retained; newLocalIdx++)
+		for (size_t moveIdx = 0; moveIdx != compactionMoves.size(); moveIdx++)
 		{
-			const uint32_t oldLocalIdx = oldLocalIdx_FromNewLocalIdx[newLocalIdx];
-			if (oldLocalIdx >= N_old ||
-				(oldLocalIdx != newLocalIdx &&
-				oldLocalIdx < N_retained))
+			const Sync::ParticleCompactionMove& move = compactionMoves[moveIdx];
+			if (move.newLocalIdx >= N_retained ||
+				move.oldLocalIdx < N_retained ||
+				move.oldLocalIdx >= N_old ||
+				(moveIdx > 0 && move.newLocalIdx <= compactionMoves[moveIdx - 1].newLocalIdx))
 			{
 				return false;
 			}
 
-			if (oldLocalIdxUsed[oldLocalIdx] != 0) { return false; }
-			oldLocalIdxUsed[oldLocalIdx] = 1;
+			if (oldLocalIdxUsed[move.oldLocalIdx] != 0) { return false; }
+			oldLocalIdxUsed[move.oldLocalIdx] = 1;
 		}
 		#endif
 
 		return true;
 	};
 
-	// check that the compaction maps are valid
-	if (!compactionMapValid(retainedFluidOldLocalIdx_FromNewLocalIdx, N_F_) ||
-		!compactionMapValid(retainedRigidOldLocalIdx_FromNewLocalIdx, N_R_) ||
+	// check that the compaction moves are valid
+	if (!compactionMovesValid(compactionMovesF, N_retainedF, N_F_) ||
+		!compactionMovesValid(compactionMovesR, N_retainedR, N_R_) ||
 		(redistributeParticlesB &&
-		 !compactionMapValid(retainedBoundaryOldLocalIdx_FromNewLocalIdx, N_B_)))
+		 !compactionMovesValid(compactionMovesB, N_retainedB, N_B_)))
 	{
 		return false;
 	}
 
 	// check that the final particle counts do not exceed the local storage limit
-	const uint32_t N_retainedF = static_cast<uint32_t>(retainedFluidOldLocalIdx_FromNewLocalIdx.size());
-	const uint32_t N_retainedB = redistributeParticlesB
-		? static_cast<uint32_t>(retainedBoundaryOldLocalIdx_FromNewLocalIdx.size())
-		: N_B_;
-	const uint32_t N_retainedR = static_cast<uint32_t>(retainedRigidOldLocalIdx_FromNewLocalIdx.size());
 	const uint64_t N_finalF_U64 = static_cast<uint64_t>(N_retainedF) + appendedParticlesF.N_;
 	const uint64_t N_finalB_U64 = redistributeParticlesB
 		? static_cast<uint64_t>(N_retainedB) + appendedParticlesB.N_
@@ -711,13 +708,14 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	};
 
 	// compact retained fluid particles into a dense prefix, filling its holes with particles from the old tail
-	// (index blocks processed in parallel, and all fields of a moved particle together)
+	// (move blocks processed in parallel, and all fields of a moved particle together)
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_retainedF, particleCompactionBlockSize_),
+		tbb::blocked_range<uint32_t>(
+			0, static_cast<uint32_t>(compactionMovesF.size()), particleCompactionBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
 			CompactParticles(
-				retainedFluidOldLocalIdx_FromNewLocalIdx,
+				compactionMovesF,
 				blockRange,
 				copyFluidParticleOldToNew);
 		},
@@ -738,13 +736,14 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		};
 
 		// compact retained boundary particles into a dense prefix, filling its holes with particles from the old tail
-		// (index blocks processed in parallel, and all fields of a moved particle together)
+		// (move blocks processed in parallel, and all fields of a moved particle together)
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, N_retainedB, particleCompactionBlockSize_),
+			tbb::blocked_range<uint32_t>(
+				0, static_cast<uint32_t>(compactionMovesB.size()), particleCompactionBlockSize_),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
 			{
 				CompactParticles(
-					retainedBoundaryOldLocalIdx_FromNewLocalIdx,
+					compactionMovesB,
 					blockRange,
 					copyBoundaryParticleOldToNew);
 			},
@@ -766,11 +765,12 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 
 	// compact retained rigid fields together
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_retainedR, particleCompactionBlockSize_),
+		tbb::blocked_range<uint32_t>(
+			0, static_cast<uint32_t>(compactionMovesR.size()), particleCompactionBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
 			CompactParticles(
-				retainedRigidOldLocalIdx_FromNewLocalIdx,
+				compactionMovesR,
 				blockRange,
 				copyRigidParticleOldToNew);
 		},

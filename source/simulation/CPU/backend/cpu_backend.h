@@ -68,9 +68,12 @@ namespace Sim
 		Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const override;
 
 		bool ApplyParticleRedistribution(
-			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
-			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
-			const std::vector<uint32_t>& retainedRigidOldLocalIdx_FromNewLocalIdx,
+			uint32_t N_retainedF,
+			uint32_t N_retainedB,
+			uint32_t N_retainedR,
+			std::span<const Sync::ParticleCompactionMove> compactionMovesF,
+			std::span<const Sync::ParticleCompactionMove> compactionMovesB,
+			std::span<const Sync::ParticleCompactionMove> compactionMovesR,
 			const Sync::FluidParticles& appendedParticlesF,
 			const Sync::BoundaryParticles& appendedParticlesB,
 			const Sync::RigidParticles& appendedParticlesR,

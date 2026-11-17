@@ -138,13 +138,15 @@ namespace Sim
 		virtual Sync::RigidConstView GetRigidParticleView() const = 0;
 		virtual Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const = 0;
 
-		// compacts retained particles in place and appends migration + halo particles
-		// (the appended fluid particles carry only id, positions, and velocities, because the
-		// following solver step re-writes the remaining fluid fields before reading them)
+		// compacts retained particles in place through the compaction moves and appends migration + halo particles
+		// (appended fluid particles carry only id, positions, and velocities)
 		virtual bool ApplyParticleRedistribution(
-			const std::vector<uint32_t>& retainedFluidOldLocalIdx_FromNewLocalIdx,
-			const std::vector<uint32_t>& retainedBoundaryOldLocalIdx_FromNewLocalIdx,
-			const std::vector<uint32_t>& retainedRigidOldLocalIdx_FromNewLocalIdx,
+			uint32_t N_retainedF,
+			uint32_t N_retainedB,
+			uint32_t N_retainedR,
+			std::span<const Sync::ParticleCompactionMove> compactionMovesF,
+			std::span<const Sync::ParticleCompactionMove> compactionMovesB,
+			std::span<const Sync::ParticleCompactionMove> compactionMovesR,
 			const Sync::FluidParticles& appendedParticlesF,
 			const Sync::BoundaryParticles& appendedParticlesB,
 			const Sync::RigidParticles& appendedParticlesR,
