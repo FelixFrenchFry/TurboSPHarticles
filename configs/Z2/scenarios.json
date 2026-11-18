@@ -25,7 +25,7 @@
           "model": "RockyCoastlineV1",
           "modelTargetExtent": 40.0,
           "boundaryMesh": {
-            "centerOfPosition": [ 39.0775, 3.6664, 20.0 ],
+            "position": [ 0.0, 0.0, 0.0 ],
             "yawDeg": -90.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0

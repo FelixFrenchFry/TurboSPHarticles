@@ -2,12 +2,15 @@
 #pragma once
 
 // external
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <glm/common.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/matrix.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -28,6 +31,13 @@
 
 namespace Scene
 {
+	enum class BoundaryMeshAlignment : uint8_t
+	{
+		Min,
+		Center,
+		Max
+	};
+
 	struct BoundaryMeshEntryConfig
 	{
 		// model asset nickname and resolved OBJ file
@@ -35,18 +45,69 @@ namespace Scene
 		std::string modelFile;
 		float modelTargetExtent; // target length of the largest local bounding box extent
 		glm::mat3 modelSourceToCanonical{ 1.0f }; // local to canonical mesh orientation
+		std::array<BoundaryMeshAlignment, 3> modelContainerAlignment{}; // one alignment per container axis (u/v/w)
 
 		// static boundary mesh pose
-		glm::vec3 boundaryMeshCenterOfPosition; // world position of the bounding box center
+		bool useContainerAlignment = false;
+		glm::vec3 boundaryMeshPosition{ 0.0f }; // world-space offset if aligned, absolute center otherwise
 		float boundaryMeshYawDeg; // turn around world Y
 		float boundaryMeshPitchDeg; // tilt around local Z
 		float boundaryMeshRollDeg; // tilt around local X
 	};
 
+	// aligns the bounds of a nonempty mesh already scaled and centered in local space
+	inline glm::vec3 ComputeBoundaryMeshCenter(
+		const BoundaryMeshEntryConfig& cfg,
+		const std::vector<glm::vec3>& meshLocalVertices,
+		const glm::mat3& orientation,
+		const OBB& container)
+	{
+		if (!cfg.useContainerAlignment) { return cfg.boundaryMeshPosition; }
+
+		const glm::mat3 containerToWorld{ container.uHat, container.vHat, container.wHat };
+		const float determinant = glm::determinant(containerToWorld);
+		if (!std::isfinite(determinant) || determinant == 0.0f)
+		{
+			throw std::runtime_error("Boundary mesh alignment requires independent container axes.");
+		}
+
+		// measure the rotated mesh bounds in container coordinates
+		const glm::mat3 meshToContainer = glm::inverse(containerToWorld) * orientation;
+		glm::vec3 meshMin = meshToContainer * meshLocalVertices.front();
+		glm::vec3 meshMax = meshMin;
+		for (const glm::vec3& vertex : meshLocalVertices)
+		{
+			const glm::vec3 vertexInContainer = meshToContainer * vertex;
+			meshMin = glm::min(meshMin, vertexInContainer);
+			meshMax = glm::max(meshMax, vertexInContainer);
+		}
+
+		const glm::vec3 containerLengths{ container.uLen, container.vLen, container.wLen };
+		glm::vec3 centerInContainer{ 0.0f };
+		for (glm::length_t axis = 0; axis < 3; axis++)
+		{
+			switch (cfg.modelContainerAlignment[axis])
+			{
+			case BoundaryMeshAlignment::Min:
+				centerInContainer[axis] = -meshMin[axis];
+				break;
+			case BoundaryMeshAlignment::Center:
+				centerInContainer[axis] = 0.5f * (containerLengths[axis] - meshMin[axis] - meshMax[axis]);
+				break;
+			case BoundaryMeshAlignment::Max:
+				centerInContainer[axis] = containerLengths[axis] - meshMax[axis];
+				break;
+			}
+		}
+
+		return container.origin + containerToWorld * centerInContainer + cfg.boundaryMeshPosition;
+	}
+
 	// loads, scales, centers, and samples a boundary mesh into single-layer boundary particles
 	inline void BuildBoundaryMesh(
 		ScenarioMgr& scenarioMgr,
 		const BoundaryMeshEntryConfig& cfg,
+		const OBB& container,
 		Sync::UniversalSimState& dst,
 		const Sim::SimParams& params)
 	{
@@ -59,6 +120,7 @@ namespace Scene
 			scenarioOrientation * cfg.modelSourceToCanonical;
 
 		SurfaceSamplingResult sampling;
+		glm::vec3 boundaryMeshCenterOfPosition;
 
 		// keep mesh storage scoped to sampling
 		{
@@ -77,6 +139,9 @@ namespace Scene
 				vertex -= boundsCenter;
 			}
 
+			boundaryMeshCenterOfPosition = ComputeBoundaryMeshCenter(
+				cfg, mesh.vertices, boundaryMeshOrientation, container);
+
 			SPDLOG_INFO("Sampling boundary model '{}' surfaces...", cfg.modelName);
 			SurfaceSampler sampler(mesh, params,
 				params.surfaceSamplingMinDistanceB,
@@ -87,7 +152,7 @@ namespace Scene
 
 		scenarioMgr.BuildBoundary_FromSurfaceSamples(
 			std::move(sampling.acceptedSamples),
-			cfg.boundaryMeshCenterOfPosition,
+			boundaryMeshCenterOfPosition,
 			boundaryMeshOrientation,
 			dst,
 			params);
@@ -103,7 +168,14 @@ namespace Scene
 
 		const auto& boundaryMesh = ReadScenarioObject(j, "boundaryMesh", scenarioName);
 		const std::string pose = scenarioName + ".boundaryMesh";
-		cfg.boundaryMeshCenterOfPosition = ReadScenarioVector<3>(boundaryMesh, "centerOfPosition", pose);
+		const bool hasAbsoluteCenter = boundaryMesh.contains("centerOfPosition");
+		if (hasAbsoluteCenter && boundaryMesh.contains("position"))
+		{
+			throw std::runtime_error(pose + " must use either 'position' or 'centerOfPosition'.");
+		}
+		cfg.useContainerAlignment = !hasAbsoluteCenter;
+		cfg.boundaryMeshPosition = ReadScenarioVector<3>(
+			boundaryMesh, hasAbsoluteCenter ? "centerOfPosition" : "position", pose);
 		cfg.boundaryMeshYawDeg = ReadScenarioFloat(boundaryMesh, "yawDeg", pose);
 		cfg.boundaryMeshPitchDeg = ReadScenarioFloat(boundaryMesh, "pitchDeg", pose);
 		cfg.boundaryMeshRollDeg = ReadScenarioFloat(boundaryMesh, "rollDeg", pose);
@@ -111,7 +183,8 @@ namespace Scene
 		return cfg;
 	}
 
-	// try to resolve a boundary model nickname to a file path and optional source-to-canonical orientation
+	// try to resolve a boundary model nickname to a file path, container alignment,
+	// and optional source-to-canonical orientation
 	inline bool TryResolveBoundaryMeshModel(
 		const std::filesystem::path& modelsFile,
 		BoundaryMeshEntryConfig& cfg,
@@ -147,6 +220,25 @@ namespace Scene
 		}
 		cfg.modelFile = model["file"].get<std::string>();
 		cfg.modelSourceToCanonical = glm::mat3{ 1.0f };
+
+		if (cfg.useContainerAlignment)
+		{
+			const std::string context = scenarioName + " boundary model '" + cfg.modelName + "'";
+			const auto& alignment = ReadScenarioObject(model, "containerAlignment", context);
+			const std::string alignmentContext = context + ".containerAlignment";
+
+			auto ReadAlignment = [&](const char* axisName) -> BoundaryMeshAlignment
+				{
+					const std::string value = ReadScenarioString(alignment, axisName, alignmentContext);
+					if (value == "min") { return BoundaryMeshAlignment::Min; }
+					if (value == "center") { return BoundaryMeshAlignment::Center; }
+					if (value == "max") { return BoundaryMeshAlignment::Max; }
+					throw std::runtime_error(
+						alignmentContext + "." + axisName + " must be 'min', 'center', or 'max'.");
+				};
+
+			cfg.modelContainerAlignment = { ReadAlignment("u"), ReadAlignment("v"), ReadAlignment("w") };
+		}
 
 		if (auto it = model.find("sourceToCanonical"); it != model.end())
 		{

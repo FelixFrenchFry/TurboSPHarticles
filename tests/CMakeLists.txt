@@ -2,6 +2,7 @@ find_package(GTest CONFIG REQUIRED)
 
 # keep the maintained suite explicit
 add_executable(TSP_Tests
+    "unit/boundary_mesh_placement.cpp"
     "unit/cell_frame.cpp"
     "unit/checkpoint.cpp"
     "unit/neighbor_lists.cpp"

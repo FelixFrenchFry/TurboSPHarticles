@@ -2,6 +2,7 @@
   "models": {
     "RockyCoastlineV1": {
       "file": "rocky_coastline_v1.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
       "metadata": {
         "vertexCount": 39306,
         "triangleCount": 78612,
@@ -12,6 +13,7 @@
     },
     "RockyCoastlineV2": {
       "file": "rocky_coastline_v2.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
       "metadata": {
         "vertexCount": 97213,
         "triangleCount": 194462,
@@ -22,6 +24,7 @@
     },
     "RockyCoastlineV3": {
       "file": "rocky_coastline_v3.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
       "metadata": {
         "vertexCount": 13015,
         "triangleCount": 26026,

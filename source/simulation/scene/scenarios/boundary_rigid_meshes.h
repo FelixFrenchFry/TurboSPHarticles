@@ -54,7 +54,7 @@ namespace Scene
 
 			for (const BoundaryMeshEntryConfig& boundaryMesh : cfg_.boundaryBodies)
 			{
-				BuildBoundaryMesh(scenarioMgr_, boundaryMesh, dst, params);
+				BuildBoundaryMesh(scenarioMgr_, boundaryMesh, cfg_.container, dst, params);
 			}
 
 			for (const RigidMeshEntryConfig& rigidMesh : cfg_.rigidBodies)
