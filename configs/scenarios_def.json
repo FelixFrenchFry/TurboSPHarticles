@@ -239,7 +239,7 @@
         "uDir": [ 1.0, 0.0, 0.0 ],
         "vDir": [ 0.0, 1.0, 0.0 ],
         "wDir": [ 0.0, 0.0, 1.0 ],
-        "uLen": 5.5,
+        "uLen": 5.2,
         "vLen": 1.5,
         "wLen": 4.0
       },
@@ -254,7 +254,7 @@
       },
       "boundaryBodies": [
         {
-          "model": "RockyCoastlineV1",
+          "model": "RockyCoastlineV9",
           "modelTargetExtent": 4.0,
           "boundaryMesh": {
             "position": [ 0.0, 0.0, 0.0 ],
@@ -269,7 +269,7 @@
           "model": "CorvetteShip",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 0.8 ],
+            "centerOfPosition": [ 1.25, 0.49514, 0.8 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -282,7 +282,7 @@
           "model": "CruiserShip",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 1.2 ],
+            "centerOfPosition": [ 1.25, 0.48441, 1.2 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -295,7 +295,7 @@
           "model": "DestroyerShip",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 1.6 ],
+            "centerOfPosition": [ 1.25, 0.48659, 1.6 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -308,7 +308,7 @@
           "model": "FrigateShip",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 2.0 ],
+            "centerOfPosition": [ 1.25, 0.49858, 2.0 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -321,7 +321,7 @@
           "model": "PassengerShip",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 2.4 ],
+            "centerOfPosition": [ 1.25, 0.51286, 2.4 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -334,7 +334,7 @@
           "model": "TugBoat",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 2.8 ],
+            "centerOfPosition": [ 1.25, 0.51541, 2.8 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0
@@ -347,7 +347,7 @@
           "model": "ShortSubmarine",
           "modelTargetExtent": 0.5,
           "rigidBody": {
-            "centerOfPosition": [ 1.25, 0.53, 3.2 ],
+            "centerOfPosition": [ 1.25, 0.52891, 3.2 ],
             "yawDeg": 0.0,
             "pitchDeg": 0.0,
             "rollDeg": 0.0

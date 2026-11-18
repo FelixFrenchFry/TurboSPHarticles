@@ -3,12 +3,12 @@
     "UnitCube": {
       "file": "unit_cube.obj",
       "massProperties": {
-        "centerOfMassOffset": [ 0.0, 0.0, 0.0 ]
+        "centerOfMassOffset": [0.0, 0.0, 0.0]
       },
       "metadata": {
         "vertexCount": 8,
         "triangleCount": 12,
-        "sourceExtent": [ 1.0, 1.0, 1.0 ],
+        "sourceExtent": [1.0, 1.0, 1.0],
         "enclosedVolume": 1.0,
         "watertight": true
       }
@@ -19,10 +19,10 @@
         "centerOfMassOffset": [0.0, -0.05, 0.0]
       },
       "metadata": {
-        "vertexCount": 6477,
-        "triangleCount": 13014,
-        "sourceExtent": [96.002426148, 26.397895813, 10.112034321],
-        "enclosedVolume": 6132.306967490753,
+        "vertexCount": 10474,
+        "triangleCount": 21024,
+        "sourceExtent": [96.002426148, 26.176640364, 10.112034321],
+        "enclosedVolume": 6121.481608718593,
         "watertight": true
       }
     },
@@ -32,10 +32,10 @@
         "centerOfMassOffset": [0.0, -0.04, 0.0]
       },
       "metadata": {
-        "vertexCount": 6804,
-        "triangleCount": 13612,
+        "vertexCount": 10029,
+        "triangleCount": 20062,
         "sourceExtent": [96.0037117, 22.188400269000002, 11.799424648],
-        "enclosedVolume": 7262.1283870016805,
+        "enclosedVolume": 7243.360692515413,
         "watertight": true
       }
     },
@@ -45,10 +45,10 @@
         "centerOfMassOffset": [0.0, -0.045, 0.0]
       },
       "metadata": {
-        "vertexCount": 7044,
-        "triangleCount": 14116,
+        "vertexCount": 10159,
+        "triangleCount": 20346,
         "sourceExtent": [96.000839233, 25.089222431000003, 11.19762659],
-        "enclosedVolume": 7753.252114661014,
+        "enclosedVolume": 7724.829111205503,
         "watertight": true
       }
     },
@@ -58,10 +58,10 @@
         "centerOfMassOffset": [0.0, -0.03, 0.0]
       },
       "metadata": {
-        "vertexCount": 7253,
-        "triangleCount": 14510,
-        "sourceExtent": [95.996669769, 33.999153614, 13.394978047],
-        "enclosedVolume": 7480.9109213992215,
+        "vertexCount": 9222,
+        "triangleCount": 18448,
+        "sourceExtent": [95.996669769, 33.949520174, 13.394978047],
+        "enclosedVolume": 7452.606387367869,
         "watertight": true
       }
     },
@@ -71,10 +71,10 @@
         "centerOfMassOffset": [0.0, -0.03, 0.0]
       },
       "metadata": {
-        "vertexCount": 18124,
-        "triangleCount": 38140,
+        "vertexCount": 26214,
+        "triangleCount": 54328,
         "sourceExtent": [96.418212891, 29.862742424, 18.888368606],
-        "enclosedVolume": 20638.124509794212,
+        "enclosedVolume": 20566.637683399807,
         "watertight": true
       }
     },
@@ -84,10 +84,10 @@
         "centerOfMassOffset": [0.0, 0.0, 0.0]
       },
       "metadata": {
-        "vertexCount": 30326,
-        "triangleCount": 61064,
+        "vertexCount": 31081,
+        "triangleCount": 62574,
         "sourceExtent": [96.35507965100001, 48.038166046, 50.28658104],
-        "enclosedVolume": 70167.10788241566,
+        "enclosedVolume": 70084.265680984,
         "watertight": true
       }
     },
@@ -97,10 +97,10 @@
         "centerOfMassOffset": [-0.055, -0.035, 0.0]
       },
       "metadata": {
-        "vertexCount": 31111,
-        "triangleCount": 63630,
+        "vertexCount": 35119,
+        "triangleCount": 71654,
         "sourceExtent": [96.213977814, 40.653997898, 23.151031494],
-        "enclosedVolume": 29861.741294060077,
+        "enclosedVolume": 29854.561574612773,
         "watertight": true
       }
     },
@@ -156,6 +156,5 @@
         "watertight": true
       }
     }
-
   }
 }

@@ -4,10 +4,10 @@
       "file": "rocky_coastline_v1.obj",
       "containerAlignment": { "u": "max", "v": "min", "w": "center" },
       "metadata": {
-        "vertexCount": 39306,
-        "triangleCount": 78612,
+        "vertexCount": 3930,
+        "triangleCount": 7860,
         "sourceExtent": [59.20000267, 10.852971077, 47.130540848],
-        "enclosedVolume": 9044.568629672149,
+        "enclosedVolume": 9050.157385731876,
         "watertight": true
       }
     },
@@ -15,10 +15,10 @@
       "file": "rocky_coastline_v2.obj",
       "containerAlignment": { "u": "max", "v": "min", "w": "center" },
       "metadata": {
-        "vertexCount": 97213,
-        "triangleCount": 194462,
+        "vertexCount": 72905,
+        "triangleCount": 145846,
         "sourceExtent": [59.900001526, 19.027208328, 47.686113356999996],
-        "enclosedVolume": 14712.491015761207,
+        "enclosedVolume": 14711.724589545167,
         "watertight": true
       }
     },
@@ -26,10 +26,76 @@
       "file": "rocky_coastline_v3.obj",
       "containerAlignment": { "u": "max", "v": "min", "w": "center" },
       "metadata": {
-        "vertexCount": 13015,
-        "triangleCount": 26026,
+        "vertexCount": 5207,
+        "triangleCount": 10410,
         "sourceExtent": [60.0, 16.87424469, 47.629392624000005],
-        "enclosedVolume": 14305.158787038723,
+        "enclosedVolume": 14303.83027195728,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV4": {
+      "file": "rocky_coastline_v4.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
+      "metadata": {
+        "vertexCount": 12166,
+        "triangleCount": 24328,
+        "sourceExtent": [60.0, 16.87424469, 47.629392624000005],
+        "enclosedVolume": 14363.735210076922,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV5": {
+      "file": "rocky_coastline_v5.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
+      "metadata": {
+        "vertexCount": 2136,
+        "triangleCount": 4268,
+        "sourceExtent": [60.0, 11.6, 47.629392624000005],
+        "enclosedVolume": 13637.384160646134,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV6": {
+      "file": "rocky_coastline_v6.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
+      "metadata": {
+        "vertexCount": 4270,
+        "triangleCount": 8536,
+        "sourceExtent": [60.0, 11.6, 47.629392624000005],
+        "enclosedVolume": 12645.071527433165,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV7": {
+      "file": "rocky_coastline_v7.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
+      "metadata": {
+        "vertexCount": 2136,
+        "triangleCount": 4268,
+        "sourceExtent": [60.0, 9.9, 47.629392624000005],
+        "enclosedVolume": 11229.62533132238,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV8": {
+      "file": "rocky_coastline_v8.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
+      "metadata": {
+        "vertexCount": 8539,
+        "triangleCount": 17074,
+        "sourceExtent": [60.0, 14.494025468, 47.629392624000005],
+        "enclosedVolume": 17216.116478851145,
+        "watertight": true
+      }
+    },
+    "RockyCoastlineV9": {
+      "file": "rocky_coastline_v9.obj",
+      "containerAlignment": { "u": "max", "v": "min", "w": "center" },
+      "metadata": {
+        "vertexCount": 3231,
+        "triangleCount": 6462,
+        "sourceExtent": [60.0, 12.0, 47.629392624000005],
+        "enclosedVolume": 8524.451524520286,
         "watertight": true
       }
     }

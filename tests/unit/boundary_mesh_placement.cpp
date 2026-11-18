@@ -67,7 +67,7 @@ namespace
 		const std::filesystem::path modelCatalogPath =
 			std::filesystem::path(TSP_CONFIG_DIR).parent_path() /
 			"assets" / "models" / "boundary_models.json";
-		for (int version = 1; version <= 3; version++)
+		for (int version = 1; version <= 9; version++)
 		{
 			const std::string modelName = "RockyCoastlineV" + std::to_string(version);
 			SCOPED_TRACE(modelName);
