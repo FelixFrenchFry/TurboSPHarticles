@@ -108,6 +108,21 @@ namespace
 		return neighbors;
 	}
 
+	// fluid neighbors of each fluid particle by distance, itself included like the neighbor search does
+	std::vector<std::vector<uint32_t>> MakeSupportNeighborsF(const PressureScene& scene, const float kernelRadiusSqu)
+	{
+		std::vector<std::vector<uint32_t>> neighbors(scene[0].size());
+		for (uint32_t i = 0; i < scene[0].size(); i++)
+		{
+			for (uint32_t j = 0; j < scene[0].size(); j++)
+			{
+				const glm::vec3 displacement = scene[0][i].position - scene[0][j].position;
+				if (glm::dot(displacement, displacement) <= kernelRadiusSqu) { neighbors[i].push_back(j); }
+			}
+		}
+		return neighbors;
+	}
+
 	// independent radial derivative in double precision with unit particle size and normalization
 	glm::dvec3 ReferenceGradient(const glm::vec3& positionI, const glm::vec3& positionJ)
 	{
@@ -237,6 +252,7 @@ namespace
 				for (uint32_t category = 0; category < neighbors.size(); category++)
 				{
 					auto view = (lists_.get()->*writeChunks[category])(chunk);
+					const bool isDenseDict = Sim::useDenseDictFF && view.dict != nullptr;
 					std::vector<uint32_t> dictPositions;
 					if (view.dict)
 					{
@@ -244,6 +260,14 @@ namespace
 						for (const uint32_t j : distinctFFByChunk[chunk])
 						{
 							dictPositions[j] = view.RegisterNeighbor(j);
+							if (!isDenseDict) { continue; }
+							uint32_t laneMask = 0;
+							for (uint32_t i = view.begin; i < view.end; i++)
+							{
+								const auto& row = neighbors[category][i];
+								if (std::find(row.begin(), row.end(), j) != row.end()) { laneMask |= 1u << (i - view.begin); }
+							}
+							view.StoreDictLaneMask(dictPositions[j], laneMask);
 						}
 					}
 					std::array<uint32_t, CPU::N_SIMD_WIDTH> counts{};
@@ -251,6 +275,7 @@ namespace
 					{
 						const auto& row = neighbors[category][i];
 						counts[i - view.begin] = static_cast<uint32_t>(row.size());
+						if (isDenseDict) { continue; }
 						for (uint32_t k = 0; k < row.size(); k++)
 						{
 							const uint32_t j = row[k];
@@ -455,7 +480,8 @@ namespace
 		const uint32_t N_F = CPU::N_SIMD_WIDTH + 1;
 		params_.restDensity = 2.0f;
 		const auto scene = MakeMixedScene(N_F, params_.restDensity);
-		const auto neighbors = MakeMixedNeighbors(N_F);
+		auto neighbors = MakeMixedNeighbors(N_F);
+		if (GetParam() && Sim::useDenseDictFF) { neighbors[0] = MakeSupportNeighborsF(scene, params_.kernelRadiusSqu); }
 		LoadScene(scene, neighbors, GetParam());
 		for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
 		{
