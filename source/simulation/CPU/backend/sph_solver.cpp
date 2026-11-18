@@ -789,6 +789,25 @@ void CPU::Density_ChunkedSELL(
 				CPU::Float32xSIMD tmp_densityR = CPU::ZeroFloat32xSIMD();
 
 				// FF density contribution
+				if (useDenseDictFF && nbrFF.dict)
+				{
+					// every dict entry of the chunk against all lanes, broadcast instead of gathered
+					// (the kernel is zero for the lanes it is not a neighbor of)
+					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
+					{
+						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
+
+						const CPU::Float32xSIMD dx = xi - CPU::SetFloat32xSIMD(xPosF[j]);
+						const CPU::Float32xSIMD dy = yi - CPU::SetFloat32xSIMD(yPosF[j]);
+						const CPU::Float32xSIMD dz = zi - CPU::SetFloat32xSIMD(zPosF[j]);
+
+						const CPU::Float32xSIMD kw = CPU::KernelWeight_CubicSpline_SIMD(
+							dx, dy, dz, particleSizeInvF,
+							kernelRadiusSqu, cubicSplineAlpha);
+						tmp_densityF = xsimd::fma(massFV, kw, tmp_densityF);
+					}
+				}
+				else
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -950,6 +969,39 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_zAccViscR = CPU::ZeroFloat32xSIMD();
 
 				// FF viscosity acceleration
+				if (useDenseDictFF && nbrFF.dict)
+				{
+					// every dict entry of the chunk against all lanes, broadcast instead of gathered
+					// (the kernel is zero for the lanes it is not a neighbor of)
+					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
+					{
+						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
+
+						const CPU::Float32xSIMD dx = xi - CPU::SetFloat32xSIMD(xPosF[j]);
+						const CPU::Float32xSIMD dy = yi - CPU::SetFloat32xSIMD(yPosF[j]);
+						const CPU::Float32xSIMD dz = zi - CPU::SetFloat32xSIMD(zPosF[j]);
+						const CPU::Float32xSIMD dvx = vxi - CPU::SetFloat32xSIMD(xVelF[j]);
+						const CPU::Float32xSIMD dvy = vyi - CPU::SetFloat32xSIMD(yVelF[j]);
+						const CPU::Float32xSIMD dvz = vzi - CPU::SetFloat32xSIMD(zVelF[j]);
+
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+
+						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
+							xsimd::fma(dvy, dy, dvz * dz));
+						const CPU::Float32xSIMD densityJ =
+							xsimd::max(CPU::SetFloat32xSIMD(densityF[j]), eps);
+						const CPU::Float32xSIMD accCoeff =
+							(massFV * dot) / (densityJ * (distSqu + particleSizeSquEps)) * kgFac;
+
+						tmp_xAccViscF = xsimd::fma(accCoeff, dx, tmp_xAccViscF);
+						tmp_yAccViscF = xsimd::fma(accCoeff, dy, tmp_yAccViscF);
+						tmp_zAccViscF = xsimd::fma(accCoeff, dz, tmp_zAccViscF);
+					}
+				}
+				else
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -1243,6 +1295,38 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				CPU::Float32xSIMD zCTermR = CPU::ZeroFloat32xSIMD();
 
 				// FF pressure source term and diagonal
+				if (useDenseDictFF && nbrFF.dict)
+				{
+					// every dict entry of the chunk against all lanes, broadcast instead of gathered
+					// (the kernel is zero for the lanes it is not a neighbor of)
+					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
+					{
+						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
+
+						const CPU::Float32xSIMD dx = xi - CPU::SetFloat32xSIMD(xPosF[j]);
+						const CPU::Float32xSIMD dy = yi - CPU::SetFloat32xSIMD(yPosF[j]);
+						const CPU::Float32xSIMD dz = zi - CPU::SetFloat32xSIMD(zPosF[j]);
+						const CPU::Float32xSIMD dvpx = vpxi - CPU::SetFloat32xSIMD(xVelPredF[j]);
+						const CPU::Float32xSIMD dvpy = vpyi - CPU::SetFloat32xSIMD(yVelPredF[j]);
+						const CPU::Float32xSIMD dvpz = vpzi - CPU::SetFloat32xSIMD(zVelPredF[j]);
+
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+
+						const CPU::Float32xSIMD sourceTerm =
+							xsimd::fma(dvpx, dx, xsimd::fma(dvpy, dy, dvpz * dz));
+
+						tmp_SourceTermF = xsimd::fma(kgFac, sourceTerm, tmp_SourceTermF);
+						xCTermF = xsimd::fma(kgFac, dx, xCTermF);
+						yCTermF = xsimd::fma(kgFac, dy, yCTermF);
+						zCTermF = xsimd::fma(kgFac, dz, zCTermF);
+
+						gradSquSumF = xsimd::fma(kgFac * kgFac, distSqu, gradSquSumF);
+					}
+				}
+				else
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -1455,6 +1539,33 @@ void CPU::PressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_zAccPressF = CPU::ZeroFloat32xSIMD();
 
 				// FF pressure acceleration
+				if (useDenseDictFF && nbrFF.dict)
+				{
+					// every dict entry of the chunk against all lanes, broadcast instead of gathered
+					// (the kernel is zero for the lanes it is not a neighbor of)
+					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
+					{
+						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
+
+						const CPU::Float32xSIMD dx = xi - CPU::SetFloat32xSIMD(xPosF[j]);
+						const CPU::Float32xSIMD dy = yi - CPU::SetFloat32xSIMD(yPosF[j]);
+						const CPU::Float32xSIMD dz = zi - CPU::SetFloat32xSIMD(zPosF[j]);
+
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+
+						const CPU::Float32xSIMD presj = CPU::SetFloat32xSIMD(pressureF[j]);
+						const CPU::Float32xSIMD accCoeffF =
+							(accCoeffF_outer + massFV * presj * densiInvSquV) * kgFac;
+
+						tmp_xAccPressF = xsimd::fma(accCoeffF, dx, tmp_xAccPressF);
+						tmp_yAccPressF = xsimd::fma(accCoeffF, dy, tmp_yAccPressF);
+						tmp_zAccPressF = xsimd::fma(accCoeffF, dz, tmp_zAccPressF);
+					}
+				}
+				else
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 
@@ -1712,6 +1823,34 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 				CPU::Float32xSIMD tmp_SysVecElemB = CPU::ZeroFloat32xSIMD();
 
 				// FF pressure system vector element
+				if (useDenseDictFF && nbrFF.dict)
+				{
+					// every dict entry of the chunk against all lanes, broadcast instead of gathered
+					// (the kernel is zero for the lanes it is not a neighbor of)
+					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
+					{
+						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
+
+						const CPU::Float32xSIMD dx = xi - CPU::SetFloat32xSIMD(xPosF[j]);
+						const CPU::Float32xSIMD dy = yi - CPU::SetFloat32xSIMD(yPosF[j]);
+						const CPU::Float32xSIMD dz = zi - CPU::SetFloat32xSIMD(zPosF[j]);
+
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+
+						const CPU::Float32xSIMD dapx = axi - CPU::SetFloat32xSIMD(xAccPressF[j]);
+						const CPU::Float32xSIMD dapy = ayi - CPU::SetFloat32xSIMD(yAccPressF[j]);
+						const CPU::Float32xSIMD dapz = azi - CPU::SetFloat32xSIMD(zAccPressF[j]);
+
+						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
+							dapx, dx, CPU::FmaFloat32xSIMD(dapy, dy, dapz * dz));
+
+						tmp_SysVecElemF = xsimd::fma(kgFac, sysVecElem, tmp_SysVecElemF);
+					}
+				}
+				else
 				{
 					const CPU::UInt32xSIMD countFF = CPU::LoadUInt16AsUInt32xSIMD(nbrFF.counts + begin);
 

@@ -1773,6 +1773,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 						chunkedSELLNeighborList->FBChunkWrite(chunk);
 					ChunkedSELLNeighborSpan_Write chunkFR =
 						chunkedSELLNeighborList->FRChunkWrite(chunk);
+					const bool isDenseDictFF = useDenseDictFF && chunkFF.dict != nullptr;
 
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
@@ -1794,7 +1795,9 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 							if (mask == 0u) { continue; }
 
 							// dict chunks store the dictionary position of the candidate
+							// (dense dict chunks store the lanes it neighbors instead of per-lane positions)
 							const uint32_t storedIdx = chunkFF.RegisterNeighbor(l);
+							if (isDenseDictFF) { chunkFF.StoreDictLaneMask(storedIdx, mask); }
 
 							// padding lanes are already cleared, so only the matching lanes are visited
 							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
@@ -1806,7 +1809,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 										"CPU ChunkedSELL FF direct fill exceeded chunk pitch.");
 								}
 
-								chunkFF.StoreNeighbor(lane, writtenFF[lane], storedIdx);
+								if (!isDenseDictFF) { chunkFF.StoreNeighbor(lane, writtenFF[lane], storedIdx); }
 								writtenFF[lane]++;
 							}
 						}

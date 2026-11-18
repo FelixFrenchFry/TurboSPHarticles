@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 #include <boost/container/small_vector.hpp>
 #include <tbb/enumerable_thread_specific.h>
@@ -41,12 +42,27 @@ namespace Sim
 	// max distinct neighbors of a dict chunk, addressable by its uint8 dictionary positions
 	static constexpr uint32_t N_SELL_DICT_SIZE_MAX = 256;
 
-	// byte size of a dict chunk's dictionary, rounded up to whole uint32 to keep the dictionaries aligned
-	inline uint32_t SELLDictBytes(SELLDictChunkFormat dictFormat, uint32_t N_entries) noexcept
+	// dense dict chunks store the lanes of each dict entry instead of per-lane dictionary positions,
+	// and the solver kernels loop them over their dictionary instead of per lane
+	static constexpr bool useDenseDictFF = true;
+
+	// one bit per SIMD lane, set for the lanes that have a dict entry as neighbor
+	using SELLLaneMask = std::conditional_t<CPU::N_SIMD_WIDTH == 16, uint16_t, uint8_t>;
+
+	// byte size of one dict entry, without its lane mask
+	inline uint32_t SELLDictEntryBytes(SELLDictChunkFormat dictFormat) noexcept
 	{
-		const uint32_t N_entryBytes = (dictFormat == SELLDictChunkFormat::DictAbs32)
+		return (dictFormat == SELLDictChunkFormat::DictAbs32)
 			? static_cast<uint32_t>(sizeof(uint32_t))
 			: static_cast<uint32_t>(sizeof(uint16_t));
+	}
+
+	// byte size of a dict chunk's dictionary, followed by its lane masks for dense dict chunks,
+	// rounded up to whole uint32 to keep the dictionaries aligned
+	inline uint32_t SELLDictBytes(SELLDictChunkFormat dictFormat, uint32_t N_entries) noexcept
+	{
+		const uint32_t N_entryBytes = SELLDictEntryBytes(dictFormat)
+			+ (useDenseDictFF ? static_cast<uint32_t>(sizeof(SELLLaneMask)) : 0u);
 		return (N_entries * N_entryBytes + 3u) & ~3u;
 	}
 
@@ -67,6 +83,16 @@ namespace Sim
 		SELLChunkFormat format = SELLChunkFormat::Abs32;
 		const uint8_t* dict = nullptr; // distinct neighbors of a dict chunk, nullptr for a normal chunk
 		SELLDictChunkFormat dictFormat = SELLDictChunkFormat::DictAbs32;
+		uint32_t N_dict = 0; // dictionary entries of a dict chunk
+		const uint8_t* dictLaneMasks = nullptr; // SELLLaneMask of each entry of a dense dict chunk, after the dictionary
+
+		// lanes that have the neighbor at a position in the dictionary of a dense dict chunk
+		uint32_t ReadDictLaneMask(uint32_t dictIdx) const noexcept
+		{
+			SELLLaneMask laneMask = 0;
+			std::memcpy(&laneMask, dictLaneMasks + sizeof(laneMask) * dictIdx, sizeof(laneMask));
+			return laneMask;
+		}
 
 		// neighbor at a position in the dictionary of a dict chunk
 		uint32_t ReadDictNeighborIdx(uint32_t dictIdx) const noexcept
@@ -143,6 +169,14 @@ namespace Sim
 		SELLDictChunkFormat dictFormat = SELLDictChunkFormat::DictAbs32;
 		uint32_t N_dictMax = 0; // dictionary size fixed by the count-query
 		uint32_t N_dict = 0; // dictionary entries written so far
+		uint8_t* dictLaneMasks = nullptr; // SELLLaneMask of each entry of a dense dict chunk, after the dictionary
+
+		// stores the lanes that have the neighbor at a position in the dictionary of a dense dict chunk
+		void StoreDictLaneMask(uint32_t dictIdx, uint32_t laneMask) const noexcept
+		{
+			const SELLLaneMask dictLaneMask = static_cast<SELLLaneMask>(laneMask);
+			std::memcpy(dictLaneMasks + sizeof(dictLaneMask) * dictIdx, &dictLaneMask, sizeof(dictLaneMask));
+		}
 
 		// returns the value StoreNeighbor() takes for neighbor j, which is j itself
 		// or its position after adding it to the dictionary of a dict chunk

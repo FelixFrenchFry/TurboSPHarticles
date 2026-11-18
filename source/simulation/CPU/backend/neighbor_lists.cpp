@@ -1289,6 +1289,21 @@ NeighborSpan NeighborLists_ChunkedSELL_AdaptCompress_CPU::FF(
 	const ChunkedSELLNeighborSpan_Read chunkFF = FFChunk(chunk);
 
 	// reconstruct fluid neighbor list of one particle from compressed SELL storage
+	// (dense dict chunks list the dict entries whose lane mask has the particle's lane, in dictionary order)
+	if (useDenseDictFF && chunkFF.dict)
+	{
+		uint32_t k = 0;
+		for (uint32_t dictIdx = 0; dictIdx < chunkFF.N_dict && k < N_nbrs; dictIdx++)
+		{
+			if ((chunkFF.ReadDictLaneMask(dictIdx) >> lane) & 1u)
+			{
+				out[k++] = chunkFF.ReadDictNeighborIdx(dictIdx);
+			}
+		}
+		assert(k == N_nbrs);
+		return NeighborSpan{ out.data(), N_nbrs };
+	}
+
 	for (uint32_t k = 0; k < N_nbrs; k++)
 	{
 		out[k] = chunkFF.ReadNeighborIdx(lane, k);
@@ -1525,6 +1540,9 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 		}
 		#endif
 
+		// dense dict chunks have no per-lane payload to pad
+		if (useDenseDictFF && chunkFF.dict) { continue; }
+
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
 		// (dict chunks pad with the first position of their dictionary)
 		const uint32_t safePaddingFluidIdx = chunkFF.dict
@@ -1537,6 +1555,8 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 			chunkFF.StoreNeighbor(lane, k, safePaddingFluidIdx);
 		}
 	}
+
+	if (useDenseDictFF && chunkFF.dict) { return; }
 
 	// tail lanes of the final partial chunk still get loaded by SIMD gathers
 	const uint32_t safeTailFluidIdx = (!chunkFF.dict && chunkFF.format == SELLChunkFormat::Delta16)
@@ -1737,7 +1757,12 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeRe
 		.pitch = nbrChunkMaxCountFF_[chunk],
 		.format = format,
 		.dict = isDict ? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk] : nullptr,
-		.dictFormat = nbrChunkDictFormatFF_[chunk]
+		.dictFormat = nbrChunkDictFormatFF_[chunk],
+		.N_dict = nbrChunkDictSizeFF_[chunk],
+		.dictLaneMasks = useDenseDictFF && isDict
+			? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk]
+				+ SELLDictEntryBytes(nbrChunkDictFormatFF_[chunk]) * nbrChunkDictSizeFF_[chunk]
+			: nullptr
 	};
 }
 
@@ -1810,7 +1835,11 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 		.format = format,
 		.dict = isDict ? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk] : nullptr,
 		.dictFormat = nbrChunkDictFormatFF_[chunk],
-		.N_dictMax = nbrChunkDictSizeFF_[chunk]
+		.N_dictMax = nbrChunkDictSizeFF_[chunk],
+		.dictLaneMasks = useDenseDictFF && isDict
+			? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk]
+				+ SELLDictEntryBytes(nbrChunkDictFormatFF_[chunk]) * nbrChunkDictSizeFF_[chunk]
+			: nullptr
 	};
 }
 
@@ -1888,14 +1917,15 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinalizeChunkStorage(
 					const uint64_t chunkStorage = ChunkStorageSize(pitch);
 					const SELLChunkFormat format = nbrChunkFormat[chunk];
 
-					// (dict chunks store their uint8 dictionary positions in the 8-bit buffer)
+					// (dict chunks store their uint8 dictionary positions in the 8-bit buffer,
+					// dense dict chunks keep their lane masks in the dictionary instead)
 					if (nbrChunkDictSize && (*nbrChunkDictSize)[chunk] > 0u)
 					{
 						if (isFinalScan)
 						{
 							nbrChunkOffsets[chunk] = running.N_entriesDict8;
 						}
-						running.N_entriesDict8 += chunkStorage;
+						running.N_entriesDict8 += useDenseDictFF ? 0u : chunkStorage;
 					}
 					else if (format == SELLChunkFormat::Delta16)
 					{

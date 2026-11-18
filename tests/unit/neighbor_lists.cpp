@@ -116,6 +116,19 @@ namespace
 		return distinct;
 	}
 
+	// lanes of a chunk that have neighbor j
+	uint32_t ChunkLaneMask(const NeighborData& data, const uint32_t category, const uint32_t chunk, const uint32_t j)
+	{
+		uint32_t laneMask = 0;
+		const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
+		for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH && begin + lane < data[category].size(); lane++)
+		{
+			const auto& neighbors = data[category][begin + lane];
+			if (std::find(neighbors.begin(), neighbors.end(), j) != neighbors.end()) { laneMask |= 1u << lane; }
+		}
+		return laneMask;
+	}
+
 	// tracking the distinct FF neighbors lets the compressed lists store FF chunks as dict chunks
 	void CommitFluidCounts(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t chunk,
 		const bool trackDistinctFF = false)
@@ -168,13 +181,23 @@ namespace
 				// direct writes register each distinct neighbor once, like the compact cell list fill
 				// (dict chunks store the dict position, normal chunks the neighbor itself)
 				const auto distinct = direct ? DistinctChunkNeighbors(data, category, chunk) : std::vector<uint32_t>{};
+				// (dense dict chunks store the lanes of each dict entry instead of per-lane positions)
+				const bool isDenseDict = Sim::useDenseDictFF && view.dict != nullptr;
 				std::vector<uint32_t> storedIdxs;
 				for (const uint32_t j : distinct) { storedIdxs.push_back(view.RegisterNeighbor(j)); }
+				if (isDenseDict)
+				{
+					for (uint32_t d = 0; d < distinct.size(); d++)
+					{
+						view.StoreDictLaneMask(storedIdxs[d], ChunkLaneMask(data, category, chunk, distinct[d]));
+					}
+				}
 				for (uint32_t i = view.begin; i < view.end; i++)
 				{
 					const auto& neighbors = data[category][i];
 					if (direct)
 					{
+						if (isDenseDict) { continue; }
 						for (uint32_t k = 0; k < neighbors.size(); k++)
 						{
 							const auto distinctIdx = std::find(distinct.begin(), distinct.end(), neighbors[k]) - distinct.begin();
@@ -215,6 +238,16 @@ namespace
 				ASSERT_EQ(actual.N, expected.size());
 				if (expected.empty()) { EXPECT_EQ(actual.data, nullptr); continue; }
 				ASSERT_NE(actual.data, nullptr);
+				// (dense dict chunks list the neighbors in dictionary order)
+				if (Sim::useDenseDictFF && category == 0 && lists.FFChunk(i / CPU::N_SIMD_WIDTH).dict)
+				{
+					std::vector<uint32_t> actualNeighbors(actual.data, actual.data + actual.N);
+					std::vector<uint32_t> expectedNeighbors = expected;
+					std::sort(actualNeighbors.begin(), actualNeighbors.end());
+					std::sort(expectedNeighbors.begin(), expectedNeighbors.end());
+					EXPECT_EQ(actualNeighbors, expectedNeighbors);
+					continue;
+				}
 				for (uint32_t k = 0; k < expected.size(); k++)
 				{
 					SCOPED_TRACE(k);
@@ -252,6 +285,19 @@ namespace
 				}
 				ASSERT_EQ(view.pitch, expectedPitch);
 				if (view.pitch == 0) { continue; }
+				if (Sim::useDenseDictFF && view.dict)
+				{
+					// every entry of a dense dict chunk is a distinct neighbor, with a lane mask of exactly the lanes that have it
+					ASSERT_EQ(view.N_dict, DistinctChunkNeighbors(data, category, chunk).size());
+					for (uint32_t dictIdx = 0; dictIdx < view.N_dict; dictIdx++)
+					{
+						SCOPED_TRACE(dictIdx);
+						const uint32_t j = view.ReadDictNeighborIdx(dictIdx);
+						EXPECT_LT(j, targetCounts[category]);
+						EXPECT_EQ(view.ReadDictLaneMask(dictIdx), ChunkLaneMask(data, category, chunk, j));
+					}
+					continue;
+				}
 				ASSERT_TRUE(view.data8 || view.data16 || view.data32);
 				for (uint32_t k = 0; k < view.pitch; k++)
 				{
@@ -546,6 +592,22 @@ namespace
 				EXPECT_EQ(view.dictFormat, dictFormats[i]);
 			}
 		}
+	}
+
+	// dense dict chunks list neighbors in candidate order, except the DictDelta16x2 high group (reversed)
+	TEST_P(NeighborListStorageTests, ListsDenseDictChunkNeighborsInDictionaryOrder)
+	{
+		auto data = MakeNeighborData(6, 0);
+		data[0][0] = { 5, 1, 3 };
+		data[0][1] = { 3, 0, 5 };
+		PrepareStorage(*lists_, data, 8, true);
+		FillStorage(*lists_, data, true);
+
+		// (explicit lists and per-lane dict positions keep each lane's own order)
+		const std::vector<uint32_t> expected = (GetParam() && Sim::useDenseDictFF)
+			? std::vector<uint32_t>{ 5, 3, 0 } : data[0][1];
+		const auto actual = lists_->FF(1);
+		EXPECT_EQ(std::vector<uint32_t>(actual.data, actual.data + actual.N), expected);
 	}
 
 	// chunks with more distinct neighbors than uint8 dict positions can address stay normal chunks
