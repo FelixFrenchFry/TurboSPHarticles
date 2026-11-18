@@ -905,6 +905,8 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 		? static_cast<uint32_t>(selectedChunkIdxs.size())
 		: neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::KernelConstants_CubicSpline_SIMD kernelConstants =
+		CPU::BuildKernelConstants_CubicSpline_SIMD(particleSizeInvF, cubicSplineAlpha);
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 	const CPU::Float32xSIMD particleSizeSquEps = CPU::SetFloat32xSIMD(0.01f * particleSizeSquF);
 	const CPU::Float32xSIMD viscosityFacF = CPU::SetFloat32xSIMD(10.0f * viscosityF);
@@ -964,28 +966,24 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD dvy = vyi - CPU::GatherFloat32xSIMD(yVelF, idxJ);
 						const CPU::Float32xSIMD dvz = vzi - CPU::GatherFloat32xSIMD(zVelF, idxJ);
 
-						CPU::Float32xSIMD xkg;
-						CPU::Float32xSIMD ykg;
-						CPU::Float32xSIMD zkg;
-						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
 							xsimd::fma(dvy, dy, dvz * dz));
-						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
-							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD densityJ =
 							xsimd::max(CPU::GatherFloat32xSIMD(densityF, idxJ), eps);
 						const CPU::Float32xSIMD accCoeff =
-							(massFV * dot) / (densityJ * (distSqu + particleSizeSquEps));
+							(massFV * dot) / (densityJ * (distSqu + particleSizeSquEps)) * kgFac;
 						const CPU::Float32xSIMD accCoeffMasked =
 							CPU::ZeroMaskedFloat32xSIMD(accCoeff, mask);
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_xAccViscF = xsimd::fma(accCoeffMasked, xkg, tmp_xAccViscF);
-						tmp_yAccViscF = xsimd::fma(accCoeffMasked, ykg, tmp_yAccViscF);
-						tmp_zAccViscF = xsimd::fma(accCoeffMasked, zkg, tmp_zAccViscF);
+						tmp_xAccViscF = xsimd::fma(accCoeffMasked, dx, tmp_xAccViscF);
+						tmp_yAccViscF = xsimd::fma(accCoeffMasked, dy, tmp_yAccViscF);
+						tmp_zAccViscF = xsimd::fma(accCoeffMasked, dz, tmp_zAccViscF);
 					}
 				}
 
@@ -1006,8 +1004,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvx = vxi - CPU::ZeroFloat32xSIMD();
 						const CPU::Float32xSIMD dvy = vyi - CPU::ZeroFloat32xSIMD();
@@ -1045,8 +1042,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvx = vxi - CPU::GatherFloat32xSIMD(xVelR, idxJ);
 						const CPU::Float32xSIMD dvy = vyi - CPU::GatherFloat32xSIMD(yVelR, idxJ);
@@ -1200,6 +1196,8 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
 	const CPU::Float32xSIMD restDensityV = CPU::SetFloat32xSIMD(restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::KernelConstants_CubicSpline_SIMD kernelConstants =
+		CPU::BuildKernelConstants_CubicSpline_SIMD(particleSizeInvF, cubicSplineAlpha);
 	const CPU::Float32xSIMD cTermFacF = CPU::SetFloat32xSIMD(-massF * restDensitySquInv);
 	const CPU::Float32xSIMD cTermFacB = CPU::SetFloat32xSIMD(-2.0f * pressGamma * restDensitySquInv);
 	const CPU::Float32xSIMD diagBFac = CPU::SetFloat32xSIMD(-massF * restDensitySquInv);
@@ -1261,25 +1259,22 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						const CPU::Float32xSIMD dvpy = vpyi - CPU::GatherFloat32xSIMD(yVelPredF, idxJ);
 						const CPU::Float32xSIMD dvpz = vpzi - CPU::GatherFloat32xSIMD(zVelPredF, idxJ);
 
-						CPU::Float32xSIMD xkg;
-						CPU::Float32xSIMD ykg;
-						CPU::Float32xSIMD zkg;
-						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD sourceTerm =
-							xsimd::fma(dvpx, xkg, xsimd::fma(dvpy, ykg, dvpz * zkg));
+							xsimd::fma(dvpx, dx, xsimd::fma(dvpy, dy, dvpz * dz));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_SourceTermF += CPU::ZeroMaskedFloat32xSIMD(sourceTerm, mask);
-						xCTermF += CPU::ZeroMaskedFloat32xSIMD(xkg, mask);
-						yCTermF += CPU::ZeroMaskedFloat32xSIMD(ykg, mask);
-						zCTermF += CPU::ZeroMaskedFloat32xSIMD(zkg, mask);
+						const CPU::Float32xSIMD kgFacMasked = CPU::ZeroMaskedFloat32xSIMD(kgFac, mask);
+						tmp_SourceTermF = xsimd::fma(kgFacMasked, sourceTerm, tmp_SourceTermF);
+						xCTermF = xsimd::fma(kgFacMasked, dx, xCTermF);
+						yCTermF = xsimd::fma(kgFacMasked, dy, yCTermF);
+						zCTermF = xsimd::fma(kgFacMasked, dz, zCTermF);
 
-						const CPU::Float32xSIMD gradSqu =
-							xsimd::fma(xkg, xkg, xsimd::fma(ykg, ykg, zkg * zkg));
-						gradSquSumF += CPU::ZeroMaskedFloat32xSIMD(gradSqu, mask);
+						gradSquSumF = xsimd::fma(kgFacMasked * kgFac, distSqu, gradSquSumF);
 					}
 				}
 
@@ -1301,8 +1296,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvpx = vpxi - CPU::ZeroFloat32xSIMD();
 						const CPU::Float32xSIMD dvpy = vpyi - CPU::ZeroFloat32xSIMD();
@@ -1338,8 +1332,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD dvpx = vpxi - CPU::GatherFloat32xSIMD(xVelR, idxJ);
 						const CPU::Float32xSIMD dvpy = vpyi - CPU::GatherFloat32xSIMD(yVelR, idxJ);
@@ -1428,6 +1421,8 @@ void CPU::PressureAcceleration_ChunkedSELL(
 		: (N_F + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 	const float densiInvSqu = 1.0f / (restDensity * restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::KernelConstants_CubicSpline_SIMD kernelConstants =
+		CPU::BuildKernelConstants_CubicSpline_SIMD(particleSizeInvF, cubicSplineAlpha);
 	const CPU::Float32xSIMD densiInvSquV = CPU::SetFloat32xSIMD(densiInvSqu);
 	const CPU::Float32xSIMD accCoeffB_outer = CPU::SetFloat32xSIMD(2.0f * pressGamma * densiInvSqu);
 	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
@@ -1473,22 +1468,20 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
 						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
 
-						CPU::Float32xSIMD xkg;
-						CPU::Float32xSIMD ykg;
-						CPU::Float32xSIMD zkg;
-						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD presj = CPU::GatherFloat32xSIMD(pressureF, idxJ);
 						const CPU::Float32xSIMD accCoeffF =
-							accCoeffF_outer + massFV * presj * densiInvSquV;
+							(accCoeffF_outer + massFV * presj * densiInvSquV) * kgFac;
 						const CPU::Float32xSIMD accCoeffFMasked = CPU::ZeroMaskedFloat32xSIMD(accCoeffF, mask);
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_xAccPressF = xsimd::fma(accCoeffFMasked, xkg, tmp_xAccPressF);
-						tmp_yAccPressF = xsimd::fma(accCoeffFMasked, ykg, tmp_yAccPressF);
-						tmp_zAccPressF = xsimd::fma(accCoeffFMasked, zkg, tmp_zAccPressF);
+						tmp_xAccPressF = xsimd::fma(accCoeffFMasked, dx, tmp_xAccPressF);
+						tmp_yAccPressF = xsimd::fma(accCoeffFMasked, dy, tmp_yAccPressF);
+						tmp_zAccPressF = xsimd::fma(accCoeffFMasked, dz, tmp_zAccPressF);
 					}
 				}
 
@@ -1510,8 +1503,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD psiBj = CPU::GatherFloat32xSIMD(psiB, idxJ);
 						const CPU::Float32xSIMD accCoeffB = accCoeffB_outer * psiBj * presi;
@@ -1542,8 +1534,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						const CPU::Float32xSIMD psiRj = CPU::GatherFloat32xSIMD(psiR, idxJ);
 						const CPU::Float32xSIMD accCoeffB = accCoeffB_outer * psiRj * presi;
@@ -1685,6 +1676,8 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const CPU::Float32xSIMD timeStepSquV = CPU::SetFloat32xSIMD(timeStep * timeStep);
 	const CPU::Float32xSIMD restDensityV = CPU::SetFloat32xSIMD(restDensity);
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::KernelConstants_CubicSpline_SIMD kernelConstants =
+		CPU::BuildKernelConstants_CubicSpline_SIMD(particleSizeInvF, cubicSplineAlpha);
 	const CPU::Float32xSIMD jacobiOmegaV = CPU::SetFloat32xSIMD(jacobiOmega);
 	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
@@ -1732,22 +1725,21 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						const CPU::Float32xSIMD dy = yi - CPU::GatherFloat32xSIMD(yPosF, idxJ);
 						const CPU::Float32xSIMD dz = zi - CPU::GatherFloat32xSIMD(zPosF, idxJ);
 
-						CPU::Float32xSIMD xkg;
-						CPU::Float32xSIMD ykg;
-						CPU::Float32xSIMD zkg;
-						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						const CPU::Float32xSIMD kgFac =
+							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD dapx = axi - CPU::GatherFloat32xSIMD(xAccPressF, idxJ);
 						const CPU::Float32xSIMD dapy = ayi - CPU::GatherFloat32xSIMD(yAccPressF, idxJ);
 						const CPU::Float32xSIMD dapz = azi - CPU::GatherFloat32xSIMD(zAccPressF, idxJ);
 
 						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
-							dapx, xkg, CPU::FmaFloat32xSIMD(dapy, ykg, dapz * zkg));
+							dapx, dx, CPU::FmaFloat32xSIMD(dapy, dy, dapz * dz));
 
 						// padded lanes gathered valid indices but contribute zero
-						tmp_SysVecElemF += CPU::AndMaskedFloat32xSIMD(sysVecElem, mask);
+						tmp_SysVecElemF = xsimd::fma(
+							CPU::AndMaskedFloat32xSIMD(kgFac, mask), sysVecElem, tmp_SysVecElemF);
 					}
 				}
 				tmp_SysVecElemF *= massFV;
@@ -1770,8 +1762,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						// TODO: subtract actual boundary pressure acc when adding non-static boundaries?
 						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
@@ -1802,8 +1793,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						CPU::Float32xSIMD ykg;
 						CPU::Float32xSIMD zkg;
 						CPU::KernelGradient_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							cubicSplineAlpha, xkg, ykg, zkg);
+							dx, dy, dz, kernelConstants, xkg, ykg, zkg);
 
 						// TODO: subtract actual rigid pressure acc when adding non-static boundaries?
 						const CPU::Float32xSIMD sysVecElem = CPU::FmaFloat32xSIMD(
