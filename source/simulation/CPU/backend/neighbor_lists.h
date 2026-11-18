@@ -5,6 +5,8 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -158,11 +160,10 @@ namespace Sim
 			std::memcpy(dictLaneMasks + sizeof(dictLaneMask) * dictIdx, &dictLaneMask, sizeof(dictLaneMask));
 		}
 
-		// returns j for StoreNeighbor(), or its new dictionary position for StoreDictLaneMask() in a dict chunk
+		// adds neighbor j to the dictionary of a dict chunk and returns its position for StoreDictLaneMask()
 		uint32_t RegisterNeighbor(uint32_t j)
 		{
-			if (!dict) { return j; }
-
+			assert(dict);
 			if (N_dict >= N_dictMax) [[unlikely]]
 			{
 				throw std::runtime_error(
@@ -212,6 +213,7 @@ namespace Sim
 		uint32_t maxRef;
 		uint32_t N_distinct = 0; // distinct neighbors of the chunk, 0 if the query does not track them
 		const uint32_t* distinct = nullptr; // their indices, up to N_SELL_DICT_SIZE_MAX
+		const uint32_t* distinctLaneMasks = nullptr; // the lanes of each of them, nullptr leaves the chunk a normal chunk
 	};
 
 	class I_NeighborListSELL : public I_NeighborList
@@ -470,8 +472,8 @@ namespace Sim
 		std::vector<SELLDictChunkFormat> nbrChunkDictFormatFF_; // per-chunk dictionary format of dict chunks
 		std::vector<uint16_t> nbrChunkDictLowFF_; // per-chunk low group size of DictDelta16x2 dictionaries
 		std::vector<uint32_t> nbrChunkBaseIdx2FF_; // per-chunk base index of their high group
-		std::vector<uint64_t> nbrChunkDictOffsetsFF_; // per-chunk starting byte into nbrChunkDictFF_
-		std::vector<uint8_t> nbrChunkDictFF_; // dictionaries of the dict chunks, concatenated for all chunks
+		std::vector<uint8_t*> nbrChunkDictFF_; // per-chunk dictionary of dict chunks, in nbrDictPagesFF_
+		std::vector<std::unique_ptr<uint8_t[]>> nbrDictPagesFF_; // dictionaries of the dict chunks, in write blocks of the count-query
 		std::vector<uint16_t> nbrList16FF_;
 		std::vector<uint16_t> nbrList16FB_;
 		std::vector<uint16_t> nbrList16FR_;
@@ -498,9 +500,24 @@ namespace Sim
 		mutable tbb::enumerable_thread_specific<boost::container::small_vector<
 			uint32_t, N_PER_SCRATCH_INLINE_FR>> nbrScratchFR_;
 
+		// per-thread write blocks of the count-query, taken from the front of the dict pages
+		struct DictWriteBlock
+		{
+			uint8_t* cursor = nullptr;
+			uint8_t* end = nullptr;
+		};
+		tbb::enumerable_thread_specific<DictWriteBlock> dictWriteBlocksFF_;
+		std::mutex dictPagesMutexFF_; // guards nbrDictPagesFF_ and N_dictBlockBytesFF_ while the count-query takes blocks
+		uint64_t N_dictBlockBytesFF_ = 0; // bytes of the write blocks taken so far
+		uint64_t N_dictPagesUsedMaxFF_ = 0; // most dict pages a count-query used since the last freeing check
+		uint32_t N_countQueriesSinceDictPageFreeFF_ = 0; // count-queries since the last freeing check
+
 		// misc
 		static constexpr uint32_t chunkWidth = CPU::N_SIMD_WIDTH;
 		static constexpr float extraAllocCapacityPct_ = 4.0f; // TODO: fine-tune
+		static constexpr uint64_t N_DICT_WRITE_BLOCK_BYTES = 256ull * 1024ull;
+		static constexpr uint64_t N_DICT_PAGE_BYTES = 8ull * 1024ull * 1024ull;
+		static constexpr uint32_t N_DICT_PAGE_FREE_INTERVAL = 64; // count-queries a dict page has to stay unused before it is freed
 
 		// helpers
 		static uint32_t ChunkOfParticle(uint32_t i) noexcept;
@@ -512,6 +529,8 @@ namespace Sim
 		static bool SplitDictDelta16x2(
 			const ChunkedSELLNeighborCountResult& counts, uint32_t& N_dictLow, uint32_t& baseIdx2) noexcept;
 		static uint64_t ChunkStorageSize(uint32_t pitch) noexcept;
+
+		uint8_t* AllocateDictFF(uint32_t N_bytes);
 
 		ChunkedSELLNeighborSpan_Read MakeReadSpanFF(uint32_t chunk) const noexcept;
 		ChunkedSELLNeighborSpan_Read MakeReadSpanFB(uint32_t chunk) const noexcept;

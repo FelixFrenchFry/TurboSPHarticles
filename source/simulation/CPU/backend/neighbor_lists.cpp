@@ -953,7 +953,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Resize(
 	nbrChunkDictFormatFF_.resize(N_chunks);
 	nbrChunkDictLowFF_.resize(N_chunks);
 	nbrChunkBaseIdx2FF_.resize(N_chunks);
-	nbrChunkDictOffsetsFF_.resize(static_cast<uint64_t>(N_chunks) + 1ull);
+	nbrChunkDictFF_.resize(N_chunks);
 
 	// rigid source particles use CSR because they are not SIMD-reordered
 	// TODO: use chunked SELL too?
@@ -981,18 +981,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::Finalize_Count()
 	FinalizeChunkStorage(
 		nbrChunkMaxCountFF_, nbrChunkFormatFF_, &nbrChunkDictSizeFF_, nbrChunkOffsetsFF_,
 		nbrList16FF_, nbrList32FF_);
-
-	// dictionary offsets are an exclusive prefix sum over the dictionary byte sizes (0 for normal chunks)
-	const uint64_t N_dictBytesFF = BuildExclusivePrefixSum_Parallel(
-		ChunkNumTotal(N_F_),
-		[&](const uint32_t chunk)
-		{
-			return static_cast<uint64_t>(
-				SELLDictBytes(nbrChunkDictFormatFF_[chunk], nbrChunkDictSizeFF_[chunk]));
-		},
-		nbrChunkDictOffsetsFF_);
-	Base::ResizeScratchVector(nbrChunkDictFF_, N_dictBytesFF, extraAllocCapacityPct_);
-
 	FinalizeChunkStorage(
 		nbrChunkMaxCountFB_, nbrChunkFormatFB_, nullptr, nbrChunkOffsetsFB_,
 		nbrList16FB_, nbrList32FB_);
@@ -1055,6 +1043,19 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrCountRR(
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::PrepareFluidCountWrite(
 	const bool allChunksWillBeWritten)
 {
+	// the dictionaries are dead until the count-query takes write blocks from the front of the dict pages again
+	// (every N_DICT_PAGE_FREE_INTERVAL count-queries, the pages none of them used are freed)
+	const uint64_t N_usedPages = (N_dictBlockBytesFF_ + N_DICT_PAGE_BYTES - 1u) / N_DICT_PAGE_BYTES;
+	N_dictPagesUsedMaxFF_ = std::max(N_dictPagesUsedMaxFF_, N_usedPages);
+	if (++N_countQueriesSinceDictPageFreeFF_ >= N_DICT_PAGE_FREE_INTERVAL)
+	{
+		nbrDictPagesFF_.resize(std::min<uint64_t>(nbrDictPagesFF_.size(), N_dictPagesUsedMaxFF_));
+		N_dictPagesUsedMaxFF_ = 0;
+		N_countQueriesSinceDictPageFreeFF_ = 0;
+	}
+	N_dictBlockBytesFF_ = 0;
+	dictWriteBlocksFF_.clear();
+
 	if (allChunksWillBeWritten) { return; }
 	ClearFluidChunkCounts_Parallel(
 		nbrCountFF_, nbrCountFB_, nbrCountFR_,
@@ -1084,8 +1085,10 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
 		"Compressed chunked SELL FR neighbor count exceeds uint16 count storage.");
 
 	// the chunk pitch and neighbor index range are complete here
-	// (FF chunks with few distinct neighbors store them once in a dictionary)
-	const bool isDictFF = countsFF.N_distinct > 0u && countsFF.N_distinct <= N_SELL_DICT_SIZE_MAX;
+	// (FF chunks with few distinct neighbors store them once in a dictionary, with the lanes of each)
+	const bool isDictFF = countsFF.distinctLaneMasks
+		&& countsFF.N_distinct > 0u
+		&& countsFF.N_distinct <= N_SELL_DICT_SIZE_MAX;
 	uint32_t N_dictLowFF = 0;
 	uint32_t baseIdx2FF = 0;
 	const bool isDictDelta16x2FF = isDictFF && SplitDictDelta16x2(countsFF, N_dictLowFF, baseIdx2FF);
@@ -1107,6 +1110,43 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::CommitFluidChunkCounts(
 		: SELLDictChunkFormat::DictAbs32;
 	nbrChunkDictLowFF_[chunk] = static_cast<uint16_t>(N_dictLowFF);
 	nbrChunkBaseIdx2FF_[chunk] = baseIdx2FF;
+
+	// dict chunks are written here, the fill-query only writes normal chunks
+	if (!isDictFF) { return; }
+	nbrChunkDictFF_[chunk] = AllocateDictFF(SELLDictBytes(nbrChunkDictFormatFF_[chunk], countsFF.N_distinct));
+	ChunkedSELLNeighborSpan_Write chunkFF = MakeWriteSpanFF(chunk);
+	for (uint32_t n = 0; n < countsFF.N_distinct; n++)
+	{
+		chunkFF.StoreDictLaneMask(chunkFF.RegisterNeighbor(countsFF.distinct[n]), countsFF.distinctLaneMasks[n]);
+	}
+}
+
+uint8_t* NeighborLists_ChunkedSELL_AdaptCompress_CPU::AllocateDictFF(const uint32_t N_bytes)
+{
+	static_assert(N_DICT_WRITE_BLOCK_BYTES >= N_SELL_DICT_SIZE_MAX * (sizeof(uint32_t) + sizeof(SELLLaneMask)),
+		"A dict write block must fit the largest dictionary.");
+	static_assert(N_DICT_PAGE_BYTES % N_DICT_WRITE_BLOCK_BYTES == 0u,
+		"Dict write blocks must tile the dict pages.");
+
+	// the thread takes the next write block once its current one is full, adding a page once all pages are taken
+	DictWriteBlock& block = dictWriteBlocksFF_.local();
+	if (static_cast<uint64_t>(block.end - block.cursor) < N_bytes)
+	{
+		const std::lock_guard<std::mutex> lock(dictPagesMutexFF_);
+		const uint64_t page = N_dictBlockBytesFF_ / N_DICT_PAGE_BYTES;
+		// (pages are not value-initialized, the writing threads touch their blocks first)
+		if (page == nbrDictPagesFF_.size())
+		{
+			nbrDictPagesFF_.push_back(std::make_unique_for_overwrite<uint8_t[]>(N_DICT_PAGE_BYTES));
+		}
+		uint8_t* blockBegin = nbrDictPagesFF_[page].get() + N_dictBlockBytesFF_ % N_DICT_PAGE_BYTES;
+		block = { blockBegin, blockBegin + N_DICT_WRITE_BLOCK_BYTES };
+		N_dictBlockBytesFF_ += N_DICT_WRITE_BLOCK_BYTES;
+	}
+
+	uint8_t* dict = block.cursor;
+	block.cursor += N_bytes;
+	return dict;
 }
 
 void NeighborLists_ChunkedSELL_AdaptCompress_CPU::SetNbrListFF(
@@ -1433,8 +1473,11 @@ NeighborLists_ChunkedSELL_AdaptCompress_CPU::GetMemUsage() const
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictFormatFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictLowFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkBaseIdx2FF_));
-	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictOffsetsFF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrChunkDictFF_));
+	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrDictPagesFF_));
+	Mem::Add(usageFF, Mem::MemUsage{
+		std::min<uint64_t>(N_dictBlockBytesFF_, nbrDictPagesFF_.size() * N_DICT_PAGE_BYTES),
+		nbrDictPagesFF_.size() * N_DICT_PAGE_BYTES });
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrList16FF_));
 	Mem::Add(usageFF, Mem::MemUsageOf_Vector(nbrList32FF_));
 
@@ -1521,6 +1564,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 	const uint32_t begin = ChunkBegin(chunk);
 	const uint32_t end = ChunkEnd(chunk, N_F_);
 	ChunkedSELLNeighborSpan_Write chunkFF = FFChunkWrite(chunk);
+	assert(!chunkFF.dict);
 
 	// direct chunk fill already wrote the real neighbors
 	for (uint32_t i = begin; i < end; i++)
@@ -1536,9 +1580,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 		}
 		#endif
 
-		// dict chunks have no per-lane payload to pad
-		if (chunkFF.dict) { continue; }
-
 		// padding entries are valid indices so SIMD gathers never touch invalid memory
 		const uint32_t safePaddingFluidIdx = (chunkFF.format == SELLChunkFormat::Delta16)
 			? chunkFF.baseIdx
@@ -1548,8 +1589,6 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 			chunkFF.StoreNeighbor(lane, k, safePaddingFluidIdx);
 		}
 	}
-
-	if (chunkFF.dict) { return; }
 
 	// tail lanes of the final partial chunk still get loaded by SIMD gathers
 	const uint32_t safeTailFluidIdx = (chunkFF.format == SELLChunkFormat::Delta16)
@@ -1747,11 +1786,11 @@ ChunkedSELLNeighborSpan_Read NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeRe
 		.chunk = chunk, .begin = begin, .end = end,
 		.pitch = nbrChunkMaxCountFF_[chunk],
 		.format = format,
-		.dict = isDict ? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk] : nullptr,
+		.dict = isDict ? nbrChunkDictFF_[chunk] : nullptr,
 		.dictFormat = nbrChunkDictFormatFF_[chunk],
 		.N_dict = nbrChunkDictSizeFF_[chunk],
 		.dictLaneMasks = isDict
-			? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk]
+			? nbrChunkDictFF_[chunk]
 				+ SELLDictEntryBytes(nbrChunkDictFormatFF_[chunk]) * nbrChunkDictSizeFF_[chunk]
 			: nullptr
 	};
@@ -1822,11 +1861,11 @@ ChunkedSELLNeighborSpan_Write NeighborLists_ChunkedSELL_AdaptCompress_CPU::MakeW
 		.chunk = chunk, .begin = begin, .end = end,
 		.pitch = nbrChunkMaxCountFF_[chunk],
 		.format = format,
-		.dict = isDict ? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk] : nullptr,
+		.dict = isDict ? nbrChunkDictFF_[chunk] : nullptr,
 		.dictFormat = nbrChunkDictFormatFF_[chunk],
 		.N_dictMax = nbrChunkDictSizeFF_[chunk],
 		.dictLaneMasks = isDict
-			? nbrChunkDictFF_.data() + nbrChunkDictOffsetsFF_[chunk]
+			? nbrChunkDictFF_[chunk]
 				+ SELLDictEntryBytes(nbrChunkDictFormatFF_[chunk]) * nbrChunkDictSizeFF_[chunk]
 			: nullptr
 	};

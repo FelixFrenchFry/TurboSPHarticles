@@ -207,10 +207,9 @@ namespace
 			params.expctdAvgNbrCountHardMax_FB = 0;
 			lists_->Resize(N_F, N_B, N_R, params);
 			lists_->PrepareFluidCountWrite(true);
-			std::vector<std::vector<uint32_t>> distinctFFByChunk(lists_->ChunkNumTotal());
 			for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
 			{
-				auto& distinctFF = distinctFFByChunk[chunk];
+				std::vector<uint32_t> distinctFF;
 				std::array<std::array<uint32_t, CPU::N_SIMD_WIDTH>, 3> counts{};
 				std::array<uint32_t, 3> minRef;
 				minRef.fill(std::numeric_limits<uint32_t>::max());
@@ -234,9 +233,21 @@ namespace
 						}
 					}
 				}
+				// (dict chunks are written here, with the lanes of each distinct neighbor)
+				std::vector<uint32_t> laneMasksFF;
+				for (const uint32_t j : distinctFF)
+				{
+					uint32_t laneMask = 0;
+					for (uint32_t i = begin; i < end; i++)
+					{
+						const auto& row = neighbors[0][i];
+						if (std::find(row.begin(), row.end(), j) != row.end()) { laneMask |= 1u << (i - begin); }
+					}
+					laneMasksFF.push_back(laneMask);
+				}
 				lists_->CommitFluidChunkCounts(chunk,
 					{ counts[0].data(), minRef[0], maxRef[0],
-						static_cast<uint32_t>(distinctFF.size()), distinctFF.data() },
+						static_cast<uint32_t>(distinctFF.size()), distinctFF.data(), laneMasksFF.data() },
 					{ counts[1].data(), minRef[1], maxRef[1] },
 					{ counts[2].data(), minRef[2], maxRef[2] });
 			}
@@ -252,27 +263,12 @@ namespace
 				for (uint32_t category = 0; category < neighbors.size(); category++)
 				{
 					auto view = (lists_.get()->*writeChunks[category])(chunk);
-					const bool isDict = view.dict != nullptr;
-					if (isDict)
-					{
-						for (const uint32_t j : distinctFFByChunk[chunk])
-						{
-							const uint32_t dictIdx = view.RegisterNeighbor(j);
-							uint32_t laneMask = 0;
-							for (uint32_t i = view.begin; i < view.end; i++)
-							{
-								const auto& row = neighbors[category][i];
-								if (std::find(row.begin(), row.end(), j) != row.end()) { laneMask |= 1u << (i - view.begin); }
-							}
-							view.StoreDictLaneMask(dictIdx, laneMask);
-						}
-					}
+					if (view.dict) { continue; }
 					std::array<uint32_t, CPU::N_SIMD_WIDTH> counts{};
 					for (uint32_t i = view.begin; i < view.end; i++)
 					{
 						const auto& row = neighbors[category][i];
 						counts[i - view.begin] = static_cast<uint32_t>(row.size());
-						if (isDict) { continue; }
 						for (uint32_t k = 0; k < row.size(); k++)
 						{
 							const uint32_t j = row[k];

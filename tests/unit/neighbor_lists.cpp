@@ -129,15 +129,17 @@ namespace
 		return laneMask;
 	}
 
-	// tracking the distinct FF neighbors lets the compressed lists store FF chunks as dict chunks
+	// tracking the distinct FF neighbors and their lanes lets the compressed lists write FF chunks as dict chunks
 	void CommitFluidCounts(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t chunk,
 		const bool trackDistinctFF = false)
 	{
 		const auto counts = CountFluidChunk(data, chunk);
 		const auto distinctFF = trackDistinctFF ? DistinctChunkNeighbors(data, 0, chunk) : std::vector<uint32_t>{};
+		std::vector<uint32_t> laneMasksFF;
+		for (const uint32_t j : distinctFF) { laneMasksFF.push_back(ChunkLaneMask(data, 0, chunk, j)); }
 		lists.CommitFluidChunkCounts(chunk,
 			{ counts.counts[0].data(), counts.minRef[0], counts.maxRef[0],
-				static_cast<uint32_t>(distinctFF.size()), distinctFF.data() },
+				static_cast<uint32_t>(distinctFF.size()), distinctFF.data(), laneMasksFF.data() },
 			{ counts.counts[1].data(), counts.minRef[1], counts.maxRef[1] },
 			{ counts.counts[2].data(), counts.minRef[2], counts.maxRef[2] });
 	}
@@ -173,33 +175,20 @@ namespace
 			{
 				auto view = (lists.*writeChunks[category])(chunk);
 				if (view.pitch == 0) { continue; }
+				// (dict chunks are written during the count, like in the compact cell list query)
+				if (direct && view.dict) { continue; }
 				// poison payloads so unwritten padding cannot pass through zero-initialized storage
 				const uint64_t N_entries = static_cast<uint64_t>(view.pitch) * CPU::N_SIMD_WIDTH;
 				if (view.data16) { std::fill_n(view.data16, N_entries, std::numeric_limits<uint16_t>::max()); }
 				if (view.data32) { std::fill_n(view.data32, N_entries, std::numeric_limits<uint32_t>::max()); }
-				// direct writes register each distinct neighbor once, like the compact cell list fill
-				// (dict chunks store the lanes of each dict entry, normal chunks the neighbor itself per lane)
-				const auto distinct = direct ? DistinctChunkNeighbors(data, category, chunk) : std::vector<uint32_t>{};
-				const bool isDict = view.dict != nullptr;
-				std::vector<uint32_t> storedIdxs;
-				for (const uint32_t j : distinct) { storedIdxs.push_back(view.RegisterNeighbor(j)); }
-				if (isDict)
-				{
-					for (uint32_t d = 0; d < distinct.size(); d++)
-					{
-						view.StoreDictLaneMask(storedIdxs[d], ChunkLaneMask(data, category, chunk, distinct[d]));
-					}
-				}
 				for (uint32_t i = view.begin; i < view.end; i++)
 				{
 					const auto& neighbors = data[category][i];
 					if (direct)
 					{
-						if (isDict) { continue; }
 						for (uint32_t k = 0; k < neighbors.size(); k++)
 						{
-							const auto distinctIdx = std::find(distinct.begin(), distinct.end(), neighbors[k]) - distinct.begin();
-							view.StoreNeighbor(i - view.begin, k, storedIdxs[distinctIdx]);
+							view.StoreNeighbor(i - view.begin, k, neighbors[k]);
 						}
 					}
 					else
@@ -479,28 +468,34 @@ namespace
 	}
 
 	// a partial count pass clears chunks it does not visit, while rigid counts are rewritten explicitly
+	// (with and without dict chunks)
 	TEST_P(NeighborListStorageTests, ClearsUnvisitedChunksBeforePartialRebuild)
 	{
-		const uint32_t N_F = 2 * CPU::N_SIMD_WIDTH + 1;
-		const auto original = MakeMixedNeighbors(N_F);
-		PrepareStorage(*lists_, original, 8);
-		FillStorage(*lists_, original, true);
-		auto data = MakeNeighborData(N_F, 3);
-		data[0][CPU::N_SIMD_WIDTH] = { 1, 0 };
-		data[1][CPU::N_SIMD_WIDTH] = { 2 };
-		data[2][CPU::N_SIMD_WIDTH] = { 1 };
-
-		lists_->PrepareFluidCountWrite(false);
-		CommitFluidCounts(*lists_, data, 1);
-		for (uint32_t category = 3; category < data.size(); category++)
+		for (const bool trackDistinctFF : { false, true })
 		{
-			for (uint32_t i = 0; i < data[category].size(); i++) { (lists_.get()->*setCounts[category])(i, 0); }
-		}
-		lists_->Finalize_Count();
-		FillStorage(*lists_, data, true);
+			SCOPED_TRACE(trackDistinctFF);
+			const uint32_t N_F = 2 * CPU::N_SIMD_WIDTH + 1;
+			const auto original = MakeMixedNeighbors(N_F);
+			PrepareStorage(*lists_, original, 8, trackDistinctFF);
+			FillStorage(*lists_, original, true);
+			auto data = MakeNeighborData(N_F, 3);
+			data[0][CPU::N_SIMD_WIDTH] = { 1, 0 };
+			data[1][CPU::N_SIMD_WIDTH] = { 2 };
+			data[2][CPU::N_SIMD_WIDTH] = { 1 };
 
-		ExpectNeighbors(*lists_, data);
-		ExpectFluidChunks(*lists_, data, 8, true);
+			lists_->PrepareFluidCountWrite(false);
+			CommitFluidCounts(*lists_, data, 1, trackDistinctFF);
+			for (uint32_t category = 3; category < data.size(); category++)
+			{
+				for (uint32_t i = 0; i < data[category].size(); i++) { (lists_.get()->*setCounts[category])(i, 0); }
+			}
+			lists_->Finalize_Count();
+			FillStorage(*lists_, data, true);
+
+			ExpectNeighbors(*lists_, data);
+			ExpectFluidChunks(*lists_, data, 8, true);
+			EXPECT_EQ(lists_->FFChunk(1).dict != nullptr, GetParam() && trackDistinctFF);
+		}
 	}
 
 	// rebuilding the same particles can switch payload formats and then remove all neighbors
@@ -608,6 +603,81 @@ namespace
 		EXPECT_EQ(std::vector<uint32_t>(actual.data, actual.data + actual.N), expected);
 	}
 
+	// the count writes dict chunks in candidate order across write blocks, over growing and shrinking rebuilds
+	TEST_P(NeighborListStorageTests, WritesDictChunksDuringCount)
+	{
+		const auto MakeDictNeighbors = [](const uint32_t N_nbrs)
+		{
+			auto data = MakeNeighborData(64'003, 0); // keep every neighbor index in one uint16 delta range
+			const uint32_t N_F = static_cast<uint32_t>(data[0].size());
+			for (uint32_t i = 0; i < N_F; i++)
+			{
+				for (uint32_t k = 0; k < N_nbrs; k++) { data[0][i].push_back((i + 3 * k) % N_F); }
+			}
+			data[1][0] = { 2, 5 };
+			return data;
+		};
+
+		for (const uint32_t N_nbrs : { 3u, 6u, 3u })
+		{
+			SCOPED_TRACE(N_nbrs);
+			const auto data = MakeDictNeighbors(N_nbrs);
+			PrepareStorage(*lists_, data, 8, true);
+			FillStorage(*lists_, data, true);
+
+			ExpectNeighbors(*lists_, data);
+			ExpectFluidChunks(*lists_, data, 8, true);
+			for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
+			{
+				SCOPED_TRACE(chunk);
+				const auto view = lists_->FFChunk(chunk);
+				ASSERT_EQ(view.dict != nullptr, GetParam());
+				const auto distinct = DistinctChunkNeighbors(data, 0, chunk);
+				for (uint32_t dictIdx = 0; dictIdx < view.N_dict; dictIdx++)
+				{
+					EXPECT_EQ(view.ReadDictNeighborIdx(dictIdx), distinct[dictIdx]);
+				}
+			}
+		}
+	}
+
+	// dict pages that the following counts leave unused are freed, here after one large count over 8 MB
+	// (the pages are checked every 64 counts, so 127 small counts span a whole check window without it)
+	TEST_P(NeighborListStorageTests, FreesDictPagesUnusedByLaterCounts)
+	{
+		if (!GetParam()) { return; }
+		const uint32_t N_chunks = 12'000;
+		const auto RebuildDictChunks = [&](const uint32_t N_dict)
+		{
+			Sim::SimParams params;
+			params.expctdAvgNbrCountHardMax_FF = 0;
+			params.expctdAvgNbrCountHardMax_FB = 0;
+			lists_->Resize(N_chunks * CPU::N_SIMD_WIDTH, 0, 0, params);
+			lists_->PrepareFluidCountWrite(true);
+			// (the first lane of every chunk has the same N_dict neighbors)
+			std::vector<uint32_t> distinct(N_dict);
+			for (uint32_t n = 0; n < N_dict; n++) { distinct[n] = n; }
+			const std::vector<uint32_t> laneMasks(N_dict, 1u);
+			std::array<uint32_t, CPU::N_SIMD_WIDTH> countsFF{};
+			countsFF[0] = N_dict;
+			const std::array<uint32_t, CPU::N_SIMD_WIDTH> noCounts{};
+			for (uint32_t chunk = 0; chunk < N_chunks; chunk++)
+			{
+				lists_->CommitFluidChunkCounts(chunk,
+					{ countsFF.data(), 0, N_dict - 1, N_dict, distinct.data(), laneMasks.data() },
+					{ noCounts.data(), std::numeric_limits<uint32_t>::max(), 0 },
+					{ noCounts.data(), std::numeric_limits<uint32_t>::max(), 0 });
+			}
+			lists_->Finalize_Count();
+		};
+
+		RebuildDictChunks(Sim::N_SELL_DICT_SIZE_MAX);
+		const uint64_t N_allocBytesLarge = lists_->GetMemUsage().fluid.N_allocBytes;
+		for (uint32_t count = 0; count < 127; count++) { RebuildDictChunks(1); }
+		EXPECT_LT(lists_->GetMemUsage().fluid.N_allocBytes, N_allocBytesLarge);
+		EXPECT_EQ(lists_->FF(0).N, 1u);
+	}
+
 	// chunks with more distinct neighbors than a dict chunk holds stay normal chunks
 	TEST_P(NeighborListStorageTests, LimitsDictChunksToDictSize)
 	{
@@ -627,7 +697,7 @@ namespace
 		}
 	}
 
-	// per-particle writes reject dict chunks, which only the direct chunk fill can register into
+	// per-particle writes reject dict chunks, which only the count writes
 	TEST_P(NeighborListStorageTests, RejectsPerParticleWritesIntoDictChunks)
 	{
 		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 1);
