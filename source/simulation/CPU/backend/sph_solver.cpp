@@ -789,7 +789,7 @@ void CPU::Density_ChunkedSELL(
 				CPU::Float32xSIMD tmp_densityR = CPU::ZeroFloat32xSIMD();
 
 				// FF density contribution
-				if (useDenseDictFF && nbrFF.dict)
+				if (nbrFF.dict)
 				{
 					// every dict entry of the chunk against all lanes, broadcast instead of gathered
 					// (the kernel is zero for the lanes it is not a neighbor of)
@@ -969,7 +969,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_zAccViscR = CPU::ZeroFloat32xSIMD();
 
 				// FF viscosity acceleration
-				if (useDenseDictFF && nbrFF.dict)
+				if (nbrFF.dict)
 				{
 					// every dict entry of the chunk against all lanes, broadcast instead of gathered
 					// (the kernel is zero for the lanes it is not a neighbor of)
@@ -1295,7 +1295,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				CPU::Float32xSIMD zCTermR = CPU::ZeroFloat32xSIMD();
 
 				// FF pressure source term and diagonal
-				if (useDenseDictFF && nbrFF.dict)
+				if (nbrFF.dict)
 				{
 					// every dict entry of the chunk against all lanes, broadcast instead of gathered
 					// (the kernel is zero for the lanes it is not a neighbor of)
@@ -1539,7 +1539,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 				CPU::Float32xSIMD tmp_zAccPressF = CPU::ZeroFloat32xSIMD();
 
 				// FF pressure acceleration
-				if (useDenseDictFF && nbrFF.dict)
+				if (nbrFF.dict)
 				{
 					// every dict entry of the chunk against all lanes, broadcast instead of gathered
 					// (the kernel is zero for the lanes it is not a neighbor of)
@@ -1823,7 +1823,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 				CPU::Float32xSIMD tmp_SysVecElemB = CPU::ZeroFloat32xSIMD();
 
 				// FF pressure system vector element
-				if (useDenseDictFF && nbrFF.dict)
+				if (nbrFF.dict)
 				{
 					// every dict entry of the chunk against all lanes, broadcast instead of gathered
 					// (the kernel is zero for the lanes it is not a neighbor of)

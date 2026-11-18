@@ -252,22 +252,19 @@ namespace
 				for (uint32_t category = 0; category < neighbors.size(); category++)
 				{
 					auto view = (lists_.get()->*writeChunks[category])(chunk);
-					const bool isDenseDict = Sim::useDenseDictFF && view.dict != nullptr;
-					std::vector<uint32_t> dictPositions;
-					if (view.dict)
+					const bool isDict = view.dict != nullptr;
+					if (isDict)
 					{
-						dictPositions.resize(N_F);
 						for (const uint32_t j : distinctFFByChunk[chunk])
 						{
-							dictPositions[j] = view.RegisterNeighbor(j);
-							if (!isDenseDict) { continue; }
+							const uint32_t dictIdx = view.RegisterNeighbor(j);
 							uint32_t laneMask = 0;
 							for (uint32_t i = view.begin; i < view.end; i++)
 							{
 								const auto& row = neighbors[category][i];
 								if (std::find(row.begin(), row.end(), j) != row.end()) { laneMask |= 1u << (i - view.begin); }
 							}
-							view.StoreDictLaneMask(dictPositions[j], laneMask);
+							view.StoreDictLaneMask(dictIdx, laneMask);
 						}
 					}
 					std::array<uint32_t, CPU::N_SIMD_WIDTH> counts{};
@@ -275,11 +272,11 @@ namespace
 					{
 						const auto& row = neighbors[category][i];
 						counts[i - view.begin] = static_cast<uint32_t>(row.size());
-						if (isDenseDict) { continue; }
+						if (isDict) { continue; }
 						for (uint32_t k = 0; k < row.size(); k++)
 						{
 							const uint32_t j = row[k];
-							view.StoreNeighbor(i - view.begin, k, view.dict ? dictPositions[j] : j);
+							view.StoreNeighbor(i - view.begin, k, j);
 						}
 					}
 					(lists_.get()->*finishChunks[category])(chunk, counts.data());
@@ -481,7 +478,7 @@ namespace
 		params_.restDensity = 2.0f;
 		const auto scene = MakeMixedScene(N_F, params_.restDensity);
 		auto neighbors = MakeMixedNeighbors(N_F);
-		if (GetParam() && Sim::useDenseDictFF) { neighbors[0] = MakeSupportNeighborsF(scene, params_.kernelRadiusSqu); }
+		if (GetParam()) { neighbors[0] = MakeSupportNeighborsF(scene, params_.kernelRadiusSqu); }
 		LoadScene(scene, neighbors, GetParam());
 		for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
 		{

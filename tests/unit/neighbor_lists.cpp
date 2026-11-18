@@ -175,17 +175,15 @@ namespace
 				if (view.pitch == 0) { continue; }
 				// poison payloads so unwritten padding cannot pass through zero-initialized storage
 				const uint64_t N_entries = static_cast<uint64_t>(view.pitch) * CPU::N_SIMD_WIDTH;
-				if (view.data8) { std::fill_n(view.data8, N_entries, std::numeric_limits<uint8_t>::max()); }
 				if (view.data16) { std::fill_n(view.data16, N_entries, std::numeric_limits<uint16_t>::max()); }
 				if (view.data32) { std::fill_n(view.data32, N_entries, std::numeric_limits<uint32_t>::max()); }
 				// direct writes register each distinct neighbor once, like the compact cell list fill
-				// (dict chunks store the dict position, normal chunks the neighbor itself)
+				// (dict chunks store the lanes of each dict entry, normal chunks the neighbor itself per lane)
 				const auto distinct = direct ? DistinctChunkNeighbors(data, category, chunk) : std::vector<uint32_t>{};
-				// (dense dict chunks store the lanes of each dict entry instead of per-lane positions)
-				const bool isDenseDict = Sim::useDenseDictFF && view.dict != nullptr;
+				const bool isDict = view.dict != nullptr;
 				std::vector<uint32_t> storedIdxs;
 				for (const uint32_t j : distinct) { storedIdxs.push_back(view.RegisterNeighbor(j)); }
-				if (isDenseDict)
+				if (isDict)
 				{
 					for (uint32_t d = 0; d < distinct.size(); d++)
 					{
@@ -197,7 +195,7 @@ namespace
 					const auto& neighbors = data[category][i];
 					if (direct)
 					{
-						if (isDenseDict) { continue; }
+						if (isDict) { continue; }
 						for (uint32_t k = 0; k < neighbors.size(); k++)
 						{
 							const auto distinctIdx = std::find(distinct.begin(), distinct.end(), neighbors[k]) - distinct.begin();
@@ -238,8 +236,8 @@ namespace
 				ASSERT_EQ(actual.N, expected.size());
 				if (expected.empty()) { EXPECT_EQ(actual.data, nullptr); continue; }
 				ASSERT_NE(actual.data, nullptr);
-				// (dense dict chunks list the neighbors in dictionary order)
-				if (Sim::useDenseDictFF && category == 0 && lists.FFChunk(i / CPU::N_SIMD_WIDTH).dict)
+				// (dict chunks list the neighbors in dictionary order)
+				if (category == 0 && lists.FFChunk(i / CPU::N_SIMD_WIDTH).dict)
 				{
 					std::vector<uint32_t> actualNeighbors(actual.data, actual.data + actual.N);
 					std::vector<uint32_t> expectedNeighbors = expected;
@@ -285,9 +283,9 @@ namespace
 				}
 				ASSERT_EQ(view.pitch, expectedPitch);
 				if (view.pitch == 0) { continue; }
-				if (Sim::useDenseDictFF && view.dict)
+				if (view.dict)
 				{
-					// every entry of a dense dict chunk is a distinct neighbor, with a lane mask of exactly the lanes that have it
+					// every entry of a dict chunk is a distinct neighbor, with a lane mask of exactly the lanes that have it
 					ASSERT_EQ(view.N_dict, DistinctChunkNeighbors(data, category, chunk).size());
 					for (uint32_t dictIdx = 0; dictIdx < view.N_dict; dictIdx++)
 					{
@@ -298,7 +296,7 @@ namespace
 					}
 					continue;
 				}
-				ASSERT_TRUE(view.data8 || view.data16 || view.data32);
+				ASSERT_TRUE(view.data16 || view.data32);
 				for (uint32_t k = 0; k < view.pitch; k++)
 				{
 					SCOPED_TRACE(k);
@@ -544,8 +542,8 @@ namespace
 		ExpectNeighbors(*lists_, data);
 	}
 
-	// dict chunks are readable through the per-particle, scalar, and SIMD interfaces, including padding and tail lanes
-	TEST_P(NeighborListStorageTests, PreservesDictChunkWritesAndSafePadding)
+	// dict chunks are readable through the per-particle and dictionary interfaces, including tail lanes
+	TEST_P(NeighborListStorageTests, PreservesDictChunkWrites)
 	{
 		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 2);
 		PrepareStorage(*lists_, data, 8, true);
@@ -594,8 +592,8 @@ namespace
 		}
 	}
 
-	// dense dict chunks list neighbors in candidate order, except the DictDelta16x2 high group (reversed)
-	TEST_P(NeighborListStorageTests, ListsDenseDictChunkNeighborsInDictionaryOrder)
+	// dict chunks list neighbors in candidate order, except the DictDelta16x2 high group (reversed)
+	TEST_P(NeighborListStorageTests, ListsDictChunkNeighborsInDictionaryOrder)
 	{
 		auto data = MakeNeighborData(6, 0);
 		data[0][0] = { 5, 1, 3 };
@@ -603,14 +601,14 @@ namespace
 		PrepareStorage(*lists_, data, 8, true);
 		FillStorage(*lists_, data, true);
 
-		// (explicit lists and per-lane dict positions keep each lane's own order)
-		const std::vector<uint32_t> expected = (GetParam() && Sim::useDenseDictFF)
+		// (normal chunks keep each lane's own order)
+		const std::vector<uint32_t> expected = GetParam()
 			? std::vector<uint32_t>{ 5, 3, 0 } : data[0][1];
 		const auto actual = lists_->FF(1);
 		EXPECT_EQ(std::vector<uint32_t>(actual.data, actual.data + actual.N), expected);
 	}
 
-	// chunks with more distinct neighbors than uint8 dict positions can address stay normal chunks
+	// chunks with more distinct neighbors than a dict chunk holds stay normal chunks
 	TEST_P(NeighborListStorageTests, LimitsDictChunksToDictSize)
 	{
 		for (const uint32_t N_distinct : { Sim::N_SELL_DICT_SIZE_MAX, Sim::N_SELL_DICT_SIZE_MAX + 1 })
