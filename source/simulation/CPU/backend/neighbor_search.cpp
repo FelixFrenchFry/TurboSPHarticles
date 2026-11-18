@@ -1767,8 +1767,6 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 					uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFR[CPU::N_SIMD_WIDTH]{};
-					uint32_t hitIdxs[N_QUERY_HIT_BLOCK];
-					uint32_t hitMasks[N_QUERY_HIT_BLOCK];
 					ChunkedSELLNeighborSpan_Write chunkFF =
 						chunkedSELLNeighborList->FFChunkWrite(chunk);
 					ChunkedSELLNeighborSpan_Write chunkFB =
@@ -1780,100 +1778,71 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 					GatherChunkQueryRanges(begin, end, fluidRanges, boundaryRanges, rigidRanges);
 
 					// FF fill neighbor list
-					// (candidates are tested branch-free per block, then only the hits are stored)
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
-						for (uint32_t blockBegin = cellRange.begin; blockBegin < cellRange.end; blockBegin += N_QUERY_HIT_BLOCK)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const uint32_t blockEnd = std::min(blockBegin + N_QUERY_HIT_BLOCK, cellRange.end);
-							uint32_t N_hits = 0;
-							for (uint32_t l = blockBegin; l < blockEnd; l++)
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
+							if (mask == 0u) { continue; }
+
+							// dict chunks store the dictionary position of the candidate
+							// (dense dict chunks store the lanes it neighbors instead of per-lane positions)
+							const uint32_t storedIdx = chunkFF.RegisterNeighbor(l);
+							if (isDenseDictFF) { chunkFF.StoreDictLaneMask(storedIdx, mask); }
+
+							// padding lanes are already cleared, so only the matching lanes are visited
+							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
 							{
-								const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
-								const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
-								const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
-								const CPU::Float32xSIMD dx = xi - xj;
-								const CPU::Float32xSIMD dy = yi - yj;
-								const CPU::Float32xSIMD dz = zi - zj;
-								const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
-									xsimd::fma(dy, dy, dz * dz));
-								const uint32_t mask =
-									CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
-								hitIdxs[N_hits] = l;
-								hitMasks[N_hits] = mask;
-								N_hits += mask != 0u ? 1u : 0u;
-							}
-
-							for (uint32_t hit = 0; hit < N_hits; hit++)
-							{
-								const uint32_t l = hitIdxs[hit];
-								const uint32_t mask = hitMasks[hit];
-
-								// dict chunks store the dictionary position of the candidate
-								// (dense dict chunks store the lanes it neighbors instead of per-lane positions)
-								const uint32_t storedIdx = chunkFF.RegisterNeighbor(l);
-								if (isDenseDictFF) { chunkFF.StoreDictLaneMask(storedIdx, mask); }
-
-								// padding lanes are already cleared, so only the matching lanes are visited
-								for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
+								const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
+								if (writtenFF[lane] >= chunkFF.pitch) [[unlikely]]
 								{
-									const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
-									if (writtenFF[lane] >= chunkFF.pitch) [[unlikely]]
-									{
-										throw std::runtime_error(
-											"CPU ChunkedSELL FF direct fill exceeded chunk pitch.");
-									}
-
-									if (!isDenseDictFF) { chunkFF.StoreNeighbor(lane, writtenFF[lane], storedIdx); }
-									writtenFF[lane]++;
+									throw std::runtime_error(
+										"CPU ChunkedSELL FF direct fill exceeded chunk pitch.");
 								}
+
+								if (!isDenseDictFF) { chunkFF.StoreNeighbor(lane, writtenFF[lane], storedIdx); }
+								writtenFF[lane]++;
 							}
 						}
 					}
 
 					// FB fill neighbor list
-					// (candidates are tested branch-free per block, then only the hits are stored)
 					for (const ActiveCellRange& cellRange : boundaryRanges)
 					{
-						for (uint32_t blockBegin = cellRange.begin; blockBegin < cellRange.end; blockBegin += N_QUERY_HIT_BLOCK)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const uint32_t blockEnd = std::min(blockBegin + N_QUERY_HIT_BLOCK, cellRange.end);
-							uint32_t N_hits = 0;
-							for (uint32_t l = blockBegin; l < blockEnd; l++)
-							{
-								const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosB[l]);
-								const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosB[l]);
-								const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosB[l]);
-								const CPU::Float32xSIMD dx = xi - xj;
-								const CPU::Float32xSIMD dy = yi - yj;
-								const CPU::Float32xSIMD dz = zi - zj;
-								const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
-									xsimd::fma(dy, dy, dz * dz));
-								const uint32_t mask =
-									CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
-								hitIdxs[N_hits] = l;
-								hitMasks[N_hits] = mask;
-								N_hits += mask != 0u ? 1u : 0u;
-							}
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosB[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosB[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosB[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const uint32_t mask =
+								CPU::MaskBits32xSIMD(distSqu <= kernelRadiusSquV) & validMask;
 
-							for (uint32_t hit = 0; hit < N_hits; hit++)
+							// padding lanes are already cleared, so only the matching lanes are visited
+							for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
 							{
-								const uint32_t l = hitIdxs[hit];
-								const uint32_t mask = hitMasks[hit];
-
-								// padding lanes are already cleared, so only the matching lanes are visited
-								for (uint32_t hitLanes = mask; hitLanes != 0u; hitLanes &= hitLanes - 1u)
+								const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
+								if (writtenFB[lane] >= chunkFB.pitch) [[unlikely]]
 								{
-									const uint32_t lane = static_cast<uint32_t>(std::countr_zero(hitLanes));
-									if (writtenFB[lane] >= chunkFB.pitch) [[unlikely]]
-									{
-										throw std::runtime_error(
-											"CPU ChunkedSELL FB direct fill exceeded chunk pitch.");
-									}
-
-									chunkFB.StoreNeighbor(lane, writtenFB[lane], l);
-									writtenFB[lane]++;
+									throw std::runtime_error(
+										"CPU ChunkedSELL FB direct fill exceeded chunk pitch.");
 								}
+
+								chunkFB.StoreNeighbor(lane, writtenFB[lane], l);
+								writtenFB[lane]++;
 							}
 						}
 					}
