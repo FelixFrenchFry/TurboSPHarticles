@@ -331,6 +331,24 @@ namespace
 		}
 	}
 
+	// chunks with as many distinct fluid neighbors as a dictionary holds stay dict chunks, more fall back to normal chunks
+	TEST_P(NeighborSearchTests, HandlesDistinctNeighborsAroundDictionarySize)
+	{
+		for (const uint32_t N_F : { Sim::N_SELL_DICT_SIZE_MAX, Sim::N_SELL_DICT_SIZE_MAX + CPU::N_SIMD_WIDTH })
+		{
+			SCOPED_TRACE(N_F);
+			// every pair of this lattice lies within the cutoff
+			std::vector<glm::vec3> fluid;
+			for (uint32_t i = 0; i < N_F; i++)
+			{
+				fluid.push_back({ 0.08f * static_cast<float>(i % 7),
+					0.08f * static_cast<float>((i / 7) % 7), 0.08f * static_cast<float>(i / 49) });
+			}
+
+			LoadAndSearch(MakeParticles(fluid, { { 0.25f, 0.25f, -0.25f } }, { { 0.25f, -0.25f, 0.25f } }));
+		}
+	}
+
 	// importing moved particles reuses the search object while retiring old cell ranges and neighbors
 	TEST_P(NeighborSearchTests, RebuildsAfterParticlesMoveBetweenCells)
 	{
