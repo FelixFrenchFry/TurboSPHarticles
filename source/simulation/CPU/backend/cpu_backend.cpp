@@ -842,7 +842,10 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 			AppendParticleField(yVelF_, src.yVel, fluidAppendBegin, blockRange);
 			AppendParticleField(zVelF_, src.zVel, fluidAppendBegin, blockRange);
 
-			// the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
+			// (appended particles start without a previous pressure)
+			std::fill_n(pressureF_.begin() + fluidAppendBegin + blockRange.begin(), blockRange.size(), 0.0f);
+
+			// the fields velPred, accPress, sourceTerm, diagElem, and density are omitted,
 			// because the following solver step re-writes them before reading them
 			// TODO: keep it like this or copy them too, if solver step behavior changes?
 		},

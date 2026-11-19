@@ -2174,6 +2174,11 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 			ApplyPermutation_Vec3(particleOrderF_,
 				be_.xVelF_, be_.yVelF_, be_.zVelF_,
 				be_.xVelPredF_, be_.yVelPredF_, be_.zVelPredF_);
+
+			if (params.jacobiWarmStart > 0.0f)
+			{
+				ApplyPermutation(particleOrderF_, be_.pressureF_, be_.xVelPredF_);
+			}
 		}
 	}
 

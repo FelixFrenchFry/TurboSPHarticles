@@ -24,6 +24,7 @@ namespace GPU
 	__constant__ float c_massF;
 	__constant__ float c_pressGamma;
 	__constant__ float c_jacobiOmega;
+	__constant__ float c_jacobiWarmStart;
 	__constant__ float c_viscosityF;
 	__constant__ float c_viscosityB;
 	__constant__ float c_xGravity;
@@ -51,6 +52,7 @@ namespace GPU
 		GPU::Check(cudaMemcpyToSymbol(c_massF, &params.massF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_pressGamma, &params.pressGamma, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_jacobiOmega, &params.jacobiOmega, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_jacobiWarmStart, &params.jacobiWarmStart, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_viscosityF, &params.viscosityF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_viscosityB, &params.viscosityB, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_xGravity, &params.gravity.x, sizeof(float)));
@@ -701,9 +703,13 @@ namespace GPU
 		float tmp_pressureF = 0.0f;
 
 		// only update pressure if particle has neighbors
+		// (warm start from the scaled previous pressure if any, otherwise one Jacobi step from zero)
 		if (!(fabsf(fin_diagElemF) <= 1e-7f))
 		{
-			tmp_pressureF = c_jacobiOmega * (fin_sourceTermF / fin_diagElemF);
+			const float pressurePrev = (c_jacobiWarmStart > 0.0f) ? pressureF[i] : 0.0f;
+			tmp_pressureF = (pressurePrev > 0.0f)
+				? c_jacobiWarmStart * pressurePrev
+				: c_jacobiOmega * (fin_sourceTermF / fin_diagElemF);
 		}
 
 		// finalize pressure value by clamping to non-negative

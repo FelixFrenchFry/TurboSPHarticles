@@ -643,6 +643,11 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		Set_JacobiOmega(it->get<float>(), verbose);
 	}
 
+	if (auto it = j.find("jacobiWarmStart"); it != j.end())
+	{
+		Set_JacobiWarmStart(it->get<float>(), verbose);
+	}
+
 	// TODO: implement setters for these
 	{
 		if (auto it = j.find("densityDevTarget"); it != j.end())
@@ -1255,6 +1260,7 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 
 	j["pressGamma"] = par.pressGamma;
 	j["jacobiOmega"] = par.jacobiOmega;
+	j["jacobiWarmStart"] = par.jacobiWarmStart;
 	j["densityDevTarget"] = par.densityDevTarget;
 	j["fixedIters"] = par.fixedIters;
 	j["minSolverIters"] = par.minSolverIters;
@@ -1877,6 +1883,27 @@ void SimParamsMgr::Set_JacobiOmega(
 	version_.fetch_add(1, std::memory_order_release);
 }
 
+void SimParamsMgr::Set_JacobiWarmStart(
+	float jacobiWarmStart, bool verbose)
+{
+	std::scoped_lock lock(paramsMutex_);
+
+	// detect if parameter would actually change
+	bool changed = false;
+	Base::MarkIfChanged(jacobiWarmStart, params_.jacobiWarmStart, changed);
+	if (!changed) { return; } // nothing to change
+
+	if (verbose)
+	{
+		SPDLOG_INFO("Changed 'jacobiWarmStart' from {} to {}",
+			params_.jacobiWarmStart, jacobiWarmStart);
+	}
+
+	// apply changes
+	params_.jacobiWarmStart = jacobiWarmStart;
+	version_.fetch_add(1, std::memory_order_release);
+}
+
 void SimParamsMgr::Set_DensityDevTarget(
 	float densityDevTarget, bool verbose)
 {
@@ -2232,6 +2259,10 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	ok &= Check("jacobiOmega < 0", true, [&]()
 	{
 		return par.jacobiOmega >= 0.0f;
+	});
+	ok &= Check("jacobiWarmStart < 0", true, [&]()
+	{
+		return par.jacobiWarmStart >= 0.0f;
 	});
 	ok &= Check("viscosityF < 0", true, [&]()
 	{

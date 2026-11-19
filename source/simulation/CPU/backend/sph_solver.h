@@ -98,6 +98,7 @@ namespace CPU
 		float cubicSplineAlpha,
 		float restDensity, float restDensitySquInv,
 		float massF, float pressGamma, float jacobiOmega,
+		float jacobiWarmStart,
 		uint32_t N_F,
 		// destinations
 		float* RESTRICT sourceTermF,

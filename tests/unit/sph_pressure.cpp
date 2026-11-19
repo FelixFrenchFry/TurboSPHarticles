@@ -305,7 +305,8 @@ namespace
 		}
 
 		InitializedPressure EvaluateInitialPressure(
-			const std::optional<std::span<const uint32_t>> selectedChunks = std::nullopt)
+			const std::optional<std::span<const uint32_t>> selectedChunks = std::nullopt,
+			const std::span<const float> previousPressure = {})
 		{
 			const uint32_t N_F = static_cast<uint32_t>(densityF_.size());
 			const float restDensitySquInv = 1.0f / (params_.restDensity * params_.restDensity);
@@ -313,6 +314,7 @@ namespace
 			result.sourceTerm.assign(N_F, untouchedOutput);
 			result.diagElem.assign(N_F, untouchedOutput);
 			result.pressure.assign(N_F, untouchedOutput);
+			std::copy(previousPressure.begin(), previousPressure.end(), result.pressure.begin());
 			CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				positions_[0][0].data(), positions_[0][1].data(), positions_[0][2].data(),
 				positions_[1][0].data(), positions_[1][1].data(), positions_[1][2].data(),
@@ -321,7 +323,7 @@ namespace
 				predictedVelocities_[2][0].data(), predictedVelocities_[2][1].data(), predictedVelocities_[2][2].data(),
 				densityF_.data(), psi_[1].data(), psi_[2].data(), *lists_,
 				params_.timeStep, params_.particleSizeInvF, cubicSplineAlpha, params_.restDensity, restDensitySquInv,
-				params_.massF, params_.pressGamma, params_.jacobiOmega, N_F,
+				params_.massF, params_.pressGamma, params_.jacobiOmega, params_.jacobiWarmStart, N_F,
 				result.sourceTerm.data(), result.diagElem.data(), result.pressure.data(),
 				selectedChunks.value_or(std::span<const uint32_t>{}), selectedChunks.has_value());
 			return result;
@@ -398,6 +400,34 @@ namespace
 			ExpectPressureNear(actual.diagElem[i], -225.0 / 512.0);
 			ExpectPressureNear(actual.pressure[i], 16.0 / 225.0);
 		}
+	}
+
+	// a warm start scales the previous pressure instead of taking the Jacobi step from zero
+	TEST_P(SphPressureTests, WarmStartsFromScaledPreviousPressure)
+	{
+		params_.jacobiWarmStart = 0.5f;
+		LoadScene(MakeFluidPair(), MakePairNeighbors());
+		const std::array previousPressure{ 0.25f, 0.125f };
+		const auto actual = EvaluateInitialPressure(std::nullopt, previousPressure);
+		ExpectPressureNear(actual.pressure[0], 0.125);
+		ExpectPressureNear(actual.pressure[1], 0.0625);
+		for (uint32_t i = 0; i < 2; i++)
+		{
+			SCOPED_TRACE(i);
+			ExpectPressureNear(actual.sourceTerm[i], -1.0 / 8.0);
+			ExpectPressureNear(actual.diagElem[i], -225.0 / 512.0);
+		}
+	}
+
+	// a warm start without previous pressure takes the cold start
+	TEST_P(SphPressureTests, WarmStartFallsBackToColdStartWithoutPreviousPressure)
+	{
+		params_.jacobiWarmStart = 0.5f;
+		LoadScene(MakeFluidPair(), MakePairNeighbors());
+		const std::array previousPressure{ 0.25f, 0.0f };
+		const auto actual = EvaluateInitialPressure(std::nullopt, previousPressure);
+		ExpectPressureNear(actual.pressure[0], 0.125);
+		ExpectPressureNear(actual.pressure[1], 16.0 / 225.0);
 	}
 
 	// equal masses give opposite pressure accelerations along the line between the particles

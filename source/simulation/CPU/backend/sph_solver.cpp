@@ -207,7 +207,8 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		neighborList,
 		timeStep, sizeInvF, cubicSplineAlpha,
 		params.restDensity, restDensitySquInv,
-		massF, params.pressGamma, params.jacobiOmega, N_F_,
+		massF, params.pressGamma, params.jacobiOmega,
+		params.jacobiWarmStart, N_F_,
 		sourceTermF, diagElemF, pressureF);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 
@@ -514,7 +515,8 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			neighborList,
 			timeStep, sizeInvF, cubicSplineAlpha,
 			params.restDensity, restDensitySquInv,
-			massF, params.pressGamma, params.jacobiOmega, N_ownedF_,
+			massF, params.pressGamma, params.jacobiOmega,
+			params.jacobiWarmStart, N_ownedF_,
 			sourceTermF, diagElemF, pressureF, chunkIdxs, true);
 	};
 	computeSourceAndDiagonal(outerFluidChunkIdxs_);
@@ -1233,6 +1235,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const float cubicSplineAlpha,
 	const float restDensity, const float restDensitySquInv,
 	const float massF, const float pressGamma, const float jacobiOmega,
+	const float jacobiWarmStart,
 	const uint32_t N_F,
 	// destinations
 	float* RESTRICT sourceTermF,
@@ -1254,6 +1257,8 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const CPU::Float32xSIMD cTermFacB = CPU::SetFloat32xSIMD(-2.0f * pressGamma * restDensitySquInv);
 	const CPU::Float32xSIMD diagBFac = CPU::SetFloat32xSIMD(-massF * restDensitySquInv);
 	const CPU::Float32xSIMD jacobiOmegaV = CPU::SetFloat32xSIMD(jacobiOmega);
+	const bool isWarmStart = jacobiWarmStart > 0.0f;
+	const CPU::Float32xSIMD jacobiWarmStartV = CPU::SetFloat32xSIMD(jacobiWarmStart);
 	const CPU::Float32xSIMD zero = CPU::ZeroFloat32xSIMD();
 	const CPU::Float32xSIMD eps = CPU::SetFloat32xSIMD(ZERO_EQU_LIM_F);
 
@@ -1460,9 +1465,16 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 				const CPU::Float32xSIMD fin_diagElemF =
 					timeStepSquV * (tmp_DiagElemA + tmp_DiagElemB + tmp_DiagElemC);
 				const CPU::Mask32xSIMD validDiag = CPU::AbsFloat32xSIMD(fin_diagElemF) > eps;
+
+				// (warm start from the scaled previous pressure if any, otherwise one Jacobi step from zero)
+				const CPU::Float32xSIMD pressureInitCold = jacobiOmegaV * (fin_sourceTermF / fin_diagElemF);
+				const CPU::Float32xSIMD pressurePrev = isWarmStart
+					? CPU::LoadFloat32xSIMDPartial(pressureF, begin, end) : zero;
+				const CPU::Float32xSIMD pressureInit = isWarmStart
+					? CPU::SelectFloat32xSIMD(pressurePrev > zero, jacobiWarmStartV * pressurePrev, pressureInitCold)
+					: pressureInitCold;
 				const CPU::Float32xSIMD pressure = xsimd::max(zero,
-					CPU::ZeroMaskedFloat32xSIMD(
-						jacobiOmegaV * (fin_sourceTermF / fin_diagElemF), validDiag));
+					CPU::ZeroMaskedFloat32xSIMD(pressureInit, validDiag));
 
 				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
 				CPU::StoreFloat32xSIMDPartial(sourceTermF, begin, end, fin_sourceTermF);

@@ -92,6 +92,7 @@ namespace Sim
 		// pressure solving
 		float pressGamma        = 0.5f;
 		float jacobiOmega       = 0.6f;
+		float jacobiWarmStart   = 0.0f;
 		float densityDevTarget  = 0.01f;
 		uint32_t fixedIters     = 10;
 		uint32_t minSolverIters = 5;
@@ -214,6 +215,7 @@ namespace Sim
 		void Set_Gravity(glm::vec3 gravity, bool verbose = false);
 		void Set_PressGamma(float pressGamma, bool verbose = false);
 		void Set_JacobiOmega(float jacobiOmega, bool verbose = false);
+		void Set_JacobiWarmStart(float jacobiWarmStart, bool verbose = false);
 		void Set_DensityDevTarget(float densityDevTarget, bool verbose = false);
 		void Set_MinSolverIters(uint32_t minSolverIters, bool verbose = false);
 		void Set_MaxSolverIters(uint32_t maxSolverIters, bool verbose = false);

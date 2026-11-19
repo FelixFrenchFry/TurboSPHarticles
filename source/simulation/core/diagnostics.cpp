@@ -254,6 +254,7 @@ namespace Sim
             params.gravity.x, params.gravity.y, params.gravity.z);
         printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "pressGamma", params.pressGamma);
         printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jacobiOmega", params.jacobiOmega);
+        printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "jacobiWarmStart", params.jacobiWarmStart);
         printf("%-*s = %.6f\n", N_CLI_SIM_PARAM_LABEL_CHARS, "densityDevTarget", params.densityDevTarget);
         printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "fixedIters", params.fixedIters);
         printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS, "minSolverIters", params.minSolverIters);

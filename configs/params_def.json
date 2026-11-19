@@ -22,6 +22,7 @@
 
   "pressGamma": 0.5,
   "jacobiOmega": 0.5,
+  "jacobiWarmStart": 0.5,
   "densityDevTarget": 0.01,
   "fixedIters": 5,
   "minSolverIters": 3,

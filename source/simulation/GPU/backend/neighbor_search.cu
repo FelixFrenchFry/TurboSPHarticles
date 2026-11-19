@@ -1092,6 +1092,10 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, d_reorderScratch, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_densityF_, d_reorderScratch, be_.stream_);
 		}
+		else if (params.jacobiWarmStart > 0.0f)
+		{
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, d_reorderScratch, be_.stream_);
+		}
 
 		// fluid arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
