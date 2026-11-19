@@ -987,7 +987,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
 							xsimd::fma(dvy, dy, dvz * dz));
@@ -1313,7 +1313,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD sourceTerm =
 							xsimd::fma(dvpx, dx, xsimd::fma(dvpy, dy, dvpz * dz));
@@ -1323,7 +1323,8 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						yCTermF = xsimd::fma(kgFac, dy, yCTermF);
 						zCTermF = xsimd::fma(kgFac, dz, zCTermF);
 
-						gradSquSumF = xsimd::fma(kgFac * kgFac, distSqu, gradSquSumF);
+						// (kgFac * distSqu first keeps the self pair exactly zero)
+						gradSquSumF = xsimd::fma(kgFac, kgFac * distSqu, gradSquSumF);
 					}
 				}
 				else
@@ -1543,6 +1544,9 @@ void CPU::PressureAcceleration_ChunkedSELL(
 				{
 					// every dict entry of the chunk against all lanes, broadcast instead of gathered
 					// (the kernel is zero for the lanes it is not a neighbor of)
+					CPU::Float32xSIMD xAccPressFF = CPU::ZeroFloat32xSIMD();
+					CPU::Float32xSIMD yAccPressFF = CPU::ZeroFloat32xSIMD();
+					CPU::Float32xSIMD zAccPressFF = CPU::ZeroFloat32xSIMD();
 					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
 					{
 						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
@@ -1554,16 +1558,21 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD presj = CPU::SetFloat32xSIMD(pressureF[j]);
-						const CPU::Float32xSIMD accCoeffF =
-							(accCoeffF_outer + massFV * presj * densiInvSquV) * kgFac;
+						const CPU::Float32xSIMD accCoeffF = (presi + presj) * kgFac;
 
-						tmp_xAccPressF = xsimd::fma(accCoeffF, dx, tmp_xAccPressF);
-						tmp_yAccPressF = xsimd::fma(accCoeffF, dy, tmp_yAccPressF);
-						tmp_zAccPressF = xsimd::fma(accCoeffF, dz, tmp_zAccPressF);
+						xAccPressFF = xsimd::fma(accCoeffF, dx, xAccPressFF);
+						yAccPressFF = xsimd::fma(accCoeffF, dy, yAccPressFF);
+						zAccPressFF = xsimd::fma(accCoeffF, dz, zAccPressFF);
 					}
+
+					// scale the FF sum by massF / restDensity^2, shared by all FF terms
+					const CPU::Float32xSIMD accCoeffFF_outer = massFV * densiInvSquV;
+					tmp_xAccPressF = xAccPressFF * accCoeffFF_outer;
+					tmp_yAccPressF = yAccPressFF * accCoeffFF_outer;
+					tmp_zAccPressF = zAccPressFF * accCoeffFF_outer;
 				}
 				else
 				{
@@ -1838,7 +1847,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD dapx = axi - CPU::SetFloat32xSIMD(xAccPressF[j]);
 						const CPU::Float32xSIMD dapy = ayi - CPU::SetFloat32xSIMD(yAccPressF[j]);

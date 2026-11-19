@@ -363,16 +363,15 @@ namespace CPU
 		};
 	}
 
-	// compute the cubic-spline kernel gradient factor of SIMD particle pairs
-	// (the gradient is factor * (dx, dy, dz))
-	XSIMD_INLINE Float32xSIMD KernelGradientFactor_CubicSpline_SIMD(
+	// compute the cubic-spline kernel gradient factor of SIMD particle pairs without the min-dist guard
+	// (finite at zero distance, for sums that multiply it by a term vanishing there)
+	XSIMD_INLINE Float32xSIMD KernelGradientFactorNoMinDist_CubicSpline_SIMD(
 		const Float32xSIMD distSqu,
 		const KernelConstants_CubicSpline_SIMD& kernelConstants) noexcept
 	{
 		const Float32xSIMD zero = xsimd::broadcast<float, SimdArch>(0.0f);
 		const Float32xSIMD one = xsimd::broadcast<float, SimdArch>(1.0f);
 		const Float32xSIMD two = xsimd::broadcast<float, SimdArch>(2.0f);
-		const Float32xSIMD eps = xsimd::broadcast<float, SimdArch>(KERNEL_GRADIENT_MIN_DIST_SQU_F);
 
 		const Float32xSIMD dist = xsimd::sqrt(distSqu);
 		const Float32xSIMD distNorm = dist * kernelConstants.sizeInv;
@@ -382,8 +381,19 @@ namespace CPU
 		const Float32xSIMD t2 = xsimd::max(two - distNorm, zero);
 		const Float32xSIMD outerFac = (kernelConstants.outerScale * t2) * t2 / dist;
 
+		return SelectFloat32xSIMD(distNorm < one, innerFac, outerFac);
+	}
+
+	// compute the cubic-spline kernel gradient factor of SIMD particle pairs
+	// (the gradient is factor * (dx, dy, dz))
+	XSIMD_INLINE Float32xSIMD KernelGradientFactor_CubicSpline_SIMD(
+		const Float32xSIMD distSqu,
+		const KernelConstants_CubicSpline_SIMD& kernelConstants) noexcept
+	{
+		const Float32xSIMD eps = xsimd::broadcast<float, SimdArch>(KERNEL_GRADIENT_MIN_DIST_SQU_F);
+
 		return ZeroMaskedFloat32xSIMD(
-			SelectFloat32xSIMD(distNorm < one, innerFac, outerFac), distSqu > eps);
+			KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants), distSqu > eps);
 	}
 
 	// compute cubic-spline kernel gradients for SIMD particle-pair offsets
