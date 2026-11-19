@@ -452,6 +452,30 @@ namespace
 		EXPECT_EQ(errors.abs, 0.0);
 	}
 
+	// a self neighbor at a particle size where the squared gradient factor overflows float32 keeps the diagonal finite
+	TEST_P(SphPressureTests, KeepsDiagonalFiniteAtTinyParticleSize)
+	{
+		// (the self-pair gradient factor is about -4.8e19 here, beyond the square root of the float32 maximum)
+		params_.particleSizeF = 2.5e-10f;
+		params_.particleSizeInvF = 4e9f;
+		PressureScene scene;
+		scene[0] = {
+			{ { -6.25e-11f, 0.0f, 0.0f }, glm::vec3(0.0f), 9.0f / 8.0f },
+			{ { 6.25e-11f, 0.0f, 0.0f }, glm::vec3(0.0f), 9.0f / 8.0f } };
+		auto neighbors = MakeNeighbors(2);
+		neighbors[0] = { { 0, 1 }, { 0, 1 } };
+		LoadScene(scene, neighbors, GetParam());
+		ASSERT_EQ(lists_->FFChunk(0).dict != nullptr, GetParam());
+
+		const auto actual = EvaluateInitialPressure();
+		for (uint32_t i = 0; i < 2; i++)
+		{
+			SCOPED_TRACE(i);
+			EXPECT_TRUE(std::isfinite(actual.diagElem[i]));
+			EXPECT_LT(actual.diagElem[i], 0.0f);
+		}
+	}
+
 	// an under-dense pair with a valid diagonal clamps negative pressures to zero
 	TEST_P(SphPressureTests, ClampsNegativePressure)
 	{

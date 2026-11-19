@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <glm/vec3.hpp>
 #include <gtest/gtest.h>
-#include <limits>
 #include <numbers>
 
 // internal
@@ -216,36 +215,40 @@ namespace
 		EXPECT_EQ(actual.gradient.z, 0.0);
 	}
 
-	// coincident and sub-threshold offsets retain a finite weight and exactly zero gradient
-	TEST(SphKernelTests, SuppressesGradientsAtCoincidentAndTinyOffsets)
+	// coincident offsets retain a finite weight and exactly zero gradient, in SIMD and scalar form
+	TEST(SphKernelTests, ReturnsZeroGradientAtCoincidentOffsets)
 	{
-		const float minDistance = std::sqrt(CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F);
-		for (const float distance : { 0.0f, 0.5f * minDistance, std::nextafter(minDistance, 0.0f) })
-		{
-			SCOPED_TRACE(distance);
-			const auto actual = EvaluateKernel({ 0.0f, -distance, 0.0f });
+		const auto actual = EvaluateKernel({ 0.0f, 0.0f, 0.0f });
 
-			EXPECT_NEAR(actual.weight, 1.0 / std::numbers::pi_v<double>, 1e-7);
-			EXPECT_EQ(actual.gradient.x, 0.0);
-			EXPECT_EQ(actual.gradient.y, 0.0);
-			EXPECT_EQ(actual.gradient.z, 0.0);
-		}
-	}
-
-	// the first tested distance above the guard must not be swallowed by an absolute tolerance
-	TEST(SphKernelTests, ComputesGradientImmediatelyAboveMinimumDistance)
-	{
-		const float minDistance = std::sqrt(CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F);
-		const float distance = std::nextafter(minDistance, std::numeric_limits<float>::infinity());
-		ASSERT_GT(distance * distance, CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F);
-		const glm::vec3 offset{ 0.0f, 0.0f, distance };
-		const auto actual = EvaluateKernel(offset);
-		const auto expected = ReferenceKernel(offset);
-
-		EXPECT_LT(actual.gradient.z, 0.0);
-		EXPECT_NEAR(actual.gradient.z / expected.gradient.z, 1.0, 2e-6);
+		EXPECT_NEAR(actual.weight, 1.0 / std::numbers::pi_v<double>, 1e-7);
 		EXPECT_EQ(actual.gradient.x, 0.0);
 		EXPECT_EQ(actual.gradient.y, 0.0);
+		EXPECT_EQ(actual.gradient.z, 0.0);
+
+		const auto constants = Sim::BuildSolverConstants(1.0f, 1000.0f);
+		float xkg = 1.0f, ykg = 1.0f, zkg = 1.0f;
+		CPU::KernelGradient_CubicSpline_Scalar(0.0f, 0.0f, 0.0f,
+			constants.sizeInvF, 4.0f, constants.cubicSplineAlpha, xkg, ykg, zkg);
+		EXPECT_EQ(xkg, 0.0f);
+		EXPECT_EQ(ykg, 0.0f);
+		EXPECT_EQ(zkg, 0.0f);
+	}
+
+	// tiny nonzero offsets keep their gradient, so relative checks avoid an absolute tolerance swallowing it
+	TEST(SphKernelTests, ComputesGradientsAtTinyOffsets)
+	{
+		for (const float distance : { 1e-10f, 1e-8f, 1e-7f })
+		{
+			SCOPED_TRACE(distance);
+			const glm::vec3 offset{ 0.0f, 0.0f, distance };
+			const auto actual = EvaluateKernel(offset);
+			const auto expected = ReferenceKernel(offset);
+
+			EXPECT_LT(actual.gradient.z, 0.0);
+			EXPECT_NEAR(actual.gradient.z / expected.gradient.z, 1.0, 2e-6);
+			EXPECT_EQ(actual.gradient.x, 0.0);
+			EXPECT_EQ(actual.gradient.y, 0.0);
+		}
 	}
 
 	// exchanging a particle pair preserves weight and reverses every gradient component
@@ -301,11 +304,9 @@ namespace
 		for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH; lane++)
 		{
 			SCOPED_TRACE(lane);
-			auto expected = ReferenceKernel(offsets[lane]);
-			if (lane % cases.size() == 1) { expected.gradient = glm::dvec3{ 0.0 }; }
+			const auto expected = ReferenceKernel(offsets[lane]);
 			ExpectKernelNear(actual[lane], expected);
-			if (lane % cases.size() == 0 || lane % cases.size() == 1 ||
-				lane % cases.size() == 5 || lane % cases.size() == 6)
+			if (lane % cases.size() == 0 || lane % cases.size() == 5 || lane % cases.size() == 6)
 			{
 				EXPECT_EQ(actual[lane].gradient.x, 0.0);
 				EXPECT_EQ(actual[lane].gradient.y, 0.0);

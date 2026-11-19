@@ -1021,7 +1021,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD dot = xsimd::fma(dvx, dx,
 							xsimd::fma(dvy, dy, dvz * dz));
@@ -1347,7 +1347,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD sourceTerm =
 							xsimd::fma(dvpx, dx, xsimd::fma(dvpy, dy, dvpz * dz));
@@ -1359,7 +1359,8 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 						yCTermF = xsimd::fma(kgFacMasked, dy, yCTermF);
 						zCTermF = xsimd::fma(kgFacMasked, dz, zCTermF);
 
-						gradSquSumF = xsimd::fma(kgFacMasked * kgFac, distSqu, gradSquSumF);
+						// (kgFac * distSqu first keeps the self pair exactly zero)
+						gradSquSumF = xsimd::fma(kgFacMasked, kgFac * distSqu, gradSquSumF);
 					}
 				}
 
@@ -1591,7 +1592,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD presj = CPU::GatherFloat32xSIMD(pressureF, idxJ);
 						const CPU::Float32xSIMD accCoeffF =
@@ -1876,7 +1877,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 							xsimd::fma(dy, dy, dz * dz));
 						const CPU::Float32xSIMD kgFac =
-							CPU::KernelGradientFactor_CubicSpline_SIMD(distSqu, kernelConstants);
+							CPU::KernelGradientFactorNoMinDist_CubicSpline_SIMD(distSqu, kernelConstants);
 
 						const CPU::Float32xSIMD dapx = axi - CPU::GatherFloat32xSIMD(xAccPressF, idxJ);
 						const CPU::Float32xSIMD dapy = ayi - CPU::GatherFloat32xSIMD(yAccPressF, idxJ);

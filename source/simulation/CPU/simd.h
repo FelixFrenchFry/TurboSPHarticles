@@ -312,7 +312,7 @@ namespace CPU
 		float& xkg, float& ykg, float& zkg)
 	{
 		const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-		if (distSqu >= kernelRadiusSqu || !(distSqu > CPU::KERNEL_GRADIENT_MIN_DIST_SQU_F))
+		if (distSqu >= kernelRadiusSqu)
 		{
 			xkg = 0.0f;
 			ykg = 0.0f;
@@ -407,7 +407,7 @@ namespace CPU
 		Float32xSIMD& ykg,
 		Float32xSIMD& zkg) noexcept
 	{
-		const Float32xSIMD commonFac = KernelGradientFactor_CubicSpline_SIMD(
+		const Float32xSIMD commonFac = KernelGradientFactorNoMinDist_CubicSpline_SIMD(
 			xsimd::fma(dx, dx, xsimd::fma(dy, dy, dz * dz)), kernelConstants);
 
 		xkg = commonFac * dx;
