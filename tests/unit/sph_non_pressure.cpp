@@ -35,12 +35,13 @@ namespace
 	using NonPressureScene = std::array<std::vector<NonPressureParticle>, 3>;
 	using NonPressureNeighbors = std::array<std::vector<std::vector<uint32_t>>, 3>;
 	constexpr float untouchedVelocity = -12345.0f;
+	using NeighborLists = Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU;
 	constexpr std::array writeChunks{
-		&Sim::I_NeighborListSELL::FFChunkWrite, &Sim::I_NeighborListSELL::FBChunkWrite,
-		&Sim::I_NeighborListSELL::FRChunkWrite };
+		&NeighborLists::FFChunkWrite, &NeighborLists::FBChunkWrite,
+		&NeighborLists::FRChunkWrite };
 	constexpr std::array finishChunks{
-		&Sim::I_NeighborListSELL::FinishFFChunkWrite, &Sim::I_NeighborListSELL::FinishFBChunkWrite,
-		&Sim::I_NeighborListSELL::FinishFRChunkWrite };
+		&NeighborLists::FinishFFChunkWrite, &NeighborLists::FinishFBChunkWrite,
+		&NeighborLists::FinishFRChunkWrite };
 
 	Sim::SimParams MakeParams(const float particleSizeF = 1.0f)
 	{
@@ -157,13 +158,12 @@ namespace
 		}
 	}
 
-	class SphNonPressureTests : public testing::TestWithParam<bool>
+	class SphNonPressureTests : public testing::Test
 	{
 	protected:
 		void SetUp() override
 		{
-			if (GetParam()) { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU>(); }
-			else { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_Explicit_CPU>(); }
+			lists_ = std::make_unique<NeighborLists>();
 		}
 
 		void BuildLists(const NonPressureScene& scene, const NonPressureNeighbors& neighbors)
@@ -223,7 +223,6 @@ namespace
 					(lists_.get()->*finishChunks[category])(chunk, counts.data());
 				}
 			}
-			lists_->Finalize_Fill();
 		}
 
 		std::vector<glm::vec3> EvaluateNonPressure(const NonPressureScene& scene,
@@ -290,11 +289,11 @@ namespace
 			return result;
 		}
 
-		std::unique_ptr<Sim::I_NeighborListSELL> lists_;
+		std::unique_ptr<NeighborLists> lists_;
 	};
 
 	// without neighbors, gravity alone updates each velocity component
-	TEST_P(SphNonPressureTests, ComputesKnownGravityOnlyMotion)
+	TEST_F(SphNonPressureTests, ComputesKnownGravityOnlyMotion)
 	{
 		NonPressureScene scene;
 		scene[0] = { { { 0.0f, 0.0f, 0.0f }, { 1.0f, -2.0f, 3.0f } },
@@ -307,7 +306,7 @@ namespace
 	}
 
 	// a pair at one smoothing length pins the gradient, mass, and neighbor-density weighting
-	TEST_P(SphNonPressureTests, ComputesKnownFluidViscosity)
+	TEST_F(SphNonPressureTests, ComputesKnownFluidViscosity)
 	{
 		for (const float massF : { 1.0f, 3.0f })
 		{
@@ -331,7 +330,7 @@ namespace
 	}
 
 	// zero and sub-floor densities use the floor, while densities above it keep their own weighting
-	TEST_P(SphNonPressureTests, ClampsSmallFluidNeighborDensities)
+	TEST_F(SphNonPressureTests, ClampsSmallFluidNeighborDensities)
 	{
 		const std::array<float, 4> densities{ 0.0f, 1e-8f, 1e-7f, 2e-7f };
 		const std::array<double, 4> effectiveDensities{ 1e-7, 1e-7, 1e-7, 2e-7 };
@@ -356,7 +355,7 @@ namespace
 	}
 
 	// stationary boundaries and moving rigid particles use volume and boundary viscosity
-	TEST_P(SphNonPressureTests, ComputesKnownBoundaryAndRigidViscosity)
+	TEST_F(SphNonPressureTests, ComputesKnownBoundaryAndRigidViscosity)
 	{
 		for (uint32_t category = 1; category < 3; category++)
 		{
@@ -380,7 +379,7 @@ namespace
 	}
 
 	// mixed populations and uneven rows must agree across full and partial SIMD chunks
-	TEST_P(SphNonPressureTests, MatchesScalarReferenceAcrossSimdBoundaries)
+	TEST_F(SphNonPressureTests, MatchesScalarReferenceAcrossSimdBoundaries)
 	{
 		auto params = MakeParams();
 		params.gravity = { 0.5f, -1.0f, 0.25f };
@@ -396,7 +395,7 @@ namespace
 	}
 
 	// size regularization and both viscosity coefficients must retain their independent effects
-	TEST_P(SphNonPressureTests, MatchesScalarReferenceAtDifferentScales)
+	TEST_F(SphNonPressureTests, MatchesScalarReferenceAtDifferentScales)
 	{
 		for (const float h : { 0.5f, 2.0f })
 		{
@@ -420,7 +419,7 @@ namespace
 	}
 
 	// equal fluid and rigid velocities eliminate their viscosity contributions
-	TEST_P(SphNonPressureTests, PreservesUniformVelocityWithoutGravity)
+	TEST_F(SphNonPressureTests, PreservesUniformVelocityWithoutGravity)
 	{
 		auto scene = MakeMixedScene(CPU::N_SIMD_WIDTH + 1);
 		for (auto& population : scene)
@@ -435,7 +434,7 @@ namespace
 	}
 
 	// tangential relative motion has zero projection onto the particle separation
-	TEST_P(SphNonPressureTests, IgnoresRelativeMotionPerpendicularToSeparation)
+	TEST_F(SphNonPressureTests, IgnoresRelativeMotionPerpendicularToSeparation)
 	{
 		for (uint32_t category = 0; category < 3; category++)
 		{
@@ -460,7 +459,7 @@ namespace
 	}
 
 	// zero viscosity leaves only gravity even when moving neighbors are present
-	TEST_P(SphNonPressureTests, AppliesOnlyGravityWhenViscositiesAreZero)
+	TEST_F(SphNonPressureTests, AppliesOnlyGravityWhenViscositiesAreZero)
 	{
 		const auto scene = MakeMixedScene(CPU::N_SIMD_WIDTH + 1);
 		const auto neighbors = MakeMixedNeighbors(scene);
@@ -478,7 +477,7 @@ namespace
 	}
 
 	// a zero time step copies current velocities despite nonzero gravity and viscosity
-	TEST_P(SphNonPressureTests, CopiesCurrentVelocitiesAtZeroTimeStep)
+	TEST_F(SphNonPressureTests, CopiesCurrentVelocitiesAtZeroTimeStep)
 	{
 		const auto scene = MakeMixedScene(CPU::N_SIMD_WIDTH + 1);
 		const auto neighbors = MakeMixedNeighbors(scene);
@@ -492,7 +491,7 @@ namespace
 	}
 
 	// coincident particles and neighbors outside support contribute no viscosity
-	TEST_P(SphNonPressureTests, HandlesZeroDistanceAndKernelCutoff)
+	TEST_F(SphNonPressureTests, HandlesZeroDistanceAndKernelCutoff)
 	{
 		for (const float distance : { 0.0f, 2.0f, 2.5f })
 		{
@@ -512,14 +511,14 @@ namespace
 	}
 
 	// empty fluid populations leave output guards untouched with or without other populations
-	TEST_P(SphNonPressureTests, HandlesEmptyFluidPopulations)
+	TEST_F(SphNonPressureTests, HandlesEmptyFluidPopulations)
 	{
 		EXPECT_TRUE(EvaluateNonPressure({}, MakeNeighbors(0)).empty());
 		EXPECT_TRUE(EvaluateNonPressure(MakeMixedScene(0), MakeNeighbors(0)).empty());
 	}
 
 	// noncontiguous selections update only the requested chunks, including a final partial chunk
-	TEST_P(SphNonPressureTests, UpdatesOnlySelectedChunks)
+	TEST_F(SphNonPressureTests, UpdatesOnlySelectedChunks)
 	{
 		const auto scene = MakeMixedScene(3 * CPU::N_SIMD_WIDTH + 1);
 		const auto neighbors = MakeMixedNeighbors(scene);
@@ -538,7 +537,7 @@ namespace
 	}
 
 	// an empty selection does no work only when selected-chunk processing is enabled
-	TEST_P(SphNonPressureTests, HonorsSelectedChunkMode)
+	TEST_F(SphNonPressureTests, HonorsSelectedChunkMode)
 	{
 		const auto scene = MakeMixedScene(CPU::N_SIMD_WIDTH + 1);
 		const auto neighbors = MakeMixedNeighbors(scene);
@@ -555,7 +554,7 @@ namespace
 	}
 
 	// an owned prefix can gather halo velocities and densities without updating halo destinations
-	TEST_P(SphNonPressureTests, ComputesOwnedPrefixUsingHaloNeighbors)
+	TEST_F(SphNonPressureTests, ComputesOwnedPrefixUsingHaloNeighbors)
 	{
 		const uint32_t N_F = 2 * CPU::N_SIMD_WIDTH + 3;
 		const uint32_t N_ownedF = CPU::N_SIMD_WIDTH + 1;
@@ -579,7 +578,7 @@ namespace
 	}
 
 	// wide index spans exercise velocity, density, and volume gathers in every neighbor category
-	TEST_P(SphNonPressureTests, ComputesViscosityAcrossCompressedIndexFormats)
+	TEST_F(SphNonPressureTests, ComputesViscosityAcrossCompressedIndexFormats)
 	{
 		NonPressureScene scene;
 		for (auto& population : scene)
@@ -615,12 +614,10 @@ namespace
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			const auto expected = GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32;
+			const auto expected = formats[chunk];
 			EXPECT_EQ(lists_->FFChunk(chunk).format, expected);
 			EXPECT_EQ(lists_->FBChunk(chunk).format, expected);
 			EXPECT_EQ(lists_->FRChunk(chunk).format, expected);
 		}
 	}
-
-	INSTANTIATE_TEST_SUITE_P(ExplicitAndCompressed, SphNonPressureTests, testing::Bool());
 }

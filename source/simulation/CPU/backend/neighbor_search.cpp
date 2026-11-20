@@ -604,7 +604,6 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 	const uint32_t N_chunks = useSelectedFluidCenters
 		? static_cast<uint32_t>(be_.pressureAccChunkIdxs_.size())
 		: N_totalChunks;
-	const bool trackChunkNeighborIdxRange = be_.neighborList_->NeedsChunkNeighborIdxRange();
 	// the distributed chunk indices are unique and ascending, a full list spans every chunk
 	be_.neighborList_->PrepareFluidCountWrite(N_chunks == N_totalChunks);
 	tbb::parallel_for(
@@ -648,11 +647,8 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
 							cntFF[lane]++;
-							if (trackChunkNeighborIdxRange)
-							{
-								minRefFF = std::min(minRefFF, j);
-								maxRefFF = std::max(maxRefFF, j);
-							}
+							minRefFF = std::min(minRefFF, j);
+							maxRefFF = std::max(maxRefFF, j);
 						}
 					}
 
@@ -667,11 +663,8 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
 							cntFB[lane]++;
-							if (trackChunkNeighborIdxRange)
-							{
-								minRefFB = std::min(minRefFB, j);
-								maxRefFB = std::max(maxRefFB, j);
-							}
+							minRefFB = std::min(minRefFB, j);
+							maxRefFB = std::max(maxRefFB, j);
 						}
 					}
 
@@ -686,11 +679,8 @@ void NS_BruteForce_CPU::Query_Count(const SimParams& params)
 						if (distSqu <= kernelRadiusSqu) [[unlikely]]
 						{
 							cntFR[lane]++;
-							if (trackChunkNeighborIdxRange)
-							{
-								minRefFR = std::min(minRefFR, j);
-								maxRefFR = std::max(maxRefFR, j);
-							}
+							minRefFR = std::min(minRefFR, j);
+							maxRefFR = std::max(maxRefFR, j);
 						}
 					}
 				}
@@ -1486,8 +1476,6 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 			: N_totalChunks;
 		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
 		auto* chunkedSELLNeighborList = be_.neighborList_.get();
-		const bool trackChunkNeighborIdxRange =
-			chunkedSELLNeighborList->NeedsChunkNeighborIdxRange();
 
 		// bit of each SIMD lane in a lane mask
 		alignas(CPU::N_SIMD_ALIGNMENT) uint32_t laneBits[CPU::N_SIMD_WIDTH]{};
@@ -1542,51 +1530,48 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 					// FF count neighbors
 					// (with the lanes of each distinct neighbor, the neighbor list writes dict chunks right away)
 					bool isCountedFF = false;
-					if (trackChunkNeighborIdxRange)
+					// branch-free pass, every candidate is written to the next slot and only a hit keeps it
+					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
-						// branch-free pass, every candidate is written to the next slot and only a hit keeps it
-						for (const ActiveCellRange& cellRange : fluidRanges)
+						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
-							{
-								const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
-								const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
-								const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
-								const CPU::Float32xSIMD dx = xi - xj;
-								const CPU::Float32xSIMD dy = yi - yj;
-								const CPU::Float32xSIMD dz = zi - zj;
-								const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
-									xsimd::fma(dy, dy, dz * dz));
-								const CPU::Mask32xSIMD hit =
-									(distSqu <= kernelRadiusSquV) && validLanes;
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
+							const CPU::Float32xSIMD dx = xi - xj;
+							const CPU::Float32xSIMD dy = yi - yj;
+							const CPU::Float32xSIMD dz = zi - zj;
+							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+								xsimd::fma(dy, dy, dz * dz));
+							const CPU::Mask32xSIMD hit =
+								(distSqu <= kernelRadiusSquV) && validLanes;
 
-								const uint32_t hitLanes = CPU::MaskBits32xSIMD(hit);
-								const uint32_t slot = std::min(N_distinctFF, N_SELL_DICT_SIZE_MAX);
-								distinctFF[slot] = l;
-								distinctLaneMasksFF[slot] = hitLanes;
-								N_distinctFF += (hitLanes != 0u) ? 1u : 0u;
-							}
-						}
-
-						// counts and index range from the kept slots, unless the dictionary overflowed
-						if (N_distinctFF <= N_SELL_DICT_SIZE_MAX)
-						{
-							for (uint32_t n = 0; n < N_distinctFF; n++)
-							{
-								minRefFF = std::min(minRefFF, distinctFF[n]);
-								maxRefFF = std::max(maxRefFF, distinctFF[n]);
-								cntFF = CPU::AddMaskedOneUInt32xSIMD(cntFF, CPU::SelectMask32xSIMD(
-									(CPU::SetUInt32xSIMD(distinctLaneMasksFF[n]) & laneBitsV) != zeroU));
-							}
-							isCountedFF = true;
-						}
-						else
-						{
-							N_distinctFF = 0;
+							const uint32_t hitLanes = CPU::MaskBits32xSIMD(hit);
+							const uint32_t slot = std::min(N_distinctFF, N_SELL_DICT_SIZE_MAX);
+							distinctFF[slot] = l;
+							distinctLaneMasksFF[slot] = hitLanes;
+							N_distinctFF += (hitLanes != 0u) ? 1u : 0u;
 						}
 					}
 
-					// lists without lane masks and overflowed dictionaries count every candidate
+					// counts and index range from the kept slots, unless the dictionary overflowed
+					if (N_distinctFF <= N_SELL_DICT_SIZE_MAX)
+					{
+						for (uint32_t n = 0; n < N_distinctFF; n++)
+						{
+							minRefFF = std::min(minRefFF, distinctFF[n]);
+							maxRefFF = std::max(maxRefFF, distinctFF[n]);
+							cntFF = CPU::AddMaskedOneUInt32xSIMD(cntFF, CPU::SelectMask32xSIMD(
+								(CPU::SetUInt32xSIMD(distinctLaneMasksFF[n]) & laneBitsV) != zeroU));
+						}
+						isCountedFF = true;
+					}
+					else
+					{
+						N_distinctFF = 0;
+					}
+
+					// overflowed dictionaries count every candidate
 					if (!isCountedFF)
 					{
 						for (const ActiveCellRange& cellRange : fluidRanges)
@@ -1605,7 +1590,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 									(distSqu <= kernelRadiusSquV) && validLanes;
 
 								const uint32_t hitLanes = CPU::MaskBits32xSIMD(hit);
-								if (trackChunkNeighborIdxRange && hitLanes != 0u)
+								if (hitLanes != 0u)
 								{
 									minRefFF = std::min(minRefFF, l);
 									maxRefFF = std::max(maxRefFF, l);
@@ -1638,7 +1623,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							const CPU::Mask32xSIMD hit =
 								(distSqu <= kernelRadiusSquV) && validLanes;
 
-							if (trackChunkNeighborIdxRange && CPU::MaskBits32xSIMD(hit) != 0u)
+							if (CPU::MaskBits32xSIMD(hit) != 0u)
 							{
 								minRefFB = std::min(minRefFB, l);
 								maxRefFB = std::max(maxRefFB, l);
@@ -1664,7 +1649,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 								xsimd::fma(dy, dy, dz * dz));
 							const CPU::Mask32xSIMD hit =
 								(distSqu <= kernelRadiusSquV) && validLanes;
-							if (trackChunkNeighborIdxRange && CPU::MaskBits32xSIMD(hit) != 0u)
+							if (CPU::MaskBits32xSIMD(hit) != 0u)
 							{
 								minRefFR = std::min(minRefFR, l);
 								maxRefFR = std::max(maxRefFR, l);

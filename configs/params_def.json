@@ -1,8 +1,7 @@
 {
   "backendType": "CPU",
-  "scenarioType": "BoundaryRigidMeshes",
+  "scenarioType": "BreakingDam",
   "neighborSearchMethod": 1,
-  "neighborListStorage": 1,
   "rigidCouplingMode": "Sequential",
   "rigidContactDiagonal": "Full",
   "domainDecompMethod": 0,

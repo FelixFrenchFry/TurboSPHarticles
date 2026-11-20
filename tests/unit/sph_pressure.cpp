@@ -36,12 +36,13 @@ namespace
 	using PressureScene = std::array<std::vector<PressureParticle>, 3>;
 	using PressureNeighbors = std::array<std::vector<std::vector<uint32_t>>, 3>;
 	constexpr float untouchedOutput = -12345.0f;
+	using NeighborLists = Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU;
 	constexpr std::array writeChunks{
-		&Sim::I_NeighborListSELL::FFChunkWrite, &Sim::I_NeighborListSELL::FBChunkWrite,
-		&Sim::I_NeighborListSELL::FRChunkWrite };
+		&NeighborLists::FFChunkWrite, &NeighborLists::FBChunkWrite,
+		&NeighborLists::FRChunkWrite };
 	constexpr std::array finishChunks{
-		&Sim::I_NeighborListSELL::FinishFFChunkWrite, &Sim::I_NeighborListSELL::FinishFBChunkWrite,
-		&Sim::I_NeighborListSELL::FinishFRChunkWrite };
+		&NeighborLists::FinishFFChunkWrite, &NeighborLists::FinishFBChunkWrite,
+		&NeighborLists::FinishFRChunkWrite };
 
 	Sim::SimParams MakeParams()
 	{
@@ -187,13 +188,12 @@ namespace
 		std::vector<float> sourceTerm, diagElem, pressure;
 	};
 
-	class SphPressureTests : public testing::TestWithParam<bool>
+	class SphPressureTests : public testing::Test
 	{
 	protected:
 		void SetUp() override
 		{
-			if (GetParam()) { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU>(); }
-			else { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_Explicit_CPU>(); }
+			lists_ = std::make_unique<NeighborLists>();
 		}
 
 		void BuildLists(const PressureScene& scene, const PressureNeighbors& neighbors,
@@ -278,7 +278,6 @@ namespace
 					(lists_.get()->*finishChunks[category])(chunk, counts.data());
 				}
 			}
-			lists_->Finalize_Fill();
 		}
 
 		void LoadScene(const PressureScene& scene, const PressureNeighbors& neighbors,
@@ -382,14 +381,14 @@ namespace
 		// one quarter gives unit normalization for the kernel's scaled polynomial
 		static constexpr float cubicSplineAlpha = 0.25f;
 		Sim::SimParams params_ = MakeParams();
-		std::unique_ptr<Sim::I_NeighborListSELL> lists_;
+		std::unique_ptr<NeighborLists> lists_;
 		std::array<std::array<std::vector<float>, 3>, 3> positions_, predictedVelocities_;
 		std::array<std::vector<float>, 3> psi_;
 		std::vector<float> densityF_;
 	};
 
 	// a stationary over-dense pair has a negative source term and positive initial pressure
-	TEST_P(SphPressureTests, ComputesKnownSourceDiagonalAndInitialPressure)
+	TEST_F(SphPressureTests, ComputesKnownSourceDiagonalAndInitialPressure)
 	{
 		LoadScene(MakeFluidPair(), MakePairNeighbors());
 		const auto actual = EvaluateInitialPressure();
@@ -403,7 +402,7 @@ namespace
 	}
 
 	// a warm start scales the previous pressure instead of taking the Jacobi step from zero
-	TEST_P(SphPressureTests, WarmStartsFromScaledPreviousPressure)
+	TEST_F(SphPressureTests, WarmStartsFromScaledPreviousPressure)
 	{
 		params_.jacobiWarmStart = 0.5f;
 		LoadScene(MakeFluidPair(), MakePairNeighbors());
@@ -420,7 +419,7 @@ namespace
 	}
 
 	// a warm start without previous pressure takes the cold start
-	TEST_P(SphPressureTests, WarmStartFallsBackToColdStartWithoutPreviousPressure)
+	TEST_F(SphPressureTests, WarmStartFallsBackToColdStartWithoutPreviousPressure)
 	{
 		params_.jacobiWarmStart = 0.5f;
 		LoadScene(MakeFluidPair(), MakePairNeighbors());
@@ -431,7 +430,7 @@ namespace
 	}
 
 	// equal masses give opposite pressure accelerations along the line between the particles
-	TEST_P(SphPressureTests, ComputesEqualAndOppositePairAcceleration)
+	TEST_F(SphPressureTests, ComputesEqualAndOppositePairAcceleration)
 	{
 		LoadScene(MakeFluidPair(), MakePairNeighbors());
 		const std::array pressure{ 16.0f / 225.0f, 16.0f / 225.0f };
@@ -447,7 +446,7 @@ namespace
 	}
 
 	// known accelerations give a hand-derived pressure correction and density error
-	TEST_P(SphPressureTests, ComputesKnownRelaxedJacobiUpdate)
+	TEST_F(SphPressureTests, ComputesKnownRelaxedJacobiUpdate)
 	{
 		LoadScene(MakeFluidPair(), MakePairNeighbors());
 		const std::array sourceTerm{ -1.0f / 8.0f, -1.0f / 8.0f };
@@ -463,7 +462,7 @@ namespace
 	}
 
 	// an isolated particle has a zero diagonal and contributes no error even when over-dense
-	TEST_P(SphPressureTests, SkipsZeroDiagonalWhenUpdatingPressureAndErrors)
+	TEST_F(SphPressureTests, SkipsZeroDiagonalWhenUpdatingPressureAndErrors)
 	{
 		PressureScene scene;
 		scene[0] = { { glm::vec3(0.0f), glm::vec3(0.0f), 9.0f / 8.0f } };
@@ -483,7 +482,7 @@ namespace
 	}
 
 	// a self neighbor at a particle size where the squared gradient factor overflows float32 keeps the diagonal finite
-	TEST_P(SphPressureTests, KeepsDiagonalFiniteAtTinyParticleSize)
+	TEST_F(SphPressureTests, KeepsDiagonalFiniteAtTinyParticleSize)
 	{
 		// (the self-pair gradient factor is about -4.8e19 here, beyond the square root of the float32 maximum)
 		params_.particleSizeF = 2.5e-10f;
@@ -494,20 +493,24 @@ namespace
 			{ { 6.25e-11f, 0.0f, 0.0f }, glm::vec3(0.0f), 9.0f / 8.0f } };
 		auto neighbors = MakeNeighbors(2);
 		neighbors[0] = { { 0, 1 }, { 0, 1 } };
-		LoadScene(scene, neighbors, GetParam());
-		ASSERT_EQ(lists_->FFChunk(0).dict != nullptr, GetParam());
-
-		const auto actual = EvaluateInitialPressure();
-		for (uint32_t i = 0; i < 2; i++)
+		for (const bool trackDistinctFF : { false, true })
 		{
-			SCOPED_TRACE(i);
-			EXPECT_TRUE(std::isfinite(actual.diagElem[i]));
-			EXPECT_LT(actual.diagElem[i], 0.0f);
+			SCOPED_TRACE(trackDistinctFF);
+			LoadScene(scene, neighbors, trackDistinctFF);
+			ASSERT_EQ(lists_->FFChunk(0).dict != nullptr, trackDistinctFF);
+
+			const auto actual = EvaluateInitialPressure();
+			for (uint32_t i = 0; i < 2; i++)
+			{
+				SCOPED_TRACE(i);
+				EXPECT_TRUE(std::isfinite(actual.diagElem[i]));
+				EXPECT_LT(actual.diagElem[i], 0.0f);
+			}
 		}
 	}
 
 	// an under-dense pair with a valid diagonal clamps negative pressures to zero
-	TEST_P(SphPressureTests, ClampsNegativePressure)
+	TEST_F(SphPressureTests, ClampsNegativePressure)
 	{
 		LoadScene(MakeFluidPair(7.0f / 8.0f), MakePairNeighbors());
 		const auto actual = EvaluateInitialPressure();
@@ -522,76 +525,81 @@ namespace
 	}
 
 	// distinct boundary and rigid weights and a moving rigid neighbor exercise all three sums
-	TEST_P(SphPressureTests, MatchesScalarReferenceAcrossSimdBoundaries)
+	TEST_F(SphPressureTests, MatchesScalarReferenceAcrossSimdBoundaries)
 	{
 		const uint32_t N_F = CPU::N_SIMD_WIDTH + 1;
 		params_.restDensity = 2.0f;
 		const auto scene = MakeMixedScene(N_F, params_.restDensity);
-		auto neighbors = MakeMixedNeighbors(N_F);
-		if (GetParam()) { neighbors[0] = MakeSupportNeighborsF(scene, params_.kernelRadiusSqu); }
-		LoadScene(scene, neighbors, GetParam());
-		for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
+		for (const bool trackDistinctFF : { false, true })
 		{
-			SCOPED_TRACE(chunk);
-			ASSERT_EQ(lists_->FFChunk(chunk).dict != nullptr, GetParam());
-		}
-		const auto initial = EvaluateInitialPressure();
-		std::vector<float> pressure(N_F);
-		std::vector<glm::dvec3> predictedVelocitiesF(N_F);
-		for (uint32_t i = 0; i < N_F; i++)
-		{
-			pressure[i] = 0.125f + 0.03125f * i;
-			predictedVelocitiesF[i] = glm::dvec3(scene[0][i].predictedVelocity);
-		}
-		const std::array predictedVelocitiesR{ glm::dvec3(scene[2][0].predictedVelocity) };
-		const std::vector<double> referencePressure(pressure.begin(), pressure.end());
-		const auto referenceAcceleration = ReferencePressureAccelerations(scene, neighbors, params_, referencePressure);
-		const auto acceleration = EvaluatePressureAcceleration(pressure);
-		const auto errors = EvaluateJacobiUpdate(acceleration, initial.sourceTerm, initial.diagElem, pressure);
-
-		Sim::PressureSolveErrorSums expectedErrors{};
-		std::vector<double> unitPressure(N_F, 0.0);
-		const double timeStep = params_.timeStep;
-		for (uint32_t i = 0; i < N_F; i++)
-		{
-			SCOPED_TRACE(i);
-			const double sourceTerm = params_.restDensity - scene[0][i].density - timeStep
-				* ReferenceDensityRate(scene, neighbors, params_, i, predictedVelocitiesF, predictedVelocitiesR);
-
-			// unit pressure at i gives the diagonal through the resulting density change
-			unitPressure[i] = 1.0;
-			const auto unitAcceleration = ReferencePressureAccelerations(scene, neighbors, params_, unitPressure);
-			const double diagElem = timeStep * timeStep
-				* ReferenceDensityRate(scene, neighbors, params_, i, unitAcceleration);
-			unitPressure[i] = 0.0;
-			ASSERT_LT(diagElem, -1e-6);
-
-			const double systemValue = timeStep * timeStep
-				* ReferenceDensityRate(scene, neighbors, params_, i, referenceAcceleration);
-			const double residual = sourceTerm - systemValue;
-			ExpectPressureNear(initial.sourceTerm[i], sourceTerm);
-			ExpectPressureNear(initial.diagElem[i], diagElem);
-			ExpectPressureNear(initial.pressure[i], std::max(0.0, params_.jacobiOmega * sourceTerm / diagElem));
-			for (int axis = 0; axis < 3; axis++)
+			SCOPED_TRACE(trackDistinctFF);
+			auto neighbors = MakeMixedNeighbors(N_F);
+			// (dict chunks take distance-based FF neighbors)
+			if (trackDistinctFF) { neighbors[0] = MakeSupportNeighborsF(scene, params_.kernelRadiusSqu); }
+			LoadScene(scene, neighbors, trackDistinctFF);
+			for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
 			{
-				SCOPED_TRACE(axis);
-				ExpectPressureNear(acceleration[i][axis], referenceAcceleration[i][axis]);
+				SCOPED_TRACE(chunk);
+				ASSERT_EQ(lists_->FFChunk(chunk).dict != nullptr, trackDistinctFF);
 			}
-			ExpectPressureNear(pressure[i],
-				std::max(0.0, referencePressure[i] + params_.jacobiOmega * residual / diagElem));
+			const auto initial = EvaluateInitialPressure();
+			std::vector<float> pressure(N_F);
+			std::vector<glm::dvec3> predictedVelocitiesF(N_F);
+			for (uint32_t i = 0; i < N_F; i++)
+			{
+				pressure[i] = 0.125f + 0.03125f * i;
+				predictedVelocitiesF[i] = glm::dvec3(scene[0][i].predictedVelocity);
+			}
+			const std::array predictedVelocitiesR{ glm::dvec3(scene[2][0].predictedVelocity) };
+			const std::vector<double> referencePressure(pressure.begin(), pressure.end());
+			const auto referenceAcceleration = ReferencePressureAccelerations(scene, neighbors, params_, referencePressure);
+			const auto acceleration = EvaluatePressureAcceleration(pressure);
+			const auto errors = EvaluateJacobiUpdate(acceleration, initial.sourceTerm, initial.diagElem, pressure);
 
-			const double error = -residual / params_.restDensity;
-			expectedErrors.raw += error;
-			expectedErrors.pos += std::max(0.0, error);
-			expectedErrors.abs += std::abs(error);
+			Sim::PressureSolveErrorSums expectedErrors{};
+			std::vector<double> unitPressure(N_F, 0.0);
+			const double timeStep = params_.timeStep;
+			for (uint32_t i = 0; i < N_F; i++)
+			{
+				SCOPED_TRACE(i);
+				const double sourceTerm = params_.restDensity - scene[0][i].density - timeStep
+					* ReferenceDensityRate(scene, neighbors, params_, i, predictedVelocitiesF, predictedVelocitiesR);
+
+				// unit pressure at i gives the diagonal through the resulting density change
+				unitPressure[i] = 1.0;
+				const auto unitAcceleration = ReferencePressureAccelerations(scene, neighbors, params_, unitPressure);
+				const double diagElem = timeStep * timeStep
+					* ReferenceDensityRate(scene, neighbors, params_, i, unitAcceleration);
+				unitPressure[i] = 0.0;
+				ASSERT_LT(diagElem, -1e-6);
+
+				const double systemValue = timeStep * timeStep
+					* ReferenceDensityRate(scene, neighbors, params_, i, referenceAcceleration);
+				const double residual = sourceTerm - systemValue;
+				ExpectPressureNear(initial.sourceTerm[i], sourceTerm);
+				ExpectPressureNear(initial.diagElem[i], diagElem);
+				ExpectPressureNear(initial.pressure[i], std::max(0.0, params_.jacobiOmega * sourceTerm / diagElem));
+				for (int axis = 0; axis < 3; axis++)
+				{
+					SCOPED_TRACE(axis);
+					ExpectPressureNear(acceleration[i][axis], referenceAcceleration[i][axis]);
+				}
+				ExpectPressureNear(pressure[i],
+					std::max(0.0, referencePressure[i] + params_.jacobiOmega * residual / diagElem));
+
+				const double error = -residual / params_.restDensity;
+				expectedErrors.raw += error;
+				expectedErrors.pos += std::max(0.0, error);
+				expectedErrors.abs += std::abs(error);
+			}
+			ExpectPressureNear(errors.raw, expectedErrors.raw);
+			ExpectPressureNear(errors.pos, expectedErrors.pos);
+			ExpectPressureNear(errors.abs, expectedErrors.abs);
 		}
-		ExpectPressureNear(errors.raw, expectedErrors.raw);
-		ExpectPressureNear(errors.pos, expectedErrors.pos);
-		ExpectPressureNear(errors.abs, expectedErrors.abs);
 	}
 
 	// select the partial second chunk and mask out one of its two lanes for acceleration
-	TEST_P(SphPressureTests, PreservesOutputsOutsideSelectedChunksAndActiveLanes)
+	TEST_F(SphPressureTests, PreservesOutputsOutsideSelectedChunksAndActiveLanes)
 	{
 		const uint32_t begin = CPU::N_SIMD_WIDTH;
 		const uint32_t N_F = begin + 2;
@@ -649,7 +657,7 @@ namespace
 		ExpectPressureNear(errors.abs, 1.0 / 8.0);
 	}
 
-	TEST_P(SphPressureTests, LeavesOutputsUntouchedWithEmptyChunkSelection)
+	TEST_F(SphPressureTests, LeavesOutputsUntouchedWithEmptyChunkSelection)
 	{
 		LoadScene(MakeFluidPair(), MakePairNeighbors());
 		const std::span<const uint32_t> selectedChunks{};
@@ -675,8 +683,6 @@ namespace
 		EXPECT_EQ(errors.abs, 0.0);
 	}
 
-	INSTANTIATE_TEST_SUITE_P(ExplicitAndCompressed, SphPressureTests, testing::Bool());
-
 	struct PressureIterationLimits
 	{
 		uint32_t fixedIters, minIters, maxIters, expectedIters;
@@ -691,7 +697,6 @@ namespace
 		const auto limits = GetParam();
 		auto params = MakeParams();
 		params.neighborSearchMethod = Base::NeighborSearchMethod::BruteForce;
-		params.neighborListMethod = Base::NeighborListMethod::ChunkedSELLX_Explicit;
 		params.solverTerminationCond = limits.termination;
 		params.densityDevTarget = 1.0f;
 		params.fixedIters = limits.fixedIters;

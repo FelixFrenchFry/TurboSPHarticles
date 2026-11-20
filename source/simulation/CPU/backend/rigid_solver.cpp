@@ -22,7 +22,7 @@ namespace
 {
 	template<class Function>
 	void ForEachContactNeighbor(const bool boundary, const uint32_t i,
-		const Sim::I_NeighborListSELL& neighborList,
+		const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 		const CPU::RigidBoundaryContactNeighbors& contactNeighbors,
 		const Function& function)
 	{
@@ -88,7 +88,7 @@ namespace
 } // namespace anonymous
 
 bool CPU::BuildRigidBoundaryNeighbors(
-	const Sim::I_NeighborListSELL& neighborList,
+	const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const uint32_t N_R,
 	RigidBoundaryContactNeighbors& contactNeighbors)
 {
@@ -249,7 +249,7 @@ void CPU::RigidContactDensityAndDiagonal(
 	const float* RESTRICT iWorldInv20RB,
 	const float* RESTRICT iWorldInv21RB,
 	const float* RESTRICT iWorldInv22RB,
-	const Sim::I_NeighborListSELL& neighborList,
+	const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const RigidBoundaryContactNeighbors& contactNeighbors,
 	const float particleSizeInvF,
 	const float kernelRadiusSqu,
@@ -419,7 +419,7 @@ void CPU::RigidContactPressureForces(
 	const float* RESTRICT densityContactB,
 	const float* RESTRICT pressureContactR,
 	const float* RESTRICT pressureContactB,
-	const Sim::I_NeighborListSELL& neighborList,
+	const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const RigidBoundaryContactNeighbors& contactNeighbors,
 	const float particleSizeInvF,
 	const float kernelRadiusSqu,
@@ -521,7 +521,7 @@ double CPU::RigidContactDensityError(
 	const float* RESTRICT sourceTermContactB,
 	const float* RESTRICT pressureContactR,
 	const float* RESTRICT pressureContactB,
-	const Sim::I_NeighborListSELL& neighborList,
+	const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const RigidBoundaryContactNeighbors& contactNeighbors,
 	const float particleSizeInvF,
 	const float kernelRadiusSqu,

@@ -31,8 +31,6 @@ namespace Sim
 			Base::ScenarioType::BreakingDam;
 		Base::NeighborSearchMethod neighborSearchMethod =
 			Base::NeighborSearchMethod::CellLinkedList_Compact;
-		Base::NeighborListMethod neighborListMethod =
-			Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
 		Base::RigidCouplingMode rigidCouplingMode =
 			Base::RigidCouplingMode::Sequential;
 		Base::RigidContactDiagonal rigidContactDiagonal =

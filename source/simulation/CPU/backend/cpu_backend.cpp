@@ -152,22 +152,7 @@ SimBackend_CPU::SimBackend_CPU(
 	}
 	neighborSearch_->Init();
 
-	// select neighbor list method
-	if (params.neighborListMethod ==
-		Base::NeighborListMethod::ChunkedSELLX_Explicit)
-	{
-		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL_Explicit_CPU>();
-	}
-	else if (params.neighborListMethod ==
-		Base::NeighborListMethod::ChunkedSELLX_AdaptCompress)
-	{
-		neighborList_ = std::make_unique<NeighborLists_ChunkedSELL_AdaptCompress_CPU>();
-	}
-	else
-	{
-		throw std::runtime_error(
-			"CPU supports only ChunkedSELL neighbor-list storage.");
-	}
+	neighborList_ = std::make_unique<NeighborLists_ChunkedSELL_AdaptCompress_CPU>();
 }
 
 void SimBackend_CPU::PullFromUniversalSimState(
@@ -1716,9 +1701,6 @@ void SimBackend_CPU::ComputeStatisticsPartial(
 
 void SimBackend_CPU::ExecuteNeighborSearch(const SimParams& params, const bool bench)
 {
-	const bool runCountQuery = neighborList_->RunCountQuery();
-	const bool runFillQuery = neighborList_->RunFillQuery();
-
 	// initial re-ordering of the data before the initial neighbor search
 	if (bench)
 	{
@@ -1736,27 +1718,17 @@ void SimBackend_CPU::ExecuteNeighborSearch(const SimParams& params, const bool b
 	neighborSearch_->Construct(params);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-	if (runCountQuery)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
-		neighborSearch_->Query_Count(params);
-		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
-	}
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
+	neighborSearch_->Query_Count(params);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList_->Finalize_Count();
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-	if (runFillQuery)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
-		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
-	}
-
-	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
-	neighborList_->Finalize_Fill();
-	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
+	neighborSearch_->Query_Fill(params);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 }
 
 bool SimBackend_CPU::TryGetLastParticleReOrder(

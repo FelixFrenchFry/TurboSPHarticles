@@ -33,12 +33,13 @@ namespace
 	using DensityScene = std::array<DensityParticles, 3>;
 	using DensityNeighbors = std::array<std::vector<std::vector<uint32_t>>, 3>;
 	constexpr float untouchedDensity = -12345.0f;
+	using NeighborLists = Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU;
 	constexpr std::array writeChunks{
-		&Sim::I_NeighborListSELL::FFChunkWrite, &Sim::I_NeighborListSELL::FBChunkWrite,
-		&Sim::I_NeighborListSELL::FRChunkWrite };
+		&NeighborLists::FFChunkWrite, &NeighborLists::FBChunkWrite,
+		&NeighborLists::FRChunkWrite };
 	constexpr std::array finishChunks{
-		&Sim::I_NeighborListSELL::FinishFFChunkWrite, &Sim::I_NeighborListSELL::FinishFBChunkWrite,
-		&Sim::I_NeighborListSELL::FinishFRChunkWrite };
+		&NeighborLists::FinishFFChunkWrite, &NeighborLists::FinishFBChunkWrite,
+		&NeighborLists::FinishFRChunkWrite };
 
 	DensityParticles MakeParticles(const std::vector<glm::vec3>& positions, const std::vector<float>& psi = {})
 	{
@@ -134,13 +135,12 @@ namespace
 		}
 	}
 
-	class SphDensityTests : public testing::TestWithParam<bool>
+	class SphDensityTests : public testing::Test
 	{
 	protected:
 		void SetUp() override
 		{
-			if (GetParam()) { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU>(); }
-			else { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_Explicit_CPU>(); }
+			lists_ = std::make_unique<NeighborLists>();
 		}
 
 		void BuildLists(const DensityScene& scene, const DensityNeighbors& neighbors)
@@ -200,7 +200,6 @@ namespace
 					(lists_.get()->*finishChunks[category])(chunk, counts.data());
 				}
 			}
-			lists_->Finalize_Fill();
 		}
 
 		std::vector<float> EvaluateDensity(const DensityScene& scene, const DensityNeighbors& neighbors,
@@ -227,11 +226,11 @@ namespace
 			return std::vector<float>(density.begin() + 1, density.begin() + 1 + N_F);
 		}
 
-		std::unique_ptr<Sim::I_NeighborListSELL> lists_;
+		std::unique_ptr<NeighborLists> lists_;
 	};
 
 	// fluid mass multiplies the listed kernel weights, including an explicitly listed self-neighbor
-	TEST_P(SphDensityTests, ComputesKnownFluidContributions)
+	TEST_F(SphDensityTests, ComputesKnownFluidContributions)
 	{
 		DensityScene scene;
 		scene[0] = MakeParticles({ { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.5f, 0.0f } });
@@ -244,7 +243,7 @@ namespace
 	}
 
 	// boundary and rigid contributions use each neighbor's psi independently of the fluid mass
-	TEST_P(SphDensityTests, ComputesKnownBoundaryAndRigidContributions)
+	TEST_F(SphDensityTests, ComputesKnownBoundaryAndRigidContributions)
 	{
 		for (uint32_t category = 1; category < 3; category++)
 		{
@@ -262,7 +261,7 @@ namespace
 	}
 
 	// uneven rows and nonzero padding targets must agree with an independent mixed-population sum
-	TEST_P(SphDensityTests, MatchesScalarReferenceAcrossSimdBoundaries)
+	TEST_F(SphDensityTests, MatchesScalarReferenceAcrossSimdBoundaries)
 	{
 		for (const uint32_t N_F : { 1u, CPU::N_SIMD_WIDTH - 1, CPU::N_SIMD_WIDTH,
 			CPU::N_SIMD_WIDTH + 1, 2 * CPU::N_SIMD_WIDTH + 3 })
@@ -276,7 +275,7 @@ namespace
 	}
 
 	// supplied neighbors at or beyond support contribute zero in every population
-	TEST_P(SphDensityTests, ExcludesContributionsOutsideKernelSupport)
+	TEST_F(SphDensityTests, ExcludesContributionsOutsideKernelSupport)
 	{
 		DensityScene scene;
 		scene[0] = MakeParticles({ { 0.0f, 0.0f, 0.0f }, { 2.0f, 0.0f, 0.0f }, { 2.5f, 0.0f, 0.0f } });
@@ -291,7 +290,7 @@ namespace
 	}
 
 	// changing particle size and mass must retain the correct normalization and population weighting
-	TEST_P(SphDensityTests, MatchesScalarReferenceAtDifferentScales)
+	TEST_F(SphDensityTests, MatchesScalarReferenceAtDifferentScales)
 	{
 		for (const float particleSizeF : { 0.25f, 1.0f, 2.0f })
 		{
@@ -315,7 +314,7 @@ namespace
 	}
 
 	// each spline weight fits in FP32, but adding them before applying mass would overflow
-	TEST_P(SphDensityTests, KeepsFluidDensityFiniteWhenUnweightedSumWouldOverflow)
+	TEST_F(SphDensityTests, KeepsFluidDensityFiniteWhenUnweightedSumWouldOverflow)
 	{
 		constexpr float particleSizeF = 1e-13f;
 		constexpr float massF = 1000.0f * particleSizeF * particleSizeF * particleSizeF;
@@ -329,7 +328,7 @@ namespace
 	}
 
 	// particles without listed neighbors overwrite old density with zero
-	TEST_P(SphDensityTests, ClearsDensityForEmptyNeighborLists)
+	TEST_F(SphDensityTests, ClearsDensityForEmptyNeighborLists)
 	{
 		const auto scene = MakeMixedScene(CPU::N_SIMD_WIDTH + 1);
 		const auto actual = EvaluateDensity(scene, MakeNeighbors(CPU::N_SIMD_WIDTH + 1));
@@ -338,14 +337,14 @@ namespace
 	}
 
 	// absent fluid particles leave output guards untouched with or without other populations
-	TEST_P(SphDensityTests, HandlesEmptyFluidPopulations)
+	TEST_F(SphDensityTests, HandlesEmptyFluidPopulations)
 	{
 		EXPECT_TRUE(EvaluateDensity({}, MakeNeighbors(0)).empty());
 		EXPECT_TRUE(EvaluateDensity(MakeMixedScene(0), MakeNeighbors(0)).empty());
 	}
 
 	// noncontiguous chunks can be visited out of order, including the final partial chunk
-	TEST_P(SphDensityTests, UpdatesOnlySelectedChunks)
+	TEST_F(SphDensityTests, UpdatesOnlySelectedChunks)
 	{
 		const auto scene = MakeMixedScene(3 * CPU::N_SIMD_WIDTH + 1);
 		const auto neighbors = MakeMixedNeighbors(scene);
@@ -366,7 +365,7 @@ namespace
 	}
 
 	// an empty selection does no work only when selected-chunk processing is enabled
-	TEST_P(SphDensityTests, HonorsSelectedChunkMode)
+	TEST_F(SphDensityTests, HonorsSelectedChunkMode)
 	{
 		const auto scene = MakeMixedScene(CPU::N_SIMD_WIDTH + 1);
 		const auto neighbors = MakeMixedNeighbors(scene);
@@ -379,7 +378,7 @@ namespace
 	}
 
 	// an owned prefix can end inside a stored chunk while still gathering neighbors from the halo
-	TEST_P(SphDensityTests, ComputesOwnedPrefixUsingHaloNeighbors)
+	TEST_F(SphDensityTests, ComputesOwnedPrefixUsingHaloNeighbors)
 	{
 		const uint32_t N_F = 2 * CPU::N_SIMD_WIDTH + 3;
 		const uint32_t N_ownedF = CPU::N_SIMD_WIDTH + 1;
@@ -405,7 +404,7 @@ namespace
 	}
 
 	// fluid gathers must decode every format and apply the shared fluid mass
-	TEST_P(SphDensityTests, ComputesFluidDensityAcrossCompressedIndexFormats)
+	TEST_F(SphDensityTests, ComputesFluidDensityAcrossCompressedIndexFormats)
 	{
 		DensityScene scene;
 		scene[0] = MakeParticles(std::vector<glm::vec3>(70'000, glm::vec3{ 0.0f }));
@@ -424,12 +423,12 @@ namespace
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			EXPECT_EQ(lists_->FFChunk(chunk).format, GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32);
+			EXPECT_EQ(lists_->FFChunk(chunk).format, formats[chunk]);
 		}
 	}
 
 	// density gathers must decode narrow deltas and absolute indices with distinct per-neighbor weights
-	TEST_P(SphDensityTests, ComputesDensityAcrossCompressedIndexFormats)
+	TEST_F(SphDensityTests, ComputesDensityAcrossCompressedIndexFormats)
 	{
 		auto scene = MakeMixedScene(2 * CPU::N_SIMD_WIDTH + 1);
 		for (uint32_t category = 1; category < 3; category++)
@@ -458,10 +457,8 @@ namespace
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			EXPECT_EQ(lists_->FBChunk(chunk).format, GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32);
-			EXPECT_EQ(lists_->FRChunk(chunk).format, GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32);
+			EXPECT_EQ(lists_->FBChunk(chunk).format, formats[chunk]);
+			EXPECT_EQ(lists_->FRChunk(chunk).format, formats[chunk]);
 		}
 	}
-
-	INSTANTIATE_TEST_SUITE_P(ExplicitAndCompressed, SphDensityTests, testing::Bool());
 }

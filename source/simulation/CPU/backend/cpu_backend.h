@@ -179,7 +179,7 @@ namespace Sim
 
 		// neighbor search
 		std::unique_ptr<I_NeighborSearch> neighborSearch_;
-		std::unique_ptr<I_NeighborListSELL> neighborList_;
+		std::unique_ptr<NeighborLists_ChunkedSELL_AdaptCompress_CPU> neighborList_;
 		friend class NS_BruteForce_CPU;
 		friend class NS_CellLinkedList_Compact_CPU;
 		friend class NeighborSearchTestAccess;

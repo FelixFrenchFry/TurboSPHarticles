@@ -156,35 +156,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			return false;
 		};
 
-	auto ParseNeighborListMethod = [](const nlohmann::json& v, Base::NeighborListMethod& out) -> bool
-		{
-			if (v.is_string())
-			{
-				const std::string s = v.get<std::string>();
-				if (s == "ChunkedSELLX_Explicit")
-					{ out = Base::NeighborListMethod::ChunkedSELLX_Explicit; return true; }
-				if (s == "ChunkedSELLX_AdaptCompress")
-					{ out = Base::NeighborListMethod::ChunkedSELLX_AdaptCompress; return true; }
-				return false;
-			}
-			else if (v.is_number_integer())
-			{
-				const int i = v.get<int>();
-				switch (i)
-				{
-				case 0:
-					out = Base::NeighborListMethod::ChunkedSELLX_Explicit;
-					return true;
-				case 1:
-					out = Base::NeighborListMethod::ChunkedSELLX_AdaptCompress;
-					return true;
-				default:
-					return false;
-				}
-			}
-			return false;
-		};
-
 	auto ParseRigidCouplingMode = [](const nlohmann::json& v, Base::RigidCouplingMode& out) -> bool
 		{
 			if (v.is_string())
@@ -438,20 +409,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			else
 			{
 				SPDLOG_WARN("Invalid 'neighborSearchMethod' value in JSON.");
-				return false;
-			}
-		}
-
-		if (auto it = j.find("neighborListStorage"); it != j.end())
-		{
-			Base::NeighborListMethod nls;
-			if (ParseNeighborListMethod(*it, nls))
-			{
-				params_.neighborListMethod = nls;
-			}
-			else
-			{
-				SPDLOG_WARN("Invalid 'neighborListStorage' value in JSON.");
 				return false;
 			}
 		}
@@ -1201,9 +1158,6 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 	j["backendType"] = Base::ToCString(par.backendType);
 	j["scenarioType"] = Base::ToCString(par.scenarioType);
 	j["neighborSearchMethod"] = Base::ToCString(par.neighborSearchMethod);
-	j["neighborListStorage"] = Base::ToCString(par.neighborListMethod);
-	j["neighborListStorageEffective"] = Base::ToEffectiveNeighborListStorageCString(
-		par.backendType, par.neighborListMethod);
 	j["rigidCouplingMode"] = Base::ToCString(par.rigidCouplingMode);
 	j["rigidContactDiagonal"] = Base::ToCString(par.rigidContactDiagonal);
 	j["domainDecompMethod"] = Base::ToCString(par.domainDecompMethod);

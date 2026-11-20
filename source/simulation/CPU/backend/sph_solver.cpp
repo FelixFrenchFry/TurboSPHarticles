@@ -100,9 +100,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	float* RESTRICT volR = volR_.data();
 	float* RESTRICT psiB = psiB_.data();
 	float* RESTRICT psiR = psiR_.data();
-	I_NeighborListSELL& neighborList = *neighborList_;
-	const bool runCountQuery = neighborList.RunCountQuery();
-	const bool runFillQuery = neighborList.RunFillQuery();
+	NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList = *neighborList_;
 
 	// --- [ neighbor search ] -----------------------------------------------------------------------
 
@@ -110,27 +108,17 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 	neighborSearch_->Construct(params);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-	if (runCountQuery)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
-		neighborSearch_->Query_Count(params);
-		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
-	}
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
+	neighborSearch_->Query_Count(params);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList.Finalize_Count();
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-	if (runFillQuery)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
-		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
-	}
-
-	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
-	neighborList.Finalize_Fill();
-	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
+	neighborSearch_->Query_Fill(params);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 
 	// --- [ density computations ] ------------------------------------------------------------------
 
@@ -383,9 +371,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	float* RESTRICT volR = volR_.data();
 	float* RESTRICT psiB = psiB_.data();
 	float* RESTRICT psiR = psiR_.data();
-	I_NeighborListSELL& neighborList = *neighborList_;
-	const bool runCountQuery = neighborList.RunCountQuery();
-	const bool runFillQuery = neighborList.RunFillQuery();
+	NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList = *neighborList_;
 
 	// --- [ neighbor search ] -----------------------------------------------------------------------
 
@@ -393,27 +379,17 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	neighborSearch_->Construct(params);
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-	if (runCountQuery)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
-		neighborSearch_->Query_Count(params);
-		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
-	}
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
+	neighborSearch_->Query_Count(params);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
 	neighborList.Finalize_Count();
 	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
 
-	if (runFillQuery)
-	{
-		benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
-		neighborSearch_->Query_Fill(params);
-		benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
-	}
-
-	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Construction);
-	neighborList.Finalize_Fill();
-	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Construction);
+	benchmarksTracker_.StartBench(Bench::BenchOp::Neighbors_Query);
+	neighborSearch_->Query_Fill(params);
+	benchmarksTracker_.StopBench(Bench::BenchOp::Neighbors_Query);
 
 	// --- [ density computations ] ------------------------------------------------------------------
 	// exported outer values are complete before Begin, inner work cannot require halo results,
@@ -752,7 +728,7 @@ void CPU::Density_ChunkedSELL(
 	const float* RESTRICT zPosR,
 	const float* RESTRICT psiB,
 	const float* RESTRICT psiR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float massF,
 	const uint32_t N_F,
@@ -908,7 +884,7 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 	const float* RESTRICT densityF,
 	const float* RESTRICT volB,
 	const float* RESTRICT volR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float particleSizeSquF,
 	const float cubicSplineAlpha,
@@ -1151,7 +1127,7 @@ void CPU::AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 	const float* RESTRICT yVelR,
 	const float* RESTRICT zVelR,
 	const float* RESTRICT volR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float particleSizeInvF, const float particleSizeSquF,
 	const float kernelRadiusSqu, const float cubicSplineAlpha,
 	const float massF, const float viscosityB,
@@ -1230,7 +1206,7 @@ void CPU::SourceTermAndDiagonalElementAndPressureJacobiInit_ChunkedSELL(
 	const float* RESTRICT densityF,
 	const float* RESTRICT psiB,
 	const float* RESTRICT psiR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float cubicSplineAlpha,
 	const float restDensity, const float restDensitySquInv,
@@ -1500,7 +1476,7 @@ void CPU::PressureAcceleration_ChunkedSELL(
 	const float* RESTRICT pressureF,
 	const float* RESTRICT psiB,
 	const float* RESTRICT psiR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float particleSizeInvF,
 	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float pressGamma,
@@ -1702,7 +1678,7 @@ void CPU::AccumulateRigidParticlePressureForces_ChunkedSELL(
 	const float* RESTRICT zPosR,
 	const float* RESTRICT pressureF,
 	const float* RESTRICT psiR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float particleSizeInvF, const float kernelRadiusSqu,
 	const float cubicSplineAlpha, const float restDensity,
 	const float massF, const float pressGamma,
@@ -1774,7 +1750,7 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const float* RESTRICT diagElemF,
 	const float* RESTRICT psiB,
 	const float* RESTRICT psiR,
-	const I_NeighborListSELL& neighborList,
+	const NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 	const float timeStep, const float particleSizeInvF,
 	const float cubicSplineAlpha,
 	const float restDensity, const float massF,

@@ -101,48 +101,6 @@ namespace Base
 		return "NeighborSearchMethod::<unknown>";
 	}
 
-	enum class NeighborListMethod : uint8_t
-	{
-		ChunkedSELLX_Explicit,          // 0
-		ChunkedSELLX_AdaptCompress      // 1
-	};
-	constexpr const char* ToCString(const NeighborListMethod v) noexcept
-	{
-		switch (v)
-		{
-		case NeighborListMethod::ChunkedSELLX_Explicit:
-			return "ChunkedSELLX_Explicit";
-		case NeighborListMethod::ChunkedSELLX_AdaptCompress:
-			return "ChunkedSELLX_AdaptCompress";
-		}
-		return "NeighborListStorage::<unknown>";
-	}
-	constexpr const char* ToEffectiveNeighborListStorageCString(
-		const BackendType backend,
-		const NeighborListMethod v) noexcept
-	{
-		switch (v)
-		{
-		case NeighborListMethod::ChunkedSELLX_Explicit:
-			return (backend == BackendType::GPU)
-				? "ChunkedSELL32_Explicit"
-			#if defined(TSP_CPU_SIMD_WIDTH) && TSP_CPU_SIMD_WIDTH == 16
-				: "ChunkedSELL16_Explicit";
-			#else
-				: "ChunkedSELL8_Explicit";
-			#endif
-		case NeighborListMethod::ChunkedSELLX_AdaptCompress:
-			return (backend == BackendType::GPU)
-				? "ChunkedSELL32_AdaptCompress"
-			#if defined(TSP_CPU_SIMD_WIDTH) && TSP_CPU_SIMD_WIDTH == 16
-				: "ChunkedSELL16_AdaptCompress";
-			#else
-				: "ChunkedSELL8_AdaptCompress";
-			#endif
-		}
-		return "ChunkedSELLX::<unknown>";
-	}
-
 	enum class RigidCouplingMode : uint8_t
 	{
 		Sequential,  // 0 TODO: reference paper

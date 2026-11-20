@@ -74,13 +74,6 @@ SimBackend_GPU::SimBackend_GPU(
 	Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
 	: benchmarksTracker_ { benchmarksTracker }
 {
-	if (params.neighborListMethod != Base::NeighborListMethod::ChunkedSELLX_AdaptCompress)
-	{
-		throw std::runtime_error(
-			"GPU supports only neighborListStorage=1 (ChunkedSELL32_AdaptCompress); "
-			"neighborListStorage=0 (ChunkedSELL32_Explicit) is not implemented.");
-	}
-
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
 
 	// select neighbor search method

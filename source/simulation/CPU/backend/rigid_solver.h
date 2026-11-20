@@ -49,7 +49,7 @@ namespace CPU
 
 	// returns whether any rigid particle has a rigid or boundary neighbor
 	bool BuildRigidBoundaryNeighbors(
-		const Sim::I_NeighborListSELL& neighborList,
+		const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 		const uint32_t N_R,
 		RigidBoundaryContactNeighbors& contactNeighbors);
 
@@ -115,7 +115,7 @@ namespace CPU
 		const float* RESTRICT iWorldInv20RB,
 		const float* RESTRICT iWorldInv21RB,
 		const float* RESTRICT iWorldInv22RB,
-		const Sim::I_NeighborListSELL& neighborList,
+		const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 		const RigidBoundaryContactNeighbors& contactNeighbors,
 		const float particleSizeInvF,
 		const float kernelRadiusSqu,
@@ -161,7 +161,7 @@ namespace CPU
 		const float* RESTRICT densityContactB,
 		const float* RESTRICT pressureContactR,
 		const float* RESTRICT pressureContactB,
-		const Sim::I_NeighborListSELL& neighborList,
+		const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 		const RigidBoundaryContactNeighbors& contactNeighbors,
 		const float particleSizeInvF,
 		const float kernelRadiusSqu,
@@ -216,7 +216,7 @@ namespace CPU
 		const float* RESTRICT sourceTermContactB,
 		const float* RESTRICT pressureContactR,
 		const float* RESTRICT pressureContactB,
-		const Sim::I_NeighborListSELL& neighborList,
+		const Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU& neighborList,
 		const RigidBoundaryContactNeighbors& contactNeighbors,
 		const float particleSizeInvF,
 		const float kernelRadiusSqu,

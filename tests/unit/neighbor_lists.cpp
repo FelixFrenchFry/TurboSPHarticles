@@ -17,32 +17,31 @@
 
 namespace
 {
+	using NeighborLists = Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU;
+
 	// categories follow the public interface order: FF, FB, FR, RF, RB, RR
 	using NeighborData = std::array<std::vector<std::vector<uint32_t>>, 6>;
-	constexpr std::array setCounts{
-		&Sim::I_NeighborList::SetNbrCountFF, &Sim::I_NeighborList::SetNbrCountFB,
-		&Sim::I_NeighborList::SetNbrCountFR, &Sim::I_NeighborList::SetNbrCountRF,
-		&Sim::I_NeighborList::SetNbrCountRB, &Sim::I_NeighborList::SetNbrCountRR };
-	constexpr std::array setLists{
-		&Sim::I_NeighborList::SetNbrListFF, &Sim::I_NeighborList::SetNbrListFB,
-		&Sim::I_NeighborList::SetNbrListFR, &Sim::I_NeighborList::SetNbrListRF,
-		&Sim::I_NeighborList::SetNbrListRB, &Sim::I_NeighborList::SetNbrListRR };
+	// per-particle writes of the rigid source categories RF, RB, RR
+	constexpr std::array setCountsR{
+		&NeighborLists::SetNbrCountRF, &NeighborLists::SetNbrCountRB, &NeighborLists::SetNbrCountRR };
+	constexpr std::array setListsR{
+		&NeighborLists::SetNbrListRF, &NeighborLists::SetNbrListRB, &NeighborLists::SetNbrListRR };
 	constexpr std::array readCounts{
-		&Sim::I_NeighborList::CountFF, &Sim::I_NeighborList::CountFB,
-		&Sim::I_NeighborList::CountFR, &Sim::I_NeighborList::CountRF,
-		&Sim::I_NeighborList::CountRB, &Sim::I_NeighborList::CountRR };
+		&NeighborLists::CountFF, &NeighborLists::CountFB,
+		&NeighborLists::CountFR, &NeighborLists::CountRF,
+		&NeighborLists::CountRB, &NeighborLists::CountRR };
 	constexpr std::array readLists{
-		&Sim::I_NeighborList::FF, &Sim::I_NeighborList::FB, &Sim::I_NeighborList::FR,
-		&Sim::I_NeighborList::RF, &Sim::I_NeighborList::RB, &Sim::I_NeighborList::RR };
+		&NeighborLists::FF, &NeighborLists::FB, &NeighborLists::FR,
+		&NeighborLists::RF, &NeighborLists::RB, &NeighborLists::RR };
 	constexpr std::array readChunks{
-		&Sim::I_NeighborListSELL::FFChunk, &Sim::I_NeighborListSELL::FBChunk,
-		&Sim::I_NeighborListSELL::FRChunk };
+		&NeighborLists::FFChunk, &NeighborLists::FBChunk,
+		&NeighborLists::FRChunk };
 	constexpr std::array writeChunks{
-		&Sim::I_NeighborListSELL::FFChunkWrite, &Sim::I_NeighborListSELL::FBChunkWrite,
-		&Sim::I_NeighborListSELL::FRChunkWrite };
+		&NeighborLists::FFChunkWrite, &NeighborLists::FBChunkWrite,
+		&NeighborLists::FRChunkWrite };
 	constexpr std::array finishChunks{
-		&Sim::I_NeighborListSELL::FinishFFChunkWrite, &Sim::I_NeighborListSELL::FinishFBChunkWrite,
-		&Sim::I_NeighborListSELL::FinishFRChunkWrite };
+		&NeighborLists::FinishFFChunkWrite, &NeighborLists::FinishFBChunkWrite,
+		&NeighborLists::FinishFRChunkWrite };
 
 	NeighborData MakeNeighborData(const uint32_t N_F, const uint32_t N_R)
 	{
@@ -130,7 +129,7 @@ namespace
 	}
 
 	// tracking the distinct FF neighbors and their lanes lets the compressed lists write FF chunks as dict chunks
-	void CommitFluidCounts(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t chunk,
+	void CommitFluidCounts(NeighborLists& lists, const NeighborData& data, const uint32_t chunk,
 		const bool trackDistinctFF = false)
 	{
 		const auto counts = CountFluidChunk(data, chunk);
@@ -144,7 +143,7 @@ namespace
 			{ counts.counts[2].data(), counts.minRef[2], counts.maxRef[2] });
 	}
 
-	void PrepareStorage(Sim::I_NeighborListSELL& lists, const NeighborData& data, const uint32_t N_B,
+	void PrepareStorage(NeighborLists& lists, const NeighborData& data, const uint32_t N_B,
 		const bool trackDistinctFF = false)
 	{
 		Sim::SimParams params;
@@ -160,13 +159,13 @@ namespace
 		{
 			for (uint32_t i = 0; i < data[category].size(); i++)
 			{
-				(lists.*setCounts[category])(i, static_cast<uint32_t>(data[category][i].size()));
+				(lists.*setCountsR[category - 3])(i, static_cast<uint32_t>(data[category][i].size()));
 			}
 		}
 		lists.Finalize_Count();
 	}
 
-	void FillStorage(Sim::I_NeighborListSELL& lists, const NeighborData& data, const bool direct)
+	void FillStorage(NeighborLists& lists, const NeighborData& data)
 	{
 		for (uint32_t chunk = 0; chunk < lists.ChunkNumTotal(); chunk++)
 		{
@@ -176,7 +175,7 @@ namespace
 				auto view = (lists.*writeChunks[category])(chunk);
 				if (view.pitch == 0) { continue; }
 				// (dict chunks are written during the count, like in the compact cell list query)
-				if (direct && view.dict) { continue; }
+				if (view.dict) { continue; }
 				// poison payloads so unwritten padding cannot pass through zero-initialized storage
 				const uint64_t N_entries = static_cast<uint64_t>(view.pitch) * CPU::N_SIMD_WIDTH;
 				if (view.data16) { std::fill_n(view.data16, N_entries, std::numeric_limits<uint16_t>::max()); }
@@ -184,19 +183,12 @@ namespace
 				for (uint32_t i = view.begin; i < view.end; i++)
 				{
 					const auto& neighbors = data[category][i];
-					if (direct)
+					for (uint32_t k = 0; k < neighbors.size(); k++)
 					{
-						for (uint32_t k = 0; k < neighbors.size(); k++)
-						{
-							view.StoreNeighbor(i - view.begin, k, neighbors[k]);
-						}
-					}
-					else
-					{
-						(lists.*setLists[category])(i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
+						view.StoreNeighbor(i - view.begin, k, neighbors[k]);
 					}
 				}
-				if (direct) { (lists.*finishChunks[category])(chunk, counts.counts[category].data()); }
+				(lists.*finishChunks[category])(chunk, counts.counts[category].data());
 			}
 		}
 		for (uint32_t category = 3; category < data.size(); category++)
@@ -204,13 +196,12 @@ namespace
 			for (uint32_t i = 0; i < data[category].size(); i++)
 			{
 				const auto& neighbors = data[category][i];
-				(lists.*setLists[category])(i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
+				(lists.*setListsR[category - 3])(i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
 			}
 		}
-		lists.Finalize_Fill();
 	}
 
-	void ExpectNeighbors(const Sim::I_NeighborListSELL& lists, const NeighborData& data)
+	void ExpectNeighbors(const NeighborLists& lists, const NeighborData& data)
 	{
 		for (uint32_t category = 0; category < data.size(); category++)
 		{
@@ -244,8 +235,7 @@ namespace
 		}
 	}
 
-	void ExpectFluidChunks(const Sim::I_NeighborListSELL& lists, const NeighborData& data,
-		const uint32_t N_B, const bool includeTail)
+	void ExpectFluidChunks(const NeighborLists& lists, const NeighborData& data, const uint32_t N_B)
 	{
 		const uint32_t N_F = static_cast<uint32_t>(data[0].size());
 		const std::array<uint32_t, 3> targetCounts{ N_F, N_B, static_cast<uint32_t>(data[3].size()) };
@@ -294,7 +284,6 @@ namespace
 					for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH; lane++)
 					{
 						SCOPED_TRACE(lane);
-						if (!includeTail && begin + lane >= end) { continue; }
 						EXPECT_EQ(view.ReadNeighborIdx(lane, k), loaded[lane]);
 						if (begin + lane < end && k < data[category][begin + lane].size())
 						{
@@ -310,46 +299,30 @@ namespace
 		}
 	}
 
-	class NeighborListStorageTests : public testing::TestWithParam<bool>
+	class NeighborListStorageTests : public testing::Test
 	{
 	protected:
 		void SetUp() override
 		{
-			if (GetParam()) { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU>(); }
-			else { lists_ = std::make_unique<Sim::NeighborLists_ChunkedSELL_Explicit_CPU>(); }
+			lists_ = std::make_unique<NeighborLists>();
 		}
 
-		std::unique_ptr<Sim::I_NeighborListSELL> lists_;
+		std::unique_ptr<NeighborLists> lists_;
 	};
 
-	// per-particle writes preserve unsorted indices, empty rows, and safe padding in active lanes
-	TEST_P(NeighborListStorageTests, PreservesPerParticleCountsAndNeighbors)
-	{
-		for (const uint32_t N_F : { CPU::N_SIMD_WIDTH + 1, CPU::N_SIMD_WIDTH + 2 })
-		{
-			SCOPED_TRACE(N_F);
-			const auto data = MakeMixedNeighbors(N_F);
-			PrepareStorage(*lists_, data, 8);
-			FillStorage(*lists_, data, false);
-
-			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, false);
-		}
-	}
-
 	// direct chunk writes are readable through the per-particle, scalar, and SIMD interfaces
-	TEST_P(NeighborListStorageTests, PreservesDirectChunkWritesAndSafePadding)
+	TEST_F(NeighborListStorageTests, PreservesDirectChunkWritesAndSafePadding)
 	{
 		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 2);
 		PrepareStorage(*lists_, data, 8);
-		FillStorage(*lists_, data, true);
+		FillStorage(*lists_, data);
 
 		ExpectNeighbors(*lists_, data);
-		ExpectFluidChunks(*lists_, data, 8, true);
+		ExpectFluidChunks(*lists_, data, 8);
 	}
 
 	// absent populations and particles without neighbors do not require payload storage
-	TEST_P(NeighborListStorageTests, HandlesEmptyPopulationsAndLists)
+	TEST_F(NeighborListStorageTests, HandlesEmptyPopulationsAndLists)
 	{
 		const std::array<std::array<uint32_t, 3>, 3> populations{{
 			{ 0, 0, 0 }, { 0, 8, 3 }, { CPU::N_SIMD_WIDTH + 1, 0, 0 }
@@ -359,31 +332,31 @@ namespace
 			SCOPED_TRACE(counts[0]);
 			const auto data = MakeNeighborData(counts[0], counts[2]);
 			PrepareStorage(*lists_, data, counts[1]);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			EXPECT_EQ(lists_->ChunkNumTotal(), counts[0] == 0 ? 0u : 2u);
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, counts[1], true);
+			ExpectFluidChunks(*lists_, data, counts[1]);
 		}
 	}
 
 	// empty categories remain empty beside populated categories sharing the same source particles
-	TEST_P(NeighborListStorageTests, KeepsEmptyCategoriesIndependent)
+	TEST_F(NeighborListStorageTests, KeepsEmptyCategoriesIndependent)
 	{
 		auto data = MakeNeighborData(CPU::N_SIMD_WIDTH + 1, 0);
 		data[0][0] = { 2, 1 };
 		data[1].back() = { 4, 1 };
 		PrepareStorage(*lists_, data, 8);
-		FillStorage(*lists_, data, true);
+		FillStorage(*lists_, data);
 
 		ExpectNeighbors(*lists_, data);
-		ExpectFluidChunks(*lists_, data, 8, true);
+		ExpectFluidChunks(*lists_, data, 8);
 		EXPECT_EQ(lists_->FRChunk(0).pitch, 0u);
 		EXPECT_EQ(lists_->FRChunk(1).pitch, 0u);
 	}
 
 	// chunk bounds and counts remain correct immediately below, at, and above a SIMD width
-	TEST_P(NeighborListStorageTests, HandlesParticleCountsAroundChunkBoundary)
+	TEST_F(NeighborListStorageTests, HandlesParticleCountsAroundChunkBoundary)
 	{
 		const std::array<uint32_t, 3> counts{ CPU::N_SIMD_WIDTH - 1, CPU::N_SIMD_WIDTH, CPU::N_SIMD_WIDTH + 1 };
 		for (uint32_t i = 0; i < counts.size(); i++)
@@ -391,16 +364,16 @@ namespace
 			SCOPED_TRACE(counts[i]);
 			const auto data = MakeMixedNeighbors(counts[i]);
 			PrepareStorage(*lists_, data, 8);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			EXPECT_EQ(lists_->ChunkNumTotal(), i == 2 ? 2u : 1u);
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, true);
+			ExpectFluidChunks(*lists_, data, 8);
 		}
 	}
 
 	// compression depends on the index span rather than the absolute index magnitude
-	TEST_P(NeighborListStorageTests, PreservesIndicesAtCompressionBoundaries)
+	TEST_F(NeighborListStorageTests, PreservesIndicesAtCompressionBoundaries)
 	{
 		const std::array<uint32_t, 4> spans{ 255, 256, 65'535, 65'536 };
 		const std::array<Sim::SELLChunkFormat, 4> formats{
@@ -409,24 +382,20 @@ namespace
 		for (uint32_t i = 0; i < spans.size(); i++)
 		{
 			SCOPED_TRACE(spans[i]);
-			for (const bool direct : { false, true })
-			{
-				SCOPED_TRACE(direct);
-				auto data = MakeNeighborData(2, 0);
-				data[1][0] = { 70'000 + spans[i], 70'000, 70'001 };
-				data[1][1] = { 70'001 };
-				PrepareStorage(*lists_, data, 140'000);
-				FillStorage(*lists_, data, direct);
+			auto data = MakeNeighborData(2, 0);
+			data[1][0] = { 70'000 + spans[i], 70'000, 70'001 };
+			data[1][1] = { 70'001 };
+			PrepareStorage(*lists_, data, 140'000);
+			FillStorage(*lists_, data);
 
-				EXPECT_EQ(lists_->FBChunk(0).format, GetParam() ? formats[i] : Sim::SELLChunkFormat::Abs32);
-				ExpectNeighbors(*lists_, data);
-				ExpectFluidChunks(*lists_, data, 140'000, direct);
-			}
+			EXPECT_EQ(lists_->FBChunk(0).format, formats[i]);
+			ExpectNeighbors(*lists_, data);
+			ExpectFluidChunks(*lists_, data, 140'000);
 		}
 	}
 
 	// separate offsets are required when multiple chunks reuse each compressed payload buffer
-	TEST_P(NeighborListStorageTests, KeepsMixedFormatChunksIndependent)
+	TEST_F(NeighborListStorageTests, KeepsMixedFormatChunksIndependent)
 	{
 		auto data = MakeNeighborData(4 * CPU::N_SIMD_WIDTH + 1, 0);
 		const std::array<uint32_t, 5> spans{ 255, 256, 65'536, 255, 65'535 };
@@ -439,19 +408,19 @@ namespace
 			data[1][chunk * CPU::N_SIMD_WIDTH] = { base + spans[chunk], base, base + 13 };
 		}
 		PrepareStorage(*lists_, data, 100'000);
-		FillStorage(*lists_, data, true);
+		FillStorage(*lists_, data);
 
 		ExpectNeighbors(*lists_, data);
-		ExpectFluidChunks(*lists_, data, 100'000, true);
+		ExpectFluidChunks(*lists_, data, 100'000);
 		for (uint32_t chunk = 0; chunk < spans.size(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			EXPECT_EQ(lists_->FBChunk(chunk).format, GetParam() ? formats[chunk] : Sim::SELLChunkFormat::Abs32);
+			EXPECT_EQ(lists_->FBChunk(chunk).format, formats[chunk]);
 		}
 	}
 
 	// resizing and rebuilding must replace old counts, payloads, and chunk metadata
-	TEST_P(NeighborListStorageTests, RebuildsAfterGrowthShrinkageAndEmptyState)
+	TEST_F(NeighborListStorageTests, RebuildsAfterGrowthShrinkageAndEmptyState)
 	{
 		for (const uint32_t N_F : { CPU::N_SIMD_WIDTH - 1, 2 * CPU::N_SIMD_WIDTH + 1,
 			CPU::N_SIMD_WIDTH + 1, 0u, CPU::N_SIMD_WIDTH })
@@ -459,17 +428,17 @@ namespace
 			SCOPED_TRACE(N_F);
 			const auto data = N_F == 0 ? MakeNeighborData(0, 0) : MakeMixedNeighbors(N_F);
 			PrepareStorage(*lists_, data, 8);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			EXPECT_EQ(lists_->ChunkNumTotal(), N_F == 0 ? 0u : (N_F - 1) / CPU::N_SIMD_WIDTH + 1);
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, true);
+			ExpectFluidChunks(*lists_, data, 8);
 		}
 	}
 
 	// a partial count pass clears chunks it does not visit, while rigid counts are rewritten explicitly
 	// (with and without dict chunks)
-	TEST_P(NeighborListStorageTests, ClearsUnvisitedChunksBeforePartialRebuild)
+	TEST_F(NeighborListStorageTests, ClearsUnvisitedChunksBeforePartialRebuild)
 	{
 		for (const bool trackDistinctFF : { false, true })
 		{
@@ -477,7 +446,7 @@ namespace
 			const uint32_t N_F = 2 * CPU::N_SIMD_WIDTH + 1;
 			const auto original = MakeMixedNeighbors(N_F);
 			PrepareStorage(*lists_, original, 8, trackDistinctFF);
-			FillStorage(*lists_, original, true);
+			FillStorage(*lists_, original);
 			auto data = MakeNeighborData(N_F, 3);
 			data[0][CPU::N_SIMD_WIDTH] = { 1, 0 };
 			data[1][CPU::N_SIMD_WIDTH] = { 2 };
@@ -487,19 +456,19 @@ namespace
 			CommitFluidCounts(*lists_, data, 1, trackDistinctFF);
 			for (uint32_t category = 3; category < data.size(); category++)
 			{
-				for (uint32_t i = 0; i < data[category].size(); i++) { (lists_.get()->*setCounts[category])(i, 0); }
+				for (uint32_t i = 0; i < data[category].size(); i++) { (lists_.get()->*setCountsR[category - 3])(i, 0); }
 			}
 			lists_->Finalize_Count();
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, true);
-			EXPECT_EQ(lists_->FFChunk(1).dict != nullptr, GetParam() && trackDistinctFF);
+			ExpectFluidChunks(*lists_, data, 8);
+			EXPECT_EQ(lists_->FFChunk(1).dict != nullptr, trackDistinctFF);
 		}
 	}
 
 	// rebuilding the same particles can switch payload formats and then remove all neighbors
-	TEST_P(NeighborListStorageTests, ReplacesCompressionFormatsAndClearsLists)
+	TEST_F(NeighborListStorageTests, ReplacesCompressionFormatsAndClearsLists)
 	{
 		const std::array<uint32_t, 4> spans{ 65'536, 255, 65'535, 0 };
 		const std::array<Sim::SELLChunkFormat, 4> formats{
@@ -512,50 +481,33 @@ namespace
 			auto data = MakeNeighborData(CPU::N_SIMD_WIDTH + 1, 0);
 			if (span != 0) { data[1][0] = { 17 + span, 17 }; data[1].back() = { 18 }; }
 			PrepareStorage(*lists_, data, 100'000);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
-			EXPECT_EQ(lists_->FBChunk(0).format, GetParam() ? formats[i] : Sim::SELLChunkFormat::Abs32);
+			EXPECT_EQ(lists_->FBChunk(0).format, formats[i]);
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 100'000, true);
+			ExpectFluidChunks(*lists_, data, 100'000);
 		}
-	}
-
-	// writes larger than the allocated pitch fail before touching the payload
-	TEST_P(NeighborListStorageTests, RejectsWritesLargerThanChunkPitch)
-	{
-		auto data = MakeNeighborData(1, 1);
-		for (uint32_t category = 0; category < 3; category++) { data[category][0] = { 0 }; }
-		PrepareStorage(*lists_, data, 1);
-		FillStorage(*lists_, data, true);
-		const std::array<uint32_t, 2> neighbors{ 0, 0 };
-
-		for (uint32_t category = 0; category < 3; category++)
-		{
-			SCOPED_TRACE(category);
-			EXPECT_THROW((lists_.get()->*setLists[category])(0, neighbors.data(), 2), std::runtime_error);
-		}
-		ExpectNeighbors(*lists_, data);
 	}
 
 	// dict chunks are readable through the per-particle and dictionary interfaces, including tail lanes
-	TEST_P(NeighborListStorageTests, PreservesDictChunkWrites)
+	TEST_F(NeighborListStorageTests, PreservesDictChunkWrites)
 	{
 		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 2);
 		PrepareStorage(*lists_, data, 8, true);
-		FillStorage(*lists_, data, true);
+		FillStorage(*lists_, data);
 
 		ExpectNeighbors(*lists_, data);
-		ExpectFluidChunks(*lists_, data, 8, true);
+		ExpectFluidChunks(*lists_, data, 8);
 		for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
 		{
 			SCOPED_TRACE(chunk);
-			EXPECT_EQ(lists_->FFChunk(chunk).dict != nullptr, GetParam());
+			EXPECT_NE(lists_->FFChunk(chunk).dict, nullptr);
 		}
 	}
 
 	// dict entries take a second base for neighbors beyond uint16 reach of the lowest one,
 	// so only spans that two uint16 windows cannot cover store absolute indices
-	TEST_P(NeighborListStorageTests, PreservesDictChunkIndicesAtCompressionBoundaries)
+	TEST_F(NeighborListStorageTests, PreservesDictChunkIndicesAtCompressionBoundaries)
 	{
 		const std::array<std::vector<uint32_t>, 3> neighbors{ {
 			{ 17 + 65'535, 17, 18 },
@@ -573,38 +525,33 @@ namespace
 			data[0][0] = neighbors[i];
 			data[0][1] = { 18 };
 			PrepareStorage(*lists_, data, 8, true);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, true);
+			ExpectFluidChunks(*lists_, data, 8);
 			const auto view = lists_->FFChunk(0);
-			ASSERT_EQ(view.dict != nullptr, GetParam());
-			if (GetParam())
-			{
-				EXPECT_EQ(view.format, formats[i]);
-				EXPECT_EQ(view.dictFormat, dictFormats[i]);
-			}
+			ASSERT_NE(view.dict, nullptr);
+			EXPECT_EQ(view.format, formats[i]);
+			EXPECT_EQ(view.dictFormat, dictFormats[i]);
 		}
 	}
 
 	// dict chunks list neighbors in candidate order, except the DictDelta16x2 high group (reversed)
-	TEST_P(NeighborListStorageTests, ListsDictChunkNeighborsInDictionaryOrder)
+	TEST_F(NeighborListStorageTests, ListsDictChunkNeighborsInDictionaryOrder)
 	{
 		auto data = MakeNeighborData(6, 0);
 		data[0][0] = { 5, 1, 3 };
 		data[0][1] = { 3, 0, 5 };
 		PrepareStorage(*lists_, data, 8, true);
-		FillStorage(*lists_, data, true);
+		FillStorage(*lists_, data);
 
-		// (normal chunks keep each lane's own order)
-		const std::vector<uint32_t> expected = GetParam()
-			? std::vector<uint32_t>{ 5, 3, 0 } : data[0][1];
+		const std::vector<uint32_t> expected{ 5, 3, 0 };
 		const auto actual = lists_->FF(1);
 		EXPECT_EQ(std::vector<uint32_t>(actual.data, actual.data + actual.N), expected);
 	}
 
 	// the count writes dict chunks in candidate order across write blocks, over growing and shrinking rebuilds
-	TEST_P(NeighborListStorageTests, WritesDictChunksDuringCount)
+	TEST_F(NeighborListStorageTests, WritesDictChunksDuringCount)
 	{
 		const auto MakeDictNeighbors = [](const uint32_t N_nbrs)
 		{
@@ -623,15 +570,15 @@ namespace
 			SCOPED_TRACE(N_nbrs);
 			const auto data = MakeDictNeighbors(N_nbrs);
 			PrepareStorage(*lists_, data, 8, true);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, true);
+			ExpectFluidChunks(*lists_, data, 8);
 			for (uint32_t chunk = 0; chunk < lists_->ChunkNumTotal(); chunk++)
 			{
 				SCOPED_TRACE(chunk);
 				const auto view = lists_->FFChunk(chunk);
-				ASSERT_EQ(view.dict != nullptr, GetParam());
+				ASSERT_NE(view.dict, nullptr);
 				const auto distinct = DistinctChunkNeighbors(data, 0, chunk);
 				for (uint32_t dictIdx = 0; dictIdx < view.N_dict; dictIdx++)
 				{
@@ -643,9 +590,8 @@ namespace
 
 	// dict pages that the following counts leave unused are freed, here after one large count over 8 MB
 	// (the pages are checked every 64 counts, so 127 small counts span a whole check window without it)
-	TEST_P(NeighborListStorageTests, FreesDictPagesUnusedByLaterCounts)
+	TEST_F(NeighborListStorageTests, FreesDictPagesUnusedByLaterCounts)
 	{
-		if (!GetParam()) { return; }
 		const uint32_t N_chunks = 12'000;
 		const auto RebuildDictChunks = [&](const uint32_t N_dict)
 		{
@@ -679,7 +625,7 @@ namespace
 	}
 
 	// chunks with more distinct neighbors than a dict chunk holds stay normal chunks
-	TEST_P(NeighborListStorageTests, LimitsDictChunksToDictSize)
+	TEST_F(NeighborListStorageTests, LimitsDictChunksToDictSize)
 	{
 		for (const uint32_t N_distinct : { Sim::N_SELL_DICT_SIZE_MAX, Sim::N_SELL_DICT_SIZE_MAX + 1 })
 		{
@@ -689,38 +635,20 @@ namespace
 			// the second lane shares every neighbor, so it adds no dict entries
 			data[0][1].assign(data[0][0].rbegin(), data[0][0].rend());
 			PrepareStorage(*lists_, data, 8, true);
-			FillStorage(*lists_, data, true);
+			FillStorage(*lists_, data);
 
 			ExpectNeighbors(*lists_, data);
-			ExpectFluidChunks(*lists_, data, 8, true);
-			EXPECT_EQ(lists_->FFChunk(0).dict != nullptr, GetParam() && N_distinct <= Sim::N_SELL_DICT_SIZE_MAX);
-		}
-	}
-
-	// per-particle writes reject dict chunks, which only the count writes
-	TEST_P(NeighborListStorageTests, RejectsPerParticleWritesIntoDictChunks)
-	{
-		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 1);
-		PrepareStorage(*lists_, data, 8, true);
-		const auto& neighbors = data[0][0];
-
-		if (GetParam())
-		{
-			EXPECT_THROW(lists_->SetNbrListFF(0, neighbors.data(), static_cast<uint32_t>(neighbors.size())),
-				std::runtime_error);
-		}
-		else
-		{
-			EXPECT_NO_THROW(lists_->SetNbrListFF(0, neighbors.data(), static_cast<uint32_t>(neighbors.size())));
+			ExpectFluidChunks(*lists_, data, 8);
+			EXPECT_EQ(lists_->FFChunk(0).dict != nullptr, N_distinct <= Sim::N_SELL_DICT_SIZE_MAX);
 		}
 	}
 
 	#if defined(_DEBUG)
 	// debug guards reject counts that cannot fit in the uint16 neighbor-count storage
-	TEST_P(NeighborListStorageTests, RejectsNeighborCountOverflow)
+	TEST_F(NeighborListStorageTests, RejectsNeighborCountOverflow)
 	{
 		PrepareStorage(*lists_, MakeNeighborData(1, 1), 1);
-		for (const auto setCount : setCounts)
+		for (const auto setCount : setCountsR)
 		{
 			EXPECT_THROW((lists_.get()->*setCount)(0, 65'536), std::runtime_error);
 		}
@@ -733,12 +661,12 @@ namespace
 	}
 
 	// debug guards catch underfilled lists through both per-particle and direct chunk APIs
-	TEST_P(NeighborListStorageTests, RejectsCountAndFillMismatches)
+	TEST_F(NeighborListStorageTests, RejectsCountAndFillMismatches)
 	{
 		const auto data = MakeMixedNeighbors(CPU::N_SIMD_WIDTH + 1);
 		PrepareStorage(*lists_, data, 8);
-		FillStorage(*lists_, data, true);
-		for (const auto setList : setLists)
+		FillStorage(*lists_, data);
+		for (const auto setList : setListsR)
 		{
 			EXPECT_THROW((lists_.get()->*setList)(0, nullptr, 0), std::runtime_error);
 		}
@@ -750,6 +678,4 @@ namespace
 		ExpectNeighbors(*lists_, data);
 	}
 	#endif
-
-	INSTANTIATE_TEST_SUITE_P(ExplicitAndCompressed, NeighborListStorageTests, testing::Bool());
 }

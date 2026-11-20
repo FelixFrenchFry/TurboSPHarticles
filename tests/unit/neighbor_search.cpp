@@ -11,7 +11,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <tuple>
 #include <vector>
 
 // internal
@@ -26,7 +25,7 @@ namespace Sim
 	class NeighborSearchTestAccess
 	{
 	public:
-		static const I_NeighborListSELL& NeighborLists(const SimBackend_CPU& backend)
+		static const NeighborLists_ChunkedSELL_AdaptCompress_CPU& NeighborLists(const SimBackend_CPU& backend)
 		{
 			return *backend.neighborList_;
 		}
@@ -45,7 +44,6 @@ namespace
 	// populations follow the universal state order: fluid, boundary, rigid
 	using SearchParticles = std::array<std::vector<SearchParticle>, 3>;
 	using NeighborIdsByParticle = std::map<uint64_t, std::vector<uint64_t>>;
-	using NeighborSearchConfig = std::tuple<Base::NeighborSearchMethod, Base::NeighborListMethod>;
 
 	SearchParticles MakeParticles(const std::vector<glm::vec3>& fluid,
 		const std::vector<glm::vec3>& boundary = {}, const std::vector<glm::vec3>& rigid = {},
@@ -145,8 +143,9 @@ namespace
 		const std::array<std::span<const uint64_t>, 3> ids{
 			backend.GetFluidParticleView().id, backend.GetBoundaryParticleView().id, backend.GetRigidParticleView().id };
 		constexpr std::array readLists{
-			&Sim::I_NeighborList::FF, &Sim::I_NeighborList::FB, &Sim::I_NeighborList::FR,
-			&Sim::I_NeighborList::RF, &Sim::I_NeighborList::RB, &Sim::I_NeighborList::RR };
+			&Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU::FF, &Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU::FB,
+			&Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU::FR, &Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU::RF,
+			&Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU::RB, &Sim::NeighborLists_ChunkedSELL_AdaptCompress_CPU::RR };
 		constexpr std::array<uint32_t, 6> sources{ 0, 0, 0, 2, 2, 2 };
 		constexpr std::array<uint32_t, 6> targets{ 0, 1, 2, 0, 1, 2 };
 		for (uint32_t population = 0; population < particles.size(); population++)
@@ -179,13 +178,12 @@ namespace
 		}
 	}
 
-	class NeighborSearchTests : public testing::TestWithParam<NeighborSearchConfig>
+	class NeighborSearchTests : public testing::TestWithParam<Base::NeighborSearchMethod>
 	{
 	protected:
 		void SetUp() override
 		{
-			params_.neighborSearchMethod = std::get<0>(GetParam());
-			params_.neighborListMethod = std::get<1>(GetParam());
+			params_.neighborSearchMethod = GetParam();
 			params_.particleSizeF = 0.5f;
 			params_.particleSizeB = 0.5f;
 			params_.particleSizeInvF = 2.0f;
@@ -390,16 +388,11 @@ namespace
 		SearchAndExpect(particles);
 	}
 
-	INSTANTIATE_TEST_SUITE_P(SearchAndStorageMethods, NeighborSearchTests,
-		testing::Combine(
-			testing::Values(Base::NeighborSearchMethod::BruteForce, Base::NeighborSearchMethod::CellLinkedList_Compact),
-			testing::Values(Base::NeighborListMethod::ChunkedSELLX_Explicit, Base::NeighborListMethod::ChunkedSELLX_AdaptCompress)),
-		[](const testing::TestParamInfo<NeighborSearchConfig>& info)
+	INSTANTIATE_TEST_SUITE_P(SearchMethods, NeighborSearchTests,
+		testing::Values(Base::NeighborSearchMethod::BruteForce, Base::NeighborSearchMethod::CellLinkedList_Compact),
+		[](const testing::TestParamInfo<Base::NeighborSearchMethod>& info)
 		{
-			const char* search = std::get<0>(info.param) == Base::NeighborSearchMethod::BruteForce
-				? "BruteForce" : "CompactCellList";
-			const char* storage = std::get<1>(info.param) == Base::NeighborListMethod::ChunkedSELLX_Explicit
-				? "Explicit" : "Compressed";
-			return std::string(search) + "_" + storage;
+			return std::string(info.param == Base::NeighborSearchMethod::BruteForce
+				? "BruteForce" : "CompactCellList");
 		});
 }
