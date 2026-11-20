@@ -1,7 +1,6 @@
 {
   "backendType": "CPU",
   "scenarioType": "RigidMeshes",
-  "neighborSearchMethod": 1,
   "domainDecompMethod": 0,
   "distHaloMode": 0,
   "loadBalanceMetric": 1,

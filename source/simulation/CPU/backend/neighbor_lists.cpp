@@ -677,7 +677,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 	ChunkedSELLNeighborSpan_Write chunkFF = FFChunkWrite(chunk);
 	assert(!chunkFF.dict);
 
-	// direct chunk fill already wrote the real neighbors
+	// the chunk fill already wrote the real neighbors
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
@@ -687,7 +687,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFFChunkWrite(
 		if (nbrCountFF_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
-				"Count and fill query mismatch in direct compressed SELL FF neighbor storage.");
+				"Count and fill query mismatch in compressed chunked SELL FF neighbor storage.");
 		}
 		#endif
 
@@ -722,7 +722,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFBChunkWrite(
 	const uint32_t safeBoundaryIdx = 0;
 	ChunkedSELLNeighborSpan_Write chunkFB = FBChunkWrite(chunk);
 
-	// direct chunk fill already wrote the real neighbors
+	// the chunk fill already wrote the real neighbors
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
@@ -732,7 +732,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFBChunkWrite(
 		if (nbrCountFB_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
-				"Count and fill query mismatch in direct compressed SELL FB neighbor storage.");
+				"Count and fill query mismatch in compressed chunked SELL FB neighbor storage.");
 		}
 		#endif
 
@@ -767,7 +767,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFRChunkWrite(
 	const uint32_t safeRigidIdx = 0;
 	ChunkedSELLNeighborSpan_Write chunkFR = FRChunkWrite(chunk);
 
-	// direct chunk fill already wrote the real neighbors
+	// the chunk fill already wrote the real neighbors
 	for (uint32_t i = begin; i < end; i++)
 	{
 		const uint32_t lane = LaneOfParticle(i);
@@ -777,7 +777,7 @@ void NeighborLists_ChunkedSELL_AdaptCompress_CPU::FinishFRChunkWrite(
 		if (nbrCountFR_[i] != N_written) [[unlikely]]
 		{
 			throw std::runtime_error(
-				"Count and fill query mismatch in direct compressed SELL FR neighbor storage.");
+				"Count and fill query mismatch in compressed chunked SELL FR neighbor storage.");
 		}
 		#endif
 

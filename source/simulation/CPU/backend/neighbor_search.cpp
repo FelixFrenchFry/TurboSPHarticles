@@ -566,429 +566,10 @@ namespace
 } // namespace anonymous
 
 // -------------------------------------------------------------------------------------------------
-// --- [ brute force implementation ] --------------------------------------------------------------
-// -------------------------------------------------------------------------------------------------
-
-void NS_BruteForce_CPU::Init()
-{
-	// nothing to do
-}
-
-void NS_BruteForce_CPU::Construct(
-	[[maybe_unused]] const SimParams& params)
-{
-	// no search structure to construct in brute force implementation
-}
-
-void NS_BruteForce_CPU::Query_Count(const SimParams& params)
-{
-	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	const uint32_t N_F = be_.N_F_;
-	const uint32_t N_B = be_.N_B_;
-	const uint32_t N_R = be_.N_R_;
-
-	const float* RESTRICT xPosF = be_.xPosF_.data();
-	const float* RESTRICT yPosF = be_.yPosF_.data();
-	const float* RESTRICT zPosF = be_.zPosF_.data();
-	const float* RESTRICT xPosB = be_.xPosB_.data();
-	const float* RESTRICT yPosB = be_.yPosB_.data();
-	const float* RESTRICT zPosB = be_.zPosB_.data();
-	const float* RESTRICT xPosR = be_.xPosR_.data();
-	const float* RESTRICT yPosR = be_.yPosR_.data();
-	const float* RESTRICT zPosR = be_.zPosR_.data();
-	const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
-
-	// count FF, FB, and FR neighbors of each fluid particle
-	const bool useSelectedFluidCenters = be_.useDistributedStepWork_;
-	const uint32_t N_totalChunks = be_.neighborList_->ChunkNumTotal();
-	const uint32_t N_chunks = useSelectedFluidCenters
-		? static_cast<uint32_t>(be_.pressureAccChunkIdxs_.size())
-		: N_totalChunks;
-	// the distributed chunk indices are unique and ascending, a full list spans every chunk
-	be_.neighborList_->PrepareFluidCountWrite(N_chunks == N_totalChunks);
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
-			{
-				const uint32_t chunk = useSelectedFluidCenters
-					? be_.pressureAccChunkIdxs_[workIdx] : workIdx;
-				const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
-				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
-				uint32_t cntFF[CPU::N_SIMD_WIDTH]{};
-				uint32_t cntFB[CPU::N_SIMD_WIDTH]{};
-				uint32_t cntFR[CPU::N_SIMD_WIDTH]{};
-				uint32_t minRefFF = std::numeric_limits<uint32_t>::max();
-				uint32_t minRefFB = std::numeric_limits<uint32_t>::max();
-				uint32_t minRefFR = std::numeric_limits<uint32_t>::max();
-				uint32_t maxRefFF = 0;
-				uint32_t maxRefFB = 0;
-				uint32_t maxRefFR = 0;
-
-				for (uint32_t i = begin; i < end; i++)
-				{
-					if (useSelectedFluidCenters && be_.pressureAccFluidParticleFlags_[i] == 0)
-						{ continue; }
-
-					const uint32_t lane = i - begin;
-					const float xi = xPosF[i];
-					const float yi = yPosF[i];
-					const float zi = zPosF[i];
-
-					// FF count neighbors
-					for (uint32_t j = 0; j < N_F; j++)
-					{
-						const float dx = xi - xPosF[j];
-						const float dy = yi - yPosF[j];
-						const float dz = zi - zPosF[j];
-						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-						if (distSqu <= kernelRadiusSqu) [[unlikely]]
-						{
-							cntFF[lane]++;
-							minRefFF = std::min(minRefFF, j);
-							maxRefFF = std::max(maxRefFF, j);
-						}
-					}
-
-					// FB count neighbors
-					for (uint32_t j = 0; j < N_B; j++)
-					{
-						const float dx = xi - xPosB[j];
-						const float dy = yi - yPosB[j];
-						const float dz = zi - zPosB[j];
-						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-						if (distSqu <= kernelRadiusSqu) [[unlikely]]
-						{
-							cntFB[lane]++;
-							minRefFB = std::min(minRefFB, j);
-							maxRefFB = std::max(maxRefFB, j);
-						}
-					}
-
-					// FR count neighbors
-					for (uint32_t j = 0; j < N_R; j++)
-					{
-						const float dx = xi - xPosR[j];
-						const float dy = yi - yPosR[j];
-						const float dz = zi - zPosR[j];
-						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-						if (distSqu <= kernelRadiusSqu) [[unlikely]]
-						{
-							cntFR[lane]++;
-							minRefFR = std::min(minRefFR, j);
-							maxRefFR = std::max(maxRefFR, j);
-						}
-					}
-				}
-
-				be_.neighborList_->CommitFluidChunkCounts(
-					chunk,
-					{ cntFF, minRefFF, maxRefFF },
-					{ cntFB, minRefFB, maxRefFB },
-					{ cntFR, minRefFR, maxRefFR });
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	// count RF, RB, and RR neighbors of each rigid particle
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_R),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				if (be_.useDistributedStepWork_ && i >= be_.N_ownedR_)
-				{
-					// clear halo counts before rebuilding neighbor-list offsets
-					be_.neighborList_->SetNbrCountRF(i, 0);
-					be_.neighborList_->SetNbrCountRB(i, 0);
-					be_.neighborList_->SetNbrCountRR(i, 0);
-					continue;
-				}
-
-				uint32_t countRF = 0;
-				uint32_t countRB = 0;
-				uint32_t countRR = 0;
-
-				// RF count neighbors
-				for (uint32_t j = 0; j < N_F; j++)
-				{
-					const float dx = xPosR[i] - xPosF[j];
-					const float dy = yPosR[i] - yPosF[j];
-					const float dz = zPosR[i] - zPosF[j];
-					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						countRF++;
-					}
-				}
-
-				// RB count neighbors
-				for (uint32_t j = 0; j < N_B; j++)
-				{
-					const float dx = xPosR[i] - xPosB[j];
-					const float dy = yPosR[i] - yPosB[j];
-					const float dz = zPosR[i] - zPosB[j];
-					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						countRB++;
-					}
-				}
-
-				// RR count neighbors from other bodies
-				for (uint32_t j = 0; j < N_R; j++)
-				{
-					// skip particles of the same rigid body
-					if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
-
-					const float dx = xPosR[i] - xPosR[j];
-					const float dy = yPosR[i] - yPosR[j];
-					const float dz = zPosR[i] - zPosR[j];
-					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						countRR++;
-					}
-				}
-
-				be_.neighborList_->SetNbrCountRF(i, countRF);
-				be_.neighborList_->SetNbrCountRB(i, countRB);
-				be_.neighborList_->SetNbrCountRR(i, countRR);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-void NS_BruteForce_CPU::Query_Fill(const SimParams& params)
-{
-	const float kernelRadiusSqu = params.kernelRadiusSqu;
-	const uint32_t N_F = be_.N_F_;
-	const uint32_t N_B = be_.N_B_;
-	const uint32_t N_R = be_.N_R_;
-	const float* RESTRICT xPosF = be_.xPosF_.data();
-	const float* RESTRICT yPosF = be_.yPosF_.data();
-	const float* RESTRICT zPosF = be_.zPosF_.data();
-	const float* RESTRICT xPosB = be_.xPosB_.data();
-	const float* RESTRICT yPosB = be_.yPosB_.data();
-	const float* RESTRICT zPosB = be_.zPosB_.data();
-	const float* RESTRICT xPosR = be_.xPosR_.data();
-	const float* RESTRICT yPosR = be_.yPosR_.data();
-	const float* RESTRICT zPosR = be_.zPosR_.data();
-	const uint32_t* RESTRICT bodyIdR = be_.bodyIdR_.data();
-
-	// fill FF, FB, and FR neighbors of each fluid particle
-	const bool useSelectedFluidCenters = be_.useDistributedStepWork_;
-	const uint32_t N_chunks = useSelectedFluidCenters
-		? static_cast<uint32_t>(be_.pressureAccChunkIdxs_.size())
-		: be_.neighborList_->ChunkNumTotal();
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_chunks),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			for (uint32_t workIdx = r.begin(); workIdx != r.end(); workIdx++)
-			{
-				const uint32_t chunk = useSelectedFluidCenters
-					? be_.pressureAccChunkIdxs_[workIdx] : workIdx;
-				const uint32_t begin = chunk * CPU::N_SIMD_WIDTH;
-				const uint32_t end = std::min(begin + CPU::N_SIMD_WIDTH, N_F);
-				uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
-				uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
-				uint32_t writtenFR[CPU::N_SIMD_WIDTH]{};
-				ChunkedSELLNeighborSpan_Write chunkFF = be_.neighborList_->FFChunkWrite(chunk);
-				ChunkedSELLNeighborSpan_Write chunkFB = be_.neighborList_->FBChunkWrite(chunk);
-				ChunkedSELLNeighborSpan_Write chunkFR = be_.neighborList_->FRChunkWrite(chunk);
-
-				for (uint32_t i = begin; i < end; i++)
-				{
-					if (useSelectedFluidCenters && be_.pressureAccFluidParticleFlags_[i] == 0)
-						{ continue; }
-
-					const uint32_t lane = i - begin;
-					const float xi = xPosF[i];
-					const float yi = yPosF[i];
-					const float zi = zPosF[i];
-
-					// FF fill neighbor list
-					for (uint32_t j = 0; j < N_F; j++)
-					{
-						const float dx = xi - xPosF[j];
-						const float dy = yi - yPosF[j];
-						const float dz = zi - zPosF[j];
-						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-						if (distSqu <= kernelRadiusSqu) [[unlikely]]
-						{
-							const uint32_t k = writtenFF[lane]++;
-
-							#if defined(_DEBUG)
-							if (k >= chunkFF.pitch) [[unlikely]]
-							{
-								throw std::runtime_error(
-									"Brute-force SELL FF fill exceeded chunk pitch.");
-							}
-							#endif
-
-							chunkFF.StoreNeighbor(lane, k, j);
-						}
-					}
-
-					// FB fill neighbor list
-					for (uint32_t j = 0; j < N_B; j++)
-					{
-						const float dx = xi - xPosB[j];
-						const float dy = yi - yPosB[j];
-						const float dz = zi - zPosB[j];
-						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-						if (distSqu <= kernelRadiusSqu) [[unlikely]]
-						{
-							const uint32_t k = writtenFB[lane]++;
-
-							#if defined(_DEBUG)
-							if (k >= chunkFB.pitch) [[unlikely]]
-							{
-								throw std::runtime_error(
-									"Brute-force SELL FB fill exceeded chunk pitch.");
-							}
-							#endif
-
-							chunkFB.StoreNeighbor(lane, k, j);
-						}
-					}
-
-					// FR fill neighbor list
-					for (uint32_t j = 0; j < N_R; j++)
-					{
-						const float dx = xi - xPosR[j];
-						const float dy = yi - yPosR[j];
-						const float dz = zi - zPosR[j];
-						const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-						if (distSqu <= kernelRadiusSqu) [[unlikely]]
-						{
-							const uint32_t k = writtenFR[lane]++;
-
-							#if defined(_DEBUG)
-							if (k >= chunkFR.pitch) [[unlikely]]
-							{
-								throw std::runtime_error(
-									"Brute-force SELL FR fill exceeded chunk pitch.");
-							}
-							#endif
-
-							chunkFR.StoreNeighbor(lane, k, j);
-						}
-					}
-				}
-
-				be_.neighborList_->FinishFFChunkWrite(chunk, writtenFF);
-				be_.neighborList_->FinishFBChunkWrite(chunk, writtenFB);
-				be_.neighborList_->FinishFRChunkWrite(chunk, writtenFR);
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-
-	// fill RF, RB, and RR neighbors of each rigid particle
-	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, N_R),
-		[&](const tbb::blocked_range<uint32_t>& r)
-		{
-			std::vector<uint32_t> neighbors;
-			for (uint32_t i = r.begin(); i != r.end(); i++)
-			{
-				if (be_.useDistributedStepWork_ && i >= be_.N_ownedR_)
-				{
-					continue;
-				}
-
-				// RF fill neighbor list
-				neighbors.clear();
-				for (uint32_t j = 0; j < N_F; j++)
-				{
-					const float dx = xPosR[i] - xPosF[j];
-					const float dy = yPosR[i] - yPosF[j];
-					const float dz = zPosR[i] - zPosF[j];
-					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						neighbors.push_back(j);
-					}
-				}
-				be_.neighborList_->SetNbrListRF(
-					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
-
-				// RB fill neighbor list
-				neighbors.clear();
-				for (uint32_t j = 0; j < N_B; j++)
-				{
-					const float dx = xPosR[i] - xPosB[j];
-					const float dy = yPosR[i] - yPosB[j];
-					const float dz = zPosR[i] - zPosB[j];
-					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						neighbors.push_back(j);
-					}
-				}
-				be_.neighborList_->SetNbrListRB(
-					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
-
-				// RR fill neighbor list from other bodies
-				neighbors.clear();
-				for (uint32_t j = 0; j < N_R; j++)
-				{
-					// skip particles of the same rigid body
-					if (j == i || bodyIdR[j] == bodyIdR[i]) { continue; }
-
-					const float dx = xPosR[i] - xPosR[j];
-					const float dy = yPosR[i] - yPosR[j];
-					const float dz = zPosR[i] - zPosR[j];
-					const float distSqu = std::fmaf(dx, dx, std::fmaf(dy, dy, dz * dz));
-
-					if (distSqu <= kernelRadiusSqu) [[unlikely]]
-					{
-						neighbors.push_back(j);
-					}
-				}
-				be_.neighborList_->SetNbrListRR(
-					i, neighbors.data(), static_cast<uint32_t>(neighbors.size()));
-			}
-		},
-		tbb::auto_partitioner{}
-	);
-}
-
-void NS_BruteForce_CPU::DataReOrder(
-	const SimParams& params)
-{
-	(void)params;
-
-	// no re-ordering in brute force implementation
-}
-
-Mem::ParticleClassMemUsage NS_BruteForce_CPU::GetMemUsage() const
-{
-	return {};
-}
-
-// -------------------------------------------------------------------------------------------------
 // --- [ cell linked list compact implementation ] -------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_CellLinkedList_Compact_CPU::Init()
+void NeighborSearch_CellLinkedList_Compact_CPU::Init()
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
@@ -1028,7 +609,7 @@ void NS_CellLinkedList_Compact_CPU::Init()
 	compactCellBuildScratch_.chunkData.clear();
 }
 
-void NS_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
 {
 	// every path below replaces the cell directory, which retires the cached cell ranges
 	cellDirectoryGeneration_++;
@@ -1230,8 +811,8 @@ void NS_CellLinkedList_Compact_CPU::Construct(const SimParams& params)
 	BuildCellPrefixStartIdx(uniqueCellIdR_, cellPrefixShift_, cellPrefixStartIdxR_);
 }
 
-const NS_CellLinkedList_Compact_CPU::CellRangeCache::Entry&
-NS_CellLinkedList_Compact_CPU::ResolveCellQueryRanges(
+const NeighborSearch_CellLinkedList_Compact_CPU::CellRangeCache::Entry&
+NeighborSearch_CellLinkedList_Compact_CPU::ResolveCellQueryRanges(
 	const uint64_t cellId, CellRangeCache& cellRangeCache) const noexcept
 {
 	if (auto* cached = cellRangeCache.Find(cellId, cellDirectoryGeneration_))
@@ -1262,7 +843,7 @@ NS_CellLinkedList_Compact_CPU::ResolveCellQueryRanges(
 	return entry;
 }
 
-void NS_CellLinkedList_Compact_CPU::GatherBoxQueryRanges(
+void NeighborSearch_CellLinkedList_Compact_CPU::GatherBoxQueryRanges(
 	const int cxBegin, const int cxEnd,
 	const int cyBegin, const int cyEnd,
 	const int czBegin, const int czEnd,
@@ -1328,7 +909,7 @@ void NS_CellLinkedList_Compact_CPU::GatherBoxQueryRanges(
 	}
 }
 
-void NS_CellLinkedList_Compact_CPU::GatherCellQueryRanges(
+void NeighborSearch_CellLinkedList_Compact_CPU::GatherCellQueryRanges(
 	const int cx,
 	const int cy,
 	const int cz,
@@ -1360,7 +941,7 @@ void NS_CellLinkedList_Compact_CPU::GatherCellQueryRanges(
 		fluidRanges, boundaryRanges, rigidRanges);
 }
 
-void NS_CellLinkedList_Compact_CPU::GatherChunkQueryRanges(
+void NeighborSearch_CellLinkedList_Compact_CPU::GatherChunkQueryRanges(
 	const uint32_t begin,
 	const uint32_t end,
 	boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& fluidRanges,
@@ -1444,7 +1025,7 @@ void NS_CellLinkedList_Compact_CPU::GatherChunkQueryRanges(
 	MergeCellRanges(rigidRanges);
 }
 
-void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 {
 	{
 		const float kernelRadiusSqu = params.kernelRadiusSqu;
@@ -1475,7 +1056,6 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 			? static_cast<uint32_t>(be_.pressureAccChunkIdxs_.size())
 			: N_totalChunks;
 		const CPU::Float32xSIMD kernelRadiusSquV = CPU::SetFloat32xSIMD(kernelRadiusSqu);
-		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 
 		// bit of each SIMD lane in a lane mask
 		alignas(CPU::N_SIMD_ALIGNMENT) uint32_t laneBits[CPU::N_SIMD_WIDTH]{};
@@ -1487,7 +1067,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 		const CPU::UInt32xSIMD zeroU = CPU::SetUInt32xSIMD(0u);
 
 		// the distributed chunk indices are unique and ascending, a full list spans every chunk
-		chunkedSELLNeighborList->PrepareFluidCountWrite(N_chunks == N_totalChunks);
+		be_.neighborList_->PrepareFluidCountWrite(N_chunks == N_totalChunks);
 
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -1529,7 +1109,6 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 
 					// FF count neighbors
 					// (with the lanes of each distinct neighbor, the neighbor list writes dict chunks right away)
-					bool isCountedFF = false;
 					// branch-free pass, every candidate is written to the next slot and only a hit keeps it
 					for (const ActiveCellRange& cellRange : fluidRanges)
 					{
@@ -1564,16 +1143,11 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 							cntFF = CPU::AddMaskedOneUInt32xSIMD(cntFF, CPU::SelectMask32xSIMD(
 								(CPU::SetUInt32xSIMD(distinctLaneMasksFF[n]) & laneBitsV) != zeroU));
 						}
-						isCountedFF = true;
 					}
 					else
 					{
+						// overflowed dictionaries count every candidate
 						N_distinctFF = 0;
-					}
-
-					// overflowed dictionaries count every candidate
-					if (!isCountedFF)
-					{
 						for (const ActiveCellRange& cellRange : fluidRanges)
 						{
 							for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
@@ -1666,7 +1240,7 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 					cntFB.store_aligned(cntLanesFB);
 					cntFR.store_aligned(cntLanesFR);
 
-					chunkedSELLNeighborList->CommitFluidChunkCounts(
+					be_.neighborList_->CommitFluidChunkCounts(
 						chunk,
 						{ cntLanesFF, minRefFF, maxRefFF, N_distinctFF, distinctFF, distinctLaneMasksFF },
 						{ cntLanesFB, minRefFB, maxRefFB },
@@ -1760,15 +1334,13 @@ void NS_CellLinkedList_Compact_CPU::Query_Count(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 {
 	{
 		const float kernelRadiusSqu = params.kernelRadiusSqu;
 		const uint32_t N_F = be_.N_F_;
 		const uint32_t N_R = be_.N_R_;
 		if (N_F == 0 && N_R == 0) { return; }
-
-		auto* chunkedSELLNeighborList = be_.neighborList_.get();
 
 		// local references for fewer pointer indirections
 		const float* RESTRICT xPosF = be_.xPosF_.data();
@@ -1823,12 +1395,9 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 					uint32_t writtenFF[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFB[CPU::N_SIMD_WIDTH]{};
 					uint32_t writtenFR[CPU::N_SIMD_WIDTH]{};
-					ChunkedSELLNeighborSpan_Write chunkFF =
-						chunkedSELLNeighborList->FFChunkWrite(chunk);
-					ChunkedSELLNeighborSpan_Write chunkFB =
-						chunkedSELLNeighborList->FBChunkWrite(chunk);
-					ChunkedSELLNeighborSpan_Write chunkFR =
-						chunkedSELLNeighborList->FRChunkWrite(chunk);
+					ChunkedSELLNeighborSpan_Write chunkFF = be_.neighborList_->FFChunkWrite(chunk);
+					ChunkedSELLNeighborSpan_Write chunkFB = be_.neighborList_->FBChunkWrite(chunk);
+					ChunkedSELLNeighborSpan_Write chunkFR = be_.neighborList_->FRChunkWrite(chunk);
 					const bool isDictFF = chunkFF.dict != nullptr;
 
 					// dict chunks are written by the count-query, so they only need their B and R neighbors
@@ -1935,9 +1504,9 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 						}
 					}
 
-					if (!isDictFF) { chunkedSELLNeighborList->FinishFFChunkWrite(chunk, writtenFF); }
-					chunkedSELLNeighborList->FinishFBChunkWrite(chunk, writtenFB);
-					chunkedSELLNeighborList->FinishFRChunkWrite(chunk, writtenFR);
+					if (!isDictFF) { be_.neighborList_->FinishFFChunkWrite(chunk, writtenFF); }
+					be_.neighborList_->FinishFBChunkWrite(chunk, writtenFB);
+					be_.neighborList_->FinishFRChunkWrite(chunk, writtenFR);
 				}
 			},
 			tbb::auto_partitioner{}
@@ -2026,17 +1595,17 @@ void NS_CellLinkedList_Compact_CPU::Query_Fill(const SimParams& params)
 	}
 }
 
-void NS_CellLinkedList_Compact_CPU::DataReOrder(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_CPU::DataReOrder(const SimParams& params)
 {
 	ReOrderParticleData(params, true);
 }
 
-void NS_CellLinkedList_Compact_CPU::DataReOrder_SolverStep(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_CPU::DataReOrder_SolverStep(const SimParams& params)
 {
 	ReOrderParticleData(params, false);
 }
 
-void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
+void NeighborSearch_CellLinkedList_Compact_CPU::ReOrderParticleData(
 	const SimParams& params,
 	const bool permuteSolverFields)
 {
@@ -2262,7 +1831,7 @@ void NS_CellLinkedList_Compact_CPU::ReOrderParticleData(
 	cellIdsMatchCurrentParticleOrder_ = true;
 }
 
-bool NS_CellLinkedList_Compact_CPU::TryGetLastParticleReOrder(
+bool NeighborSearch_CellLinkedList_Compact_CPU::TryGetLastParticleReOrder(
 	std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
 	std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
 {
@@ -2274,7 +1843,7 @@ bool NS_CellLinkedList_Compact_CPU::TryGetLastParticleReOrder(
 	return true;
 }
 
-Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU::GetMemUsage() const
+Mem::ParticleClassMemUsage NeighborSearch_CellLinkedList_Compact_CPU::GetMemUsage() const
 {
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
@@ -2314,7 +1883,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_CPU::GetMemUsage() const
 	return { usageF, usageB, usageR };
 }
 
-void NS_CellLinkedList_Compact_CPU::UpdateCellFrame()
+void NeighborSearch_CellLinkedList_Compact_CPU::UpdateCellFrame()
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
@@ -2420,7 +1989,7 @@ void NS_CellLinkedList_Compact_CPU::UpdateCellFrame()
 	cellFrameValid_ = true;
 }
 
-inline bool NS_CellLinkedList_Compact_CPU::IsInsideSimDomain(
+inline bool NeighborSearch_CellLinkedList_Compact_CPU::IsInsideSimDomain(
 	const float x, const float y, const float z) const noexcept
 {
 	const glm::vec3& min = be_.simDomainMin_;
@@ -2432,7 +2001,7 @@ inline bool NS_CellLinkedList_Compact_CPU::IsInsideSimDomain(
 		&& z >= min.z && z <= max.z;
 }
 
-inline bool NS_CellLinkedList_Compact_CPU::IsInsideCellFrame(
+inline bool NeighborSearch_CellLinkedList_Compact_CPU::IsInsideCellFrame(
 	int cx, int cy, int cz) const noexcept
 {
 	const int lx = cx - static_cast<int>(cellFrame_.cellOrigX);
@@ -2444,7 +2013,7 @@ inline bool NS_CellLinkedList_Compact_CPU::IsInsideCellFrame(
 		&& lz >= 0 && lz < static_cast<int>(cellFrame_.N_dimZ);
 }
 
-inline uint64_t NS_CellLinkedList_Compact_CPU::MapToCellId_Morton(
+inline uint64_t NeighborSearch_CellLinkedList_Compact_CPU::MapToCellId_Morton(
 	int cx, int cy, int cz) const noexcept
 {
 	// shift to local cell frame
@@ -2469,7 +2038,7 @@ inline uint64_t NS_CellLinkedList_Compact_CPU::MapToCellId_Morton(
 	return xx | yy | zz; // interleaving for 3D Morton code
 }
 
-inline uint64_t NS_CellLinkedList_Compact_CPU::SpreadBitsWithGaps_21to63(uint32_t v) noexcept
+inline uint64_t NeighborSearch_CellLinkedList_Compact_CPU::SpreadBitsWithGaps_21to63(uint32_t v) noexcept
 {
 	uint64_t x = static_cast<uint64_t>(v & 0x1fffffU); // lower 21 bits
 
@@ -2484,7 +2053,7 @@ inline uint64_t NS_CellLinkedList_Compact_CPU::SpreadBitsWithGaps_21to63(uint32_
 	return x;
 }
 
-void NS_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
+void NeighborSearch_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
 	const std::span<const uint64_t> uniqueCellIds,
 	const uint32_t cellPrefixShift,
 	CellPrefixStartIdx& cellPrefixStartIdx) noexcept
@@ -2498,7 +2067,7 @@ void NS_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
 	}
 }
 
-uint32_t NS_CellLinkedList_Compact_CPU::FindCompactCellIdx(
+uint32_t NeighborSearch_CellLinkedList_Compact_CPU::FindCompactCellIdx(
 	const std::vector<uint64_t>& uniqueCellIds,
 	const uint64_t cellId,
 	const CellPrefixStartIdx& cellPrefixStartIdx,

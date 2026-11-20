@@ -1,7 +1,6 @@
 {
   "backendType": "CPU",
   "scenarioType": "BoundaryRigidMeshes",
-  "neighborSearchMethod": 1,
   "rigidCouplingMode": "Sequential",
   "rigidContactDiagonal": "Full",
   "domainDecompMethod": 0,

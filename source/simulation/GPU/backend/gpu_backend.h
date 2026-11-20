@@ -24,6 +24,9 @@
 
 namespace Sim
 {
+	// forward declarations
+	class NeighborSearch_CellLinkedList_Compact_GPU;
+
 	// vector struct for device-side 3D floats
 	struct Vec3f
 	{
@@ -106,8 +109,7 @@ namespace Sim
 	{
 	public:
 
-		SimBackend_GPU(Bench::BenchmarksTracker& benchmarksTracker,
-						 const SimParams& params);
+		explicit SimBackend_GPU(Bench::BenchmarksTracker& benchmarksTracker);
 		~SimBackend_GPU() override;
 
 		const char* Name() const override
@@ -165,9 +167,8 @@ namespace Sim
 		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search
-		std::unique_ptr<I_NeighborSearch> neighborSearch_;
-		friend class NS_BruteForce_GPU;
-		friend class NS_CellLinkedList_Compact_GPU;
+		std::unique_ptr<NeighborSearch_CellLinkedList_Compact_GPU> neighborSearch_;
+		friend class NeighborSearch_CellLinkedList_Compact_GPU;
 
 		// CUDA stream
 		cudaStream_t stream_ = nullptr;

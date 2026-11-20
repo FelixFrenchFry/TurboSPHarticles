@@ -22,67 +22,38 @@ namespace Sim
 	class SimBackend_CPU;
 
 	// ---------------------------------------------------------------------------------------------
-	// --- [ brute force implementation ] ----------------------------------------------------------
-	// ---------------------------------------------------------------------------------------------
-
-	class NS_BruteForce_CPU
-		: public I_NeighborSearch
-	{
-	public:
-
-		explicit NS_BruteForce_CPU(SimBackend_CPU& backend)
-			: be_{ backend } {}
-
-		const char* Name() const override { return "BruteForce_CPU"; }
-
-		void Init() override;
-
-		void Construct(const SimParams& params) override;
-
-		void Query_Count(const SimParams& params) override;
-
-		void Query_Fill(const SimParams& params) override;
-
-		void DataReOrder(const SimParams& params) override;
-
-		Mem::ParticleClassMemUsage GetMemUsage() const override;
-
-	private:
-		
-		SimBackend_CPU& be_;
-	};
-
-	// ---------------------------------------------------------------------------------------------
 	// --- [ cell linked list compact implementation ] ---------------------------------------------
 	// ---------------------------------------------------------------------------------------------
 
-	class NS_CellLinkedList_Compact_CPU
-		: public I_NeighborSearch
+	class NeighborSearch_CellLinkedList_Compact_CPU
 	{
 	public:
 
-		explicit NS_CellLinkedList_Compact_CPU(SimBackend_CPU& backend)
+		explicit NeighborSearch_CellLinkedList_Compact_CPU(SimBackend_CPU& backend)
 			: be_{ backend } {}
 
-		const char* Name() const override { return "CellLinkedList_Compact_CPU"; }
+		void Init();
 
-		void Init() override;
+		void Construct(const SimParams& params);
 
-		void Construct(const SimParams& params) override;
+		void Query_Count(const SimParams& params);
 
-		void Query_Count(const SimParams& params) override;
+		void Query_Fill(const SimParams& params);
 
-		void Query_Fill(const SimParams& params) override;
+		void DataReOrder(const SimParams& params);
 
-		void DataReOrder(const SimParams& params) override;
+		// re-orders particle fields ahead of a full solver step, which re-initializes some of them,
+		// so permutations of those fields are skipped (TODO: update if solver step behavior changes)
+		// (currently omitted are velPred, accPress, sourceTerm, diagElem, density, and pressure without warm start)
+		void DataReOrder_SolverStep(const SimParams& params);
 
-		void DataReOrder_SolverStep(const SimParams& params) override;
-
+		// provides views onto the latest local re-order permutation
+		// (non-owning, valid until the next re-order or construction)
 		bool TryGetLastParticleReOrder(
 			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const override;
+			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const;
 
-		Mem::ParticleClassMemUsage GetMemUsage() const override;
+		Mem::ParticleClassMemUsage GetMemUsage() const;
 
 	private:
 

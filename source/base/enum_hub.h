@@ -84,23 +84,6 @@ namespace Base
 		return "ScenarioType::<unknown>";
 	}
 
-	enum class NeighborSearchMethod : uint8_t
-	{
-		BruteForce,                 // 0
-		CellLinkedList_Compact,     // 1 ("Compressed neighbour lists for SPH" Band, Gissler, Teschner, 2020)
-	};
-	constexpr const char* ToCString(const NeighborSearchMethod v) noexcept
-	{
-		switch (v)
-		{
-		case NeighborSearchMethod::BruteForce: return
-			"BruteForce";
-		case NeighborSearchMethod::CellLinkedList_Compact: return
-			"CellLinkedList_Compact";
-		}
-		return "NeighborSearchMethod::<unknown>";
-	}
-
 	enum class RigidCouplingMode : uint8_t
 	{
 		Sequential,  // 0 TODO: reference paper

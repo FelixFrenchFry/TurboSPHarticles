@@ -332,8 +332,6 @@ namespace Sim
 			Base::ToCString(params.backendType));
         printf("%-30s = %s\n", "sim scenario",
             Base::ToCString(params.scenarioType));
-        printf("%-30s = %s\n", "neighbor search method",
-			Base::ToCString(params.neighborSearchMethod));
 
 		// TODO: re-enable this output later (temporarily disabled)
 		// printf("%-30s = %s\n", "rigid coupling mode",

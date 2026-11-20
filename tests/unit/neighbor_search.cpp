@@ -10,7 +10,6 @@
 #include <map>
 #include <memory>
 #include <span>
-#include <string>
 #include <vector>
 
 // internal
@@ -178,12 +177,11 @@ namespace
 		}
 	}
 
-	class NeighborSearchTests : public testing::TestWithParam<Base::NeighborSearchMethod>
+	class NeighborSearchTests : public testing::Test
 	{
 	protected:
 		void SetUp() override
 		{
-			params_.neighborSearchMethod = GetParam();
 			params_.particleSizeF = 0.5f;
 			params_.particleSizeB = 0.5f;
 			params_.particleSizeInvF = 2.0f;
@@ -196,7 +194,7 @@ namespace
 			params_.expctdAvgNbrCountHardMax_FF = 0;
 			params_.expctdAvgNbrCountHardMax_FB = 0;
 			benchmarks_ = std::make_unique<Bench::BenchmarksTracker>(params_);
-			backend_ = std::make_unique<Sim::SimBackend_CPU>(*benchmarks_, params_);
+			backend_ = std::make_unique<Sim::SimBackend_CPU>(*benchmarks_);
 		}
 
 		void SearchAndExpect(const SearchParticles& particles)
@@ -218,7 +216,7 @@ namespace
 	};
 
 	// shuffled input order and separate clusters exercise all six neighbor categories by stable ID
-	TEST_P(NeighborSearchTests, FindsMixedPopulationNeighbors)
+	TEST_F(NeighborSearchTests, FindsMixedPopulationNeighbors)
 	{
 		const auto particles = MakeParticles(
 			{ { 3.0f, 0.0f, 0.0f }, { -0.25f, 0.0f, 0.0f }, { 0.5f, 0.25f, 0.0f },
@@ -231,7 +229,7 @@ namespace
 	}
 
 	// exactly representable axis-aligned cases separate the inclusive cutoff from its neighboring floats
-	TEST_P(NeighborSearchTests, IncludesExactCutoffAndExcludesOutsidePairs)
+	TEST_F(NeighborSearchTests, IncludesExactCutoffAndExcludesOutsidePairs)
 	{
 		const float inside = std::nextafter(1.0f, 0.0f);
 		const float outside = std::nextafter(1.0f, 2.0f);
@@ -244,14 +242,14 @@ namespace
 	}
 
 	// this offset rounds to the cutoff with separate multiply-adds, but is outside with nested FMA
-	TEST_P(NeighborSearchTests, ExcludesOffAxisPairsJustOutsideCutoff)
+	TEST_F(NeighborSearchTests, ExcludesOffAxisPairsJustOutsideCutoff)
 	{
 		const std::vector<glm::vec3> positions{ { 0.0f, 0.0f, 0.0f }, { 0.1f, 0.3f, 0.94868332f } };
 		LoadAndSearch(MakeParticles(positions, positions, positions));
 	}
 
 	// binary-fraction coordinates cross positive and negative cell faces, edges, and corners
-	TEST_P(NeighborSearchTests, FindsNeighborsAcrossCellBoundaries)
+	TEST_F(NeighborSearchTests, FindsNeighborsAcrossCellBoundaries)
 	{
 		const auto particles = MakeParticles(
 			{ { -0.125f, -0.125f, -0.125f }, { 0.125f, -0.125f, -0.125f },
@@ -264,7 +262,7 @@ namespace
 	}
 
 	// smaller cells require querying beyond adjacent cells, including after the cell size changes
-	TEST_P(NeighborSearchTests, SearchesBeyondAdjacentCellsWhenCellsAreSmall)
+	TEST_F(NeighborSearchTests, SearchesBeyondAdjacentCellsWhenCellsAreSmall)
 	{
 		const auto particles = MakeParticles(
 			{ { 0.125f, 0.125f, 0.125f }, { 0.875f, 0.125f, 0.125f },
@@ -281,7 +279,7 @@ namespace
 	}
 
 	// empty scenes and missing populations remain valid through repeated imports and searches
-	TEST_P(NeighborSearchTests, HandlesEmptyAndSinglePopulationScenes)
+	TEST_F(NeighborSearchTests, HandlesEmptyAndSinglePopulationScenes)
 	{
 		const std::array<SearchParticles, 5> scenes{
 			MakeParticles({}),
@@ -298,7 +296,7 @@ namespace
 
 	// coincident fluid particles include themselves
 	// (rigid particles exclude neighbors from their entire own body)
-	TEST_P(NeighborSearchTests, HandlesCoincidentParticlesAndRigidBodyExclusions)
+	TEST_F(NeighborSearchTests, HandlesCoincidentParticlesAndRigidBodyExclusions)
 	{
 		const auto particles = MakeParticles(
 			{ { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
@@ -310,7 +308,7 @@ namespace
 	}
 
 	// full and partial SIMD chunks must yield the same neighborhoods as scalar all-pairs queries
-	TEST_P(NeighborSearchTests, HandlesParticleCountsAroundSimdWidth)
+	TEST_F(NeighborSearchTests, HandlesParticleCountsAroundSimdWidth)
 	{
 		for (const uint32_t N_F : { CPU::N_SIMD_WIDTH - 1, CPU::N_SIMD_WIDTH, CPU::N_SIMD_WIDTH + 1 })
 		{
@@ -330,7 +328,7 @@ namespace
 	}
 
 	// chunks with as many distinct fluid neighbors as a dictionary holds stay dict chunks, more fall back to normal chunks
-	TEST_P(NeighborSearchTests, HandlesDistinctNeighborsAroundDictionarySize)
+	TEST_F(NeighborSearchTests, HandlesDistinctNeighborsAroundDictionarySize)
 	{
 		for (const uint32_t N_F : { Sim::N_SELL_DICT_SIZE_MAX, Sim::N_SELL_DICT_SIZE_MAX + CPU::N_SIMD_WIDTH })
 		{
@@ -348,7 +346,7 @@ namespace
 	}
 
 	// importing moved particles reuses the search object while retiring old cell ranges and neighbors
-	TEST_P(NeighborSearchTests, RebuildsAfterParticlesMoveBetweenCells)
+	TEST_F(NeighborSearchTests, RebuildsAfterParticlesMoveBetweenCells)
 	{
 		const auto original = MakeParticles(
 			{ { 0.0f, 0.0f, 0.0f }, { 0.5f, 0.0f, 0.0f }, { -4.0f, 0.25f, 0.25f } },
@@ -370,7 +368,7 @@ namespace
 	}
 
 	// body motion updates rigid world positions without reimporting the scene or replacing the search object
-	TEST_P(NeighborSearchTests, RebuildsAfterRigidBodyMotion)
+	TEST_F(NeighborSearchTests, RebuildsAfterRigidBodyMotion)
 	{
 		auto particles = MakeParticles({ { 0.0f, 0.0f, 0.0f } }, { { 0.5f, 0.0f, 0.0f } },
 			{ { 0.25f, 0.0f, 0.0f }, { 0.75f, 0.0f, 0.0f } });
@@ -387,12 +385,4 @@ namespace
 		particles[2][0].position.x = 0.25f;
 		SearchAndExpect(particles);
 	}
-
-	INSTANTIATE_TEST_SUITE_P(SearchMethods, NeighborSearchTests,
-		testing::Values(Base::NeighborSearchMethod::BruteForce, Base::NeighborSearchMethod::CellLinkedList_Compact),
-		[](const testing::TestParamInfo<Base::NeighborSearchMethod>& info)
-		{
-			return std::string(info.param == Base::NeighborSearchMethod::BruteForce
-				? "BruteForce" : "CompactCellList");
-		});
 }

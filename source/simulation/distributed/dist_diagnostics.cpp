@@ -1325,7 +1325,6 @@ namespace Dist
 
 		std::printf("%-30s = %s\n", "sim backend", Base::ToCString(params.backendType));
 		std::printf("%-30s = %s\n", "sim scenario", Base::ToCString(params.scenarioType));
-		std::printf("%-30s = %s\n", "neighbor search method", Base::ToCString(params.neighborSearchMethod));
 		// TODO: re-enable this output later (temporarily disabled)
 		// std::printf("%-30s = %s\n", "rigid coupling mode", Base::ToCString(params.rigidCouplingMode));
 		// std::printf("%-30s = %s\n", "rigid contact diagonal", Base::ToCString(params.rigidContactDiagonal));

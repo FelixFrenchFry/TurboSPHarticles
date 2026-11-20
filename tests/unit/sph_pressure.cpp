@@ -696,7 +696,6 @@ namespace
 	{
 		const auto limits = GetParam();
 		auto params = MakeParams();
-		params.neighborSearchMethod = Base::NeighborSearchMethod::BruteForce;
 		params.solverTerminationCond = limits.termination;
 		params.densityDevTarget = 1.0f;
 		params.fixedIters = limits.fixedIters;
@@ -709,7 +708,7 @@ namespace
 		state.particlesF.id = { 1, 2 };
 		state.particlesF.xPos = { -0.25f, 0.25f };
 		Bench::BenchmarksTracker benchmarks(params);
-		Sim::SimBackend_CPU backend(benchmarks, params);
+		Sim::SimBackend_CPU backend(benchmarks);
 		backend.PullFromUniversalSimState(state, params);
 		backend.ExecuteFullSimStep(params, 1);
 

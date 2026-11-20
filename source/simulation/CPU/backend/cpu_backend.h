@@ -18,11 +18,15 @@
 
 namespace Sim
 {
+	// forward declarations
+	class NeighborSearch_CellLinkedList_Compact_CPU;
+
 	class SimBackend_CPU final  : public I_SimBackend, public I_DistributedParticleBackend
 	{
 	public:
 
-		SimBackend_CPU(Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params);
+		explicit SimBackend_CPU(Bench::BenchmarksTracker& benchmarksTracker);
+		~SimBackend_CPU() override;
 
 		const char* Name() const override
 			{ return "CPU"; }
@@ -178,10 +182,9 @@ namespace Sim
 		Bench::BenchmarksTracker& benchmarksTracker_;
 
 		// neighbor search
-		std::unique_ptr<I_NeighborSearch> neighborSearch_;
+		std::unique_ptr<NeighborSearch_CellLinkedList_Compact_CPU> neighborSearch_;
 		std::unique_ptr<NeighborLists_ChunkedSELL_AdaptCompress_CPU> neighborList_;
-		friend class NS_BruteForce_CPU;
-		friend class NS_CellLinkedList_Compact_CPU;
+		friend class NeighborSearch_CellLinkedList_Compact_CPU;
 		friend class NeighborSearchTestAccess;
 
 		// metadata

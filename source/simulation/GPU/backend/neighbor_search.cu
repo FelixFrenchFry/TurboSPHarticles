@@ -102,13 +102,13 @@ namespace
 		return offset;
 	}
 
-	struct NS_FinalizeScratchLayout
+	struct NeighborSearch_FinalizeScratchLayout
 	{
 		uint64_t chunkOffsetsScratch = 0;
 		uint64_t N_totalBytes = 0;
 	};
 
-	struct NS_CompactBuildScratchLayout
+	struct NeighborSearch_CompactBuildScratchLayout
 	{
 		uint64_t cellIdF = 0;
 		uint64_t cellIdB = 0;
@@ -143,7 +143,7 @@ namespace
 	}
 
 	// device scratch for one radix sort of cell ID / particle index pairs
-	struct NS_SortScratch
+	struct NeighborSearch_SortScratch
 	{
 		uint64_t* d_altKeys = nullptr;
 		uint32_t* d_altValues = nullptr;
@@ -155,7 +155,7 @@ namespace
 	inline void SortPairsByCellId(
 		uint64_t* const d_cellId,
 		uint32_t* const d_particleIdx,
-		const NS_SortScratch& scratch,
+		const NeighborSearch_SortScratch& scratch,
 		const uint32_t N,
 		cudaStream_t stream)
 	{
@@ -187,19 +187,19 @@ namespace
 		}
 	}
 
-	struct NS_CompactSharedScratchLayout
+	struct NeighborSearch_CompactSharedScratchLayout
 	{
-		NS_FinalizeScratchLayout finalize;
-		NS_CompactBuildScratchLayout build;
+		NeighborSearch_FinalizeScratchLayout finalize;
+		NeighborSearch_CompactBuildScratchLayout build;
 		uint64_t N_phaseScratchBytes = 0;
 		uint64_t queryLoAnyByCellF = 0;
 		uint64_t queryHiAnyByCellF = 0;
 		uint64_t N_totalBytes = 0;
 	};
 
-	inline NS_FinalizeScratchLayout BuildFinalizeScratchLayout(const uint32_t N_F)
+	inline NeighborSearch_FinalizeScratchLayout BuildFinalizeScratchLayout(const uint32_t N_F)
 	{
-		NS_FinalizeScratchLayout layout{};
+		NeighborSearch_FinalizeScratchLayout layout{};
 		uint64_t cursor = 0;
 		const uint32_t N_chunks = SellChunkNumTotal(N_F);
 
@@ -210,10 +210,10 @@ namespace
 		return layout;
 	}
 
-	inline NS_CompactBuildScratchLayout BuildCompactBuildScratchLayout(
+	inline NeighborSearch_CompactBuildScratchLayout BuildCompactBuildScratchLayout(
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R)
 	{
-		NS_CompactBuildScratchLayout layout{};
+		NeighborSearch_CompactBuildScratchLayout layout{};
 		uint64_t cursor = 0;
 		const uint32_t N_sortMax = std::max({ N_F, N_B, N_R });
 
@@ -228,10 +228,10 @@ namespace
 		return layout;
 	}
 
-	inline NS_CompactSharedScratchLayout BuildCompactSharedScratchLayout(
+	inline NeighborSearch_CompactSharedScratchLayout BuildCompactSharedScratchLayout(
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R)
 	{
-		NS_CompactSharedScratchLayout layout{};
+		NeighborSearch_CompactSharedScratchLayout layout{};
 		layout.finalize = BuildFinalizeScratchLayout(N_F);
 		layout.build = BuildCompactBuildScratchLayout(N_F, N_B, N_R);
 		layout.N_phaseScratchBytes =
@@ -354,7 +354,7 @@ namespace
 void SimBackend_GPU::FinalizeNeighborLists_Count()
 {
 	const uint32_t N_chunks = SellChunkNumTotal(N_F_);
-	const NS_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(N_F_);
+	const NeighborSearch_FinalizeScratchLayout scratchLayout = BuildFinalizeScratchLayout(N_F_);
 	EnsureNsSharedScratchCapacity(scratchLayout.N_totalBytes);
 	uint64_t* const d_nbrChunkOffsetsScratch = ScratchPtr<uint64_t>(d_nsSharedScratch_, scratchLayout.chunkOffsetsScratch);
 
@@ -496,139 +496,10 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 }
 
 // -------------------------------------------------------------------------------------------------
-// --- [ brute force implementation ] --------------------------------------------------------------
-// -------------------------------------------------------------------------------------------------
-
-void NS_BruteForce_GPU::Init()
-{
-	// nothing to do
-}
-
-void NS_BruteForce_GPU::Construct(
-	const SimParams& params)
-{
-	GPU::NS_ReloadConstants(
-		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, 0.0f, 1u,
-		0.0f, 0.0f, 0.0f,
-		Sim::CellCoordFrame{}, 0u, 0u, be_.stream_);
-
-	GPU::StreamSync(be_.stream_);
-}
-
-void NS_BruteForce_GPU::Query_Count(
-	const SimParams& params)
-{
-
-	// (no count reset needed, query overwrites every per-particle count)
-
-	if (be_.N_F_ > 0)
-	{
-		GPU::Launch_BruteForce_Query_Count(
-			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-			be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
-			be_.d_nbrCountFF_.Data(), be_.d_nbrCountFB_.Data(), be_.d_nbrCountFR_.Data(),
-			be_.d_nbrChunkMaxCountFF_.Data(),
-			be_.d_nbrChunkMaxCountFB_.Data(),
-			be_.d_nbrChunkMaxCountFR_.Data(),
-			be_.d_nbrChunkBaseIdxFF_.Data(),
-			be_.d_nbrChunkBaseIdxFB_.Data(),
-			be_.d_nbrChunkBaseIdxFR_.Data(),
-			be_.d_nbrChunkFormatFF_.Data(),
-			be_.d_nbrChunkFormatFB_.Data(),
-			be_.d_nbrChunkFormatFR_.Data());
-	}
-
-	GPU::Launch_BruteForce_Query_Count_RF_RB_RR(
-		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-		be_.d_bodyIdR_.Data(),
-		be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
-		be_.d_nbrCountRF_.Data(), be_.d_nbrCountRB_.Data(), be_.d_nbrCountRR_.Data());
-
-	GPU::StreamSync(be_.stream_);
-}
-
-void NS_BruteForce_GPU::Query_Fill(
-	const SimParams& params)
-{
-	(void)params;
-
-	// reset overflow before filling packed SELL32 lists
-	GPU::MemsetZero(be_.d_nbrOverflowFlag_.Data(), 1, be_.stream_);
-
-	if (be_.N_F_ > 0)
-	{
-		GPU::Launch_BruteForce_Query_Fill(
-			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-			be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
-			be_.d_nbrChunkMaxCountFF_.Data(),
-			be_.d_nbrChunkMaxCountFB_.Data(),
-			be_.d_nbrChunkMaxCountFR_.Data(),
-			be_.d_nbrChunkOffsetsFF_.Data(),
-			be_.d_nbrChunkOffsetsFB_.Data(),
-			be_.d_nbrChunkOffsetsFR_.Data(),
-			be_.d_nbrChunkBaseIdxFF_.Data(),
-			be_.d_nbrChunkBaseIdxFB_.Data(),
-			be_.d_nbrChunkBaseIdxFR_.Data(),
-			be_.d_nbrChunkFormatFF_.Data(),
-			be_.d_nbrChunkFormatFB_.Data(),
-			be_.d_nbrChunkFormatFR_.Data(),
-			be_.d_nbrListDelta8FF_.Data(),
-			be_.d_nbrListDelta8FB_.Data(),
-			be_.d_nbrListDelta8FR_.Data(),
-			be_.d_nbrListDelta16FF_.Data(),
-			be_.d_nbrListDelta16FB_.Data(),
-			be_.d_nbrListDelta16FR_.Data(),
-			be_.d_nbrListAbs32FF_.Data(),
-			be_.d_nbrListAbs32FB_.Data(),
-			be_.d_nbrListAbs32FR_.Data(),
-			be_.d_nbrOverflowFlag_.Data());
-	}
-
-	GPU::Launch_BruteForce_Query_Fill_RF_RB_RR(
-		be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-		be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-		be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-		be_.d_bodyIdR_.Data(),
-		be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
-		be_.d_nbrOffsetsRF_.Data(), be_.d_nbrOffsetsRB_.Data(), be_.d_nbrOffsetsRR_.Data(),
-		be_.d_nbrListRF_.Data(), be_.d_nbrListRB_.Data(), be_.d_nbrListRR_.Data());
-
-	#if defined(_DEBUG)
-	CheckNbrListErrorFlag(be_.d_nbrOverflowFlag_, be_.stream_,
-		"GPU brute force SELL32 fill-query");
-	#else
-	GPU::StreamSync(be_.stream_);
-	#endif
-}
-
-void NS_BruteForce_GPU::DataReOrder(
-	const SimParams& params)
-{
-	(void)params;
-
-	// no re-ordering in brute force implementation
-}
-
-Mem::ParticleClassMemUsage NS_BruteForce_GPU::GetMemUsage() const
-{
-	Mem::MemUsage usageF{};
-
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
-
-	return { usageF, {}, {} };
-}
-
-// -------------------------------------------------------------------------------------------------
 // --- [ cell linked list compact implementation ] -------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-void NS_CellLinkedList_Compact_GPU::Init()
+void NeighborSearch_CellLinkedList_Compact_GPU::Init()
 {
 	cellSize_ = 0.0f;
 	cellSizeInv_ = 0.0f;
@@ -657,7 +528,7 @@ void NS_CellLinkedList_Compact_GPU::Init()
 	d_queryCellRefAnyByCellF_.Release();
 }
 
-void NS_CellLinkedList_Compact_GPU::UpdateCellFrame()
+void NeighborSearch_CellLinkedList_Compact_GPU::UpdateCellFrame()
 {
 	cellFrame_ = {};
 
@@ -702,7 +573,7 @@ void NS_CellLinkedList_Compact_GPU::UpdateCellFrame()
 	cellFrame_ = nextFrame;
 }
 
-void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
@@ -747,19 +618,19 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 	UpdateCellFrame();
 
 	EnsureStorageAllocation();
-	const NS_CompactSharedScratchLayout scratchLayout =
+	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(N_F, N_B, N_R);
 	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
 	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
 	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
-	const NS_SortScratch sortScratch{
+	const NeighborSearch_SortScratch sortScratch{
 		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
 		be_.d_sortParticleIdxScratch_.Data(),
 		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
 		scratchLayout.build.cubTempBytes,
 		CellIdKeyBits(cellFrame_) };
 
-	GPU::NS_ReloadConstants(
+	GPU::NeighborSearch_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
 		0.0f, 0.0f, 0.0f,
 		cellFrame_, 0u, 0u,
@@ -812,7 +683,7 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 			N_R, be_.stream_, d_cellIdR_.Data(), d_sortedParticleIdxR_.Data());
 
 		// the rigid marker scratch is unused until the compact cell list below overwrites it
-		NS_SortScratch rigidSortScratch = sortScratch;
+		NeighborSearch_SortScratch rigidSortScratch = sortScratch;
 		rigidSortScratch.d_altValues = d_cellMarkerR_.Data();
 
 		SortPairsByCellId(
@@ -860,7 +731,7 @@ void NS_CellLinkedList_Compact_GPU::Construct(const SimParams& params)
 	cellIdsAvailableForReuse_ = false;
 }
 
-void NS_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
 {
 	(void)params;
 
@@ -911,7 +782,7 @@ void NS_CellLinkedList_Compact_GPU::Query_Count(const SimParams& params)
 	GPU::StreamSync(be_.stream_);
 }
 
-void NS_CellLinkedList_Compact_GPU::Query_Fill(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_GPU::Query_Fill(const SimParams& params)
 {
 	(void)params;
 
@@ -974,17 +845,17 @@ void NS_CellLinkedList_Compact_GPU::Query_Fill(const SimParams& params)
 	#endif
 }
 
-void NS_CellLinkedList_Compact_GPU::DataReOrder(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_GPU::DataReOrder(const SimParams& params)
 {
 	ReOrderParticleData(params, true);
 }
 
-void NS_CellLinkedList_Compact_GPU::DataReOrder_SolverStep(const SimParams& params)
+void NeighborSearch_CellLinkedList_Compact_GPU::DataReOrder_SolverStep(const SimParams& params)
 {
 	ReOrderParticleData(params, false);
 }
 
-void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
+void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	const SimParams& params,
 	const bool permuteSolverFields)
 {
@@ -1013,19 +884,19 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	UpdateCellFrame();
 
 	EnsureStorageAllocation();
-	const NS_CompactSharedScratchLayout scratchLayout =
+	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(N_F, N_B, be_.N_R_);
 	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
 	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
 	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
-	const NS_SortScratch sortScratch{
+	const NeighborSearch_SortScratch sortScratch{
 		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
 		be_.d_sortParticleIdxScratch_.Data(),
 		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
 		scratchLayout.build.cubTempBytes,
 		CellIdKeyBits(cellFrame_) };
 
-	GPU::NS_ReloadConstants(
+	GPU::NeighborSearch_ReloadConstants(
 		be_.N_F_, be_.N_B_, be_.N_R_, params.kernelRadius, cellSize_, cellQueryReach_,
 		0.0f, 0.0f, 0.0f,
 		cellFrame_, 0u, 0u,
@@ -1133,7 +1004,7 @@ void NS_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	GPU::StreamSync(be_.stream_);
 }
 
-Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU::GetMemUsage() const
+Mem::ParticleClassMemUsage NeighborSearch_CellLinkedList_Compact_GPU::GetMemUsage() const
 {
 	Mem::MemUsage usageF{};
 	Mem::MemUsage usageB{};
@@ -1164,7 +1035,7 @@ Mem::ParticleClassMemUsage NS_CellLinkedList_Compact_GPU::GetMemUsage() const
 	return { usageF, usageB, usageR };
 }
 
-void NS_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
+void NeighborSearch_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
@@ -1188,7 +1059,7 @@ void NS_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 		BuildCompactSharedScratchLayout(N_F, N_B, N_R).N_totalBytes);
 }
 
-void NS_CellLinkedList_Compact_GPU::BuildCompactCellList(
+void NeighborSearch_CellLinkedList_Compact_GPU::BuildCompactCellList(
 	DeviceBuffer<uint64_t>& d_uniqueCellId,
 	DeviceBuffer<uint32_t>& d_cellStartIdx,
 	uint32_t* d_markerScanScratch,
@@ -1252,7 +1123,7 @@ void NS_CellLinkedList_Compact_GPU::BuildCompactCellList(
 		d_uniqueCellId.Data(), d_cellStartIdx.Data());
 }
 
-void NS_CellLinkedList_Compact_GPU::BuildMergedCompactCellRanges()
+void NeighborSearch_CellLinkedList_Compact_GPU::BuildMergedCompactCellRanges()
 {
 	N_nonEmptyCellsAny_ = 0;
 
@@ -1333,14 +1204,14 @@ void NS_CellLinkedList_Compact_GPU::BuildMergedCompactCellRanges()
 		d_cellRangeByAny_.Data());
 }
 
-void NS_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()
+void NeighborSearch_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()
 {
 	if (N_nonEmptyCellsF_ == 0 || N_nonEmptyCellsAny_ == 0)
 	{
 		return;
 	}
 
-	const NS_CompactSharedScratchLayout scratchLayout =
+	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_, be_.N_R_);
 	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
@@ -1355,7 +1226,7 @@ void NS_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()
 		d_queryLoAnyByCellF, d_queryHiAnyByCellF);
 }
 
-void NS_CellLinkedList_Compact_GPU::BuildQueryCellRefCache()
+void NeighborSearch_CellLinkedList_Compact_GPU::BuildQueryCellRefCache()
 {
 	N_queryCellSlots_ = QueryCellSlotCount(cellQueryReach_);
 
@@ -1378,7 +1249,7 @@ void NS_CellLinkedList_Compact_GPU::BuildQueryCellRefCache()
 		d_queryCellRefAnyByCellF_.Resize(capTarget);
 	}
 
-	const NS_CompactSharedScratchLayout scratchLayout =
+	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_, be_.N_R_);
 	const uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);

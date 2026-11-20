@@ -71,29 +71,13 @@ namespace
 } // namespace anonymous
 
 SimBackend_GPU::SimBackend_GPU(
-	Bench::BenchmarksTracker& benchmarksTracker, const SimParams& params)
+	Bench::BenchmarksTracker& benchmarksTracker)
 	: benchmarksTracker_ { benchmarksTracker }
 {
 	GPU::Check(cudaStreamCreate(&stream_), "cudaStreamCreate()");
 
-	// select neighbor search method
-	if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::BruteForce)
-	{
-		neighborSearch_ = std::make_unique<NS_BruteForce_GPU>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::CellLinkedList_Compact)
-	{
-		neighborSearch_ = std::make_unique<NS_CellLinkedList_Compact_GPU>(*this);
-	}
-	else
-	{
-		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
-	}
+	neighborSearch_ = std::make_unique<NeighborSearch_CellLinkedList_Compact_GPU>(*this);
 	neighborSearch_->Init();
-
-	// TODO: select neighbor list method once implemented
 }
 
 void SimBackend_GPU::SetSimDomainBounds(

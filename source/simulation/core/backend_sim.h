@@ -36,9 +36,6 @@ namespace Sync
 
 namespace Sim
 {
-	// forward declarations
-	class I_NeighborSearch;
-
 	// body-level force and torque accumulated during one backend step used for distributed execution
 	// (accumulated by each rank, summed up and integrated at root, then broadcast back to each rank)
 	struct RigidBodyForceTorque
@@ -309,48 +306,6 @@ namespace Sim
 
 	// backend factory
 	std::unique_ptr<I_SimBackend> MakeSimBackend(Base::BackendType backendType,
-												 Bench::BenchmarksTracker& benchmarksTracker,
-												 const SimParams& params);
-
-	// -----------------------------------------------------------------------------------------------
-	// --- [ neighbor search and neighbor list interfaces ] ------------------------------------------
-	// -----------------------------------------------------------------------------------------------
-
-	class I_NeighborSearch
-	{
-	public:
-
-		virtual ~I_NeighborSearch() = default;
-
-		virtual const char* Name() const = 0;
-
-		virtual void Init() = 0;
-
-		virtual void Construct(const SimParams& params) = 0;
-
-		virtual void Query_Count(const SimParams& params) = 0;
-
-		virtual void Query_Fill(const SimParams& params) = 0;
-
-		virtual void DataReOrder(const SimParams& params) = 0;
-
-		// re-orders particle fields ahead of a full solver step, which re-initializes some of them,
-		// so permutations of those fields are skipped (TODO: update if solver step behavior changes)
-		// (currently omitted are velPred, accPress, sourceTerm, diagElem, pressure, and density)
-		virtual void DataReOrder_SolverStep(const SimParams& params) { DataReOrder(params); }
-
-		// provides views onto the latest local re-order permutation, if neighbor search exposes it
-		// (non-owning, valid until the next re-order or construction)
-		virtual bool TryGetLastParticleReOrder(
-			std::span<const uint32_t>& oldFluidLocalIdx_FromNewLocalIdx,
-			std::span<const uint32_t>& oldBoundaryLocalIdx_FromNewLocalIdx) const
-		{
-			(void)oldFluidLocalIdx_FromNewLocalIdx;
-			(void)oldBoundaryLocalIdx_FromNewLocalIdx;
-			return false;
-		}
-
-		virtual Mem::ParticleClassMemUsage GetMemUsage() const = 0;
-	};
+												 Bench::BenchmarksTracker& benchmarksTracker);
 
 } // namespace Sim

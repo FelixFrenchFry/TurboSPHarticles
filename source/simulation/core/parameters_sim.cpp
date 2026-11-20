@@ -127,35 +127,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			return false;
 		};
 
-	auto ParseNeighborSearchMethod = [](const nlohmann::json& v, Base::NeighborSearchMethod& out) -> bool
-		{
-			if (v.is_string())
-			{
-				const std::string s = v.get<std::string>();
-				if (s == "BruteForce")
-					{ out = Base::NeighborSearchMethod::BruteForce; return true; }
-				if (s == "CellLinkedList_Compact")
-					{ out = Base::NeighborSearchMethod::CellLinkedList_Compact; return true; }
-				return false;
-			}
-			else if (v.is_number_integer())
-			{
-				const int i = v.get<int>();
-				switch (i)
-				{
-				case 0:
-					out = Base::NeighborSearchMethod::BruteForce;
-					return true;
-				case 1:
-					out = Base::NeighborSearchMethod::CellLinkedList_Compact;
-					return true;
-				default:
-					return false;
-				}
-			}
-			return false;
-		};
-
 	auto ParseRigidCouplingMode = [](const nlohmann::json& v, Base::RigidCouplingMode& out) -> bool
 		{
 			if (v.is_string())
@@ -396,20 +367,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			else
 			{
 				SPDLOG_WARN("Invalid 'scenarioType' value in JSON.");
-			}
-		}
-
-		if (auto it = j.find("neighborSearchMethod"); it != j.end())
-		{
-			Base::NeighborSearchMethod nsm;
-			if (ParseNeighborSearchMethod(*it, nsm))
-			{
-				params_.neighborSearchMethod = nsm;
-			}
-			else
-			{
-				SPDLOG_WARN("Invalid 'neighborSearchMethod' value in JSON.");
-				return false;
 			}
 		}
 
@@ -1157,7 +1114,6 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 
 	j["backendType"] = Base::ToCString(par.backendType);
 	j["scenarioType"] = Base::ToCString(par.scenarioType);
-	j["neighborSearchMethod"] = Base::ToCString(par.neighborSearchMethod);
 	j["rigidCouplingMode"] = Base::ToCString(par.rigidCouplingMode);
 	j["rigidContactDiagonal"] = Base::ToCString(par.rigidContactDiagonal);
 	j["domainDecompMethod"] = Base::ToCString(par.domainDecompMethod);

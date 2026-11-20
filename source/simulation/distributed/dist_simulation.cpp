@@ -428,8 +428,7 @@ void DistSimulationMgr::CreateSimBackend(const Base::BackendType backendType)
 	statisticsTracker_ = std::make_unique<Stats::StatisticsTracker>(simParams_);
 	try
 	{
-		simBackend_ = Sim::MakeSimBackend(
-			backendType, *benchmarksTracker_, simParams_);
+		simBackend_ = Sim::MakeSimBackend(backendType, *benchmarksTracker_);
 	}
 	catch (const std::exception& ex)
 	{

@@ -129,31 +129,18 @@ namespace
 // ---------------------------------------------------------------------------------------------------
 
 SimBackend_CPU::SimBackend_CPU(
-	Bench::BenchmarksTracker& benchmarksTracker,
-	const SimParams& params)
+	Bench::BenchmarksTracker& benchmarksTracker)
 	: benchmarksTracker_{ benchmarksTracker }
 {
 	affinityParts_ = std::make_unique<StepAffinityPartitioners>();
 
-	// select neighbor search method
-	if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::BruteForce)
-	{
-		neighborSearch_ = std::make_unique<NS_BruteForce_CPU>(*this);
-	}
-	else if (params.neighborSearchMethod ==
-		Base::NeighborSearchMethod::CellLinkedList_Compact)
-	{
-		neighborSearch_ = std::make_unique<NS_CellLinkedList_Compact_CPU>(*this);
-	}
-	else
-	{
-		throw std::runtime_error("Unsupported 'NeighborSearchMethod' requested.");
-	}
+	neighborSearch_ = std::make_unique<NeighborSearch_CellLinkedList_Compact_CPU>(*this);
 	neighborSearch_->Init();
 
 	neighborList_ = std::make_unique<NeighborLists_ChunkedSELL_AdaptCompress_CPU>();
 }
+
+SimBackend_CPU::~SimBackend_CPU() = default;
 
 void SimBackend_CPU::PullFromUniversalSimState(
 	Sync::UniversalSimState& src, const SimParams& params)

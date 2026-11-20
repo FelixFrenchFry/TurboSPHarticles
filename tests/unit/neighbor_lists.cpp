@@ -128,7 +128,7 @@ namespace
 		return laneMask;
 	}
 
-	// tracking the distinct FF neighbors and their lanes lets the compressed lists write FF chunks as dict chunks
+	// tracking the distinct FF neighbors and their lanes lets the lists write FF chunks as dict chunks
 	void CommitFluidCounts(NeighborLists& lists, const NeighborData& data, const uint32_t chunk,
 		const bool trackDistinctFF = false)
 	{

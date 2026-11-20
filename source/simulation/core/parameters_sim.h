@@ -29,8 +29,6 @@ namespace Sim
 			Base::BackendType::CPU;
 		Base::ScenarioType scenarioType	=
 			Base::ScenarioType::BreakingDam;
-		Base::NeighborSearchMethod neighborSearchMethod =
-			Base::NeighborSearchMethod::CellLinkedList_Compact;
 		Base::RigidCouplingMode rigidCouplingMode =
 			Base::RigidCouplingMode::Sequential;
 		Base::RigidContactDiagonal rigidContactDiagonal =

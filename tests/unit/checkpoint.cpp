@@ -288,8 +288,7 @@ namespace
 		const nlohmann::json changes{
 			{ "timeStep", 0.002 }, { "restDensity", 900.0 }, { "massF", 0.002 },
 			{ "gravity", { 1.0, 0.0, 0.0 } }, { "jacobiOmega", 0.75 },
-			{ "fixedIters", 20 }, { "maxSolverIters", 200 },
-			{ "neighborSearchMethod", "BruteForce" }, { "gridCellSizeRatio", 0.5 } };
+			{ "fixedIters", 20 }, { "maxSolverIters", 200 }, { "gridCellSizeRatio", 0.5 } };
 		for (const auto mode : { Export::CheckpointMode::Single, Export::CheckpointMode::Distributed })
 		{
 			SCOPED_TRACE(mode == Export::CheckpointMode::Single ? "single" : "distributed");
