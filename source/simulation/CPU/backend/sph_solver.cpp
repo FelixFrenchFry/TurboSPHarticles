@@ -226,6 +226,13 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			massF, params.pressGamma, N_F_, affinityParts_->full,
 			xAccPressF, yAccPressF, zAccPressF);
 
+		N_solverIters_++;
+
+		// fixed iterations only read the error sums of the last one
+		const bool computeErrors = params.solverTerminationCond !=
+			Base::SolverTerminationCond::FixedIters ||
+			TerminationConditionSatisfied(params);
+
 		// update system vector and pressure
 		CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 			xPosF, yPosF, zPosF,
@@ -237,7 +244,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			neighborList,
 			timeStep, sizeInvF, cubicSplineAlpha,
 			params.restDensity, massF, params.jacobiOmega,
-			N_F_, affinityParts_->full, pressureF, nullptr, errorSums);
+			N_F_, affinityParts_->full, pressureF, nullptr, errorSums, {}, false, computeErrors);
 
 		if (N_F_ > 0)
 		{
@@ -249,7 +256,6 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 				/ static_cast<float>(N_F_);
 		}
 
-		N_solverIters_++;
 		if (TerminationConditionSatisfied(params)) { break; }
 	}
 
@@ -1782,7 +1788,8 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 	const uint8_t* RESTRICT errorParticleFlags,
 	PressureSolveErrorSums& errorSums,
 	const std::span<const uint32_t> selectedChunkIdxs,
-	const bool useSelectedChunks)
+	const bool useSelectedChunks,
+	const bool computeErrors)
 {
 	struct DensityErrorAccum
 	{
@@ -1984,6 +1991,8 @@ void CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
 
 				// final chunk may contain fewer than CPU::N_SIMD_WIDTH active particles
 				CPU::StoreFloat32xSIMDPartial(pressureF, begin, end, pressureNext);
+
+				if (!computeErrors) { continue; }
 
 				const CPU::Float32xSIMD relErr = predDensityError / restDensityV;
 				const uint32_t validDiagMask = CPU::MaskBits32xSIMD(validDiag);

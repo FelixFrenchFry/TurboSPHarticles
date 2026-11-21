@@ -163,7 +163,8 @@ namespace CPU
 		const uint8_t* RESTRICT errorParticleFlags,
 		Sim::PressureSolveErrorSums& errorSums,
 		std::span<const uint32_t> selectedChunkIdxs = {},
-		bool useSelectedChunks = false);
+		bool useSelectedChunks = false,
+		bool computeErrors = true);
 
 	void AccumulateRigidParticleNonPressureForces_ChunkedSELL(
 		const float* RESTRICT xPosF,
