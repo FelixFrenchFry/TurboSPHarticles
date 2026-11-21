@@ -234,6 +234,34 @@ namespace
 		EXPECT_EQ(zkg, 0.0f);
 	}
 
+	// the unscaled weight times alpha / size^3 matches the reference and vanishes at and beyond support
+	TEST(SphKernelTests, ScalesUnscaledWeightToReference)
+	{
+		const std::array<float, 7> distances{ 0.0f, 0.3f, 0.5f, 1.0f, 1.5f, 2.0f, 2.5f };
+		for (const float particleSizeF : { 0.25f, 1.0f, 4.0f })
+		{
+			SCOPED_TRACE(particleSizeF);
+			const auto constants = Sim::BuildSolverConstants(particleSizeF, 1000.0f);
+			const auto kernelConstants = CPU::BuildKernelConstants_CubicSpline_SIMD(
+				constants.sizeInvF, constants.cubicSplineAlpha);
+			const double weightScale = constants.cubicSplineAlpha * std::pow(constants.sizeInvF, 3);
+			// compare dimensionless values so the tolerance follows the h^-3 scaling
+			const double sizeCubed = std::pow(particleSizeF, 3);
+			for (const float q : distances)
+			{
+				SCOPED_TRACE(q);
+				const float distance = q * particleSizeF;
+				std::array<float, CPU::N_SIMD_WIDTH> weights{};
+				CPU::KernelWeightUnscaled_CubicSpline_SIMD(
+					CPU::SetFloat32xSIMD(distance * distance), kernelConstants).store_unaligned(weights.data());
+
+				const double expectedWeight = ReferenceKernel({ distance, 0.0f, 0.0f }, particleSizeF).weight * sizeCubed;
+				EXPECT_NEAR(weights[0] * weightScale * sizeCubed, expectedWeight, 1e-7 + 2e-6 * expectedWeight);
+				if (q >= 2.0f) { EXPECT_EQ(weights[0], 0.0f); }
+			}
+		}
+	}
+
 	// tiny nonzero offsets keep their gradient, so relative checks avoid an absolute tolerance swallowing it
 	TEST(SphKernelTests, ComputesGradientsAtTinyOffsets)
 	{

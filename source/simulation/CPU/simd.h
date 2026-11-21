@@ -383,6 +383,22 @@ namespace CPU
 		return SelectFloat32xSIMD(dist < kernelConstants.size, innerFac, outerFac);
 	}
 
+	// compute the unscaled cubic-spline kernel weight of SIMD particle pairs in distance units
+	// (zero at and beyond the kernel radius, sums take the alpha / size^3 factor once)
+	XSIMD_INLINE Float32xSIMD KernelWeightUnscaled_CubicSpline_SIMD(
+		const Float32xSIMD distSqu,
+		const KernelConstants_CubicSpline_SIMD& kernelConstants) noexcept
+	{
+		const Float32xSIMD zero = xsimd::broadcast<float, SimdArch>(0.0f);
+		const Float32xSIMD minusFour = xsimd::broadcast<float, SimdArch>(-4.0f);
+
+		const Float32xSIMD dist = xsimd::sqrt(distSqu);
+		const Float32xSIMD t1 = xsimd::max(kernelConstants.size - dist, zero);
+		const Float32xSIMD t2 = xsimd::max(kernelConstants.twoSize - dist, zero);
+
+		return xsimd::fma(minusFour, t1 * t1 * t1, t2 * t2 * t2);
+	}
+
 	// compute the cubic-spline kernel gradient factor of SIMD particle pairs
 	// (the gradient is factor * (dx, dy, dz))
 	XSIMD_INLINE Float32xSIMD KernelGradientFactor_CubicSpline_SIMD(

@@ -747,6 +747,10 @@ void CPU::Density_ChunkedSELL(
 		? static_cast<uint32_t>(selectedChunkIdxs.size())
 		: neighborList.ChunkNumTotal();
 	const CPU::Float32xSIMD massFV = CPU::SetFloat32xSIMD(massF);
+	const CPU::KernelConstants_CubicSpline_SIMD kernelConstants =
+		CPU::BuildKernelConstants_CubicSpline_SIMD(particleSizeInvF, cubicSplineAlpha);
+	const CPU::Float32xSIMD weightScaleFV = CPU::SetFloat32xSIMD(
+		massF * cubicSplineAlpha * particleSizeInvF * particleSizeInvF * particleSizeInvF);
 
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_chunks),
@@ -780,6 +784,7 @@ void CPU::Density_ChunkedSELL(
 					const float* const RESTRICT xPosNbrF = xPosF;
 					const float* const RESTRICT yPosNbrF = yPosF;
 					const float* const RESTRICT zPosNbrF = zPosF;
+					CPU::Float32xSIMD weightSumFF = CPU::ZeroFloat32xSIMD();
 					for (uint32_t dictIdx = 0; dictIdx < nbrFF.N_dict; dictIdx++)
 					{
 						const uint32_t j = nbrFF.ReadDictNeighborIdx(dictIdx);
@@ -788,11 +793,12 @@ void CPU::Density_ChunkedSELL(
 						const CPU::Float32xSIMD dy = yi - CPU::SetFloat32xSIMD(yPosNbrF[j]);
 						const CPU::Float32xSIMD dz = zi - CPU::SetFloat32xSIMD(zPosNbrF[j]);
 
-						const CPU::Float32xSIMD kw = CPU::KernelWeight_CubicSpline_SIMD(
-							dx, dy, dz, particleSizeInvF,
-							kernelRadiusSqu, cubicSplineAlpha);
-						tmp_densityF = xsimd::fma(massFV, kw, tmp_densityF);
+						const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
+							xsimd::fma(dy, dy, dz * dz));
+						weightSumFF += CPU::KernelWeightUnscaled_CubicSpline_SIMD(distSqu, kernelConstants);
 					}
+					// mass, alpha and 1 / size^3 scale the whole FF sum
+					tmp_densityF = weightSumFF * weightScaleFV;
 				}
 				else
 				{
@@ -988,12 +994,16 @@ void CPU::NonPressureAcceleration_ChunkedSELL(
 						const CPU::Float32xSIMD densityJ =
 							xsimd::max(CPU::SetFloat32xSIMD(densityNbrF[j]), eps);
 						const CPU::Float32xSIMD accCoeff =
-							(massFV * dot) / (densityJ * (distSqu + particleSizeSquEps)) * kgFac;
+							dot / (densityJ * (distSqu + particleSizeSquEps)) * kgFac;
 
 						tmp_xAccViscF = xsimd::fma(accCoeff, dx, tmp_xAccViscF);
 						tmp_yAccViscF = xsimd::fma(accCoeff, dy, tmp_yAccViscF);
 						tmp_zAccViscF = xsimd::fma(accCoeff, dz, tmp_zAccViscF);
 					}
+					// mass scales the whole FF sum
+					tmp_xAccViscF *= massFV;
+					tmp_yAccViscF *= massFV;
+					tmp_zAccViscF *= massFV;
 				}
 				else
 				{
