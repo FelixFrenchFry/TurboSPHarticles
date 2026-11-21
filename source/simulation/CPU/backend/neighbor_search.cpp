@@ -1079,6 +1079,15 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 			[&](const tbb::blocked_range<uint32_t>& range)
 			{
 				auto& queryMetaScratch = queryMetaScratch_.local();
+				const float* const RESTRICT xPosNbrF = xPosF;
+				const float* const RESTRICT yPosNbrF = yPosF;
+				const float* const RESTRICT zPosNbrF = zPosF;
+				const float* const RESTRICT xPosNbrB = xPosB;
+				const float* const RESTRICT yPosNbrB = yPosB;
+				const float* const RESTRICT zPosNbrB = zPosB;
+				const float* const RESTRICT xPosNbrR = xPosR;
+				const float* const RESTRICT yPosNbrR = yPosR;
+				const float* const RESTRICT zPosNbrR = zPosR;
 				auto& fluidRanges = queryMetaScratch.fluidRanges;
 				auto& boundaryRanges = queryMetaScratch.boundaryRanges;
 				auto& rigidRanges = queryMetaScratch.rigidRanges;
@@ -1125,9 +1134,9 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
-							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
-							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosNbrF[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosNbrF[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosNbrF[l]);
 							const CPU::Float32xSIMD dx = xi - xj;
 							const CPU::Float32xSIMD dy = yi - yj;
 							const CPU::Float32xSIMD dz = zi - zj;
@@ -1162,9 +1171,9 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 						{
 							for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 							{
-								const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosF[l]);
-								const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosF[l]);
-								const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosF[l]);
+								const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosNbrF[l]);
+								const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosNbrF[l]);
+								const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosNbrF[l]);
 								const CPU::Float32xSIMD dx = xi - xj;
 								const CPU::Float32xSIMD dy = yi - yj;
 								const CPU::Float32xSIMD dz = zi - zj;
@@ -1195,9 +1204,9 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 					{
 						for (uint32_t l = cellRange.begin; l < cellRange.end; l++)
 						{
-							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosB[l]);
-							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosB[l]);
-							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosB[l]);
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosNbrB[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosNbrB[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosNbrB[l]);
 							const CPU::Float32xSIMD dx = xi - xj;
 							const CPU::Float32xSIMD dy = yi - yj;
 							const CPU::Float32xSIMD dz = zi - zj;
@@ -1221,9 +1230,9 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 						for (uint32_t sortedIdx = cellRange.begin; sortedIdx < cellRange.end; sortedIdx++)
 						{
 							const uint32_t l = particleOrderR_[sortedIdx];
-							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosR[l]);
-							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosR[l]);
-							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosR[l]);
+							const CPU::Float32xSIMD xj = CPU::SetFloat32xSIMD(xPosNbrR[l]);
+							const CPU::Float32xSIMD yj = CPU::SetFloat32xSIMD(yPosNbrR[l]);
+							const CPU::Float32xSIMD zj = CPU::SetFloat32xSIMD(zPosNbrR[l]);
 							const CPU::Float32xSIMD dx = xi - xj;
 							const CPU::Float32xSIMD dy = yi - yj;
 							const CPU::Float32xSIMD dz = zi - zj;
