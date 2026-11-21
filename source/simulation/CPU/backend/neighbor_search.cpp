@@ -582,27 +582,28 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Init()
 	cellIdF_.clear();
 	particleOrderF_.clear();
 	uniqueCellIdF_.clear();
-	cellPrefixStartIdxF_ = {};
+	cellPrefixStartIdxF_.fill(0u);
 	cellStartIdxHaloF_.clear();
 	uniqueCellIdHaloF_.clear();
-	cellPrefixStartIdxHaloF_ = {};
+	cellPrefixStartIdxHaloF_.fill(0u);
 
 	cellStartIdxB_.clear();
 	cellIdB_.clear();
 	particleOrderB_.clear();
 	uniqueCellIdB_.clear();
-	cellPrefixStartIdxB_ = {};
+	cellPrefixStartIdxB_.fill(0u);
 	cellStartIdxHaloB_.clear();
 	uniqueCellIdHaloB_.clear();
-	cellPrefixStartIdxHaloB_ = {};
+	cellPrefixStartIdxHaloB_.fill(0u);
 
 	cellStartIdxR_.clear();
 	cellIdR_.clear();
 	particleOrderR_.clear();
 	uniqueCellIdR_.clear();
-	cellPrefixStartIdxR_ = {};
+	cellPrefixStartIdxR_.fill(0u);
 
 	cellPrefixShift_ = 0;
+	N_cellPrefixBuckets_ = N_CELL_PREFIX_BUCKETS;
 
 	compactCellBuildScratch_.cellIds.clear();
 	compactCellBuildScratch_.particleOrder.clear();
@@ -629,27 +630,28 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Construct(const SimParams& param
 		cellIdF_.clear();
 		particleOrderF_.clear();
 		uniqueCellIdF_.clear();
-		cellPrefixStartIdxF_ = {};
+		cellPrefixStartIdxF_.fill(0u);
 		cellStartIdxHaloF_.clear();
 		uniqueCellIdHaloF_.clear();
-		cellPrefixStartIdxHaloF_ = {};
+		cellPrefixStartIdxHaloF_.fill(0u);
 
 		cellStartIdxB_.clear();
 		cellIdB_.clear();
 		particleOrderB_.clear();
 		uniqueCellIdB_.clear();
-		cellPrefixStartIdxB_ = {};
+		cellPrefixStartIdxB_.fill(0u);
 		cellStartIdxHaloB_.clear();
 		uniqueCellIdHaloB_.clear();
-		cellPrefixStartIdxHaloB_ = {};
+		cellPrefixStartIdxHaloB_.fill(0u);
 
 		cellStartIdxR_.clear();
 		cellIdR_.clear();
 		particleOrderR_.clear();
 		uniqueCellIdR_.clear();
-		cellPrefixStartIdxR_ = {};
+		cellPrefixStartIdxR_.fill(0u);
 
 		cellPrefixShift_ = 0;
+		N_cellPrefixBuckets_ = N_CELL_PREFIX_BUCKETS;
 
 		compactCellBuildScratch_.cellIds.clear();
 		compactCellBuildScratch_.particleOrder.clear();
@@ -803,18 +805,21 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Construct(const SimParams& param
 		| (SpreadBitsWithGaps_21to63(std::max(cellFrame_.N_dimZ, 1u) - 1u) << 2);
 	const uint32_t N_cellIdBits = static_cast<uint32_t>(std::bit_width(maxCellId));
 	cellPrefixShift_ = N_cellIdBits > N_CELL_PREFIX_BITS ? N_cellIdBits - N_CELL_PREFIX_BITS : 0u;
+	N_cellPrefixBuckets_ = 1u << (N_cellIdBits - cellPrefixShift_);
 
-	BuildCellPrefixStartIdx(uniqueCellIdF_, cellPrefixShift_, cellPrefixStartIdxF_);
-	BuildCellPrefixStartIdx(uniqueCellIdHaloF_, cellPrefixShift_, cellPrefixStartIdxHaloF_);
-	BuildCellPrefixStartIdx(uniqueCellIdB_, cellPrefixShift_, cellPrefixStartIdxB_);
-	BuildCellPrefixStartIdx(uniqueCellIdHaloB_, cellPrefixShift_, cellPrefixStartIdxHaloB_);
-	BuildCellPrefixStartIdx(uniqueCellIdR_, cellPrefixShift_, cellPrefixStartIdxR_);
+	BuildCellPrefixStartIdx(uniqueCellIdF_, cellPrefixShift_, N_cellPrefixBuckets_, cellPrefixStartIdxF_);
+	BuildCellPrefixStartIdx(uniqueCellIdHaloF_, cellPrefixShift_, N_cellPrefixBuckets_, cellPrefixStartIdxHaloF_);
+	BuildCellPrefixStartIdx(uniqueCellIdB_, cellPrefixShift_, N_cellPrefixBuckets_, cellPrefixStartIdxB_);
+	BuildCellPrefixStartIdx(uniqueCellIdHaloB_, cellPrefixShift_, N_cellPrefixBuckets_, cellPrefixStartIdxHaloB_);
+	BuildCellPrefixStartIdx(uniqueCellIdR_, cellPrefixShift_, N_cellPrefixBuckets_, cellPrefixStartIdxR_);
 }
 
 const NeighborSearch_CellLinkedList_Compact_CPU::CellRangeCache::Entry&
 NeighborSearch_CellLinkedList_Compact_CPU::ResolveCellQueryRanges(
 	const uint64_t cellId, CellRangeCache& cellRangeCache) const noexcept
 {
+	assert((cellId >> cellPrefixShift_) < N_cellPrefixBuckets_ && "Cell ID lies outside the built prefix buckets");
+
 	if (auto* cached = cellRangeCache.Find(cellId, cellDirectoryGeneration_))
 	{
 		return *cached;
@@ -2056,14 +2061,15 @@ inline uint64_t NeighborSearch_CellLinkedList_Compact_CPU::SpreadBitsWithGaps_21
 void NeighborSearch_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
 	const std::span<const uint64_t> uniqueCellIds,
 	const uint32_t cellPrefixShift,
+	const uint32_t N_cellPrefixBuckets,
 	CellPrefixStartIdx& cellPrefixStartIdx) noexcept
 {
 	// cell k starts every bucket after the prefix of cell k - 1 up to its own prefix
-	// (the trailing out-of-frame cell (EMPTY_64) lies past the last bucket)
+	// (the trailing out-of-frame cell (EMPTY_64) lies past the last built bucket, unreachable buckets stay unbuilt)
 	const uint64_t N_cells = uniqueCellIds.size();
 	const auto CellPrefix = [&](const uint64_t k) noexcept
 	{
-		return std::min<uint64_t>(uniqueCellIds[k] >> cellPrefixShift, N_CELL_PREFIX_BUCKETS);
+		return std::min<uint64_t>(uniqueCellIds[k] >> cellPrefixShift, N_cellPrefixBuckets);
 	};
 
 	tbb::parallel_for(
@@ -2073,7 +2079,7 @@ void NeighborSearch_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
 			for (uint64_t k = r.begin(); k != r.end(); k++)
 			{
 				const uint64_t pBegin = (k == 0) ? 0 : CellPrefix(k - 1) + 1;
-				const uint64_t pEnd = (k == N_cells) ? N_CELL_PREFIX_BUCKETS : CellPrefix(k);
+				const uint64_t pEnd = (k == N_cells) ? N_cellPrefixBuckets : CellPrefix(k);
 				for (uint64_t p = pBegin; p <= pEnd; p++)
 				{
 					cellPrefixStartIdx[p] = static_cast<uint32_t>(k);

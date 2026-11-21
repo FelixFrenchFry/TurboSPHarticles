@@ -178,6 +178,7 @@ namespace Sim
 		CellPrefixStartIdx cellPrefixStartIdxR_{};
 
 		uint32_t cellPrefixShift_ = 0; // cell ID right shift to the prefix bucket
+		uint32_t N_cellPrefixBuckets_ = N_CELL_PREFIX_BUCKETS; // prefix buckets the in-frame cell IDs reach
 
 		CompactCellBuildScratch compactCellBuildScratch_;
 
@@ -206,7 +207,7 @@ namespace Sim
 			boost::container::small_vector<ActiveCellRange, N_QUERY_CELL_INLINE>& rigidRanges) const;
 
 		static void BuildCellPrefixStartIdx(
-			std::span<const uint64_t> uniqueCellIds, uint32_t cellPrefixShift,
+			std::span<const uint64_t> uniqueCellIds, uint32_t cellPrefixShift, uint32_t N_cellPrefixBuckets,
 			CellPrefixStartIdx& cellPrefixStartIdx) noexcept;
 		// finds the compact cell index of an in-frame cell ID within its prefix bucket
 		static uint32_t FindCompactCellIdx(
