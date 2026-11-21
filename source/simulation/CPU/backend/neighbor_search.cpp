@@ -2058,13 +2058,29 @@ void NeighborSearch_CellLinkedList_Compact_CPU::BuildCellPrefixStartIdx(
 	const uint32_t cellPrefixShift,
 	CellPrefixStartIdx& cellPrefixStartIdx) noexcept
 {
-	// the trailing out-of-frame cell (EMPTY_64) lies past the last bucket
-	auto first = uniqueCellIds.begin();
-	for (uint32_t p = 0; p <= N_CELL_PREFIX_BUCKETS; p++)
+	// cell k starts every bucket after the prefix of cell k - 1 up to its own prefix
+	// (the trailing out-of-frame cell (EMPTY_64) lies past the last bucket)
+	const uint64_t N_cells = uniqueCellIds.size();
+	const auto CellPrefix = [&](const uint64_t k) noexcept
 	{
-		first = std::lower_bound(first, uniqueCellIds.end(), static_cast<uint64_t>(p) << cellPrefixShift);
-		cellPrefixStartIdx[p] = static_cast<uint32_t>(first - uniqueCellIds.begin());
-	}
+		return std::min<uint64_t>(uniqueCellIds[k] >> cellPrefixShift, N_CELL_PREFIX_BUCKETS);
+	};
+
+	tbb::parallel_for(
+		tbb::blocked_range<uint64_t>(0, N_cells + 1),
+		[&](const tbb::blocked_range<uint64_t>& r)
+		{
+			for (uint64_t k = r.begin(); k != r.end(); k++)
+			{
+				const uint64_t pBegin = (k == 0) ? 0 : CellPrefix(k - 1) + 1;
+				const uint64_t pEnd = (k == N_cells) ? N_CELL_PREFIX_BUCKETS : CellPrefix(k);
+				for (uint64_t p = pBegin; p <= pEnd; p++)
+				{
+					cellPrefixStartIdx[p] = static_cast<uint32_t>(k);
+				}
+			}
+		},
+		tbb::auto_partitioner{});
 }
 
 uint32_t NeighborSearch_CellLinkedList_Compact_CPU::FindCompactCellIdx(

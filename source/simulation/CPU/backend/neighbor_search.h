@@ -64,10 +64,10 @@ namespace Sim
 		float cellSizeInv_ = 0.0f;
 		uint32_t cellQueryReach_ = 1; // query range in cells around each particle
 		static constexpr uint32_t N_CELL_FRAME_REBUILD_MARGIN = 8; // hysteresis buffer
-		static constexpr uint32_t N_CELL_PREFIX_BITS = 12;
+		static constexpr uint32_t N_CELL_PREFIX_BITS = 20;
 		static constexpr uint32_t N_CELL_PREFIX_BUCKETS = 1u << N_CELL_PREFIX_BITS;
 		static constexpr uint32_t N_QUERY_CELL_INLINE = 96;
-		static constexpr uint32_t N_QUERY_LOOKUP_CACHE = 256;
+		static constexpr uint32_t N_QUERY_LOOKUP_CACHE = 4096;
 		static_assert(std::has_single_bit(N_QUERY_LOOKUP_CACHE),
 			"Query lookup cache size must be a power of two.");
 
