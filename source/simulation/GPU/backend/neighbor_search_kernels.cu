@@ -81,7 +81,23 @@ namespace GPU
 	static_assert(N_SELL_WIDTH == 32u,
 		"Chunked SELL32 chunk meta reduction assumes one chunk per warp.");
 
+	// window of the Delta16x2 home group, 15 bits wide around the particles of the chunk
+	__device__ __forceinline__
+	void Delta16x2HomeWindow(
+		const uint32_t chunk,
+		uint32_t& homeLoRef,
+		uint32_t& homeHiRef)
+	{
+		constexpr uint32_t homeReach = (0x8000u - N_SELL_WIDTH) / 2u;
+		constexpr uint32_t homeHiOffset = N_SELL_WIDTH - 1u + homeReach;
+		const uint32_t chunkBegin = chunk * N_SELL_WIDTH;
+
+		homeLoRef = (chunkBegin > homeReach) ? (chunkBegin - homeReach) : 0u;
+		homeHiRef = (chunkBegin < 0xffffffffu - homeHiOffset) ? (chunkBegin + homeHiOffset) : 0xffffffffu;
+	}
+
 	// every lane of the warp has to reach this, the shuffles span the full chunk
+	// (the Delta16x2 groups are only reduced and committed with a second base index destination)
 	__device__ __forceinline__
 	void CommitChunkCompressionMeta(
 		const uint32_t chunk,
@@ -91,7 +107,11 @@ namespace GPU
 		uint32_t maxRef,
 		uint16_t* __restrict__ chunkMaxCount,
 		uint32_t* __restrict__ chunkBaseIdx,
-		uint8_t* __restrict__ chunkFormat)
+		uint8_t* __restrict__ chunkFormat,
+		uint32_t homeMinRef = 0xffffffffu,
+		uint32_t farLoMaxRef = 0u,
+		uint32_t farHiMinRef = 0xffffffffu,
+		uint32_t* __restrict__ chunkBaseIdx2 = nullptr)
 	{
 		// match per-particle counts before reducing the chunk pitch
 		pitch = static_cast<uint16_t>(pitch);
@@ -104,6 +124,19 @@ namespace GPU
 			pitch = (otherPitch > pitch) ? otherPitch : pitch;
 			minRef = (otherMinRef < minRef) ? otherMinRef : minRef;
 			maxRef = (otherMaxRef > maxRef) ? otherMaxRef : maxRef;
+		}
+
+		if (chunkBaseIdx2 != nullptr)
+		{
+			for (uint32_t offset = N_SELL_WIDTH / 2u; offset != 0u; offset >>= 1u)
+			{
+				const uint32_t otherHomeMinRef = __shfl_down_sync(0xffffffffu, homeMinRef, offset);
+				const uint32_t otherFarLoMaxRef = __shfl_down_sync(0xffffffffu, farLoMaxRef, offset);
+				const uint32_t otherFarHiMinRef = __shfl_down_sync(0xffffffffu, farHiMinRef, offset);
+				homeMinRef = (otherHomeMinRef < homeMinRef) ? otherHomeMinRef : homeMinRef;
+				farLoMaxRef = (otherFarLoMaxRef > farLoMaxRef) ? otherFarLoMaxRef : farLoMaxRef;
+				farHiMinRef = (otherFarHiMinRef < farHiMinRef) ? otherFarHiMinRef : farHiMinRef;
+			}
 		}
 
 		if (!isChunkOwner) { return; }
@@ -120,15 +153,41 @@ namespace GPU
 		const uint32_t span = (maxRef >= minRef) ? (maxRef - minRef) : 0xffffffffu;
 		const bool canUseDelta16 =
 			(maxRef >= minRef) && (span <= 0xffffu);
-		const bool canUseDelta8 =
-			(maxRef >= minRef) && (span <= 0xffu);
+
+		// one 16-bit window, split into two adjacent 15-bit groups
+		// (without a second base index destination, the reader derives it from the first)
+		if (canUseDelta16)
+		{
+			chunkBaseIdx[chunk] = minRef;
+			if (chunkBaseIdx2 != nullptr) { chunkBaseIdx2[chunk] = minRef + 0x8000u; }
+			chunkFormat[chunk] = static_cast<uint8_t>(NbrChunkFormat::Delta16x2);
+			return;
+		}
+
+		// two 15-bit groups, the home group around the chunk and one far group below or above it
+		if (chunkBaseIdx2 != nullptr)
+		{
+			uint32_t homeLoRef = 0u;
+			uint32_t homeHiRef = 0u;
+			Delta16x2HomeWindow(chunk, homeLoRef, homeHiRef);
+
+			const bool hasFarLo = minRef < homeLoRef;
+			const bool hasFarHi = maxRef > homeHiRef;
+			const uint32_t farMinRef = hasFarLo ? minRef : farHiMinRef;
+			const uint32_t farMaxRef = hasFarLo ? farLoMaxRef : maxRef;
+
+			// (an empty home group keeps its minimum above the window)
+			if (hasFarLo != hasFarHi && homeMinRef <= homeHiRef && farMaxRef - farMinRef <= 0x7fffu)
+			{
+				chunkBaseIdx[chunk] = homeMinRef;
+				chunkBaseIdx2[chunk] = farMinRef;
+				chunkFormat[chunk] = static_cast<uint8_t>(NbrChunkFormat::Delta16x2);
+				return;
+			}
+		}
 
 		chunkBaseIdx[chunk] = minRef;
-		chunkFormat[chunk] = canUseDelta8
-			? static_cast<uint8_t>(NbrChunkFormat::Delta8)
-			: (canUseDelta16
-				? static_cast<uint8_t>(NbrChunkFormat::Delta16)
-				: static_cast<uint8_t>(NbrChunkFormat::Abs32));
+		chunkFormat[chunk] = static_cast<uint8_t>(NbrChunkFormat::Abs32);
 	}
 
 	__device__ __forceinline__
@@ -139,8 +198,8 @@ namespace GPU
 		uint32_t& wr,
 		const uint32_t j,
 		const uint32_t chunkBaseIdx,
+		const uint32_t chunkBaseIdx2,
 		const uint8_t chunkFormat,
-		uint8_t* __restrict__ nbrListDelta8,
 		uint16_t* __restrict__ nbrListDelta16,
 		uint32_t* __restrict__ nbrListAbs32,
 		uint32_t* __restrict__ overflowFlag)
@@ -149,31 +208,22 @@ namespace GPU
 		{
 			const uint64_t linearIdx = wr * N_SELL_WIDTH + lane;
 
-			if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta8))
+			if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16x2))
 			{
+				// neighbors outside the first group set the top bit and use the second base index
+				const bool isFirstGroup = (j >= chunkBaseIdx) && (j - chunkBaseIdx <= 0x7fffu);
+
 				#if defined(_DEBUG)
-				if (j < chunkBaseIdx || j - chunkBaseIdx > 0xffu)
+				if (!isFirstGroup && (j < chunkBaseIdx2 || j - chunkBaseIdx2 > 0x7fffu))
 				{
 					atomicOr(overflowFlag, NbrListError_DeltaRangeOverflow);
 					return;
 				}
 				#endif
 
-				nbrListDelta8[chunkBase + linearIdx] =
-					static_cast<uint8_t>(j - chunkBaseIdx);
-			}
-			else if (chunkFormat == static_cast<uint8_t>(NbrChunkFormat::Delta16))
-			{
-				#if defined(_DEBUG)
-				if (j < chunkBaseIdx || j - chunkBaseIdx > 0xffffu)
-				{
-					atomicOr(overflowFlag, NbrListError_DeltaRangeOverflow);
-					return;
-				}
-				#endif
-
-				nbrListDelta16[chunkBase + linearIdx] =
-					static_cast<uint16_t>(j - chunkBaseIdx);
+				nbrListDelta16[chunkBase + linearIdx] = isFirstGroup
+					? static_cast<uint16_t>(j - chunkBaseIdx)
+					: static_cast<uint16_t>(0x8000u | (j - chunkBaseIdx2));
 			}
 			else
 			{
@@ -659,6 +709,7 @@ namespace GPU
 		uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		uint32_t* __restrict__ nbrChunkBaseIdxFB,
 		uint32_t* __restrict__ nbrChunkBaseIdxFR,
+		uint32_t* __restrict__ nbrChunkBaseIdx2FF,
 		uint8_t* __restrict__ nbrChunkFormatFF,
 		uint8_t* __restrict__ nbrChunkFormatFB,
 		uint8_t* __restrict__ nbrChunkFormatFR)
@@ -674,6 +725,9 @@ namespace GPU
 		uint32_t cntFR = 0;
 		uint32_t minRefFF = 0xffffffffu;
 		uint32_t maxRefFF = 0u;
+		uint32_t homeMinRefFF = 0xffffffffu;
+		uint32_t farLoMaxRefFF = 0u;
+		uint32_t farHiMinRefFF = 0xffffffffu;
 		uint32_t minRefFB = 0xffffffffu;
 		uint32_t maxRefFB = 0u;
 		uint32_t minRefFR = 0xffffffffu;
@@ -688,6 +742,11 @@ namespace GPU
 			const uint32_t cF_src = compactCellIdxByParticleF[i];
 			const uint64_t querySlotBase =
 				static_cast<uint64_t>(cF_src) * static_cast<uint64_t>(N_queryCellSlots);
+
+			// FF neighbors inside this window form the Delta16x2 home group, the others a far group
+			uint32_t homeLoRefFF = 0u;
+			uint32_t homeHiRefFF = 0u;
+			Delta16x2HomeWindow(chunk, homeLoRefFF, homeHiRefFF);
 
 			// check all particles j in the cached neighboring grid cells
 			for (uint32_t s = 0; s < N_queryCellSlots; s++)
@@ -711,6 +770,19 @@ namespace GPU
 						cntFF++;
 						minRefFF = (j < minRefFF) ? j : minRefFF;
 						maxRefFF = (j > maxRefFF) ? j : maxRefFF;
+
+						if (j < homeLoRefFF)
+						{
+							farLoMaxRefFF = (j > farLoMaxRefFF) ? j : farLoMaxRefFF;
+						}
+						else if (j > homeHiRefFF)
+						{
+							farHiMinRefFF = (j < farHiMinRefFF) ? j : farHiMinRefFF;
+						}
+						else
+						{
+							homeMinRefFF = (j < homeMinRefFF) ? j : homeMinRefFF;
+						}
 					}
 				}
 
@@ -786,7 +858,8 @@ namespace GPU
 
 		CommitChunkCompressionMeta(
 			chunk, isChunkOwner, cntFF, minRefFF, maxRefFF,
-			nbrChunkMaxCountFF, nbrChunkBaseIdxFF, nbrChunkFormatFF);
+			nbrChunkMaxCountFF, nbrChunkBaseIdxFF, nbrChunkFormatFF,
+			homeMinRefFF, farLoMaxRefFF, farHiMinRefFF, nbrChunkBaseIdx2FF);
 		CommitChunkCompressionMeta(
 			chunk, isChunkOwner, cntFB, minRefFB, maxRefFB,
 			nbrChunkMaxCountFB, nbrChunkBaseIdxFB, nbrChunkFormatFB);
@@ -823,14 +896,12 @@ namespace GPU
 		const uint32_t* __restrict__ nbrChunkBaseIdxFF,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFB,
 		const uint32_t* __restrict__ nbrChunkBaseIdxFR,
+		const uint32_t* __restrict__ nbrChunkBaseIdx2FF,
 		const uint8_t* __restrict__ nbrChunkFormatFF,
 		const uint8_t* __restrict__ nbrChunkFormatFB,
 		const uint8_t* __restrict__ nbrChunkFormatFR,
 		const uint32_t N_F,
 		// destinations
-		uint8_t* __restrict__ nbrListDelta8FF,
-		uint8_t* __restrict__ nbrListDelta8FB,
-		uint8_t* __restrict__ nbrListDelta8FR,
 		uint16_t* __restrict__ nbrListDelta16FF,
 		uint16_t* __restrict__ nbrListDelta16FB,
 		uint16_t* __restrict__ nbrListDelta16FR,
@@ -865,6 +936,11 @@ namespace GPU
 		const uint8_t formatFF = nbrChunkFormatFF[chunk];
 		const uint8_t formatFB = nbrChunkFormatFB[chunk];
 		const uint8_t formatFR = nbrChunkFormatFR[chunk];
+		const uint32_t baseIdx2FF = (formatFF == static_cast<uint8_t>(NbrChunkFormat::Delta16x2))
+			? nbrChunkBaseIdx2FF[chunk] : 0u;
+		// FB and FR chunks never split, their second base index sits 0x8000 above the first
+		const uint32_t baseIdx2FB = baseIdxFB + 0x8000u;
+		const uint32_t baseIdx2FR = baseIdxFR + 0x8000u;
 		uint32_t wrFF = 0;
 		uint32_t wrFB = 0;
 		uint32_t wrFR = 0;
@@ -891,8 +967,8 @@ namespace GPU
 					// add fluid neighbor to the list
 					StoreNeighbor_CompressedSell32(
 						baseFF, pitchFF, lane, wrFF, j,
-						baseIdxFF, formatFF,
-						nbrListDelta8FF, nbrListDelta16FF, nbrListAbs32FF,
+						baseIdxFF, baseIdx2FF, formatFF,
+						nbrListDelta16FF, nbrListAbs32FF,
 						overflowFlag);
 				}
 			}
@@ -910,8 +986,8 @@ namespace GPU
 					// add boundary neighbor to the list
 					StoreNeighbor_CompressedSell32(
 						baseFB, pitchFB, lane, wrFB, j,
-						baseIdxFB, formatFB,
-						nbrListDelta8FB, nbrListDelta16FB, nbrListAbs32FB,
+						baseIdxFB, baseIdx2FB, formatFB,
+						nbrListDelta16FB, nbrListAbs32FB,
 						overflowFlag);
 				}
 			}
@@ -957,8 +1033,8 @@ namespace GPU
 								// add rigid neighbor to the list
 								StoreNeighbor_CompressedSell32(
 									baseFR, pitchFR, lane, wrFR, j,
-									baseIdxFR, formatFR,
-									nbrListDelta8FR, nbrListDelta16FR, nbrListAbs32FR,
+									baseIdxFR, baseIdx2FR, formatFR,
+									nbrListDelta16FR, nbrListAbs32FR,
 									overflowFlag);
 							}
 						}
@@ -1377,6 +1453,7 @@ namespace GPU
 		uint32_t* nbrChunkBaseIdxFF,
 		uint32_t* nbrChunkBaseIdxFB,
 		uint32_t* nbrChunkBaseIdxFR,
+		uint32_t* nbrChunkBaseIdx2FF,
 		uint8_t* nbrChunkFormatFF,
 		uint8_t* nbrChunkFormatFB,
 		uint8_t* nbrChunkFormatFR)
@@ -1398,6 +1475,7 @@ namespace GPU
 			nbrCountFF, nbrCountFB, nbrCountFR,
 			nbrChunkMaxCountFF, nbrChunkMaxCountFB, nbrChunkMaxCountFR,
 			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkBaseIdx2FF,
 			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR);
 
 		GPU::CheckLastKernel("K_CellLinkedList_Compact_Query_Count()");
@@ -1426,13 +1504,11 @@ namespace GPU
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
 		const uint32_t* nbrChunkBaseIdxFR,
+		const uint32_t* nbrChunkBaseIdx2FF,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
 		const uint8_t* nbrChunkFormatFR,
 		// destinations
-		uint8_t* nbrListDelta8FF,
-		uint8_t* nbrListDelta8FB,
-		uint8_t* nbrListDelta8FR,
 		uint16_t* nbrListDelta16FF,
 		uint16_t* nbrListDelta16FB,
 		uint16_t* nbrListDelta16FR,
@@ -1457,9 +1533,9 @@ namespace GPU
 			nbrChunkMaxCountFF, nbrChunkMaxCountFB, nbrChunkMaxCountFR,
 			nbrChunkOffsetsFF, nbrChunkOffsetsFB, nbrChunkOffsetsFR,
 			nbrChunkBaseIdxFF, nbrChunkBaseIdxFB, nbrChunkBaseIdxFR,
+			nbrChunkBaseIdx2FF,
 			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
 			N_F,
-			nbrListDelta8FF, nbrListDelta8FB, nbrListDelta8FR,
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
 			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR,
 			overflowFlag);

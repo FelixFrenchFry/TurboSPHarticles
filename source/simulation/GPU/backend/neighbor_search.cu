@@ -381,7 +381,6 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 	{
 		N_totalFF_ = N_totalFB_ = N_totalFR_ = 0;
 		N_packedFF_ = N_packedFB_ = N_packedFR_ = 0;
-		N_delta8FF_ = N_delta8FB_ = N_delta8FR_ = 0;
 		N_delta16FF_ = N_delta16FB_ = N_delta16FR_ = 0;
 		N_abs32FF_ = N_abs32FB_ = N_abs32FR_ = 0;
 		GPU::Copy_HostToDevice(d_nbrChunkOffsetsFF_.Data(), &zero, 1, stream_);
@@ -399,17 +398,15 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 			auto& d_nbrChunkMaxCount,
 			auto& d_nbrChunkFormat,
 			auto& d_nbrChunkOffsets,
-			auto& d_nbrListDelta8,
 			auto& d_nbrListDelta16,
 			auto& d_nbrListAbs32,
 			uint64_t& N_total,
 			uint64_t& N_packed,
-			uint64_t& N_delta8,
 			uint64_t& N_delta16,
 			uint64_t& N_abs32)
 		{
-			uint64_t totals[3]{};
-			for (uint8_t format = 0; format < 3; format++)
+			uint64_t totals[2]{};
+			for (uint8_t format = 0; format < 2; format++)
 			{
 				GPU::Copy_HostToDevice(d_nbrChunkOffsetsScratch, &zero, 1, stream_);
 				thrust::transform_inclusive_scan(
@@ -437,15 +434,11 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 				ToU64{}, uint64_t{ 0 }, thrust::plus<uint64_t>{});
 			GPU::StreamSync(stream_);
 
-			N_delta8 = totals[static_cast<uint8_t>(GPU::NbrChunkFormat::Delta8)];
-			N_delta16 = totals[static_cast<uint8_t>(GPU::NbrChunkFormat::Delta16)];
+			N_delta16 = totals[static_cast<uint8_t>(GPU::NbrChunkFormat::Delta16x2)];
 			N_abs32 = totals[static_cast<uint8_t>(GPU::NbrChunkFormat::Abs32)];
 			N_packed = Sim::CheckedParticleAdd(
-				Sim::CheckedParticleAdd(
-					N_delta8,
-					Sim::CheckedParticleMultiply(
-						N_delta16, sizeof(uint16_t), "GPU SELL packed bytes"),
-					"GPU SELL packed bytes"),
+				Sim::CheckedParticleMultiply(
+					N_delta16, sizeof(uint16_t), "GPU SELL packed bytes"),
 				Sim::CheckedParticleMultiply(
 					N_abs32, sizeof(uint32_t), "GPU SELL packed bytes"),
 				"GPU SELL packed bytes");
@@ -459,23 +452,22 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 					std::numeric_limits<uint64_t>::max(),
 					"GPU SELL reserve"));
 			};
-			grow(d_nbrListDelta8, N_delta8);
 			grow(d_nbrListDelta16, N_delta16);
 			grow(d_nbrListAbs32, N_abs32);
 		};
 
 		finalizeSell("Finalize SELL32 FF", d_nbrCountFF_, d_nbrChunkMaxCountFF_,
 			d_nbrChunkFormatFF_, d_nbrChunkOffsetsFF_,
-			d_nbrListDelta8FF_, d_nbrListDelta16FF_, d_nbrListAbs32FF_,
-			N_totalFF_, N_packedFF_, N_delta8FF_, N_delta16FF_, N_abs32FF_);
+			d_nbrListDelta16FF_, d_nbrListAbs32FF_,
+			N_totalFF_, N_packedFF_, N_delta16FF_, N_abs32FF_);
 		finalizeSell("Finalize SELL32 FB", d_nbrCountFB_, d_nbrChunkMaxCountFB_,
 			d_nbrChunkFormatFB_, d_nbrChunkOffsetsFB_,
-			d_nbrListDelta8FB_, d_nbrListDelta16FB_, d_nbrListAbs32FB_,
-			N_totalFB_, N_packedFB_, N_delta8FB_, N_delta16FB_, N_abs32FB_);
+			d_nbrListDelta16FB_, d_nbrListAbs32FB_,
+			N_totalFB_, N_packedFB_, N_delta16FB_, N_abs32FB_);
 		finalizeSell("Finalize SELL32 FR", d_nbrCountFR_, d_nbrChunkMaxCountFR_,
 			d_nbrChunkFormatFR_, d_nbrChunkOffsetsFR_,
-			d_nbrListDelta8FR_, d_nbrListDelta16FR_, d_nbrListAbs32FR_,
-			N_totalFR_, N_packedFR_, N_delta8FR_, N_delta16FR_, N_abs32FR_);
+			d_nbrListDelta16FR_, d_nbrListAbs32FR_,
+			N_totalFR_, N_packedFR_, N_delta16FR_, N_abs32FR_);
 	}
 
 	// build CSR offsets and storage for rigid source neighbors
@@ -780,6 +772,7 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Query_Count(const SimParams& par
 			be_.d_nbrChunkBaseIdxFF_.Data(),
 			be_.d_nbrChunkBaseIdxFB_.Data(),
 			be_.d_nbrChunkBaseIdxFR_.Data(),
+			be_.d_nbrChunkBaseIdx2FF_.Data(),
 			be_.d_nbrChunkFormatFF_.Data(),
 			be_.d_nbrChunkFormatFB_.Data(),
 			be_.d_nbrChunkFormatFR_.Data());
@@ -831,10 +824,9 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Query_Fill(const SimParams& para
 			be_.d_nbrChunkOffsetsFR_.Data(),
 			be_.d_nbrChunkBaseIdxFF_.Data(), be_.d_nbrChunkBaseIdxFB_.Data(),
 			be_.d_nbrChunkBaseIdxFR_.Data(),
+			be_.d_nbrChunkBaseIdx2FF_.Data(),
 			be_.d_nbrChunkFormatFF_.Data(), be_.d_nbrChunkFormatFB_.Data(),
 			be_.d_nbrChunkFormatFR_.Data(),
-			be_.d_nbrListDelta8FF_.Data(), be_.d_nbrListDelta8FB_.Data(),
-			be_.d_nbrListDelta8FR_.Data(),
 			be_.d_nbrListDelta16FF_.Data(), be_.d_nbrListDelta16FB_.Data(),
 			be_.d_nbrListDelta16FR_.Data(),
 			be_.d_nbrListAbs32FF_.Data(), be_.d_nbrListAbs32FB_.Data(),

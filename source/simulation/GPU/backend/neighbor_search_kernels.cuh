@@ -107,6 +107,7 @@ namespace GPU
 		uint32_t* nbrChunkBaseIdxFF,
 		uint32_t* nbrChunkBaseIdxFB,
 		uint32_t* nbrChunkBaseIdxFR,
+		uint32_t* nbrChunkBaseIdx2FF,
 		uint8_t* nbrChunkFormatFF,
 		uint8_t* nbrChunkFormatFB,
 		uint8_t* nbrChunkFormatFR);
@@ -134,13 +135,11 @@ namespace GPU
 		const uint32_t* nbrChunkBaseIdxFF,
 		const uint32_t* nbrChunkBaseIdxFB,
 		const uint32_t* nbrChunkBaseIdxFR,
+		const uint32_t* nbrChunkBaseIdx2FF,
 		const uint8_t* nbrChunkFormatFF,
 		const uint8_t* nbrChunkFormatFB,
 		const uint8_t* nbrChunkFormatFR,
 		// destinations
-		uint8_t* nbrListDelta8FF,
-		uint8_t* nbrListDelta8FB,
-		uint8_t* nbrListDelta8FR,
 		uint16_t* nbrListDelta16FF,
 		uint16_t* nbrListDelta16FB,
 		uint16_t* nbrListDelta16FR,

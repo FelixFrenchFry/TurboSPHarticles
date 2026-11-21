@@ -256,6 +256,7 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFF_; // per-chunk base index used for delta storage
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFB_;
 		DeviceBuffer<uint32_t> d_nbrChunkBaseIdxFR_;
+		DeviceBuffer<uint32_t> d_nbrChunkBaseIdx2FF_; // per-chunk second base index of Delta16x2 chunks
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFF_; // per-chunk storage format
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFB_;
 		DeviceBuffer<uint8_t> d_nbrChunkFormatFR_;
@@ -265,9 +266,6 @@ namespace Sim
 		DeviceBuffer<uint64_t> d_nbrOffsetsRF_;
 		DeviceBuffer<uint64_t> d_nbrOffsetsRB_;
 		DeviceBuffer<uint64_t> d_nbrOffsetsRR_;
-		DeviceBuffer<uint8_t> d_nbrListDelta8FF_; // contiguous delta8 neighbor storage
-		DeviceBuffer<uint8_t> d_nbrListDelta8FB_;
-		DeviceBuffer<uint8_t> d_nbrListDelta8FR_;
 		DeviceBuffer<uint16_t> d_nbrListDelta16FF_; // contiguous delta16 neighbor storage
 		DeviceBuffer<uint16_t> d_nbrListDelta16FB_;
 		DeviceBuffer<uint16_t> d_nbrListDelta16FR_;
@@ -287,9 +285,6 @@ namespace Sim
 		uint64_t N_packedFF_ = 0; // total compressed storage length in bytes
 		uint64_t N_packedFB_ = 0;
 		uint64_t N_packedFR_ = 0;
-		uint64_t N_delta8FF_ = 0; // compressed delta8 storage length in refs
-		uint64_t N_delta8FB_ = 0;
-		uint64_t N_delta8FR_ = 0;
 		uint64_t N_delta16FF_ = 0; // compressed delta16 storage length in refs
 		uint64_t N_delta16FB_ = 0;
 		uint64_t N_delta16FR_ = 0;
@@ -322,8 +317,8 @@ namespace Sim
 		mutable std::vector<uint16_t> h_expNbrCountFR_;
 		mutable std::vector<uint64_t> h_expNbrChunkOffsetsFF_;
 		mutable std::vector<uint32_t> h_expNbrChunkBaseIdxFF_;
+		mutable std::vector<uint32_t> h_expNbrChunkBaseIdx2FF_;
 		mutable std::vector<uint8_t> h_expNbrChunkFormatFF_;
-		mutable std::vector<uint8_t> h_expNbrListDelta8FF_;
 		mutable std::vector<uint16_t> h_expNbrListDelta16FF_;
 		mutable std::vector<uint32_t> h_expNbrListAbs32FF_;
 		mutable std::vector<float> h_expXPosF_;
@@ -364,6 +359,7 @@ namespace Sim
 				d_nbrCountFF_.Size() != N_newF || d_nbrCountFB_.Size() != N_newF || d_nbrCountFR_.Size() != N_newF ||
 				d_nbrChunkMaxCountFF_.Size() != N_newChunks || d_nbrChunkMaxCountFB_.Size() != N_newChunks || d_nbrChunkMaxCountFR_.Size() != N_newChunks ||
 				d_nbrChunkBaseIdxFF_.Size() != N_newChunks || d_nbrChunkBaseIdxFB_.Size() != N_newChunks || d_nbrChunkBaseIdxFR_.Size() != N_newChunks ||
+				d_nbrChunkBaseIdx2FF_.Size() != N_newChunks ||
 				d_nbrChunkFormatFF_.Size() != N_newChunks || d_nbrChunkFormatFB_.Size() != N_newChunks || d_nbrChunkFormatFR_.Size() != N_newChunks ||
 				d_nbrChunkOffsetsFF_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
 				d_nbrChunkOffsetsFB_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
@@ -393,6 +389,7 @@ namespace Sim
 			d_nbrCountFF_.Resize(N_F_); d_nbrCountFB_.Resize(N_F_); d_nbrCountFR_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_newChunks); d_nbrChunkMaxCountFB_.Resize(N_newChunks); d_nbrChunkMaxCountFR_.Resize(N_newChunks);
 			d_nbrChunkBaseIdxFF_.Resize(N_newChunks); d_nbrChunkBaseIdxFB_.Resize(N_newChunks); d_nbrChunkBaseIdxFR_.Resize(N_newChunks);
+			d_nbrChunkBaseIdx2FF_.Resize(N_newChunks);
 			d_nbrChunkFormatFF_.Resize(N_newChunks); d_nbrChunkFormatFB_.Resize(N_newChunks); d_nbrChunkFormatFR_.Resize(N_newChunks);
 			d_nbrChunkOffsetsFF_.Resize(static_cast<uint64_t>(N_newChunks) + 1);
 			d_nbrChunkOffsetsFB_.Resize(static_cast<uint64_t>(N_newChunks) + 1);

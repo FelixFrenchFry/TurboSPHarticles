@@ -10,11 +10,11 @@ namespace GPU
 {
 	static constexpr uint32_t N_SELL_WIDTH = 32u;
 
+	// (a single 16-bit window is a Delta16x2 chunk with the second base index 0x8000 above the first)
 	enum class NbrChunkFormat : uint8_t
 	{
-		Delta8 = 0u,
-		Delta16 = 1u,
-		Abs32 = 2u
+		Delta16x2 = 0u, // 15-bit offsets from one of two base indices, the top bit selects the second
+		Abs32 = 1u
 	};
 
 	// bit-mask written by chunked SELL32 neighbor-list safety checks
