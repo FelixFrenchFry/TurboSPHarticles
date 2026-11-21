@@ -318,10 +318,11 @@ namespace
 		return Mem::MemUsage{ N_bytes, N_bytes };
 	}
 
+	// gathers into raw scratch storage (at least N elements), then copies the gathered data back
 	template <typename T>
 	inline void ApplyPermutation_DeviceBuffer(
 		const uint32_t* d_perm, const uint32_t N,
-		DeviceBuffer<T>& d_src, DeviceBuffer<T>& d_tmp,
+		DeviceBuffer<T>& d_src, T* d_tmp,
 		cudaStream_t stream)
 	{
 		if (N == 0) { return; }
@@ -331,22 +332,39 @@ namespace
 			thrust::device_pointer_cast(d_perm),
 			thrust::device_pointer_cast(d_perm + N),
 			thrust::device_pointer_cast(d_src.Data()),
+			thrust::device_pointer_cast(d_tmp));
+
+		thrust::copy(
+			thrust::cuda::par.on(stream),
+			thrust::device_pointer_cast(d_tmp),
+			thrust::device_pointer_cast(d_tmp + N),
+			thrust::device_pointer_cast(d_src.Data()));
+	}
+
+	template <typename T>
+	inline void ApplyPermutation_DeviceBuffer(
+		const uint32_t* d_perm, const uint32_t N,
+		DeviceBuffer<T>& d_src, DeviceBuffer<T>& d_tmp,
+		cudaStream_t stream)
+	{
+		if (N == 0) { return; }
+
+		// the re-order scratch is sized for the largest particle class, so smaller classes copy
+		if (d_src.Size() != d_tmp.Size())
+		{
+			ApplyPermutation_DeviceBuffer(d_perm, N, d_src, d_tmp.Data(), stream);
+			return;
+		}
+
+		thrust::gather(
+			thrust::cuda::par.on(stream),
+			thrust::device_pointer_cast(d_perm),
+			thrust::device_pointer_cast(d_perm + N),
+			thrust::device_pointer_cast(d_src.Data()),
 			thrust::device_pointer_cast(d_tmp.Data()));
 
 		// equal-sized buffers exchange their storage instead of copying the gathered data back
-		// (the re-order scratch is sized for the largest particle class, so smaller classes copy)
-		if (d_src.Size() == d_tmp.Size())
-		{
-			d_src.Swap(d_tmp);
-		}
-		else
-		{
-			thrust::copy(
-				thrust::cuda::par.on(stream),
-				thrust::device_pointer_cast(d_tmp.Data()),
-				thrust::device_pointer_cast(d_tmp.Data() + N),
-				thrust::device_pointer_cast(d_src.Data()));
-		}
+		d_src.Swap(d_tmp);
 	}
 
 } // namespace anonymous
@@ -931,12 +949,15 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	DeviceBuffer<float>& d_reorderScratch =
 		permuteSolverFields ? d_solverFieldScratch : be_.d_densityF_;
 
+	// particle IDs gather through the alternate sort keys, free after both sorts and sized for the largest class
+	uint64_t* const d_reorderIdScratch = sortScratch.d_altKeys;
+
 	// re-order fluid SoA arrays according to sorted fluid indices
 	if (N_F > 0)
 	{
 		const uint32_t* d_permF = d_sortedParticleIdxF_.Data();
 
-		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, be_.d_reorderIdScratch_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_idF_, d_reorderIdScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xPosF_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yPosF_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zPosF_, d_reorderScratch, be_.stream_);
@@ -981,7 +1002,7 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	{
 		const uint32_t* d_permB = d_sortedParticleIdxB;
 
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, be_.d_reorderIdScratch_, be_.stream_);
+		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, d_reorderIdScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);

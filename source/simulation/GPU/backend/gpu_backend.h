@@ -298,7 +298,6 @@ namespace Sim
 		uint64_t N_abs32FR_ = 0;
 		const float extraAllocCapacityPct_ = 2.0f; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
-		DeviceBuffer<uint64_t> d_reorderIdScratch_;
 		DeviceBuffer<uint32_t> d_sortParticleIdxScratch_;
 
 		// reusable device scratch for particle statistics
@@ -369,7 +368,6 @@ namespace Sim
 				d_nbrChunkOffsetsFF_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
 				d_nbrChunkOffsetsFB_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
 				d_nbrChunkOffsetsFR_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
-				d_reorderIdScratch_.Size() != N_newReorderScratch ||
 				d_sortParticleIdxScratch_.Size() != N_newReorderScratch;
 			const bool needBoundary = force || N_newB != N_B_ ||
 				d_idB_.Size() != N_newB ||
@@ -390,7 +388,6 @@ namespace Sim
 			d_idB_.Resize(N_B_);
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
 			d_volB_.Resize(N_B_); d_psiB_.Resize(N_B_);
-			d_reorderIdScratch_.Resize(N_newReorderScratch);
 			d_sortParticleIdxScratch_.Resize(N_newReorderScratch);
 
 			d_nbrCountFF_.Resize(N_F_); d_nbrCountFB_.Resize(N_F_); d_nbrCountFR_.Resize(N_F_);
