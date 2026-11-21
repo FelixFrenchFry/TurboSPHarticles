@@ -1,6 +1,7 @@
 // sph_kernels.cu
 
 // external
+#include <cfloat>
 #include <cuda_runtime.h>
 
 // internal
@@ -16,8 +17,6 @@ namespace GPU
 	__constant__ uint32_t c_N_F;
 	__constant__ uint32_t c_N_B;
 	__constant__ float c_timeStep;
-	__constant__ float c_sizeF;
-	__constant__ float c_sizeInvF;
 	__constant__ float c_sizeB;
 	__constant__ float c_restDensity;
 	__constant__ float c_restDensitySquInv;
@@ -30,8 +29,19 @@ namespace GPU
 	__constant__ float c_xGravity;
 	__constant__ float c_yGravity;
 	__constant__ float c_zGravity;
-	__constant__ float c_kernelRadiusSqu;
-	__constant__ float c_cubicSplineAlpha;
+	__constant__ float c_sizeSquEps;
+	__constant__ float c_weightScale;
+
+	// cubic-spline gradient coefficients per unit distance
+	struct KernelConstants_CubicSpline
+	{
+		float size;
+		float twoSize;
+		float innerSlope;
+		float innerOffset;
+		float outerScale;
+	};
+	__constant__ KernelConstants_CubicSpline c_kernelConstants;
 
 	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream)
 	{
@@ -39,13 +49,19 @@ namespace GPU
 		const float sizeInvF = solverConstants.sizeInvF;
 		const float cubicSplineAlpha = solverConstants.cubicSplineAlpha;
 		const float restDensitySquInv = solverConstants.restDensitySquInv;
+		const float sizeSquEps = 0.01f * solverConstants.sizeSquF;
+		const float weightScale = cubicSplineAlpha * sizeInvF * sizeInvF * sizeInvF;
+		const KernelConstants_CubicSpline kernelConstants{
+			1.0f / sizeInvF,
+			2.0f / sizeInvF,
+			9.0f * cubicSplineAlpha * sizeInvF * sizeInvF * sizeInvF,
+			-12.0f * cubicSplineAlpha * sizeInvF * sizeInvF,
+			-3.0f * cubicSplineAlpha * sizeInvF * sizeInvF * sizeInvF };
 
 		// store values in constant memory on the GPU
 		GPU::Check(cudaMemcpyToSymbol(c_N_F, &N_F, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_N_B, &N_B, sizeof(uint32_t)));
 		GPU::Check(cudaMemcpyToSymbol(c_timeStep, &params.timeStep, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_sizeF, &params.particleSizeF, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_sizeInvF, &sizeInvF, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_sizeB, &params.particleSizeB, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_restDensity, &params.restDensity, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_restDensitySquInv, &restDensitySquInv, sizeof(float)));
@@ -58,75 +74,43 @@ namespace GPU
 		GPU::Check(cudaMemcpyToSymbol(c_xGravity, &params.gravity.x, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_yGravity, &params.gravity.y, sizeof(float)));
 		GPU::Check(cudaMemcpyToSymbol(c_zGravity, &params.gravity.z, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_kernelRadiusSqu, &params.kernelRadiusSqu, sizeof(float)));
-		GPU::Check(cudaMemcpyToSymbol(c_cubicSplineAlpha, &cubicSplineAlpha, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_sizeSquEps, &sizeSquEps, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_weightScale, &weightScale, sizeof(float)));
+		GPU::Check(cudaMemcpyToSymbol(c_kernelConstants, &kernelConstants, sizeof(KernelConstants_CubicSpline)));
 	}
 
 	// ------------------------------------------------------------------------------------------------
 	// --- [ helpers ] --------------------------------------------------------------------------------
 	// ------------------------------------------------------------------------------------------------
 
+	// unscaled cubic-spline kernel weight in distance units
+	// (zero at and beyond the kernel radius, sums take the alpha / size^3 factor once)
 	__device__ __forceinline__
-	void KernelWeight_CubicSpline(
-		float dx, float dy, float dz,
-		float& w)
+	float KernelWeightUnscaled_CubicSpline(const float distSqu)
 	{
-		const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
-		if (!(distSqu < c_kernelRadiusSqu))
-		{
-			w = 0.0f;
-			return;
-		}
+		// (clamped rsqrt, exact zero distance at the self pair)
+		const float dist = distSqu * rsqrtf(fmaxf(distSqu, FLT_MIN));
+		const float t1 = fmaxf(c_kernelConstants.size - dist, 0.0f);
+		const float t2 = fmaxf(c_kernelConstants.twoSize - dist, 0.0f);
 
-		float dist = sqrtf(distSqu);
-		float distNorm = dist * c_sizeInvF;
-
-		float t1 = distNorm < 1.0f ? 1.0f - distNorm : 0.0f;
-		float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
-		const float t1_3 = (t1 * t1) * t1;
-		const float t2_3 = (t2 * t2) * t2;
-
-		w = c_cubicSplineAlpha * fmaf(-4.0f, t1_3, t2_3);
+		return fmaf(-4.0f, (t1 * t1) * t1, (t2 * t2) * t2);
 	}
 
+	// cubic-spline kernel gradient factor without the min-dist guard, the gradient is factor * (dx, dy, dz)
+	// (finite at zero distance, for sums that multiply it by a term vanishing there)
 	__device__ __forceinline__
-	void KernelGradient_CubicSpline(
-		float dx, float dy, float dz,
-		float& gx, float& gy, float& gz)
+	float KernelGradientFactorNoMinDist_CubicSpline(const float distSqu)
 	{
-		const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
-		if (distSqu < c_kernelRadiusSqu && distSqu > 1e-14f)
-		{
-			// 1 / (distNorm * c_sizeF * c_sizeF) collapses to distInv * c_sizeInvF
-			float distInv = rsqrtf(distSqu);
-			float distNorm = distSqu * distInv * c_sizeInvF;
+		// (clamped rsqrt, exact zero distance at the self pair)
+		const float distInv = rsqrtf(fmaxf(distSqu, FLT_MIN));
+		const float dist = distSqu * distInv;
 
-			float commonFac = 0.0f;
-			if (distNorm < 1.0f)
-			{
-				// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
-				commonFac = c_cubicSplineAlpha * c_sizeInvF * c_sizeInvF
-							* fmaf(9.0f, distNorm, -12.0f);
-			}
-			else
-			{
-				float t2 = distNorm < 2.0f ? 2.0f - distNorm : 0.0f;
+		// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
+		const float innerFac = fmaf(c_kernelConstants.innerSlope, dist, c_kernelConstants.innerOffset);
+		const float t2 = fmaxf(c_kernelConstants.twoSize - dist, 0.0f);
+		const float outerFac = (t2 * t2) * (c_kernelConstants.outerScale * distInv);
 
-				commonFac = c_cubicSplineAlpha
-							* (-3.0f * t2 * t2)
-							* distInv * c_sizeInvF;
-			}
-
-			gx = commonFac * dx;
-			gy = commonFac * dy;
-			gz = commonFac * dz;
-		}
-		else
-		{
-			gx = 0.0f;
-			gy = 0.0f;
-			gz = 0.0f;
-		}
+		return (dist < c_kernelConstants.size) ? innerFac : outerFac;
 	}
 
 	__device__ __forceinline__
@@ -254,9 +238,7 @@ namespace GPU
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
 
-		float tmp_densityF = 0.0f;
-		float tmp_densityB = 0.0f;
-		float tmp_densityR = 0.0f;
+		float weightSumFF = 0.0f;
 
 		const uint32_t chunk = i / N_SELL_WIDTH;
 		const uint32_t lane = i % N_SELL_WIDTH;
@@ -283,10 +265,12 @@ namespace GPU
 				const float dy = yi - yPosF[j];
 				const float dz = zi - zPosF[j];
 
-				float kw = 0.0f;
-				KernelWeight_CubicSpline(dx, dy, dz, kw);
-				tmp_densityF = fmaf(c_massF, kw, tmp_densityF);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				weightSumFF += KernelWeightUnscaled_CubicSpline(distSqu);
 			});
+
+		// mass scales the whole FF sum
+		float tmp_density = weightSumFF * c_massF;
 
 		// FB density contribution
 		ComputeForEachNeighbor_SELL32(
@@ -298,10 +282,8 @@ namespace GPU
 				const float dy = yi - yPosB[j];
 				const float dz = zi - zPosB[j];
 
-				float kw = 0.0f;
-				KernelWeight_CubicSpline(dx, dy, dz, kw);
-
-				tmp_densityB = fmaf(psiB[j], kw, tmp_densityB);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				tmp_density = fmaf(psiB[j], KernelWeightUnscaled_CubicSpline(distSqu), tmp_density);
 			});
 
 		// FR density contribution
@@ -314,13 +296,12 @@ namespace GPU
 				const float dy = yi - yPosR[j];
 				const float dz = zi - zPosR[j];
 
-				float kw = 0.0f;
-				KernelWeight_CubicSpline(dx, dy, dz, kw);
-
-				tmp_densityR = fmaf(psiR[j], kw, tmp_densityR);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				tmp_density = fmaf(psiR[j], KernelWeightUnscaled_CubicSpline(distSqu), tmp_density);
 			});
 
-		densityF[i] = tmp_densityF + tmp_densityB + tmp_densityR;
+		// alpha and 1 / size^3 scale the whole sum
+		densityF[i] = tmp_density * c_weightScale;
 	}
 
 	__global__
@@ -414,19 +395,17 @@ namespace GPU
 				const float dvy = vyi - yVelF[j];
 				const float dvz = vzi - zVelF[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float accViscCoeff = (c_massF / fmaxf(densityF[j], 1e-7f))
-										 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
-										 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
-										 + 0.01f * c_sizeF * c_sizeF);
+				const float dot = fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz));
+				const float accViscCoeff = dot
+										 / (fmaxf(densityF[j], 1e-7f) * (distSqu + c_sizeSquEps))
+										 * kgFac;
 
-				tmp_xAccViscF = fmaf(accViscCoeff, xkg, tmp_xAccViscF);
-				tmp_yAccViscF = fmaf(accViscCoeff, ykg, tmp_yAccViscF);
-				tmp_zAccViscF = fmaf(accViscCoeff, zkg, tmp_zAccViscF);
+				tmp_xAccViscF = fmaf(accViscCoeff, dx, tmp_xAccViscF);
+				tmp_yAccViscF = fmaf(accViscCoeff, dy, tmp_yAccViscF);
+				tmp_zAccViscF = fmaf(accViscCoeff, dz, tmp_zAccViscF);
 			});
 
 		// temp accumulation variables
@@ -447,19 +426,15 @@ namespace GPU
 				const float dvy = vyi;
 				const float dvz = vzi;
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float accViscCoeff = volB[j]
-										 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
-										 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
-										 + 0.01f * c_sizeF * c_sizeF);
+				const float dot = fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz));
+				const float accViscCoeff = (volB[j] * dot) / (distSqu + c_sizeSquEps) * kgFac;
 
-				tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
-				tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
-				tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
+				tmp_xAccViscB = fmaf(accViscCoeff, dx, tmp_xAccViscB);
+				tmp_yAccViscB = fmaf(accViscCoeff, dy, tmp_yAccViscB);
+				tmp_zAccViscB = fmaf(accViscCoeff, dz, tmp_zAccViscB);
 			});
 
 		// FR viscosity acceleration
@@ -475,26 +450,22 @@ namespace GPU
 				const float dvy = vyi - yVelR[j];
 				const float dvz = vzi - zVelR[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float accViscCoeff = volR[j]
-										 * fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz))
-										 / (fmaf(dx, dx, fmaf(dy, dy, dz * dz))
-										 + 0.01f * c_sizeF * c_sizeF);
+				const float dot = fmaf(dvx, dx, fmaf(dvy, dy, dvz * dz));
+				const float accViscCoeff = (volR[j] * dot) / (distSqu + c_sizeSquEps) * kgFac;
 
-				tmp_xAccViscB = fmaf(accViscCoeff, xkg, tmp_xAccViscB);
-				tmp_yAccViscB = fmaf(accViscCoeff, ykg, tmp_yAccViscB);
-				tmp_zAccViscB = fmaf(accViscCoeff, zkg, tmp_zAccViscB);
+				tmp_xAccViscB = fmaf(accViscCoeff, dx, tmp_xAccViscB);
+				tmp_yAccViscB = fmaf(accViscCoeff, dy, tmp_yAccViscB);
+				tmp_zAccViscB = fmaf(accViscCoeff, dz, tmp_zAccViscB);
 			});
 
-		// finalize accelerations
+		// finalize accelerations, mass scales the whole FF sum
 		// (3D -> factor 2 * (dim + 2))
-		tmp_xAccViscF *= 2.0f * (3 + 2) * c_viscosityF;
-		tmp_yAccViscF *= 2.0f * (3 + 2) * c_viscosityF;
-		tmp_zAccViscF *= 2.0f * (3 + 2) * c_viscosityF;
+		tmp_xAccViscF *= c_massF * (2.0f * (3 + 2) * c_viscosityF);
+		tmp_yAccViscF *= c_massF * (2.0f * (3 + 2) * c_viscosityF);
+		tmp_zAccViscF *= c_massF * (2.0f * (3 + 2) * c_viscosityF);
 		tmp_xAccViscB *= 2.0f * (3 + 2) * c_viscosityB;
 		tmp_yAccViscB *= 2.0f * (3 + 2) * c_viscosityB;
 		tmp_zAccViscB *= 2.0f * (3 + 2) * c_viscosityB;
@@ -602,17 +573,18 @@ namespace GPU
 				const float dvpy = vpyi - yVelPredF[j];
 				const float dvpz = vpzi - zVelPredF[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				tmp_sourceTermF += fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
+				const float sourceTerm = fmaf(dvpx, dx, fmaf(dvpy, dy, dvpz * dz));
+				tmp_sourceTermF = fmaf(kgFac, sourceTerm, tmp_sourceTermF);
 
-				xCTermF += xkg;
-				yCTermF += ykg;
-				zCTermF += zkg;
-				gradSquSumF += fmaf(xkg, xkg, fmaf(ykg, ykg, zkg * zkg));
+				xCTermF = fmaf(kgFac, dx, xCTermF);
+				yCTermF = fmaf(kgFac, dy, yCTermF);
+				zCTermF = fmaf(kgFac, dz, zCTermF);
+
+				// (kgFac * distSqu first keeps the self pair exactly zero)
+				gradSquSumF = fmaf(kgFac, kgFac * distSqu, gradSquSumF);
 			});
 		tmp_sourceTermF *= c_massF;
 
@@ -635,17 +607,15 @@ namespace GPU
 				const float dvpy = vpyi;
 				const float dvpz = vpzi;
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFacWeighted = psiB[j] * KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float psiBj = psiB[j];
-				tmp_sourceTermB += psiBj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
+				const float sourceTerm = fmaf(dvpx, dx, fmaf(dvpy, dy, dvpz * dz));
+				tmp_sourceTermB = fmaf(kgFacWeighted, sourceTerm, tmp_sourceTermB);
 
-				xCTermB += psiBj * xkg;
-				yCTermB += psiBj * ykg;
-				zCTermB += psiBj * zkg;
+				xCTermB = fmaf(kgFacWeighted, dx, xCTermB);
+				yCTermB = fmaf(kgFacWeighted, dy, yCTermB);
+				zCTermB = fmaf(kgFacWeighted, dz, zCTermB);
 			});
 
 		// FR pressure source term and diagonal
@@ -661,17 +631,15 @@ namespace GPU
 				const float dvpy = vpyi - yVelR[j];
 				const float dvpz = vpzi - zVelR[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFacWeighted = psiR[j] * KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float psiRj = psiR[j];
-				tmp_sourceTermB += psiRj * fmaf(dvpx, xkg, fmaf(dvpy, ykg, dvpz * zkg));
+				const float sourceTerm = fmaf(dvpx, dx, fmaf(dvpy, dy, dvpz * dz));
+				tmp_sourceTermB = fmaf(kgFacWeighted, sourceTerm, tmp_sourceTermB);
 
-				xCTermB += psiRj * xkg;
-				yCTermB += psiRj * ykg;
-				zCTermB += psiRj * zkg;
+				xCTermB = fmaf(kgFacWeighted, dx, xCTermB);
+				yCTermB = fmaf(kgFacWeighted, dy, yCTermB);
+				zCTermB = fmaf(kgFacWeighted, dz, zCTermB);
 			});
 
 		// finalize source term
@@ -766,9 +734,7 @@ namespace GPU
 		const float yi = yPosF[i];
 		const float zi = zPosF[i];
 		const float presi = pressureF[i];
-		const float densi = c_restDensity;
-		const float densiInvSqu = 1.0f / (densi * densi);
-		const float accCoeffF_outer = c_massF * presi * densiInvSqu;
+		const float accCoeffB_i = 2.0f * c_pressGamma * c_restDensitySquInv * presi;
 
 		// temp accumulation variables
 		float tmp_xAccPressF = 0.0f;
@@ -799,18 +765,20 @@ namespace GPU
 				const float dy = yi - yPosF[j];
 				const float dz = zi - zPosF[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float accCoeffF = accCoeffF_outer + c_massF
-									  * pressureF[j] * densiInvSqu;
+				const float accCoeffF = (presi + pressureF[j]) * kgFac;
 
-				tmp_xAccPressF = fmaf(accCoeffF, xkg, tmp_xAccPressF);
-				tmp_yAccPressF = fmaf(accCoeffF, ykg, tmp_yAccPressF);
-				tmp_zAccPressF = fmaf(accCoeffF, zkg, tmp_zAccPressF);
+				tmp_xAccPressF = fmaf(accCoeffF, dx, tmp_xAccPressF);
+				tmp_yAccPressF = fmaf(accCoeffF, dy, tmp_yAccPressF);
+				tmp_zAccPressF = fmaf(accCoeffF, dz, tmp_zAccPressF);
 			});
+
+		// scale the FF sum by massF / restDensity^2, shared by all FF terms
+		tmp_xAccPressF *= c_massF * c_restDensitySquInv;
+		tmp_yAccPressF *= c_massF * c_restDensitySquInv;
+		tmp_zAccPressF *= c_massF * c_restDensitySquInv;
 
 		// FB pressure acceleration
 		ComputeForEachNeighbor_SELL32(
@@ -822,17 +790,14 @@ namespace GPU
 				const float dy = yi - yPosB[j];
 				const float dz = zi - zPosB[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float accCoeffB = c_pressGamma * 2.0f
-									  * psiB[j] * presi * densiInvSqu;
+				const float accCoeffB = accCoeffB_i * psiB[j] * kgFac;
 
-				tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
-				tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
-				tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
+				tmp_xAccPressF = fmaf(accCoeffB, dx, tmp_xAccPressF);
+				tmp_yAccPressF = fmaf(accCoeffB, dy, tmp_yAccPressF);
+				tmp_zAccPressF = fmaf(accCoeffB, dz, tmp_zAccPressF);
 			});
 
 		// FR pressure acceleration
@@ -845,17 +810,14 @@ namespace GPU
 				const float dy = yi - yPosR[j];
 				const float dz = zi - zPosR[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float accCoeffB = c_pressGamma * 2.0f
-									  * psiR[j] * presi * densiInvSqu;
+				const float accCoeffB = accCoeffB_i * psiR[j] * kgFac;
 
-				tmp_xAccPressF = fmaf(accCoeffB, xkg, tmp_xAccPressF);
-				tmp_yAccPressF = fmaf(accCoeffB, ykg, tmp_yAccPressF);
-				tmp_zAccPressF = fmaf(accCoeffB, zkg, tmp_zAccPressF);
+				tmp_xAccPressF = fmaf(accCoeffB, dx, tmp_xAccPressF);
+				tmp_yAccPressF = fmaf(accCoeffB, dy, tmp_yAccPressF);
+				tmp_zAccPressF = fmaf(accCoeffB, dz, tmp_zAccPressF);
 			});
 
 		// finalize pressure acceleration
@@ -948,16 +910,17 @@ namespace GPU
 				const float dy = yi - yPosF[j];
 				const float dz = zi - zPosF[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFac = KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float dotAccF = fmaf(axi - xAccPressF[j], xkg,
-									  fmaf(ayi - yAccPressF[j], ykg,
-										  (azi - zAccPressF[j]) * zkg));
-				tmp_sysVecElem = fmaf(c_massF, dotAccF, tmp_sysVecElem);
+				const float dotAccF = fmaf(axi - xAccPressF[j], dx,
+									  fmaf(ayi - yAccPressF[j], dy,
+										  (azi - zAccPressF[j]) * dz));
+				tmp_sysVecElem = fmaf(kgFac, dotAccF, tmp_sysVecElem);
 			});
+
+		// mass scales the whole FF sum
+		tmp_sysVecElem *= c_massF;
 
 		// FB pressure system vector element
 		ComputeForEachNeighbor_SELL32(
@@ -969,15 +932,11 @@ namespace GPU
 				const float dy = yi - yPosB[j];
 				const float dz = zi - zPosB[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFacWeighted = psiB[j] * KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float psiBj = psiB[j];
-
-				const float dotAccB = fmaf(axi, xkg, fmaf(ayi, ykg, azi * zkg));
-				tmp_sysVecElem = fmaf(psiBj, dotAccB, tmp_sysVecElem);
+				const float dotAccB = fmaf(axi, dx, fmaf(ayi, dy, azi * dz));
+				tmp_sysVecElem = fmaf(kgFacWeighted, dotAccB, tmp_sysVecElem);
 			});
 
 		// FR pressure system vector element
@@ -990,15 +949,11 @@ namespace GPU
 				const float dy = yi - yPosR[j];
 				const float dz = zi - zPosR[j];
 
-				float xkg = 0.0f;
-				float ykg = 0.0f;
-				float zkg = 0.0f;
-				KernelGradient_CubicSpline(dx, dy, dz, xkg, ykg, zkg);
+				const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
+				const float kgFacWeighted = psiR[j] * KernelGradientFactorNoMinDist_CubicSpline(distSqu);
 
-				const float psiRj = psiR[j];
-
-				const float dotAccR = fmaf(axi, xkg, fmaf(ayi, ykg, azi * zkg));
-				tmp_sysVecElem = fmaf(psiRj, dotAccR, tmp_sysVecElem);
+				const float dotAccR = fmaf(axi, dx, fmaf(ayi, dy, azi * dz));
+				tmp_sysVecElem = fmaf(kgFacWeighted, dotAccR, tmp_sysVecElem);
 			});
 
 		float tmp_pressureF = 0.0f;

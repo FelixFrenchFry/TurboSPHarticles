@@ -143,7 +143,7 @@ namespace GPU
 		float& gx, float& gy, float& gz)
 	{
 		const float distSqu = fmaf(dx, dx, fmaf(dy, dy, dz * dz));
-		if (distSqu >= kernelRadiusSqu || !(distSqu > 1e-14f))
+		if (distSqu >= kernelRadiusSqu)
 		{
 			gx = 0.0f;
 			gy = 0.0f;
