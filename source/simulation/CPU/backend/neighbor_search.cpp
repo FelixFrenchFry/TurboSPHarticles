@@ -1093,9 +1093,15 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 						useSelectedFluidCenters
 							? be_.pressureAccFluidParticleFlags_.data() : nullptr,
 						begin, end);
-					const CPU::Float32xSIMD xi = CPU::LoadFloat32xSIMDPartial(xPosF, begin, end);
-					const CPU::Float32xSIMD yi = CPU::LoadFloat32xSIMDPartial(yPosF, begin, end);
-					const CPU::Float32xSIMD zi = CPU::LoadFloat32xSIMDPartial(zPosF, begin, end);
+					// lanes without a valid particle sit far outside every kernel radius and never hit
+					// (finite, so the distance test stays exact without IEEE infinities)
+					const CPU::Float32xSIMD farV = CPU::SetFloat32xSIMD(1e18f);
+					const CPU::Float32xSIMD xi = CPU::SelectFloat32xSIMD(
+						validLanes, CPU::LoadFloat32xSIMDPartial(xPosF, begin, end), farV);
+					const CPU::Float32xSIMD yi = CPU::SelectFloat32xSIMD(
+						validLanes, CPU::LoadFloat32xSIMDPartial(yPosF, begin, end), farV);
+					const CPU::Float32xSIMD zi = CPU::SelectFloat32xSIMD(
+						validLanes, CPU::LoadFloat32xSIMDPartial(zPosF, begin, end), farV);
 					CPU::UInt32xSIMD cntFF = CPU::SetUInt32xSIMD(0u);
 					CPU::UInt32xSIMD cntFB = CPU::SetUInt32xSIMD(0u);
 					CPU::UInt32xSIMD cntFR = CPU::SetUInt32xSIMD(0u);
@@ -1127,8 +1133,7 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 							const CPU::Float32xSIMD dz = zi - zj;
 							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
-							const CPU::Mask32xSIMD hit =
-								(distSqu <= kernelRadiusSquV) && validLanes;
+							const CPU::Mask32xSIMD hit = distSqu <= kernelRadiusSquV;
 
 							const uint32_t hitLanes = CPU::MaskBits32xSIMD(hit);
 							const uint32_t slot = std::min(N_distinctFF, N_SELL_DICT_SIZE_MAX);
@@ -1165,8 +1170,7 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 								const CPU::Float32xSIMD dz = zi - zj;
 								const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 									xsimd::fma(dy, dy, dz * dz));
-								const CPU::Mask32xSIMD hit =
-									(distSqu <= kernelRadiusSquV) && validLanes;
+								const CPU::Mask32xSIMD hit = distSqu <= kernelRadiusSquV;
 
 								const uint32_t hitLanes = CPU::MaskBits32xSIMD(hit);
 								if (hitLanes != 0u)
@@ -1199,8 +1203,7 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 							const CPU::Float32xSIMD dz = zi - zj;
 							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
-							const CPU::Mask32xSIMD hit =
-								(distSqu <= kernelRadiusSquV) && validLanes;
+							const CPU::Mask32xSIMD hit = distSqu <= kernelRadiusSquV;
 
 							if (CPU::MaskBits32xSIMD(hit) != 0u)
 							{
@@ -1226,8 +1229,7 @@ void NeighborSearch_CellLinkedList_Compact_CPU::Query_Count(const SimParams& par
 							const CPU::Float32xSIMD dz = zi - zj;
 							const CPU::Float32xSIMD distSqu = xsimd::fma(dx, dx,
 								xsimd::fma(dy, dy, dz * dz));
-							const CPU::Mask32xSIMD hit =
-								(distSqu <= kernelRadiusSquV) && validLanes;
+							const CPU::Mask32xSIMD hit = distSqu <= kernelRadiusSquV;
 							if (CPU::MaskBits32xSIMD(hit) != 0u)
 							{
 								minRefFR = std::min(minRefFR, l);
