@@ -1,0 +1,143 @@
+{
+  "scenarios": {
+    "BoundaryRigidMeshes": {
+      "type": "BoundaryRigidMeshes",
+      "container": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 130.0,
+        "vLen": 37.5,
+        "wLen": 100.0
+      },
+      "fluid": {
+        "origin": [ 0.0, 0.0, 0.0 ],
+        "uDir": [ 1.0, 0.0, 0.0 ],
+        "vDir": [ 0.0, 1.0, 0.0 ],
+        "wDir": [ 0.0, 0.0, 1.0 ],
+        "uLen": 50.0,
+        "vLen": 12.5,
+        "wLen": 100.0
+      },
+      "boundaryBodies": [
+        {
+          "model": "RockyCoastlineV9",
+          "modelTargetExtent": 100.0,
+          "boundaryMesh": {
+            "position": [ 0.0, 0.0, 0.0 ],
+            "yawDeg": -90.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          }
+        }
+      ],
+      "rigidBodies": [
+        {
+          "model": "CorvetteShip",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 13.6285, 20.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 500.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "CruiserShip",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 13.36025, 30.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 500.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "DestroyerShip",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 13.41475, 40.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 500.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "FrigateShip",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 13.7145, 50.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 500.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "PassengerShip",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 14.0715, 60.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 400.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "TugBoat",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 14.13525, 70.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 500.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "ShortSubmarine",
+          "modelTargetExtent": 12.5,
+          "rigidBody": {
+            "centerOfPosition": [ 31.25, 14.47275, 80.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 1200.0,
+          "rigidInitVel": [ 0.0, 0.0, 0.0 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        },
+        {
+          "model": "AsteroidBennu",
+          "modelTargetExtent": 7.5,
+          "rigidBody": {
+            "centerOfPosition": [ 5.0, 16.25, 5.0 ],
+            "yawDeg": 0.0,
+            "pitchDeg": 0.0,
+            "rollDeg": 0.0
+          },
+          "rigidDensity": 750.0,
+          "rigidInitVel": [ 5.0, 0.0, 12.5 ],
+          "rigidInitOmega": [ 0.0, 0.0, 0.0 ]
+        }
+      ]
+    }
+  }
+}

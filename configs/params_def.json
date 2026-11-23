@@ -68,6 +68,6 @@
   "exportDir": "test",
   "exportInterval": 10,
   "checkpointTime": 0,
-  "surfaceNbrCountRatio": 0.75,
+  "surfaceNbrCountRatio": 0.8,
   "progressReportMode": "Auto"
 }
