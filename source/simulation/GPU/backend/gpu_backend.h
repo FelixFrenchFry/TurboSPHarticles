@@ -346,7 +346,7 @@ namespace Sim
 
 			const uint32_t N_newChunks = (N_newF == 0u)
 				? 0u : ((N_newF - 1u) / GPU::N_SELL_WIDTH) + 1u;
-			const uint32_t N_newReorderScratch = std::max(N_newF, N_newB);
+			const uint32_t N_newSortIdxScratch = std::max(N_newF, N_newB);
 			const bool needOverflow = d_nbrOverflowFlag_.Size() != 1;
 			const bool needFluid = force || N_newF != N_F_ ||
 				d_idF_.Size() != N_newF ||
@@ -355,7 +355,7 @@ namespace Sim
 				d_xVelPredF_.Size() != N_newF || d_yVelPredF_.Size() != N_newF || d_zVelPredF_.Size() != N_newF ||
 				d_xAccPressF_.Size() != N_newF || d_yAccPressF_.Size() != N_newF || d_zAccPressF_.Size() != N_newF ||
 				d_sourceTermF_.Size() != N_newF || d_diagElemF_.Size() != N_newF ||
-				d_pressureF_.Size() != N_newF || d_densityF_.Size() != N_newReorderScratch ||
+				d_pressureF_.Size() != N_newF || d_densityF_.Size() != N_newF ||
 				d_nbrCountFF_.Size() != N_newF || d_nbrCountFB_.Size() != N_newF || d_nbrCountFR_.Size() != N_newF ||
 				d_nbrChunkMaxCountFF_.Size() != N_newChunks || d_nbrChunkMaxCountFB_.Size() != N_newChunks || d_nbrChunkMaxCountFR_.Size() != N_newChunks ||
 				d_nbrChunkBaseIdxFF_.Size() != N_newChunks || d_nbrChunkBaseIdxFB_.Size() != N_newChunks || d_nbrChunkBaseIdxFR_.Size() != N_newChunks ||
@@ -364,7 +364,7 @@ namespace Sim
 				d_nbrChunkOffsetsFF_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
 				d_nbrChunkOffsetsFB_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
 				d_nbrChunkOffsetsFR_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
-				d_sortParticleIdxScratch_.Size() != N_newReorderScratch;
+				d_sortParticleIdxScratch_.Size() != N_newSortIdxScratch;
 			const bool needBoundary = force || N_newB != N_B_ ||
 				d_idB_.Size() != N_newB ||
 				d_xPosB_.Size() != N_newB || d_yPosB_.Size() != N_newB || d_zPosB_.Size() != N_newB ||
@@ -379,12 +379,12 @@ namespace Sim
 			d_xVelPredF_.Resize(N_F_); d_yVelPredF_.Resize(N_F_); d_zVelPredF_.Resize(N_F_);
 			d_xAccPressF_.Resize(N_F_); d_yAccPressF_.Resize(N_F_); d_zAccPressF_.Resize(N_F_);
 			d_sourceTermF_.Resize(N_F_); d_diagElemF_.Resize(N_F_);
-			d_pressureF_.Resize(N_F_); d_densityF_.Resize(N_newReorderScratch);
+			d_pressureF_.Resize(N_F_); d_densityF_.Resize(N_F_);
 
 			d_idB_.Resize(N_B_);
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
 			d_volB_.Resize(N_B_); d_psiB_.Resize(N_B_);
-			d_sortParticleIdxScratch_.Resize(N_newReorderScratch);
+			d_sortParticleIdxScratch_.Resize(N_newSortIdxScratch);
 
 			d_nbrCountFF_.Resize(N_F_); d_nbrCountFB_.Resize(N_F_); d_nbrCountFR_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_newChunks); d_nbrChunkMaxCountFB_.Resize(N_newChunks); d_nbrChunkMaxCountFR_.Resize(N_newChunks);

@@ -17,6 +17,7 @@
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
 #include <thrust/set_operations.h>
+#include <thrust/sort.h>
 #include <thrust/transform_scan.h>
 #include <thrust/transform_reduce.h>
 #include <thrust/tuple.h>
@@ -110,9 +111,7 @@ namespace
 
 	struct NeighborSearch_CompactBuildScratchLayout
 	{
-		uint64_t cellIdF = 0;
-		uint64_t cellIdB = 0;
-		uint64_t sortedParticleIdxB = 0;
+		uint64_t cellId = 0;
 		uint64_t sortAltKeys = 0;
 		uint64_t sortCubTemp = 0;
 		uint64_t cubTempBytes = 0;
@@ -132,6 +131,8 @@ namespace
 	// temp storage for radix sorting N pairs with CUB, queried over the full key width
 	inline uint64_t QueryCubSortTempStorageBytes(const uint32_t N)
 	{
+		if (N <= 1u) { return 0; }
+
 		cub::DoubleBuffer<uint64_t> keys;
 		cub::DoubleBuffer<uint32_t> values;
 		size_t tempBytes = 0;
@@ -217,9 +218,7 @@ namespace
 		uint64_t cursor = 0;
 		const uint32_t N_sortMax = std::max({ N_F, N_B, N_R });
 
-		layout.cellIdF = ReserveScratchElems<uint64_t>(cursor, N_F);
-		layout.cellIdB = ReserveScratchElems<uint64_t>(cursor, N_B);
-		layout.sortedParticleIdxB = ReserveScratchElems<uint32_t>(cursor, N_B);
+		layout.cellId = ReserveScratchElems<uint64_t>(cursor, N_sortMax);
 		layout.sortAltKeys = ReserveScratchElems<uint64_t>(cursor, N_sortMax);
 		layout.cubTempBytes = QueryCubSortTempStorageBytes(N_sortMax);
 		layout.sortCubTemp = ReserveScratchElems<uint8_t>(cursor, layout.cubTempBytes);
@@ -349,7 +348,7 @@ namespace
 	{
 		if (N == 0) { return; }
 
-		// the re-order scratch is sized for the largest particle class, so smaller classes copy
+		// copy back when scratch capacity differs from the source buffer
 		if (d_src.Size() != d_tmp.Size())
 		{
 			ApplyPermutation_DeviceBuffer(d_perm, N, d_src, d_tmp.Data(), stream);
@@ -531,8 +530,6 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Init()
 	d_uniqueCellIdR_.Release();
 	d_cellStartIdxR_.Release();
 	d_sortedParticleIdxR_.Release();
-	d_cellIdR_.Release();
-	d_cellMarkerR_.Release();
 	d_uniqueCellIdAny_.Release();
 	d_cellRangeByAny_.Release();
 	d_queryCellRefAnyByCellF_.Release();
@@ -609,8 +606,6 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 		d_uniqueCellIdR_.Release();
 		d_cellStartIdxR_.Release();
 		d_sortedParticleIdxR_.Release();
-		d_cellIdR_.Release();
-		d_cellMarkerR_.Release();
 		d_uniqueCellIdAny_.Release();
 		d_cellRangeByAny_.Release();
 		d_queryCellRefAnyByCellF_.Release();
@@ -630,9 +625,7 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 	EnsureStorageAllocation();
 	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(N_F, N_B, N_R);
-	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
-	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
-	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
+	uint64_t* const d_cellId = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellId);
 	const NeighborSearch_SortScratch sortScratch{
 		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
 		be_.d_sortParticleIdxScratch_.Data(),
@@ -654,50 +647,19 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 	{
 		cellIdsAvailableForReuse_ = false;
 
-		// --- [ cell coordinates and indices for fluid and boundary particles ] ---------------------
+		// --- [ cell coordinates and indices for fluid particles ] ----------------------------------
 
 		if (N_F > 0) // fluid
 		{
 			GPU::Launch_FillCellIdAndInitParticleIdx(
 				be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-				N_F, be_.stream_, d_cellIdF, d_sortedParticleIdxF_.Data());
-		}
+				N_F, be_.stream_, d_cellId, d_sortedParticleIdxF_.Data());
 
-		if (N_B > 0) // boundary
-		{
-			GPU::Launch_FillCellIdAndInitParticleIdx(
-				be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-				N_B, be_.stream_, d_cellIdB, d_sortedParticleIdxB);
-		}
+			// --- [ sort particle indices by cell IDs ] ---------------------------------------------
 
-		// --- [ sort particle indices by cell IDs ] -------------------------------------------------
-
-		if (N_F > 0) // fluid
-		{
 			SortPairsByCellId(
-				d_cellIdF, d_sortedParticleIdxF_.Data(), sortScratch, N_F, be_.stream_);
+				d_cellId, d_sortedParticleIdxF_.Data(), sortScratch, N_F, be_.stream_);
 		}
-
-		if (N_B > 0) // boundary
-		{
-			SortPairsByCellId(
-				d_cellIdB, d_sortedParticleIdxB, sortScratch, N_B, be_.stream_);
-		}
-	}
-
-	// build rigid particle cell keys without changing body-contiguous particle storage
-	if (N_R > 0)
-	{
-		GPU::Launch_FillCellIdAndInitParticleIdx(
-			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
-			N_R, be_.stream_, d_cellIdR_.Data(), d_sortedParticleIdxR_.Data());
-
-		// the rigid marker scratch is unused until the compact cell list below overwrites it
-		NeighborSearch_SortScratch rigidSortScratch = sortScratch;
-		rigidSortScratch.d_altValues = d_cellMarkerR_.Data();
-
-		SortPairsByCellId(
-			d_cellIdR_.Data(), d_sortedParticleIdxR_.Data(), rigidSortScratch, N_R, be_.stream_);
 	}
 
 	// --- [ build compact cell list and fill in cell start indices ] --------------------------------
@@ -705,27 +667,58 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 	if (N_F > 0) // fluid
 	{
 		BuildCompactCellList(d_uniqueCellIdF_, d_cellStartIdxF_, d_sortedParticleIdxF_.Data(),
-			d_cellIdF, N_F, N_nonEmptyCellsF_);
+			d_cellId, N_F, N_nonEmptyCellsF_);
 	}
 	else
 	{
 		N_nonEmptyCellsF_ = 0;
 	}
 
-	if (N_B > 0) // boundary
+	// reuse d_cellId and d_sortedParticleIdxF_ sequentially for B and R cell lists
+	if (N_B > 0) // B
 	{
-		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_, d_sortedParticleIdxB,
-			d_cellIdB, N_B, N_nonEmptyCellsB_);
+		uint32_t* const d_permB = d_sortedParticleIdxF_.Data();
+		GPU::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			N_B, be_.stream_, d_cellId, d_permB);
+
+		// DataReOrder() already sorted B particles for this step, only check/sort standalone
+		if (!canReuseCellIds)
+		{
+			const bool isSortedB = (N_B <= 1u) || thrust::is_sorted(
+				thrust::cuda::par.on(be_.stream_),
+				thrust::device_pointer_cast(d_cellId),
+				thrust::device_pointer_cast(d_cellId + N_B));
+			if (!isSortedB)
+			{
+				SortPairsByCellId(d_cellId, d_permB, sortScratch, N_B, be_.stream_);
+			}
+		}
+
+		BuildCompactCellList(d_uniqueCellIdB_, d_cellStartIdxB_, d_permB,
+			d_cellId, N_B, N_nonEmptyCellsB_);
 	}
 	else
 	{
 		N_nonEmptyCellsB_ = 0;
 	}
 
-	if (N_R > 0) // rigid
+	// build R particle cell keys without changing body-contiguous particle storage
+	if (N_R > 0) // R
 	{
-		BuildCompactCellList(d_uniqueCellIdR_, d_cellStartIdxR_, d_cellMarkerR_.Data(),
-			d_cellIdR_.Data(), N_R, N_nonEmptyCellsR_);
+		GPU::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
+			N_R, be_.stream_, d_cellId, d_sortedParticleIdxR_.Data());
+
+		// d_sortedParticleIdxF_ is free until BuildQueryLookupBounds() overwrites it
+		NeighborSearch_SortScratch rigidSortScratch = sortScratch;
+		rigidSortScratch.d_altValues = d_sortedParticleIdxF_.Data();
+
+		SortPairsByCellId(
+			d_cellId, d_sortedParticleIdxR_.Data(), rigidSortScratch, N_R, be_.stream_);
+
+		BuildCompactCellList(d_uniqueCellIdR_, d_cellStartIdxR_, d_sortedParticleIdxF_.Data(),
+			d_cellId, N_R, N_nonEmptyCellsR_);
 	}
 	else
 	{
@@ -871,9 +864,8 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 {
 	const uint32_t N_F = be_.N_F_;
 	const uint32_t N_B = be_.N_B_;
-	const uint32_t N_MAX = std::max(N_F, N_B);
 
-	if (N_MAX == 0)
+	if (N_F == 0 && N_B == 0)
 	{
 		particlesMatchCurrentCellOrder_ = false;
 		cellIdsAvailableForReuse_ = false;
@@ -896,9 +888,7 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	EnsureStorageAllocation();
 	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
 		BuildCompactSharedScratchLayout(N_F, N_B, be_.N_R_);
-	uint64_t* const d_cellIdF = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdF);
-	uint64_t* const d_cellIdB = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellIdB);
-	uint32_t* const d_sortedParticleIdxB = ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortedParticleIdxB);
+	uint64_t* const d_cellId = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellId);
 	const NeighborSearch_SortScratch sortScratch{
 		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
 		be_.d_sortParticleIdxScratch_.Data(),
@@ -912,39 +902,58 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 		cellFrame_, 0u, 0u,
 		be_.stream_);
 
-	// build the exact compact-CLL cell IDs and particle permutation for fluid particles
+	// re-order B particles sequentially before F re-ordering uses the shared build scratch
+	if (N_B > 0)
+	{
+		uint32_t* const d_permB = d_sortedParticleIdxF_.Data();
+		GPU::Launch_FillCellIdAndInitParticleIdx(
+			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
+			N_B, be_.stream_, d_cellId, d_permB);
+
+		const bool isSortedB = (N_B <= 1u) || thrust::is_sorted(
+			thrust::cuda::par.on(be_.stream_),
+			thrust::device_pointer_cast(d_cellId),
+			thrust::device_pointer_cast(d_cellId + N_B));
+
+		if (!isSortedB)
+		{
+			SortPairsByCellId(d_cellId, d_permB, sortScratch, N_B, be_.stream_);
+
+			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, sortScratch.d_altKeys, be_.stream_);
+
+			// reuse sortAltKeys (uint64_t[>= N_B]) as float[N_B] gather scratch after idB finishes
+			float* const d_floatScratchB = ScratchPtr<float>(
+				be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys);
+			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_floatScratchB, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_floatScratchB, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_floatScratchB, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_volB_, d_floatScratchB, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_psiB_, d_floatScratchB, be_.stream_);
+		}
+	}
+
+	// build the exact compact-CLL cell IDs and particle permutation for F particles
 	if (N_F > 0)
 	{
 		GPU::Launch_FillCellIdAndInitParticleIdx(
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
-			N_F, be_.stream_, d_cellIdF, d_sortedParticleIdxF_.Data());
+			N_F, be_.stream_, d_cellId, d_sortedParticleIdxF_.Data());
 
 		SortPairsByCellId(
-			d_cellIdF, d_sortedParticleIdxF_.Data(), sortScratch, N_F, be_.stream_);
-	}
-
-	// build the exact compact-CLL cell IDs and particle permutation for boundary particles
-	if (N_B > 0)
-	{
-		GPU::Launch_FillCellIdAndInitParticleIdx(
-			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
-			N_B, be_.stream_, d_cellIdB, d_sortedParticleIdxB);
-
-		SortPairsByCellId(
-			d_cellIdB, d_sortedParticleIdxB, sortScratch, N_B, be_.stream_);
+			d_cellId, d_sortedParticleIdxF_.Data(), sortScratch, N_F, be_.stream_);
 	}
 
 	// density array as temp scratch storage (only needed after the particle arrays are re-ordered),
 	// unless it is permuted itself below and needs a scratch buffer of its own
 	DeviceBuffer<float> d_solverFieldScratch;
-	if (permuteSolverFields) { d_solverFieldScratch.Resize(N_MAX); }
+	if (permuteSolverFields && N_F > 0) { d_solverFieldScratch.Resize(N_F); }
 	DeviceBuffer<float>& d_reorderScratch =
 		permuteSolverFields ? d_solverFieldScratch : be_.d_densityF_;
 
-	// particle IDs gather through the alternate sort keys, free after both sorts and sized for the largest class
+	// particle IDs gather through the alternate sort keys, free after the F sort
 	uint64_t* const d_reorderIdScratch = sortScratch.d_altKeys;
 
-	// re-order fluid SoA arrays according to sorted fluid indices
+	// re-order fluid SoA arrays according to sorted F indices
 	if (N_F > 0)
 	{
 		const uint32_t* d_permF = d_sortedParticleIdxF_.Data();
@@ -958,7 +967,7 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelF_, d_reorderScratch, be_.stream_);
 		ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelF_, d_reorderScratch, be_.stream_);
 
-		// the remaining fluid particle fields only need to be permuted after backend-only neighbor searches,
+		// the remaining F particle fields only need to be permuted after backend-only neighbor searches,
 		// because a following full solver step re-initializes them (TODO: update if solver step behavior changes)
 		if (permuteSolverFields)
 		{
@@ -981,31 +990,11 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_pressureF_, d_reorderScratch, be_.stream_);
 		}
 
-		// fluid arrays are now in sorted order, so sorted particle index becomes identity
+		// F arrays are now in sorted order, so sorted particle index becomes identity
 		thrust::sequence(
 			thrust::cuda::par.on(be_.stream_),
 			thrust::device_pointer_cast(d_sortedParticleIdxF_.Data()),
 			thrust::device_pointer_cast(d_sortedParticleIdxF_.Data() + N_F),
-			0u);
-	}
-
-	// re-order boundary SoA arrays according to sorted boundary indices
-	if (N_B > 0)
-	{
-		const uint32_t* d_permB = d_sortedParticleIdxB;
-
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_idB_, d_reorderIdScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_volB_, d_reorderScratch, be_.stream_);
-		ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_psiB_, d_reorderScratch, be_.stream_);
-
-		// boundary arrays are now in sorted order, so sorted particle index becomes identity
-		thrust::sequence(
-			thrust::cuda::par.on(be_.stream_),
-			thrust::device_pointer_cast(d_sortedParticleIdxB),
-			thrust::device_pointer_cast(d_sortedParticleIdxB + N_B),
 			0u);
 	}
 
@@ -1036,8 +1025,6 @@ Mem::ParticleClassMemUsage NeighborSearch_CellLinkedList_Compact_GPU::GetMemUsag
 	// rigid
 	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellStartIdxR_));
 	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_sortedParticleIdxR_));
-	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellIdR_));
-	Mem::Add(usageR, MemUsageOf_DeviceBuffer(d_cellMarkerR_));
 
 	// shared merged lookup metadata is accounted in the fluid bucket to avoid double-counting
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
@@ -1054,18 +1041,17 @@ void NeighborSearch_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 	const uint32_t N_B = be_.N_B_;
 	const uint32_t N_R = be_.N_R_;
 
-	if (N_F > 0)
+	const uint32_t N_sortedIdxMin = std::max({ (N_F > 0) ? (N_F + 1u) : 0u, N_B, N_R });
+	if (N_sortedIdxMin > 0)
 	{
 		// keep capacity once allocated and only grow when needed
 		// (to avoid repeated device alloc/free between steps)
-		if (d_sortedParticleIdxF_.Size() < N_F + 1) { d_sortedParticleIdxF_.Resize(N_F + 1); }
+		if (d_sortedParticleIdxF_.Size() < N_sortedIdxMin) { d_sortedParticleIdxF_.Resize(N_sortedIdxMin); }
 	}
 
 	if (N_R > 0)
 	{
 		if (d_sortedParticleIdxR_.Size() < N_R) { d_sortedParticleIdxR_.Resize(N_R); }
-		if (d_cellIdR_.Size() < N_R) { d_cellIdR_.Resize(N_R); }
-		if (d_cellMarkerR_.Size() < N_R) { d_cellMarkerR_.Resize(N_R); }
 	}
 
 	be_.EnsureNsSharedScratchCapacity(
