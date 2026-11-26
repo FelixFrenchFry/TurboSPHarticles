@@ -299,10 +299,9 @@ namespace Sim
 			params.surfaceSamplingMinDistanceR,
 			params.surfaceSamplingMaxDistanceR,
 			params.surfaceSamplingCoverageProbeSpacingR);
-		printf("%-*s = [ %u / %u ]\n", N_CLI_SIM_PARAM_LABEL_CHARS,
-			"sampling candidates / trials",
-			params.surfaceSamplingCandidateMultiplier,
-			params.surfaceSamplingMaxTrialsPerCell);
+		printf("%-*s = %u\n", N_CLI_SIM_PARAM_LABEL_CHARS,
+			"sampling candidates",
+			params.surfaceSamplingCandidateMultiplier);
 		printf("%-*s = %" PRIu64 "\n", N_CLI_SIM_PARAM_LABEL_CHARS,
 			"sampling seed", params.surfaceSamplingSeed);
 

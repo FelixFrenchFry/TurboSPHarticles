@@ -48,7 +48,6 @@
   "surfaceSamplingMaxDistanceRatioR": 1.0,
   "surfaceSamplingCoverageProbeSpacingRatioR": 0.2,
   "surfaceSamplingCandidateMultiplier": 10,
-  "surfaceSamplingMaxTrialsPerCell": 5,
   "surfaceSamplingSeed": 67,
 
   "maxThreadsSim": -1,

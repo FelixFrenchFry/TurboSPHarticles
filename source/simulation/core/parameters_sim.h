@@ -136,7 +136,6 @@ namespace Sim
 
 		// candidate generation
 		uint32_t surfaceSamplingCandidateMultiplier = 8; // candidate pool size multiplier
-		uint32_t surfaceSamplingMaxTrialsPerCell = 10; // max candidate trials per spatial cell
 		uint64_t surfaceSamplingSeed = 42; // RNG seed
 
 		// threading

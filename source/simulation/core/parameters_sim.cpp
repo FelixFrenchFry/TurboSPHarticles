@@ -764,7 +764,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		float maxDistanceRatioR = params_.surfaceSamplingMaxDistanceRatioR;
 		float coverageProbeSpacingRatioR = params_.surfaceSamplingCoverageProbeSpacingRatioR;
 		uint32_t candidateMultiplier = params_.surfaceSamplingCandidateMultiplier;
-		uint32_t maxTrialsPerCell = params_.surfaceSamplingMaxTrialsPerCell;
 		uint64_t seed = params_.surfaceSamplingSeed;
 
 
@@ -795,10 +794,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		if (auto it = j.find("surfaceSamplingCandidateMultiplier"); it != j.end())
 		{
 			candidateMultiplier = it->get<uint32_t>();
-		}
-		if (auto it = j.find("surfaceSamplingMaxTrialsPerCell"); it != j.end())
-		{
-			maxTrialsPerCell = it->get<uint32_t>();
 		}
 		if (auto it = j.find("surfaceSamplingSeed"); it != j.end())
 		{
@@ -831,9 +826,9 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 			SPDLOG_WARN("Invalid surface sampling distance ratios for R in JSON.");
 			return false;
 		}
-		if (candidateMultiplier == 0 || maxTrialsPerCell == 0)
+		if (candidateMultiplier == 0)
 		{
-			SPDLOG_WARN("Surface sampling candidate multiplier and trials per cell must both be > 0.");
+			SPDLOG_WARN("Surface sampling candidate multiplier must be > 0.");
 			return false;
 		}
 
@@ -844,7 +839,6 @@ bool SimParamsMgr::ApplySimParamsFromJson_(
 		params_.surfaceSamplingMaxDistanceRatioR = maxDistanceRatioR;
 		params_.surfaceSamplingCoverageProbeSpacingRatioR = coverageProbeSpacingRatioR;
 		params_.surfaceSamplingCandidateMultiplier = candidateMultiplier;
-		params_.surfaceSamplingMaxTrialsPerCell = maxTrialsPerCell;
 		params_.surfaceSamplingSeed = seed;
 
 		UpdateSurfaceSamplingDistances_();
@@ -1216,7 +1210,6 @@ nlohmann::json Sim::ToJson(const SimParams& par)
 	j["surfaceSamplingMaxDistanceR"] = par.surfaceSamplingMaxDistanceR;
 	j["surfaceSamplingCoverageProbeSpacingR"] = par.surfaceSamplingCoverageProbeSpacingR;
 	j["surfaceSamplingCandidateMultiplier"] = par.surfaceSamplingCandidateMultiplier;
-	j["surfaceSamplingMaxTrialsPerCell"] = par.surfaceSamplingMaxTrialsPerCell;
 	j["surfaceSamplingSeed"] = par.surfaceSamplingSeed;
 
 	// --- [ threading ] -----------------------------------------------------------------------------
@@ -2185,10 +2178,6 @@ bool SimParamsMgr::AssertParamDerivationCorrectness() const
 	ok &= Check("surfaceSamplingCandidateMultiplier == 0", true, [&]()
 	{
 		return par.surfaceSamplingCandidateMultiplier > 0;
-	});
-	ok &= Check("surfaceSamplingMaxTrialsPerCell == 0", true, [&]()
-	{
-		return par.surfaceSamplingMaxTrialsPerCell > 0;
 	});
 	ok &= Check("surfaceNbrCountThreshold == 0", true, [&]()
 	{

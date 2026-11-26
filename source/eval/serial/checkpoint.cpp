@@ -39,8 +39,7 @@ namespace Export
 			"surfaceSamplingMinDistanceRatioR", "surfaceSamplingMaxDistanceRatioR",
 			"surfaceSamplingCoverageProbeSpacingRatioR", "surfaceSamplingMinDistanceR",
 			"surfaceSamplingMaxDistanceR", "surfaceSamplingCoverageProbeSpacingR",
-			"surfaceSamplingCandidateMultiplier", "surfaceSamplingMaxTrialsPerCell",
-			"surfaceSamplingSeed" })
+			"surfaceSamplingCandidateMultiplier", "surfaceSamplingSeed" })
 		{
 			params.erase(key);
 		}

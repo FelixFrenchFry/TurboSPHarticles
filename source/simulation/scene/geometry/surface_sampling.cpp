@@ -2,15 +2,17 @@
 
 // external
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <glm/geometric.hpp>
 #include <limits>
-#include <random>
 #include <stdexcept>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_sort.h>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -160,10 +162,11 @@ namespace
 			std::isfinite(value.z);
 	}
 
-	double Random01(std::mt19937_64& rng)
+	// splitmix64 output at a position of the seeded stream, mapped to [0, 1)
+	double Random01(const uint64_t seed, const uint64_t streamIdx)
 	{
-		// explicit conversion keeps seeded candidates consistent across standard libraries
-		return static_cast<double>(rng() >> 11) * 0x1.0p-53;
+		const uint64_t h = CellCoordHash::Mix(seed + (streamIdx + 1ull) * 0x9e3779b97f4a7c15ull);
+		return static_cast<double>(h >> 11) * 0x1.0p-53;
 	}
 
 	float DistanceEpsilon(const float distance)
@@ -194,6 +197,17 @@ namespace
 			.z = makeAxis(pos.z),
 		};
 	}
+
+	// cell parity classes, same-class cells lie outside each other's 3x3x3 query
+	constexpr uint32_t N_phaseGroups = 8;
+
+	uint32_t PhaseGroup(const CellCoord& cell)
+	{
+		return static_cast<uint32_t>((cell.x & 1) | ((cell.y & 1) << 1) | ((cell.z & 1) << 2));
+	}
+
+	// divisor of the estimated sample count giving the selection batch size
+	constexpr uint32_t SelectionBatchDivisor = 16;
 
 	float SurfaceDistance(
 		const glm::vec3& sampleA,
@@ -454,9 +468,9 @@ namespace Scene
 		}
 
 		// validate candidate controls
-		if (params.surfaceSamplingCandidateMultiplier == 0 || params.surfaceSamplingMaxTrialsPerCell == 0)
+		if (params.surfaceSamplingCandidateMultiplier == 0)
 		{
-			throw std::runtime_error("Surface sampling candidate multiplier and trials per cell must be positive.");
+			throw std::runtime_error("Surface sampling candidate multiplier must be positive.");
 		}
 
 		// validate source positions before computing triangle geometry
@@ -559,31 +573,23 @@ namespace Scene
 		acceptedSamples.reserve(N_estimatedSamples);
 		SampleSpatialHash spatialHash(minDistance_, acceptedSamples);
 		spatialHash.Reserve(N_estimatedSamples);
-		SampleCellTable<uint32_t> trialsPerCell;
-		trialsPerCell.Reserve(N_estimatedSamples);
 		const float cellSizeInv = 1.0f / minDistance_;
 
 		// generate and select candidate batches in stable global order
-		const uint32_t N_candidateBatch = SurfaceSamplingBatchSize(N_candidates, N_samplingBatch);
+		const uint32_t N_candidateBatch = SurfaceSamplingBatchSize(N_candidates, std::min(
+			N_samplingBatch,
+			std::max<uint32_t>(1, N_estimatedSamples / SelectionBatchDivisor)));
 		std::vector<glm::vec3> candidates(N_candidateBatch);
-		std::vector<double> areaTargets(N_candidateBatch);
-		std::vector<float> barycentricScales(N_candidateBatch);
-		std::vector<float> barycentricOffsets(N_candidateBatch);
-		std::mt19937_64 rng(params.surfaceSamplingSeed);
+		std::vector<CellCoord> candidateCells(N_candidateBatch);
+		std::vector<uint32_t> cellCandidateIdxs(N_candidateBatch);
+		std::vector<uint32_t> cellCandidateBegins;
+		cellCandidateBegins.reserve(N_candidateBatch + 1);
+		std::vector<uint8_t> isCandidateAccepted(N_candidateBatch, 0u);
 
 		for (uint64_t candidateBegin = 0; candidateBegin < N_candidates;)
 		{
 			const uint32_t N_batch = SurfaceSamplingBatchSize(
 				N_candidates - candidateBegin, N_candidateBatch);
-
-			// generate random inputs serially to preserve the seeded candidate stream
-			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
-			{
-				areaTargets[batchIdx] = Random01(rng) * surfaceArea;
-				barycentricScales[batchIdx] = std::sqrt(
-					static_cast<float>(Random01(rng)));
-				barycentricOffsets[batchIdx] = static_cast<float>(Random01(rng));
-			}
 
 			// resolve candidates independently into preallocated slots
 			tbb::parallel_for(
@@ -592,11 +598,19 @@ namespace Scene
 				{
 					for (uint32_t batchIdx = r.begin(); batchIdx != r.end(); batchIdx++)
 					{
+						// draw three random inputs at the candidate's position in the seeded stream
+						const uint64_t streamIdx = 3ull * (candidateBegin + batchIdx);
+						const double areaTarget = Random01(params.surfaceSamplingSeed, streamIdx) * surfaceArea;
+						const float barycentricScale = std::sqrt(
+							static_cast<float>(Random01(params.surfaceSamplingSeed, streamIdx + 1)));
+						const float barycentricOffset = static_cast<float>(
+							Random01(params.surfaceSamplingSeed, streamIdx + 2));
+
 						// choose a triangle proportional to its surface area
 						const auto triangleIt = std::lower_bound(
 							triangles.begin(),
 							triangles.end(),
-							areaTargets[batchIdx],
+							areaTarget,
 							[](const TriangleData& triangle, const double target)
 							{
 								return triangle.cumulativeArea < target;
@@ -606,49 +620,117 @@ namespace Scene
 							: static_cast<uint32_t>(triangleIt - triangles.begin());
 
 						// sample a uniform position on the selected triangle
-						const float b1 = barycentricScales[batchIdx] *
-							(1.0f - barycentricOffsets[batchIdx]);
+						const float b1 = barycentricScale * (1.0f - barycentricOffset);
 						const glm::vec3 barycentric
 						{
-							1.0f - barycentricScales[batchIdx],
+							1.0f - barycentricScale,
 							b1,
-							barycentricScales[batchIdx] - b1,
+							barycentricScale - b1,
 						};
 						candidates[batchIdx] = MakeSurfacePoint(
 							triangles[triangleIdx],
 							barycentric);
+						candidateCells[batchIdx] = MakeCellCoord(candidates[batchIdx], cellSizeInv);
+						cellCandidateIdxs[batchIdx] = batchIdx;
 					}
 				},
 				tbb::auto_partitioner{}
 			);
 
-			// select candidates with a minimum surface distance
-			for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
-			{
-				const glm::vec3& candidate = candidates[batchIdx];
-				const CellCoord cell = MakeCellCoord(candidate, cellSizeInv);
-				uint32_t& N_trials = trialsPerCell.GetOrInsert(cell);
-				if (N_trials >= params.surfaceSamplingMaxTrialsPerCell) { continue; }
-				N_trials++;
-
-				const bool hasDistanceConflict = spatialHash.AnyNearby(
-					candidate,
-					minDistance_,
-					[&](const uint32_t sampleIdx)
-					{
-						return SurfaceDistance(
-							candidate,
-							acceptedSamples[sampleIdx]) < minDistance_;
-					});
-				if (hasDistanceConflict) { continue; }
-				if (acceptedSamples.size() >= Sim::MaxLocalParticleCount)
+			// group candidates by phase group and cell, in candidate order within each cell
+			tbb::parallel_sort(
+				cellCandidateIdxs.begin(),
+				cellCandidateIdxs.begin() + N_batch,
+				[&](const uint32_t batchIdxA, const uint32_t batchIdxB)
 				{
-					throw std::runtime_error("Surface sample count exceeds the local particle limit.");
-				}
+					const CellCoord& cellA = candidateCells[batchIdxA];
+					const CellCoord& cellB = candidateCells[batchIdxB];
+					return std::make_tuple(PhaseGroup(cellA), cellA.z, cellA.y, cellA.x, batchIdxA) <
+						std::make_tuple(PhaseGroup(cellB), cellB.z, cellB.y, cellB.x, batchIdxB);
+				});
 
-				const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
-				acceptedSamples.push_back(candidate);
-				spatialHash.Insert(sampleIdx);
+			// find per-cell candidate ranges and per-phase-group cell ranges
+			cellCandidateBegins.clear();
+			std::array<uint32_t, N_phaseGroups + 1> phaseGroupCellBegins{};
+			for (uint32_t sortedIdx = 0; sortedIdx < N_batch; sortedIdx++)
+			{
+				const CellCoord& cell = candidateCells[cellCandidateIdxs[sortedIdx]];
+				if (sortedIdx > 0 && cell == candidateCells[cellCandidateIdxs[sortedIdx - 1]]) { continue; }
+
+				cellCandidateBegins.push_back(sortedIdx);
+				phaseGroupCellBegins[PhaseGroup(cell) + 1]++;
+			}
+			const uint32_t N_batchCells = static_cast<uint32_t>(cellCandidateBegins.size());
+			cellCandidateBegins.push_back(N_batch);
+			for (uint32_t phaseGroup = 0; phaseGroup < N_phaseGroups; phaseGroup++)
+			{
+				phaseGroupCellBegins[phaseGroup + 1] += phaseGroupCellBegins[phaseGroup];
+			}
+
+			uint32_t N_maxCellCandidates = 0;
+			for (uint32_t cellIdx = 0; cellIdx < N_batchCells; cellIdx++)
+			{
+				N_maxCellCandidates = std::max(N_maxCellCandidates,
+					cellCandidateBegins[cellIdx + 1] - cellCandidateBegins[cellIdx]);
+			}
+
+			// select one candidate per cell and round, sweeping phase groups in alternating order per batch
+			const bool isPhaseGroupOrderReversed = (candidateBegin / N_candidateBatch) % 2 == 1;
+			for (uint32_t candidateRound = 0; candidateRound < N_maxCellCandidates; candidateRound++)
+			{
+				for (uint32_t phaseGroupStep = 0; phaseGroupStep < N_phaseGroups; phaseGroupStep++)
+				{
+					const uint32_t phaseGroup = isPhaseGroupOrderReversed
+						? N_phaseGroups - 1 - phaseGroupStep
+						: phaseGroupStep;
+					const uint32_t cellBegin = phaseGroupCellBegins[phaseGroup];
+					const uint32_t cellEnd = phaseGroupCellBegins[phaseGroup + 1];
+
+					// test one phase group in parallel against the read-only sample hash
+					tbb::parallel_for(
+						tbb::blocked_range<uint32_t>(cellBegin, cellEnd),
+						[&](const tbb::blocked_range<uint32_t>& r)
+						{
+							for (uint32_t cellIdx = r.begin(); cellIdx != r.end(); cellIdx++)
+							{
+								const uint32_t sortedIdx = cellCandidateBegins[cellIdx] + candidateRound;
+								if (sortedIdx >= cellCandidateBegins[cellIdx + 1])
+								{
+									isCandidateAccepted[cellIdx] = 0u;
+									continue;
+								}
+
+								const glm::vec3& candidate = candidates[cellCandidateIdxs[sortedIdx]];
+								const bool hasDistanceConflict = spatialHash.AnyNearby(
+									candidate,
+									minDistance_,
+									[&](const uint32_t sampleIdx)
+									{
+										return SurfaceDistance(
+											candidate,
+											acceptedSamples[sampleIdx]) < minDistance_;
+									});
+								isCandidateAccepted[cellIdx] = static_cast<uint8_t>(!hasDistanceConflict);
+							}
+						},
+						tbb::auto_partitioner{}
+					);
+
+					// insert accepted candidates in stable cell order
+					for (uint32_t cellIdx = cellBegin; cellIdx < cellEnd; cellIdx++)
+					{
+						if (isCandidateAccepted[cellIdx] == 0u) { continue; }
+						if (acceptedSamples.size() >= Sim::MaxLocalParticleCount)
+						{
+							throw std::runtime_error("Surface sample count exceeds the local particle limit.");
+						}
+
+						const uint32_t sortedIdx = cellCandidateBegins[cellIdx] + candidateRound;
+						const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
+						acceptedSamples.push_back(candidates[cellCandidateIdxs[sortedIdx]]);
+						spatialHash.Insert(sampleIdx);
+					}
+				}
 			}
 
 			candidateBegin += N_batch;
