@@ -115,6 +115,15 @@ namespace
 		uint64_t sortAltKeys = 0;
 		uint64_t sortCubTemp = 0;
 		uint64_t cubTempBytes = 0;
+		uint64_t sortAltValues = 0;
+		uint64_t N_totalBytes = 0;
+	};
+
+	struct NeighborSearch_CompactQueryScratchLayout
+	{
+		uint64_t queryLoAnyByCellF = 0;
+		uint64_t queryHiAnyByCellF = 0;
+		uint64_t queryCellRefAnyByCellF = 0;
 		uint64_t N_totalBytes = 0;
 	};
 
@@ -188,16 +197,6 @@ namespace
 		}
 	}
 
-	struct NeighborSearch_CompactSharedScratchLayout
-	{
-		NeighborSearch_FinalizeScratchLayout finalize;
-		NeighborSearch_CompactBuildScratchLayout build;
-		uint64_t N_phaseScratchBytes = 0;
-		uint64_t queryLoAnyByCellF = 0;
-		uint64_t queryHiAnyByCellF = 0;
-		uint64_t N_totalBytes = 0;
-	};
-
 	inline NeighborSearch_FinalizeScratchLayout BuildFinalizeScratchLayout(const uint32_t N_F)
 	{
 		NeighborSearch_FinalizeScratchLayout layout{};
@@ -222,26 +221,25 @@ namespace
 		layout.sortAltKeys = ReserveScratchElems<uint64_t>(cursor, N_sortMax);
 		layout.cubTempBytes = QueryCubSortTempStorageBytes(N_sortMax);
 		layout.sortCubTemp = ReserveScratchElems<uint8_t>(cursor, layout.cubTempBytes);
+		layout.sortAltValues = ReserveScratchElems<uint32_t>(cursor, std::max(N_F, N_B));
 		layout.N_totalBytes = cursor;
 
 		return layout;
 	}
 
-	inline NeighborSearch_CompactSharedScratchLayout BuildCompactSharedScratchLayout(
-		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R)
+	// query phase scratch, overlays the build scratch once all sorts and cell lists are done
+	// (behind the finalize chunk offsets, which are written between count and fill)
+	inline NeighborSearch_CompactQueryScratchLayout BuildCompactQueryScratchLayout(
+		const uint32_t N_F, const uint32_t N_nonEmptyCellsF, const uint32_t N_queryCellSlots)
 	{
-		NeighborSearch_CompactSharedScratchLayout layout{};
-		layout.finalize = BuildFinalizeScratchLayout(N_F);
-		layout.build = BuildCompactBuildScratchLayout(N_F, N_B, N_R);
-		layout.N_phaseScratchBytes =
-			std::max(layout.finalize.N_totalBytes, layout.build.N_totalBytes);
+		NeighborSearch_CompactQueryScratchLayout layout{};
+		uint64_t cursor = BuildFinalizeScratchLayout(N_F).N_totalBytes;
 
-		// query bounds are produced and consumed after all sorts, on the same stream
-		// (two uint32_t[N_F] arrays fit in the uint64_t[N_sortMax] alternate keys)
-		uint64_t cursor = layout.build.sortAltKeys;
-		layout.queryLoAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
-		layout.queryHiAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_F);
-		layout.N_totalBytes = std::max(layout.N_phaseScratchBytes, cursor);
+		layout.queryLoAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_nonEmptyCellsF);
+		layout.queryHiAnyByCellF = ReserveScratchElems<uint32_t>(cursor, N_nonEmptyCellsF);
+		layout.queryCellRefAnyByCellF = ReserveScratchElems<uint32_t>(cursor,
+			static_cast<uint64_t>(N_nonEmptyCellsF) * N_queryCellSlots);
+		layout.N_totalBytes = cursor;
 
 		return layout;
 	}
@@ -532,7 +530,6 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Init()
 	d_sortedParticleIdxR_.Release();
 	d_uniqueCellIdAny_.Release();
 	d_cellRangeByAny_.Release();
-	d_queryCellRefAnyByCellF_.Release();
 }
 
 void NeighborSearch_CellLinkedList_Compact_GPU::UpdateCellFrame()
@@ -608,7 +605,6 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 		d_sortedParticleIdxR_.Release();
 		d_uniqueCellIdAny_.Release();
 		d_cellRangeByAny_.Release();
-		d_queryCellRefAnyByCellF_.Release();
 
 		return;
 	}
@@ -623,14 +619,14 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 	UpdateCellFrame();
 
 	EnsureStorageAllocation();
-	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(N_F, N_B, N_R);
-	uint64_t* const d_cellId = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellId);
+	const NeighborSearch_CompactBuildScratchLayout scratchLayout =
+		BuildCompactBuildScratchLayout(N_F, N_B, N_R);
+	uint64_t* const d_cellId = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.cellId);
 	const NeighborSearch_SortScratch sortScratch{
-		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
-		be_.d_sortParticleIdxScratch_.Data(),
-		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
-		scratchLayout.build.cubTempBytes,
+		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.sortAltKeys),
+		ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.sortAltValues),
+		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.sortCubTemp),
+		scratchLayout.cubTempBytes,
 		CellIdKeyBits(cellFrame_) };
 
 	GPU::NeighborSearch_ReloadConstants(
@@ -726,6 +722,12 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Construct(const SimParams& param
 	}
 
 	BuildMergedCompactCellRanges();
+
+	// query phase scratch overlays the build scratch, which is dead from here on
+	N_queryCellSlots_ = QueryCellSlotCount(cellQueryReach_);
+	be_.EnsureNsSharedScratchCapacity(BuildCompactQueryScratchLayout(
+		N_F, N_nonEmptyCellsF_, N_queryCellSlots_).N_totalBytes);
+
 	BuildQueryLookupBounds();
 	BuildQueryCellRefCache();
 
@@ -748,13 +750,16 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Query_Count(const SimParams& par
 
 	if (be_.N_F_ > 0)
 	{
+		const NeighborSearch_CompactQueryScratchLayout scratchLayout =
+			BuildCompactQueryScratchLayout(be_.N_F_, N_nonEmptyCellsF_, N_queryCellSlots_);
+
 		GPU::Launch_CellLinkedList_Compact_Query_Count(
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
 			d_cellRangeByAny_.Data(),
 			d_sortedParticleIdxF_.Data(),
-			d_queryCellRefAnyByCellF_.Data(),
+			ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.queryCellRefAnyByCellF),
 			d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
 			N_nonEmptyCellsR_,
 			N_queryCellSlots_, be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
@@ -801,13 +806,16 @@ void NeighborSearch_CellLinkedList_Compact_GPU::Query_Fill(const SimParams& para
 
 	if (be_.N_F_ > 0)
 	{
+		const NeighborSearch_CompactQueryScratchLayout scratchLayout =
+			BuildCompactQueryScratchLayout(be_.N_F_, N_nonEmptyCellsF_, N_queryCellSlots_);
+
 		GPU::Launch_CellLinkedList_Compact_Query_Fill(
 			be_.d_xPosF_.Data(), be_.d_yPosF_.Data(), be_.d_zPosF_.Data(),
 			be_.d_xPosB_.Data(), be_.d_yPosB_.Data(), be_.d_zPosB_.Data(),
 			be_.d_xPosR_.Data(), be_.d_yPosR_.Data(), be_.d_zPosR_.Data(),
 			d_cellRangeByAny_.Data(),
 			d_sortedParticleIdxF_.Data(),
-			d_queryCellRefAnyByCellF_.Data(),
+			ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.queryCellRefAnyByCellF),
 			d_uniqueCellIdR_.Data(), d_cellStartIdxR_.Data(), d_sortedParticleIdxR_.Data(),
 			N_nonEmptyCellsR_,
 			N_queryCellSlots_, be_.N_F_, be_.N_B_, be_.N_R_, be_.stream_,
@@ -886,14 +894,14 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 	UpdateCellFrame();
 
 	EnsureStorageAllocation();
-	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(N_F, N_B, be_.N_R_);
-	uint64_t* const d_cellId = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.cellId);
+	const NeighborSearch_CompactBuildScratchLayout scratchLayout =
+		BuildCompactBuildScratchLayout(N_F, N_B, be_.N_R_);
+	uint64_t* const d_cellId = ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.cellId);
 	const NeighborSearch_SortScratch sortScratch{
-		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys),
-		be_.d_sortParticleIdxScratch_.Data(),
-		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.build.sortCubTemp),
-		scratchLayout.build.cubTempBytes,
+		ScratchPtr<uint64_t>(be_.d_nsSharedScratch_, scratchLayout.sortAltKeys),
+		ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.sortAltValues),
+		ScratchPtr<uint8_t>(be_.d_nsSharedScratch_, scratchLayout.sortCubTemp),
+		scratchLayout.cubTempBytes,
 		CellIdKeyBits(cellFrame_) };
 
 	GPU::NeighborSearch_ReloadConstants(
@@ -923,7 +931,7 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 
 			// reuse sortAltKeys (uint64_t[>= N_B]) as float[N_B] gather scratch after idB finishes
 			float* const d_floatScratchB = ScratchPtr<float>(
-				be_.d_nsSharedScratch_, scratchLayout.build.sortAltKeys);
+				be_.d_nsSharedScratch_, scratchLayout.sortAltKeys);
 			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_xPosB_, d_floatScratchB, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_yPosB_, d_floatScratchB, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permB, N_B, be_.d_zPosB_, d_floatScratchB, be_.stream_);
@@ -1029,7 +1037,6 @@ Mem::ParticleClassMemUsage NeighborSearch_CellLinkedList_Compact_GPU::GetMemUsag
 	// shared merged lookup metadata is accounted in the fluid bucket to avoid double-counting
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_uniqueCellIdAny_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_cellRangeByAny_));
-	Mem::Add(usageF, MemUsageOf_DeviceBuffer(d_queryCellRefAnyByCellF_));
 	Mem::Add(usageF, MemUsageOf_DeviceBuffer(be_.d_nsSharedScratch_));
 
 	return { usageF, usageB, usageR };
@@ -1054,8 +1061,9 @@ void NeighborSearch_CellLinkedList_Compact_GPU::EnsureStorageAllocation()
 		if (d_sortedParticleIdxR_.Size() < N_R) { d_sortedParticleIdxR_.Resize(N_R); }
 	}
 
-	be_.EnsureNsSharedScratchCapacity(
-		BuildCompactSharedScratchLayout(N_F, N_B, N_R).N_totalBytes);
+	be_.EnsureNsSharedScratchCapacity(std::max(
+		BuildFinalizeScratchLayout(N_F).N_totalBytes,
+		BuildCompactBuildScratchLayout(N_F, N_B, N_R).N_totalBytes));
 }
 
 void NeighborSearch_CellLinkedList_Compact_GPU::BuildCompactCellList(
@@ -1210,8 +1218,8 @@ void NeighborSearch_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()
 		return;
 	}
 
-	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_, be_.N_R_);
+	const NeighborSearch_CompactQueryScratchLayout scratchLayout =
+		BuildCompactQueryScratchLayout(be_.N_F_, N_nonEmptyCellsF_, N_queryCellSlots_);
 	uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
 	uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
@@ -1227,29 +1235,13 @@ void NeighborSearch_CellLinkedList_Compact_GPU::BuildQueryLookupBounds()
 
 void NeighborSearch_CellLinkedList_Compact_GPU::BuildQueryCellRefCache()
 {
-	N_queryCellSlots_ = QueryCellSlotCount(cellQueryReach_);
-
 	if (N_nonEmptyCellsF_ == 0 || N_nonEmptyCellsAny_ == 0)
 	{
 		return;
 	}
 
-	const uint64_t N_queryCellRefs = static_cast<uint64_t>(N_nonEmptyCellsF_) * N_queryCellSlots_;
-	if (d_queryCellRefAnyByCellF_.Size() < N_queryCellRefs)
-	{
-		const uint64_t extraCapacity = Base::ExtraPercent(N_queryCellRefs, be_.extraAllocCapacityPct_);
-		if (extraCapacity > std::numeric_limits<uint64_t>::max() - N_queryCellRefs) [[unlikely]]
-		{
-			throw std::runtime_error("GPU compact CLL query-cell cache too large.");
-		}
-
-		const uint64_t capTarget = N_queryCellRefs + extraCapacity;
-
-		d_queryCellRefAnyByCellF_.Resize(capTarget);
-	}
-
-	const NeighborSearch_CompactSharedScratchLayout scratchLayout =
-		BuildCompactSharedScratchLayout(be_.N_F_, be_.N_B_, be_.N_R_);
+	const NeighborSearch_CompactQueryScratchLayout scratchLayout =
+		BuildCompactQueryScratchLayout(be_.N_F_, N_nonEmptyCellsF_, N_queryCellSlots_);
 	const uint32_t* const d_queryLoAnyByCellF = ScratchPtr<uint32_t>(
 		be_.d_nsSharedScratch_, scratchLayout.queryLoAnyByCellF);
 	const uint32_t* const d_queryHiAnyByCellF = ScratchPtr<uint32_t>(
@@ -1260,5 +1252,5 @@ void NeighborSearch_CellLinkedList_Compact_GPU::BuildQueryCellRefCache()
 		d_cellStartIdxF_.Data(), d_uniqueCellIdAny_.Data(),
 		d_queryLoAnyByCellF, d_queryHiAnyByCellF,
 		N_nonEmptyCellsF_, N_queryCellSlots_, be_.stream_,
-		d_queryCellRefAnyByCellF_.Data());
+		ScratchPtr<uint32_t>(be_.d_nsSharedScratch_, scratchLayout.queryCellRefAnyByCellF));
 }

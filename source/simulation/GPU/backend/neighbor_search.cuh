@@ -72,7 +72,6 @@ namespace Sim
 		DeviceBuffer<uint32_t> d_sortedParticleIdxR_;
 
 		DeviceBuffer<uint64_t> d_uniqueCellIdAny_; // unique cell IDs of all non-empty fluid/boundary cells
-		DeviceBuffer<uint32_t> d_queryCellRefAnyByCellF_; // cached references for source fluid-cell query slot -> merged-cell index
 		DeviceBuffer<GPU::CellRangeByAny> d_cellRangeByAny_; // merged-cell to fluid/boundary particle ranges
 
 		// helpers

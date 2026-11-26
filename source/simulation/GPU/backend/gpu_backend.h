@@ -293,7 +293,6 @@ namespace Sim
 		uint64_t N_abs32FR_ = 0;
 		const float extraAllocCapacityPct_ = 2.0f; // TODO: fine-tune
 		DeviceBuffer<uint8_t> d_nsSharedScratch_; // shared scratch arena for neighbor search/query/finalize
-		DeviceBuffer<uint32_t> d_sortParticleIdxScratch_;
 
 		// reusable device scratch for particle statistics
 		mutable DeviceBuffer<uint32_t> d_nbrCountHist_;
@@ -346,7 +345,6 @@ namespace Sim
 
 			const uint32_t N_newChunks = (N_newF == 0u)
 				? 0u : ((N_newF - 1u) / GPU::N_SELL_WIDTH) + 1u;
-			const uint32_t N_newSortIdxScratch = std::max(N_newF, N_newB);
 			const bool needOverflow = d_nbrOverflowFlag_.Size() != 1;
 			const bool needFluid = force || N_newF != N_F_ ||
 				d_idF_.Size() != N_newF ||
@@ -363,8 +361,7 @@ namespace Sim
 				d_nbrChunkFormatFF_.Size() != N_newChunks || d_nbrChunkFormatFB_.Size() != N_newChunks || d_nbrChunkFormatFR_.Size() != N_newChunks ||
 				d_nbrChunkOffsetsFF_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
 				d_nbrChunkOffsetsFB_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
-				d_nbrChunkOffsetsFR_.Size() != static_cast<uint64_t>(N_newChunks) + 1 ||
-				d_sortParticleIdxScratch_.Size() != N_newSortIdxScratch;
+				d_nbrChunkOffsetsFR_.Size() != static_cast<uint64_t>(N_newChunks) + 1;
 			const bool needBoundary = force || N_newB != N_B_ ||
 				d_idB_.Size() != N_newB ||
 				d_xPosB_.Size() != N_newB || d_yPosB_.Size() != N_newB || d_zPosB_.Size() != N_newB ||
@@ -384,7 +381,6 @@ namespace Sim
 			d_idB_.Resize(N_B_);
 			d_xPosB_.Resize(N_B_); d_yPosB_.Resize(N_B_); d_zPosB_.Resize(N_B_);
 			d_volB_.Resize(N_B_); d_psiB_.Resize(N_B_);
-			d_sortParticleIdxScratch_.Resize(N_newSortIdxScratch);
 
 			d_nbrCountFF_.Resize(N_F_); d_nbrCountFB_.Resize(N_F_); d_nbrCountFR_.Resize(N_F_);
 			d_nbrChunkMaxCountFF_.Resize(N_newChunks); d_nbrChunkMaxCountFB_.Resize(N_newChunks); d_nbrChunkMaxCountFR_.Resize(N_newChunks);

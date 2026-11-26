@@ -1009,7 +1009,6 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 	{
 		MemUsage usage{};
 
-		Add(usage, MemUsageOf_DeviceBuffer(d_sortParticleIdxScratch_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_idRB_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_particleOffsetsR_ByBody_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_particleLocalIdxsR_ByBody_));
