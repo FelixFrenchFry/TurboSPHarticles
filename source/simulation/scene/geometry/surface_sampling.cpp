@@ -12,6 +12,8 @@
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
+#include <tbb/parallel_scan.h>
 #include <tbb/parallel_sort.h>
 #include <tuple>
 #include <utility>
@@ -611,8 +613,7 @@ namespace Scene
 		std::vector<glm::vec3> candidates(N_candidateBatch);
 		std::vector<CellCoord> candidateCells(N_candidateBatch);
 		std::vector<uint32_t> cellCandidateIdxs(N_candidateBatch);
-		std::vector<uint32_t> cellCandidateBegins;
-		cellCandidateBegins.reserve(N_candidateBatch + 1);
+		std::vector<uint32_t> cellCandidateBegins(N_candidateBatch + 1);
 		std::vector<uint8_t> isCandidateAccepted(N_candidateBatch, 0u);
 
 		for (uint64_t candidateBegin = 0; candidateBegin < N_candidates;)
@@ -678,30 +679,68 @@ namespace Scene
 						std::make_tuple(PhaseGroup(cellB), cellB.z, cellB.y, cellB.x, batchIdxB);
 				});
 
-			// find per-cell candidate ranges and per-phase-group cell ranges
-			cellCandidateBegins.clear();
+			// find per-cell candidate ranges with a parallel scan over cell starts
+			const auto isCellBegin = [&](const uint32_t sortedIdx)
+				{
+					return sortedIdx == 0 ||
+						candidateCells[cellCandidateIdxs[sortedIdx]] != candidateCells[cellCandidateIdxs[sortedIdx - 1]];
+				};
+			const uint32_t N_batchCells = tbb::parallel_scan(
+				tbb::blocked_range<uint32_t>(0, N_batch),
+				uint32_t{ 0 },
+				[&](const tbb::blocked_range<uint32_t>& r,
+					const uint32_t prefix,
+					const bool isFinalScan)
+				{
+					uint32_t cellIdx = prefix;
+					for (uint32_t sortedIdx = r.begin(); sortedIdx != r.end(); sortedIdx++)
+					{
+						if (!isCellBegin(sortedIdx)) { continue; }
+						if (isFinalScan) { cellCandidateBegins[cellIdx] = sortedIdx; }
+						cellIdx++;
+					}
+					return cellIdx;
+				},
+				[](const uint32_t lhs, const uint32_t rhs)
+				{
+					return lhs + rhs;
+				},
+				tbb::auto_partitioner{}
+			);
+			cellCandidateBegins[N_batchCells] = N_batch;
+
+			// find per-phase-group cell ranges by binary search over the phase-group-major cell order
 			std::array<uint32_t, N_phaseGroups + 1> phaseGroupCellBegins{};
-			for (uint32_t sortedIdx = 0; sortedIdx < N_batch; sortedIdx++)
+			for (uint32_t phaseGroup = 0; phaseGroup <= N_phaseGroups; phaseGroup++)
 			{
-				const CellCoord& cell = candidateCells[cellCandidateIdxs[sortedIdx]];
-				if (sortedIdx > 0 && cell == candidateCells[cellCandidateIdxs[sortedIdx - 1]]) { continue; }
-
-				cellCandidateBegins.push_back(sortedIdx);
-				phaseGroupCellBegins[PhaseGroup(cell) + 1]++;
-			}
-			const uint32_t N_batchCells = static_cast<uint32_t>(cellCandidateBegins.size());
-			cellCandidateBegins.push_back(N_batch);
-			for (uint32_t phaseGroup = 0; phaseGroup < N_phaseGroups; phaseGroup++)
-			{
-				phaseGroupCellBegins[phaseGroup + 1] += phaseGroupCellBegins[phaseGroup];
+				phaseGroupCellBegins[phaseGroup] = static_cast<uint32_t>(std::lower_bound(
+					cellCandidateBegins.begin(),
+					cellCandidateBegins.begin() + N_batchCells,
+					phaseGroup,
+					[&](const uint32_t sortedIdx, const uint32_t targetPhaseGroup)
+					{
+						return PhaseGroup(candidateCells[cellCandidateIdxs[sortedIdx]]) < targetPhaseGroup;
+					}) - cellCandidateBegins.begin());
 			}
 
-			uint32_t N_maxCellCandidates = 0;
-			for (uint32_t cellIdx = 0; cellIdx < N_batchCells; cellIdx++)
-			{
-				N_maxCellCandidates = std::max(N_maxCellCandidates,
-					cellCandidateBegins[cellIdx + 1] - cellCandidateBegins[cellIdx]);
-			}
+			// find the largest per-cell candidate count of the batch
+			const uint32_t N_maxCellCandidates = tbb::parallel_reduce(
+				tbb::blocked_range<uint32_t>(0, N_batchCells),
+				uint32_t{ 0 },
+				[&](const tbb::blocked_range<uint32_t>& r, uint32_t N_max)
+				{
+					for (uint32_t cellIdx = r.begin(); cellIdx != r.end(); cellIdx++)
+					{
+						N_max = std::max(N_max, cellCandidateBegins[cellIdx + 1] - cellCandidateBegins[cellIdx]);
+					}
+					return N_max;
+				},
+				[](const uint32_t lhs, const uint32_t rhs)
+				{
+					return std::max(lhs, rhs);
+				},
+				tbb::auto_partitioner{}
+			);
 
 			// select one candidate per cell and round, sweeping phase groups in alternating order per batch
 			const bool isPhaseGroupOrderReversed = (candidateBegin / N_candidateBatch) % 2 == 1;
