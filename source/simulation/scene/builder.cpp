@@ -12,11 +12,13 @@
 #include <numbers>
 #include <random>
 #include <stdexcept>
-#include <unordered_map>
+#include <tuple>
+#include <utility>
 #include <vector>
 #include <tbb/blocked_range.h>
 #include <tbb/blocked_range3d.h>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_sort.h>
 
 // internal
 #include "source/base/helpers.h"
@@ -180,7 +182,7 @@ void ScenarioMgr::ComputeParticleCoefficients(
 	const uint32_t begin,
 	const uint32_t end)
 {
-	// temp local cell buckets to avoid O(N^2) boundary neighbor search
+	// temp cell coordinate of the sorted boundary neighbor search
 	struct CellCoord
 	{
 		int32_t x = 0;
@@ -188,19 +190,6 @@ void ScenarioMgr::ComputeParticleCoefficients(
 		int32_t z = 0;
 
 		bool operator==(const CellCoord&) const = default;
-	};
-
-	struct CellCoordHash
-	{
-		uint64_t operator()(const CellCoord& c) const noexcept
-		{
-			uint64_t h = static_cast<uint32_t>(c.x);
-			h ^= static_cast<uint64_t>(static_cast<uint32_t>(c.y))
-			   + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
-			h ^= static_cast<uint64_t>(static_cast<uint32_t>(c.z))
-			   + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
-			return h;
-		}
 	};
 
 	const auto makeCellCoord =
@@ -254,23 +243,9 @@ void ScenarioMgr::ComputeParticleCoefficients(
 	const Sim::SolverConstants solverConstants = Sim::BuildSolverConstants(params.particleSizeF, params.restDensity);
 
 	std::vector<CellCoord> cellCoords(N_compute);
-	std::unordered_map<CellCoord, std::vector<uint32_t>, CellCoordHash> cellBuckets;
-	cellBuckets.reserve(static_cast<uint64_t>(N_compute) * 2ull);
+	std::vector<uint32_t> sortedLocalIdxs(N_compute);
 
-	// insert boundary particles into cell buckets
-	for (uint32_t localIdx = 0; localIdx < N_compute; localIdx++)
-	{
-		const uint32_t i = begin + localIdx;
-		cellCoords[localIdx] = makeCellCoord(
-			xPos[i],
-			yPos[i],
-			zPos[i],
-			cellSizeInv);
-		cellBuckets[cellCoords[localIdx]].push_back(i);
-	}
-
-	// compute non-uniform boundary contribution coefficients for all boundary particles
-	const auto& cellBucketsReadOnly = cellBuckets;
+	// compute particle cells in parallel
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(0, N_compute),
 		[&](const tbb::blocked_range<uint32_t>& r)
@@ -278,34 +253,108 @@ void ScenarioMgr::ComputeParticleCoefficients(
 			for (uint32_t localIdx = r.begin(); localIdx != r.end(); localIdx++)
 			{
 				const uint32_t i = begin + localIdx;
-				float sumW = 0.0f;
-				const CellCoord baseCell = cellCoords[localIdx];
+				cellCoords[localIdx] = makeCellCoord(
+					xPos[i],
+					yPos[i],
+					zPos[i],
+					cellSizeInv);
+				sortedLocalIdxs[localIdx] = localIdx;
+			}
+		},
+		tbb::auto_partitioner{}
+	);
 
-				for (int32_t dz = -cellQueryReach; dz <= cellQueryReach; dz++)
+	// sort particles by z, y, x cell, in particle order within each cell
+	const auto isCellLess = [](const CellCoord& cellA, const CellCoord& cellB)
+		{
+			return std::tie(cellA.z, cellA.y, cellA.x) < std::tie(cellB.z, cellB.y, cellB.x);
+		};
+	tbb::parallel_sort(
+		sortedLocalIdxs.begin(),
+		sortedLocalIdxs.end(),
+		[&](const uint32_t localIdxA, const uint32_t localIdxB)
+		{
+			const CellCoord& cellA = cellCoords[localIdxA];
+			const CellCoord& cellB = cellCoords[localIdxB];
+			return std::tie(cellA.z, cellA.y, cellA.x, localIdxA) <
+				std::tie(cellB.z, cellB.y, cellB.x, localIdxB);
+		});
+
+	// finds the contiguous range of an x row of cells in the sorted particle order
+	const auto findCellRowRange =
+		[&](const CellCoord& firstCell, const CellCoord& lastCell) -> std::pair<uint32_t, uint32_t>
+		{
+			const auto first = std::lower_bound(
+				sortedLocalIdxs.begin(),
+				sortedLocalIdxs.end(),
+				firstCell,
+				[&](const uint32_t localIdx, const CellCoord& target)
 				{
-					for (int32_t dy = -cellQueryReach; dy <= cellQueryReach; dy++)
-					{
-						for (int32_t dx = -cellQueryReach; dx <= cellQueryReach; dx++)
-						{
-							const CellCoord cell
-							{
-								.x = baseCell.x + dx,
-								.y = baseCell.y + dy,
-								.z = baseCell.z + dz,
-							};
-							const auto it = cellBucketsReadOnly.find(cell);
-							if (it == cellBucketsReadOnly.end()) { continue; }
+					return isCellLess(cellCoords[localIdx], target);
+				});
+			const auto last = std::upper_bound(
+				first,
+				sortedLocalIdxs.end(),
+				lastCell,
+				[&](const CellCoord& target, const uint32_t localIdx)
+				{
+					return isCellLess(target, cellCoords[localIdx]);
+				});
+			return {
+				static_cast<uint32_t>(first - sortedLocalIdxs.begin()),
+				static_cast<uint32_t>(last - sortedLocalIdxs.begin()) };
+		};
 
-							for (const uint32_t j : it->second)
-							{
-								sumW += KernelWeight_CubicSpline(
-									xPos[i] - xPos[j],
-									yPos[i] - yPos[j],
-									zPos[i] - zPos[j],
-									solverConstants.sizeInvF, params.kernelRadiusSqu,
-									solverConstants.cubicSplineAlpha);
-							}
+	// compute non-uniform boundary contribution coefficients for all boundary particles
+	tbb::parallel_for(
+		tbb::blocked_range<uint32_t>(0, N_compute),
+		[&](const tbb::blocked_range<uint32_t>& r)
+		{
+			// neighbor cell row ranges, reused across consecutive particles of the same cell
+			std::vector<std::pair<uint32_t, uint32_t>> nbrRowRanges;
+			CellCoord nbrRangesCell{};
+
+			for (uint32_t sortedIdx = r.begin(); sortedIdx != r.end(); sortedIdx++)
+			{
+				const uint32_t i = begin + sortedLocalIdxs[sortedIdx];
+				const CellCoord baseCell = cellCoords[sortedLocalIdxs[sortedIdx]];
+				if (nbrRowRanges.empty() || baseCell != nbrRangesCell)
+				{
+					nbrRowRanges.clear();
+					for (int32_t dz = -cellQueryReach; dz <= cellQueryReach; dz++)
+					{
+						for (int32_t dy = -cellQueryReach; dy <= cellQueryReach; dy++)
+						{
+							nbrRowRanges.push_back(findCellRowRange(
+								CellCoord
+								{
+									.x = baseCell.x - cellQueryReach,
+									.y = baseCell.y + dy,
+									.z = baseCell.z + dz,
+								},
+								CellCoord
+								{
+									.x = baseCell.x + cellQueryReach,
+									.y = baseCell.y + dy,
+									.z = baseCell.z + dz,
+								}));
 						}
+					}
+					nbrRangesCell = baseCell;
+				}
+
+				float sumW = 0.0f;
+				for (const auto& [nbrSortedBegin, nbrSortedEnd] : nbrRowRanges)
+				{
+					for (uint32_t nbrSortedIdx = nbrSortedBegin; nbrSortedIdx < nbrSortedEnd; nbrSortedIdx++)
+					{
+						const uint32_t j = begin + sortedLocalIdxs[nbrSortedIdx];
+						sumW += KernelWeight_CubicSpline(
+							xPos[i] - xPos[j],
+							yPos[i] - yPos[j],
+							zPos[i] - zPos[j],
+							solverConstants.sizeInvF, params.kernelRadiusSqu,
+							solverConstants.cubicSplineAlpha);
 					}
 				}
 

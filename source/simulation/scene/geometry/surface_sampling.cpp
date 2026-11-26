@@ -10,6 +10,7 @@
 #include <limits>
 #include <stdexcept>
 #include <tbb/blocked_range.h>
+#include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
 #include <tuple>
@@ -383,6 +384,34 @@ namespace
 		}
 
 		return std::max<uint32_t>(1, static_cast<uint32_t>(N_subdivisionsD));
+	}
+
+	// barycentric lattice position of a coverage probe
+	struct ProbeLatticePoint
+	{
+		uint32_t triangleIdx = 0;
+		uint32_t N_subdivisions = 1;
+		uint32_t i = 0;
+		uint32_t j = 0;
+	};
+
+	// first lattice index of barycentric row i, rows shrink from N_subdivisions + 1 points
+	uint64_t ProbeRowBegin(const uint32_t N_subdivisions, const uint32_t i)
+	{
+		return static_cast<uint64_t>(i) * (2ull * N_subdivisions + 3ull - i) / 2ull;
+	}
+
+	glm::vec3 MakeProbe(const TriangleData& triangle, const ProbeLatticePoint& point)
+	{
+		const float N_subdivisionsInv = 1.0f / static_cast<float>(point.N_subdivisions);
+		const uint32_t k = point.N_subdivisions - point.i - point.j;
+		const glm::vec3 barycentric
+		{
+			static_cast<float>(point.i) * N_subdivisionsInv,
+			static_cast<float>(point.j) * N_subdivisionsInv,
+			static_cast<float>(k) * N_subdivisionsInv,
+		};
+		return MakeSurfacePoint(triangle, barycentric);
 	}
 
 	uint64_t AddSurfaceCoverageProbes(const uint64_t N_probes, const uint32_t N_subdivisions)
@@ -762,14 +791,19 @@ namespace Scene
 		const auto& triangles = storage_->triangles;
 		auto& acceptedSamples = storage_->acceptedSamples;
 
-		// count barycentric coverage probes with checked uint64 totals
-		uint64_t N_probes = 0;
-		for (const TriangleData& triangle : triangles)
+		// count barycentric coverage probes per triangle with checked uint64 totals
+		std::vector<uint32_t> triangleSubdivisions(triangles.size());
+		std::vector<uint64_t> triangleProbeBegins(triangles.size() + 1, 0);
+		for (uint32_t triangleIdx = 0;
+			triangleIdx < static_cast<uint32_t>(triangles.size());
+			triangleIdx++)
 		{
-			const uint32_t N_subdivisions = SurfaceCoverageSubdivisions(
-				triangle.longestEdge, coverageProbeSpacing_);
-			N_probes = AddSurfaceCoverageProbes(N_probes, N_subdivisions);
+			triangleSubdivisions[triangleIdx] = SurfaceCoverageSubdivisions(
+				triangles[triangleIdx].longestEdge, coverageProbeSpacing_);
+			triangleProbeBegins[triangleIdx + 1] = AddSurfaceCoverageProbes(
+				triangleProbeBegins[triangleIdx], triangleSubdivisions[triangleIdx]);
 		}
+		const uint64_t N_probes = triangleProbeBegins.back();
 		storage_->stats.N_coverageProbes = N_probes;
 
 		// reserve probe spacing as the continuous coverage error budget
@@ -787,104 +821,111 @@ namespace Scene
 			spatialHash.Insert(sampleIdx);
 		}
 
-		// generate and repair coverage probes in bounded batches
-		const uint32_t N_probeBatch = SurfaceSamplingBatchSize(N_probes, N_samplingBatch);
-		std::vector<glm::vec3> probes;
-		probes.reserve(N_probeBatch);
-		std::vector<uint8_t> needsRepair(N_probeBatch, 0u);
-
-		const auto repairProbeBatch = [&]()
+		// locates a probe in stable triangle and barycentric lattice order
+		const auto locateProbe = [&](const uint64_t probeIdx) -> ProbeLatticePoint
 			{
-				const uint32_t N_batch = static_cast<uint32_t>(probes.size());
-				if (N_batch == 0) { return; }
+				ProbeLatticePoint point;
+				point.triangleIdx = static_cast<uint32_t>(std::upper_bound(
+					triangleProbeBegins.begin(),
+					triangleProbeBegins.end(),
+					probeIdx) - triangleProbeBegins.begin() - 1);
+				point.N_subdivisions = triangleSubdivisions[point.triangleIdx];
 
-				// query one probe batch in parallel against the read-only sample hash
-				tbb::parallel_for(
-					tbb::blocked_range<uint32_t>(0, N_batch),
-					[&](const tbb::blocked_range<uint32_t>& r)
-					{
-						for (uint32_t batchIdx = r.begin(); batchIdx != r.end(); batchIdx++)
-						{
-							const glm::vec3& probe = probes[batchIdx];
-							const bool isCovered = spatialHash.AnyNearby(
-								probe,
-								probeTargetDistance,
-								[&](const uint32_t sampleIdx)
-								{
-									return SurfaceDistance(
-										probe,
-										acceptedSamples[sampleIdx]) <= probeTargetDistance;
-								});
-							needsRepair[batchIdx] = static_cast<uint8_t>(!isCovered);
-						}
-					},
-					tbb::auto_partitioner{}
-				);
-
-				// recheck and insert repairs in stable probe order
-				for (uint32_t batchIdx = 0; batchIdx < N_batch; batchIdx++)
+				// binary search for the last row starting at or before the lattice index
+				const uint64_t latticeIdx = probeIdx - triangleProbeBegins[point.triangleIdx];
+				uint32_t rowHigh = point.N_subdivisions;
+				while (point.i < rowHigh)
 				{
-					if (needsRepair[batchIdx] == 0u) { continue; }
-
-					const glm::vec3& probe = probes[batchIdx];
-					const bool isCovered = spatialHash.AnyNearby(
-						probe,
-						probeTargetDistance,
-						[&](const uint32_t sampleIdx)
-						{
-							return SurfaceDistance(
-								probe,
-								acceptedSamples[sampleIdx]) <= probeTargetDistance;
-						});
-					if (isCovered) { continue; }
-					if (acceptedSamples.size() >= Sim::MaxLocalParticleCount)
-					{
-						throw std::runtime_error("Repaired surface sample count exceeds the local particle limit.");
-					}
-
-					const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
-					acceptedSamples.push_back(probe);
-					spatialHash.Insert(sampleIdx);
-					N_repairs++;
+					const uint32_t rowMid = point.i + (rowHigh - point.i + 1) / 2;
+					if (ProbeRowBegin(point.N_subdivisions, rowMid) <= latticeIdx) { point.i = rowMid; }
+					else { rowHigh = rowMid - 1; }
 				}
-
-				probes.clear();
+				point.j = static_cast<uint32_t>(latticeIdx - ProbeRowBegin(point.N_subdivisions, point.i));
+				return point;
 			};
 
-		// generate probes in stable triangle and barycentric lattice order
-		for (uint32_t triangleIdx = 0;
-			triangleIdx < static_cast<uint32_t>(triangles.size());
-			triangleIdx++)
-		{
-			const TriangleData& triangle = triangles[triangleIdx];
-			const uint32_t N_subdivisions = SurfaceCoverageSubdivisions(
-				triangle.longestEdge, coverageProbeSpacing_);
-			const float N_subdivisionsInv = 1.0f / static_cast<float>(N_subdivisions);
-
-			for (uint32_t i = 0; i <= N_subdivisions; i++)
+		// tests a probe against the accepted samples within the probe target distance
+		const auto isProbeCovered = [&](const glm::vec3& probe)
 			{
-				for (uint32_t j = 0; j <= N_subdivisions - i; j++)
+				return spatialHash.AnyNearby(
+					probe,
+					probeTargetDistance,
+					[&](const uint32_t sampleIdx)
+					{
+						return SurfaceDistance(
+							probe,
+							acceptedSamples[sampleIdx]) <= probeTargetDistance;
+					});
+			};
+
+		// generate and repair coverage probes in bounded batches
+		tbb::enumerable_thread_specific<std::vector<uint64_t>> uncoveredProbeIdxsLocal;
+		std::vector<uint64_t> uncoveredProbeIdxs;
+		for (uint64_t probeBegin = 0; probeBegin < N_probes;)
+		{
+			const uint64_t probeEnd = probeBegin + SurfaceSamplingBatchSize(
+				N_probes - probeBegin, N_samplingBatch);
+
+			// generate and query one probe batch in parallel against the read-only sample hash
+			tbb::parallel_for(
+				tbb::blocked_range<uint64_t>(probeBegin, probeEnd),
+				[&](const tbb::blocked_range<uint64_t>& r)
 				{
-					const uint32_t k = N_subdivisions - i - j;
-					const glm::vec3 barycentric
-					{
-						static_cast<float>(i) * N_subdivisionsInv,
-						static_cast<float>(j) * N_subdivisionsInv,
-						static_cast<float>(k) * N_subdivisionsInv,
-					};
-					probes.push_back(MakeSurfacePoint(
-						triangle,
-						barycentric));
+					std::vector<uint64_t>& uncoveredProbeIdxsThread = uncoveredProbeIdxsLocal.local();
+					ProbeLatticePoint point = locateProbe(r.begin());
 
-					if (probes.size() == N_probeBatch)
+					for (uint64_t probeIdx = r.begin(); probeIdx != r.end(); probeIdx++)
 					{
-						repairProbeBatch();
+						if (!isProbeCovered(MakeProbe(triangles[point.triangleIdx], point)))
+						{
+							uncoveredProbeIdxsThread.push_back(probeIdx);
+						}
+
+						// advance to the next lattice point, row, or triangle
+						if (++point.j <= point.N_subdivisions - point.i) { continue; }
+						point.j = 0;
+						if (++point.i <= point.N_subdivisions) { continue; }
+						point.i = 0;
+						if (++point.triangleIdx < static_cast<uint32_t>(triangles.size()))
+						{
+							point.N_subdivisions = triangleSubdivisions[point.triangleIdx];
+						}
 					}
-				}
-			}
-		}
+				},
+				tbb::auto_partitioner{}
+			);
 
-		repairProbeBatch();
+			// collect uncovered probes of the batch in stable probe order
+			uncoveredProbeIdxs.clear();
+			for (std::vector<uint64_t>& uncoveredProbeIdxsThread : uncoveredProbeIdxsLocal)
+			{
+				uncoveredProbeIdxs.insert(
+					uncoveredProbeIdxs.end(),
+					uncoveredProbeIdxsThread.begin(),
+					uncoveredProbeIdxsThread.end());
+				uncoveredProbeIdxsThread.clear();
+			}
+			tbb::parallel_sort(uncoveredProbeIdxs.begin(), uncoveredProbeIdxs.end());
+
+			// recheck and insert repairs in stable probe order
+			for (const uint64_t probeIdx : uncoveredProbeIdxs)
+			{
+				const ProbeLatticePoint point = locateProbe(probeIdx);
+				const glm::vec3 probe = MakeProbe(triangles[point.triangleIdx], point);
+				if (isProbeCovered(probe)) { continue; }
+				if (acceptedSamples.size() >= Sim::MaxLocalParticleCount)
+				{
+					throw std::runtime_error("Repaired surface sample count exceeds the local particle limit.");
+				}
+
+				const uint32_t sampleIdx = static_cast<uint32_t>(acceptedSamples.size());
+				acceptedSamples.push_back(probe);
+				spatialHash.Insert(sampleIdx);
+				N_repairs++;
+			}
+
+			probeBegin = probeEnd;
+		}
 	}
 
 	void SurfaceSampler::ValidateSamples()
