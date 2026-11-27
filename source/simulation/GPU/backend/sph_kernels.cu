@@ -969,9 +969,6 @@ namespace GPU
 
 	__global__
 	void K_Integration(
-		const float* __restrict__ xVelPredF,
-		const float* __restrict__ yVelPredF,
-		const float* __restrict__ zVelPredF,
 		const float* __restrict__ xAccPressF,
 		const float* __restrict__ yAccPressF,
 		const float* __restrict__ zAccPressF,
@@ -987,10 +984,10 @@ namespace GPU
 		if (i >= c_N_F) { return; }
 
 		// explicit Euler integration for velocity
-		// (now only refining predicted velocity with pressure acc)
-		xVelF[i] = fmaf(c_timeStep, xAccPressF[i], xVelPredF[i]);
-		yVelF[i] = fmaf(c_timeStep, yAccPressF[i], yVelPredF[i]);
-		zVelF[i] = fmaf(c_timeStep, zAccPressF[i], zVelPredF[i]);
+		// NOTE: the velocity arrays hold the predicted velocity on entry and are refined in place with pressure acc
+		xVelF[i] = fmaf(c_timeStep, xAccPressF[i], xVelF[i]);
+		yVelF[i] = fmaf(c_timeStep, yAccPressF[i], yVelF[i]);
+		zVelF[i] = fmaf(c_timeStep, zAccPressF[i], zVelF[i]);
 
 		// semi-implicit Euler integration
 		// (using updated velocity for position update)
@@ -1248,7 +1245,6 @@ namespace GPU
 	}
 
 	void Launch_Integration(
-		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
@@ -1260,7 +1256,7 @@ namespace GPU
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_Integration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
-			xVelPredF, yVelPredF, zVelPredF, xAccPressF, yAccPressF, zAccPressF,
+			xAccPressF, yAccPressF, zAccPressF,
 			xPosF, yPosF, zPosF, xVelF, yVelF, zVelF);
 		GPU::CheckLastKernel("K_Integration()");
 	}

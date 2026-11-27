@@ -140,9 +140,6 @@ void SimBackend_GPU::PullFromUniversalSimState(
 		GPU::Copy_HostToDevice(d_xVelF_.Data(), F.xVel.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_yVelF_.Data(), F.yVel.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zVelF_.Data(), F.zVel.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_xVelPredF_.Data(), F.xVelPred.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_yVelPredF_.Data(), F.yVelPred.data(), N_F_, stream_);
-		GPU::Copy_HostToDevice(d_zVelPredF_.Data(), F.zVelPred.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_xAccPressF_.Data(), F.xAccPress.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_yAccPressF_.Data(), F.yAccPress.data(), N_F_, stream_);
 		GPU::Copy_HostToDevice(d_zAccPressF_.Data(), F.zAccPress.data(), N_F_, stream_);
@@ -267,9 +264,10 @@ void SimBackend_GPU::PushToUniversalSimState(
 		GPU::Copy_DeviceToHost(F.xVel.data(), d_xVelF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.yVel.data(), d_yVelF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zVel.data(), d_zVelF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.xVelPred.data(), d_xVelPredF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.yVelPred.data(), d_yVelPredF_.Data(), N_F_, stream_);
-		GPU::Copy_DeviceToHost(F.zVelPred.data(), d_zVelPredF_.Data(), N_F_, stream_);
+		// NOTE: the predicted velocity is not stored, the non-pressure pass recomputes it every step
+		std::fill(F.xVelPred.begin(), F.xVelPred.end(), 0.0f);
+		std::fill(F.yVelPred.begin(), F.yVelPred.end(), 0.0f);
+		std::fill(F.zVelPred.begin(), F.zVelPred.end(), 0.0f);
 		GPU::Copy_DeviceToHost(F.xAccPress.data(), d_xAccPressF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.yAccPress.data(), d_yAccPressF_.Data(), N_F_, stream_);
 		GPU::Copy_DeviceToHost(F.zAccPress.data(), d_zAccPressF_.Data(), N_F_, stream_);
@@ -867,9 +865,6 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usageF, MemUsageOf_DeviceBuffer(d_xVelF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_yVelF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_zVelF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_xVelPredF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_yVelPredF_));
-		Add(usageF, MemUsageOf_DeviceBuffer(d_zVelPredF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_xAccPressF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_yAccPressF_));
 		Add(usageF, MemUsageOf_DeviceBuffer(d_zAccPressF_));
@@ -1365,7 +1360,8 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 			d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(), d_nbrListDelta16FR_.Data(),
 			d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(), d_nbrListAbs32FR_.Data(),
 			N_F_, N_B_, N_R_, stream_,
-			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data());
+			// NOTE: predicted velocity goes into the pressure acceleration buffers, unused until the solver
+			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench(Bench::BenchOp::NonPressure_Acceleration);
@@ -1388,6 +1384,11 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 			benchmarksTracker_.StopBench(Bench::BenchOp::Rigid_ForceAccumulation);
 		}
 
+		// NOTE: from here until integration, the velocity buffers hold the predicted velocity
+		d_xVelF_.Swap(d_xAccPressF_);
+		d_yVelF_.Swap(d_yAccPressF_);
+		d_zVelF_.Swap(d_zAccPressF_);
+
 		// --- [ source-term (density invariance) and diagonal elements ] -------------------------------
 
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
@@ -1395,7 +1396,8 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 			d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
 			d_xPosR_.Data(), d_yPosR_.Data(), d_zPosR_.Data(),
-			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
+			// NOTE: the velocity buffers hold the predicted velocity here
+			d_xVelF_.Data(), d_yVelF_.Data(), d_zVelF_.Data(),
 			d_xVelR_.Data(), d_yVelR_.Data(), d_zVelR_.Data(),
 			d_densityF_.Data(),
 			d_psiB_.Data(), d_psiR_.Data(),
@@ -1520,7 +1522,6 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 
 		benchmarksTracker_.StartBench(Bench::BenchOp::Particle_Integration);
 		GPU::Launch_Integration(
-			d_xVelPredF_.Data(), d_yVelPredF_.Data(), d_zVelPredF_.Data(),
 			d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data(),
 			N_F_, N_B_, stream_,
 			d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
