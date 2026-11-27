@@ -61,9 +61,6 @@ namespace Sim
 		// computes & fills in rank-local partial stat data for distributed execution
 		bool FillStatisticsPartial(Stats::StatisticsPartial& partial, const SimParams& simParams) const override;
 
-		// reports whether CPU supports distributed execution
-		bool SupportsDistributedSimulation() const override { return true; }
-
 		I_DistributedParticleBackend* GetDistributedParticleBackend() override { return this; }
 
 		Sync::FluidConstView GetFluidParticleView() const override;

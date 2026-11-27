@@ -325,15 +325,7 @@ bool DistSimulationMgr::Init(
 	// create the backend before building or restoring its domain bounds
 	SPDLOG_INFO_MPI("Create distributed simulation backend...", mpiContext_);
 	CreateSimBackend(simParams_.backendType);
-	bool backendSupported = simBackend_ && simBackend_->SupportsDistributedSimulation();
-	if (simBackend_ && !backendSupported)
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Sim backend {} does not support distributed simulation. "
-			"CPU is currently the only distributed backend.",
-			mpiContext_.Rank(), mpiContext_.Size(), simBackend_->Name());
-	}
-	if (!mpiContext_.AllTrue(backendSupported)) { return false; }
+	if (!mpiContext_.AllTrue(distParticleBackend_ != nullptr)) { return false; }
 
 	SPDLOG_INFO_MPI("Init distributed domain decomp...", mpiContext_);
 	// every rank parses the same broadcast parameters, so all ranks pick the same strategy
@@ -452,8 +444,8 @@ void DistSimulationMgr::CreateSimBackend(const Base::BackendType backendType)
 	if (!distParticleBackend_)
 	{
 		SPDLOG_ERROR(
-			"[rank {}/{}] Sim backend ({}) does not provide distributed "
-			"particle storage access. CPU is currently the only distributed backend.",
+			"[rank {}/{}] Sim backend ({}) does not support distributed simulation. "
+			"CPU is currently the only distributed backend.",
 			mpiContext_.Rank(), mpiContext_.Size(), static_cast<int>(backendType));
 		simBackend_.reset();
 		return;
@@ -1407,7 +1399,7 @@ bool DistSimulationMgr::InitializeSimBackendFromState()
 		}
 
 		// configure compact [ owned ][ halo ] layout before any backend re-order
-		if (localOk && !simBackend_->ConfigureDistributedParticleLayout(
+		if (localOk && !distParticleBackend_->ConfigureDistributedParticleLayout(
 			particleStateF_.N_owned,
 			particleStateB_.N_owned,
 			particleStateR_.N_owned))
@@ -1668,7 +1660,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 {
 	bool localOk = true;
 
-	if (!simBackend_->FillFluidParticleNearSurfaceFlags(
+	if (!distParticleBackend_->FillFluidParticleNearSurfaceFlags(
 			simParams_, localNearSurfaceFlagsScratch_) ||
 		localNearSurfaceFlagsScratch_.size() !=
 			static_cast<uint64_t>(particlesF.N_))
@@ -1712,7 +1704,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 	fluidSolverSyncMgr_.SynchronizeFluidParticleFlagsToHalos(
 		localNearSurfaceFlagsScratch_, simParams_.distHaloMode);
 
-	if (!simBackend_->BuildExportFluidParticleLocalIdxs(
+	if (!distParticleBackend_->BuildExportFluidParticleLocalIdxs(
 		localNearSurfaceFlagsScratch_,
 		localIdxs))
 	{
@@ -1834,7 +1826,7 @@ bool DistSimulationMgr::FillDistributedStatisticsRecord(
 	bool localOk = true;
 
 	auto& partial = statisticsPartialScratch_;
-	if (!simBackend_->FillStatisticsPartial(partial, params))
+	if (!distParticleBackend_->FillStatisticsPartial(partial, params))
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Failed to fill rank-local distributed statistics partial.",
@@ -2272,7 +2264,7 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 		if (localOk)
 		{
 			MarkTrace(Trace::TraceStage::Dist_BackendConfiguration);
-			configured = simBackend_->ConfigureDistributedStep(
+			configured = distParticleBackend_->ConfigureDistributedStep(
 				outerLocalIdxsF_,
 				pressureAccHaloLocalIdxsF_,
 				fluidSolverSyncMgr_);
@@ -2314,7 +2306,7 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 	MarkTrace(Trace::TraceStage::Dist_RigidForceCollection);
 	try
 	{
-		if (!simBackend_->GetRigidBodyForceTorque(rigidBodyForceTorque_))
+		if (!distParticleBackend_->GetRigidBodyForceTorque(rigidBodyForceTorque_))
 		{
 			SPDLOG_ERROR(
 				"[rank {}/{}] Failed to read rank-local rigid body force and torque.",
@@ -2349,7 +2341,7 @@ bool DistSimulationMgr::FinishRankLocalBackendStep(
 	{
 		MarkTrace(Trace::TraceStage::Dist_RigidForceIntegration);
 		if (mpiContext_.IsRoot() &&
-			!simBackend_->ApplyRigidBodyForceTorque(
+			!distParticleBackend_->ApplyRigidBodyForceTorque(
 				rigidBodyForceTorque_,
 				params.timeStep))
 		{

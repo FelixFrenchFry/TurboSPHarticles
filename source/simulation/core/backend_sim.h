@@ -121,7 +121,7 @@ namespace Sim
 		return nbrCountFB > 0 || nbrCountFR > 0 || nbrCountFF < nbrCountThreshold;
 	}
 
-	// optional backend capability for particle exchange between ranks for distributed execution
+	// optional backend capability for distributed execution (particle exchange between ranks and rank-local work)
 	class I_DistributedParticleBackend
 	{
 	public:
@@ -155,6 +155,41 @@ namespace Sim
 		// copies/applies only dynamic rigid-body state used by distributed synchronization
 		virtual void CopyRigidBodyStateTo(Sync::RigidBodies& rigidBodies) const = 0;
 		virtual bool ApplyRigidBodyStateFrom(const Sync::RigidBodies& rigidBodies) = 0;
+
+		// configures the compact [ owned ][ halo ] layout of pulled particles before any distributed re-order
+		virtual bool ConfigureDistributedParticleLayout(
+			uint32_t N_ownedF,
+			uint32_t N_ownedB,
+			uint32_t N_ownedR) = 0;
+
+		// configures rank-authoritative particle work for distributed execution
+		// (both index lists must be strictly ascending in the current local layout)
+		// (the owned fluid prefix always computes pressure acceleration, the halo list adds to it)
+		virtual bool ConfigureDistributedStep(
+			const std::vector<uint32_t>& outerLocalIdxsF,
+			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
+			I_DistributedFluidSolverSync& distributedFluidSolverSync) = 0;
+
+		// classifies fluid particles against the regular export near-surface threshold
+		virtual bool FillFluidParticleNearSurfaceFlags(
+			const SimParams& simParams,
+			std::vector<uint8_t>& nearSurfaceFlags) const = 0;
+
+		// selects regular export surface particles using authoritative near-surface flags
+		virtual bool BuildExportFluidParticleLocalIdxs(
+			const std::vector<uint8_t>& nearSurfaceFlags,
+			std::vector<uint32_t>& localIdxs) const = 0;
+
+		// reads body-level force and torque accumulated during the latest backend step
+		virtual bool GetRigidBodyForceTorque(RigidBodyForceTorque& dst) const = 0;
+
+		// applies externally synchronized body force and torque through integrator of the backend
+		virtual bool ApplyRigidBodyForceTorque(
+			const RigidBodyForceTorque& forceTorque,
+			float timeStep) = 0;
+
+		// computes & fills in the partial stat data for the current sim step
+		virtual bool FillStatisticsPartial(Stats::StatisticsPartial& partial, const SimParams& simParams) const = 0;
 	};
 
 	// -----------------------------------------------------------------------------------------------
@@ -212,85 +247,11 @@ namespace Sim
 		// (backend-specific so that the stats can be computed from the custom data structures efficiently)
 		virtual void FillStatisticsRecord(Stats::StatRecordStep& record, const SimParams& params) const = 0;
 
-		// computes & fills in the partial stat data for the current sim step
-		virtual bool FillStatisticsPartial(Stats::StatisticsPartial& partial, const SimParams& simParams) const
-		{
-			(void)partial;
-			(void)simParams;
-			return false;
-		}
-
-		// reports whether the backend implements all components required for distributed execution
-		virtual bool SupportsDistributedSimulation() const { return false; }
-
-		// exposes optional backend-resident particle storage used for particle exchange in distributed execution
+		// exposes the distributed execution capability of the backend (null if unsupported)
 		virtual I_DistributedParticleBackend* GetDistributedParticleBackend() { return nullptr; }
 
 		// executes only the neighbor search (construction and query of the data NS structure)
 		virtual void ExecuteNeighborSearch(const SimParams& params, bool bench = false) = 0;
-
-		// configures the compact [ owned ][ halo ] layout of pulled particles before any distributed re-order
-		virtual bool ConfigureDistributedParticleLayout(
-			uint32_t N_ownedF,
-			uint32_t N_ownedB,
-			uint32_t N_ownedR)
-		{
-			(void)N_ownedF;
-			(void)N_ownedB;
-			(void)N_ownedR;
-			return false;
-		}
-
-		// configures rank-authoritative particle work for distributed execution
-		// (both index lists must be strictly ascending in the current local layout)
-		// (the owned fluid prefix always computes pressure acceleration, the halo list adds to it)
-		virtual bool ConfigureDistributedStep(
-			const std::vector<uint32_t>& outerLocalIdxsF,
-			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
-			I_DistributedFluidSolverSync& distributedFluidSolverSync)
-		{
-			(void)outerLocalIdxsF;
-			(void)pressureAccHaloLocalIdxsF;
-			(void)distributedFluidSolverSync;
-			return false;
-		}
-
-		// classifies fluid particles against the regular export near-surface threshold
-		virtual bool FillFluidParticleNearSurfaceFlags(
-			const SimParams& simParams,
-			std::vector<uint8_t>& nearSurfaceFlags) const
-		{
-			(void)simParams;
-			(void)nearSurfaceFlags;
-			return false;
-		}
-
-		// selects regular export surface particles using authoritative near-surface flags
-		virtual bool BuildExportFluidParticleLocalIdxs(
-			const std::vector<uint8_t>& nearSurfaceFlags,
-			std::vector<uint32_t>& localIdxs) const
-		{
-			(void)nearSurfaceFlags;
-			(void)localIdxs;
-			return false;
-		}
-
-		// reads body-level force and torque accumulated during the latest backend step
-		virtual bool GetRigidBodyForceTorque(RigidBodyForceTorque& dst) const
-		{
-			(void)dst;
-			return false;
-		}
-
-		// applies externally synchronized body force and torque through integrator of the backend
-		virtual bool ApplyRigidBodyForceTorque(
-			const RigidBodyForceTorque& forceTorque,
-			float timeStep)
-		{
-			(void)forceTorque;
-			(void)timeStep;
-			return false;
-		}
 
 		// advances the simulation by N_steps
 		virtual void ExecuteFullSimStep(const SimParams& params, uint32_t N_steps = 1) = 0;
