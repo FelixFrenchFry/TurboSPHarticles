@@ -175,11 +175,12 @@ namespace GPU
 		float* pressureF);
 
 	void Launch_Integration(
+		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,
 		const float* xAccPressF, const float* yAccPressF, const float* zAccPressF,
 		const uint32_t N_F, const uint32_t N_B,
 		cudaStream_t stream,
 		// destinations
 		float* xPosF, float* yPosF, float* zPosF,
-		float* xVelF, float* yVelF, float* zVelF); // NOTE: predicted velocity on entry, updated in place
+		float* xVelF, float* yVelF, float* zVelF);
 
 } // namespace GPU

@@ -37,7 +37,7 @@ namespace Sim
 
 		// re-orders particle fields ahead of a full solver step, which re-initializes some of them,
 		// so permutations of those fields are skipped (TODO: update if solver step behavior changes)
-		// (currently omitted are accPress, sourceTerm, diagElem, density, and pressure without warm start)
+		// (currently omitted are velPred, accPress, sourceTerm, diagElem, density, and pressure without warm start)
 		void DataReOrder_SolverStep(const SimParams& params);
 
 		Mem::ParticleClassMemUsage GetMemUsage() const;

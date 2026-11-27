@@ -983,6 +983,10 @@ void NeighborSearch_CellLinkedList_Compact_GPU::ReOrderParticleData(
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yAccPressF_, d_reorderScratch, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zAccPressF_, d_reorderScratch, be_.stream_);
 
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_xVelPredF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_yVelPredF_, d_reorderScratch, be_.stream_);
+			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_zVelPredF_, d_reorderScratch, be_.stream_);
+
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_sourceTermF_, d_reorderScratch, be_.stream_);
 			ApplyPermutation_DeviceBuffer(d_permF, N_F, be_.d_diagElemF_, d_reorderScratch, be_.stream_);
 			// without a warm start, pressure is re-initialized by the source-term kernel

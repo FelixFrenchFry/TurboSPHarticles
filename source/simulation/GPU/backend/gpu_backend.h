@@ -190,7 +190,8 @@ namespace Sim
 		// fluid particles
 		DeviceBuffer<uint64_t> d_idF_;
 		DeviceBuffer<float> d_xPosF_, d_yPosF_, d_zPosF_;
-		DeviceBuffer<float> d_xVelF_, d_yVelF_, d_zVelF_; // NOTE: predicted velocity between the vel/accPress swap and integration
+		DeviceBuffer<float> d_xVelF_, d_yVelF_, d_zVelF_;
+		DeviceBuffer<float> d_xVelPredF_, d_yVelPredF_, d_zVelPredF_;
 		DeviceBuffer<float> d_xAccPressF_, d_yAccPressF_, d_zAccPressF_;
 		DeviceBuffer<float> d_sourceTermF_;
 		DeviceBuffer<float> d_diagElemF_;
@@ -349,6 +350,7 @@ namespace Sim
 				d_idF_.Size() != N_newF ||
 				d_xPosF_.Size() != N_newF || d_yPosF_.Size() != N_newF || d_zPosF_.Size() != N_newF ||
 				d_xVelF_.Size() != N_newF || d_yVelF_.Size() != N_newF || d_zVelF_.Size() != N_newF ||
+				d_xVelPredF_.Size() != N_newF || d_yVelPredF_.Size() != N_newF || d_zVelPredF_.Size() != N_newF ||
 				d_xAccPressF_.Size() != N_newF || d_yAccPressF_.Size() != N_newF || d_zAccPressF_.Size() != N_newF ||
 				d_sourceTermF_.Size() != N_newF || d_diagElemF_.Size() != N_newF ||
 				d_pressureF_.Size() != N_newF || d_densityF_.Size() != N_newF ||
@@ -371,6 +373,7 @@ namespace Sim
 			d_idF_.Resize(N_F_);
 			d_xPosF_.Resize(N_F_); d_yPosF_.Resize(N_F_); d_zPosF_.Resize(N_F_);
 			d_xVelF_.Resize(N_F_); d_yVelF_.Resize(N_F_); d_zVelF_.Resize(N_F_);
+			d_xVelPredF_.Resize(N_F_); d_yVelPredF_.Resize(N_F_); d_zVelPredF_.Resize(N_F_);
 			d_xAccPressF_.Resize(N_F_); d_yAccPressF_.Resize(N_F_); d_zAccPressF_.Resize(N_F_);
 			d_sourceTermF_.Resize(N_F_); d_diagElemF_.Resize(N_F_);
 			d_pressureF_.Resize(N_F_); d_densityF_.Resize(N_F_);
