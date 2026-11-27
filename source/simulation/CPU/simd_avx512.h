@@ -29,4 +29,11 @@ namespace CPU
 		return UInt32xSIMD(_mm512_cvtepu16_epi32(lo));
 	}
 
+	// compute the square root of each float lane
+	inline Float32xSIMD SqrtFloat32xSIMD(
+		const Float32xSIMD v) noexcept
+	{
+		return xsimd::sqrt(v);
+	}
+
 } // namespace CPU

@@ -313,7 +313,7 @@ namespace
 		}
 	}
 
-	// different lane masks and branches must remain independent at either SIMD width
+	// different lane masks and branches must remain independent at every SIMD width
 	TEST(SphKernelTests, EvaluatesMixedLanesIndependently)
 	{
 		const std::array<glm::vec3, 8> cases{{
@@ -322,27 +322,32 @@ namespace
 			{ 0.9f, -1.2f, 0.0f }, { 0.0f, 0.0f, 2.0f },
 			{ -2.5f, 0.0f, 0.0f }, { -0.5f, 0.25f, -0.125f }
 		}};
-		KernelOffsets offsets;
-		for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH; lane++)
+		for (uint32_t batchBegin = 0; batchBegin < cases.size(); batchBegin += CPU::N_SIMD_WIDTH)
 		{
-			offsets[lane] = cases[lane % cases.size()];
-		}
-		const auto actual = EvaluateKernels(offsets);
-
-		for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH; lane++)
-		{
-			SCOPED_TRACE(lane);
-			const auto expected = ReferenceKernel(offsets[lane]);
-			ExpectKernelNear(actual[lane], expected);
-			if (lane % cases.size() == 0 || lane % cases.size() == 5 || lane % cases.size() == 6)
+			KernelOffsets offsets;
+			for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH; lane++)
 			{
-				EXPECT_EQ(actual[lane].gradient.x, 0.0);
-				EXPECT_EQ(actual[lane].gradient.y, 0.0);
-				EXPECT_EQ(actual[lane].gradient.z, 0.0);
+				offsets[lane] = cases[(batchBegin + lane) % cases.size()];
 			}
-			if (lane % cases.size() == 5 || lane % cases.size() == 6)
+			const auto actual = EvaluateKernels(offsets);
+
+			for (uint32_t lane = 0; lane < CPU::N_SIMD_WIDTH; lane++)
 			{
-				EXPECT_EQ(actual[lane].weight, 0.0);
+				const auto caseIdx = (batchBegin + lane) % cases.size();
+				SCOPED_TRACE(::testing::Message() << "case " << caseIdx << ", lane " << lane);
+				const auto expected = ReferenceKernel(cases[caseIdx]);
+				ExpectKernelNear(actual[lane], expected);
+				const bool outsideSupport = caseIdx == 5 || caseIdx == 6;
+				if (caseIdx == 0 || outsideSupport)
+				{
+					EXPECT_EQ(actual[lane].gradient.x, 0.0);
+					EXPECT_EQ(actual[lane].gradient.y, 0.0);
+					EXPECT_EQ(actual[lane].gradient.z, 0.0);
+				}
+				if (outsideSupport)
+				{
+					EXPECT_EQ(actual[lane].weight, 0.0);
+				}
 			}
 		}
 	}

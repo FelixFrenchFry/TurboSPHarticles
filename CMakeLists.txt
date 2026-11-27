@@ -26,14 +26,24 @@ option(ENABLE_MPI "Build distributed headless application with MPI" OFF)
 
 set(TSP_CUDA_ARCHITECTURE "native" CACHE STRING "CUDA architecture")
 set(TSP_CPU_SIMD_ARCH "auto" CACHE STRING "CPU SIMD architecture")
-set_property(CACHE TSP_CPU_SIMD_ARCH PROPERTY STRINGS auto AVX256 AVX512)
+set_property(CACHE TSP_CPU_SIMD_ARCH PROPERTY STRINGS auto NEON64 AVX256 AVX512)
 
-# 'auto' resolves against the configure host, not the run host
-if(TSP_CPU_SIMD_ARCH STREQUAL "auto")
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        # MSVC has no __builtin_cpu_supports
-        set(TSP_HOST_HAS_AVX512 OFF)
-    else()
+set(TSP_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+# use the compiler target architecture on Windows
+if(WIN32 AND CMAKE_CXX_COMPILER_ARCHITECTURE_ID)
+    set(TSP_TARGET_PROCESSOR "${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}")
+endif()
+string(TOLOWER "${TSP_TARGET_PROCESSOR}" TSP_TARGET_PROCESSOR)
+
+if(TSP_TARGET_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    set(TSP_CPU_SIMD_ARCH_SUPPORTED NEON64)
+    set(TSP_CPU_SIMD_ARCH_DEFAULT NEON64)
+elseif(TSP_TARGET_PROCESSOR MATCHES "^(x86_64|amd64|x64|x86|i[3-6]86)$")
+    set(TSP_CPU_SIMD_ARCH_SUPPORTED AVX256 AVX512)
+    set(TSP_CPU_SIMD_ARCH_DEFAULT AVX256)
+    # probe native x86 with compilers that provide __builtin_cpu_supports
+    if(TSP_CPU_SIMD_ARCH STREQUAL "auto" AND NOT CMAKE_CROSSCOMPILING
+       AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         include(CheckCXXSourceRuns)
         check_cxx_source_runs("
 int main()
@@ -45,38 +55,46 @@ int main()
         && __builtin_cpu_supports(\"avx512bw\")) ? 0 : 1;
 }
 " TSP_HOST_HAS_AVX512)
+        if(TSP_HOST_HAS_AVX512)
+            set(TSP_CPU_SIMD_ARCH_DEFAULT AVX512)
+        endif()
     endif()
-
-    if(TSP_HOST_HAS_AVX512)
-        set(TSP_CPU_SIMD_ARCH "AVX512")
-    else()
-        set(TSP_CPU_SIMD_ARCH "AVX256")
-    endif()
-
-    set(TSP_CPU_SIMD_ARCH_ORIGIN " [auto-detected]")
+else()
+    message(FATAL_ERROR "Unsupported target CPU architecture '${TSP_TARGET_PROCESSOR}'.")
 endif()
 
-if(TSP_CPU_SIMD_ARCH STREQUAL "AVX256")
+if(TSP_CPU_SIMD_ARCH STREQUAL "auto")
+    set(TSP_CPU_SIMD_ARCH "${TSP_CPU_SIMD_ARCH_DEFAULT}")
+    set(TSP_CPU_SIMD_ARCH_ORIGIN " [auto-detected]")
+elseif(NOT TSP_CPU_SIMD_ARCH IN_LIST TSP_CPU_SIMD_ARCH_SUPPORTED)
+    string(JOIN ", " TSP_CPU_SIMD_ARCH_CHOICES ${TSP_CPU_SIMD_ARCH_SUPPORTED})
+    message(FATAL_ERROR
+        "Unsupported TSP_CPU_SIMD_ARCH='${TSP_CPU_SIMD_ARCH}' for target CPU '${TSP_TARGET_PROCESSOR}'. "
+        "Expected auto or one of: ${TSP_CPU_SIMD_ARCH_CHOICES}.")
+endif()
+
+set(TSP_CPU_SIMD_ARCH_DEFINE TSP_CPU_SIMD_ARCH_${TSP_CPU_SIMD_ARCH}=1)
+if(TSP_CPU_SIMD_ARCH STREQUAL "NEON64")
+    # using the default Advanced SIMD support on AArch64
+    set(TSP_CPU_SIMD_WIDTH 4)
+    set(TSP_CPU_ISA_COMPILE_OPTIONS_MSVC "")
+    set(TSP_CPU_ISA_COMPILE_OPTIONS_GNU "")
+elseif(TSP_CPU_SIMD_ARCH STREQUAL "AVX256")
     set(TSP_CPU_SIMD_WIDTH 8)
-    set(TSP_CPU_SIMD_ARCH_DEFINE TSP_CPU_SIMD_ARCH_AVX256=1)
-    set(TSP_CPU_ISA_COMPILER_FLAGS_MSVC "/arch:AVX2")
-    set(TSP_CPU_ISA_COMPILER_FLAGS_GNU "-mavx2 -mfma")
+    set(TSP_CPU_ISA_COMPILE_OPTIONS_MSVC /arch:AVX2)
+    set(TSP_CPU_ISA_COMPILE_OPTIONS_GNU -mavx2 -mfma)
 elseif(TSP_CPU_SIMD_ARCH STREQUAL "AVX512")
     set(TSP_CPU_SIMD_WIDTH 16)
-    set(TSP_CPU_SIMD_ARCH_DEFINE TSP_CPU_SIMD_ARCH_AVX512=1)
-    set(TSP_CPU_ISA_COMPILER_FLAGS_MSVC "/arch:AVX512")
-    set(TSP_CPU_ISA_COMPILER_FLAGS_GNU "-mavx512f -mavx512cd -mavx512dq -mavx512bw -mfma")
-else()
-    message(FATAL_ERROR
-        "Unsupported TSP_CPU_SIMD_ARCH='${TSP_CPU_SIMD_ARCH}'. "
-        "Expected auto, AVX256 or AVX512.")
+    set(TSP_CPU_ISA_COMPILE_OPTIONS_MSVC /arch:AVX512)
+    set(TSP_CPU_ISA_COMPILE_OPTIONS_GNU -mavx512f -mavx512cd -mavx512dq -mavx512bw -mfma)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    set(TSP_CPU_ISA_COMPILER_FLAGS "${TSP_CPU_ISA_COMPILER_FLAGS_MSVC}")
+    set(TSP_CPU_ISA_COMPILE_OPTIONS "${TSP_CPU_ISA_COMPILE_OPTIONS_MSVC}")
 else()
-    set(TSP_CPU_ISA_COMPILER_FLAGS "${TSP_CPU_ISA_COMPILER_FLAGS_GNU}")
+    set(TSP_CPU_ISA_COMPILE_OPTIONS "${TSP_CPU_ISA_COMPILE_OPTIONS_GNU}")
 endif()
+string(JOIN " " TSP_CPU_ISA_COMPILER_FLAGS ${TSP_CPU_ISA_COMPILE_OPTIONS})
 
 message(STATUS "CPU SIMD: ${TSP_CPU_SIMD_ARCH} (${TSP_CPU_SIMD_WIDTH} lanes)${TSP_CPU_SIMD_ARCH_ORIGIN}")
 
@@ -228,32 +246,9 @@ target_compile_options(Project_Options INTERFACE
         $<$<CONFIG:Release>:-O3>
         $<$<CONFIG:RelWithDebInfo>:-O2 -lineinfo>
     >
+    # apply CPU ISA flags to C++ only
+    "$<$<COMPILE_LANGUAGE:CXX>:${TSP_CPU_ISA_COMPILE_OPTIONS}>"
 )
-
-# CPU SIMD ISA flags required by the selected SELL vector width
-if(TSP_CPU_SIMD_ARCH STREQUAL "AVX512") # 16-wide SIMD processing of floats
-    target_compile_options(Project_Options INTERFACE
-        # MSVC C++ only
-        $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
-            /arch:AVX512
-        >
-        # GCC/Clang C++ only
-        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
-            -mavx512f -mavx512cd -mavx512dq -mavx512bw -mfma
-        >
-    )
-else() # 8-wide SIMD processing of floats
-    target_compile_options(Project_Options INTERFACE
-        # MSVC C++ only
-        $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:
-            /arch:AVX2
-        >
-        # GCC/Clang C++ only
-        $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<COMPILE_LANGUAGE:CXX>>:
-            -mavx2 -mfma
-        >
-    )
-endif()
 
 # link-time optimization
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)

@@ -8,12 +8,16 @@
 #include <xsimd/xsimd.hpp>
 
 // internal
-#if defined(TSP_CPU_SIMD_ARCH_AVX512)
+#if defined(TSP_CPU_SIMD_ARCH_NEON64)
+#include "source/simulation/CPU/simd_neon64.h"
+#elif defined(TSP_CPU_SIMD_ARCH_AVX256)
+#include "source/simulation/CPU/simd_avx256.h"
+#elif defined(TSP_CPU_SIMD_ARCH_AVX512)
 #include "source/simulation/CPU/simd_avx512.h"
-#elif defined(TSP_CPU_SIMD_ARCH_AVX256) || !defined(TSP_CPU_SIMD_WIDTH)
+#elif !defined(TSP_CPU_SIMD_WIDTH)
 #include "source/simulation/CPU/simd_avx256.h"
 #else
-#error "Unsupported CPU SIMD architecture. Expected support for AVX256 or AVX512."
+#error "Unsupported CPU SIMD architecture. Expected NEON64, AVX256 or AVX512."
 #endif
 
 
@@ -290,7 +294,7 @@ namespace CPU
 
 		const Float32xSIMD distSqu = xsimd::fma(dx, dx, xsimd::fma(dy, dy, dz * dz));
 		const Mask32xSIMD inside = distSqu < radiusSqu;
-		const Float32xSIMD dist = xsimd::sqrt(distSqu);
+		const Float32xSIMD dist = SqrtFloat32xSIMD(distSqu);
 		const Float32xSIMD distNorm = dist * sizeInv;
 
 		const Float32xSIMD t1 = xsimd::max(one - distNorm, zero);
@@ -373,7 +377,7 @@ namespace CPU
 	{
 		const Float32xSIMD zero = xsimd::broadcast<float, SimdArch>(0.0f);
 
-		const Float32xSIMD dist = xsimd::sqrt(distSqu);
+		const Float32xSIMD dist = SqrtFloat32xSIMD(distSqu);
 
 		// factor q * (9q - 12) and cancel q / dist to avoid cancellation near zero
 		const Float32xSIMD innerFac = xsimd::fma(kernelConstants.innerSlope, dist, kernelConstants.innerOffset);
@@ -392,7 +396,7 @@ namespace CPU
 		const Float32xSIMD zero = xsimd::broadcast<float, SimdArch>(0.0f);
 		const Float32xSIMD minusFour = xsimd::broadcast<float, SimdArch>(-4.0f);
 
-		const Float32xSIMD dist = xsimd::sqrt(distSqu);
+		const Float32xSIMD dist = SqrtFloat32xSIMD(distSqu);
 		const Float32xSIMD t1 = xsimd::max(kernelConstants.size - dist, zero);
 		const Float32xSIMD t2 = xsimd::max(kernelConstants.twoSize - dist, zero);
 
