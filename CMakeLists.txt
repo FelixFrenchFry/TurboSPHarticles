@@ -24,7 +24,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(ENABLE_CUDA "Build GPU backend with CUDA" OFF)
 option(ENABLE_MPI "Build distributed headless application with MPI" OFF)
 
-set(TSP_CUDA_ARCHITECTURE "native" CACHE STRING "CUDA architecture")
 set(TSP_CPU_SIMD_ARCH "auto" CACHE STRING "CPU SIMD architecture")
 set_property(CACHE TSP_CPU_SIMD_ARCH PROPERTY STRINGS auto NEON64 AVX256 AVX512)
 
@@ -131,6 +130,8 @@ find_package(glm CONFIG REQUIRED)
 find_package(xsimd CONFIG REQUIRED)
 
 if(ENABLE_CUDA)
+    # targeting A100 (80), H100/H200 (90), B200/GB200 (100) and RTX 50 series (120)
+    set(CMAKE_CUDA_ARCHITECTURES "80;90;100;120" CACHE STRING "CUDA architectures")
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
     set(CMAKE_CUDA_STANDARD 20)
@@ -312,7 +313,6 @@ if(ENABLE_CUDA AND SRC_SIM_GPU)
     set_target_properties(TSP_H PROPERTIES
         CUDA_SEPARABLE_COMPILATION OFF
         POSITION_INDEPENDENT_CODE ON
-        CUDA_ARCHITECTURES "${TSP_CUDA_ARCHITECTURE}"
     )
     # keep IPO off when CUDA is enabled to avoid nvlink/LTO clashes
     set_property(TARGET TSP_H PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
@@ -346,7 +346,6 @@ if(ENABLE_VIS)
             CUDA_SEPARABLE_COMPILATION ON
             CUDA_RESOLVE_DEVICE_SYMBOLS OFF
             POSITION_INDEPENDENT_CODE ON
-            CUDA_ARCHITECTURES "${TSP_CUDA_ARCHITECTURE}"
         )
         set_property(TARGET TSP_V PROPERTY INTERPROCEDURAL_OPTIMIZATION OFF)
     endif()

@@ -32,7 +32,7 @@ jobs:
           - name: GCC 13 / Debug / AVX256
             id: gcc13-debug
             os: ubuntu-24.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: g++-13
             build_type: Debug
             linux_packages: g++-13
@@ -40,7 +40,7 @@ jobs:
           - name: GCC 13 / Release / AVX256
             id: gcc13-release
             os: ubuntu-24.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: g++-13
             build_type: Release
             linux_packages: g++-13
@@ -49,7 +49,7 @@ jobs:
           - name: GCC 15 / Debug / AVX256
             id: gcc15-debug
             os: ubuntu-26.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: g++-15
             build_type: Debug
             linux_packages: g++-15
@@ -57,7 +57,7 @@ jobs:
           - name: GCC 15 / Release / AVX256
             id: gcc15-release
             os: ubuntu-26.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: g++-15
             build_type: Release
             linux_packages: g++-15
@@ -66,7 +66,7 @@ jobs:
           - name: Clang 18 / Debug / AVX256
             id: clang18-debug
             os: ubuntu-24.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: clang++-18
             build_type: Debug
             linker_flags: -fuse-ld=/usr/bin/ld.lld-18
@@ -75,7 +75,7 @@ jobs:
           - name: Clang 18 / Release / AVX256
             id: clang18-release
             os: ubuntu-24.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: clang++-18
             build_type: Release
             linker_flags: -fuse-ld=/usr/bin/ld.lld-18
@@ -85,7 +85,7 @@ jobs:
           - name: Clang 21 / Debug / AVX256
             id: clang21-debug
             os: ubuntu-26.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: clang++-21
             build_type: Debug
             linker_flags: -fuse-ld=/usr/bin/ld.lld-21
@@ -94,7 +94,7 @@ jobs:
           - name: Clang 21 / Release / AVX256
             id: clang21-release
             os: ubuntu-26.04
-            preset: CI-Linux-Tests
+            preset: CI-Linux-x64-Headless-CPU-Tests
             compiler: clang++-21
             build_type: Release
             linker_flags: -fuse-ld=/usr/bin/ld.lld-21
@@ -104,7 +104,7 @@ jobs:
           - name: MSVC 19.44 (VS 2022) / Debug / AVX256
             id: msvc2022-debug
             os: windows-2022
-            preset: CI-Windows-Tests
+            preset: CI-Windows-x64-Headless-CPU-Tests
             compiler: cl
             build_type: Debug
             vs_version: '17.0'
@@ -113,7 +113,7 @@ jobs:
           - name: MSVC 19.44 (VS 2022) / Release / AVX256
             id: msvc2022-release
             os: windows-2022
-            preset: CI-Windows-Tests
+            preset: CI-Windows-x64-Headless-CPU-Tests
             compiler: cl
             build_type: Release
             vs_version: '17.0'
@@ -123,14 +123,14 @@ jobs:
           - name: MSVC 19.5x (VS 2026) / Debug / AVX256
             id: msvc2026-debug
             os: windows-2025-vs2026
-            preset: CI-Windows-Tests
+            preset: CI-Windows-x64-Headless-CPU-Tests
             compiler: cl
             build_type: Debug
             run_tests: true
           - name: MSVC 19.5x (VS 2026) / Release / AVX256
             id: msvc2026-release
             os: windows-2025-vs2026
-            preset: CI-Windows-Tests
+            preset: CI-Windows-x64-Headless-CPU-Tests
             compiler: cl
             build_type: Release
             run_tests: true
@@ -138,7 +138,7 @@ jobs:
           - name: Clang 18 / Debug / AVX256 / ASan + UBSan
             id: clang18-sanitizers
             os: ubuntu-24.04
-            preset: CI-Linux-Clang-Sanitizers
+            preset: CI-Linux-x64-Headless-CPU-Tests-ASan-UBSan
             compiler: clang++-18
             build_type: Debug
             linker_flags: -fsanitize=address,undefined
@@ -148,7 +148,7 @@ jobs:
           - name: GCC 13 / Release / MPI / COMPILE ONLY
             id: gcc13-mpi
             os: ubuntu-24.04
-            preset: CI-Linux-MPI
+            preset: CI-Linux-x64-Headless-CPU-MPI-Tests
             compiler: g++-13
             build_type: Release
             linux_packages: g++-13 libopenmpi-dev openmpi-bin
@@ -157,7 +157,7 @@ jobs:
           - name: GCC 15 / Release / AVX512 / COMPILE ONLY
             id: gcc15-avx512
             os: ubuntu-26.04
-            preset: CI-Linux-AVX512
+            preset: CI-Linux-x64-Headless-CPU-Tests-AVX512
             compiler: g++-15
             build_type: Release
             linux_packages: g++-15
@@ -165,7 +165,7 @@ jobs:
           - name: Clang 21 / Release / AVX512 / COMPILE ONLY
             id: clang21-avx512
             os: ubuntu-26.04
-            preset: CI-Linux-AVX512
+            preset: CI-Linux-x64-Headless-CPU-Tests-AVX512
             compiler: clang++-21
             build_type: Release
             linker_flags: -fuse-ld=/usr/bin/ld.lld-21
@@ -174,7 +174,7 @@ jobs:
           - name: MSVC 19.5x (VS 2026) / Release / AVX512 / COMPILE ONLY
             id: msvc2026-avx512
             os: windows-2025-vs2026
-            preset: CI-Windows-AVX512
+            preset: CI-Windows-x64-Headless-CPU-Tests-AVX512
             compiler: cl
             build_type: Release
             run_tests: false
@@ -260,7 +260,7 @@ jobs:
 
   # build CUDA without GPU execution
   cuda_compile:
-    name: CUDA 13.2 / GCC 13 / Release / sm_80 / COMPILE ONLY
+    name: CUDA 13.2 / GCC 13 / Release / COMPILE ONLY
     runs-on: ubuntu-24.04
     container: nvidia/cuda:13.2.1-devel-ubuntu24.04
     timeout-minutes: 45
@@ -296,26 +296,25 @@ jobs:
         uses: actions/cache@v6
         with:
           path: out/vcpkg_cache
-          key: vcpkg-CI-Linux-CUDA-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: vcpkg-CI-Linux-CUDA-
+          key: vcpkg-CI-Linux-x64-Release-Headless-CUDA-Tests-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: vcpkg-CI-Linux-x64-Release-Headless-CUDA-Tests-
 
-      # use sm_80 without GPU detection
       - name: Configure
         run: >-
-          cmake --preset CI-Linux-CUDA
+          cmake --preset CI-Linux-x64-Release-Headless-CUDA-Tests
           -DCMAKE_CXX_COMPILER=g++-13
 
       - name: Compile and link applications and maintained tests
-        run: cmake --build out/build/CI-Linux-CUDA --parallel 2
+        run: cmake --build out/build/CI-Linux-x64-Release-Headless-CUDA-Tests --parallel 2
 
       # always save configuration diagnostics
       - name: Upload configuration diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: diagnostics-CI-Linux-CUDA
+          name: diagnostics-CI-Linux-x64-Release-Headless-CUDA-Tests
           path: |
-            out/build/CI-Linux-CUDA/CMakeFiles/CMakeConfigureLog.yaml
-            out/build/CI-Linux-CUDA/vcpkg-manifest-install.log
+            out/build/CI-Linux-x64-Release-Headless-CUDA-Tests/CMakeFiles/CMakeConfigureLog.yaml
+            out/build/CI-Linux-x64-Release-Headless-CUDA-Tests/vcpkg-manifest-install.log
           if-no-files-found: ignore
           retention-days: 7

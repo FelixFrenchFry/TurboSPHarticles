@@ -75,7 +75,7 @@
     },
 
     {
-      "name": "Windows-Debug",
+      "name": "Windows-x64-Debug-Visual-CUDA",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -83,7 +83,7 @@
       }
     },
     {
-      "name": "Windows-RelWithDeb",
+      "name": "Windows-x64-RelWithDebInfo-Visual-CUDA",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -92,7 +92,7 @@
       }
     },
     {
-      "name": "Windows-Release",
+      "name": "Windows-x64-Release-Visual-CUDA",
       "inherits": "base-win",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -101,7 +101,7 @@
       }
     },
     {
-      "name": "Windows-Debug-MPI",
+      "name": "Windows-x64-Debug-Headless-CPU-MPI",
       "inherits": "base-win-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -109,7 +109,7 @@
       }
     },
     {
-      "name": "Windows-RelWithDeb-MPI",
+      "name": "Windows-x64-RelWithDebInfo-Headless-CPU-MPI",
       "inherits": "base-win-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -118,7 +118,7 @@
       }
     },
     {
-      "name": "Windows-Release-MPI",
+      "name": "Windows-x64-Release-Headless-CPU-MPI",
       "inherits": "base-win-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -128,7 +128,7 @@
     },
 
     {
-      "name": "Linux-Debug",
+      "name": "Linux-x64-Debug-Visual-CUDA",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -136,7 +136,7 @@
       }
     },
     {
-      "name": "Linux-RelWithDeb",
+      "name": "Linux-x64-RelWithDebInfo-Visual-CUDA",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -145,7 +145,7 @@
       }
     },
     {
-      "name": "Linux-Release",
+      "name": "Linux-x64-Release-Visual-CUDA",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -154,17 +154,28 @@
       }
     },
     {
-      "name": "Linux-Release-CUDA",
+      "name": "Linux-x64-Release-Headless-CUDA",
       "inherits": "base-linux",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "TSP_CUDA_ARCHITECTURE": "80;90",
         "ENABLE_VIS": "OFF"
       }
     },
     {
-      "name": "Linux-Debug-MPI",
+      "name": "Linux-arm64-Release-Headless-CUDA",
+      "inherits": "base-linux",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_VIS": "OFF",
+        "TSP_CPU_SIMD_ARCH": "NEON64",
+        "VCPKG_TARGET_TRIPLET": "arm64-linux",
+        "VCPKG_HOST_TRIPLET": "arm64-linux"
+      }
+    },
+    {
+      "name": "Linux-x64-Debug-Headless-CPU-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -172,7 +183,7 @@
       }
     },
     {
-      "name": "Linux-RelWithDeb-MPI",
+      "name": "Linux-x64-RelWithDebInfo-Headless-CPU-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -181,7 +192,7 @@
       }
     },
     {
-      "name": "Linux-Release-MPI",
+      "name": "Linux-x64-Release-Headless-CPU-MPI",
       "inherits": "base-linux-mpi",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
@@ -210,47 +221,45 @@
       "inherits": [ "ci", "base-linux" ]
     },
     {
-      "name": "CI-Linux-Tests",
+      "name": "CI-Linux-x64-Headless-CPU-Tests",
       "inherits": "ci-linux"
     },
     {
-      "name": "CI-Windows-Tests",
+      "name": "CI-Windows-x64-Headless-CPU-Tests",
       "inherits": [ "ci", "base-win" ]
     },
     {
-      "name": "CI-Linux-Clang-Sanitizers",
-      "inherits": "CI-Linux-Tests",
+      "name": "CI-Linux-x64-Headless-CPU-Tests-ASan-UBSan",
+      "inherits": "CI-Linux-x64-Headless-CPU-Tests",
       "cacheVariables": {
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
       }
     },
     {
-      "name": "CI-Linux-MPI",
-      "inherits": "CI-Linux-Tests",
+      "name": "CI-Linux-x64-Headless-CPU-MPI-Tests",
+      "inherits": "CI-Linux-x64-Headless-CPU-Tests",
       "cacheVariables": {
         "ENABLE_MPI": "ON"
       }
     },
     {
-      "name": "CI-Linux-AVX512",
-      "inherits": "CI-Linux-Tests",
+      "name": "CI-Linux-x64-Headless-CPU-Tests-AVX512",
+      "inherits": "CI-Linux-x64-Headless-CPU-Tests",
       "cacheVariables": {
         "TSP_CPU_SIMD_ARCH": "AVX512"
       }
     },
     {
-      "name": "CI-Windows-AVX512",
-      "inherits": "CI-Windows-Tests",
+      "name": "CI-Windows-x64-Headless-CPU-Tests-AVX512",
+      "inherits": "CI-Windows-x64-Headless-CPU-Tests",
       "cacheVariables": { "TSP_CPU_SIMD_ARCH": "AVX512" }
     },
     {
-      "name": "CI-Linux-CUDA",
+      "name": "CI-Linux-x64-Release-Headless-CUDA-Tests",
       "inherits": "ci-linux",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_CUDA": "ON",
-        "TSP_CUDA_ARCHITECTURE": "80",
-        "CMAKE_CUDA_ARCHITECTURES": "80",
         "CMAKE_CUDA_HOST_COMPILER": "g++-13"
       }
     }
@@ -258,57 +267,61 @@
 
   "buildPresets": [
     {
-      "name": "Windows-Debug",
-      "configurePreset": "Windows-Debug"
+      "name": "Windows-x64-Debug-Visual-CUDA",
+      "configurePreset": "Windows-x64-Debug-Visual-CUDA"
     },
     {
-      "name": "Windows-RelWithDeb",
-      "configurePreset": "Windows-RelWithDeb"
+      "name": "Windows-x64-RelWithDebInfo-Visual-CUDA",
+      "configurePreset": "Windows-x64-RelWithDebInfo-Visual-CUDA"
     },
     {
-      "name": "Windows-Release",
-      "configurePreset": "Windows-Release"
+      "name": "Windows-x64-Release-Visual-CUDA",
+      "configurePreset": "Windows-x64-Release-Visual-CUDA"
     },
     {
-      "name": "Windows-Debug-MPI",
-      "configurePreset": "Windows-Debug-MPI"
+      "name": "Windows-x64-Debug-Headless-CPU-MPI",
+      "configurePreset": "Windows-x64-Debug-Headless-CPU-MPI"
     },
     {
-      "name": "Windows-RelWithDeb-MPI",
-      "configurePreset": "Windows-RelWithDeb-MPI"
+      "name": "Windows-x64-RelWithDebInfo-Headless-CPU-MPI",
+      "configurePreset": "Windows-x64-RelWithDebInfo-Headless-CPU-MPI"
     },
     {
-      "name": "Windows-Release-MPI",
-      "configurePreset": "Windows-Release-MPI"
+      "name": "Windows-x64-Release-Headless-CPU-MPI",
+      "configurePreset": "Windows-x64-Release-Headless-CPU-MPI"
     },
 
     {
-      "name": "Linux-Debug",
-      "configurePreset": "Linux-Debug"
+      "name": "Linux-x64-Debug-Visual-CUDA",
+      "configurePreset": "Linux-x64-Debug-Visual-CUDA"
     },
     {
-      "name": "Linux-RelWithDeb",
-      "configurePreset": "Linux-RelWithDeb"
+      "name": "Linux-x64-RelWithDebInfo-Visual-CUDA",
+      "configurePreset": "Linux-x64-RelWithDebInfo-Visual-CUDA"
     },
     {
-      "name": "Linux-Release",
-      "configurePreset": "Linux-Release"
+      "name": "Linux-x64-Release-Visual-CUDA",
+      "configurePreset": "Linux-x64-Release-Visual-CUDA"
     },
     {
-      "name": "Linux-Release-CUDA",
-      "configurePreset": "Linux-Release-CUDA"
+      "name": "Linux-x64-Release-Headless-CUDA",
+      "configurePreset": "Linux-x64-Release-Headless-CUDA"
     },
     {
-      "name": "Linux-Debug-MPI",
-      "configurePreset": "Linux-Debug-MPI"
+      "name": "Linux-arm64-Release-Headless-CUDA",
+      "configurePreset": "Linux-arm64-Release-Headless-CUDA"
     },
     {
-      "name": "Linux-RelWithDeb-MPI",
-      "configurePreset": "Linux-RelWithDeb-MPI"
+      "name": "Linux-x64-Debug-Headless-CPU-MPI",
+      "configurePreset": "Linux-x64-Debug-Headless-CPU-MPI"
     },
     {
-      "name": "Linux-Release-MPI",
-      "configurePreset": "Linux-Release-MPI"
+      "name": "Linux-x64-RelWithDebInfo-Headless-CPU-MPI",
+      "configurePreset": "Linux-x64-RelWithDebInfo-Headless-CPU-MPI"
+    },
+    {
+      "name": "Linux-x64-Release-Headless-CPU-MPI",
+      "configurePreset": "Linux-x64-Release-Headless-CPU-MPI"
     }
   ]
 }

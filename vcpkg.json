@@ -1,7 +1,7 @@
 {
   "name": "turbospharticles",
   "version": "0.1.0",
-  "builtin-baseline": "7213cf8135c329c37c7e2778e40774489a0583a8",
+  "builtin-baseline": "9eec002df1cd109f8f104cd966a763daf9751489",
   "dependencies": [
     "tbb",
     "spdlog",
@@ -10,6 +10,9 @@
     "boost-container",
     "glm",
     "xsimd"
+  ],
+  "overrides": [
+    { "name": "imgui", "version": "1.91.9" }
   ],
   "features": {
     "tests": {
