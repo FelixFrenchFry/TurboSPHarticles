@@ -112,32 +112,6 @@ find_package(Boost CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(xsimd CONFIG REQUIRED)
 
-# probe for /openmp:llvm on MSVC and fall back
-if(MSVC)
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("/openmp:llvm" HAS_OPENMP_LLVM_FLAG)
-    check_cxx_compiler_flag("/openmp:experimental" HAS_OPENMP_EXP_FLAG)
-    add_library(MSVC_LLVM_OpenMP INTERFACE)
-
-    if(HAS_OPENMP_LLVM_FLAG)
-        target_compile_options(MSVC_LLVM_OpenMP INTERFACE
-            $<$<COMPILE_LANGUAGE:CXX>:/openmp:llvm>)  # modern LLVM libomp
-        if(HAS_OPENMP_EXP_FLAG)
-            target_compile_options(MSVC_LLVM_OpenMP INTERFACE
-                $<$<COMPILE_LANGUAGE:CXX>:/openmp:experimental>)
-        endif()
-        message(STATUS "OpenMP: MSVC using /openmp:llvm (+experimental for simd)")
-    else()
-        # fallback to classic /openmp (older vcomp runtime)
-        target_compile_options(MSVC_LLVM_OpenMP INTERFACE
-            $<$<COMPILE_LANGUAGE:CXX>:/openmp>)
-        message(WARNING "OpenMP: /openmp:llvm not supported by this MSVC; falling back to /openmp.")
-    endif()
-else()
-    # explicitly request CXX component
-    find_package(OpenMP REQUIRED COMPONENTS CXX)
-endif()
-
 if(ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
@@ -165,7 +139,6 @@ file(GLOB_RECURSE SRC_SIM_CORE CONFIGURE_DEPENDS "source/simulation/core/*.cpp")
 file(GLOB_RECURSE SRC_SIM_SCENE CONFIGURE_DEPENDS "source/simulation/scene/*.cpp")
 file(GLOB_RECURSE SRC_SIM_SYNC CONFIGURE_DEPENDS "source/simulation/sync/*.cpp")
 file(GLOB_RECURSE SRC_SIM_CPU CONFIGURE_DEPENDS "source/simulation/CPU/*.cpp")
-list(FILTER SRC_SIM_CPU EXCLUDE REGEX "/legacy/")
 
 if(ENABLE_CUDA)
     file(GLOB_RECURSE SRC_SIM_GPU CONFIGURE_DEPENDS
@@ -325,8 +298,6 @@ target_link_libraries(TSP_H PUBLIC
     Project_Warnings
     Project_Defines
     Project_Options
-    $<$<CXX_COMPILER_ID:MSVC>:MSVC_LLVM_OpenMP>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:OpenMP::OpenMP_CXX>
 )
 
 if(ENABLE_CUDA)

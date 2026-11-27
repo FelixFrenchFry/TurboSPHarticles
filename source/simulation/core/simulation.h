@@ -147,7 +147,6 @@ namespace Sim
 		static constexpr uint8_t visualParticleMaskR_ = 1 << 1;
 		std::atomic<uint8_t> visualParticleMask_{ visualParticleMaskF_ | visualParticleMaskR_ };
 
-		// controller thread spawns worker threads within OpenMP parallel regions
 		std::jthread controllerThread_;
 		std::atomic<bool> running_{ false };
 		std::atomic<bool> stopRequested_{ false };

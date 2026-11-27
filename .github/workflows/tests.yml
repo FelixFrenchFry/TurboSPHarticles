@@ -70,7 +70,7 @@ jobs:
             compiler: clang++-18
             build_type: Debug
             linker_flags: -fuse-ld=/usr/bin/ld.lld-18
-            linux_packages: clang-18 libomp-18-dev lld-18 llvm-18
+            linux_packages: clang-18 lld-18 llvm-18
             run_tests: true
           - name: Clang 18 / Release / AVX256
             id: clang18-release
@@ -79,7 +79,7 @@ jobs:
             compiler: clang++-18
             build_type: Release
             linker_flags: -fuse-ld=/usr/bin/ld.lld-18
-            linux_packages: clang-18 libomp-18-dev lld-18 llvm-18
+            linux_packages: clang-18 lld-18 llvm-18
             run_tests: true
           # Clang 21 on Ubuntu 26.04 (Debug and Release)
           - name: Clang 21 / Debug / AVX256
@@ -89,7 +89,7 @@ jobs:
             compiler: clang++-21
             build_type: Debug
             linker_flags: -fuse-ld=/usr/bin/ld.lld-21
-            linux_packages: clang-21 libomp-21-dev lld-21 llvm-21
+            linux_packages: clang-21 lld-21 llvm-21
             run_tests: true
           - name: Clang 21 / Release / AVX256
             id: clang21-release
@@ -98,7 +98,7 @@ jobs:
             compiler: clang++-21
             build_type: Release
             linker_flags: -fuse-ld=/usr/bin/ld.lld-21
-            linux_packages: clang-21 libomp-21-dev lld-21 llvm-21
+            linux_packages: clang-21 lld-21 llvm-21
             run_tests: true
           # MSVC 19.44 (VS 2022) on Windows Server 2022 (Debug and Release)
           - name: MSVC 19.44 (VS 2022) / Debug / AVX256
@@ -142,7 +142,7 @@ jobs:
             compiler: clang++-18
             build_type: Debug
             linker_flags: -fsanitize=address,undefined
-            linux_packages: clang-18 libomp-18-dev libclang-rt-18-dev llvm-18
+            linux_packages: clang-18 libclang-rt-18-dev llvm-18
             run_tests: true
           # build the distributed application, but do not run MPI tests
           - name: GCC 13 / Release / MPI / COMPILE ONLY
@@ -169,7 +169,7 @@ jobs:
             compiler: clang++-21
             build_type: Release
             linker_flags: -fuse-ld=/usr/bin/ld.lld-21
-            linux_packages: clang-21 libomp-21-dev lld-21 llvm-21
+            linux_packages: clang-21 lld-21 llvm-21
             run_tests: false
           - name: MSVC 19.5x (VS 2026) / Release / AVX512 / COMPILE ONLY
             id: msvc2026-avx512
