@@ -5,7 +5,6 @@
 #include <atomic>
 #include <glm/vec3.hpp>
 #include <cmath>
-#include <spdlog/spdlog.h>
 #include <tbb/parallel_for.h>
 
 // internal
@@ -1058,6 +1057,8 @@ void SimBackend_GPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_DeviceBuffer(d_densityStats_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_velocityStatsPartials_));
 		Add(usage, MemUsageOf_DeviceBuffer(d_velocityStats_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_pressureSolveErrorSumsPartials_));
+		Add(usage, MemUsageOf_DeviceBuffer(d_pressureSolveErrorSums_));
 
 		Set(record, memSpaceVRAM, MemBucket::Misc, usage);
 	}
@@ -1412,16 +1413,27 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_SourceAndDiagonal);
 
-		// --- [ relaxed jacobi solver for pressure ] ---------------------------------------------------
+		// --- [ relaxed Jacobi solver for pressure ] ---------------------------------------------------
 
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
-		// rest solver-related variables
-		N_solverIters_ = 1;
-
-		do
+		// reset solver-related variables
+		N_solverIters_ = N_F_ > 0 ? 1 : 0;
+		avgRelDensityErrorF_raw_ = 0.0f;
+		avgRelDensityErrorF_pos_ = 0.0f;
+		avgRelDensityErrorF_abs_ = 0.0f;
+		const uint32_t N_errorPartials = GPU::PressureSolveErrorPartialCount(N_F_);
+		if (d_pressureSolveErrorSumsPartials_.Size() < N_errorPartials)
 		{
-			// [ loop 1: pressure acceleration ] --------------------------------------------------------
+			d_pressureSolveErrorSumsPartials_.Resize(N_errorPartials);
+		}
+		d_pressureSolveErrorSums_.Resize(1);
+
+		while (N_F_ > 0) // Jacobi iteration loop
+		{
+			PressureSolveErrorSums errorSums{};
+
+			// compute pressure acceleration from current pressure field
 			GPU::Launch_PressureAcceleration(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1438,7 +1450,15 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				N_F_, N_B_, N_R_, stream_,
 				d_xAccPressF_.Data(), d_yAccPressF_.Data(), d_zAccPressF_.Data());
 
-			// [ loop 2: relaxed jacobi solver ] --------------------------------------------------------
+			N_solverIters_++;
+
+			// fixed iterations only read the error sums of the last one
+			// (and iterations below minSolverIters cannot terminate, so they skip them too)
+			const bool computeErrors = N_solverIters_ >= params.minSolverIters &&
+				(params.solverTerminationCond != Base::SolverTerminationCond::FixedIters ||
+				 TerminationConditionSatisfied(params));
+
+			// update system vector and pressure
 			GPU::Launch_PressureRelaxedJacobiSolver(
 				d_xPosF_.Data(), d_yPosF_.Data(), d_zPosF_.Data(),
 				d_xPosB_.Data(), d_yPosB_.Data(), d_zPosB_.Data(),
@@ -1454,10 +1474,26 @@ void SimBackend_GPU::ExecuteFullSimStep(const SimParams& params, uint32_t N_step
 				d_nbrListDelta16FF_.Data(), d_nbrListDelta16FB_.Data(), d_nbrListDelta16FR_.Data(),
 				d_nbrListAbs32FF_.Data(), d_nbrListAbs32FB_.Data(), d_nbrListAbs32FR_.Data(),
 				N_F_, N_B_, N_R_, stream_,
-				d_pressureF_.Data());
+				d_pressureF_.Data(),
+				d_pressureSolveErrorSumsPartials_.Data(),
+				d_pressureSolveErrorSums_.Data(),
+				computeErrors);
 
-			N_solverIters_++;
-		} while (!TerminationConditionSatisfied(params));
+			if (computeErrors)
+			{
+				GPU::Copy_DeviceToHost(&errorSums, d_pressureSolveErrorSums_.Data(), 1, stream_);
+				GPU::StreamSync(stream_);
+
+				avgRelDensityErrorF_raw_ = static_cast<float>(errorSums.raw)
+					/ static_cast<float>(N_F_);
+				avgRelDensityErrorF_pos_ = static_cast<float>(errorSums.pos)
+					/ static_cast<float>(N_F_);
+				avgRelDensityErrorF_abs_ = static_cast<float>(errorSums.abs)
+					/ static_cast<float>(N_F_);
+			}
+
+			if (TerminationConditionSatisfied(params)) { break; }
+		}
 		GPU::StreamSync(stream_);
 		benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 
@@ -1576,29 +1612,30 @@ bool SimBackend_GPU::TerminationConditionSatisfied(const SimParams& params) cons
 		break;
 
 	case Base::SolverTerminationCond::RelDensityError_Raw:
-	case Base::SolverTerminationCond::RelDensityError_Pos:
-	case Base::SolverTerminationCond::RelDensityError_Abs:
-	{
-		// TODO: implement
-		static bool warnedNotImplemented = false;
-		if (!warnedNotImplemented)
+		if (avgRelDensityErrorF_raw_ <= params.densityDevTarget)
 		{
-			SPDLOG_WARN("GPU solver termination condition '{}' is currently not implemented. "
-				"Falling back to maxSolverIters.",
-				Base::ToCString(params.solverTerminationCond));
-			warnedNotImplemented = true;
+			satisfied = true;
 		}
-	}
+		break;
+
+	case Base::SolverTerminationCond::RelDensityError_Pos:
+		if (avgRelDensityErrorF_pos_ <= params.densityDevTarget)
+		{
+			satisfied = true;
+		}
+		break;
+
+	case Base::SolverTerminationCond::RelDensityError_Abs:
+		if (avgRelDensityErrorF_abs_ <= params.densityDevTarget)
+		{
+			satisfied = true;
+		}
 		break;
 
 	default:
-		// unknown enum value
-		static bool warnedUnknown = false;
-		if (!warnedUnknown)
+		if (N_solverIters_ >= 3)
 		{
-			SPDLOG_WARN("GPU solver termination condition '<unknown>' is currently not implemented. "
-				"Falling back to maxSolverIters.");
-			warnedUnknown = true;
+			satisfied = true;
 		}
 		break;
 	}

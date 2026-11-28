@@ -6,6 +6,7 @@
 
 // internal
 #include "source/simulation/GPU/gpu_utils.h"
+#include "common.cuh"
 #include "snapshot_kernels.cuh"
 
 
@@ -89,7 +90,7 @@ namespace GPU
 		Sync::VisualParticleSample* fluidDst,
 		Sync::VisualParticleSample* rigidDst)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 
 		// pack fluid particles into visual samples
 		if (N_F > 0)

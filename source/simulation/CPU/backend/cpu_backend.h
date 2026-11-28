@@ -208,6 +208,10 @@ namespace Sim
 		uint32_t N_ownedB_ = 0;
 		uint32_t N_ownedR_ = 0;
 		uint32_t N_solverIters_ = 0;
+		// average relative density errors of the latest pressure solver iteration that computed them
+		float avgRelDensityErrorF_raw_ = 0.0f;
+		float avgRelDensityErrorF_pos_ = 0.0f;
+		float avgRelDensityErrorF_abs_ = 0.0f;
 
 		// simulation domain reported by the manager, empty extent while it is unknown
 		glm::vec3 simDomainMin_ = glm::vec3(0.0f);
@@ -337,11 +341,6 @@ namespace Sim
 		bool useDistributedStepWork_ = false;
 		bool integrateRigidBodies_ = true;
 		bool applyRigidBodyExternalForces_ = true;
-
-		// misc data
-		float avgRelDensityErrorF_raw_;
-		float avgRelDensityErrorF_pos_;
-		float avgRelDensityErrorF_abs_;
 
 		// re-usable work (scratch) buffers for temp storage
 		// TODO: rework this?

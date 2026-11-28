@@ -5,6 +5,9 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
+// internal
+#include "common.cuh"
+
 
 
 namespace GPU
@@ -35,12 +38,10 @@ namespace GPU
 		float velMagMax = 0.0f;
 	};
 
-	static constexpr uint32_t N_STATISTICS_REDUCTION_BLOCK = 256u;
-
 	inline uint32_t StatisticsReductionBlockCount(const uint32_t N_F)
 	{
-		return (N_F + N_STATISTICS_REDUCTION_BLOCK - 1u) /
-			N_STATISTICS_REDUCTION_BLOCK;
+		return (N_F + N_DEFAULT_BLOCK_SIZE - 1u) /
+			N_DEFAULT_BLOCK_SIZE;
 	}
 
 	void Launch_ComputeNeighborCountStats(

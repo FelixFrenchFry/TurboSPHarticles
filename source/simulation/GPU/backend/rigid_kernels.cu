@@ -571,7 +571,7 @@ namespace GPU
 	{
 		if (N_R == 0) { return; }
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 		K_UpdateRigidParticles<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			bodyIdR, xPosRelR, yPosRelR, zPosRelR,
@@ -595,7 +595,7 @@ namespace GPU
 	{
 		if (N_RB == 0) { return; }
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_RB + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_ClearRigidForcesAndAddGravity<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -629,7 +629,7 @@ namespace GPU
 		float* xForceR, float* yForceR, float* zForceR)
 	{
 		if (N_R == 0) { return; }
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 		K_AccumulateRigidParticleNonPressureForces<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR,
@@ -660,7 +660,7 @@ namespace GPU
 		float* xForceR, float* yForceR, float* zForceR)
 	{
 		if (N_R == 0) { return; }
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 		K_AccumulateRigidParticlePressureForces<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosR, yPosR, zPosR, pressureF, psiR,
@@ -691,7 +691,7 @@ namespace GPU
 	{
 		if (N_RB == 0 || N_R == 0) { return; }
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = N_RB;
 		const uint32_t N_sharedBytes = 6u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 
@@ -736,7 +736,7 @@ namespace GPU
 	{
 		if (N_RB == 0) { return; }
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_RB + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_IntegrateRigidBodies<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(

@@ -7,12 +7,19 @@
 
 // internal
 #include "common.cuh"
+#include "source/simulation/core/backend_sim.h"
 #include "source/simulation/core/parameters_sim.h"
 
 
 
 namespace GPU
 {
+	// one partial error sum per pressure solver block
+	inline uint32_t PressureSolveErrorPartialCount(const uint32_t N_F)
+	{
+		return (N_F + N_DEFAULT_BLOCK_SIZE - 1u) / N_DEFAULT_BLOCK_SIZE;
+	}
+
 	void ReloadConstants(const Sim::SimParams& params, uint32_t N_F, uint32_t N_B, cudaStream_t stream);
 
 	void Launch_Density(
@@ -172,7 +179,10 @@ namespace GPU
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
-		float* pressureF);
+		float* pressureF,
+		Sim::PressureSolveErrorSums* partialErrorSums,
+		Sim::PressureSolveErrorSums* errorSums,
+		bool computeErrors);
 
 	void Launch_Integration(
 		const float* xVelPredF, const float* yVelPredF, const float* zVelPredF,

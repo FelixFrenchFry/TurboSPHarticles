@@ -229,9 +229,10 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 		N_solverIters_++;
 
 		// fixed iterations only read the error sums of the last one
-		const bool computeErrors = params.solverTerminationCond !=
-			Base::SolverTerminationCond::FixedIters ||
-			TerminationConditionSatisfied(params);
+		// (and iterations below minSolverIters cannot terminate, so they skip them too)
+		const bool computeErrors = N_solverIters_ >= params.minSolverIters &&
+			(params.solverTerminationCond != Base::SolverTerminationCond::FixedIters ||
+			 TerminationConditionSatisfied(params));
 
 		// update system vector and pressure
 		CPU::PressureRelaxedJacobiSolver_ChunkedSELL(
@@ -246,7 +247,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 			params.restDensity, massF, params.jacobiOmega,
 			N_F_, affinityParts_->full, pressureF, nullptr, errorSums, {}, false, computeErrors);
 
-		if (N_F_ > 0)
+		if (computeErrors)
 		{
 			avgRelDensityErrorF_raw_ = static_cast<float>(errorSums.raw)
 				/ static_cast<float>(N_F_);
@@ -518,13 +519,15 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
 	// reset solver-related variables
-	N_solverIters_ = 1;
+	const uint64_t N_globalF = sync.GetGlobalFluidParticleCount();
+	N_solverIters_ = N_globalF > 0 ? 1 : 0;
 	avgRelDensityErrorF_raw_ = 0.0f;
 	avgRelDensityErrorF_pos_ = 0.0f;
 	avgRelDensityErrorF_abs_ = 0.0f;
 
-	do // Jacobi iteration loop
+	while (N_globalF > 0) // Jacobi iteration loop
 	{
+		// compute pressure acceleration from current pressure field
 		const auto computePressureAcceleration = [&](
 			const std::span<const uint32_t> chunkIdxs,
 			const uint32_t N_fluidCenters,
@@ -571,6 +574,15 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 			benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 		}
 
+		N_solverIters_++;
+
+		// fixed iterations only read the error sums of the last one
+		// (and iterations below minSolverIters cannot terminate, so they skip them too)
+		const bool computeErrors = N_solverIters_ >= params.minSolverIters &&
+			(params.solverTerminationCond != Base::SolverTerminationCond::FixedIters ||
+			 TerminationConditionSatisfied(params));
+
+		// update system vector and pressure
 		const auto updatePressure = [&](const std::span<const uint32_t> chunkIdxs,
 			tbb::affinity_partitioner& affPart)
 		{
@@ -587,7 +599,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				params.restDensity, massF, params.jacobiOmega,
 				N_ownedF_, affPart, pressureF,
 				nullptr, errorSums,
-				chunkIdxs, true);
+				chunkIdxs, true, computeErrors);
 			return errorSums;
 		};
 
@@ -607,26 +619,19 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 		EndFluidFieldSync();
 		benchmarksTracker_.StartBench(Bench::BenchOp::Pressure_JacobiSolver);
 
-		// make every rank use the same global convergence criterion
-		const PressureSolveErrorSums errorSums =
-			sync.GlobalizePressureSolveErrorSums(localErrorSums);
-		const uint64_t N_globalF = sync.GetGlobalFluidParticleCount();
-		if (N_globalF > 0)
+		if (computeErrors)
 		{
+			// make every rank use the same global convergence criterion
+			const PressureSolveErrorSums errorSums =
+				sync.GlobalizePressureSolveErrorSums(localErrorSums);
 			const double N_globalF_inv = 1.0 / static_cast<double>(N_globalF);
 			avgRelDensityErrorF_raw_ = static_cast<float>(errorSums.raw * N_globalF_inv);
 			avgRelDensityErrorF_pos_ = static_cast<float>(errorSums.pos * N_globalF_inv);
 			avgRelDensityErrorF_abs_ = static_cast<float>(errorSums.abs * N_globalF_inv);
 		}
-		else
-		{
-			avgRelDensityErrorF_raw_ = 0.0f;
-			avgRelDensityErrorF_pos_ = 0.0f;
-			avgRelDensityErrorF_abs_ = 0.0f;
-		}
 
-		N_solverIters_++;
-	} while (!TerminationConditionSatisfied(params));
+		if (TerminationConditionSatisfied(params)) { break; }
+	}
 
 	benchmarksTracker_.StopBench(Bench::BenchOp::Pressure_JacobiSolver);
 

@@ -10,6 +10,9 @@ namespace GPU
 {
 	static constexpr uint32_t N_SELL_WIDTH = 32u;
 
+	// threads per block for kernels without a tuned block size
+	static constexpr uint32_t N_DEFAULT_BLOCK_SIZE = 256u;
+
 	// (a single 16-bit window is a Delta16x2 chunk with the second base index 0x8000 above the first)
 	enum class NbrChunkFormat : uint8_t
 	{

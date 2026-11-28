@@ -181,6 +181,10 @@ namespace Sim
 		uint32_t N_R_ = 0; // number of rigid particles
 		uint32_t N_RB_ = 0; // number of rigid bodies
 		uint32_t N_solverIters_ = 0;
+		// average relative density errors of the latest pressure solver iteration that computed them
+		float avgRelDensityErrorF_raw_ = 0.0f;
+		float avgRelDensityErrorF_pos_ = 0.0f;
+		float avgRelDensityErrorF_abs_ = 0.0f;
 		Vec3f simDomainMin_{};
 		Vec3f simDomainMax_{};
 		bool simDomainBoundsValid_ = false;
@@ -308,6 +312,10 @@ namespace Sim
 		mutable DeviceBuffer<GPU::VelocityStats> d_velocityStatsPartials_;
 		mutable DeviceBuffer<GPU::VelocityStats> d_velocityStats_;
 		mutable GPU::VelocityStats h_velocityStats_;
+
+		// scratch for pressure solver error sums, ceil(N_F / 256) entries -> one result
+		DeviceBuffer<PressureSolveErrorSums> d_pressureSolveErrorSumsPartials_;
+		DeviceBuffer<PressureSolveErrorSums> d_pressureSolveErrorSums_;
 
 		// re-usable host staging buffers for export snapshot packing
 		// (reduces per-export allocations and allocator overhead)

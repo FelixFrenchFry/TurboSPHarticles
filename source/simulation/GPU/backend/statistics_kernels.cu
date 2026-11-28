@@ -411,7 +411,7 @@ namespace GPU
 
 		GPU::MemsetZero(nbrCountHist, N_NBR_COUNT_HISTOGRAM_BINS, stream);
 
-		const uint32_t N_BLOCK_SIZE = 256u;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1u) / N_BLOCK_SIZE;
 
 		K_BuildNeighborCountHistogram<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -446,7 +446,7 @@ namespace GPU
 			return;
 		}
 
-		const uint32_t N_BLOCK_SIZE = N_STATISTICS_REDUCTION_BLOCK;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = StatisticsReductionBlockCount(N_F);
 		const uint32_t N_sharedBytes = 3u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 
@@ -477,7 +477,7 @@ namespace GPU
 			return;
 		}
 
-		const uint32_t N_BLOCK_SIZE = N_STATISTICS_REDUCTION_BLOCK;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = StatisticsReductionBlockCount(N_F);
 		const uint32_t N_sharedBytes = 3u * N_BLOCK_SIZE * static_cast<uint32_t>(sizeof(float));
 

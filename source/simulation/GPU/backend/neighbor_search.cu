@@ -386,7 +386,7 @@ void SimBackend_GPU::FinalizeNeighborLists_Count()
 	}
 	else
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = GPU::N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_chunks + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		auto finalizeSell = [&](

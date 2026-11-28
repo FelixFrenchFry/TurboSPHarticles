@@ -1305,7 +1305,7 @@ namespace GPU
 		// destinations
 		uint32_t* cellStartMarker)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_MarkCellStarts<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1324,7 +1324,7 @@ namespace GPU
 		uint64_t* uniqueCellId,
 		uint32_t* cellStartIdx)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_FillUniqueCellIdAndCellStartIdx<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1346,7 +1346,7 @@ namespace GPU
 		// destinations
 		CellRangeByAny* cellRangeByAny)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = N_nonEmptyCellsAny == 0
 			? 0
 			: 1u + (N_nonEmptyCellsAny - 1u) / N_BLOCK_SIZE;
@@ -1375,7 +1375,7 @@ namespace GPU
 		uint32_t* queryLoAnyByCellF,
 		uint32_t* queryHiAnyByCellF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsF + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_FillQueryLookupBoundsF<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1400,7 +1400,7 @@ namespace GPU
 		// destinations
 		uint32_t* queryCellRefAnyByCellF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_nonEmptyCellsF + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_FillQueryCellRefsByCellF<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1420,7 +1420,7 @@ namespace GPU
 		// destinations
 		uint64_t* cellId, uint32_t* sortedParticleIdx)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_FillCellIdAndInitParticleIdx<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1461,7 +1461,7 @@ namespace GPU
 		(void)N_B;
 		(void)N_R;
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_CellLinkedList_Compact_Query_Count<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1520,7 +1520,7 @@ namespace GPU
 		(void)N_B;
 		(void)N_R;
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_CellLinkedList_Compact_Query_Fill<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1565,7 +1565,7 @@ namespace GPU
 		(void)N_F;
 		(void)N_B;
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		if (N_R > 0)
@@ -1606,7 +1606,7 @@ namespace GPU
 		(void)N_F;
 		(void)N_B;
 
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_R + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		if (N_R > 0)

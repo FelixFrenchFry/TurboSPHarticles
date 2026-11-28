@@ -862,10 +862,16 @@ namespace GPU
 		const uint32_t* __restrict__ nbrListAbs32FB,
 		const uint32_t* __restrict__ nbrListAbs32FR,
 		// destinations
-		float* __restrict__ pressureF)
+		float* __restrict__ pressureF,
+		Sim::PressureSolveErrorSums* __restrict__ partialErrorSums,
+		const bool computeErrors)
 	{
-		const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-		if (i >= c_N_F) { return; }
+		uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+		const bool active = i < c_N_F;
+		if (!active && !computeErrors) { return; }
+
+		// out-of-range threads redo the last particle without writing, to reach the reduction barrier
+		if (!active) { i = c_N_F - 1; }
 
 		// particle i data
 		const float xi = xPosF[i];
@@ -964,7 +970,108 @@ namespace GPU
 		}
 
 		// finalize pressure value by clamping to non-negative
-		pressureF[i] = fmaxf(tmp_pressureF, 0.0f);
+		if (active) { pressureF[i] = fmaxf(tmp_pressureF, 0.0f); }
+
+		// (uniform across the launch, so every thread of the block reaches the barrier)
+		if (!computeErrors) { return; }
+
+		// relative density error of particle i, zero for out-of-range threads and particles without neighbors
+		float relErr = 0.0f;
+		if (active && !(fabsf(diagElemF[i]) <= 1e-7f))
+		{
+			const float predDensityError = c_timeStep * c_timeStep * tmp_sysVecElem - sourceTermF[i];
+			relErr = predDensityError / c_restDensity;
+		}
+
+		double sumRaw = static_cast<double>(relErr);
+		double sumPos = fmax(0.0, sumRaw);
+		double sumAbs = fabs(sumRaw);
+
+		// reduce within each warp, then over the warps of the block in a fixed order
+		for (uint32_t offset = 16u; offset > 0u; offset >>= 1u)
+		{
+			sumRaw += __shfl_down_sync(0xffffffffu, sumRaw, offset);
+			sumPos += __shfl_down_sync(0xffffffffu, sumPos, offset);
+			sumAbs += __shfl_down_sync(0xffffffffu, sumAbs, offset);
+		}
+
+		__shared__ double sRaw[N_DEFAULT_BLOCK_SIZE / 32u];
+		__shared__ double sPos[N_DEFAULT_BLOCK_SIZE / 32u];
+		__shared__ double sAbs[N_DEFAULT_BLOCK_SIZE / 32u];
+		const uint32_t warpIdx = threadIdx.x / 32u;
+		if (threadIdx.x % 32u == 0u)
+		{
+			sRaw[warpIdx] = sumRaw;
+			sPos[warpIdx] = sumPos;
+			sAbs[warpIdx] = sumAbs;
+		}
+		__syncthreads();
+
+		if (threadIdx.x == 0u)
+		{
+			Sim::PressureSolveErrorSums out{};
+			for (uint32_t w = 0; w < blockDim.x / 32u; w++)
+			{
+				out.raw += sRaw[w];
+				out.pos += sPos[w];
+				out.abs += sAbs[w];
+			}
+
+			partialErrorSums[blockIdx.x] = out;
+		}
+	}
+
+	__global__
+	void K_FinalizePressureSolveErrorSums(
+		const Sim::PressureSolveErrorSums* __restrict__ partialErrorSums,
+		const uint32_t N_partials,
+		Sim::PressureSolveErrorSums* __restrict__ errorSums)
+	{
+		const uint32_t tid = threadIdx.x;
+
+		// each thread sums a fixed strided subset of the block partials
+		double sumRaw = 0.0;
+		double sumPos = 0.0;
+		double sumAbs = 0.0;
+		for (uint32_t partialIdx = tid; partialIdx < N_partials; partialIdx += blockDim.x)
+		{
+			sumRaw += partialErrorSums[partialIdx].raw;
+			sumPos += partialErrorSums[partialIdx].pos;
+			sumAbs += partialErrorSums[partialIdx].abs;
+		}
+
+		// reduce within each warp, then over the warps of the block in a fixed order
+		for (uint32_t offset = 16u; offset > 0u; offset >>= 1u)
+		{
+			sumRaw += __shfl_down_sync(0xffffffffu, sumRaw, offset);
+			sumPos += __shfl_down_sync(0xffffffffu, sumPos, offset);
+			sumAbs += __shfl_down_sync(0xffffffffu, sumAbs, offset);
+		}
+
+		__shared__ double sRaw[N_DEFAULT_BLOCK_SIZE / 32u];
+		__shared__ double sPos[N_DEFAULT_BLOCK_SIZE / 32u];
+		__shared__ double sAbs[N_DEFAULT_BLOCK_SIZE / 32u];
+		const uint32_t warpIdx = tid / 32u;
+		if (tid % 32u == 0u)
+		{
+			sRaw[warpIdx] = sumRaw;
+			sPos[warpIdx] = sumPos;
+			sAbs[warpIdx] = sumAbs;
+		}
+		__syncthreads();
+
+		if (tid == 0u)
+		{
+			Sim::PressureSolveErrorSums out{};
+			for (uint32_t w = 0; w < blockDim.x / 32u; w++)
+			{
+				out.raw += sRaw[w];
+				out.pos += sPos[w];
+				out.abs += sAbs[w];
+			}
+
+			*errorSums = out;
+		}
 	}
 
 	__global__
@@ -1036,7 +1143,7 @@ namespace GPU
 		// destinations
 		float* densityF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_Density<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1083,7 +1190,7 @@ namespace GPU
 		// destinations
 		float* xVelPredF, float* yVelPredF, float* zVelPredF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_NonPressureAcceleration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1134,7 +1241,7 @@ namespace GPU
 		float* diagElemF,
 		float* pressureF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_SourceTermAndDiagonalElementAndPressureJacobiInit<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1183,7 +1290,7 @@ namespace GPU
 		float* yAccPressF,
 		float* zAccPressF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_PressureAcceleration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
@@ -1229,10 +1336,13 @@ namespace GPU
 		const uint32_t N_F, const uint32_t N_B, const uint32_t N_R,
 		cudaStream_t stream,
 		// destinations
-		float* pressureF)
+		float* pressureF,
+		Sim::PressureSolveErrorSums* partialErrorSums,
+		Sim::PressureSolveErrorSums* errorSums,
+		const bool computeErrors)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
-		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
+		const uint32_t N_GRID_SIZE = PressureSolveErrorPartialCount(N_F);
 
 		K_PressureRelaxedJacobiSolver<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
 			xPosF, yPosF, zPosF, xPosB, yPosB, zPosB, xPosR, yPosR, zPosR,
@@ -1243,8 +1353,15 @@ namespace GPU
 			nbrChunkBaseIdx2FF,
 			nbrChunkFormatFF, nbrChunkFormatFB, nbrChunkFormatFR,
 			nbrListDelta16FF, nbrListDelta16FB, nbrListDelta16FR,
-			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR, pressureF);
+			nbrListAbs32FF, nbrListAbs32FB, nbrListAbs32FR, pressureF, partialErrorSums, computeErrors);
 		GPU::CheckLastKernel("K_PressureRelaxedJacobiSolver()");
+
+		if (!computeErrors) { return; }
+
+		// reduce the block partials on device and leave only the final sums for the host
+		K_FinalizePressureSolveErrorSums<<<1, N_BLOCK_SIZE, 0, stream>>>(
+			partialErrorSums, N_GRID_SIZE, errorSums);
+		GPU::CheckLastKernel("K_FinalizePressureSolveErrorSums()");
 	}
 
 	void Launch_Integration(
@@ -1256,7 +1373,7 @@ namespace GPU
 		float* xPosF, float* yPosF, float* zPosF,
 		float* xVelF, float* yVelF, float* zVelF)
 	{
-		const uint32_t N_BLOCK_SIZE = 256;
+		const uint32_t N_BLOCK_SIZE = N_DEFAULT_BLOCK_SIZE;
 		const uint32_t N_GRID_SIZE = (N_F + N_BLOCK_SIZE - 1) / N_BLOCK_SIZE;
 
 		K_Integration<<<N_GRID_SIZE, N_BLOCK_SIZE, 0, stream>>>(
