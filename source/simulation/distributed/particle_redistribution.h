@@ -2,6 +2,7 @@
 #pragma once
 
 // external
+#include <array>
 #include <cstdint>
 #include <mpi.h>
 #include <span>
@@ -177,11 +178,21 @@ namespace Dist
 			static constexpr uint32_t N_fields = 6;
 			static constexpr bool hasBodyIds = false;
 
-			template <typename ParticlesF, typename Visit>
-			static void VisitFields(ParticlesF& particlesF, Visit&& visit)
+			static std::array<std::span<const float>, N_fields> Fields(const ConstView& particlesF)
 			{
-				visit(particlesF.xPos); visit(particlesF.yPos); visit(particlesF.zPos);
-				visit(particlesF.xVel); visit(particlesF.yVel); visit(particlesF.zVel);
+				return
+				{
+					particlesF.xPos, particlesF.yPos, particlesF.zPos,
+					particlesF.xVel, particlesF.yVel, particlesF.zVel
+				};
+			}
+			static std::array<std::vector<float>*, N_fields> Fields(Particles& particlesF)
+			{
+				return
+				{
+					&particlesF.xPos, &particlesF.yPos, &particlesF.zPos,
+					&particlesF.xVel, &particlesF.yVel, &particlesF.zVel
+				};
 			}
 		};
 
@@ -194,11 +205,21 @@ namespace Dist
 			static constexpr uint32_t N_fields = 5;
 			static constexpr bool hasBodyIds = false;
 
-			template <typename ParticlesB, typename Visit>
-			static void VisitFields(ParticlesB& particlesB, Visit&& visit)
+			static std::array<std::span<const float>, N_fields> Fields(const ConstView& particlesB)
 			{
-				visit(particlesB.xPos); visit(particlesB.yPos); visit(particlesB.zPos);
-				visit(particlesB.volB); visit(particlesB.psiB);
+				return
+				{
+					particlesB.xPos, particlesB.yPos, particlesB.zPos,
+					particlesB.volB, particlesB.psiB
+				};
+			}
+			static std::array<std::vector<float>*, N_fields> Fields(Particles& particlesB)
+			{
+				return
+				{
+					&particlesB.xPos, &particlesB.yPos, &particlesB.zPos,
+					&particlesB.volB, &particlesB.psiB
+				};
 			}
 		};
 
@@ -212,11 +233,21 @@ namespace Dist
 			static constexpr uint32_t N_fields = 5;
 			static constexpr bool hasBodyIds = true;
 
-			template <typename ParticlesR, typename Visit>
-			static void VisitFields(ParticlesR& particlesR, Visit&& visit)
+			static std::array<std::span<const float>, N_fields> Fields(const ConstView& particlesR)
 			{
-				visit(particlesR.xPosRel); visit(particlesR.yPosRel); visit(particlesR.zPosRel);
-				visit(particlesR.volR); visit(particlesR.psiR);
+				return
+				{
+					particlesR.xPosRel, particlesR.yPosRel, particlesR.zPosRel,
+					particlesR.volR, particlesR.psiR
+				};
+			}
+			static std::array<std::vector<float>*, N_fields> Fields(Particles& particlesR)
+			{
+				return
+				{
+					&particlesR.xPosRel, &particlesR.yPosRel, &particlesR.zPosRel,
+					&particlesR.volR, &particlesR.psiR
+				};
 			}
 		};
 

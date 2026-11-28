@@ -2,7 +2,6 @@
 
 // external
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cmath>
 #include <limits>
@@ -545,6 +544,7 @@ void ParticleRedistributionMgr::ExchangeBuffer<Payload>::SetBulkFromParticleView
 	if (localIdxs.empty()) { return; }
 
 	const std::span<uint64_t> ids{ particleIds_.data(), N_particles_ };
+	const auto srcFields = Payload::Fields(src);
 
 	// gather particle fields sequentially within each parallel block
 	// TODO: use explicit SIMD similarly to sph_solver.cpp?
@@ -559,13 +559,12 @@ void ParticleRedistributionMgr::ExchangeBuffer<Payload>::SetBulkFromParticleView
 			GatherParticleField(bodyIds, src.bodyId, localIdxs, blockRange);
 		}
 
-		uint32_t fieldIdx = 0;
-		Payload::VisitFields(src, [&](const auto& srcValues)
+		for (uint32_t fieldIdx = 0; fieldIdx != Payload::N_fields; fieldIdx++)
 		{
 			const std::span<float> dstValues =
-				PayloadFieldValues(fieldValues_, fieldIdx++, N_particles_);
-			GatherParticleField(dstValues, srcValues, localIdxs, blockRange);
-		});
+				PayloadFieldValues(fieldValues_, fieldIdx, N_particles_);
+			GatherParticleField(dstValues, srcFields[fieldIdx], localIdxs, blockRange);
+		}
 	});
 }
 
@@ -577,6 +576,7 @@ void ParticleRedistributionMgr::ExchangeBuffer<Payload>::CopyBulkToLocalParticle
 	if (IsEmpty()) { return; }
 
 	const std::span<const uint64_t> ids{ particleIds_.data(), N_particles_ };
+	const auto dstFields = Payload::Fields(dst);
 
 	// copy particle fields sequentially within each parallel block
 	// TODO: use explicit SIMD similarly to sph_solver.cpp?
@@ -591,13 +591,12 @@ void ParticleRedistributionMgr::ExchangeBuffer<Payload>::CopyBulkToLocalParticle
 			CopyParticleField(dst.bodyId, bodyIds, dstBeginLocalIdx, blockRange);
 		}
 
-		uint32_t fieldIdx = 0;
-		Payload::VisitFields(dst, [&](auto& dstValues)
+		for (uint32_t fieldIdx = 0; fieldIdx != Payload::N_fields; fieldIdx++)
 		{
 			const std::span<const float> srcValues =
-				PayloadFieldValues(fieldValues_, fieldIdx++, N_particles_);
-			CopyParticleField(dstValues, srcValues, dstBeginLocalIdx, blockRange);
-		});
+				PayloadFieldValues(fieldValues_, fieldIdx, N_particles_);
+			CopyParticleField(*dstFields[fieldIdx], srcValues, dstBeginLocalIdx, blockRange);
+		}
 	});
 }
 
@@ -1443,18 +1442,19 @@ bool ParticleRedistributionMgr::PrepareParticleMutation(
 
 	// only the IDs, body IDs, and payload fields are reserved and sized
 	// (the omitted fluid fields are re-written by the following solver step before being read)
+	const auto appendedFields = Payload::Fields(appendedParticles);
 	if (appendedParticles.id.capacity() < N_appended)
 	{
 		const uint32_t N_capacity = ParticleCapacityWithExtra(
 			N_appended, scratchBufferExtraAllocCapacityPct_);
 		appendedParticles.id.reserve(N_capacity);
 		if constexpr (Payload::hasBodyIds) { appendedParticles.bodyId.reserve(N_capacity); }
-		Payload::VisitFields(appendedParticles, [&](auto& values) { values.reserve(N_capacity); });
+		for (std::vector<float>* values : appendedFields) { values->reserve(N_capacity); }
 	}
 	appendedParticles.N_ = N_appended;
 	appendedParticles.id.resize(N_appended);
 	if constexpr (Payload::hasBodyIds) { appendedParticles.bodyId.resize(N_appended, Sync::InvalidRigidBodyId); }
-	Payload::VisitFields(appendedParticles, [&](auto& values) { values.resize(N_appended); });
+	for (std::vector<float>* values : appendedFields) { values->resize(N_appended); }
 
 	uint32_t appendLocalIdx = 0;
 
@@ -1484,12 +1484,7 @@ bool ParticleRedistributionMgr::PrepareParticleMutation(
 	{
 		const uint32_t N_localHalo = static_cast<uint32_t>(localHaloLocalIdxs.size());
 		const uint32_t haloAppendLocalIdxBase = appendLocalIdx;
-
-		// source fields in payload order, paired with the destination fields by visit order
-		std::array<std::span<const float>, Payload::N_fields> srcFieldValues{};
-		uint32_t srcFieldIdx = 0;
-		Payload::VisitFields(oldParticles, [&](const auto& srcValues) { srcFieldValues[srcFieldIdx++] = srcValues; });
-
+		const auto srcFields = Payload::Fields(oldParticles);
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(0, N_localHalo, PARTICLE_GATHER_BLOCK_SIZE),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
@@ -1502,12 +1497,11 @@ bool ParticleRedistributionMgr::PrepareParticleMutation(
 				GatherParticleField(bodyIds, oldParticles.bodyId, localHaloLocalIdxs, blockRange);
 			}
 
-			uint32_t fieldIdx = 0;
-			Payload::VisitFields(appendedParticles, [&](auto& dstValues)
+			for (uint32_t fieldIdx = 0; fieldIdx != Payload::N_fields; fieldIdx++)
 			{
-				std::span<float> dstHaloValues{ dstValues.data() + haloAppendLocalIdxBase, N_localHalo };
-				GatherParticleField(dstHaloValues, srcFieldValues[fieldIdx++], localHaloLocalIdxs, blockRange);
-			});
+				std::span<float> dstValues{ appendedFields[fieldIdx]->data() + haloAppendLocalIdxBase, N_localHalo };
+				GatherParticleField(dstValues, srcFields[fieldIdx], localHaloLocalIdxs, blockRange);
+			}
 		});
 		appendLocalIdx += N_localHalo;
 	}

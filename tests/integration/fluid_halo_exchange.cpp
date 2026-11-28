@@ -238,6 +238,168 @@ namespace
 		}
 	}
 
+	// particles 0 and 3 cross the first slab boundary and stay in their old ranks' halos
+	// particles 5 and 6 stay near the second boundary, so rank 1 receives halos from both peers
+	constexpr std::array<glm::vec3, 7> redistributionPositions{ {
+		{ 1.000f, 2.000f, 4.25f },
+		{ 1.125f, 1.875f, 3.25f },
+		{ 1.250f, 1.750f, 2.00f },
+		{ 1.375f, 1.625f, 3.75f },
+		{ 1.500f, 1.500f, 4.75f },
+		{ 1.625f, 1.375f, 7.75f },
+		{ 1.750f, 1.250f, 8.25f }
+	} };
+
+	Sync::UniversalSimState MakeRedistributionState(const std::vector<uint64_t>& ownedIds)
+	{
+		Sync::UniversalSimState state;
+		state.ResizeFluid(ownedIds.size());
+		state.ResizeBoundary(ownedIds.size());
+		state.ResizeRigid(ownedIds.size());
+		state.ResizeRigidBodies(2);
+		state.rigidBodies.assignSequentialIds();
+		state.rigidBodies.rigidParticleCount = { 4, 3 };
+		state.rigidBodies.zCM = { 1.0f, 2.0f };
+
+		auto& fluid = state.particlesF;
+		auto& boundary = state.particlesB;
+		auto& rigid = state.particlesR;
+		for (uint32_t i = 0; i < fluid.N_; i++)
+		{
+			const uint64_t id = ownedIds[i];
+			const auto& position = redistributionPositions[id];
+			const auto velocity = InitialVelocity(id);
+			const float value = static_cast<float>(id);
+			fluid.id[i] = id;
+			fluid.xPos[i] = position.x;
+			fluid.yPos[i] = position.y;
+			fluid.zPos[i] = position.z;
+			fluid.xVel[i] = velocity.x;
+			fluid.yVel[i] = velocity.y;
+			fluid.zVel[i] = velocity.z;
+
+			boundary.id[i] = id;
+			boundary.xPos[i] = position.x;
+			boundary.yPos[i] = position.y;
+			boundary.zPos[i] = position.z;
+			boundary.volB[i] = 10.0f + value;
+			boundary.psiB[i] = 20.0f + value;
+
+			const uint32_t bodyIdx = static_cast<uint32_t>(id % 2);
+			rigid.id[i] = id;
+			rigid.bodyId[i] = bodyIdx;
+			rigid.xPosRel[i] = position.x;
+			rigid.yPosRel[i] = position.y;
+			rigid.zPosRel[i] = position.z - state.rigidBodies.zCM[bodyIdx];
+			rigid.volR[i] = 30.0f + value;
+			rigid.psiR[i] = 40.0f + value;
+		}
+		return state;
+	}
+
+	void ExpectRedistributedLayout(const char* species, const Dist::DistParticleState& state,
+		const uint32_t N_local, const std::span<const uint64_t> actualIds,
+		const std::vector<uint64_t>& expectedIds, const uint32_t N_owned, const uint32_t N_outer)
+	{
+		SCOPED_TRACE(species);
+		EXPECT_EQ(state.N_owned, N_owned);
+		EXPECT_EQ(state.N_halo, expectedIds.size() - N_owned);
+		EXPECT_EQ(state.N_outer, N_outer);
+		ASSERT_EQ(N_local, expectedIds.size());
+		ASSERT_EQ(std::vector<uint64_t>(actualIds.begin(), actualIds.end()), expectedIds);
+	}
+
+	// checks retained owners, migrated owners, and both sources of halos for every species
+	TEST(ParticleRedistributionTests, PreservesFieldsAcrossMigrationAndHaloExchange)
+	{
+		auto& mpi = *mpiContext;
+		const int rank = mpi.Rank();
+		SCOPED_TRACE(rank);
+		const auto params = MakeParams(Base::DistHaloMode::SingleHalo);
+		auto decomp = Dist::MakeDomainDecomp(Base::DomainDecompMethod::AABB_Slabs);
+		decomp->Build({ slabBounds, params.distHaloRadius, N_ranks });
+
+		const std::array<std::vector<uint64_t>, N_ranks> initialIds{ {
+			{ 0, 1, 2 }, { 3, 4, 5 }, { 6 }
+		} };
+		// retained owners first, then migrated owners, local halo copies, and received halos
+		const std::array<std::vector<uint64_t>, N_ranks> expectedIds{ {
+			{ 2, 1, 3, 0, 4 }, { 5, 4, 0, 3, 1, 6 }, { 6, 5 }
+		} };
+		const std::array<std::vector<uint32_t>, N_ranks> expectedOuterLocalIdxs{ {
+			{ 1, 2 }, { 0, 1, 2 }, { 0 }
+		} };
+
+		auto state = MakeRedistributionState(initialIds[rank]);
+		const auto rigidBodies = state.rigidBodies;
+		const uint32_t N_owned = state.particlesF.N_;
+		constexpr uint64_t N_global = redistributionPositions.size();
+		Bench::BenchmarksTracker benchmarks(params);
+		Sim::SimBackend_CPU backend(benchmarks);
+		backend.SetSimDomainBounds(slabBounds.min, slabBounds.max);
+		backend.PullFromUniversalSimState(state, params);
+		Dist::DistParticleState fluidState, boundaryState, rigidState;
+		fluidState.N_owned = N_owned;
+		boundaryState.N_owned = N_owned;
+		rigidState.N_owned = N_owned;
+		Dist::ParticleRedistributionMgr redistribution;
+		std::vector<uint32_t> outerLocalIdxs;
+		std::string failMsg;
+		ASSERT_TRUE(redistribution.RedistributeParticles(
+			backend, fluidState, boundaryState, rigidState, outerLocalIdxs, rigidBodies, *decomp, mpi,
+			params, true, N_global, N_global, N_global, &failMsg)) << failMsg;
+
+		const auto& stats = redistribution.GetStats();
+		const uint32_t N_recvOwned = rank < 2 ? 1u : 0u;
+		const uint64_t N_recvHalo = rank == 1 ? 2u : 1u;
+		EXPECT_EQ(stats.N_recvOwnedF, N_recvOwned);
+		EXPECT_EQ(stats.N_recvOwnedB, N_recvOwned);
+		EXPECT_EQ(stats.N_recvOwnedR, N_recvOwned);
+		EXPECT_EQ(stats.N_recvHaloF, N_recvHalo);
+		EXPECT_EQ(stats.N_recvHaloB, N_recvHalo);
+		EXPECT_EQ(stats.N_recvHaloR, N_recvHalo);
+		EXPECT_EQ(outerLocalIdxs, expectedOuterLocalIdxs[rank]);
+
+		const auto actualF = backend.GetFluidParticleView();
+		const auto actualB = backend.GetBoundaryParticleView();
+		const auto actualR = backend.GetRigidParticleView();
+		const uint32_t N_outer = static_cast<uint32_t>(expectedOuterLocalIdxs[rank].size());
+		ASSERT_NO_FATAL_FAILURE(ExpectRedistributedLayout(
+			"fluid", fluidState, actualF.N_, actualF.id, expectedIds[rank], N_owned, N_outer));
+		ASSERT_NO_FATAL_FAILURE(ExpectRedistributedLayout(
+			"boundary", boundaryState, actualB.N_, actualB.id, expectedIds[rank], N_owned, N_outer));
+		ASSERT_NO_FATAL_FAILURE(ExpectRedistributedLayout(
+			"rigid", rigidState, actualR.N_, actualR.id, expectedIds[rank], N_owned, N_outer));
+
+		for (uint32_t i = 0; i < actualF.N_; i++)
+		{
+			const uint64_t id = actualF.id[i];
+			SCOPED_TRACE(id);
+			const auto& position = redistributionPositions[id];
+			const auto velocity = InitialVelocity(id);
+			EXPECT_EQ(actualF.xPos[i], position.x);
+			EXPECT_EQ(actualF.yPos[i], position.y);
+			EXPECT_EQ(actualF.zPos[i], position.z);
+			EXPECT_EQ(actualF.xVel[i], velocity.x);
+			EXPECT_EQ(actualF.yVel[i], velocity.y);
+			EXPECT_EQ(actualF.zVel[i], velocity.z);
+
+			EXPECT_EQ(actualB.xPos[i], position.x);
+			EXPECT_EQ(actualB.yPos[i], position.y);
+			EXPECT_EQ(actualB.zPos[i], position.z);
+			EXPECT_EQ(actualB.volB[i], 10.0f + static_cast<float>(id));
+			EXPECT_EQ(actualB.psiB[i], 20.0f + static_cast<float>(id));
+
+			const uint32_t bodyIdx = static_cast<uint32_t>(id % 2);
+			EXPECT_EQ(actualR.bodyId[i], bodyIdx);
+			EXPECT_EQ(actualR.xPosRel[i], position.x);
+			EXPECT_EQ(actualR.yPosRel[i], position.y);
+			EXPECT_EQ(actualR.zPosRel[i], position.z - rigidBodies.zCM[bodyIdx]);
+			EXPECT_EQ(actualR.volR[i], 30.0f + static_cast<float>(id));
+			EXPECT_EQ(actualR.psiR[i], 40.0f + static_cast<float>(id));
+		}
+	}
+
 	// provides malformed backend views through the public redistribution entry point
 	class RigidRedistributionTestBackend final : public Sim::I_DistributedParticleBackend
 	{
