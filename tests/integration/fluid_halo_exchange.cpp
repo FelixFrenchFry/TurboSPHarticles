@@ -238,7 +238,7 @@ namespace
 		}
 	}
 
-	// Provide malformed backend views through the public redistribution entry point.
+	// provides malformed backend views through the public redistribution entry point
 	class RigidRedistributionTestBackend final : public Sim::I_DistributedParticleBackend
 	{
 	public:
@@ -257,7 +257,7 @@ namespace
 			const Sync::FluidParticles&, const Sync::BoundaryParticles&, const Sync::RigidParticles&,
 			uint32_t, uint32_t, uint32_t, bool, const Sim::SimParams&) override
 		{
-			ADD_FAILURE() << "Malformed rigid particle view reached backend mutation.";
+			ADD_FAILURE() << "Malformed rigid particle view reached backend mutation";
 			return false;
 		}
 		void CopyRigidBodyStateTo(Sync::RigidBodies&) const override {}
@@ -265,7 +265,10 @@ namespace
 		bool ConfigureDistributedParticleLayout(uint32_t, uint32_t, uint32_t) override { return false; }
 		void TakeFluidSolverSyncLocalIdxs(Sim::I_DistributedFluidSolverSync&) override {}
 		bool ConfigureDistributedStep(
-			const std::vector<uint32_t>&, Sim::I_DistributedFluidSolverSync&) override { return false; }
+			const std::vector<uint32_t>&, Sim::I_DistributedFluidSolverSync&) override
+		{
+			return false;
+		}
 		bool BuildExportFluidParticleLocalIdxs(
 			const Sim::SimParams&, Sim::I_DistributedFluidSolverSync&, std::vector<uint32_t>&) const override
 		{
@@ -279,7 +282,11 @@ namespace
 		Sync::RigidConstView rigidView_;
 	};
 
-	enum class RigidViewFault { ShortBodyIds, InvalidBodyIndex };
+	enum class RigidViewFault : uint8_t
+	{
+		ShortBodyIds,
+		InvalidBodyIndex
+	};
 
 	void ExpectRigidRedistributionFailure(const RigidViewFault fault)
 	{
@@ -291,7 +298,7 @@ namespace
 		decomp->Build({ slabBounds, params.distHaloRadius, N_ranks });
 
 		Sync::RigidBodies bodies;
-		// Back both indices with transforms so a missed bounds check reaches the halo exchange.
+		// back both indices with transforms so a missed bounds check reaches the halo exchange
 		bodies.resizeAll(2);
 		bodies.N_ = 1;
 		bodies.rigidParticleCount = { 1 };
@@ -303,7 +310,8 @@ namespace
 		{
 			rigid.id[0] = 0;
 			rigid.bodyId[0] = fault == RigidViewFault::InvalidBodyIndex ? bodies.N_ : 0;
-			rigid.xPosRel[0] = rigid.yPosRel[0] = 1.0f;
+			rigid.xPosRel[0] = 1.0f;
+			rigid.yPosRel[0] = 1.0f;
 		}
 		auto rigidView = rigid.constView();
 		if (rank == 0 && fault == RigidViewFault::ShortBodyIds)
@@ -313,7 +321,8 @@ namespace
 
 		RigidRedistributionTestBackend backend(rigidView);
 		Dist::ParticleRedistributionMgr redistribution;
-		Dist::DistParticleState fluidState, boundaryState, rigidState{ .N_owned = rigid.N_ };
+		Dist::DistParticleState fluidState, boundaryState, rigidState;
+		rigidState.N_owned = rigid.N_;
 		std::vector<uint32_t> outerLocalIdxs;
 		std::string failMsg;
 		EXPECT_FALSE(redistribution.RedistributeParticles(
@@ -323,11 +332,13 @@ namespace
 		EXPECT_EQ(redistribution.GetStats().N_recvHaloR, 0u);
 	}
 
+	// a truncated body-ID span must fail before exchanging halos or mutating the backend
 	TEST(RigidRedistributionTests, RejectsShortBodyIdViewBeforeHaloExchange)
 	{
 		ExpectRigidRedistributionFailure(RigidViewFault::ShortBodyIds);
 	}
 
+	// an out-of-range body index must fail before exchanging halos or mutating the backend
 	TEST(RigidRedistributionTests, RejectsOutOfRangeBodyIndexBeforeHaloExchange)
 	{
 		ExpectRigidRedistributionFailure(RigidViewFault::InvalidBodyIndex);

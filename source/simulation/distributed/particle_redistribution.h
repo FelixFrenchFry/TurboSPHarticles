@@ -25,27 +25,6 @@ namespace Dist
 	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 	inline constexpr uint32_t PARTICLE_GATHER_BLOCK_SIZE = 2048;
 
-	// packed payload field blocks, ordered as they are gathered, sent, and copied out
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_COUNT = 6;
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_X_POS = 0;
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Y_POS = 1;
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Z_POS = 2;
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_X_VEL = 3;
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Y_VEL = 4;
-	inline constexpr uint32_t FLUID_PAYLOAD_FIELD_Z_VEL = 5;
-	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_COUNT = 5;
-	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_X_POS = 0;
-	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_Y_POS = 1;
-	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_Z_POS = 2;
-	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_VOL = 3;
-	inline constexpr uint32_t BOUNDARY_PAYLOAD_FIELD_PSI = 4;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_COUNT = 5;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_X_POS_REL = 0;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_Y_POS_REL = 1;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_Z_POS_REL = 2;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_VOL = 3;
-	inline constexpr uint32_t RIGID_PAYLOAD_FIELD_PSI = 4;
-
 	// packed particle count lanes exchanged once per redistribution
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_COUNT = 6;
 	inline constexpr int PARTICLE_REDISTRIBUTION_LANE_OWNED_FLUID = 0;
@@ -186,103 +165,64 @@ namespace Dist
 		static constexpr float exchangeBufferExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune
 		static constexpr float scratchBufferExtraAllocCapacityPct_ = 5.0f; // TODO: fine-tune
 
-		// packed SoA payload for migrated or halo fluid particles, carrying only identity,
+		// payload float fields of migrated or halo F particles, in packed order
 		// (the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
 		// because the following solver step re-writes them before reading them)
 		// TODO: keep it like this or copy them too, if solver step behavior changes?
-		class FluidExchangeBuffer
+		struct FluidPayload
 		{
-		public:
+			using ConstView = Sync::FluidConstView;
+			using Particles = Sync::FluidParticles;
+			static constexpr const char* particleTypeName = "Fluid";
+			static constexpr uint32_t N_fields = 6;
+			static constexpr bool hasBodyIds = false;
 
-			void Clear();
-			void Resize(uint32_t N);
-
-			// resizes and gathers the given backend particles into the buffer
-			void SetBulkFromParticleView(
-				const Sync::FluidConstView& src,
-				const std::vector<uint32_t>& localIdxs);
-
-			// copies the whole buffer into a contiguous backend range
-			void CopyBulkToLocalParticles(
-				Sync::FluidParticles& dst,
-				uint32_t dstBeginLocalIdx) const;
-
-			void QueueIRecvPayload(
-				const MpiContext& mpiContext,
-				int peerRank,
-				int tagBase,
-				std::vector<MPI_Request>& requests);
-			void QueueISendPayload(
-				const MpiContext& mpiContext,
-				int peerRank,
-				int tagBase,
-				std::vector<MPI_Request>& requests) const;
-
-			// helpers
-			uint32_t Size() const { return N_particles_; }
-			bool IsEmpty() const { return Size() == 0; }
-			int CheckedCount() const;
-			Mem::MemUsage GetMemoryUsage() const;
-
-		private:
-
-			// logical particle count, which storage only grows to hold
-			uint32_t N_particles_ = 0;
-
-			// packed payload storage, holding the particle IDs and one contiguous block
-			// per float field, indexed by [fieldIdx * N_particles_ + bufferIdx]
-			std::vector<uint64_t> particleIds_;
-			std::vector<float> fieldValues_;
+			template <typename ParticlesF, typename Visit>
+			static void VisitFields(ParticlesF& particlesF, Visit&& visit)
+			{
+				visit(particlesF.xPos); visit(particlesF.yPos); visit(particlesF.zPos);
+				visit(particlesF.xVel); visit(particlesF.yVel); visit(particlesF.zVel);
+			}
 		};
 
-		// packed SoA payload for migrated or halo boundary particles
-		class BoundaryExchangeBuffer
+		// payload float fields of migrated or halo B particles, in packed order
+		struct BoundaryPayload
 		{
-		public:
+			using ConstView = Sync::BoundaryConstView;
+			using Particles = Sync::BoundaryParticles;
+			static constexpr const char* particleTypeName = "Boundary";
+			static constexpr uint32_t N_fields = 5;
+			static constexpr bool hasBodyIds = false;
 
-			void Clear();
-			void Resize(uint32_t N);
-
-			// resizes and gathers the given backend particles into the buffer
-			void SetBulkFromParticleView(
-				const Sync::BoundaryConstView& src,
-				const std::vector<uint32_t>& localIdxs);
-
-			// copies the whole buffer into a contiguous backend range
-			void CopyBulkToLocalParticles(
-				Sync::BoundaryParticles& dst,
-				uint32_t dstBeginLocalIdx) const;
-
-			void QueueIRecvPayload(
-				const MpiContext& mpiContext,
-				int peerRank,
-				int tagBase,
-				std::vector<MPI_Request>& requests);
-			void QueueISendPayload(
-				const MpiContext& mpiContext,
-				int peerRank,
-				int tagBase,
-				std::vector<MPI_Request>& requests) const;
-
-			// helpers
-			uint32_t Size() const { return N_particles_; }
-			bool IsEmpty() const { return Size() == 0; }
-			int CheckedCount() const;
-			Mem::MemUsage GetMemoryUsage() const;
-
-		private:
-
-			// logical particle count, which storage only grows to hold
-			uint32_t N_particles_ = 0;
-
-			// packed payload storage, holding the particle IDs and one contiguous block
-			// per float field, indexed by [fieldIdx * N_particles_ + bufferIdx]
-			std::vector<uint64_t> particleIds_;
-			std::vector<float> fieldValues_;
+			template <typename ParticlesB, typename Visit>
+			static void VisitFields(ParticlesB& particlesB, Visit&& visit)
+			{
+				visit(particlesB.xPos); visit(particlesB.yPos); visit(particlesB.zPos);
+				visit(particlesB.volB); visit(particlesB.psiB);
+			}
 		};
 
-		// packed SoA payload for migrated or halo rigid particles
-		class RigidExchangeBuffer
+		// payload float fields of migrated or halo R particles, in packed order
+		// (rigid particles also carry their body IDs)
+		struct RigidPayload
+		{
+			using ConstView = Sync::RigidConstView;
+			using Particles = Sync::RigidParticles;
+			static constexpr const char* particleTypeName = "Rigid";
+			static constexpr uint32_t N_fields = 5;
+			static constexpr bool hasBodyIds = true;
+
+			template <typename ParticlesR, typename Visit>
+			static void VisitFields(ParticlesR& particlesR, Visit&& visit)
+			{
+				visit(particlesR.xPosRel); visit(particlesR.yPosRel); visit(particlesR.zPosRel);
+				visit(particlesR.volR); visit(particlesR.psiR);
+			}
+		};
+
+		// packed SoA payload for migrated or halo particles of one species
+		template <typename Payload>
+		class ExchangeBuffer
 		{
 		public:
 
@@ -291,12 +231,12 @@ namespace Dist
 
 			// resizes and gathers the given backend particles into the buffer
 			void SetBulkFromParticleView(
-				const Sync::RigidConstView& src,
+				const typename Payload::ConstView& src,
 				const std::vector<uint32_t>& localIdxs);
 
 			// copies the whole buffer into a contiguous backend range
 			void CopyBulkToLocalParticles(
-				Sync::RigidParticles& dst,
+				typename Payload::Particles& dst,
 				uint32_t dstBeginLocalIdx) const;
 
 			void QueueIRecvPayload(
@@ -321,7 +261,7 @@ namespace Dist
 			// logical particle count, which storage only grows to hold
 			uint32_t N_particles_ = 0;
 
-			// packed particle IDs, body IDs, and one contiguous block per float field,
+			// packed particle IDs, body IDs (rigid only), and one contiguous block per float field,
 			// indexed by [fieldIdx * N_particles_ + bufferIdx]
 			std::vector<uint64_t> particleIds_;
 			std::vector<uint32_t> bodyIds_;
@@ -332,20 +272,20 @@ namespace Dist
 		struct RankBuffers
 		{
 			// ownership migration payloads
-			FluidExchangeBuffer sendOwnedParticlesF;
-			FluidExchangeBuffer recvOwnedParticlesF;
-			BoundaryExchangeBuffer sendOwnedParticlesB;
-			BoundaryExchangeBuffer recvOwnedParticlesB;
-			RigidExchangeBuffer sendOwnedParticlesR;
-			RigidExchangeBuffer recvOwnedParticlesR;
+			ExchangeBuffer<FluidPayload> sendOwnedParticlesF;
+			ExchangeBuffer<FluidPayload> recvOwnedParticlesF;
+			ExchangeBuffer<BoundaryPayload> sendOwnedParticlesB;
+			ExchangeBuffer<BoundaryPayload> recvOwnedParticlesB;
+			ExchangeBuffer<RigidPayload> sendOwnedParticlesR;
+			ExchangeBuffer<RigidPayload> recvOwnedParticlesR;
 
 			// halo exchange payloads
-			FluidExchangeBuffer sendHaloParticlesF;
-			FluidExchangeBuffer recvHaloParticlesF;
-			BoundaryExchangeBuffer sendHaloParticlesB;
-			BoundaryExchangeBuffer recvHaloParticlesB;
-			RigidExchangeBuffer sendHaloParticlesR;
-			RigidExchangeBuffer recvHaloParticlesR;
+			ExchangeBuffer<FluidPayload> sendHaloParticlesF;
+			ExchangeBuffer<FluidPayload> recvHaloParticlesF;
+			ExchangeBuffer<BoundaryPayload> sendHaloParticlesB;
+			ExchangeBuffer<BoundaryPayload> recvHaloParticlesB;
+			ExchangeBuffer<RigidPayload> sendHaloParticlesR;
+			ExchangeBuffer<RigidPayload> recvHaloParticlesR;
 
 			// ownership migration counts
 			int N_sendOwnedF = 0;
@@ -377,7 +317,7 @@ namespace Dist
 			uint32_t localIdx);
 
 		// particle property copying into append-only backend mutation storage
-		// (fluid particles carry the same reduced field set as FluidExchangeBuffer)
+		// (fluid particles carry the same reduced field set as FluidPayload)
 		static void CopyFluidParticle(
 			const Sync::FluidConstView& src,
 			Sync::FluidParticles& dst,
