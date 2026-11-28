@@ -236,7 +236,6 @@ namespace Dist
 		std::unique_ptr<Sim::I_SimBackend> simBackend_{ nullptr };
 		Sim::I_DistributedParticleBackend* distParticleBackend_ = nullptr;
 		mutable Stats::StatisticsPartial statisticsPartialScratch_{};
-		mutable std::vector<uint8_t> localNearSurfaceFlagsScratch_{};
 		mutable std::vector<uint32_t> exportFluidParticleLocalIdxsScratch_{};
 
 		// serialization management

@@ -2,6 +2,7 @@
 #pragma once
 
 // external
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -73,6 +74,7 @@ namespace Sim
 		PressureAcceleration,
 		Pressure,
 		PressureErrorReduction,
+		ExportSurfaceFlags,
 	};
 
 	// optional owner-to-halo synchronization used by distributed fluid solvers
@@ -82,28 +84,21 @@ namespace Sim
 
 		virtual ~I_DistributedFluidSolverSync() = default;
 
-		// an empty permutation means that particle storage was not re-ordered
-		// (inverted by the caller, which needs it for its own index remapping anyway)
-		virtual void ApplyFluidParticleReOrder(
-			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) = 0;
+		// hands the send and receive local index lists of the latest plan over by swapping storage
+		// (peer-major in the local layout the plan was built on, the receiver keeps them valid across re-orders)
+		virtual void SwapFluidSyncLocalIdxs(
+			Base::DistHaloMode haloExtent,
+			std::vector<uint32_t>& sendLocalIdxs,
+			std::vector<uint32_t>& recvLocalIdxs) = 0;
 
-		// split owner-to-halo exchange of fluid values over the selected halo extent
-		virtual void BeginSynchronizeFluidScalarField(
-			std::span<float> values,
+		// split owner-to-halo exchange of per-particle payloads packed in the order of the index lists
+		// (payloads stay untouched until the exchange ends, and may be device memory under CUDA-aware MPI)
+		virtual void BeginFluidHaloExchange(
+			std::span<const std::byte> sendPayload,
+			std::span<std::byte> recvPayload,
 			Base::DistHaloMode haloExtent,
 			FluidSolverSyncPhase phase) = 0;
-		virtual void BeginSynchronizeFluidVectorField(
-			std::span<float> xValues,
-			std::span<float> yValues,
-			std::span<float> zValues,
-			Base::DistHaloMode haloExtent,
-			FluidSolverSyncPhase phase) = 0;
-		virtual void EndSynchronizeFluidFields() = 0;
-
-		// overwrites fluid halo flags with the values held by their owning ranks
-		virtual void SynchronizeFluidParticleFlagsToHalos(
-			std::span<uint8_t> flags,
-			Base::DistHaloMode haloExtent) = 0;
+		virtual void EndFluidHaloExchange() = 0;
 
 		virtual PressureSolveErrorSums GlobalizePressureSolveErrorSums(
 			const PressureSolveErrorSums& localSums) const = 0;
@@ -162,6 +157,10 @@ namespace Sim
 			uint32_t N_ownedB,
 			uint32_t N_ownedR) = 0;
 
+		// takes over the send and receive local index lists of a freshly rebuilt fluid solver sync plan
+		virtual void TakeFluidSolverSyncLocalIdxs(
+			I_DistributedFluidSolverSync& distributedFluidSolverSync) = 0;
+
 		// configures rank-authoritative particle work for distributed execution
 		// (both index lists must be strictly ascending in the current local layout)
 		// (the owned fluid prefix always computes pressure acceleration, the halo list adds to it)
@@ -170,14 +169,11 @@ namespace Sim
 			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) = 0;
 
-		// classifies fluid particles against the regular export near-surface threshold
-		virtual bool FillFluidParticleNearSurfaceFlags(
-			const SimParams& simParams,
-			std::vector<uint8_t>& nearSurfaceFlags) const = 0;
-
-		// selects regular export surface particles using authoritative near-surface flags
+		// selects regular export surface particles, with near-surface flags of halos taken from their owners
+		// (collective with the neighboring ranks, failures before or during the exchange throw)
 		virtual bool BuildExportFluidParticleLocalIdxs(
-			const std::vector<uint8_t>& nearSurfaceFlags,
+			const SimParams& simParams,
+			I_DistributedFluidSolverSync& distributedFluidSolverSync,
 			std::vector<uint32_t>& localIdxs) const = 0;
 
 		// reads body-level force and torque accumulated during the latest backend step

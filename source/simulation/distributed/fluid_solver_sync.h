@@ -3,6 +3,7 @@
 
 // external
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -11,7 +12,6 @@
 #include <vector>
 
 // internal
-#include "source/eval/bench/benchmarks.h"
 #include "source/eval/memory/categories.h"
 #include "source/simulation/core/backend_sim.h"
 #include "source/simulation/sync/state_sim.h"
@@ -36,16 +36,12 @@ namespace Dist
 	struct FluidSolverSyncPayloadProtocol
 	{
 		int tag = -1;
-		uint32_t N_fields = 0;
+		uint32_t N_bytesPerParticle = 0;
 	};
 
 	// phase-specific message identity and payload shape for solver field exchanges
 	std::optional<FluidSolverSyncPayloadProtocol> GetFluidSolverSyncPayloadProtocol(
 		Sim::FluidSolverSyncPhase phase) noexcept;
-
-	// particles packed per block, keeping one block of every field cache resident
-	// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
-	inline constexpr uint32_t FLUID_SOLVER_SYNC_BLOCK_SIZE = 2048;
 
 	// owned and halo particles classified per chunk, so workers fill disjoint plan ranges
 	// TODO: fine-tune chunk size by trying out 2048, 4096, 8192, 16384?
@@ -71,29 +67,21 @@ namespace Dist
 			Base::DistHaloMode distHaloMode,
 			uint64_t N_expectedGlobalF,
 			MpiContext& mpiContext,
-			Bench::BenchmarksTracker& benchmarksTracker,
 			std::string* failMsg = nullptr);
 
-		// remaps the plan onto re-ordered backend storage
-		void ApplyFluidParticleReOrder(
-			std::span<const uint32_t> newFluidLocalIdx_FromOldLocalIdx) override;
+		// hands the local index lists of the published plan over, once per rebuild and halo extent
+		void SwapFluidSyncLocalIdxs(
+			Base::DistHaloMode haloExtent,
+			std::vector<uint32_t>& sendLocalIdxs,
+			std::vector<uint32_t>& recvLocalIdxs) override;
 
-		// overwrites remote values with the ones held by their owning rank
-		void BeginSynchronizeFluidScalarField(
-			std::span<float> values,
+		// posts the receives and sends of every peer slice of the packed payloads
+		void BeginFluidHaloExchange(
+			std::span<const std::byte> sendPayload,
+			std::span<std::byte> recvPayload,
 			Base::DistHaloMode haloExtent,
 			Sim::FluidSolverSyncPhase phase) override;
-		void BeginSynchronizeFluidVectorField(
-			std::span<float> xValues,
-			std::span<float> yValues,
-			std::span<float> zValues,
-			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase) override;
-		void EndSynchronizeFluidFields() override;
-
-		void SynchronizeFluidParticleFlagsToHalos(
-			std::span<uint8_t> flags,
-			Base::DistHaloMode haloExtent) override;
+		void EndFluidHaloExchange() override;
 
 		// sums rank-local solver errors, normalization happens in the solver
 		Sim::PressureSolveErrorSums GlobalizePressureSolveErrorSums(
@@ -105,47 +93,25 @@ namespace Dist
 
 	private:
 
-		// particle slots shared with one neighboring rank for one halo extent
+		// particle slots shared with every neighboring rank for one halo extent, peer-major
+		// (sorted by global particle ID within each peer slice, local indices in the layout of the latest Rebuild())
 		struct ParticlePlan
 		{
-			// local slots read from and written to, sorted by global particle ID
+			// local slots read from and written to
 			std::vector<uint32_t> sendLocalIdxs;
 			std::vector<uint32_t> recvLocalIdxs;
-		};
 
-		// global particle IDs matching the local index lists of one plan under construction
-		struct ParticlePlanIds
-		{
+			// global particle IDs matching the local index lists, used to order and validate the plan
 			std::vector<uint64_t> sendParticleIds;
 			std::vector<uint64_t> recvParticleIds;
-		};
 
-		// single/double halo plans and reusable payload storage for one neighboring rank
-		struct PeerPlan
-		{
-			int rank = -1;
-			std::array<ParticlePlan, N_HALO_EXTENTS> particlePlans;
+			// peer slice offsets into the lists, indexed by [peerIdx] up to N_peers (inclusive)
+			// the combined send list can include the same local particle for multiple peers
+			std::vector<uint64_t> sendOffsets_ByPeer;
+			std::vector<uint64_t> recvOffsets_ByPeer;
 
-			// reusable payload storage
-			std::vector<float> sendBuffer;
-			std::vector<float> recvBuffer;
-			std::vector<uint8_t> sendByteBuffer;
-			std::vector<uint8_t> recvByteBuffer;
-		};
-
-		// one contiguous slice of one peer payload, packed or unpacked by a single worker
-		struct FieldSyncWorkItem
-		{
-			uint32_t peerIdx = 0;
-			uint32_t beginParticleIdx = 0;
-			uint32_t endParticleIdx = 0;
-		};
-
-		// flat pack and unpack work covering every peer for one halo extent
-		struct FieldSyncSchedule
-		{
-			std::vector<FieldSyncWorkItem> sendWorkItems;
-			std::vector<FieldSyncWorkItem> recvWorkItems;
+			// set by Rebuild(), cleared once the local index lists are handed over
+			bool localIdxsPublished = false;
 		};
 
 		// reusable scratch for parallel construction of variable-sized peer plans
@@ -167,55 +133,25 @@ namespace Dist
 
 			// owner peer selected during the receive count pass
 			std::vector<int> recvPeerIdx_ByHaloIdx;
-
-			// global particle IDs used to order and validate the plans, indexed by [peerIdx][haloExtentIdx]
-			std::vector<std::array<ParticlePlanIds, N_HALO_EXTENTS>> particlePlanIds_ByPeer;
 		};
-
-		// packs and posts exchange of up to three fields in one round of messages
-		void BeginSynchronizeFluidFields(
-			const std::array<std::span<float>, 3>& fields,
-			uint32_t N_fields,
-			Base::DistHaloMode haloExtent,
-			Sim::FluidSolverSyncPhase phase);
-
-		// rebuilds both single and double halo work schedules from the published peer plans
-		void BuildFieldSyncSchedules();
-
-		// splits one peer particle range into block-sized work items
-		static void AppendFieldSyncWorkItems(
-			std::vector<FieldSyncWorkItem>& workItems,
-			uint32_t peerIdx,
-			uint32_t N_particles);
-
-		// clears one plan for the next rebuild
-		static void ClearParticlePlan(ParticlePlan& particlePlan);
 
 		// set when Rebuild() publishes a validated plan
 		MpiContext* mpiContext_ = nullptr;
-		Bench::BenchmarksTracker* benchmarksTracker_ = nullptr;
 
-		// particle counts the current plan was built for
+		// particle count the current plan was built for
 		uint64_t N_globalF_ = 0;
-		uint32_t N_localF_ = 0;
 		Base::DistHaloMode distHaloMode_ = Base::DistHaloMode::SingleHalo;
 
-		// peer exchange plans and reusable MPI requests
-		std::vector<PeerPlan> peerPlans_;
-
-		// flat pack and unpack work covering every peer, rebuilt with the plans
-		std::array<FieldSyncSchedule, N_HALO_EXTENTS> fieldSyncSchedules_;
+		// neighboring ranks in ascending order, single/double halo plans and reusable MPI requests
+		std::vector<int> peerRanks_;
+		std::array<ParticlePlan, N_HALO_EXTENTS> particlePlans_;
 
 		std::vector<MPI_Request> requests_;
 		std::vector<MpiRequestInfo> requestInfos_;
-		std::array<std::span<float>, 3> pendingFields_{};
-		uint32_t N_pendingFields_ = 0;
-		Base::DistHaloMode pendingHaloExtent_ = Base::DistHaloMode::SingleHalo;
 		Sim::FluidSolverSyncPhase pendingPhase_ = Sim::FluidSolverSyncPhase::Density;
 		bool fluidFieldExchangePending_ = false;
 
 		// reusable rebuild storage
-		std::vector<PeerPlan> nextPeerPlans_;
 		PlanBuildWorkBuffers planBuildWorkBuffers_;
 		std::vector<std::pair<uint64_t, uint32_t>> peerIdxSortScratch_;
 	};

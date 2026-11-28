@@ -1472,10 +1472,13 @@ bool DistSimulationMgr::RebuildFluidSolverSyncPlan()
 			simParams_.distHaloMode,
 			N_expectedGlobalF_,
 			mpiContext_,
-			*benchmarksTracker_,
 			&failMsg))
 		{
 			localOk = false;
+		}
+		else
+		{
+			distParticleBackend_->TakeFluidSolverSyncLocalIdxs(fluidSolverSyncMgr_);
 		}
 	}
 	catch (const std::exception& ex)
@@ -1660,19 +1663,7 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 {
 	bool localOk = true;
 
-	if (!distParticleBackend_->FillFluidParticleNearSurfaceFlags(
-			simParams_, localNearSurfaceFlagsScratch_) ||
-		localNearSurfaceFlagsScratch_.size() !=
-			static_cast<uint64_t>(particlesF.N_))
-	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to classify rank-local fluid particles "
-			"for distributed surface export.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		localOk = false;
-	}
-
-	if (localOk && !particleStateF_.IsValidLocalParticleLayout(particlesF.N_))
+	if (!particleStateF_.IsValidLocalParticleLayout(particlesF.N_))
 	{
 		SPDLOG_ERROR(
 			"[rank {}/{}] Invalid fluid particle layout "
@@ -1698,20 +1689,32 @@ bool DistSimulationMgr::BuildExportFluidParticleLocalIdxs(
 		}
 	}
 
-	// validate local flags on each rank before entering owner-to-halo exchange
+	// validate the local layout on each rank before the backend enters the owner-to-halo exchange
 	if (!mpiContext_.AllTrue(localOk)) { return false; }
 
-	fluidSolverSyncMgr_.SynchronizeFluidParticleFlagsToHalos(
-		localNearSurfaceFlagsScratch_, simParams_.distHaloMode);
-
-	if (!distParticleBackend_->BuildExportFluidParticleLocalIdxs(
-		localNearSurfaceFlagsScratch_,
-		localIdxs))
+	// failures inside the neighbor exchange abort every rank
+	try
 	{
-		SPDLOG_ERROR(
-			"[rank {}/{}] Failed to select distributed fluid surface particles.",
-			mpiContext_.Rank(), mpiContext_.Size());
-		localOk = false;
+		if (!distParticleBackend_->BuildExportFluidParticleLocalIdxs(
+			simParams_,
+			fluidSolverSyncMgr_,
+			localIdxs))
+		{
+			SPDLOG_ERROR(
+				"[rank {}/{}] Failed to select distributed fluid surface particles.",
+				mpiContext_.Rank(), mpiContext_.Size());
+			localOk = false;
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		mpiContext_.Abort(
+			"Failed to select distributed fluid surface particles: " + std::string(ex.what()));
+	}
+	catch (...)
+	{
+		mpiContext_.Abort(
+			"Failed to select distributed fluid surface particles: unknown error.");
 	}
 
 	return mpiContext_.AllTrue(localOk);
@@ -1801,7 +1804,8 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_ParticleMetadata,
 		Mem::MemUsageOf_Vector(outerLocalIdxsF_));
 
-	Mem::MemUsage exchangeBufferUsage{};
+	Mem::MemUsage exchangeBufferUsage =
+		Mem::Get(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_ExchangeBuffers);
 	Mem::Add(exchangeBufferUsage, particleRedistributionMgr_.GetExchangeBufferMemoryUsage());
 	Mem::Add(exchangeBufferUsage, fluidSolverSyncMgr_.GetExchangeBufferMemoryUsage());
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_ExchangeBuffers, exchangeBufferUsage);
@@ -1814,7 +1818,6 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodyForceTorque(rigidBodyForceTorque_));
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodySyncBuffers(rigidBodySyncBuffers_));
 	Mem::Add(miscUsage, MemoryUsageOfStatisticsPartial(statisticsPartialScratch_));
-	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(localNearSurfaceFlagsScratch_));
 	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(exportFluidParticleLocalIdxsScratch_));
 	Mem::Add(miscUsage, MemoryUsageOfExportSnapshot(exportSnapScratch_));
 	Mem::Set(record, Mem::MemSpace::RAM, Mem::MemBucket::Dist_Misc, miscUsage);

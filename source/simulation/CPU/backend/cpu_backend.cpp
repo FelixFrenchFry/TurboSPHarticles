@@ -199,6 +199,10 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	rigidBoundaryContactNeighbors_.Clear();
 	newFluidLocalIdx_FromOldLocalIdx_.clear();
 	chunkFlagsScratch_.clear();
+	solverSyncSendLocalIdxsF_[0].clear();
+	solverSyncSendLocalIdxsF_[1].clear();
+	solverSyncRecvLocalIdxsF_[0].clear();
+	solverSyncRecvLocalIdxsF_[1].clear();
 	useDistributedStepWork_ = false;
 	integrateRigidBodies_ = true;
 	applyRigidBodyExternalForces_ = true;
@@ -878,6 +882,10 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	innerFluidChunkIdxs_.clear();
 	outerFluidChunkIdxs_.clear();
 	chunkFlagsScratch_.clear();
+	solverSyncSendLocalIdxsF_[0].clear();
+	solverSyncSendLocalIdxsF_[1].clear();
+	solverSyncRecvLocalIdxsF_[0].clear();
+	solverSyncRecvLocalIdxsF_[1].clear();
 	useDistributedStepWork_ = false;
 	neighborList_->Resize(N_F_, N_B_, N_R_, params);
 	return true;
@@ -1095,15 +1103,19 @@ void SimBackend_CPU::ClassifyExportSurfaceParticles(
 }
 
 bool SimBackend_CPU::BuildExportFluidParticleLocalIdxs(
-	const std::vector<uint8_t>& nearSurfaceFlags,
+	const SimParams& simParams,
+	I_DistributedFluidSolverSync& distributedFluidSolverSync,
 	std::vector<uint32_t>& localIdxs) const
 {
-	if (!neighborList_ || nearSurfaceFlags.size() != N_F_)
+	if (!FillFluidParticleNearSurfaceFlags(simParams, expNearSurfaceFlagsScratch_))
 	{
-		return false;
+		throw std::runtime_error(
+			"Failed to classify CPU fluid particles before the near-surface flag exchange.");
 	}
+	SynchronizeFluidParticleFlagsToHalos(
+		expNearSurfaceFlagsScratch_, simParams.distHaloMode, distributedFluidSolverSync);
 
-	ClassifyExportSurfaceParticles(nearSurfaceFlags);
+	ClassifyExportSurfaceParticles(expNearSurfaceFlagsScratch_);
 	const uint32_t N_surface = static_cast<uint32_t>(
 		std::ranges::count(expSurfaceFlagsScratch_, uint8_t{ 1 }));
 
@@ -1321,6 +1333,17 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Set(record, memSpace, MemBucket::Neighbors_ListStorageR, usage.rigid);
 	}
 
+	// --- [ distributed exchange buffers ] ---------------------------------------------------------
+
+	{
+		MemUsage usage{};
+		Add(usage, MemUsageOf_Vector(solverSyncSendPayloadF_));
+		Add(usage, MemUsageOf_Vector(solverSyncRecvPayloadF_));
+		Add(usage, MemUsageOf_Vector(solverSyncSendFlagsF_));
+		Add(usage, MemUsageOf_Vector(solverSyncRecvFlagsF_));
+		Set(record, memSpace, MemBucket::Dist_ExchangeBuffers, usage);
+	}
+
 	// --- [ misc ] ----------------------------------------------------------------------------------
 
 	{
@@ -1330,6 +1353,7 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(workBufferF2_));
 		Add(usage, MemUsageOf_Vector(workBufferF3_));
 		Add(usage, MemUsageOf_Vector(expSurfaceFlagsScratch_));
+		Add(usage, MemUsageOf_Vector(expNearSurfaceFlagsScratch_));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFF.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFB.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountFR.histogram));
@@ -1346,6 +1370,10 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(particleLocalIdxsR_ByBody_));
 		Add(usage, MemUsageOf_Vector(newFluidLocalIdx_FromOldLocalIdx_));
 		Add(usage, MemUsageOf_Vector(chunkFlagsScratch_));
+		Add(usage, MemUsageOf_Vector(solverSyncSendLocalIdxsF_[0]));
+		Add(usage, MemUsageOf_Vector(solverSyncSendLocalIdxsF_[1]));
+		Add(usage, MemUsageOf_Vector(solverSyncRecvLocalIdxsF_[0]));
+		Add(usage, MemUsageOf_Vector(solverSyncRecvLocalIdxsF_[1]));
 		Add(usage, MemUsageOf_Vector(xPosRelWorldR_));
 		Add(usage, MemUsageOf_Vector(yPosRelWorldR_));
 		Add(usage, MemUsageOf_Vector(zPosRelWorldR_));
@@ -1749,6 +1777,19 @@ bool SimBackend_CPU::ConfigureDistributedParticleLayout(
 	return true;
 }
 
+void SimBackend_CPU::TakeFluidSolverSyncLocalIdxs(
+	I_DistributedFluidSolverSync& distributedFluidSolverSync)
+{
+	for (const Base::DistHaloMode haloExtent :
+		{ Base::DistHaloMode::SingleHalo, Base::DistHaloMode::DoubleHalo })
+	{
+		distributedFluidSolverSync.SwapFluidSyncLocalIdxs(
+			haloExtent,
+			solverSyncSendLocalIdxsF_[Base::GetIdx(haloExtent)],
+			solverSyncRecvLocalIdxsF_[Base::GetIdx(haloExtent)]);
+	}
+}
+
 bool SimBackend_CPU::ConfigureDistributedStep(
 	const std::vector<uint32_t>& outerLocalIdxsF,
 	const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
@@ -1873,10 +1914,6 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 		oldFluidLocalIdx_FromNewLocalIdx,
 		oldBoundaryLocalIdx_FromNewLocalIdx))
 	{
-		if (distributedFluidSolverSync_)
-		{
-			distributedFluidSolverSync_->ApplyFluidParticleReOrder({});
-		}
 		BuildDistributedSolverChunkIdxs();
 		return;
 	}
@@ -1918,10 +1955,10 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 		const char* failMsg)
 	{
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, static_cast<uint32_t>(localIdxs.size())),
-			[&](const tbb::blocked_range<uint32_t>& r)
+			tbb::blocked_range<uint64_t>(0, localIdxs.size()),
+			[&](const tbb::blocked_range<uint64_t>& r)
 			{
-				for (uint32_t i = r.begin(); i != r.end(); i++)
+				for (uint64_t i = r.begin(); i != r.end(); i++)
 				{
 					uint32_t& localIdx = localIdxs[i];
 					if (localIdx >= N_F_) { throw std::runtime_error(failMsg); }
@@ -1940,13 +1977,112 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 		"Invalid outer CPU fluid particle local index.");
 	remapLocalIdxs(pressureAccHaloLocalIdxsF_, N_F_,
 		"Invalid halo pressure-acceleration CPU fluid particle local index.");
+	for (uint32_t haloExtentIdx = 0; haloExtentIdx != solverSyncSendLocalIdxsF_.size(); haloExtentIdx++)
+	{
+		remapLocalIdxs(solverSyncSendLocalIdxsF_[haloExtentIdx], N_ownedF_,
+			"Invalid solver sync send CPU fluid particle local index.");
+		remapLocalIdxs(solverSyncRecvLocalIdxsF_[haloExtentIdx], N_F_,
+			"Invalid solver sync receive CPU fluid particle local index.");
+	}
 
 	BuildDistributedSolverChunkIdxs();
+}
 
-	if (distributedFluidSolverSync_)
+void SimBackend_CPU::BeginFluidFieldSync(
+	const std::array<std::span<float>, 3>& fields,
+	const uint32_t N_fields,
+	const Base::DistHaloMode haloExtent,
+	const FluidSolverSyncPhase phase)
+{
+	const std::vector<uint32_t>& sendLocalIdxs = solverSyncSendLocalIdxsF_[Base::GetIdx(haloExtent)];
+	const std::vector<uint32_t>& recvLocalIdxs = solverSyncRecvLocalIdxsF_[Base::GetIdx(haloExtent)];
+	const uint64_t N_sendValues = static_cast<uint64_t>(N_fields) * sendLocalIdxs.size();
+	const uint64_t N_recvValues = static_cast<uint64_t>(N_fields) * recvLocalIdxs.size();
+
+	benchmarksTracker_.StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
+	Base::ResizeGrowScratchVector(solverSyncSendPayloadF_, N_sendValues);
+	Base::ResizeGrowScratchVector(solverSyncRecvPayloadF_, N_recvValues);
+
+	// fields are interleaved per particle, so every peer slice stays one contiguous range
+	tbb::parallel_for(
+		tbb::blocked_range<uint64_t>(0, sendLocalIdxs.size(), solverSyncPackBlockSize_),
+		[&](const tbb::blocked_range<uint64_t>& r)
+		{
+			for (uint64_t i = r.begin(); i != r.end(); i++)
+			{
+				const uint32_t localIdx = sendLocalIdxs[i];
+				for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
+				{
+					solverSyncSendPayloadF_[N_fields * i + fieldIdx] =
+						fields[fieldIdx][localIdx];
+				}
+			}
+		});
+
+	distributedFluidSolverSync_->BeginFluidHaloExchange(
+		std::as_bytes(std::span<const float>(solverSyncSendPayloadF_.data(), N_sendValues)),
+		std::as_writable_bytes(std::span<float>(solverSyncRecvPayloadF_.data(), N_recvValues)),
+		haloExtent,
+		phase);
+	solverSyncPendingFieldsF_ = fields;
+	N_solverSyncPendingFields_ = N_fields;
+	solverSyncPendingHaloExtent_ = haloExtent;
+	benchmarksTracker_.StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
+}
+
+void SimBackend_CPU::EndFluidFieldSync()
+{
+	benchmarksTracker_.StartBench(Bench::BenchOp::Dist_HaloFieldExchange);
+	distributedFluidSolverSync_->EndFluidHaloExchange();
+
+	// every halo slot is owned by exactly one peer, so the writes are disjoint
+	const std::vector<uint32_t>& recvLocalIdxs =
+		solverSyncRecvLocalIdxsF_[Base::GetIdx(solverSyncPendingHaloExtent_)];
+	const uint32_t N_fields = N_solverSyncPendingFields_;
+	tbb::parallel_for(
+		tbb::blocked_range<uint64_t>(0, recvLocalIdxs.size(), solverSyncPackBlockSize_),
+		[&](const tbb::blocked_range<uint64_t>& r)
+		{
+			for (uint64_t i = r.begin(); i != r.end(); i++)
+			{
+				const uint32_t localIdx = recvLocalIdxs[i];
+				for (uint32_t fieldIdx = 0; fieldIdx != N_fields; fieldIdx++)
+				{
+					solverSyncPendingFieldsF_[fieldIdx][localIdx] =
+						solverSyncRecvPayloadF_[N_fields * i + fieldIdx];
+				}
+			}
+		});
+	solverSyncPendingFieldsF_ = {};
+	N_solverSyncPendingFields_ = 0;
+	benchmarksTracker_.StopBench(Bench::BenchOp::Dist_HaloFieldExchange);
+}
+
+void SimBackend_CPU::SynchronizeFluidParticleFlagsToHalos(
+	std::vector<uint8_t>& flags,
+	const Base::DistHaloMode haloExtent,
+	I_DistributedFluidSolverSync& distributedFluidSolverSync) const
+{
+	const std::vector<uint32_t>& sendLocalIdxs = solverSyncSendLocalIdxsF_[Base::GetIdx(haloExtent)];
+	const std::vector<uint32_t>& recvLocalIdxs = solverSyncRecvLocalIdxsF_[Base::GetIdx(haloExtent)];
+	Base::ResizeGrowScratchVector(solverSyncSendFlagsF_, sendLocalIdxs.size());
+	Base::ResizeGrowScratchVector(solverSyncRecvFlagsF_, recvLocalIdxs.size());
+
+	for (uint64_t i = 0; i != sendLocalIdxs.size(); i++)
 	{
-		distributedFluidSolverSync_->ApplyFluidParticleReOrder(
-			newFluidLocalIdx_FromOldLocalIdx_);
+		solverSyncSendFlagsF_[i] = flags[sendLocalIdxs[i]];
+	}
+
+	distributedFluidSolverSync.BeginFluidHaloExchange(
+		std::as_bytes(std::span<const uint8_t>(solverSyncSendFlagsF_.data(), sendLocalIdxs.size())),
+		std::as_writable_bytes(std::span<uint8_t>(solverSyncRecvFlagsF_.data(), recvLocalIdxs.size())),
+		haloExtent,
+		FluidSolverSyncPhase::ExportSurfaceFlags);
+	distributedFluidSolverSync.EndFluidHaloExchange();
+
+	for (uint64_t i = 0; i != recvLocalIdxs.size(); i++)
+	{
+		flags[recvLocalIdxs[i]] = solverSyncRecvFlagsF_[i];
 	}
 }
 

@@ -2,6 +2,7 @@
 #pragma once
 
 // external
+#include <array>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -100,6 +101,10 @@ namespace Sim
 			uint32_t N_ownedB,
 			uint32_t N_ownedR) override;
 
+		// takes over the peer-major send and receive local index lists of the rebuilt solver sync plan
+		void TakeFluidSolverSyncLocalIdxs(
+			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
+
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
 			const std::vector<uint32_t>& outerLocalIdxsF,
@@ -109,11 +114,12 @@ namespace Sim
 		// classifies local fluid particles against the export near-surface threshold
 		bool FillFluidParticleNearSurfaceFlags(
 			const SimParams& simParams,
-			std::vector<uint8_t>& nearSurfaceFlags) const override;
+			std::vector<uint8_t>& nearSurfaceFlags) const;
 
-		// selects local export surface particles using reconciled near-surface flags
+		// selects local export surface particles, with halo near-surface flags taken from their owners
 		bool BuildExportFluidParticleLocalIdxs(
-			const std::vector<uint8_t>& nearSurfaceFlags,
+			const SimParams& simParams,
+			I_DistributedFluidSolverSync& distributedFluidSolverSync,
 			std::vector<uint32_t>& localIdxs) const override;
 
 		// reads body-level force and torque accumulated during the latest backend step
@@ -148,6 +154,7 @@ namespace Sim
 		// TODO: fine-tune chunk size by trying out 1024, 2048, 4096, 8192, 16384, 32768?
 		static constexpr uint32_t particleCompactionBlockSize_ = 1024;
 		static constexpr uint32_t particleAppendBlockSize_ = 4096;
+		static constexpr uint32_t solverSyncPackBlockSize_ = 2048;
 
 		// computes rank-local statistics for all particles or active distributed particles,
 		// so records can be finalized locally OR aggregated across ranks before finalization
@@ -158,6 +165,21 @@ namespace Sim
 
 		void ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
 		void BuildDistributedSolverChunkIdxs();
+
+		// packs the send slots of up to three fields, interleaved per particle, and starts their halo exchange
+		void BeginFluidFieldSync(
+			const std::array<std::span<float>, 3>& fields,
+			uint32_t N_fields,
+			Base::DistHaloMode haloExtent,
+			FluidSolverSyncPhase phase);
+		// waits for the pending halo exchange and writes the received values into the halo slots
+		void EndFluidFieldSync();
+
+		// overwrites halo flags with the values held by their owning ranks
+		void SynchronizeFluidParticleFlagsToHalos(
+			std::vector<uint8_t>& flags,
+			Base::DistHaloMode haloExtent,
+			I_DistributedFluidSolverSync& distributedFluidSolverSync) const;
 
 		void ClassifyExportSurfaceParticles(const std::vector<uint8_t>& nearSurfaceFlags) const;
 
@@ -313,6 +335,17 @@ namespace Sim
 		// marks the SIMD chunks holding at least one selected particle during the chunk build
 		std::vector<uint8_t> chunkFlagsScratch_;
 		I_DistributedFluidSolverSync* distributedFluidSolverSync_ = nullptr;
+		// peer-major send and receive local index lists of the solver sync plan per halo extent (single, double)
+		std::array<std::vector<uint32_t>, 2> solverSyncSendLocalIdxsF_;
+		std::array<std::vector<uint32_t>, 2> solverSyncRecvLocalIdxsF_;
+		// packed payloads and target fields of the pending solver sync exchange
+		std::vector<float> solverSyncSendPayloadF_;
+		std::vector<float> solverSyncRecvPayloadF_;
+		mutable std::vector<uint8_t> solverSyncSendFlagsF_;
+		mutable std::vector<uint8_t> solverSyncRecvFlagsF_;
+		std::array<std::span<float>, 3> solverSyncPendingFieldsF_{};
+		uint32_t N_solverSyncPendingFields_ = 0;
+		Base::DistHaloMode solverSyncPendingHaloExtent_ = Base::DistHaloMode::SingleHalo;
 		bool useDistributedStepWork_ = false;
 		bool integrateRigidBodies_ = true;
 		bool applyRigidBodyExternalForces_ = true;
