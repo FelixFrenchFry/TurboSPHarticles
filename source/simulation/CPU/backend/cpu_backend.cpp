@@ -1798,6 +1798,8 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
+	#if defined(_DEBUG)
+	// outer list range and order checks (debug builds only)
 	const uint32_t N_outerF = static_cast<uint32_t>(outerLocalIdxsF.size());
 	const auto isInvalidOuterIdx = [&](const uint32_t outerIdx)
 	{
@@ -1825,6 +1827,7 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 			outerIdx, outerLocalIdxsF[outerIdx], outerLocalIdxsF[outerIdx - 1]);
 		return false;
 	}
+	#endif
 
 	outerFluidParticleLocalIdxs_ = outerLocalIdxsF;
 	distributedFluidSolverSync_ = &distributedFluidSolverSync;

@@ -56,7 +56,7 @@ namespace Dist
 	public:
 
 		// builds the peer exchange plan from the current owned and remote particles
-		// (collective peer-count and fingerprint validation is enabled in every build,
+		// (collective peer-count validation is enabled in every build,
 		// full peer-plan validation is enabled in debug/validation builds)
 		bool Rebuild(
 			const Sync::FluidConstView& particlesF,

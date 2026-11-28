@@ -198,6 +198,7 @@ namespace
 		#endif
 	}
 
+	#if defined(_DEBUG)
 	// checks that retained and appended particle IDs land inside the global particle range
 	// (retained particles are checked as part of the whole old owned prefix)
 	bool ValidatePreparedParticleIds(
@@ -233,6 +234,7 @@ namespace
 
 		return true;
 	}
+	#endif
 
 	// moves the per-particle flags of retained particles along with their compaction moves,
 	// so the retained prefix of the flags is indexed by new local index
@@ -1931,12 +1933,13 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 		}
 	}
 
-	// validate rebuilt fluid counts and particle IDs
+	// validate rebuilt fluid counts (and particle IDs in debug builds)
 	if (appendLocalIdx != N_appended)
 	{
 		if (failMsg) { *failMsg = "Prepared fluid particle mutation count is inconsistent."; }
 		return false;
 	}
+	#if defined(_DEBUG)
 	if (!ValidatePreparedParticleIds(
 		N_oldOwned,
 		oldParticles.id,
@@ -1947,6 +1950,9 @@ bool ParticleRedistributionMgr::PrepareFluidParticleMutation(
 	{
 		return false;
 	}
+	#else
+	(void)N_global;
+	#endif
 
 	// classify the rebuilt owned prefix, where routing already flagged retained outer particles
 	ApplyCompactionMovesToFlags(compactionMovesF_, routes_.fluidIsOuterOwned_ByLocalIdx);
@@ -2090,12 +2096,13 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 		}
 	}
 
-	// validate rebuilt boundary counts and particle IDs
+	// validate rebuilt boundary counts (and particle IDs in debug builds)
 	if (appendLocalIdx != N_appended)
 	{
 		if (failMsg) { *failMsg = "Prepared boundary particle mutation count is inconsistent."; }
 		return false;
 	}
+	#if defined(_DEBUG)
 	if (!ValidatePreparedParticleIds(
 		N_oldOwned,
 		oldParticles.id,
@@ -2106,6 +2113,9 @@ bool ParticleRedistributionMgr::PrepareBoundaryParticleMutation(
 	{
 		return false;
 	}
+	#else
+	(void)N_global;
+	#endif
 
 	// classify the rebuilt owned prefix, where routing already flagged retained outer particles
 	ApplyCompactionMovesToFlags(compactionMovesB_, routes_.boundaryIsOuterOwned_ByLocalIdx);
@@ -2271,10 +2281,12 @@ bool ParticleRedistributionMgr::BuildExchangeRoutes(
 		{
 			return false;
 		}
+		#if defined(_DEBUG)
 		if (!ValidateLocalRigidParticleAttachments(particlesR, rigidBodies, failMsg))
 		{
 			return false;
 		}
+		#endif
 
 		PrepareBuffers(N_ranks);
 	}

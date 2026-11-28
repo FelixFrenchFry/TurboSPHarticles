@@ -37,6 +37,13 @@ using namespace Dist;
 
 namespace
 {
+	// per-step owned particle ID checksums (debug builds only, owned counts are checked in every build)
+	#if defined(_DEBUG)
+	constexpr bool ValidateOwnedParticleIdsEveryStep = true;
+	#else
+	constexpr bool ValidateOwnedParticleIdsEveryStep = false;
+	#endif
+
 	// checksum over the particle IDs owned by this rank, summed across all ranks it has
 	// to stay at the value the initial partition produced (wrap-around sums are intended)
 	uint64_t OwnedParticleIdChecksum(
@@ -1217,7 +1224,9 @@ bool DistSimulationMgr::ValidateRankLocalSimState(
 	return localOk;
 }
 
-bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts(const bool useBackendState) const
+bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts(
+	const bool useBackendState,
+	const bool includeIdChecksums) const
 {
 	std::span<const uint64_t> particleIdsF = localSimState_.particlesF.id;
 	std::span<const uint64_t> particleIdsB = localSimState_.particlesB.id;
@@ -1250,21 +1259,24 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts(const bool useBackendS
 	{
 		particleStateF_.N_owned,
 		particleStateB_.N_owned,
-		particleStateR_.N_owned,
-		OwnedParticleIdChecksum(particleStateF_, particleIdsF),
-		OwnedParticleIdChecksum(particleStateB_, particleIdsB),
-		OwnedParticleIdChecksum(particleStateR_, particleIdsR)
+		particleStateR_.N_owned
 	};
+	if (includeIdChecksums)
+	{
+		N_globalOwned.push_back(OwnedParticleIdChecksum(particleStateF_, particleIdsF));
+		N_globalOwned.push_back(OwnedParticleIdChecksum(particleStateB_, particleIdsB));
+		N_globalOwned.push_back(OwnedParticleIdChecksum(particleStateR_, particleIdsR));
+	}
 	mpiContext_.AllReduceSumUint64s(N_globalOwned);
 
 	const bool countsValid =
 		N_globalOwned[0] == N_expectedGlobalF_ &&
 		N_globalOwned[1] == N_expectedGlobalB_ &&
 		N_globalOwned[2] == N_expectedGlobalR_;
-	const bool checksumsValid =
+	const bool checksumsValid = !includeIdChecksums || (
 		N_globalOwned[3] == expectedOwnedIdChecksumF_ &&
 		N_globalOwned[4] == expectedOwnedIdChecksumB_ &&
-		N_globalOwned[5] == expectedOwnedIdChecksumR_;
+		N_globalOwned[5] == expectedOwnedIdChecksumR_);
 
 	if (!countsValid)
 	{
@@ -1332,21 +1344,21 @@ bool DistSimulationMgr::ValidateGlobalOwnedParticleCounts(const bool useBackendS
 		};
 
 		if ((N_globalOwned[0] != N_expectedGlobalF_ ||
-			N_globalOwned[3] != expectedOwnedIdChecksumF_) &&
+			(includeIdChecksums && N_globalOwned[3] != expectedOwnedIdChecksumF_)) &&
 			!ReportOwnedIdConflict(
 				particleStateF_, particleIdsF, N_expectedGlobalF_, "fluid"))
 		{
 			return false;
 		}
 		if ((N_globalOwned[1] != N_expectedGlobalB_ ||
-			N_globalOwned[4] != expectedOwnedIdChecksumB_) &&
+			(includeIdChecksums && N_globalOwned[4] != expectedOwnedIdChecksumB_)) &&
 			!ReportOwnedIdConflict(
 				particleStateB_, particleIdsB, N_expectedGlobalB_, "boundary"))
 		{
 			return false;
 		}
 		if ((N_globalOwned[2] != N_expectedGlobalR_ ||
-			N_globalOwned[5] != expectedOwnedIdChecksumR_) &&
+			(includeIdChecksums && N_globalOwned[5] != expectedOwnedIdChecksumR_)) &&
 			!ReportOwnedIdConflict(
 				particleStateR_, particleIdsR, N_expectedGlobalR_, "rigid"))
 		{
@@ -2056,7 +2068,8 @@ bool DistSimulationMgr::ExecuteDistributedStep(const Sim::SimParams& params)
 
 		MarkTrace(Trace::TraceStage::Dist_GlobalCountValidation);
 		benchmarksTracker_->StartBench(Bench::BenchOp::Dist_Misc);
-		const bool globalCountsOk = ValidateGlobalOwnedParticleCounts();
+		const bool globalCountsOk = ValidateGlobalOwnedParticleCounts(
+			true, ValidateOwnedParticleIdsEveryStep);
 		benchmarksTracker_->StopBench(Bench::BenchOp::Dist_Misc);
 		if (!globalCountsOk) { return false; }
 
@@ -2363,6 +2376,7 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata() const
 		return false;
 	}
 
+	#if defined(_DEBUG)
 	if (!ValidateLocalRigidParticleAttachments(
 		particlesR, localSimState_.rigidBodies, &rigidFailMsg))
 	{
@@ -2371,6 +2385,7 @@ bool DistSimulationMgr::ValidateRankLocalParticleMetadata() const
 			mpiContext_.Rank(), mpiContext_.Size(), rigidFailMsg);
 		return false;
 	}
+	#endif
 
 	return true;
 }

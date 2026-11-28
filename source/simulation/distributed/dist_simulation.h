@@ -109,7 +109,8 @@ namespace Dist
 		bool ValidateRankLocalSimState(bool includeRigidState) const;
 
 		// [ rank-reduced ] validates that the owned particle sums still add up to the global counts established during initialization
-		bool ValidateGlobalOwnedParticleCounts(bool useBackendState = true) const;
+		// (optionally also the owned particle ID checksums, which read every owned particle ID)
+		bool ValidateGlobalOwnedParticleCounts(bool useBackendState = true, bool includeIdChecksums = true) const;
 
 		// [ rank-reduced ] transfers rank-local state into the selected backend
 		bool InitializeSimBackendFromState();

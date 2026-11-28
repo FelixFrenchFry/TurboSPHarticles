@@ -7,6 +7,7 @@
 #include <exception>
 #include <glm/vec3.hpp>
 #include <gtest/gtest.h>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,6 +15,7 @@
 // internal
 #include "source/simulation/CPU/backend/cpu_backend.h"
 #include "source/simulation/distributed/fluid_solver_sync.h"
+#include "source/simulation/distributed/particle_redistribution.h"
 
 
 
@@ -234,6 +236,101 @@ namespace
 			EXPECT_GT(pressure, 0.0f);
 			EXPECT_NEAR(actual.pressure[i], pressure, pressure * 1e-5f);
 		}
+	}
+
+	// Provide malformed backend views through the public redistribution entry point.
+	class RigidRedistributionTestBackend final : public Sim::I_DistributedParticleBackend
+	{
+	public:
+		explicit RigidRedistributionTestBackend(const Sync::RigidConstView rigidView)
+			: rigidView_(rigidView) {}
+
+		Sync::FluidConstView GetFluidParticleView() const override { return {}; }
+		Sync::BoundaryConstView GetBoundaryParticleView() const override { return {}; }
+		Sync::RigidConstView GetRigidParticleView() const override { return rigidView_; }
+		Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const override { return {}; }
+		bool ApplyParticleRedistribution(
+			uint32_t, uint32_t, uint32_t,
+			std::span<const Sync::ParticleCompactionMove>,
+			std::span<const Sync::ParticleCompactionMove>,
+			std::span<const Sync::ParticleCompactionMove>,
+			const Sync::FluidParticles&, const Sync::BoundaryParticles&, const Sync::RigidParticles&,
+			uint32_t, uint32_t, uint32_t, bool, const Sim::SimParams&) override
+		{
+			ADD_FAILURE() << "Malformed rigid particle view reached backend mutation.";
+			return false;
+		}
+		void CopyRigidBodyStateTo(Sync::RigidBodies&) const override {}
+		bool ApplyRigidBodyStateFrom(const Sync::RigidBodies&) override { return false; }
+		bool ConfigureDistributedParticleLayout(uint32_t, uint32_t, uint32_t) override { return false; }
+		void TakeFluidSolverSyncLocalIdxs(Sim::I_DistributedFluidSolverSync&) override {}
+		bool ConfigureDistributedStep(
+			const std::vector<uint32_t>&, Sim::I_DistributedFluidSolverSync&) override { return false; }
+		bool BuildExportFluidParticleLocalIdxs(
+			const Sim::SimParams&, Sim::I_DistributedFluidSolverSync&, std::vector<uint32_t>&) const override
+		{
+			return false;
+		}
+		bool GetRigidBodyForceTorque(Sim::RigidBodyForceTorque&) const override { return false; }
+		bool ApplyRigidBodyForceTorque(const Sim::RigidBodyForceTorque&, float) override { return false; }
+		bool FillStatisticsPartial(Stats::StatisticsPartial&, const Sim::SimParams&) const override { return false; }
+
+	private:
+		Sync::RigidConstView rigidView_;
+	};
+
+	enum class RigidViewFault { ShortBodyIds, InvalidBodyIndex };
+
+	void ExpectRigidRedistributionFailure(const RigidViewFault fault)
+	{
+		auto& mpi = *mpiContext;
+		const int rank = mpi.Rank();
+		SCOPED_TRACE(rank);
+		const auto params = MakeParams(Base::DistHaloMode::SingleHalo);
+		auto decomp = Dist::MakeDomainDecomp(Base::DomainDecompMethod::AABB_Slabs);
+		decomp->Build({ slabBounds, params.distHaloRadius, N_ranks });
+
+		Sync::RigidBodies bodies;
+		// Back both indices with transforms so a missed bounds check reaches the halo exchange.
+		bodies.resizeAll(2);
+		bodies.N_ = 1;
+		bodies.rigidParticleCount = { 1 };
+		bodies.zCM = { 3.75f, 3.75f };
+
+		Sync::RigidParticles rigid;
+		rigid.resizeAll(rank == 0 ? 1 : 0);
+		if (rank == 0)
+		{
+			rigid.id[0] = 0;
+			rigid.bodyId[0] = fault == RigidViewFault::InvalidBodyIndex ? bodies.N_ : 0;
+			rigid.xPosRel[0] = rigid.yPosRel[0] = 1.0f;
+		}
+		auto rigidView = rigid.constView();
+		if (rank == 0 && fault == RigidViewFault::ShortBodyIds)
+		{
+			rigidView.bodyId = rigidView.bodyId.first(0);
+		}
+
+		RigidRedistributionTestBackend backend(rigidView);
+		Dist::ParticleRedistributionMgr redistribution;
+		Dist::DistParticleState fluidState, boundaryState, rigidState{ .N_owned = rigid.N_ };
+		std::vector<uint32_t> outerLocalIdxs;
+		std::string failMsg;
+		EXPECT_FALSE(redistribution.RedistributeParticles(
+			backend, fluidState, boundaryState, rigidState, outerLocalIdxs, bodies, *decomp, mpi,
+			params, false, 0, 0, 1, &failMsg));
+		if (rank == 0) { EXPECT_FALSE(failMsg.empty()); }
+		EXPECT_EQ(redistribution.GetStats().N_recvHaloR, 0u);
+	}
+
+	TEST(RigidRedistributionTests, RejectsShortBodyIdViewBeforeHaloExchange)
+	{
+		ExpectRigidRedistributionFailure(RigidViewFault::ShortBodyIds);
+	}
+
+	TEST(RigidRedistributionTests, RejectsOutOfRangeBodyIndexBeforeHaloExchange)
+	{
+		ExpectRigidRedistributionFailure(RigidViewFault::InvalidBodyIndex);
 	}
 }
 
