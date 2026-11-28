@@ -1809,27 +1809,26 @@ bool ParticleRedistributionMgr::RedistributeParticles(
 	// apply prepared fluid, boundary, and rigid mutations
 	try
 	{
-		localOk = distParticleBackend.ApplyParticleRedistribution(
-			routes_.N_keptOwnedF,
-			routes_.N_keptOwnedB,
-			routes_.N_keptOwnedR,
-			compactionMovesF_,
-			compactionMovesB_,
-			compactionMovesR_,
-			appendedParticlesF_,
-			appendedParticlesB_,
-			appendedParticlesR_,
-			rebuiltParticleStateF_.N_owned,
-			redistributeParticlesB
-				? rebuiltParticleStateB_.N_owned
-				: particleStateB.N_owned,
-			rebuiltParticleStateR_.N_owned,
-			redistributeParticlesB,
+		const Sim::ParticleRedistributionMutation<Sync::FluidParticles> mutationF{
+			.N_retained = routes_.N_keptOwnedF,
+			.N_owned = rebuiltParticleStateF_.N_owned,
+			.compactionMoves = compactionMovesF_,
+			.appendedParticles = appendedParticlesF_ };
+		const Sim::ParticleRedistributionMutation<Sync::BoundaryParticles> mutationB{
+			.N_retained = routes_.N_keptOwnedB,
+			.N_owned = rebuiltParticleStateB_.N_owned,
+			.compactionMoves = compactionMovesB_,
+			.appendedParticles = appendedParticlesB_ };
+		const Sim::ParticleRedistributionMutation<Sync::RigidParticles> mutationR{
+			.N_retained = routes_.N_keptOwnedR,
+			.N_owned = rebuiltParticleStateR_.N_owned,
+			.compactionMoves = compactionMovesR_,
+			.appendedParticles = appendedParticlesR_ };
+		distParticleBackend.ApplyParticleRedistribution(
+			mutationF,
+			redistributeParticlesB ? &mutationB : nullptr,
+			mutationR,
 			simParams);
-		if (!localOk && failMsg)
-		{
-			*failMsg = "Backend rejected particle redistribution mutation.";
-		}
 	}
 	catch (const std::exception& ex)
 	{

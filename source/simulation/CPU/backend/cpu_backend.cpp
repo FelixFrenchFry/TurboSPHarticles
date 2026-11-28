@@ -476,143 +476,23 @@ Sync::ParticlePositionConstView SimBackend_CPU::GetRigidParticleWorldPositionVie
 	return { xPosR_, yPosR_, zPosR_ };
 }
 
-bool SimBackend_CPU::ApplyParticleRedistribution(
-	const uint32_t N_retainedF,
-	const uint32_t N_retainedB,
-	const uint32_t N_retainedR,
-	const std::span<const Sync::ParticleCompactionMove> compactionMovesF,
-	const std::span<const Sync::ParticleCompactionMove> compactionMovesB,
-	const std::span<const Sync::ParticleCompactionMove> compactionMovesR,
-	const Sync::FluidParticles& appendedParticlesF,
-	const Sync::BoundaryParticles& appendedParticlesB,
-	const Sync::RigidParticles& appendedParticlesR,
-	const uint32_t N_ownedF,
-	const uint32_t N_ownedB,
-	const uint32_t N_ownedR,
-	const bool redistributeParticlesB,
+void SimBackend_CPU::ApplyParticleRedistribution(
+	const ParticleRedistributionMutation<Sync::FluidParticles>& mutationF,
+	const ParticleRedistributionMutation<Sync::BoundaryParticles>* mutationB,
+	const ParticleRedistributionMutation<Sync::RigidParticles>& mutationR,
 	const SimParams& params)
 {
-	const auto fluidSizeValid = [&appendedParticlesF](const auto& values)
+	const bool redistributeParticlesB = mutationB != nullptr;
+	if (!redistributeParticlesB && !useDistributedParticleLayout_)
 	{
-		return values.size() == appendedParticlesF.N_;
-	};
-	const auto fluidFieldOmitted = [](const auto& values)
-	{
-		return values.empty();
-	};
-	const auto boundarySizeValid = [&appendedParticlesB](const auto& values)
-	{
-		return values.size() == appendedParticlesB.N_;
-	};
-	const auto rigidSizeValid = [&appendedParticlesR](const auto& values)
-	{
-		return values.size() == appendedParticlesR.N_;
-	};
-
-	// check that the appended particle blocks have the expected sizes
-	// (the fields velPred, accPress, sourceTerm, diagElem, pressure, and density are omitted,
-	// because the following solver step re-writes them before reading them)
-	// TODO: keep it like this or copy them too, if solver step behavior changes?
-	if (!fluidSizeValid(appendedParticlesF.id) ||
-		!fluidSizeValid(appendedParticlesF.xPos) ||
-		!fluidSizeValid(appendedParticlesF.yPos) ||
-		!fluidSizeValid(appendedParticlesF.zPos) ||
-		!fluidSizeValid(appendedParticlesF.xVel) ||
-		!fluidSizeValid(appendedParticlesF.yVel) ||
-		!fluidSizeValid(appendedParticlesF.zVel) ||
-		!fluidFieldOmitted(appendedParticlesF.xVelPred) ||
-		!fluidFieldOmitted(appendedParticlesF.yVelPred) ||
-		!fluidFieldOmitted(appendedParticlesF.zVelPred) ||
-		!fluidFieldOmitted(appendedParticlesF.xAccPress) ||
-		!fluidFieldOmitted(appendedParticlesF.yAccPress) ||
-		!fluidFieldOmitted(appendedParticlesF.zAccPress) ||
-		!fluidFieldOmitted(appendedParticlesF.sourceTerm) ||
-		!fluidFieldOmitted(appendedParticlesF.diagElem) ||
-		!fluidFieldOmitted(appendedParticlesF.pressure) ||
-		!fluidFieldOmitted(appendedParticlesF.density) ||
-		!rigidSizeValid(appendedParticlesR.id) ||
-		!rigidSizeValid(appendedParticlesR.bodyId) ||
-		!rigidSizeValid(appendedParticlesR.xPosRel) ||
-		!rigidSizeValid(appendedParticlesR.yPosRel) ||
-		!rigidSizeValid(appendedParticlesR.zPosRel) ||
-		!rigidSizeValid(appendedParticlesR.volR) ||
-		!rigidSizeValid(appendedParticlesR.psiR) ||
-		(redistributeParticlesB &&
-			(!boundarySizeValid(appendedParticlesB.id) ||
-			 !boundarySizeValid(appendedParticlesB.xPos) ||
-			 !boundarySizeValid(appendedParticlesB.yPos) ||
-			 !boundarySizeValid(appendedParticlesB.zPos) ||
-			 !boundarySizeValid(appendedParticlesB.volB) ||
-			 !boundarySizeValid(appendedParticlesB.psiB))))
-	{
-		return false;
+		throw std::runtime_error(
+			"Particle redistribution without boundary mutation requires a configured particle layout.");
 	}
-
-	for (const uint32_t bodyIdx : appendedParticlesR.bodyId)
-	{
-		if (bodyIdx >= N_RB_) { return false; }
-	}
-
-	const auto compactionMovesValid = [](
-		const std::span<const Sync::ParticleCompactionMove> compactionMoves,
-		const uint32_t N_retained,
-		const uint32_t N_old)
-	{
-		if (N_retained > N_old || compactionMoves.size() > N_retained) { return false; }
-
-		#if defined(_DEBUG)
-		// exhaustively validate that moves fill ascending prefix slots from above the retained prefix,
-		// without sourcing any particle twice
-		std::vector<uint8_t> oldLocalIdxUsed(N_old, 0);
-		for (size_t moveIdx = 0; moveIdx != compactionMoves.size(); moveIdx++)
-		{
-			const Sync::ParticleCompactionMove& move = compactionMoves[moveIdx];
-			if (move.newLocalIdx >= N_retained ||
-				move.oldLocalIdx < N_retained ||
-				move.oldLocalIdx >= N_old ||
-				(moveIdx > 0 && move.newLocalIdx <= compactionMoves[moveIdx - 1].newLocalIdx))
-			{
-				return false;
-			}
-
-			if (oldLocalIdxUsed[move.oldLocalIdx] != 0) { return false; }
-			oldLocalIdxUsed[move.oldLocalIdx] = 1;
-		}
-		#endif
-
-		return true;
-	};
-
-	// check that the compaction moves are valid
-	if (!compactionMovesValid(compactionMovesF, N_retainedF, N_F_) ||
-		!compactionMovesValid(compactionMovesR, N_retainedR, N_R_) ||
-		(redistributeParticlesB &&
-		 !compactionMovesValid(compactionMovesB, N_retainedB, N_B_)))
-	{
-		return false;
-	}
-
-	// check that the final particle counts do not exceed the local storage limit
-	const uint64_t N_finalF_U64 = static_cast<uint64_t>(N_retainedF) + appendedParticlesF.N_;
-	const uint64_t N_finalB_U64 = redistributeParticlesB
-		? static_cast<uint64_t>(N_retainedB) + appendedParticlesB.N_
+	const uint32_t N_finalF = mutationF.N_retained + mutationF.appendedParticles.N_;
+	const uint32_t N_finalB = redistributeParticlesB
+		? mutationB->N_retained + mutationB->appendedParticles.N_
 		: N_B_;
-	const uint64_t N_finalR_U64 = static_cast<uint64_t>(N_retainedR) + appendedParticlesR.N_;
-	if (N_finalF_U64 > Sim::MaxLocalParticleCount ||
-		N_finalB_U64 > Sim::MaxLocalParticleCount ||
-		N_finalR_U64 > Sim::MaxLocalParticleCount)
-	{
-		return false;
-	}
-
-	const uint32_t N_finalF = static_cast<uint32_t>(N_finalF_U64);
-	const uint32_t N_finalB = static_cast<uint32_t>(N_finalB_U64);
-	const uint32_t N_finalR = static_cast<uint32_t>(N_finalR_U64);
-
-	if (N_ownedF > N_finalF || N_ownedB > N_finalB || N_ownedR > N_finalR)
-	{
-		return false;
-	}
+	const uint32_t N_finalR = mutationR.N_retained + mutationR.appendedParticles.N_;
 
 	// reserve all required field capacity before compacting particles in place,
 	// so subsequent resize calls can then use this capacity without reallocating
@@ -686,11 +566,11 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	// (move blocks processed in parallel, and all fields of a moved particle together)
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(
-			0, static_cast<uint32_t>(compactionMovesF.size()), particleCompactionBlockSize_),
+			0, static_cast<uint32_t>(mutationF.compactionMoves.size()), particleCompactionBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
 			CompactParticles(
-				compactionMovesF,
+				mutationF.compactionMoves,
 				blockRange,
 				copyFluidParticleOldToNew);
 		},
@@ -714,11 +594,11 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 		// (move blocks processed in parallel, and all fields of a moved particle together)
 		tbb::parallel_for(
 			tbb::blocked_range<uint32_t>(
-				0, static_cast<uint32_t>(compactionMovesB.size()), particleCompactionBlockSize_),
+				0, static_cast<uint32_t>(mutationB->compactionMoves.size()), particleCompactionBlockSize_),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
 			{
 				CompactParticles(
-					compactionMovesB,
+					mutationB->compactionMoves,
 					blockRange,
 					copyBoundaryParticleOldToNew);
 			},
@@ -741,11 +621,11 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	// compact retained rigid fields together
 	tbb::parallel_for(
 		tbb::blocked_range<uint32_t>(
-			0, static_cast<uint32_t>(compactionMovesR.size()), particleCompactionBlockSize_),
+			0, static_cast<uint32_t>(mutationR.compactionMoves.size()), particleCompactionBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
 			CompactParticles(
-				compactionMovesR,
+				mutationR.compactionMoves,
 				blockRange,
 				copyRigidParticleOldToNew);
 		},
@@ -802,12 +682,12 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 
 	// append migrated and halo fluid particles after the retained prefix to complete the new local layout
 	// (index blocks processed in parallel, and fields sequentially within each block)
-	const uint32_t fluidAppendBegin = N_retainedF;
+	const uint32_t fluidAppendBegin = mutationF.N_retained;
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, appendedParticlesF.N_, particleAppendBlockSize_),
+		tbb::blocked_range<uint32_t>(0, mutationF.appendedParticles.N_, particleAppendBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			const Sync::FluidParticles& src = appendedParticlesF;
+			const Sync::FluidParticles& src = mutationF.appendedParticles;
 
 			AppendParticleField(idF_, src.id, fluidAppendBegin, blockRange);
 			AppendParticleField(xPosF_, src.xPos, fluidAppendBegin, blockRange);
@@ -830,12 +710,12 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	{
 		// append migrated and halo boundary particles after the retained prefix to complete the new local layout
 		// (index blocks processed in parallel, and fields sequentially within each block)
-		const uint32_t boundaryAppendBegin = N_retainedB;
+		const uint32_t boundaryAppendBegin = mutationB->N_retained;
 		tbb::parallel_for(
-			tbb::blocked_range<uint32_t>(0, appendedParticlesB.N_, particleAppendBlockSize_),
+			tbb::blocked_range<uint32_t>(0, mutationB->appendedParticles.N_, particleAppendBlockSize_),
 			[&](const tbb::blocked_range<uint32_t>& blockRange)
 			{
-				const Sync::BoundaryParticles& src = appendedParticlesB;
+				const Sync::BoundaryParticles& src = mutationB->appendedParticles;
 
 				AppendParticleField(idB_, src.id, boundaryAppendBegin, blockRange);
 				AppendParticleField(xPosB_, src.xPos, boundaryAppendBegin, blockRange);
@@ -848,12 +728,12 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	}
 
 	// append migrated owners and halos after the retained rigid prefix
-	const uint32_t rigidAppendBegin = N_retainedR;
+	const uint32_t rigidAppendBegin = mutationR.N_retained;
 	tbb::parallel_for(
-		tbb::blocked_range<uint32_t>(0, appendedParticlesR.N_, particleAppendBlockSize_),
+		tbb::blocked_range<uint32_t>(0, mutationR.appendedParticles.N_, particleAppendBlockSize_),
 		[&](const tbb::blocked_range<uint32_t>& blockRange)
 		{
-			const Sync::RigidParticles& src = appendedParticlesR;
+			const Sync::RigidParticles& src = mutationR.appendedParticles;
 
 			AppendParticleField(idR_, src.id, rigidAppendBegin, blockRange);
 			AppendParticleField(bodyIdR_, src.bodyId, rigidAppendBegin, blockRange);
@@ -871,9 +751,9 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 
 	// publish the rebuilt [ owned ][ halo ] layout and clear step work configured for the old one
 	useDistributedParticleLayout_ = true;
-	N_ownedF_ = N_ownedF;
-	N_ownedB_ = N_ownedB;
-	N_ownedR_ = N_ownedR;
+	N_ownedF_ = mutationF.N_owned;
+	if (redistributeParticlesB) { N_ownedB_ = mutationB->N_owned; }
+	N_ownedR_ = mutationR.N_owned;
 	outerFluidParticleLocalIdxs_.clear();
 	pressureAccFluidParticleFlags_.clear();
 	pressureAccChunkIdxs_.clear();
@@ -886,7 +766,6 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	solverSyncRecvLocalIdxsF_[1].clear();
 	useDistributedStepWork_ = false;
 	neighborList_->Resize(N_F_, N_B_, N_R_, params);
-	return true;
 }
 
 void SimBackend_CPU::CopyRigidBodyStateTo(

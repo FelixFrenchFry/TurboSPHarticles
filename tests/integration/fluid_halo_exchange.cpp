@@ -411,16 +411,13 @@ namespace
 		Sync::BoundaryConstView GetBoundaryParticleView() const override { return {}; }
 		Sync::RigidConstView GetRigidParticleView() const override { return rigidView_; }
 		Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const override { return {}; }
-		bool ApplyParticleRedistribution(
-			uint32_t, uint32_t, uint32_t,
-			std::span<const Sync::ParticleCompactionMove>,
-			std::span<const Sync::ParticleCompactionMove>,
-			std::span<const Sync::ParticleCompactionMove>,
-			const Sync::FluidParticles&, const Sync::BoundaryParticles&, const Sync::RigidParticles&,
-			uint32_t, uint32_t, uint32_t, bool, const Sim::SimParams&) override
+		void ApplyParticleRedistribution(
+			const Sim::ParticleRedistributionMutation<Sync::FluidParticles>&,
+			const Sim::ParticleRedistributionMutation<Sync::BoundaryParticles>*,
+			const Sim::ParticleRedistributionMutation<Sync::RigidParticles>&,
+			const Sim::SimParams&) override
 		{
 			ADD_FAILURE() << "Malformed rigid particle view reached backend mutation";
-			return false;
 		}
 		void CopyRigidBodyStateTo(Sync::RigidBodies&) const override {}
 		bool ApplyRigidBodyStateFrom(const Sync::RigidBodies&) override { return false; }

@@ -116,6 +116,16 @@ namespace Sim
 		return nbrCountFB > 0 || nbrCountFR > 0 || nbrCountFF < nbrCountThreshold;
 	}
 
+	// compaction moves and appended particles of one species, validated by the caller before the backend applies them
+	template <typename Particles>
+	struct ParticleRedistributionMutation
+	{
+		uint32_t N_retained = 0;
+		uint32_t N_owned = 0;
+		std::span<const Sync::ParticleCompactionMove> compactionMoves;
+		const Particles& appendedParticles;
+	};
+
 	// optional backend capability for distributed execution (particle exchange between ranks and rank-local work)
 	class I_DistributedParticleBackend
 	{
@@ -130,21 +140,11 @@ namespace Sim
 		virtual Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const = 0;
 
 		// compacts retained particles in place through the compaction moves and appends migration + halo particles
-		// (appended fluid particles carry only id, positions, and velocities)
-		virtual bool ApplyParticleRedistribution(
-			uint32_t N_retainedF,
-			uint32_t N_retainedB,
-			uint32_t N_retainedR,
-			std::span<const Sync::ParticleCompactionMove> compactionMovesF,
-			std::span<const Sync::ParticleCompactionMove> compactionMovesB,
-			std::span<const Sync::ParticleCompactionMove> compactionMovesR,
-			const Sync::FluidParticles& appendedParticlesF,
-			const Sync::BoundaryParticles& appendedParticlesB,
-			const Sync::RigidParticles& appendedParticlesR,
-			uint32_t N_ownedF,
-			uint32_t N_ownedB,
-			uint32_t N_ownedR,
-			bool redistributeParticlesB,
+		// (appended fluid particles carry only id, positions, and velocities, boundary particles stay put without mutationB)
+		virtual void ApplyParticleRedistribution(
+			const ParticleRedistributionMutation<Sync::FluidParticles>& mutationF,
+			const ParticleRedistributionMutation<Sync::BoundaryParticles>* mutationB,
+			const ParticleRedistributionMutation<Sync::RigidParticles>& mutationR,
 			const SimParams& params) = 0;
 
 		// copies/applies only dynamic rigid-body state used by distributed synchronization

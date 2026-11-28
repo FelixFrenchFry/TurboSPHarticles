@@ -69,20 +69,10 @@ namespace Sim
 		Sync::RigidConstView GetRigidParticleView() const override;
 		Sync::ParticlePositionConstView GetRigidParticleWorldPositionView() const override;
 
-		bool ApplyParticleRedistribution(
-			uint32_t N_retainedF,
-			uint32_t N_retainedB,
-			uint32_t N_retainedR,
-			std::span<const Sync::ParticleCompactionMove> compactionMovesF,
-			std::span<const Sync::ParticleCompactionMove> compactionMovesB,
-			std::span<const Sync::ParticleCompactionMove> compactionMovesR,
-			const Sync::FluidParticles& appendedParticlesF,
-			const Sync::BoundaryParticles& appendedParticlesB,
-			const Sync::RigidParticles& appendedParticlesR,
-			uint32_t N_ownedF,
-			uint32_t N_ownedB,
-			uint32_t N_ownedR,
-			bool redistributeParticlesB,
+		void ApplyParticleRedistribution(
+			const ParticleRedistributionMutation<Sync::FluidParticles>& mutationF,
+			const ParticleRedistributionMutation<Sync::BoundaryParticles>* mutationB,
+			const ParticleRedistributionMutation<Sync::RigidParticles>& mutationR,
 			const SimParams& params) override;
 
 		void CopyRigidBodyStateTo(Sync::RigidBodies& rigidBodies) const override;
