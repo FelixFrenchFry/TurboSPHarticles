@@ -18,9 +18,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <utility>
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_scan.h>
-#include <tbb/partitioner.h>
 
 // internal
 #include "source/base/enum_hub.h"
@@ -1155,7 +1152,6 @@ void DistSimulationMgr::BuildRankLocalSimState(Sync::UniversalSimState&& globalS
 {
 	// reset rank-local work buffers
 	outerLocalIdxsF_.clear();
-	pressureAccHaloLocalIdxsF_.clear();
 	rigidBodyForceTorque_ = {};
 
 	// keep owned particles first, then append halo particles
@@ -1814,7 +1810,6 @@ void DistSimulationMgr::FillDistributedMemoryRecord(
 	Mem::Add(miscUsage, particleRedistributionMgr_.GetScratchMemoryUsage());
 	Mem::Add(miscUsage, fluidSolverSyncMgr_.GetPlanMemoryUsage());
 	Mem::Add(miscUsage, loadBalanceMgr_.GetScratchMemoryUsage());
-	Mem::Add(miscUsage, Mem::MemUsageOf_Vector(pressureAccHaloLocalIdxsF_));
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodyForceTorque(rigidBodyForceTorque_));
 	Mem::Add(miscUsage, MemoryUsageOfRigidBodySyncBuffers(rigidBodySyncBuffers_));
 	Mem::Add(miscUsage, MemoryUsageOfStatisticsPartial(statisticsPartialScratch_));
@@ -2186,77 +2181,6 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 	benchmarksTracker_->StartBench(Bench::BenchOp::Dist_PlanRebuild);
 
 	bool localOk = true;
-	pressureAccHaloLocalIdxsF_.clear();
-
-	try
-	{
-		// computes pressure acceleration for the first halo layer locally
-		if (simParams_.distHaloMode == Base::DistHaloMode::DoubleHalo)
-		{
-			const Sync::FluidConstView particlesF =
-				distParticleBackend_->GetFluidParticleView();
-			const AABB singleHaloBounds =
-				domainDecomp_->OwnedExtentAABB(mpiContext_.Rank())
-					.ExtendedAtGlobalBounds(domainDecomp_->GlobalExtentAABB())
-					.Expanded(simParams_.kernelRadius);
-			const uint32_t N_owned = particleStateF_.N_owned;
-			const uint32_t N_halo = particleStateF_.N_halo;
-
-			if (N_halo > 0u)
-			{
-				// upper bound for the selected halo particles
-				pressureAccHaloLocalIdxsF_.resize(N_halo);
-
-				const uint32_t N_firstHalo = tbb::parallel_scan(
-					tbb::blocked_range<uint32_t>(0, N_halo),
-					uint32_t{ 0 },
-					[&](const tbb::blocked_range<uint32_t>& range,
-						const uint32_t prefix,
-						const bool isFinalScan)
-				{
-					uint32_t N_selected = prefix;
-					for (uint32_t haloIdx = range.begin();
-						haloIdx != range.end(); haloIdx++)
-					{
-						// halo particles occupy the local suffix behind the owned prefix
-						const uint32_t localIdx = N_owned + haloIdx;
-						const glm::vec3 position{
-							particlesF.xPos[localIdx],
-							particlesF.yPos[localIdx],
-							particlesF.zPos[localIdx]
-						};
-						if (!singleHaloBounds.Contains(position)) { continue; }
-
-						if (isFinalScan)
-						{
-							pressureAccHaloLocalIdxsF_[N_selected] = localIdx;
-						}
-						N_selected++;
-					}
-					return N_selected;
-				},
-				[](const uint32_t lhs, const uint32_t rhs)
-				{
-					return lhs + rhs;
-				},
-				tbb::auto_partitioner{}
-				);
-
-				pressureAccHaloLocalIdxsF_.resize(N_firstHalo);
-			}
-		}
-	}
-	catch (const std::exception& ex)
-	{
-		mpiContext_.Abort(
-			"Failed to classify rank-local distributed work: " +
-			std::string(ex.what()));
-	}
-	catch (...)
-	{
-		mpiContext_.Abort(
-			"Failed to classify rank-local distributed work: unknown error.");
-	}
 
 	try
 	{
@@ -2269,7 +2193,6 @@ bool DistSimulationMgr::PrepareRankLocalBackendStep()
 			MarkTrace(Trace::TraceStage::Dist_BackendConfiguration);
 			configured = distParticleBackend_->ConfigureDistributedStep(
 				outerLocalIdxsF_,
-				pressureAccHaloLocalIdxsF_,
 				fluidSolverSyncMgr_);
 		}
 		if (localOk && !configured)

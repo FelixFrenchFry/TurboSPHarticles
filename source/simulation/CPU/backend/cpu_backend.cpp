@@ -152,7 +152,6 @@ void SimBackend_CPU::PullFromUniversalSimState(
 	N_ownedB_ = 0;
 	N_ownedR_ = 0;
 	outerFluidParticleLocalIdxs_.clear();
-	pressureAccHaloLocalIdxsF_.clear();
 	pressureAccFluidParticleFlags_.clear();
 	pressureAccChunkIdxs_.clear();
 	innerFluidChunkIdxs_.clear();
@@ -876,7 +875,6 @@ bool SimBackend_CPU::ApplyParticleRedistribution(
 	N_ownedB_ = N_ownedB;
 	N_ownedR_ = N_ownedR;
 	outerFluidParticleLocalIdxs_.clear();
-	pressureAccHaloLocalIdxsF_.clear();
 	pressureAccFluidParticleFlags_.clear();
 	pressureAccChunkIdxs_.clear();
 	innerFluidChunkIdxs_.clear();
@@ -1361,7 +1359,6 @@ void SimBackend_CPU::FillMemoryRecord(Mem::MemRecordStep& record) const
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRB.histogram));
 		Add(usage, MemUsageOf_Vector(statisticsPartialScratch_.nbrCountRR.histogram));
 		Add(usage, MemUsageOf_Vector(outerFluidParticleLocalIdxs_));
-		Add(usage, MemUsageOf_Vector(pressureAccHaloLocalIdxsF_));
 		Add(usage, MemUsageOf_Vector(pressureAccFluidParticleFlags_));
 		Add(usage, MemUsageOf_Vector(pressureAccChunkIdxs_));
 		Add(usage, MemUsageOf_Vector(innerFluidChunkIdxs_));
@@ -1722,7 +1719,8 @@ void SimBackend_CPU::ExecuteNeighborSearch(const SimParams& params, const bool b
 		benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	}
 	neighborSearch_->DataReOrder(params);
-	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
+	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs(
+		params.distHaloMode == Base::DistHaloMode::DoubleHalo);
 	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	if (bench)
 	{
@@ -1792,7 +1790,6 @@ void SimBackend_CPU::TakeFluidSolverSyncLocalIdxs(
 
 bool SimBackend_CPU::ConfigureDistributedStep(
 	const std::vector<uint32_t>& outerLocalIdxsF,
-	const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
 	I_DistributedFluidSolverSync& distributedFluidSolverSync)
 {
 	if (!useDistributedParticleLayout_)
@@ -1829,41 +1826,7 @@ bool SimBackend_CPU::ConfigureDistributedStep(
 		return false;
 	}
 
-	const uint32_t N_pressureAccHaloF = static_cast<uint32_t>(pressureAccHaloLocalIdxsF.size());
-	const auto isInvalidPressureAccHaloIdx = [&](const uint32_t pressureAccHaloIdx)
-	{
-		const uint32_t localIdx = pressureAccHaloLocalIdxsF[pressureAccHaloIdx];
-		return localIdx < N_ownedF_ || localIdx >= N_F_;
-	};
-	if (Check::CountViolations(0, N_pressureAccHaloF, isInvalidPressureAccHaloIdx) != 0)
-	{
-		const uint32_t pressureAccHaloIdx = Check::FindFirstViolation(
-			0, N_pressureAccHaloF, isInvalidPressureAccHaloIdx);
-		SPDLOG_ERROR(
-			"Invalid halo pressure-acceleration fluid particle local index {}.",
-			pressureAccHaloLocalIdxsF[pressureAccHaloIdx]);
-		return false;
-	}
-
-	const auto isNotAscendingPressureAccHaloIdx = [&](const uint32_t pressureAccHaloIdx)
-	{
-		return pressureAccHaloLocalIdxsF[pressureAccHaloIdx - 1] >=
-			pressureAccHaloLocalIdxsF[pressureAccHaloIdx];
-	};
-	if (Check::CountViolations(1, N_pressureAccHaloF, isNotAscendingPressureAccHaloIdx) != 0)
-	{
-		const uint32_t pressureAccHaloIdx = Check::FindFirstViolation(
-			1, N_pressureAccHaloF, isNotAscendingPressureAccHaloIdx);
-		SPDLOG_ERROR(
-			"Halo pressure-acceleration fluid particle local indices must be strictly ascending "
-			"(pressureAccHaloIdx={}, localIdx={}, previousLocalIdx={}).",
-			pressureAccHaloIdx, pressureAccHaloLocalIdxsF[pressureAccHaloIdx],
-			pressureAccHaloLocalIdxsF[pressureAccHaloIdx - 1]);
-		return false;
-	}
-
 	outerFluidParticleLocalIdxs_ = outerLocalIdxsF;
-	pressureAccHaloLocalIdxsF_ = pressureAccHaloLocalIdxsF;
 	distributedFluidSolverSync_ = &distributedFluidSolverSync;
 	useDistributedStepWork_ = true;
 	integrateRigidBodies_ = false;
@@ -1903,7 +1866,8 @@ bool SimBackend_CPU::ApplyRigidBodyForceTorque(
 	return true;
 }
 
-void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs()
+void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs(
+	const bool computeFirstHaloLayerPressAcc)
 {
 	if (!useDistributedStepWork_) { return; }
 	if (!neighborSearch_) { return; }
@@ -1914,7 +1878,7 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 		oldFluidLocalIdx_FromNewLocalIdx,
 		oldBoundaryLocalIdx_FromNewLocalIdx))
 	{
-		BuildDistributedSolverChunkIdxs();
+		BuildDistributedSolverChunkIdxs(computeFirstHaloLayerPressAcc);
 		return;
 	}
 
@@ -1951,7 +1915,8 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 
 	auto remapLocalIdxs = [this](
 		std::vector<uint32_t>& localIdxs,
-		const uint32_t N_validLocalIdxs,
+		const uint32_t beginValidLocalIdx,
+		const uint32_t endValidLocalIdx,
 		const char* failMsg)
 	{
 		tbb::parallel_for(
@@ -1964,7 +1929,10 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 					if (localIdx >= N_F_) { throw std::runtime_error(failMsg); }
 
 					const uint32_t newLocalIdx = newFluidLocalIdx_FromOldLocalIdx_[localIdx];
-					if (newLocalIdx >= N_validLocalIdxs) { throw std::runtime_error(failMsg); }
+					if (newLocalIdx < beginValidLocalIdx || newLocalIdx >= endValidLocalIdx)
+					{
+						throw std::runtime_error(failMsg);
+					}
 
 					localIdx = newLocalIdx;
 				}
@@ -1973,19 +1941,17 @@ void SimBackend_CPU::ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs
 		);
 	};
 
-	remapLocalIdxs(outerFluidParticleLocalIdxs_, N_ownedF_,
+	remapLocalIdxs(outerFluidParticleLocalIdxs_, 0, N_ownedF_,
 		"Invalid outer CPU fluid particle local index.");
-	remapLocalIdxs(pressureAccHaloLocalIdxsF_, N_F_,
-		"Invalid halo pressure-acceleration CPU fluid particle local index.");
 	for (uint32_t haloExtentIdx = 0; haloExtentIdx != solverSyncSendLocalIdxsF_.size(); haloExtentIdx++)
 	{
-		remapLocalIdxs(solverSyncSendLocalIdxsF_[haloExtentIdx], N_ownedF_,
+		remapLocalIdxs(solverSyncSendLocalIdxsF_[haloExtentIdx], 0, N_ownedF_,
 			"Invalid solver sync send CPU fluid particle local index.");
-		remapLocalIdxs(solverSyncRecvLocalIdxsF_[haloExtentIdx], N_F_,
+		remapLocalIdxs(solverSyncRecvLocalIdxsF_[haloExtentIdx], N_ownedF_, N_F_,
 			"Invalid solver sync receive CPU fluid particle local index.");
 	}
 
-	BuildDistributedSolverChunkIdxs();
+	BuildDistributedSolverChunkIdxs(computeFirstHaloLayerPressAcc);
 }
 
 void SimBackend_CPU::BeginFluidFieldSync(
@@ -2086,23 +2052,28 @@ void SimBackend_CPU::SynchronizeFluidParticleFlagsToHalos(
 	}
 }
 
-void SimBackend_CPU::BuildDistributedSolverChunkIdxs()
+void SimBackend_CPU::BuildDistributedSolverChunkIdxs(
+	const bool computeFirstHaloLayerPressAcc)
 {
 	// marking chunks that hold at least one of the particles yields the chunk indices in ascending order
 	// (the callers validate the local indices against the fluid particle count)
 	const uint32_t N_chunks = (N_F_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 	const uint32_t N_ownedChunks = (N_ownedF_ + CPU::N_SIMD_WIDTH - 1) / CPU::N_SIMD_WIDTH;
 
-	// pressure acceleration covers the owned prefix and the selected halo particles
+	// pressure acceleration covers the owned prefix plus the single-halo receive list in DoubleHalo mode
 	// TODO: parallelize with TBB?
 	pressureAccFluidParticleFlags_.assign(N_ownedF_, 1);
 	pressureAccFluidParticleFlags_.resize(N_F_, 0);
 	chunkFlagsScratch_.assign(N_chunks, 0);
 	std::fill(chunkFlagsScratch_.begin(), chunkFlagsScratch_.begin() + N_ownedChunks, uint8_t{ 1 });
-	for (const uint32_t localIdx : pressureAccHaloLocalIdxsF_)
+	if (computeFirstHaloLayerPressAcc)
 	{
-		pressureAccFluidParticleFlags_[localIdx] = 1;
-		chunkFlagsScratch_[localIdx / CPU::N_SIMD_WIDTH] = 1;
+		for (const uint32_t localIdx :
+			solverSyncRecvLocalIdxsF_[Base::GetIdx(Base::DistHaloMode::SingleHalo)])
+		{
+			pressureAccFluidParticleFlags_[localIdx] = 1;
+			chunkFlagsScratch_[localIdx / CPU::N_SIMD_WIDTH] = 1;
+		}
 	}
 
 	pressureAccChunkIdxs_.clear();

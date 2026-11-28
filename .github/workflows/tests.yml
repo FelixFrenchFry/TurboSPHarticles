@@ -18,14 +18,14 @@ env:
   VCPKG_DISABLE_METRICS: '1'
 
 jobs:
-  # run CPU tests across compilers and build types, with MPI and AVX512 compile checks
+  # run CPU and MPI tests across toolchains, with AVX512 compile checks
   toolchains:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # 17 configurations (12 toolchain test runs, 1 sanitizer run, 4 compile checks)
+      # 17 configurations (12 toolchain test runs, 1 sanitizer run, 1 MPI run, 3 compile checks)
       matrix:
         include:
           # GCC 13 on Ubuntu 24.04 (Debug and Release)
@@ -144,15 +144,15 @@ jobs:
             linker_flags: -fsanitize=address,undefined
             linux_packages: clang-18 libclang-rt-18-dev llvm-18
             run_tests: true
-          # build the distributed application, but do not run MPI tests
-          - name: GCC 13 / Release / MPI / COMPILE ONLY
+          # run the multi-rank integration tests with Open MPI
+          - name: GCC 13 / Release / MPI
             id: gcc13-mpi
             os: ubuntu-24.04
             preset: CI-Linux-x64-Headless-CPU-MPI-Tests
             compiler: g++-13
             build_type: Release
             linux_packages: g++-13 libopenmpi-dev openmpi-bin
-            run_tests: false
+            run_tests: true
           # build with AVX512, but do not run the tests
           - name: GCC 15 / Release / AVX512 / COMPILE ONLY
             id: gcc15-avx512
@@ -239,9 +239,11 @@ jobs:
       - name: Build applications and maintained tests
         run: cmake --build out/build/${{ matrix.preset }} --parallel 2
 
-      # skip MPI and AVX512 execution
+      # skip AVX512 execution
       - name: Run maintained tests
         if: matrix.run_tests
+        env:
+          OMPI_MCA_rmaps_base_oversubscribe: '1'
         run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure --no-tests=error --output-junit "${{ github.workspace }}/out/build/${{ matrix.preset }}/test-results.xml"
 
       # always save diagnostics

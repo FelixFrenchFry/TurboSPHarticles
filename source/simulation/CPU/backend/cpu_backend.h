@@ -108,7 +108,6 @@ namespace Sim
 		// configures rank-authoritative particle work for one distributed step
 		bool ConfigureDistributedStep(
 			const std::vector<uint32_t>& outerLocalIdxsF,
-			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) override;
 
 		// classifies local fluid particles against the export near-surface threshold
@@ -163,8 +162,8 @@ namespace Sim
 			const SimParams& simParams,
 			bool ownedOnly) const;
 
-		void ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
-		void BuildDistributedSolverChunkIdxs();
+		void ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs(bool computeFirstHaloLayerPressAcc);
+		void BuildDistributedSolverChunkIdxs(bool computeFirstHaloLayerPressAcc);
 
 		// packs the send slots of up to three fields, interleaved per particle, and starts their halo exchange
 		void BeginFluidFieldSync(
@@ -324,7 +323,6 @@ namespace Sim
 		// flags for particle filtering in distributed execution
 		// TODO: rework this?
 		std::vector<uint32_t> outerFluidParticleLocalIdxs_;
-		std::vector<uint32_t> pressureAccHaloLocalIdxsF_; // halo part of the pressure-acceleration work
 		std::vector<uint8_t> pressureAccFluidParticleFlags_;
 		std::vector<uint32_t> pressureAccChunkIdxs_;
 		std::vector<uint32_t> innerFluidChunkIdxs_;

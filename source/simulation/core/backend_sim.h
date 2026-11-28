@@ -162,11 +162,10 @@ namespace Sim
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) = 0;
 
 		// configures rank-authoritative particle work for distributed execution
-		// (both index lists must be strictly ascending in the current local layout)
-		// (the owned fluid prefix always computes pressure acceleration, the halo list adds to it)
+		// (the outer index list must be strictly ascending in the current local layout)
+		// (with DoubleHalo, the single-halo receive list adds the first halo layer to the pressure acceleration)
 		virtual bool ConfigureDistributedStep(
 			const std::vector<uint32_t>& outerLocalIdxsF,
-			const std::vector<uint32_t>& pressureAccHaloLocalIdxsF,
 			I_DistributedFluidSolverSync& distributedFluidSolverSync) = 0;
 
 		// selects regular export surface particles, with near-surface flags of halos taken from their owners

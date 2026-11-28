@@ -224,7 +224,6 @@ namespace Dist
 
 		// distributed step preparation, indexing the local layout until the backend step re-orders it
 		std::vector<uint32_t> outerLocalIdxsF_{};
-		std::vector<uint32_t> pressureAccHaloLocalIdxsF_{};
 		Sim::RigidBodyForceTorque rigidBodyForceTorque_{};
 		RigidBodySyncBuffers rigidBodySyncBuffers_{};
 

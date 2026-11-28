@@ -310,6 +310,8 @@ bool FluidSolverSyncMgr::Rebuild(
 	constexpr uint32_t doubleHaloIdx = Base::GetIdx(Base::DistHaloMode::DoubleHalo);
 
 	const bool useDoubleHalo = distHaloMode == Base::DistHaloMode::DoubleHalo;
+	// in DoubleHalo mode, the single-halo receive list is also the first halo layer that computes pressure acc
+	// (a larger radius here also needs a matching larger double-halo extent)
 	const AABB singleHaloBounds =
 		domainDecomp.OwnedExtentAABB(mpiContext.Rank())
 			.ExtendedAtGlobalBounds(domainDecomp.GlobalExtentAABB()).Expanded(singleHaloRadius);

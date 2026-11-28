@@ -32,3 +32,21 @@ gtest_discover_tests(TSP_Tests
     DISCOVERY_MODE PRE_TEST
     PROPERTIES LABELS unit TIMEOUT 30
 )
+
+if(ENABLE_MPI AND MPIEXEC_EXECUTABLE)
+    add_executable(TSP_MPI_Tests "integration/fluid_halo_exchange.cpp")
+    target_link_libraries(TSP_MPI_Tests PRIVATE TSP_D GTest::gtest)
+
+    if(ENABLE_CUDA)
+        set_target_properties(TSP_MPI_Tests PROPERTIES
+            CUDA_RESOLVE_DEVICE_SYMBOLS ON
+            INTERPROCEDURAL_OPTIMIZATION OFF
+        )
+    endif()
+
+    add_test(NAME FluidHaloExchangeMPI COMMAND
+        ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS}
+        $<TARGET_FILE:TSP_MPI_Tests> ${MPIEXEC_POSTFLAGS}
+    )
+    set_tests_properties(FluidHaloExchangeMPI PROPERTIES LABELS mpi PROCESSORS 3 TIMEOUT 45)
+endif()

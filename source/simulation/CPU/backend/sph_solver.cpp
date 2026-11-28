@@ -63,7 +63,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	neighborSearch_->DataReOrder_SolverStep(params);
-	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
+	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs(false);
 	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
@@ -320,7 +320,7 @@ void SimBackend_CPU::Step_IISPH(const SimParams& params)
 void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 {
 	I_DistributedFluidSolverSync& sync = *distributedFluidSolverSync_;
-	const bool computeFirstHaloLayerPressureAcc =
+	const bool computeFirstHaloLayerPressAcc =
 		params.distHaloMode == Base::DistHaloMode::DoubleHalo;
 
 	// --- [ temporary pre-computed constants ] ------------------------------------------------------
@@ -340,7 +340,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 	benchmarksTracker_.StartBench(Bench::BenchOp::ParticleData_Reordering);
 	neighborSearch_->DataReOrder_SolverStep(params);
 	// update owned indices and the synchronization plan for the reordered storage
-	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs();
+	ApplyLastParticleReOrderToDistributedFluidParticleLocalIdxs(computeFirstHaloLayerPressAcc);
 	affinityParts_ = std::make_unique<StepAffinityPartitioners>(); // reset mapping
 	benchmarksTracker_.StopBench(Bench::BenchOp::ParticleData_Reordering);
 
@@ -544,7 +544,7 @@ void SimBackend_CPU::Step_IISPH_Distributed(const SimParams& params)
 				chunkIdxs, true, particleFlags);
 		};
 
-		if (computeFirstHaloLayerPressureAcc)
+		if (computeFirstHaloLayerPressAcc)
 		{
 			computePressureAcceleration(
 				pressureAccChunkIdxs_, N_F_, pressureAccFluidParticleFlags_.data(),
