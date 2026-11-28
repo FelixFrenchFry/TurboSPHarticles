@@ -173,7 +173,7 @@ namespace Dist
 		{
 			using ConstView = Sync::FluidConstView;
 			using Particles = Sync::FluidParticles;
-			static constexpr const char* particleTypeName = "Fluid";
+			static constexpr const char* particleTypeName = "fluid";
 			static constexpr uint32_t N_fields = 6;
 			static constexpr bool hasBodyIds = false;
 
@@ -190,7 +190,7 @@ namespace Dist
 		{
 			using ConstView = Sync::BoundaryConstView;
 			using Particles = Sync::BoundaryParticles;
-			static constexpr const char* particleTypeName = "Boundary";
+			static constexpr const char* particleTypeName = "boundary";
 			static constexpr uint32_t N_fields = 5;
 			static constexpr bool hasBodyIds = false;
 
@@ -208,7 +208,7 @@ namespace Dist
 		{
 			using ConstView = Sync::RigidConstView;
 			using Particles = Sync::RigidParticles;
-			static constexpr const char* particleTypeName = "Rigid";
+			static constexpr const char* particleTypeName = "rigid";
 			static constexpr uint32_t N_fields = 5;
 			static constexpr bool hasBodyIds = true;
 
@@ -316,24 +316,6 @@ namespace Dist
 			const Sync::RigidBodies& bodies,
 			uint32_t localIdx);
 
-		// particle property copying into append-only backend mutation storage
-		// (fluid particles carry the same reduced field set as FluidPayload)
-		static void CopyFluidParticle(
-			const Sync::FluidConstView& src,
-			Sync::FluidParticles& dst,
-			uint32_t srcLocalIdx,
-			uint32_t dstLocalIdx);
-		static void CopyBoundaryParticle(
-			const Sync::BoundaryConstView& src,
-			Sync::BoundaryParticles& dst,
-			uint32_t srcLocalIdx,
-			uint32_t dstLocalIdx);
-		static void CopyRigidParticle(
-			const Sync::RigidConstView& src,
-			Sync::RigidParticles& dst,
-			uint32_t srcLocalIdx,
-			uint32_t dstLocalIdx);
-
 		// sparse compaction construction, filling the slots of departing owned particles
 		// inside the retained prefix with the retained particles above it
 		bool BuildCompactionMoves(
@@ -399,30 +381,26 @@ namespace Dist
 		void ExchangePayloads(
 			int rank, int N_ranks,
 			const MpiContext& mpiContext);
-		bool PrepareFluidParticleMutation(
-			const Sync::FluidConstView& oldParticles,
+
+		// prepares retained compaction, appended particles, and matching metadata of one species
+		// (countOuterParticles(N_owned, N_retained) classifies the rebuilt owned prefix, rigidBodies is read for rigid only)
+		template <typename Payload, typename CountOuterParticles>
+		bool PrepareParticleMutation(
+			const typename Payload::ConstView& oldParticles,
 			uint32_t N_oldOwned,
-			const IDomainDecomp& domainDecomp,
-			int rank,
-			float haloRadius,
-			uint64_t N_global,
-			std::string* failMsg);
-		bool PrepareBoundaryParticleMutation(
-			const Sync::BoundaryConstView& oldParticles,
-			uint32_t N_oldOwned,
-			const IDomainDecomp& domainDecomp,
-			int rank,
-			float haloRadius,
-			uint64_t N_global,
-			std::string* failMsg);
-		bool PrepareRigidParticleMutation(
-			const Sync::RigidConstView& oldParticles,
-			uint32_t N_oldOwned,
+			uint32_t N_retained,
+			const std::vector<std::vector<uint32_t>>& ownedLocalIdxs_ByDstRank,
+			const std::vector<uint32_t>& localHaloLocalIdxs,
+			ExchangeBuffer<Payload> RankBuffers::* recvOwnedParticles,
+			ExchangeBuffer<Payload> RankBuffers::* recvHaloParticles,
+			uint32_t N_recvOwned,
+			uint64_t N_recvHalo,
 			const Sync::RigidBodies& rigidBodies,
-			const IDomainDecomp& domainDecomp,
-			int rank,
-			float haloRadius,
 			uint64_t N_global,
+			std::vector<Sync::ParticleCompactionMove>& compactionMoves,
+			typename Payload::Particles& appendedParticles,
+			DistParticleState& rebuiltParticleState,
+			CountOuterParticles&& countOuterParticles,
 			std::string* failMsg);
 
 		// peer communication routes and storage
